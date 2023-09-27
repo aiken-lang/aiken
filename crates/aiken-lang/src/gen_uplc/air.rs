@@ -147,10 +147,6 @@ pub enum Air {
         tipo: Rc<Type>,
     },
     // Field Access
-    RecordAccess {
-        record_index: u64,
-        tipo: Rc<Type>,
-    },
     FieldsExpose {
         indices: Vec<(usize, String, Rc<Type>)>,
         check_last_item: bool,
@@ -172,10 +168,6 @@ pub enum Air {
         names: Vec<String>,
         tipo: Rc<Type>,
         check_last_item: bool,
-    },
-    TupleIndex {
-        tipo: Rc<Type>,
-        tuple_index: usize,
     },
     // Misc.
     ErrorTerm {

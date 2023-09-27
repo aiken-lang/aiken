@@ -3,7 +3,7 @@ use pretty_assertions::assert_eq;
 use aiken_lang::ast::{Definition, Function, TypedFunction, TypedValidator};
 use uplc::{
     ast::{Constant, Data, DeBruijn, Name, Program, Term, Type},
-    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD, CONSTR_INDEX_EXPOSER},
+    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
     machine::cost_model::ExBudget,
     optimize,
 };
@@ -1037,8 +1037,7 @@ fn acceptance_test_10_map_none() {
             )
             .apply(Term::Constant(
                 Constant::Data(Data::constr(1, vec![])).into(),
-            ))
-            .constr_get_field(),
+            )),
         false,
     );
 }
@@ -1120,8 +1119,7 @@ fn acceptance_test_10_map_some() {
             )
             .apply(Term::Constant(
                 Constant::Data(Data::constr(0, vec![Data::integer(2.into())])).into(),
-            ))
-            .constr_get_field(),
+            )),
         false,
     );
 }
@@ -1621,38 +1619,6 @@ fn acceptance_test_18_or_else() {
                 Term::snd_pair()
                     .apply(Term::unconstr_data().apply(Term::var("x")))
                     .lambda("x"),
-            )
-            .lambda(CONSTR_GET_FIELD)
-            .apply(
-                Term::var(CONSTR_GET_FIELD)
-                    .apply(Term::var(CONSTR_GET_FIELD))
-                    .apply(Term::integer(0.into())),
-            )
-            .lambda(CONSTR_GET_FIELD)
-            .apply(
-                Term::equals_integer()
-                    .apply(Term::var("__wanted_arg".to_string()))
-                    .apply(Term::var("__current_arg_number".to_string()))
-                    .if_else(
-                        Term::head_list(),
-                        Term::var(CONSTR_GET_FIELD)
-                            .apply(Term::var(CONSTR_GET_FIELD))
-                            .apply(
-                                Term::add_integer()
-                                    .apply(Term::var("__current_arg_number"))
-                                    .apply(Term::integer(1.into())),
-                            )
-                            .apply(
-                                Term::tail_list().apply(Term::var("__current_list_of_constr_args")),
-                            )
-                            .apply(Term::var("__wanted_arg"))
-                            .lambda("__current_list_of_constr_args"),
-                    )
-                    .apply(Term::var("__list_of_constr_args"))
-                    .lambda("__wanted_arg")
-                    .lambda("__list_of_constr_args")
-                    .lambda("__current_arg_number")
-                    .lambda(CONSTR_GET_FIELD),
             ),
         false,
     );
@@ -1723,38 +1689,6 @@ fn acceptance_test_19_map_none_wrap_int() {
                 Term::snd_pair()
                     .apply(Term::unconstr_data().apply(Term::var("x")))
                     .lambda("x"),
-            )
-            .lambda(CONSTR_GET_FIELD)
-            .apply(
-                Term::var(CONSTR_GET_FIELD)
-                    .apply(Term::var(CONSTR_GET_FIELD))
-                    .apply(Term::integer(0.into())),
-            )
-            .lambda(CONSTR_GET_FIELD)
-            .apply(
-                Term::equals_integer()
-                    .apply(Term::var("__wanted_arg".to_string()))
-                    .apply(Term::var("__current_arg_number".to_string()))
-                    .if_else(
-                        Term::head_list(),
-                        Term::var(CONSTR_GET_FIELD)
-                            .apply(Term::var(CONSTR_GET_FIELD))
-                            .apply(
-                                Term::add_integer()
-                                    .apply(Term::var("__current_arg_number"))
-                                    .apply(Term::integer(1.into())),
-                            )
-                            .apply(
-                                Term::tail_list().apply(Term::var("__current_list_of_constr_args")),
-                            )
-                            .apply(Term::var("__wanted_arg"))
-                            .lambda("__current_list_of_constr_args"),
-                    )
-                    .apply(Term::var("__list_of_constr_args"))
-                    .lambda("__wanted_arg")
-                    .lambda("__list_of_constr_args")
-                    .lambda("__current_arg_number")
-                    .lambda(CONSTR_GET_FIELD),
             ),
         false,
     );
@@ -1826,38 +1760,6 @@ fn acceptance_test_19_map_wrap_void() {
                 Term::snd_pair()
                     .apply(Term::unconstr_data().apply(Term::var("x")))
                     .lambda("x"),
-            )
-            .lambda(CONSTR_GET_FIELD)
-            .apply(
-                Term::var(CONSTR_GET_FIELD)
-                    .apply(Term::var(CONSTR_GET_FIELD))
-                    .apply(Term::integer(0.into())),
-            )
-            .lambda(CONSTR_GET_FIELD)
-            .apply(
-                Term::equals_integer()
-                    .apply(Term::var("__wanted_arg".to_string()))
-                    .apply(Term::var("__current_arg_number".to_string()))
-                    .if_else(
-                        Term::head_list(),
-                        Term::var(CONSTR_GET_FIELD)
-                            .apply(Term::var(CONSTR_GET_FIELD))
-                            .apply(
-                                Term::add_integer()
-                                    .apply(Term::var("__current_arg_number"))
-                                    .apply(Term::integer(1.into())),
-                            )
-                            .apply(
-                                Term::tail_list().apply(Term::var("__current_list_of_constr_args")),
-                            )
-                            .apply(Term::var("__wanted_arg"))
-                            .lambda("__current_list_of_constr_args"),
-                    )
-                    .apply(Term::var("__list_of_constr_args"))
-                    .lambda("__wanted_arg")
-                    .lambda("__list_of_constr_args")
-                    .lambda("__current_arg_number")
-                    .lambda(CONSTR_GET_FIELD),
             ),
         false,
     );
@@ -1934,8 +1836,7 @@ fn acceptance_test_20_map_some() {
             .apply(Term::Constant(
                 Constant::Data(Data::constr(0, vec![Data::integer(15.into())])).into(),
             ))
-            .constr_fields_exposer()
-            .constr_get_field(),
+            .constr_fields_exposer(),
         false,
     );
 }
@@ -2054,7 +1955,6 @@ fn acceptance_test_22_filter_map() {
                 ),
             )
             .apply(Term::list_data().apply(Term::empty_list()))
-            .constr_get_field()
             .constr_fields_exposer()
             .constr_index_exposer(),
         false,
@@ -2280,7 +2180,6 @@ fn acceptance_test_24_map2() {
                 ))
                 .into(),
             ))
-            .constr_get_field()
             .constr_fields_exposer()
             .constr_index_exposer(),
         false,
@@ -2887,11 +2786,12 @@ fn when_tuple_deconstruction() {
                         Term::equals_integer()
                             .apply(
                                 Term::un_i_data().apply(
-                                    Term::var(CONSTR_GET_FIELD)
+                                    Term::head_list()
+                                        .apply(Term::var("__fields"))
+                                        .lambda("__fields")
                                         .apply(
                                             Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("a")),
-                                        )
-                                        .apply(Term::integer(0.into())),
+                                        ),
                                 ),
                             )
                             .apply(Term::var("x"))
@@ -3065,38 +2965,6 @@ fn when_tuple_deconstruction() {
             .lambda("ctx")
             .lambda("red")
             .lambda("dat")
-            .lambda(CONSTR_GET_FIELD)
-            .apply(
-                Term::var(CONSTR_GET_FIELD)
-                    .apply(Term::var(CONSTR_GET_FIELD))
-                    .apply(Term::integer(0.into())),
-            )
-            .lambda(CONSTR_GET_FIELD)
-            .apply(
-                Term::equals_integer()
-                    .apply(Term::var("__wanted_arg".to_string()))
-                    .apply(Term::var("__current_arg_number".to_string()))
-                    .if_else(
-                        Term::head_list(),
-                        Term::var(CONSTR_GET_FIELD)
-                            .apply(Term::var(CONSTR_GET_FIELD))
-                            .apply(
-                                Term::add_integer()
-                                    .apply(Term::var("__current_arg_number"))
-                                    .apply(Term::integer(1.into())),
-                            )
-                            .apply(
-                                Term::tail_list().apply(Term::var("__current_list_of_constr_args")),
-                            )
-                            .apply(Term::var("__wanted_arg"))
-                            .lambda("__current_list_of_constr_args"),
-                    )
-                    .apply(Term::var("__list_of_constr_args"))
-                    .lambda("__wanted_arg")
-                    .lambda("__list_of_constr_args")
-                    .lambda("__current_arg_number")
-                    .lambda(CONSTR_GET_FIELD),
-            )
             .lambda(CONSTR_FIELDS_EXPOSER)
             .apply(
                 Term::snd_pair()
@@ -3359,38 +3227,6 @@ fn generic_validator_type_test() {
             )
             .lambda("_ctx")
             .lambda("r")
-            .lambda(CONSTR_GET_FIELD)
-            .apply(
-                Term::var(CONSTR_GET_FIELD)
-                    .apply(Term::var(CONSTR_GET_FIELD))
-                    .apply(Term::integer(0.into())),
-            )
-            .lambda(CONSTR_GET_FIELD)
-            .apply(
-                Term::equals_integer()
-                    .apply(Term::var("__wanted_arg".to_string()))
-                    .apply(Term::var("__current_arg_number".to_string()))
-                    .if_else(
-                        Term::head_list(),
-                        Term::var(CONSTR_GET_FIELD)
-                            .apply(Term::var(CONSTR_GET_FIELD))
-                            .apply(
-                                Term::add_integer()
-                                    .apply(Term::var("__current_arg_number"))
-                                    .apply(Term::integer(1.into())),
-                            )
-                            .apply(
-                                Term::tail_list().apply(Term::var("__current_list_of_constr_args")),
-                            )
-                            .apply(Term::var("__wanted_arg"))
-                            .lambda("__current_list_of_constr_args"),
-                    )
-                    .apply(Term::var("__list_of_constr_args"))
-                    .lambda("__wanted_arg")
-                    .lambda("__list_of_constr_args")
-                    .lambda("__current_arg_number")
-                    .lambda(CONSTR_GET_FIELD),
-            )
             .lambda(CONSTR_FIELDS_EXPOSER)
             .apply(
                 Term::snd_pair()
@@ -3526,12 +3362,18 @@ fn record_update_output_2_vals() {
                                     .apply(
                                         Term::mk_cons()
                                             .apply(
-                                                Term::var(CONSTR_GET_FIELD)
+                                                Term::head_list()
+                                                    .apply(
+                                                        Term::tail_list().apply(
+                                                            Term::tail_list()
+                                                                .apply(Term::var("__fields")),
+                                                        ),
+                                                    )
+                                                    .lambda("__fields")
                                                     .apply(
                                                         Term::var(CONSTR_FIELDS_EXPOSER)
                                                             .apply(Term::var("prev_output")),
-                                                    )
-                                                    .apply(Term::integer(2.into())),
+                                                    ),
                                             )
                                             .apply(Term::var("tail_index_3")),
                                     ),
@@ -3560,7 +3402,6 @@ fn record_update_output_2_vals() {
                     Data::constr(1, vec![]),
                 ],
             )))
-            .constr_get_field()
             .constr_fields_exposer()
             .constr_index_exposer(),
         false,
@@ -3624,12 +3465,18 @@ fn record_update_output_1_val() {
                                     .apply(
                                         Term::mk_cons()
                                             .apply(
-                                                Term::var(CONSTR_GET_FIELD)
+                                                Term::head_list()
+                                                    .apply(
+                                                        Term::tail_list().apply(
+                                                            Term::tail_list()
+                                                                .apply(Term::var("__fields")),
+                                                        ),
+                                                    )
+                                                    .lambda("__fields")
                                                     .apply(
                                                         Term::var(CONSTR_FIELDS_EXPOSER)
                                                             .apply(Term::var("prev_output")),
-                                                    )
-                                                    .apply(Term::integer(2.into())),
+                                                    ),
                                             )
                                             .apply(Term::var("tail_index_3")),
                                     ),
@@ -3657,7 +3504,6 @@ fn record_update_output_1_val() {
                     Data::constr(1, vec![]),
                 ],
             )))
-            .constr_get_field()
             .constr_fields_exposer()
             .constr_index_exposer(),
         false,
@@ -3756,7 +3602,6 @@ fn record_update_output_first_last_val() {
                     Data::constr(1, vec![]),
                 ],
             )))
-            .constr_get_field()
             .constr_fields_exposer()
             .constr_index_exposer(),
         false,
@@ -3823,7 +3668,6 @@ fn list_fields_unwrap() {
                 Term::bool(true),
                 Term::bool(true).if_else(Term::bool(false), Term::bool(true)),
             )
-            .constr_get_field()
             .constr_fields_exposer()
             .constr_index_exposer(),
         false,
@@ -3930,12 +3774,13 @@ fn foldl_type_mismatch() {
                             .delayed_if_else(
                                 Term::equals_data()
                                     .apply(
-                                        Term::var(CONSTR_GET_FIELD)
+                                        Term::head_list()
+                                            .apply(Term::var("__fields"))
+                                            .lambda("__fields")
                                             .apply(
                                                 Term::var(CONSTR_FIELDS_EXPOSER)
                                                     .apply(Term::var("o")),
-                                            )
-                                            .apply(Term::integer(0.into())),
+                                            ),
                                     )
                                     .apply(Term::var("addr1"))
                                     .delayed_if_else(
@@ -3997,7 +3842,6 @@ fn foldl_type_mismatch() {
                     Data::constr(1, vec![]),
                 ],
             )))
-            .constr_get_field()
             .constr_fields_exposer()
             .constr_index_exposer(),
         false,
@@ -5066,7 +4910,6 @@ fn list_clause_with_assign2() {
                 vec![Data::integer(1.into())],
             )])))
             .constr_fields_exposer()
-            .constr_get_field()
             .constr_index_exposer(),
         false,
     );
@@ -5131,9 +4974,10 @@ fn opaque_value_in_datum() {
             .lambda("val")
             .apply(
                 Term::unmap_data().apply(
-                    Term::var(CONSTR_GET_FIELD)
-                        .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("dat")))
-                        .apply(Term::integer(1.into())),
+                    Term::head_list()
+                        .apply(Term::tail_list().apply(Term::var("__fields")))
+                        .lambda("__fields")
+                        .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("dat"))),
                 ),
             )
             .delayed_if_else(Term::unit(), Term::Error)
@@ -5227,7 +5071,6 @@ fn opaque_value_in_datum() {
             .lambda("ctx")
             .lambda("red")
             .lambda("dat")
-            .constr_get_field()
             .constr_fields_exposer()
             .constr_index_exposer(),
         false,
@@ -5300,9 +5143,10 @@ fn opaque_value_in_test() {
             .lambda("val")
             .apply(
                 Term::unmap_data().apply(
-                    Term::var(CONSTR_GET_FIELD)
-                        .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("dat")))
-                        .apply(Term::integer(1.into())),
+                    Term::head_list()
+                        .apply(Term::tail_list().apply(Term::var("__fields")))
+                        .lambda("__fields")
+                        .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("dat"))),
                 ),
             )
             .lambda("dat")
@@ -5330,7 +5174,6 @@ fn opaque_value_in_test() {
                 )]))
                 .into(),
             )]))
-            .constr_get_field()
             .constr_fields_exposer()
             .constr_index_exposer(),
         false,
@@ -5361,7 +5204,6 @@ fn expect_none() {
             .apply(Term::Constant(
                 Constant::Data(Data::constr(1, vec![])).into(),
             ))
-            .constr_get_field()
             .constr_index_exposer()
             .constr_fields_exposer(),
         false,
@@ -5584,7 +5426,6 @@ fn tuple_2_match() {
                 Term::bool(true),
                 Term::bool(true).if_else(Term::bool(false), Term::bool(true)),
             )
-            .constr_get_field()
             .constr_fields_exposer()
             .constr_index_exposer(),
         false,

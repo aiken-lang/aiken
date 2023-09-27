@@ -315,18 +315,6 @@ pub enum AirExpression {
         record: Box<AirTree>,
         args: Vec<AirTree>,
     },
-    // Field Access
-    RecordAccess {
-        field_index: u64,
-        tipo: Rc<Type>,
-        record: Box<AirTree>,
-    },
-    // Tuple Access
-    TupleIndex {
-        tipo: Rc<Type>,
-        tuple_index: usize,
-        tuple: Box<AirTree>,
-    },
     // Misc.
     ErrorTerm {
         tipo: Rc<Type>,
@@ -684,12 +672,33 @@ impl AirTree {
             args,
         })
     }
-    pub fn record_access(field_index: u64, tipo: Rc<Type>, record: AirTree) -> AirTree {
-        AirTree::Expression(AirExpression::RecordAccess {
-            field_index,
-            tipo,
-            record: record.into(),
-        })
+    pub fn index_access(function_name: String, tipo: Rc<Type>, list_of_fields: AirTree) -> AirTree {
+        AirTree::cast_from_data(
+            AirTree::call(
+                AirTree::var(
+                    ValueConstructor::public(
+                        Type::Fn {
+                            args: vec![list(data())],
+                            ret: data(),
+                        }
+                        .into(),
+                        ValueConstructorVariant::ModuleFn {
+                            name: function_name.clone(),
+                            field_map: None,
+                            module: "".to_string(),
+                            arity: 1,
+                            location: Span::empty(),
+                            builtin: None,
+                        },
+                    ),
+                    function_name,
+                    "",
+                ),
+                data(),
+                vec![list_of_fields],
+            ),
+            tipo.clone(),
+        )
     }
 
     pub fn fields_expose(
@@ -754,12 +763,19 @@ impl AirTree {
             hoisted_over: None,
         }
     }
-    pub fn tuple_index(tuple_index: usize, tipo: Rc<Type>, tuple: AirTree) -> AirTree {
-        AirTree::Expression(AirExpression::TupleIndex {
-            tipo,
-            tuple_index,
-            tuple: tuple.into(),
-        })
+    pub fn pair_index(index: usize, tipo: Rc<Type>, tuple: AirTree) -> AirTree {
+        AirTree::cast_from_data(
+            AirTree::builtin(
+                if index == 0 {
+                    DefaultFunction::FstPair
+                } else {
+                    DefaultFunction::SndPair
+                },
+                data(),
+                vec![tuple],
+            ),
+            tipo.clone(),
+        )
     }
     pub fn error(tipo: Rc<Type>) -> AirTree {
         AirTree::Expression(AirExpression::ErrorTerm { tipo })
@@ -1241,28 +1257,6 @@ impl AirTree {
                         arg.create_air_vec(air_vec);
                     }
                 }
-                AirExpression::RecordAccess {
-                    field_index,
-                    tipo,
-                    record,
-                } => {
-                    air_vec.push(Air::RecordAccess {
-                        record_index: *field_index,
-                        tipo: tipo.clone(),
-                    });
-                    record.create_air_vec(air_vec);
-                }
-                AirExpression::TupleIndex {
-                    tipo,
-                    tuple_index,
-                    tuple,
-                } => {
-                    air_vec.push(Air::TupleIndex {
-                        tipo: tipo.clone(),
-                        tuple_index: *tuple_index,
-                    });
-                    tuple.create_air_vec(air_vec);
-                }
                 AirExpression::ErrorTerm { tipo } => {
                     air_vec.push(Air::ErrorTerm { tipo: tipo.clone() })
                 }
@@ -1300,8 +1294,6 @@ impl AirTree {
                 | AirExpression::If { tipo, .. }
                 | AirExpression::Constr { tipo, .. }
                 | AirExpression::RecordUpdate { tipo, .. }
-                | AirExpression::RecordAccess { tipo, .. }
-                | AirExpression::TupleIndex { tipo, .. }
                 | AirExpression::ErrorTerm { tipo }
                 | AirExpression::Trace { tipo, .. } => tipo.clone(),
                 AirExpression::Void => void(),
@@ -1351,9 +1343,7 @@ impl AirTree {
                 | AirExpression::CastFromData { tipo, .. }
                 | AirExpression::CastToData { tipo, .. }
                 | AirExpression::If { tipo, .. }
-                | AirExpression::RecordAccess { tipo, .. }
                 | AirExpression::Constr { tipo, .. }
-                | AirExpression::TupleIndex { tipo, .. }
                 | AirExpression::ErrorTerm { tipo }
                 | AirExpression::Trace { tipo, .. } => vec![tipo],
                 AirExpression::Var { constructor, .. } => {
@@ -1836,24 +1826,6 @@ impl AirTree {
                         );
                     }
                 }
-                AirExpression::RecordAccess { record, .. } => {
-                    record.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirExpression::TupleIndex { tuple, .. } => {
-                    tuple.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
                 AirExpression::Trace { msg, then, .. } => {
                     msg.do_traverse_tree_with(
                         tree_path,
@@ -2170,21 +2142,6 @@ impl AirTree {
 
                         item.do_find_air_tree_node(tree_path_iter)
                     }
-                    AirExpression::RecordAccess { record, .. } => {
-                        if *index == 0 {
-                            record.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
-                    }
-                    AirExpression::TupleIndex { tuple, .. } => {
-                        if *index == 0 {
-                            tuple.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
-                    }
-
                     AirExpression::Trace { msg, then, .. } => {
                         if *index == 0 {
                             msg.as_mut().do_find_air_tree_node(tree_path_iter)
