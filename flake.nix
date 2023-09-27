@@ -32,6 +32,8 @@
 
           cargoLock.lockFile = ./Cargo.lock;
 
+          GIT_COMMIT_HASH_SHORT = self.rev or "dirty"; #  or self.dirtyRev;
+          
           postInstall = ''
             mkdir -p $out/share/zsh/site-functions
             $out/bin/aiken completion zsh > $out/share/zsh/site-functions/_aiken
