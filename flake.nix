@@ -35,7 +35,8 @@
           GIT_COMMIT_HASH_SHORT = self.shortRev or "dirty"; # or self.dirtyRev;
           postPatch = ''
             substituteInPlace crates/aiken/src/cmd/mod.rs \
-              --replace  "built_info::GIT_COMMIT_HASH_SHORT" "\"$GIT_COMMIT_HASH_SHORT\".to_string()"
+              --replace  "built_info::GIT_COMMIT_HASH_SHORT" \
+              "Some(\"$GIT_COMMIT_HASH_SHORT\")"
           '';
           
           postInstall = ''
