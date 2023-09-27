@@ -10,7 +10,7 @@ use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use uplc::{
     ast::{Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType},
-    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_GET_FIELD, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
+    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
     builtins::DefaultFunction,
     machine::cost_model::ExBudget,
     optimize::aiken_optimize_and_intern,
@@ -22,7 +22,7 @@ use crate::{
         AssignmentKind, BinOp, Pattern, Span, TypedArg, TypedClause, TypedDataType, TypedFunction,
         TypedPattern, TypedValidator, UnOp,
     },
-    builtins::{bool, data, int, void},
+    builtins::{bool, data, int, list, void},
     expr::TypedExpr,
     gen_uplc::builder::{
         check_replaceable_opaque_type, convert_opaque_type, erase_opaque_type_operations,
@@ -187,10 +187,7 @@ impl<'a> CodeGenerator<'a> {
 
     fn finalize(&mut self, mut term: Term<Name>) -> Program<Name> {
         if self.needs_field_access {
-            term = term
-                .constr_get_field()
-                .constr_fields_exposer()
-                .constr_index_exposer();
+            term = term.constr_fields_exposer().constr_index_exposer();
         }
 
         // TODO: Once SOP is implemented, new version is 1.1.0
@@ -550,7 +547,38 @@ impl<'a> CodeGenerator<'a> {
                 if check_replaceable_opaque_type(&record.tipo(), &self.data_types) {
                     self.build(record)
                 } else {
-                    AirTree::record_access(*index, tipo.clone(), self.build(record))
+                    self.needs_field_access = true;
+                    let function_name = format!("__access_index_{}", *index);
+
+                    if self.code_gen_functions.get(&function_name).is_none() {
+                        let mut body = AirTree::local_var("__fields", list(data()));
+
+                        for _ in 0..*index {
+                            body = AirTree::builtin(
+                                DefaultFunction::TailList,
+                                list(data()),
+                                vec![body],
+                            )
+                        }
+
+                        body = AirTree::builtin(DefaultFunction::HeadList, data(), vec![body]);
+
+                        self.code_gen_functions.insert(
+                            function_name.clone(),
+                            CodeGenFunction::Function {
+                                body,
+                                params: vec!["__fields".to_string()],
+                            },
+                        );
+                    }
+
+                    let list_of_fields = AirTree::call(
+                        AirTree::local_var(CONSTR_FIELDS_EXPOSER, void()),
+                        list(data()),
+                        vec![self.build(record)],
+                    );
+
+                    AirTree::index_access(function_name, tipo.clone(), list_of_fields)
                 }
             }
 
@@ -622,8 +650,38 @@ impl<'a> CodeGenerator<'a> {
                 tipo.clone(),
             ),
 
-            TypedExpr::TupleIndex { index, tuple, .. } => {
-                AirTree::tuple_index(*index, tuple.tipo(), self.build(tuple))
+            TypedExpr::TupleIndex {
+                index, tuple, tipo, ..
+            } => {
+                if tuple.tipo().is_2_tuple() {
+                    AirTree::pair_index(*index, tipo.clone(), self.build(tuple))
+                } else {
+                    let function_name = format!("__access_index_{}", *index);
+
+                    if self.code_gen_functions.get(&function_name).is_none() {
+                        let mut body = AirTree::local_var("__fields", list(data()));
+
+                        for _ in 0..*index {
+                            body = AirTree::builtin(
+                                DefaultFunction::TailList,
+                                list(data()),
+                                vec![body],
+                            )
+                        }
+
+                        body = AirTree::builtin(DefaultFunction::HeadList, data(), vec![body]);
+
+                        self.code_gen_functions.insert(
+                            function_name.clone(),
+                            CodeGenFunction::Function {
+                                body,
+                                params: vec!["__fields".to_string()],
+                            },
+                        );
+                    }
+
+                    AirTree::index_access(function_name, tipo.clone(), self.build(tuple))
+                }
             }
 
             TypedExpr::ErrorTerm { tipo, .. } => AirTree::error(tipo.clone()),
@@ -3876,10 +3934,7 @@ impl<'a> CodeGenerator<'a> {
                         ) {
                             let mut term = self.uplc_code_gen(air_vec.clone());
 
-                            term = term
-                                .constr_get_field()
-                                .constr_fields_exposer()
-                                .constr_index_exposer();
+                            term = term.constr_fields_exposer().constr_index_exposer();
 
                             let mut program: Program<Name> = Program {
                                 version: (1, 0, 0),
@@ -4660,18 +4715,6 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::RecordAccess { record_index, tipo } => {
-                self.needs_field_access = true;
-                let constr = arg_stack.pop().unwrap();
-
-                let mut term = Term::var(CONSTR_GET_FIELD)
-                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(constr))
-                    .apply(Term::integer(record_index.into()));
-
-                term = builder::convert_data_to_type(term, &tipo);
-
-                arg_stack.push(term);
-            }
             Air::FieldsExpose {
                 indices,
                 check_last_item,
@@ -4928,33 +4971,6 @@ impl<'a> CodeGenerator<'a> {
                         }
                     }
                 };
-
-                arg_stack.push(term);
-            }
-            Air::TupleIndex { tipo, tuple_index } => {
-                let mut term = arg_stack.pop().unwrap();
-
-                if matches!(tipo.get_uplc_type(), UplcType::Pair(_, _)) {
-                    if tuple_index == 0 {
-                        term = builder::convert_data_to_type(
-                            Term::fst_pair().apply(term),
-                            &tipo.get_inner_types()[0],
-                        );
-                    } else {
-                        term = builder::convert_data_to_type(
-                            Term::snd_pair().apply(term),
-                            &tipo.get_inner_types()[1],
-                        );
-                    }
-                } else {
-                    self.needs_field_access = true;
-                    term = builder::convert_data_to_type(
-                        Term::var(CONSTR_GET_FIELD)
-                            .apply(term)
-                            .apply(Term::integer(tuple_index.into())),
-                        &tipo.get_inner_types()[tuple_index],
-                    );
-                }
 
                 arg_stack.push(term);
             }

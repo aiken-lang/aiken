@@ -6,7 +6,6 @@ use pallas_primitives::alonzo::PlutusData;
 
 pub const CONSTR_FIELDS_EXPOSER: &str = "__constr_fields_exposer";
 pub const CONSTR_INDEX_EXPOSER: &str = "__constr_index_exposer";
-pub const CONSTR_GET_FIELD: &str = "__constr_get_field";
 pub const EXPECT_ON_LIST: &str = "__expect_on_list";
 
 impl<T> Term<T> {
@@ -342,40 +341,5 @@ impl Term<Name> {
                 .apply(Term::unconstr_data().apply(Term::var("__constr_var")))
                 .lambda("__constr_var"),
         )
-    }
-
-    pub fn constr_get_field(self) -> Self {
-        self.lambda(CONSTR_GET_FIELD)
-            .apply(
-                Term::var(CONSTR_GET_FIELD)
-                    .apply(Term::var(CONSTR_GET_FIELD))
-                    .apply(Term::integer(0.into())),
-            )
-            .lambda(CONSTR_GET_FIELD)
-            .apply(
-                Term::equals_integer()
-                    .apply(Term::var("__wanted_arg"))
-                    .apply(Term::var("__current_arg_number"))
-                    .if_else(
-                        Term::head_list(),
-                        Term::var(CONSTR_GET_FIELD)
-                            .apply(Term::var(CONSTR_GET_FIELD))
-                            .apply(
-                                Term::add_integer()
-                                    .apply(Term::var("__current_arg_number"))
-                                    .apply(Term::integer(1.into())),
-                            )
-                            .apply(
-                                Term::tail_list().apply(Term::var("__current_list_of_constr_args")),
-                            )
-                            .apply(Term::var("__wanted_arg"))
-                            .lambda("__current_list_of_constr_args"),
-                    )
-                    .apply(Term::var("__list_of_constr_args"))
-                    .lambda("__wanted_arg")
-                    .lambda("__list_of_constr_args")
-                    .lambda("__current_arg_number")
-                    .lambda(CONSTR_GET_FIELD),
-            )
     }
 }
