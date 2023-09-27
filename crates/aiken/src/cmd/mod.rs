@@ -1,5 +1,4 @@
 use clap::Parser;
-use std::env;
 
 pub mod blueprint;
 pub mod build;
@@ -57,6 +56,6 @@ fn version() -> String {
     format!(
         "v{} {}",
         built_info::PKG_VERSION,
-        built_info::GIT_COMMIT_HASH_SHORT
+        built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown")
     )
 }
