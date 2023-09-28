@@ -32,7 +32,7 @@
 
           cargoLock.lockFile = ./Cargo.lock;
 
-          GIT_COMMIT_HASH_SHORT = self.shortRev or "dirty"; # or self.dirtyRev;
+          GIT_COMMIT_HASH_SHORT = self.shortRev or "unknown";
           postPatch = ''
             substituteInPlace crates/aiken/src/cmd/mod.rs \
               --replace  "built_info::GIT_COMMIT_HASH_SHORT" \
