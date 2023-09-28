@@ -11,8 +11,8 @@ pub struct Args {
 }
 
 #[derive(serde::Deserialize)]
-struct Vowels {
-    count: u8,
+struct Output {
+    pub code: String,
 }
 
 pub fn exec(Args { directory }: Args) -> miette::Result<()> {
@@ -32,19 +32,23 @@ pub fn exec(Args { directory }: Args) -> miette::Result<()> {
     let blueprint: Blueprint =
         serde_json::from_reader(BufReader::new(blueprint)).into_diagnostic()?;
 
-    let wasm = include_bytes!("../../../../../code.wasm");
+    let wasm = include_bytes!("../../../../../plugin/target/wasm32-wasi/release/plugin.wasm");
     // NOTE: if you encounter an error such as:
     // "Unable to load plugin: unknown import: wasi_snapshot_preview1::fd_write has not been defined"
     // change `false` to `true` in the following function to provide WASI imports to your plugin.
     let context = Context::new();
-    let mut plugin =
-        Plugin::new(&context, wasm, [], false).map_err(|e| miette::miette!("{}", e))?;
+    let mut plugin = Plugin::new(&context, wasm, [], true).map_err(|e| miette::miette!("{}", e))?;
 
-    let data = plugin.call("count_vowels", "this is a test").unwrap();
+    let data = plugin
+        .call(
+            "count_vowels",
+            serde_json::to_vec(&blueprint).into_diagnostic()?,
+        )
+        .map_err(|e| miette::miette!("{e}"))?;
 
-    let vowels: Vowels = serde_json::from_reader(data).into_diagnostic()?;
+    let output: Output = serde_json::from_reader(data).into_diagnostic()?;
 
-    println!("{}", vowels.count);
+    println!("{}", output.code);
 
     Ok(())
 }
