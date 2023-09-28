@@ -10,6 +10,7 @@ shared-version = true
 tag-name = "v{{version}}"
 
 [workspace.dependencies]
+serde = { version = "1.0.152", features = ["derive"] }
 insta = { version = "1.30.0", features = ["yaml"] }
 
 [profile.dev.package.insta]

@@ -1,6 +1,7 @@
 pub mod address;
 pub mod apply;
 pub mod convert;
+pub mod generate;
 pub mod hash;
 pub mod policy;
 
@@ -14,6 +15,7 @@ pub enum Cmd {
     Hash(hash::Args),
     Apply(apply::Args),
     Convert(convert::Args),
+    Generate(generate::Args),
 }
 
 pub fn exec(cmd: Cmd) -> miette::Result<()> {
@@ -23,5 +25,6 @@ pub fn exec(cmd: Cmd) -> miette::Result<()> {
         Cmd::Hash(args) => hash::exec(args),
         Cmd::Apply(args) => apply::exec(args),
         Cmd::Convert(args) => convert::exec(args),
+        Cmd::Generate(args) => generate::exec(args),
     }
 }

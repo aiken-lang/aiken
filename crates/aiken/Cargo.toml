@@ -33,6 +33,7 @@ pallas-crypto = "0.18.0"
 pallas-primitives = "0.18.0"
 pallas-traverse = "0.18.0"
 regex = "1.7.1"
+serde.workspace = true
 serde_json = "1.0.94"
 thiserror = "1.0.39"
 
@@ -44,6 +45,7 @@ clap_complete = "4.3.2"
 inquire = "0.6.2"
 num-bigint = "0.4.3"
 ordinal = "0.3.2"
+extism = "0.5.2"
 
 [build-dependencies]
 built = { version = "0.6.0", features = ["git2"] }
