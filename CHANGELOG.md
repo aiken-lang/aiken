@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.0.18-alpha - 2023-MM-DD
+## v1.0.18-alpha - 2023-09-29
 
 ### Added
 
@@ -19,6 +19,8 @@
 - **aiken-lang**: (Code Gen): Remove the use of Air::RecordAccess and TupleIndex
   and replace them with functions that directly get the item at the specified
   index. Also improves performance.
+- **uplc**: Added more cases to the inline optimization function to allow the
+  removal of further unnecessary lambda bindings.
 
 ## v1.0.17-alpha - 2023-09-20
 
