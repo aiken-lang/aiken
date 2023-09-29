@@ -283,17 +283,21 @@ fn inline_basic_reduce(term: &mut Term<Name>) {
             } = func
             {
                 let occurrences = var_occurrences(body, parameter_name.clone());
+                // TODO: Once case and constr is live we need to also check if case is delaying values
+                let delays = delayed_execution(body.as_ref());
                 if occurrences == 1 {
-                    if let replace_term @ (Term::Var(_)
+                    if delays == 0 {
+                        *term = substitute_term(body.as_ref(), parameter_name.clone(), arg);
+                    } else if let Term::Var(_)
                     | Term::Constant(_)
                     | Term::Error
                     | Term::Delay(_)
                     | Term::Lambda { .. }
-                    | Term::Builtin(_)) = arg
+                    | Term::Builtin(_) = arg
                     {
-                        *term =
-                            substitute_term(body.as_ref(), parameter_name.clone(), replace_term);
+                        *term = substitute_term(body.as_ref(), parameter_name.clone(), arg);
                     }
+                // This will strip out unused terms that can't throw an error by themselves
                 } else if occurrences == 0 {
                     if let Term::Var(_)
                     | Term::Constant(_)
@@ -460,6 +464,18 @@ fn var_occurrences(term: &Term<Name>, search_for: Rc<Name>) -> usize {
                 + var_occurrences(argument.as_ref(), search_for)
         }
         Term::Force(x) => var_occurrences(x.as_ref(), search_for),
+        _ => 0,
+    }
+}
+
+fn delayed_execution(term: &Term<Name>) -> usize {
+    match term {
+        Term::Delay(body) => 1 + delayed_execution(body.as_ref()),
+        Term::Lambda { body, .. } => 1 + delayed_execution(body.as_ref()),
+        Term::Apply { function, argument } => {
+            delayed_execution(function.as_ref()) + delayed_execution(argument.as_ref())
+        }
+        Term::Force(x) => delayed_execution(x.as_ref()),
         _ => 0,
     }
 }

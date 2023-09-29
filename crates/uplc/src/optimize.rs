@@ -26,4 +26,6 @@ pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
         .wrap_data_reduce()
         .lambda_reduce()
         .inline_reduce()
+        .lambda_reduce()
+        .inline_reduce()
 }
