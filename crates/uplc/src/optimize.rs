@@ -6,7 +6,7 @@ use crate::{
 pub mod shrinker;
 
 pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
-    let mut program = program.builtin_force_reduce();
+    let mut program = program.builtin_force_reducer();
 
     let mut interner = Interner::new();
 
@@ -18,14 +18,14 @@ pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
     let program: Program<Name> = program_named.try_into().unwrap();
 
     program
-        .lambda_reduce()
-        .inline_reduce()
-        .lambda_reduce()
-        .inline_reduce()
-        .force_delay_reduce()
-        .wrap_data_reduce()
-        .lambda_reduce()
-        .inline_reduce()
-        .lambda_reduce()
-        .inline_reduce()
+        .lambda_reducer()
+        .inline_reducer()
+        .lambda_reducer()
+        .inline_reducer()
+        .force_delay_reducer()
+        .cast_data_reducer()
+        .lambda_reducer()
+        .inline_reducer()
+        .lambda_reducer()
+        .inline_reducer()
 }
