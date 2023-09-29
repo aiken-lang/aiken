@@ -2786,12 +2786,9 @@ fn when_tuple_deconstruction() {
                         Term::equals_integer()
                             .apply(
                                 Term::un_i_data().apply(
-                                    Term::head_list()
-                                        .apply(Term::var("__fields"))
-                                        .lambda("__fields")
-                                        .apply(
-                                            Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("a")),
-                                        ),
+                                    Term::head_list().apply(
+                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("a")),
+                                    ),
                                 ),
                             )
                             .apply(Term::var("x"))
@@ -3773,15 +3770,9 @@ fn foldl_type_mismatch() {
                             .apply(Term::var("mb_b_index"))
                             .delayed_if_else(
                                 Term::equals_data()
-                                    .apply(
-                                        Term::head_list()
-                                            .apply(Term::var("__fields"))
-                                            .lambda("__fields")
-                                            .apply(
-                                                Term::var(CONSTR_FIELDS_EXPOSER)
-                                                    .apply(Term::var("o")),
-                                            ),
-                                    )
+                                    .apply(Term::head_list().apply(
+                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("o")),
+                                    ))
                                     .apply(Term::var("addr1"))
                                     .delayed_if_else(
                                         Term::constr_data().apply(Term::integer(0.into())).apply(
@@ -5141,14 +5132,9 @@ fn opaque_value_in_test() {
             .lambda("tuple_item_0")
             .apply(Term::head_list().apply(Term::var("val")))
             .lambda("val")
-            .apply(
-                Term::unmap_data().apply(
-                    Term::head_list()
-                        .apply(Term::tail_list().apply(Term::var("__fields")))
-                        .lambda("__fields")
-                        .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("dat"))),
-                ),
-            )
+            .apply(Term::unmap_data().apply(Term::head_list().apply(
+                Term::tail_list().apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("dat"))),
+            )))
             .lambda("dat")
             .apply(Term::Constant(
                 Constant::Data(Data::constr(
