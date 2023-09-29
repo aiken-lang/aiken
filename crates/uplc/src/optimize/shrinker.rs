@@ -334,9 +334,7 @@ fn inline_single_occurrence_reducer(term: &mut Term<Name>) {
                 let occurrences = var_occurrences(body, parameter_name.clone());
 
                 let delays = delayed_execution(body.as_ref());
-                let recursive = is_recursive(arg);
-                // We don't want to inline recursive functions
-                if occurrences == 1 && !recursive {
+                if occurrences == 1 {
                     if delays == 0 {
                         *term = substitute_term(body.as_ref(), parameter_name.clone(), arg);
                     } else if let Term::Var(_)
@@ -522,24 +520,6 @@ fn var_occurrences(term: &Term<Name>, search_for: Rc<Name>) -> usize {
         Term::Case { .. } => todo!(),
         Term::Constr { .. } => todo!(),
         _ => 0,
-    }
-}
-
-fn is_recursive(term: &Term<Name>) -> bool {
-    match term {
-        Term::Delay(body) => is_recursive(body.as_ref()),
-        Term::Lambda { body, .. } => is_recursive(body.as_ref()),
-        Term::Apply { function, argument } => {
-            if let (Term::Var(a), Term::Var(b)) = (function.as_ref(), argument.as_ref()) {
-                a.as_ref() == b.as_ref()
-            } else {
-                is_recursive(function.as_ref()) || is_recursive(argument.as_ref())
-            }
-        }
-        Term::Force(x) => is_recursive(x.as_ref()),
-        Term::Case { .. } => todo!(),
-        Term::Constr { .. } => todo!(),
-        _ => false,
     }
 }
 
