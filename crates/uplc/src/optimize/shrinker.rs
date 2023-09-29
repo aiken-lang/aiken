@@ -129,6 +129,8 @@ fn builtin_force_reduce(term: &mut Term<Name>, builtin_map: &mut IndexMap<u8, ()
             let arg = Rc::make_mut(argument);
             builtin_force_reduce(arg, builtin_map);
         }
+        Term::Case { .. } => todo!(),
+        Term::Constr { .. } => todo!(),
         _ => {}
     }
 }
@@ -160,6 +162,8 @@ fn force_delay_reduce(term: &mut Term<Name>) {
             let arg = Rc::make_mut(argument);
             force_delay_reduce(arg);
         }
+        Term::Case { .. } => todo!(),
+        Term::Constr { .. } => todo!(),
         _ => {}
     }
 }
@@ -201,6 +205,8 @@ fn inline_direct_reduce(term: &mut Term<Name>) {
             let f = Rc::make_mut(f);
             inline_direct_reduce(f);
         }
+        Term::Case { .. } => todo!(),
+        Term::Constr { .. } => todo!(),
         _ => {}
     }
 }
@@ -256,6 +262,8 @@ fn inline_identity_reduce(term: &mut Term<Name>) {
             let f = Rc::make_mut(f);
             inline_identity_reduce(f);
         }
+        Term::Case { .. } => todo!(),
+        Term::Constr { .. } => todo!(),
         _ => {}
     }
 }
@@ -314,6 +322,8 @@ fn inline_basic_reduce(term: &mut Term<Name>) {
             let f = Rc::make_mut(f);
             inline_basic_reduce(f);
         }
+        Term::Case { .. } => todo!(),
+        Term::Constr { .. } => todo!(),
         _ => {}
     }
 }
@@ -435,6 +445,8 @@ fn wrap_data_reduce(term: &mut Term<Name>) {
         Term::Force(f) => {
             wrap_data_reduce(Rc::make_mut(f));
         }
+        Term::Case { .. } => todo!(),
+        Term::Constr { .. } => todo!(),
         _ => {}
     }
 }
@@ -464,6 +476,8 @@ fn var_occurrences(term: &Term<Name>, search_for: Rc<Name>) -> usize {
                 + var_occurrences(argument.as_ref(), search_for)
         }
         Term::Force(x) => var_occurrences(x.as_ref(), search_for),
+        Term::Case { .. } => todo!(),
+        Term::Constr { .. } => todo!(),
         _ => 0,
     }
 }
@@ -476,6 +490,15 @@ fn delayed_execution(term: &Term<Name>) -> usize {
             delayed_execution(function.as_ref()) + delayed_execution(argument.as_ref())
         }
         Term::Force(x) => delayed_execution(x.as_ref()),
+        Term::Case { constr, branches } => {
+            1 + delayed_execution(constr.as_ref())
+                + branches
+                    .iter()
+                    .fold(0, |acc, branch| acc + delayed_execution(branch))
+        }
+        Term::Constr { fields, .. } => fields
+            .iter()
+            .fold(0, |acc, field| acc + delayed_execution(field)),
         _ => 0,
     }
 }
@@ -512,6 +535,8 @@ fn lambda_reduce(term: &mut Term<Name>) {
             let f = Rc::make_mut(f);
             lambda_reduce(f);
         }
+        Term::Case { .. } => todo!(),
+        Term::Constr { .. } => todo!(),
         _ => {}
     }
 }
@@ -553,6 +578,8 @@ fn substitute_term(term: &Term<Name>, original: Rc<Name>, replace_with: &Term<Na
             argument: Rc::new(substitute_term(argument.as_ref(), original, replace_with)),
         },
         Term::Force(x) => Term::Force(Rc::new(substitute_term(x.as_ref(), original, replace_with))),
+        Term::Case { .. } => todo!(),
+        Term::Constr { .. } => todo!(),
         x => x.clone(),
     }
 }
@@ -600,6 +627,8 @@ fn replace_identity_usage(term: &Term<Name>, original: Rc<Name>) -> Term<Name> {
             }
         }
         Term::Force(x) => Term::Force(Rc::new(replace_identity_usage(x.as_ref(), original))),
+        Term::Case { .. } => todo!(),
+        Term::Constr { .. } => todo!(),
         x => x.clone(),
     }
 }
