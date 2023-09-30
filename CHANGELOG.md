@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.19-alpha - 2023-09-29
+
+### Fixed
+
+- **aiken-lang**: Fixed small typo in `hoist_dependent_functions` lead to
+  internal cyclic calls not being recognized.
+
 ## v1.0.18-alpha - 2023-09-29
 
 ### Added
