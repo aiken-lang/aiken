@@ -3236,7 +3236,7 @@ impl<'a> CodeGenerator<'a> {
                         let mut functions = functions.clone();
 
                         for (_, body) in functions.iter_mut() {
-                            modify_cyclic_calls(body, key, &self.cyclic_functions);
+                            modify_cyclic_calls(body, &dep_key, &self.cyclic_functions);
                         }
 
                         dep_insertions.push(AirTree::define_cyclic_func(
