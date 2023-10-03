@@ -3,7 +3,7 @@ use crate::{
     builtins,
     expr::TypedExpr,
     parser,
-    tipo::error::{Error, Warning},
+    tipo::error::{Error, UnifyErrorSituation, Warning},
     IdGenerator,
 };
 use std::collections::HashMap;
@@ -1003,6 +1003,104 @@ fn trace_if_false_ko() {
     assert!(matches!(
         check(parse(source_code)),
         Err((_, Error::CouldNotUnify { .. }))
+    ))
+}
+
+#[test]
+fn pipe_with_wrong_type() {
+    let source_code = r#"
+        test foo() {
+          True |> bar
+        }
+
+        fn bar(n: Int) {
+          n - 1
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::CouldNotUnify {
+                situation: Some(UnifyErrorSituation::PipeTypeMismatch),
+                ..
+            }
+        ))
+    ))
+}
+
+#[test]
+fn pipe_with_wrong_type_and_args() {
+    let source_code = r#"
+        test foo() {
+          True |> bar(False)
+        }
+
+        fn bar(n: Int, l: Bool) {
+          n - 1
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::CouldNotUnify {
+                situation: Some(UnifyErrorSituation::PipeTypeMismatch),
+                ..
+            }
+        ))
+    ))
+}
+
+#[test]
+fn pipe_with_right_type_and_wrong_args() {
+    let source_code = r#"
+        test foo() {
+          1 |> bar(1)
+        }
+
+        fn bar(n: Int, l: Bool) {
+          n - 1
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::CouldNotUnify {
+                situation: None,
+                ..
+            }
+        ))
+    ))
+}
+
+#[test]
+fn pipe_with_wrong_type_and_full_args() {
+    let source_code = r#"
+        test foo() {
+          True |> bar(False)
+        }
+
+        fn bar(l: Bool) -> fn(Int) -> Int {
+          fn(n: Int) {
+            n - 1
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((
+            _,
+            Error::CouldNotUnify {
+                situation: Some(UnifyErrorSituation::PipeTypeMismatch),
+                ..
+            }
+        ))
     ))
 }
 

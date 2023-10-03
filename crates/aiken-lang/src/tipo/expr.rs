@@ -76,17 +76,21 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     ) -> Result<(TypedExpr, Vec<TypedCallArg>, Rc<Type>), Error> {
         let fun = self.infer(fun)?;
 
-        let (fun, args, typ) = self.do_infer_call_with_known_fun(fun, args, location)?;
+        let (fun, args, typ) = self.do_infer_call_with_known_fun(fun, args, location, |e| e)?;
 
         Ok((fun, args, typ))
     }
 
-    pub fn do_infer_call_with_known_fun(
+    pub fn do_infer_call_with_known_fun<F>(
         &mut self,
         fun: TypedExpr,
         mut args: Vec<CallArg<UntypedExpr>>,
         location: Span,
-    ) -> Result<(TypedExpr, Vec<TypedCallArg>, Rc<Type>), Error> {
+        map_err: F,
+    ) -> Result<(TypedExpr, Vec<TypedCallArg>, Rc<Type>), Error>
+    where
+        F: Copy + FnOnce(Error) -> Error,
+    {
         // Check to see if the function accepts labelled arguments
         match self.get_field_map(&fun, location)? {
             // The fun has a field map so labelled arguments may be present and need to be reordered.
@@ -105,14 +109,20 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         let mut arguments = Vec::new();
 
-        for (tipo, arg) in args_types.iter_mut().zip(args) {
+        for (index, (tipo, arg)) in args_types.iter_mut().zip(args).enumerate() {
             let CallArg {
                 label,
                 value,
                 location,
             } = arg;
 
-            let value = self.infer_call_argument(value, tipo.clone())?;
+            let value = self.infer_call_argument(value, tipo.clone());
+
+            let value = if index == 0 {
+                value.map_err(map_err)?
+            } else {
+                value?
+            };
 
             arguments.push(CallArg {
                 label,
