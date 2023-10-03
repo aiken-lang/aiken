@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.20-alpha - unreleased
+
+### Fixed
+
+- **aiken-lang**: improved error messages for `a |> b(x)`
+
 ## v1.0.19-alpha - 2023-09-29
 
 ### Fixed
