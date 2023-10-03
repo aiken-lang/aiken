@@ -1158,7 +1158,7 @@ fn suggest_unify(
             given
         },
         Some(UnifyErrorSituation::PipeTypeMismatch) => formatdoc! {
-            r#"As I was looking at a pipeline you have defined, I realized that one of the pipe isn't valid.
+            r#"As I was looking at a pipeline you have defined, I realized that one of the pipes isn't valid.
 
                I am expecting the pipe to send into something of type:
 

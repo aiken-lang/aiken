@@ -202,9 +202,9 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
         args: Vec<CallArg<UntypedExpr>>,
         location: Span,
     ) -> Result<TypedExpr, Error> {
-        let (function, args, tipo) = self
-            .expr_typer
-            .do_infer_call_with_known_fun(function, args, location)?;
+        let (function, args, tipo) =
+            self.expr_typer
+                .do_infer_call_with_known_fun(function, args, location, |e| e)?;
 
         let function = TypedExpr::Call {
             location,
@@ -214,14 +214,11 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
         };
 
         let args = vec![self.untyped_left_hand_value_variable_call_argument()];
-        // TODO: use `.with_unify_error_situation(UnifyErrorSituation::PipeTypeMismatch)`
-        // This will require the typing of the arguments to be lifted up out of
-        // the function below. If it is not we don't know if the error comes
-        // from incorrect usage of the pipe or if it originates from the
-        // argument expressions.
-        let (function, args, tipo) = self
-            .expr_typer
-            .do_infer_call_with_known_fun(function, args, location)?;
+        let (function, args, tipo) =
+            self.expr_typer
+                .do_infer_call_with_known_fun(function, args, location, |e| {
+                    e.with_unify_error_situation(UnifyErrorSituation::PipeTypeMismatch)
+                })?;
 
         Ok(TypedExpr::Call {
             location,
@@ -239,14 +236,11 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
         location: Span,
     ) -> Result<TypedExpr, Error> {
         arguments.insert(0, self.untyped_left_hand_value_variable_call_argument());
-        // TODO: use `.with_unify_error_situation(UnifyErrorSituation::PipeTypeMismatch)`
-        // This will require the typing of the arguments to be lifted up out of
-        // the function below. If it is not we don't know if the error comes
-        // from incorrect usage of the pipe or if it originates from the
-        // argument expressions.
-        let (fun, args, tipo) = self
-            .expr_typer
-            .do_infer_call_with_known_fun(function, arguments, location)?;
+        let (fun, args, tipo) =
+            self.expr_typer
+                .do_infer_call_with_known_fun(function, arguments, location, |e| {
+                    e.with_unify_error_situation(UnifyErrorSituation::PipeTypeMismatch)
+                })?;
 
         Ok(TypedExpr::Call {
             location,
