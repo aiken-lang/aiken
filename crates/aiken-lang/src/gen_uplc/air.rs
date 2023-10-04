@@ -172,6 +172,7 @@ pub enum Air {
     // Misc.
     ErrorTerm {
         tipo: Rc<Type>,
+        validator: bool,
     },
     Trace {
         tipo: Rc<Type>,

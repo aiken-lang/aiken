@@ -120,7 +120,7 @@ impl<'a> CodeGenerator<'a> {
     ) -> Program<Name> {
         let mut air_tree_fun = self.build(&fun.body);
 
-        air_tree_fun = wrap_validator_condition(air_tree_fun);
+        air_tree_fun = wrap_validator_condition(air_tree_fun, self.tracing);
 
         let mut validator_args_tree = self.check_validator_args(&fun.arguments, true, air_tree_fun);
 
@@ -139,7 +139,7 @@ impl<'a> CodeGenerator<'a> {
 
             let mut air_tree_fun_other = self.build(&other.body);
 
-            air_tree_fun_other = wrap_validator_condition(air_tree_fun_other);
+            air_tree_fun_other = wrap_validator_condition(air_tree_fun_other, self.tracing);
 
             let mut validator_args_tree_other =
                 self.check_validator_args(&other.arguments, true, air_tree_fun_other);
@@ -684,7 +684,7 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
 
-            TypedExpr::ErrorTerm { tipo, .. } => AirTree::error(tipo.clone()),
+            TypedExpr::ErrorTerm { tipo, .. } => AirTree::error(tipo.clone(), false),
 
             TypedExpr::RecordUpdate {
                 tipo, spread, args, ..
@@ -1468,12 +1468,12 @@ impl<'a> CodeGenerator<'a> {
 
             let error_term = if self.tracing {
                 AirTree::trace(
-                    AirTree::string("Constr index did not match any type variant"),
+                    AirTree::string("Constr index didn't match a type variant"),
                     tipo.clone(),
-                    AirTree::error(tipo.clone()),
+                    AirTree::error(tipo.clone(), false),
                 )
             } else {
-                AirTree::error(tipo.clone())
+                AirTree::error(tipo.clone(), false)
             };
 
             if function.is_none() && defined_data_types.get(&data_type_name).is_none() {
@@ -4327,7 +4327,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
 
                 let trace_term = if self.tracing {
-                    Term::Error.trace(Term::string("Expected on incorrect constructor variant."))
+                    Term::Error.trace(Term::string("Expected on incorrect Constr variant"))
                 } else {
                     Term::Error
                 };
@@ -4344,7 +4344,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
 
                 let trace_term = if self.tracing {
-                    Term::Error.trace(Term::string("Expected on incorrect boolean variant"))
+                    Term::Error.trace(Term::string("Expected on incorrect bool variant"))
                 } else {
                     Term::Error
                 };
@@ -5045,7 +5045,14 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::ErrorTerm { .. } => arg_stack.push(Term::Error),
+            Air::ErrorTerm { validator, .. } => {
+                if validator {
+                    arg_stack.push(Term::Error.apply(Term::Error.force()))
+                } else {
+                    arg_stack.push(Term::Error);
+                }
+            }
+
             Air::NoOp => {}
         }
     }

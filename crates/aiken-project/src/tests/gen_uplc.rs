@@ -2827,7 +2827,12 @@ fn when_tuple_deconstruction() {
                     .apply(Term::var("dat"))
                     .apply(Term::var("red")),
             )
-            .delayed_if_else(Term::unit(), Term::Error)
+            .delayed_if_else(
+                Term::unit(),
+                Term::Error
+                    .apply(Term::Error.force())
+                    .trace(Term::string("Validator returned false")),
+            )
             .lambda("_")
             .apply(
                 Term::var("expect_RedSpend")
@@ -2866,7 +2871,7 @@ fn when_tuple_deconstruction() {
                                                 )),
                                             ),
                                         Term::Error.trace(Term::string(
-                                            "Constr index did not match any type variant",
+                                            "Constr index didn't match a type variant",
                                         )),
                                     ),
                             )
@@ -2916,7 +2921,7 @@ fn when_tuple_deconstruction() {
                                                 )),
                                             ),
                                         Term::Error.trace(Term::string(
-                                            "Constr index did not match any type variant",
+                                            "Constr index didn't match a type variant",
                                         )),
                                     ),
                             )
@@ -2948,7 +2953,7 @@ fn when_tuple_deconstruction() {
                                             .apply(Term::var("field_1")),
                                     ),
                                 Term::Error.trace(Term::string(
-                                    "Constr index did not match any type variant",
+                                    "Constr index didn't match a type variant",
                                 )),
                             )
                             .lambda("subject")
@@ -3111,7 +3116,7 @@ fn generic_validator_type_test() {
             )
             .lambda("subject")
             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("r")))
-            .delayed_if_else(Term::unit(), Term::Error)
+            .delayed_if_else(Term::unit(), Term::Error.apply(Term::Error.force()).trace(Term::string("Validator returned false")))
             .lambda("_").apply(
                 Term::var("__expect_A")
                     .lambda("__expect_A")
@@ -3169,7 +3174,7 @@ fn generic_validator_type_test() {
                                                     .apply(Term::var("r")),
                                             ),
                                         Term::Error.trace(Term::string(
-                                            "Constr index did not match any type variant",
+                                            "Constr index didn't match a type variant",
                                         )),
                                     ),
                             )
@@ -3209,7 +3214,7 @@ fn generic_validator_type_test() {
                                             .apply(Term::var("field_B")),
                                     ),
                                 Term::Error.trace(Term::string(
-                                    "Constr index did not match any type variant",
+                                    "Constr index didn't match a type variant",
                                 )),
                             )
                             .lambda("subject")
@@ -4971,7 +4976,12 @@ fn opaque_value_in_datum() {
                         .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("dat"))),
                 ),
             )
-            .delayed_if_else(Term::unit(), Term::Error)
+            .delayed_if_else(
+                Term::unit(),
+                Term::Error
+                    .apply(Term::Error.force())
+                    .trace(Term::string("Validator returned false")),
+            )
             .lambda("_")
             .apply(
                 Term::equals_integer()
@@ -5025,8 +5035,7 @@ fn opaque_value_in_datum() {
                             )
                             .lambda("dat_fields")
                             .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("param_0"))),
-                        Term::Error
-                            .trace(Term::string("Constr index did not match any type variant")),
+                        Term::Error.trace(Term::string("Constr index didn't match a type variant")),
                     )
                     .lambda("subject")
                     .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("param_0")))
@@ -5184,7 +5193,7 @@ fn expect_none() {
             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("x")))
             .delayed_if_else(
                 Term::bool(true),
-                Term::Error.trace(Term::string("Expected on incorrect constructor variant.")),
+                Term::Error.trace(Term::string("Expected on incorrect Constr variant")),
             )
             .lambda("x")
             .apply(Term::Constant(

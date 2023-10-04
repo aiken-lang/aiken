@@ -318,6 +318,7 @@ pub enum AirExpression {
     // Misc.
     ErrorTerm {
         tipo: Rc<Type>,
+        validator: bool,
     },
     Trace {
         tipo: Rc<Type>,
@@ -777,8 +778,8 @@ impl AirTree {
             tipo.clone(),
         )
     }
-    pub fn error(tipo: Rc<Type>) -> AirTree {
-        AirTree::Expression(AirExpression::ErrorTerm { tipo })
+    pub fn error(tipo: Rc<Type>, validator: bool) -> AirTree {
+        AirTree::Expression(AirExpression::ErrorTerm { tipo, validator })
     }
     pub fn trace(msg: AirTree, tipo: Rc<Type>, then: AirTree) -> AirTree {
         AirTree::Expression(AirExpression::Trace {
@@ -1257,9 +1258,10 @@ impl AirTree {
                         arg.create_air_vec(air_vec);
                     }
                 }
-                AirExpression::ErrorTerm { tipo } => {
-                    air_vec.push(Air::ErrorTerm { tipo: tipo.clone() })
-                }
+                AirExpression::ErrorTerm { tipo, validator } => air_vec.push(Air::ErrorTerm {
+                    tipo: tipo.clone(),
+                    validator: *validator,
+                }),
                 AirExpression::Trace { tipo, msg, then } => {
                     air_vec.push(Air::Trace { tipo: tipo.clone() });
                     msg.create_air_vec(air_vec);
@@ -1294,7 +1296,7 @@ impl AirTree {
                 | AirExpression::If { tipo, .. }
                 | AirExpression::Constr { tipo, .. }
                 | AirExpression::RecordUpdate { tipo, .. }
-                | AirExpression::ErrorTerm { tipo }
+                | AirExpression::ErrorTerm { tipo, .. }
                 | AirExpression::Trace { tipo, .. } => tipo.clone(),
                 AirExpression::Void => void(),
                 AirExpression::Var { constructor, .. } => constructor.tipo.clone(),
@@ -1344,7 +1346,7 @@ impl AirTree {
                 | AirExpression::CastToData { tipo, .. }
                 | AirExpression::If { tipo, .. }
                 | AirExpression::Constr { tipo, .. }
-                | AirExpression::ErrorTerm { tipo }
+                | AirExpression::ErrorTerm { tipo, .. }
                 | AirExpression::Trace { tipo, .. } => vec![tipo],
                 AirExpression::Var { constructor, .. } => {
                     vec![constructor.tipo.borrow_mut()]

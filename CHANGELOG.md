@@ -2,6 +2,10 @@
 
 ## v1.0.20-alpha - unreleased
 
+### Changed
+
+- **aiken-lang**: Added validator specific error when validator returns false
+
 ### Fixed
 
 - **aiken-lang**: improved error messages for `a |> b(x)`

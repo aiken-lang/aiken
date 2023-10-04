@@ -1671,9 +1671,17 @@ pub fn cast_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Nam
     term
 }
 
-pub fn wrap_validator_condition(air_tree: AirTree) -> AirTree {
+pub fn wrap_validator_condition(air_tree: AirTree, trace: bool) -> AirTree {
     let success_branch = vec![(air_tree, AirTree::void())];
-    let otherwise = AirTree::error(void());
+    let otherwise = if trace {
+        AirTree::trace(
+            AirTree::string("Validator returned false"),
+            void(),
+            AirTree::error(void(), true),
+        )
+    } else {
+        AirTree::error(void(), true)
+    };
 
     AirTree::if_branches(success_branch, void(), otherwise)
 }
