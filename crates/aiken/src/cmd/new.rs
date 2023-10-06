@@ -1,5 +1,5 @@
 use aiken_project::{
-    config::Config,
+    config::{self, Config},
     package_name::{self, PackageName},
 };
 use indoc::{formatdoc, indoc};
@@ -10,8 +10,6 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
-
-use crate::built_info;
 
 #[derive(clap::Args)]
 /// Create a new Aiken project
@@ -196,13 +194,13 @@ fn create_github_action(root: &Path) -> miette::Result<()> {
 
                   - uses: aiken-lang/setup-aiken@v0.1.0
                     with:
-                      version: v{version}
+                      version: {version}
 
                   - run: aiken fmt --check
                   - run: aiken check -D
                   - run: aiken build
             "#,
-            version = built_info::PKG_VERSION,
+            version = config::compiler_version(false),
         },
     )
     .into_diagnostic()?;

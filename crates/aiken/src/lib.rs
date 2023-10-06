@@ -14,10 +14,6 @@ use uplc::machine::cost_model::ExBudget;
 
 pub mod cmd;
 
-pub mod built_info {
-    include!(concat!(env!("OUT_DIR"), "/built.rs"));
-}
-
 pub fn with_project<A>(directory: Option<PathBuf>, deny: bool, mut action: A) -> miette::Result<()>
 where
     A: FnMut(&mut Project<Terminal>) -> Result<(), Vec<aiken_project::error::Error>>,

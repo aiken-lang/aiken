@@ -12,6 +12,7 @@ authors = [
   "KtorZ <matthias.benkort@gmail.com>",
 ]
 rust-version = "1.66.1"
+build = "build.rs"
 
 [dependencies]
 askama = "0.12.0"
@@ -48,3 +49,6 @@ uplc = { path = '../uplc', version = "1.0.19-alpha" }
 [dev-dependencies]
 proptest = "1.2.0"
 pretty_assertions = "1.3.0"
+
+[build-dependencies]
+built = { version = "0.6.0", features = ["git2"] }
