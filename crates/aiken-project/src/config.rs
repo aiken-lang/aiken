@@ -124,8 +124,8 @@ mod built_info {
 pub fn compiler_version(include_commit_hash: bool) -> String {
     if include_commit_hash {
         format!(
-            "v{} {}",
-            built_info::PKG_VERSION_MAJOR,
+            "v{}+{}",
+            built_info::PKG_VERSION,
             built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown")
         )
     } else {

@@ -4,7 +4,10 @@ pub mod parameter;
 pub mod schema;
 pub mod validator;
 
-use crate::{config::Config, module::CheckedModules};
+use crate::{
+    config::{self, Config},
+    module::CheckedModules,
+};
 use aiken_lang::gen_uplc::CodeGenerator;
 use definitions::Definitions;
 use error::Error;
@@ -33,6 +36,9 @@ pub struct Preamble {
     pub plutus_version: PlutusVersion,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub compiler: Option<Compiler>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
 }
 
@@ -41,6 +47,13 @@ pub struct Preamble {
 pub enum PlutusVersion {
     V1,
     V2,
+}
+
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Compiler {
+    pub name: String,
+    pub version: String,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -132,6 +145,10 @@ impl From<&Config> for Preamble {
             } else {
                 Some(config.description.clone())
             },
+            compiler: Some(Compiler {
+                name: "Aiken".to_string(),
+                version: config::compiler_version(true),
+            }),
             plutus_version: PlutusVersion::V2,
             version: config.version.clone(),
             license: config.license.clone(),
@@ -155,6 +172,10 @@ mod tests {
                 description: None,
                 version: "1.0.0".to_string(),
                 plutus_version: PlutusVersion::V2,
+                compiler: Some(Compiler {
+                    name: "Aiken".to_string(),
+                    version: "1.0.0".to_string(),
+                }),
                 license: Some("Apache-2.0".to_string()),
             },
             validators: vec![],
@@ -167,6 +188,10 @@ mod tests {
                     "title": "Foo",
                     "version": "1.0.0",
                     "plutusVersion": "v2",
+                    "compiler": {
+                        "name": "Aiken",
+                        "version": "1.0.0"
+                    },
                     "license": "Apache-2.0"
                 },
                 "validators": []
@@ -182,6 +207,7 @@ mod tests {
                 description: Some("Lorem ipsum".to_string()),
                 version: "1.0.0".to_string(),
                 plutus_version: PlutusVersion::V2,
+                compiler: None,
                 license: None,
             },
             validators: vec![],
@@ -233,6 +259,7 @@ mod tests {
                 description: None,
                 version: "1.0.0".to_string(),
                 plutus_version: PlutusVersion::V2,
+                compiler: None,
                 license: None,
             },
             validators: vec![],

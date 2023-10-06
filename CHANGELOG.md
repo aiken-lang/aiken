@@ -2,6 +2,10 @@
 
 ## v1.0.20-alpha - unreleased
 
+### Added
+
+- **aiken-project**: The `plutus.json` blueprint now contains a `compiler.name` and `compiler.version` fields.
+
 ### Changed
 
 - **aiken-lang**: Added validator specific error when validator returns false
