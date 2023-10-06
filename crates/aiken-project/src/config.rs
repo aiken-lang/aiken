@@ -132,3 +132,15 @@ pub fn compiler_version(include_commit_hash: bool) -> String {
         format!("v{}", built_info::PKG_VERSION_MAJOR,)
     }
 }
+
+pub fn compiler_info() -> String {
+    format!(
+        r#"
+Operating System: {}
+Architecture:     {}
+Version:          {}"#,
+        built_info::CFG_OS,
+        built_info::CFG_TARGET_ARCH,
+        compiler_version(true),
+    )
+}

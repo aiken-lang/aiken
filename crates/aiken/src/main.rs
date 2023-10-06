@@ -4,6 +4,7 @@ use aiken::cmd::{
     packages::{self, add},
     tx, uplc, Cmd,
 };
+use aiken_project::{config, pretty};
 
 use owo_colors::OwoColorize;
 
@@ -54,18 +55,19 @@ fn panic_handler() {
 
         let error_message = indoc::formatdoc! {
             r#"{fatal}
-
                 Whoops! You found a bug in the Aiken compiler.
 
                 Please report this error at https://github.com/aiken-lang/aiken/issues/new.
                 In your bug report please provide the information below and if possible the code
                 that produced it.
+                {info}
 
-                    {location}{message}"#,
+                {location}{message}"#,
+            info = config::compiler_info(),
             fatal = "aiken::fatal::error".red().bold(),
             location = location.purple(),
         };
 
-        println!("{error_message}")
+        println!("\n{}", pretty::indent(&error_message, 3));
     }));
 }

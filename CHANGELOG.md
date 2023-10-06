@@ -5,6 +5,7 @@
 ### Added
 
 - **aiken-project**: The `plutus.json` blueprint now contains a `compiler.name` and `compiler.version` fields.
+- **aiken-prokect**: Add compiler and system information to panic error report.
 
 ### Changed
 
