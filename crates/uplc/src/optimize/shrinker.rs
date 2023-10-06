@@ -183,9 +183,14 @@ fn lambda_reducer(term: &mut Term<Name>) {
                 body,
             } = func
             {
-                if let replace_term @ (Term::Var(_) | Term::Constant(_) | Term::Builtin(_)) = arg {
+                if let Term::Constant(c) = arg {
+                    if !matches!(c.as_ref(), Constant::String(_)) {
+                        let body = Rc::make_mut(body);
+                        *term = substitute_term(body, parameter_name.clone(), arg);
+                    }
+                } else if let Term::Var(_) | Term::Builtin(_) = arg {
                     let body = Rc::make_mut(body);
-                    *term = substitute_term(body, parameter_name.clone(), replace_term);
+                    *term = substitute_term(body, parameter_name.clone(), arg);
                 }
             }
         }
