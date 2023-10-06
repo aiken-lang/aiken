@@ -659,10 +659,7 @@ pub fn erase_opaque_type_operations(
 /// Determine whether this air_tree node introduces any shadowing over `potential_matches`
 pub fn find_introduced_variables(air_tree: &AirTree) -> Vec<String> {
     match air_tree {
-        AirTree::Statement {
-            statement: AirStatement::Let { name, .. },
-            ..
-        } => vec![name.clone()],
+        AirTree::Expression(AirExpression::Let { name, .. }) => vec![name.clone()],
         AirTree::Statement {
             statement: AirStatement::TupleGuard { indices, .. },
             ..
