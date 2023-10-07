@@ -2242,6 +2242,8 @@ impl<'a> CodeGenerator<'a> {
                                     subject_tipo.clone(),
                                 ),
                             )
+                        } else if indices.iter().all(|s| s.1 == "_") {
+                            AirTree::no_op()
                         } else {
                             AirTree::fields_expose(
                                 indices,
