@@ -4824,13 +4824,6 @@ fn list_clause_with_assign2() {
                                                             Term::mk_cons()
                                                                 .apply(Term::var("n"))
                                                                 .apply(Term::empty_list())
-                                                                .lambda("_")
-                                                                .apply(
-                                                                    Term::var(
-                                                                        CONSTR_FIELDS_EXPOSER,
-                                                                    )
-                                                                    .apply(Term::var("n")),
-                                                                )
                                                                 .delay(),
                                                             Term::var("clauses_delayed"),
                                                         )
@@ -5374,13 +5367,7 @@ fn tuple_2_match() {
                                                     .apply(Term::var("tuple_index_1")),
                                             )
                                             .if_else(
-                                                Term::bool(false)
-                                                    .lambda("_")
-                                                    .apply(
-                                                        Term::var(CONSTR_FIELDS_EXPOSER)
-                                                            .apply(Term::var("tuple_index_1")),
-                                                    )
-                                                    .delay(),
+                                                Term::bool(false).delay(),
                                                 Term::var("clauses_delayed"),
                                             )
                                             .force()
@@ -5389,15 +5376,7 @@ fn tuple_2_match() {
                                     )
                                     .force()
                                     .lambda("clauses_delayed")
-                                    .apply(
-                                        Term::bool(false)
-                                            .lambda("_")
-                                            .apply(
-                                                Term::var(CONSTR_FIELDS_EXPOSER)
-                                                    .apply(Term::var("tuple_index_0")),
-                                            )
-                                            .delay(),
-                                    )
+                                    .apply(Term::bool(false).delay())
                                     .delay(),
                             )
                             .delay(),
