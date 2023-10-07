@@ -86,12 +86,15 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    pub fn reset(&mut self) {
+    pub fn reset(&mut self, reset_special_functions: bool) {
         self.code_gen_functions = IndexMap::new();
         self.zero_arg_functions = IndexMap::new();
         self.defined_functions = IndexMap::new();
         self.cyclic_functions = IndexMap::new();
         self.id_gen = IdGenerator::new();
+        if reset_special_functions {
+            self.special_functions = CodeGenSpecialFuncs::new();
+        }
     }
 
     pub fn insert_function(
@@ -136,7 +139,7 @@ impl<'a> CodeGenerator<'a> {
         let mut term = self.uplc_code_gen(full_vec);
 
         if let Some(other) = other_fun {
-            self.reset();
+            self.reset(false);
 
             let mut air_tree_fun_other = self.build(&other.body);
 
@@ -207,7 +210,7 @@ impl<'a> CodeGenerator<'a> {
         // switching to a shared code generator caused some
         // instability issues and we fixed it by placing this
         // method here.
-        self.reset();
+        self.reset(true);
 
         program
     }
