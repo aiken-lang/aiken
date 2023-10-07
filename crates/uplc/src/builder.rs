@@ -296,6 +296,25 @@ impl<T> Term<T> {
             .force()
     }
 
+    pub fn delayed_choose_data(
+        self,
+        constr_case: Self,
+        map_case: Self,
+        array_case: Self,
+        int_case: Self,
+        bytes_case: Self,
+    ) -> Self {
+        Term::Builtin(DefaultFunction::ChooseData)
+            .force()
+            .apply(self)
+            .apply(constr_case.delay())
+            .apply(map_case.delay())
+            .apply(array_case.delay())
+            .apply(int_case.delay())
+            .apply(bytes_case.delay())
+            .force()
+    }
+
     pub fn trace(self, msg_term: Self) -> Self {
         Term::Builtin(DefaultFunction::Trace)
             .force()

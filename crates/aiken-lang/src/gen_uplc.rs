@@ -156,17 +156,18 @@ impl<'a> CodeGenerator<'a> {
 
             let other_term = self.uplc_code_gen(full_vec_other);
 
-            let (spend, mint) = if other.arguments.len() > fun.arguments.len() {
-                (other_term, term)
-            } else {
-                (term, other_term)
-            };
+            let (spend, spend_name, mint, mint_name) =
+                if other.arguments.len() > fun.arguments.len() {
+                    (other_term, other.name.clone(), term, fun.name.clone())
+                } else {
+                    (term, fun.name.clone(), other_term, other.name.clone())
+                };
 
             // Special Case with multi_validators
             self.special_functions.use_function(CONSTR_FIELDS_EXPOSER);
             self.special_functions.use_function(CONSTR_INDEX_EXPOSER);
 
-            term = wrap_as_multi_validator(spend, mint);
+            term = wrap_as_multi_validator(spend, mint, self.tracing, spend_name, mint_name);
         }
 
         term = cast_validator_args(term, params);
