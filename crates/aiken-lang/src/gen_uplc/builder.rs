@@ -36,6 +36,13 @@ pub type Params = Vec<String>;
 
 pub type CycleFunctionNames = Vec<String>;
 
+pub const TOO_MANY_ITEMS: &str = "TOO_MANY_ITEMS";
+pub const LIST_NOT_EMPTY: &str = "LIST_NOT_EMPTY";
+pub const CONSTR_NOT_EMPTY: &str = "CONSTR_NOT_EMPTY";
+pub const INCORRECT_BOOLEAN: &str = "INCORRECT_BOOLEAN";
+pub const INCORRECT_CONSTR: &str = "INCORRECT_CONSTR";
+pub const CONSTR_INDEX_MISMATCH: &str = "CONSTR_INDEX_MISMATCH";
+
 #[derive(Clone, Debug)]
 pub enum CodeGenFunction {
     Function { body: AirTree, params: Params },
@@ -178,6 +185,91 @@ impl ClauseProperties {
                 specific_clause: SpecificClause::ConstrClause,
             }
         }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CodeGenSpecialFuncs {
+    pub used_funcs: Vec<String>,
+    pub key_to_func: IndexMap<String, Term<Name>>,
+}
+
+impl CodeGenSpecialFuncs {
+    pub fn new() -> Self {
+        let mut key_to_func = IndexMap::new();
+
+        key_to_func.insert(
+            CONSTR_FIELDS_EXPOSER.to_string(),
+            Term::snd_pair()
+                .apply(Term::unconstr_data().apply(Term::var("__constr_var")))
+                .lambda("__constr_var"),
+        );
+
+        key_to_func.insert(
+            CONSTR_INDEX_EXPOSER.to_string(),
+            Term::fst_pair()
+                .apply(Term::unconstr_data().apply(Term::var("__constr_var")))
+                .lambda("__constr_var"),
+        );
+
+        key_to_func.insert(
+            TOO_MANY_ITEMS.to_string(),
+            Term::string("List/Tuple/Constr contains more items than expected"),
+        );
+
+        key_to_func.insert(
+            LIST_NOT_EMPTY.to_string(),
+            Term::string("Expected no items for List"),
+        );
+
+        key_to_func.insert(
+            CONSTR_NOT_EMPTY.to_string(),
+            Term::string("Expected no fields for Constr"),
+        );
+
+        key_to_func.insert(
+            INCORRECT_BOOLEAN.to_string(),
+            Term::string("Expected on incorrect Boolean variant"),
+        );
+
+        key_to_func.insert(
+            INCORRECT_CONSTR.to_string(),
+            Term::string("Expected on incorrect Constr variant"),
+        );
+
+        key_to_func.insert(
+            CONSTR_INDEX_MISMATCH.to_string(),
+            Term::string("Constr index didn't match a type variant"),
+        );
+
+        CodeGenSpecialFuncs {
+            used_funcs: vec![],
+            key_to_func,
+        }
+    }
+
+    pub fn use_function(&mut self, func_name: &'static str) -> &'static str {
+        if !self.used_funcs.contains(&func_name.to_string()) {
+            self.used_funcs.push(func_name.to_string());
+        }
+        func_name
+    }
+
+    pub fn get_function(&self, func_name: &String) -> Term<Name> {
+        self.key_to_func[func_name].clone()
+    }
+
+    pub fn apply_used_functions(&self, mut term: Term<Name>) -> Term<Name> {
+        for func_name in self.used_funcs.iter() {
+            term = term.lambda(func_name).apply(self.get_function(func_name));
+        }
+        term
+    }
+}
+
+impl Default for CodeGenSpecialFuncs {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1265,27 +1357,16 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
 
 #[allow(clippy::too_many_arguments)]
 pub fn list_access_to_uplc(
-    names: &[String],
+    names_types: &[(String, Rc<Type>)],
     id_list: &[u64],
     tail: bool,
     current_index: usize,
     term: Term<Name>,
-    tipos: Vec<Rc<Type>>,
     check_last_item: bool,
     is_list_accessor: bool,
-    tracing: bool,
+    error_term: Term<Name>,
 ) -> Term<Name> {
-    let trace_term = if tracing {
-        Term::Error.trace(Term::string(
-            "List/Tuple/Constr contains more items than expected",
-        ))
-    } else {
-        Term::Error
-    };
-
-    if let Some((first, names)) = names.split_first() {
-        let (current_tipo, tipos) = tipos.split_first().unwrap();
-
+    if let Some(((first, current_tipo), names_types)) = names_types.split_first() {
         let head_list =
             if matches!(current_tipo.get_uplc_type(), UplcType::Pair(_, _)) && is_list_accessor {
                 Term::head_list().apply(Term::var(format!(
@@ -1302,11 +1383,11 @@ pub fn list_access_to_uplc(
                 )
             };
 
-        if names.len() == 1 && tail {
-            if first == "_" && names[0] == "_" {
+        if names_types.len() == 1 && tail {
+            if first == "_" && names_types[0].0 == "_" {
                 term.lambda("_")
             } else if first == "_" {
-                term.lambda(names[0].clone())
+                term.lambda(&names_types[0].0)
                     .apply(Term::tail_list().apply(Term::var(format!(
                         "tail_index_{}_{}",
                         current_index, id_list[current_index]
@@ -1315,25 +1396,25 @@ pub fn list_access_to_uplc(
                         "tail_index_{}_{}",
                         current_index, id_list[current_index]
                     ))
-            } else if names[0] == "_" {
-                term.lambda(first.clone()).apply(head_list).lambda(format!(
+            } else if names_types[0].0 == "_" {
+                term.lambda(first).apply(head_list).lambda(format!(
                     "tail_index_{}_{}",
                     current_index, id_list[current_index]
                 ))
             } else {
-                term.lambda(names[0].clone())
+                term.lambda(&names_types[0].0)
                     .apply(Term::tail_list().apply(Term::var(format!(
                         "tail_index_{}_{}",
                         current_index, id_list[current_index]
                     ))))
-                    .lambda(first.clone())
+                    .lambda(first)
                     .apply(head_list)
                     .lambda(format!(
                         "tail_index_{}_{}",
                         current_index, id_list[current_index]
                     ))
             }
-        } else if names.is_empty() {
+        } else if names_types.is_empty() {
             if first == "_" {
                 if check_last_item {
                     Term::tail_list()
@@ -1341,7 +1422,7 @@ pub fn list_access_to_uplc(
                             "tail_index_{}_{}",
                             current_index, id_list[current_index]
                         )))
-                        .delayed_choose_list(term, trace_term)
+                        .delayed_choose_list(term, error_term)
                 } else {
                     term
                 }
@@ -1357,7 +1438,7 @@ pub fn list_access_to_uplc(
                             "tail_index_{}_{}",
                             current_index, id_list[current_index]
                         )))
-                        .delayed_choose_list(term, trace_term)
+                        .delayed_choose_list(term, error_term)
                 } else {
                     term
                 }
@@ -1370,15 +1451,14 @@ pub fn list_access_to_uplc(
             }
         } else if first == "_" {
             let mut list_access_inner = list_access_to_uplc(
-                names,
+                names_types,
                 id_list,
                 tail,
                 current_index + 1,
                 term,
-                tipos.to_owned(),
                 check_last_item,
                 is_list_accessor,
-                tracing,
+                error_term,
             );
 
             list_access_inner = match &list_access_inner {
@@ -1409,15 +1489,14 @@ pub fn list_access_to_uplc(
             }
         } else {
             let mut list_access_inner = list_access_to_uplc(
-                names,
+                names_types,
                 id_list,
                 tail,
                 current_index + 1,
                 term,
-                tipos.to_owned(),
                 check_last_item,
                 is_list_accessor,
-                tracing,
+                error_term,
             );
 
             list_access_inner = match &list_access_inner {
