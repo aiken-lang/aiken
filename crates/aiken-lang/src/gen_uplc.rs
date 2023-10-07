@@ -22,13 +22,14 @@ use crate::{
         AssignmentKind, BinOp, Pattern, Span, TypedArg, TypedClause, TypedDataType, TypedFunction,
         TypedPattern, TypedValidator, UnOp,
     },
-    builtins::{bool, data, int, list, void},
+    builtins::{bool, data, int, list, string, void},
     expr::TypedExpr,
     gen_uplc::builder::{
         check_replaceable_opaque_type, convert_opaque_type, erase_opaque_type_operations,
         find_and_replace_generics, find_list_clause_or_default_first, get_arg_type_name,
         get_generic_id_and_type, get_variant_name, monomorphize, pattern_has_conditions,
         wrap_as_multi_validator, wrap_validator_condition, CodeGenFunction, SpecificClause,
+        CONSTR_INDEX_MISMATCH,
     },
     tipo::{
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
@@ -42,8 +43,9 @@ use self::{
     builder::{
         cast_validator_args, constants_ir, convert_type_to_data, extract_constant,
         lookup_data_type_by_tipo, modify_cyclic_calls, modify_self_calls, rearrange_list_clauses,
-        AssignmentProperties, ClauseProperties, CycleFunctionNames, DataTypeKey, FunctionAccessKey,
-        HoistableFunction, Variant,
+        AssignmentProperties, ClauseProperties, CodeGenSpecialFuncs, CycleFunctionNames,
+        DataTypeKey, FunctionAccessKey, HoistableFunction, Variant, CONSTR_NOT_EMPTY,
+        INCORRECT_BOOLEAN, INCORRECT_CONSTR, LIST_NOT_EMPTY, TOO_MANY_ITEMS,
     },
     tree::{AirExpression, AirTree, TreePath},
 };
@@ -54,7 +56,7 @@ pub struct CodeGenerator<'a> {
     functions: IndexMap<FunctionAccessKey, &'a TypedFunction>,
     data_types: IndexMap<DataTypeKey, &'a TypedDataType>,
     module_types: IndexMap<&'a String, &'a TypeInfo>,
-    needs_field_access: bool,
+    special_functions: CodeGenSpecialFuncs,
     code_gen_functions: IndexMap<String, CodeGenFunction>,
     zero_arg_functions: IndexMap<(FunctionAccessKey, Variant), Vec<Air>>,
     cyclic_functions:
@@ -75,7 +77,7 @@ impl<'a> CodeGenerator<'a> {
             functions,
             data_types,
             module_types,
-            needs_field_access: false,
+            special_functions: CodeGenSpecialFuncs::new(),
             code_gen_functions: IndexMap::new(),
             zero_arg_functions: IndexMap::new(),
             cyclic_functions: IndexMap::new(),
@@ -87,7 +89,7 @@ impl<'a> CodeGenerator<'a> {
     pub fn reset(&mut self) {
         self.code_gen_functions = IndexMap::new();
         self.zero_arg_functions = IndexMap::new();
-        self.needs_field_access = false;
+        self.special_functions = CodeGenSpecialFuncs::new();
         self.defined_functions = IndexMap::new();
         self.cyclic_functions = IndexMap::new();
         self.id_gen = IdGenerator::new();
@@ -160,9 +162,11 @@ impl<'a> CodeGenerator<'a> {
                 (term, other_term)
             };
 
-            term = wrap_as_multi_validator(spend, mint);
+            // Special Case with multi_validators
+            self.special_functions.use_function(CONSTR_FIELDS_EXPOSER);
+            self.special_functions.use_function(CONSTR_INDEX_EXPOSER);
 
-            self.needs_field_access = true;
+            term = wrap_as_multi_validator(spend, mint);
         }
 
         term = cast_validator_args(term, params);
@@ -186,9 +190,7 @@ impl<'a> CodeGenerator<'a> {
     }
 
     fn finalize(&mut self, mut term: Term<Name>) -> Program<Name> {
-        if self.needs_field_access {
-            term = term.constr_fields_exposer().constr_index_exposer();
-        }
+        term = self.special_functions.apply_used_functions(term);
 
         // TODO: Once SOP is implemented, new version is 1.1.0
         let mut program = Program {
@@ -547,7 +549,6 @@ impl<'a> CodeGenerator<'a> {
                 if check_replaceable_opaque_type(&record.tipo(), &self.data_types) {
                     self.build(record)
                 } else {
-                    self.needs_field_access = true;
                     let function_name = format!("__access_index_{}", *index);
 
                     if self.code_gen_functions.get(&function_name).is_none() {
@@ -573,7 +574,10 @@ impl<'a> CodeGenerator<'a> {
                     }
 
                     let list_of_fields = AirTree::call(
-                        AirTree::local_var(CONSTR_FIELDS_EXPOSER, void()),
+                        AirTree::local_var(
+                            self.special_functions.use_function(CONSTR_FIELDS_EXPOSER),
+                            void(),
+                        ),
                         list(data()),
                         vec![self.build(record)],
                     );
@@ -1468,7 +1472,10 @@ impl<'a> CodeGenerator<'a> {
 
             let error_term = if self.tracing {
                 AirTree::trace(
-                    AirTree::string("Constr index didn't match a type variant"),
+                    AirTree::local_var(
+                        self.special_functions.use_function(CONSTR_INDEX_MISMATCH),
+                        string(),
+                    ),
                     tipo.clone(),
                     AirTree::error(tipo.clone(), false),
                 )
@@ -3819,31 +3826,44 @@ impl<'a> CodeGenerator<'a> {
                     id_list.push(self.id_gen.next());
                 }
 
-                let inner_types = tipo
+                let names_empty = names.is_empty();
+
+                let names_types = tipo
                     .get_inner_types()
                     .into_iter()
                     .cycle()
                     .take(names.len())
+                    .zip(names)
+                    .map(|(tipo, name)| (name, tipo))
                     .collect_vec();
 
-                if !names.is_empty() {
+                if !names_empty {
+                    let error_term = if self.tracing {
+                        Term::Error.trace(Term::var(
+                            self.special_functions.use_function(TOO_MANY_ITEMS),
+                        ))
+                    } else {
+                        Term::Error
+                    };
+
                     term = builder::list_access_to_uplc(
-                        &names,
+                        &names_types,
                         &id_list,
                         tail,
                         0,
                         term,
-                        inner_types,
                         check_last_item,
                         true,
-                        self.tracing,
+                        error_term,
                     )
                     .apply(value);
 
                     arg_stack.push(term);
                 } else if check_last_item {
                     let trace_term = if self.tracing {
-                        Term::Error.trace(Term::string("Expected no items for List"))
+                        Term::Error.trace(Term::var(
+                            self.special_functions.use_function(LIST_NOT_EMPTY),
+                        ))
                     } else {
                         Term::Error
                     };
@@ -4323,20 +4343,24 @@ impl<'a> CodeGenerator<'a> {
                 arg_stack.push(term);
             }
             Air::AssertConstr { constr_index } => {
-                self.needs_field_access = true;
                 let constr = arg_stack.pop().unwrap();
 
                 let mut term = arg_stack.pop().unwrap();
 
                 let trace_term = if self.tracing {
-                    Term::Error.trace(Term::string("Expected on incorrect Constr variant"))
+                    Term::Error.trace(Term::var(
+                        self.special_functions.use_function(INCORRECT_CONSTR),
+                    ))
                 } else {
                     Term::Error
                 };
 
                 term = Term::equals_integer()
                     .apply(Term::integer(constr_index.into()))
-                    .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(constr))
+                    .apply(
+                        Term::var(self.special_functions.use_function(CONSTR_INDEX_EXPOSER))
+                            .apply(constr),
+                    )
                     .delayed_if_else(term, trace_term);
 
                 arg_stack.push(term);
@@ -4346,7 +4370,9 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
 
                 let trace_term = if self.tracing {
-                    Term::Error.trace(Term::string("Expected on incorrect bool variant"))
+                    Term::Error.trace(Term::var(
+                        self.special_functions.use_function(INCORRECT_BOOLEAN),
+                    ))
                 } else {
                     Term::Error
                 };
@@ -4375,8 +4401,8 @@ impl<'a> CodeGenerator<'a> {
                 {
                     subject
                 } else {
-                    self.needs_field_access = true;
-                    Term::var(CONSTR_INDEX_EXPOSER).apply(subject)
+                    Term::var(self.special_functions.use_function(CONSTR_INDEX_EXPOSER))
+                        .apply(subject)
                 };
 
                 let mut term = arg_stack.pop().unwrap();
@@ -4576,10 +4602,10 @@ impl<'a> CodeGenerator<'a> {
                     } else if tipo.is_list() || tipo.is_tuple() {
                         unreachable!()
                     } else {
-                        self.needs_field_access = true;
-                        Term::equals_integer()
-                            .apply(checker)
-                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var(subject_name)))
+                        Term::equals_integer().apply(checker).apply(
+                            Term::var(self.special_functions.use_function(CONSTR_INDEX_EXPOSER))
+                                .apply(Term::var(subject_name)),
+                        )
                     };
 
                     let term = condition
@@ -4721,7 +4747,6 @@ impl<'a> CodeGenerator<'a> {
                 indices,
                 check_last_item,
             } => {
-                self.needs_field_access = true;
                 let mut id_list = vec![];
 
                 let value = arg_stack.pop().unwrap();
@@ -4736,33 +4761,48 @@ impl<'a> CodeGenerator<'a> {
 
                 let current_index = 0;
 
-                let names = indices.iter().cloned().map(|item| item.1).collect_vec();
-                let inner_types = indices.iter().cloned().map(|item| item.2).collect_vec();
+                let names_types = indices
+                    .iter()
+                    .cloned()
+                    .map(|item| (item.1, item.2))
+                    .collect_vec();
 
                 if !indices.is_empty() {
-                    term = builder::list_access_to_uplc(
-                        &names,
-                        &id_list,
-                        false,
-                        current_index,
-                        term,
-                        inner_types,
-                        check_last_item,
-                        false,
-                        self.tracing,
-                    );
-
-                    term = term.apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(value));
-
-                    arg_stack.push(term);
-                } else if check_last_item {
-                    let trace_term = if self.tracing {
-                        Term::Error.trace(Term::string("Expected no fields for Constr"))
+                    let error_term = if self.tracing {
+                        Term::Error.trace(Term::var(
+                            self.special_functions.use_function(TOO_MANY_ITEMS),
+                        ))
                     } else {
                         Term::Error
                     };
 
-                    term = Term::var(CONSTR_FIELDS_EXPOSER)
+                    term = builder::list_access_to_uplc(
+                        &names_types,
+                        &id_list,
+                        false,
+                        current_index,
+                        term,
+                        check_last_item,
+                        false,
+                        error_term,
+                    );
+
+                    term = term.apply(
+                        Term::var(self.special_functions.use_function(CONSTR_FIELDS_EXPOSER))
+                            .apply(value),
+                    );
+
+                    arg_stack.push(term);
+                } else if check_last_item {
+                    let trace_term = if self.tracing {
+                        Term::Error.trace(Term::var(
+                            self.special_functions.use_function(CONSTR_NOT_EMPTY),
+                        ))
+                    } else {
+                        Term::Error
+                    };
+
+                    term = Term::var(self.special_functions.use_function(CONSTR_FIELDS_EXPOSER))
                         .apply(value)
                         .delayed_choose_list(term, trace_term);
 
@@ -4772,18 +4812,18 @@ impl<'a> CodeGenerator<'a> {
                 };
             }
             Air::FieldsEmpty => {
-                self.needs_field_access = true;
-
                 let value = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
 
                 let trace_term = if self.tracing {
-                    Term::Error.trace(Term::string("Expected no fields for Constr"))
+                    Term::Error.trace(Term::var(
+                        self.special_functions.use_function(CONSTR_NOT_EMPTY),
+                    ))
                 } else {
                     Term::Error
                 };
 
-                term = Term::var(CONSTR_FIELDS_EXPOSER)
+                term = Term::var(self.special_functions.use_function(CONSTR_FIELDS_EXPOSER))
                     .apply(value)
                     .delayed_choose_list(term, trace_term);
 
@@ -4794,7 +4834,9 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
 
                 let trace_term = if self.tracing {
-                    Term::Error.trace(Term::string("Expected no items for List"))
+                    Term::Error.trace(Term::var(
+                        self.special_functions.use_function(LIST_NOT_EMPTY),
+                    ))
                 } else {
                     Term::Error
                 };
@@ -4867,7 +4909,6 @@ impl<'a> CodeGenerator<'a> {
                 indices,
                 tipo,
             } => {
-                self.needs_field_access = true;
                 let tail_name_prefix = "__tail_index";
 
                 let data_type = lookup_data_type_by_tipo(&self.data_types, &tipo)
@@ -4946,9 +4987,10 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
 
-                term = term
-                    .lambda(format!("{tail_name_prefix}_0"))
-                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(record));
+                term = term.lambda(format!("{tail_name_prefix}_0")).apply(
+                    Term::var(self.special_functions.use_function(CONSTR_FIELDS_EXPOSER))
+                        .apply(record),
+                );
 
                 arg_stack.push(term);
             }
@@ -5018,16 +5060,25 @@ impl<'a> CodeGenerator<'a> {
                         id_list.push(self.id_gen.next());
                     }
 
+                    let names_types = names.into_iter().zip(inner_types).collect_vec();
+
+                    let error_term = if self.tracing {
+                        Term::Error.trace(Term::var(
+                            self.special_functions.use_function(TOO_MANY_ITEMS),
+                        ))
+                    } else {
+                        Term::Error
+                    };
+
                     term = builder::list_access_to_uplc(
-                        &names,
+                        &names_types,
                         &id_list,
                         false,
                         0,
                         term,
-                        tipo.get_inner_types(),
                         check_last_item,
                         false,
-                        self.tracing,
+                        error_term,
                     )
                     .apply(value);
 
