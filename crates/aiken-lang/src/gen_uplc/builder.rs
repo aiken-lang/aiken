@@ -36,12 +36,12 @@ pub type Params = Vec<String>;
 
 pub type CycleFunctionNames = Vec<String>;
 
-pub const TOO_MANY_ITEMS: &str = "TOO_MANY_ITEMS";
-pub const LIST_NOT_EMPTY: &str = "LIST_NOT_EMPTY";
-pub const CONSTR_NOT_EMPTY: &str = "CONSTR_NOT_EMPTY";
-pub const INCORRECT_BOOLEAN: &str = "INCORRECT_BOOLEAN";
-pub const INCORRECT_CONSTR: &str = "INCORRECT_CONSTR";
-pub const CONSTR_INDEX_MISMATCH: &str = "CONSTR_INDEX_MISMATCH";
+pub const TOO_MANY_ITEMS: &str = "__TOO_MANY_ITEMS";
+pub const LIST_NOT_EMPTY: &str = "__LIST_NOT_EMPTY";
+pub const CONSTR_NOT_EMPTY: &str = "__CONSTR_NOT_EMPTY";
+pub const INCORRECT_BOOLEAN: &str = "__INCORRECT_BOOLEAN";
+pub const INCORRECT_CONSTR: &str = "__INCORRECT_CONSTR";
+pub const CONSTR_INDEX_MISMATCH: &str = "__CONSTR_INDEX_MISMATCH";
 
 #[derive(Clone, Debug)]
 pub enum CodeGenFunction {

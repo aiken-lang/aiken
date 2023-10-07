@@ -89,7 +89,6 @@ impl<'a> CodeGenerator<'a> {
     pub fn reset(&mut self) {
         self.code_gen_functions = IndexMap::new();
         self.zero_arg_functions = IndexMap::new();
-        self.special_functions = CodeGenSpecialFuncs::new();
         self.defined_functions = IndexMap::new();
         self.cyclic_functions = IndexMap::new();
         self.id_gen = IdGenerator::new();
