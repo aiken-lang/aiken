@@ -2,7 +2,11 @@
   "preamble": {
     "title": "aiken-lang/acceptance_test_079",
     "version": "0.0.0",
-    "plutusVersion": "v2"
+    "plutusVersion": "v2",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.0.19-alpha+fba89a9"
+    }
   },
   "validators": [
     {
@@ -19,8 +23,8 @@
           "$ref": "#/definitions/RedeemerWrapper$Int"
         }
       },
-      "compiledCode": "5852010000323232322253330033370e900018021baa00113253330043370e002902a0a4c2c6eb40084c88c8c94ccc01ccdc399b800020014815052616375a0066eb4010c018c014dd5000ab9a5573aaae795d09",
-      "hash": "62ff3d6f616ed3df935a8bc94c071204a1558a66b1c3f1ff78d58743"
+      "compiledCode": "5855010000323232322253330033370e900018021baa00113253330043370e002902a0a4c26cac6eb40084c88c8c94ccc01ccdc399b800020014815052613656375a0066eb4010c018c014dd5000ab9a5573aaae795d09",
+      "hash": "17ac08d1f433fb2bd21501e4bde3818628349d032fd3b58174e82d39"
     },
     {
       "title": "foo.mint",
@@ -30,8 +34,8 @@
           "$ref": "#/definitions/Int"
         }
       },
-      "compiledCode": "5852010000323232322253330033370e900018021baa00113253330043370e002902a0a4c2c6eb40084c88c8c94ccc01ccdc399b800020014815052616375a0066eb4010c018c014dd5000ab9a5573aaae795d09",
-      "hash": "62ff3d6f616ed3df935a8bc94c071204a1558a66b1c3f1ff78d58743"
+      "compiledCode": "5855010000323232322253330033370e900018021baa00113253330043370e002902a0a4c26cac6eb40084c88c8c94ccc01ccdc399b800020014815052613656375a0066eb4010c018c014dd5000ab9a5573aaae795d09",
+      "hash": "17ac08d1f433fb2bd21501e4bde3818628349d032fd3b58174e82d39"
     }
   ],
   "definitions": {
