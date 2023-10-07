@@ -1699,20 +1699,68 @@ pub fn special_case_builtin(
     }
 }
 
-pub fn wrap_as_multi_validator(spend: Term<Name>, mint: Term<Name>) -> Term<Name> {
-    Term::equals_integer()
-        .apply(Term::integer(0.into()))
-        .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("__second_arg")))
-        .delayed_if_else(
-            mint.apply(Term::var("__first_arg"))
-                .apply(Term::var("__second_arg")),
-            spend.apply(Term::var("__first_arg")).apply(
-                Term::head_list()
-                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("__second_arg"))),
-            ),
-        )
-        .lambda("__second_arg")
-        .lambda("__first_arg")
+pub fn wrap_as_multi_validator(
+    spend: Term<Name>,
+    mint: Term<Name>,
+    trace: bool,
+    spend_name: String,
+    mint_name: String,
+) -> Term<Name> {
+    if trace {
+        let trace_string = format!(
+            "Incorrect redeemer type for validator {}. 
+            Double check you have wrapped the redeemer type as specified in your plutus.json",
+            spend_name
+        );
+
+        let error_term = Term::Error.trace(Term::var("__incorrect_second_arg_type"));
+
+        Term::var("__second_arg")
+            .delayed_choose_data(
+                Term::equals_integer()
+                    .apply(Term::integer(0.into()))
+                    .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("__second_arg")))
+                    .delayed_if_else(
+                        mint.apply(Term::var("__first_arg"))
+                            .apply(Term::var("__second_arg"))
+                            .trace(Term::string(format!(
+                                "Running 2 arg validator {}",
+                                mint_name
+                            ))),
+                        spend
+                            .apply(Term::var("__first_arg"))
+                            .apply(Term::head_list().apply(
+                                Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("__second_arg")),
+                            ))
+                            .trace(Term::string(format!(
+                                "Running 3 arg validator {}",
+                                spend_name
+                            ))),
+                    ),
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+                error_term,
+            )
+            .lambda("__incorrect_second_arg_type")
+            .apply(Term::string(trace_string))
+            .lambda("__second_arg")
+            .lambda("__first_arg")
+    } else {
+        Term::equals_integer()
+            .apply(Term::integer(0.into()))
+            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("__second_arg")))
+            .delayed_if_else(
+                mint.apply(Term::var("__first_arg"))
+                    .apply(Term::var("__second_arg")),
+                spend.apply(Term::var("__first_arg")).apply(
+                    Term::head_list()
+                        .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("__second_arg"))),
+                ),
+            )
+            .lambda("__second_arg")
+            .lambda("__first_arg")
+    }
 }
 
 /// If the pattern is a list the return the number of elements and if it has a tail
