@@ -1,6 +1,9 @@
 use pretty_assertions::assert_eq;
 
-use aiken_lang::ast::{Definition, Function, TypedFunction, TypedValidator};
+use aiken_lang::{
+    ast::{Definition, Function, TypedFunction, TypedValidator},
+    gen_uplc::builder::{CONSTR_INDEX_MISMATCH, CONSTR_NOT_EMPTY, TOO_MANY_ITEMS},
+};
 use uplc::{
     ast::{Constant, Data, DeBruijn, Name, Program, Term, Type},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
@@ -2846,9 +2849,7 @@ fn when_tuple_deconstruction() {
                                     .apply(Term::var("red_constr_fields"))
                                     .delayed_choose_list(
                                         Term::unit(),
-                                        Term::Error.trace(Term::string(
-                                            "List/Tuple/Constr contains more items than expected",
-                                        )),
+                                        Term::Error.trace(Term::var(TOO_MANY_ITEMS)),
                                     )
                                     .lambda("field_1")
                                     .apply(Term::un_i_data().apply(
@@ -2866,13 +2867,9 @@ fn when_tuple_deconstruction() {
                                             .apply(Term::var("red"))
                                             .delayed_choose_list(
                                                 Term::unit(),
-                                                Term::Error.trace(Term::string(
-                                                    "Expected no fields for Constr",
-                                                )),
+                                                Term::Error.trace(Term::var(CONSTR_NOT_EMPTY)),
                                             ),
-                                        Term::Error.trace(Term::string(
-                                            "Constr index didn't match a type variant",
-                                        )),
+                                        Term::Error.trace(Term::var(CONSTR_INDEX_MISMATCH)),
                                     ),
                             )
                             .lambda("subject")
@@ -2898,9 +2895,7 @@ fn when_tuple_deconstruction() {
                                         Term::unit().lambda("_").apply(
                                             Term::var("expect_Thing").apply(Term::var("field_1")),
                                         ),
-                                        Term::Error.trace(Term::string(
-                                            "List/Tuple/Constr contains more items than expected",
-                                        )),
+                                        Term::Error.trace(Term::var(TOO_MANY_ITEMS)),
                                     )
                                     .lambda("field_1")
                                     .apply(Term::head_list().apply(Term::var("dat_constr_fields")))
@@ -2916,13 +2911,9 @@ fn when_tuple_deconstruction() {
                                             .apply(Term::var("dat"))
                                             .delayed_choose_list(
                                                 Term::unit(),
-                                                Term::Error.trace(Term::string(
-                                                    "Expected no fields for Constr",
-                                                )),
+                                                Term::Error.trace(Term::var(CONSTR_NOT_EMPTY)),
                                             ),
-                                        Term::Error.trace(Term::string(
-                                            "Constr index didn't match a type variant",
-                                        )),
+                                        Term::Error.trace(Term::var(CONSTR_INDEX_MISMATCH)),
                                     ),
                             )
                             .lambda("subject")
@@ -2939,9 +2930,7 @@ fn when_tuple_deconstruction() {
                                     .apply(Term::var("field_1_constr_fields"))
                                     .delayed_choose_list(
                                         Term::unit(),
-                                        Term::Error.trace(Term::string(
-                                            "List/Tuple/Constr contains more items than expected",
-                                        )),
+                                        Term::Error.trace(Term::var(TOO_MANY_ITEMS)),
                                     )
                                     .lambda("idx")
                                     .apply(Term::un_i_data().apply(
@@ -2952,9 +2941,7 @@ fn when_tuple_deconstruction() {
                                         Term::var(CONSTR_FIELDS_EXPOSER)
                                             .apply(Term::var("field_1")),
                                     ),
-                                Term::Error.trace(Term::string(
-                                    "Constr index didn't match a type variant",
-                                )),
+                                Term::Error.trace(Term::var(CONSTR_INDEX_MISMATCH)),
                             )
                             .lambda("subject")
                             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("field_1")))
@@ -2973,12 +2960,20 @@ fn when_tuple_deconstruction() {
                     .apply(Term::unconstr_data().apply(Term::var("x")))
                     .lambda("x"),
             )
+            .lambda(CONSTR_INDEX_MISMATCH)
+            .apply(Term::string("Constr index didn't match a type variant"))
+            .lambda(TOO_MANY_ITEMS)
+            .apply(Term::string(
+                "List/Tuple/Constr contains more items than expected",
+            ))
             .lambda(CONSTR_INDEX_EXPOSER)
             .apply(
                 Term::fst_pair()
                     .apply(Term::unconstr_data().apply(Term::var("x")))
                     .lambda("x"),
-            ),
+            )
+            .lambda(CONSTR_NOT_EMPTY)
+            .apply(Term::string("Expected no fields for Constr")),
         false,
     );
 }
@@ -3059,7 +3054,6 @@ fn when_tuple_empty_lists() {
 
 #[test]
 fn generic_validator_type_test() {
-    let error_string = "List/Tuple/Constr contains more items than expected";
     let src = r#"
       type A<x> {
         NoA
@@ -3116,8 +3110,14 @@ fn generic_validator_type_test() {
             )
             .lambda("subject")
             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("r")))
-            .delayed_if_else(Term::unit(), Term::Error.apply(Term::Error.force()).trace(Term::string("Validator returned false")))
-            .lambda("_").apply(
+            .delayed_if_else(
+                Term::unit(),
+                Term::Error
+                    .apply(Term::Error.force())
+                    .trace(Term::string("Validator returned false")),
+            )
+            .lambda("_")
+            .apply(
                 Term::var("__expect_A")
                     .lambda("__expect_A")
                     .apply(
@@ -3129,9 +3129,7 @@ fn generic_validator_type_test() {
                                     .apply(Term::var("r"))
                                     .delayed_choose_list(
                                         Term::unit(),
-                                        Term::Error.trace(Term::string(
-                                            "Expected no fields for Constr",
-                                        )),
+                                        Term::Error.trace(Term::var(CONSTR_NOT_EMPTY)),
                                     ),
                                 Term::equals_integer()
                                     .apply(Term::integer(1.into()))
@@ -3144,15 +3142,12 @@ fn generic_validator_type_test() {
                                                     Term::var("__expect_B")
                                                         .apply(Term::var("field_B")),
                                                 ),
-                                                Term::Error
-                                                    .trace(Term::string("List/Tuple/Constr contains more items than expected")),
+                                                Term::Error.trace(Term::var(TOO_MANY_ITEMS)),
                                             )
                                             .lambda("field_B")
                                             .apply(Term::head_list().apply(Term::var("tail_1")))
                                             .lambda("tail_1")
-                                            .apply(
-                                                Term::tail_list().apply(Term::var("r_fields")),
-                                            )
+                                            .apply(Term::tail_list().apply(Term::var("r_fields")))
                                             .lambda("field_0")
                                             .apply(
                                                 Term::equals_integer()
@@ -3160,9 +3155,8 @@ fn generic_validator_type_test() {
                                                     .apply(
                                                         Term::fst_pair().apply(
                                                             Term::unconstr_data().apply(
-                                                                Term::head_list().apply(
-                                                                    Term::var("r_fields"),
-                                                                ),
+                                                                Term::head_list()
+                                                                    .apply(Term::var("r_fields")),
                                                             ),
                                                         ),
                                                     )
@@ -3173,9 +3167,7 @@ fn generic_validator_type_test() {
                                                 Term::var(CONSTR_FIELDS_EXPOSER)
                                                     .apply(Term::var("r")),
                                             ),
-                                        Term::Error.trace(Term::string(
-                                            "Constr index didn't match a type variant",
-                                        )),
+                                        Term::Error.trace(Term::var(CONSTR_INDEX_MISMATCH)),
                                     ),
                             )
                             .lambda("subject")
@@ -3192,20 +3184,17 @@ fn generic_validator_type_test() {
                                     .apply(Term::var("B_fields"))
                                     .delayed_choose_list(
                                         Term::unit(),
-                                        Term::Error.trace(Term::string(error_string)),
+                                        Term::Error.trace(Term::var(TOO_MANY_ITEMS)),
                                     )
                                     .lambda("something")
                                     .apply(
                                         Term::equals_integer()
                                             .apply(Term::integer(0.into()))
-                                            .apply(
-                                                Term::fst_pair().apply(
-                                                    Term::unconstr_data().apply(
-                                                        Term::head_list()
-                                                            .apply(Term::var("B_fields")),
-                                                    ),
+                                            .apply(Term::fst_pair().apply(
+                                                Term::unconstr_data().apply(
+                                                    Term::head_list().apply(Term::var("B_fields")),
                                                 ),
-                                            )
+                                            ))
                                             .delayed_if_else(Term::unit(), Term::Error),
                                     )
                                     .lambda("B_fields")
@@ -3213,9 +3202,7 @@ fn generic_validator_type_test() {
                                         Term::var(CONSTR_FIELDS_EXPOSER)
                                             .apply(Term::var("field_B")),
                                     ),
-                                Term::Error.trace(Term::string(
-                                    "Constr index didn't match a type variant",
-                                )),
+                                Term::Error.trace(Term::var(CONSTR_INDEX_MISMATCH)),
                             )
                             .lambda("subject")
                             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("field_B")))
@@ -3224,11 +3211,17 @@ fn generic_validator_type_test() {
                     .apply(Term::var("r")),
             )
             .lambda("r")
-            .apply(
-                Term::var("r"),
-            )
+            .apply(Term::var("r"))
             .lambda("_ctx")
             .lambda("r")
+            .lambda(CONSTR_NOT_EMPTY)
+            .apply(Term::string("Expected no fields for Constr"))
+            .lambda(CONSTR_INDEX_MISMATCH)
+            .apply(Term::string("Constr index didn't match a type variant"))
+            .lambda(TOO_MANY_ITEMS)
+            .apply(Term::string(
+                "List/Tuple/Constr contains more items than expected",
+            ))
             .lambda(CONSTR_FIELDS_EXPOSER)
             .apply(
                 Term::snd_pair()
@@ -3404,8 +3397,7 @@ fn record_update_output_2_vals() {
                     Data::constr(1, vec![]),
                 ],
             )))
-            .constr_fields_exposer()
-            .constr_index_exposer(),
+            .constr_fields_exposer(),
         false,
     );
 }
@@ -3506,8 +3498,7 @@ fn record_update_output_1_val() {
                     Data::constr(1, vec![]),
                 ],
             )))
-            .constr_fields_exposer()
-            .constr_index_exposer(),
+            .constr_fields_exposer(),
         false,
     );
 }
@@ -3604,8 +3595,7 @@ fn record_update_output_first_last_val() {
                     Data::constr(1, vec![]),
                 ],
             )))
-            .constr_fields_exposer()
-            .constr_index_exposer(),
+            .constr_fields_exposer(),
         false,
     );
 }
@@ -3670,8 +3660,7 @@ fn list_fields_unwrap() {
                 Term::bool(true),
                 Term::bool(true).if_else(Term::bool(false), Term::bool(true)),
             )
-            .constr_fields_exposer()
-            .constr_index_exposer(),
+            .constr_fields_exposer(),
         false,
     );
 }
@@ -4898,7 +4887,6 @@ fn list_clause_with_assign2() {
                 0,
                 vec![Data::integer(1.into())],
             )])))
-            .constr_fields_exposer()
             .constr_index_exposer(),
         false,
     );
@@ -4954,9 +4942,7 @@ fn opaque_value_in_datum() {
                     .apply(
                         Term::unmap_data().apply(Term::snd_pair().apply(Term::var("tuple_item_0"))),
                     ),
-                Term::Error.trace(Term::string(
-                    "List/Tuple/Constr contains more items than expected",
-                )),
+                Term::Error.trace(Term::var(TOO_MANY_ITEMS)),
             )
             .lambda("tuple_item_0")
             .apply(Term::head_list().apply(Term::var("val")))
@@ -5010,9 +4996,7 @@ fn opaque_value_in_datum() {
                                             .lambda("pair_outer"),
                                     ),
                                 ),
-                                Term::Error.trace(Term::string(
-                                    "List/Tuple/Constr contains more items than expected",
-                                )),
+                                Term::Error.trace(Term::var(TOO_MANY_ITEMS)),
                             )
                             .lambda("a")
                             .apply(
@@ -5065,7 +5049,11 @@ fn opaque_value_in_datum() {
             .lambda("red")
             .lambda("dat")
             .constr_fields_exposer()
-            .constr_index_exposer(),
+            .constr_index_exposer()
+            .lambda(TOO_MANY_ITEMS)
+            .apply(Term::string(
+                "List/Tuple/Constr contains more items than expected",
+            )),
         false,
     );
 }
@@ -5162,8 +5150,7 @@ fn opaque_value_in_test() {
                 )]))
                 .into(),
             )]))
-            .constr_fields_exposer()
-            .constr_index_exposer(),
+            .constr_fields_exposer(),
         false,
     );
 }
@@ -5192,8 +5179,7 @@ fn expect_none() {
             .apply(Term::Constant(
                 Constant::Data(Data::constr(1, vec![])).into(),
             ))
-            .constr_index_exposer()
-            .constr_fields_exposer(),
+            .constr_index_exposer(),
         false,
     );
 }
@@ -5400,8 +5386,8 @@ fn tuple_2_match() {
                 Term::bool(true),
                 Term::bool(true).if_else(Term::bool(false), Term::bool(true)),
             )
-            .constr_fields_exposer()
-            .constr_index_exposer(),
+            .constr_index_exposer()
+            .constr_fields_exposer(),
         false,
     );
 }
