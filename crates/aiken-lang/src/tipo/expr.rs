@@ -118,6 +118,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             let value = self.infer_call_argument(value, tipo.clone());
 
+            // This is so that we can annotate the error properly
+            // with the pipe type mismatch situation when this is called from
+            // `infer_pipeline`
             let value = if index == 0 {
                 value.map_err(map_err)?
             } else {
