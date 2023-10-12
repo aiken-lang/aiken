@@ -83,6 +83,37 @@ fn validator_illegal_arity() {
 }
 
 #[test]
+fn mark_constructors_as_used_via_field_access() {
+    let source_code = r#"
+      type Datum {
+        D0(D0Params)
+        D1(D1Params)
+      }
+
+      type D0Params {
+        foo: Int,
+      }
+
+      type D1Params {
+        bar: Int,
+      }
+
+      validator {
+        fn foo(d: Datum, _r, _c) {
+          when d is {
+            D0(params) -> params.foo == 1
+            D1(_params) -> False
+          }
+        }
+      }
+    "#;
+
+    let (warnings, _) = check_validator(parse(source_code)).unwrap();
+
+    assert_eq!(warnings.len(), 1)
+}
+
+#[test]
 fn validator_correct_form() {
     let source_code = r#"
       validator {
