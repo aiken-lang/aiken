@@ -782,21 +782,18 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         };
 
         // Check to see if it's a Type that can have accessible fields
-        let (accessors, name) = match collapse_links(record.tipo()).as_ref() {
+        let accessors = match collapse_links(record.tipo()).as_ref() {
             // A type in the current module which may have fields
-            Type::App { module, name, .. } if module == self.environment.current_module => self
-                .environment
-                .accessors
-                .get(name)
-                .map(|t| (t, name.clone())),
+            Type::App { module, name, .. } if module == self.environment.current_module => {
+                self.environment.accessors.get(name)
+            }
 
             // A type in another module which may have fields
             Type::App { module, name, .. } => self
                 .environment
                 .importable_modules
                 .get(module)
-                .and_then(|module| module.accessors.get(name))
-                .map(|accessors| (accessors, name.clone())),
+                .and_then(|module| module.accessors.get(name)),
 
             _something_without_fields => return Err(unknown_field(vec![])),
         }
@@ -829,7 +826,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             false,
         )?;
 
-        self.environment.increment_usage(&name);
+        if let Type::App { name, .. } = record.tipo().as_ref() {
+            self.environment.increment_usage(name);
+        };
 
         Ok(TypedExpr::RecordAccess {
             record,
