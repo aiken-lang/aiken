@@ -13,10 +13,8 @@ use std::{
 };
 use vec1::Vec1;
 
-pub const ASSERT_VARIABLE: &str = "_try";
 pub const CAPTURE_VARIABLE: &str = "_capture";
 pub const PIPE_VARIABLE: &str = "_pipe";
-pub const TRY_VARIABLE: &str = "_try";
 
 pub type TypedModule = Module<TypeInfo, TypedDefinition>;
 pub type UntypedModule = Module<(), UntypedDefinition>;
