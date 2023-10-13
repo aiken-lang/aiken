@@ -3124,7 +3124,7 @@ impl TwoArguments {
                 }
             }
             TwoArguments::ConstAboveDiagonal(l) => {
-                if x > y {
+                if x < y {
                     l.constant
                 } else {
                     let p = *l.model.clone();
@@ -3132,7 +3132,7 @@ impl TwoArguments {
                 }
             }
             TwoArguments::ConstBelowDiagonal(l) => {
-                if x < y {
+                if x > y {
                     l.constant
                 } else {
                     let p = *l.model.clone();
