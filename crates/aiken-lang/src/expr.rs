@@ -614,6 +614,7 @@ impl UntypedExpr {
                     holes.push(ast::Arg {
                         location: Span::empty(),
                         annotation: None,
+                        doc: None,
                         arg_name: ast::ArgName::Named {
                             label: name.clone(),
                             name,

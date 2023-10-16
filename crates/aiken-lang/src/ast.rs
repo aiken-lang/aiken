@@ -543,6 +543,7 @@ pub struct Arg<T> {
     pub arg_name: ArgName,
     pub location: Span,
     pub annotation: Option<Annotation>,
+    pub doc: Option<String>,
     pub tipo: T,
 }
 
@@ -553,11 +554,16 @@ impl<A> Arg<A> {
             arg_name: self.arg_name,
             location: self.location,
             annotation: self.annotation,
+            doc: self.doc,
         }
     }
 
     pub fn get_variable_name(&self) -> Option<&str> {
         self.arg_name.get_variable_name()
+    }
+
+    pub fn put_doc(&mut self, new_doc: String) {
+        self.doc = Some(new_doc);
     }
 }
 

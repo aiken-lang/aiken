@@ -17,6 +17,7 @@ Validator(
                     },
                     location: 21..26,
                     annotation: None,
+                    doc: None,
                     tipo: (),
                 },
                 Arg {
@@ -28,6 +29,7 @@ Validator(
                     },
                     location: 28..32,
                     annotation: None,
+                    doc: None,
                     tipo: (),
                 },
                 Arg {
@@ -39,6 +41,7 @@ Validator(
                     },
                     location: 34..37,
                     annotation: None,
+                    doc: None,
                     tipo: (),
                 },
             ],
@@ -67,6 +70,7 @@ Validator(
                         },
                         location: 64..68,
                         annotation: None,
+                        doc: None,
                         tipo: (),
                     },
                     Arg {
@@ -78,6 +82,7 @@ Validator(
                         },
                         location: 70..73,
                         annotation: None,
+                        doc: None,
                         tipo: (),
                     },
                 ],

@@ -22,6 +22,7 @@ Fn {
                     arguments: [],
                 },
             ),
+            doc: None,
             tipo: (),
         },
     ],

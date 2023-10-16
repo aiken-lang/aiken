@@ -848,6 +848,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             arg_name,
             annotation,
             location,
+            doc,
             ..
         } = arg;
 
@@ -870,6 +871,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             location,
             annotation,
             tipo,
+            doc,
         })
     }
 

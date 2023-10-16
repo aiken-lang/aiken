@@ -1,8 +1,8 @@
 use crate::error::Error;
 use aiken_lang::{
     ast::{
-        DataType, Definition, Located, ModuleKind, TypedDataType, TypedFunction, TypedModule,
-        TypedValidator, UntypedModule,
+        DataType, Definition, Function, Located, ModuleKind, TypedDataType, TypedFunction,
+        TypedModule, TypedValidator, UntypedModule, Validator,
     },
     gen_uplc::{
         builder::{DataTypeKey, FunctionAccessKey},
@@ -208,24 +208,85 @@ impl CheckedModule {
                 def.put_doc(doc);
             }
 
-            if let Definition::DataType(DataType { constructors, .. }) = def {
-                for constructor in constructors {
-                    let docs: Vec<&str> =
-                        comments_before(&mut doc_comments, constructor.location.start, &self.code);
-                    if !docs.is_empty() {
-                        let doc = docs.join("\n");
-                        constructor.put_doc(doc);
-                    }
+            match def {
+                Definition::DataType(DataType { constructors, .. }) => {
+                    for constructor in constructors {
+                        let docs: Vec<&str> = comments_before(
+                            &mut doc_comments,
+                            constructor.location.start,
+                            &self.code,
+                        );
+                        if !docs.is_empty() {
+                            let doc = docs.join("\n");
+                            constructor.put_doc(doc);
+                        }
 
-                    for argument in constructor.arguments.iter_mut() {
+                        for argument in constructor.arguments.iter_mut() {
+                            let docs: Vec<&str> = comments_before(
+                                &mut doc_comments,
+                                argument.location.start,
+                                &self.code,
+                            );
+                            if !docs.is_empty() {
+                                let doc = docs.join("\n");
+                                argument.put_doc(doc);
+                            }
+                        }
+                    }
+                }
+                Definition::Fn(Function { arguments, .. }) => {
+                    for argument in arguments {
                         let docs: Vec<&str> =
                             comments_before(&mut doc_comments, argument.location.start, &self.code);
+
                         if !docs.is_empty() {
                             let doc = docs.join("\n");
                             argument.put_doc(doc);
                         }
                     }
                 }
+                Definition::Validator(Validator {
+                    params,
+                    fun,
+                    other_fun,
+                    ..
+                }) => {
+                    for param in params {
+                        let docs: Vec<&str> =
+                            comments_before(&mut doc_comments, param.location.start, &self.code);
+
+                        if !docs.is_empty() {
+                            let doc = docs.join("\n");
+                            param.put_doc(doc);
+                        }
+                    }
+
+                    for argument in fun.arguments.iter_mut() {
+                        let docs: Vec<&str> =
+                            comments_before(&mut doc_comments, argument.location.start, &self.code);
+
+                        if !docs.is_empty() {
+                            let doc = docs.join("\n");
+                            argument.put_doc(doc);
+                        }
+                    }
+
+                    if let Some(fun) = other_fun {
+                        for argument in fun.arguments.iter_mut() {
+                            let docs: Vec<&str> = comments_before(
+                                &mut doc_comments,
+                                argument.location.start,
+                                &self.code,
+                            );
+
+                            if !docs.is_empty() {
+                                let doc = docs.join("\n");
+                                argument.put_doc(doc);
+                            }
+                        }
+                    }
+                }
+                _ => (),
             }
         }
     }

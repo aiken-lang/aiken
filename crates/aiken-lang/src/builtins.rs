@@ -680,12 +680,19 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
                     location: Span::empty(),
                     is_validator_param: false,
                 },
+                doc: None,
                 location: Span::empty(),
                 annotation: None,
                 tipo: bool(),
             }],
             can_error: false,
-            doc: None,
+            doc: Some(
+                indoc::indoc! {
+                    r#"
+                    /// Like `!`, but as a function. Handy for chaining using the pipe operator `|>` or to pass as a function.
+                    "#
+                }.to_string()
+            ),
             location: Span::empty(),
             name: "not".to_string(),
             public: true,
@@ -732,6 +739,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
                 },
                 location: Span::empty(),
                 annotation: None,
+                doc: None,
                 tipo: a_var.clone(),
             }],
             can_error: false,
@@ -746,7 +754,14 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
                 },
                 name: "a".to_string(),
             },
-            doc: None,
+            doc: Some(
+                indoc::indoc! {
+                    r#"
+                    A function that returns its argument. Handy as a default behavior sometimes.
+                    "#
+                }
+                .to_string(),
+            ),
             location: Span::empty(),
             name: "identity".to_string(),
             public: true,
@@ -780,6 +795,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
                     },
                     location: Span::empty(),
                     annotation: None,
+                    doc: None,
                     tipo: a_var.clone(),
                 },
                 Arg {
@@ -790,6 +806,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
                     },
                     location: Span::empty(),
                     annotation: None,
+                    doc: None,
                     tipo: b_var,
                 },
             ],
@@ -804,7 +821,21 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
                 },
                 name: "a".to_string(),
             },
-            doc: None,
+            doc: Some(
+                indoc::indoc! {
+                    r#"
+                    A function that always return its first argument. Handy in folds and maps.
+
+                    ```aiken
+                    let always_14 = always(14, _)
+                    always_14(42) == 14
+                    always_14(1337) == 14
+                    always_14(0) == 14
+                    ```
+                    "#
+                }
+                .to_string(),
+            ),
             location: Span::empty(),
             name: "always".to_string(),
             public: true,
@@ -841,6 +872,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
                 },
                 location: Span::empty(),
                 annotation: None,
+                doc: None,
                 tipo: input_type.clone(),
             }],
             body: TypedExpr::Fn {
@@ -857,6 +889,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
                         },
                         location: Span::empty(),
                         annotation: None,
+                        doc: None,
                         tipo: b_var.clone(),
                     },
                     Arg {
@@ -868,6 +901,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
                         },
                         location: Span::empty(),
                         annotation: None,
+                        doc: None,
                         tipo: a_var.clone(),
                     },
                 ],
@@ -920,7 +954,22 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
                 }),
                 return_annotation: None,
             },
-            doc: None,
+            doc: Some(
+                indoc::indoc! {
+                    r#"
+                    A function that flips the arguments of a function.
+
+                    ```aiken
+                    pub fn titleize(left: String, right: String) {}
+
+                    titleize("Hello", "World") // "Hello, World!"
+
+                    flip(titleize)("Hello", "World") // "World, Hello!"
+                    ```
+                    "#
+                }
+                .to_string(),
+            ),
             location: Span::empty(),
             name: "flip".to_string(),
             public: true,

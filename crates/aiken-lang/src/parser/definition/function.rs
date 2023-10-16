@@ -82,6 +82,7 @@ pub fn param(is_validator_param: bool) -> impl Parser<Token, ast::UntypedArg, Er
     .map_with_span(|(arg_name, annotation), span| ast::Arg {
         location: span,
         annotation,
+        doc: None,
         tipo: (),
         arg_name,
     })

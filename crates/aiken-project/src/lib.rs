@@ -181,14 +181,17 @@ where
             output_path: destination.clone(),
         });
 
-        let doc_files = docs::generate_all(
-            &self.root,
-            &self.config,
-            self.checked_modules
-                .values()
-                .filter(|CheckedModule { package, .. }| package == &self.config.name.to_string())
-                .collect(),
-        );
+        let modules = self
+            .checked_modules
+            .values_mut()
+            .filter(|CheckedModule { package, .. }| package == &self.config.name.to_string())
+            .map(|m| {
+                m.attach_doc_and_module_comments();
+                &*m
+            })
+            .collect();
+
+        let doc_files = docs::generate_all(&self.root, &self.config, modules);
 
         for file in doc_files {
             let path = destination.join(file.path);
@@ -269,6 +272,10 @@ where
                     .handle_event(Event::GeneratingBlueprint {
                         path: self.blueprint_path(),
                     });
+
+                self.checked_modules.values_mut().for_each(|m| {
+                    m.attach_doc_and_module_comments();
+                });
 
                 let mut generator = self.checked_modules.new_generator(
                     &self.functions,
@@ -641,7 +648,7 @@ where
                 self.module_types
                     .insert(name.clone(), ast.type_info.clone());
 
-                let mut checked_module = CheckedModule {
+                let checked_module = CheckedModule {
                     kind,
                     extra,
                     name: name.clone(),
@@ -650,8 +657,6 @@ where
                     package,
                     input_path: path,
                 };
-
-                checked_module.attach_doc_and_module_comments();
 
                 self.checked_modules.insert(name, checked_module);
             }

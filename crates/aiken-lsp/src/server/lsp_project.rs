@@ -42,7 +42,7 @@ impl LspProject {
 
         let modules = self.project.modules();
 
-        for module in modules.into_iter() {
+        for mut module in modules.into_iter() {
             let path = module
                 .input_path
                 .canonicalize()
@@ -54,6 +54,8 @@ impl LspProject {
             let line_numbers = LineNumbers::new(&module.code);
 
             let source = SourceInfo { path, line_numbers };
+
+            module.attach_doc_and_module_comments();
 
             self.sources.insert(module.name.to_string(), source);
             self.modules.insert(module.name.to_string(), module);

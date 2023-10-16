@@ -462,6 +462,8 @@ impl<'comments> Formatter<'comments> {
     fn fn_arg<'a, A>(&mut self, arg: &'a Arg<A>) -> Document<'a> {
         let comments = self.pop_comments(arg.location.start);
 
+        let doc_comments = self.doc_comments(arg.location.start);
+
         let doc = match &arg.annotation {
             None => arg.arg_name.to_doc(),
             Some(a) => arg
@@ -471,6 +473,8 @@ impl<'comments> Formatter<'comments> {
                 .append(self.annotation(a)),
         }
         .group();
+
+        let doc = doc_comments.append(doc.group()).group();
 
         commented(doc, comments)
     }
@@ -525,6 +529,13 @@ impl<'comments> Formatter<'comments> {
         other_fun: &'a Option<UntypedFunction>,
         end_position: usize,
     ) -> Document<'a> {
+        // validator(params)
+        let v_head = "validator".to_doc().append(if !params.is_empty() {
+            wrap_args(params.iter().map(|e| (self.fn_arg(e), false)))
+        } else {
+            nil()
+        });
+
         let fun_comments = self.pop_comments(fun.location.start);
         let fun_doc_comments = self.doc_comments(fun.location.start);
         let first_fn = self
@@ -573,13 +584,6 @@ impl<'comments> Formatter<'comments> {
             Some(comments) => v_body.append(lines(2)).append(comments).nest(INDENT),
             None => v_body.nest(INDENT),
         };
-
-        // validator(params)
-        let v_head = "validator".to_doc().append(if !params.is_empty() {
-            wrap_args(params.iter().map(|e| (self.fn_arg(e), false)))
-        } else {
-            nil()
-        });
 
         v_head
             .append(" {")
