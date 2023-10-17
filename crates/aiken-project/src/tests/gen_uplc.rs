@@ -192,7 +192,7 @@ fn acceptance_test_2_repeat() {
                                     Term::less_than_equals_integer()
                                         .apply(Term::var("n"))
                                         .apply(Term::integer(0.into()))
-                                        .delayed_if_else(
+                                        .delayed_if_then_else(
                                             Term::empty_list(),
                                             Term::mk_cons()
                                                 .apply(Term::b_data().apply(Term::var("x")))
@@ -200,7 +200,7 @@ fn acceptance_test_2_repeat() {
                                                     Term::var("repeat")
                                                         .apply(Term::var("repeat"))
                                                         .apply(
-                                                            Term::sub_integer()
+                                                            Term::subtract_integer()
                                                                 .apply(Term::var("n"))
                                                                 .apply(Term::integer(1.into())),
                                                         ),
@@ -685,7 +685,7 @@ fn acceptance_test_6_if_else() {
         Term::equals_integer()
             .apply(Term::integer(1.into()))
             .apply(Term::integer(1.into()))
-            .delayed_if_else(Term::bool(true), Term::bool(false)),
+            .delayed_if_then_else(Term::bool(true), Term::bool(false)),
         false,
     );
 }
@@ -889,9 +889,9 @@ fn acceptance_test_8_is_empty() {
                     .lambda("bytes"),
             )
             .apply(Term::byte_string(vec![]))
-            .delayed_if_else(
+            .delayed_if_then_else(
                 Term::bool(true),
-                Term::bool(true).if_else(Term::bool(false), Term::bool(true)),
+                Term::bool(true).if_then_else(Term::bool(false), Term::bool(true)),
             ),
         false,
     );
@@ -922,9 +922,9 @@ fn acceptance_test_8_is_not_empty() {
                     .lambda("bytes"),
             )
             .apply(Term::byte_string(vec![1]))
-            .delayed_if_else(
+            .delayed_if_then_else(
                 Term::bool(false),
-                Term::bool(false).if_else(Term::bool(false), Term::bool(true)),
+                Term::bool(false).if_then_else(Term::bool(false), Term::bool(true)),
             ),
         false,
     );
@@ -955,9 +955,9 @@ fn acceptance_test_9_is_empty() {
                     .lambda("bytes"),
             )
             .apply(Term::byte_string(vec![]))
-            .delayed_if_else(
+            .delayed_if_then_else(
                 Term::bool(true),
-                Term::bool(true).if_else(Term::bool(false), Term::bool(true)),
+                Term::bool(true).if_then_else(Term::bool(false), Term::bool(true)),
             ),
         false,
     );
@@ -994,7 +994,7 @@ fn acceptance_test_10_map_none() {
                         Term::equals_integer()
                             .apply(Term::integer(1.into()))
                             .apply(Term::var("constr_index"))
-                            .delayed_if_else(
+                            .delayed_if_then_else(
                                 Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
                                 Term::constr_data()
                                     .apply(Term::integer(0.into()))
@@ -1076,7 +1076,7 @@ fn acceptance_test_10_map_some() {
                         Term::equals_integer()
                             .apply(Term::integer(1.into()))
                             .apply(Term::var("constr_index"))
-                            .delayed_if_else(
+                            .delayed_if_then_else(
                                 Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
                                 Term::constr_data()
                                     .apply(Term::integer(0.into()))
@@ -1318,7 +1318,7 @@ fn acceptance_test_12_filter_even() {
                                             Term::empty_list(),
                                             Term::var("f")
                                                 .apply(Term::var("x"))
-                                                .delayed_if_else(
+                                                .delayed_if_then_else(
                                                     Term::mk_cons()
                                                         .apply(Term::i_data().apply(Term::var("x")))
                                                         .apply(
@@ -1388,7 +1388,7 @@ fn acceptance_test_14_list_creation() {
                     Term::mk_cons()
                         .apply(
                             Term::i_data().apply(
-                                Term::sub_integer()
+                                Term::subtract_integer()
                                     .apply(Term::integer(0.into()))
                                     .apply(Term::integer(2.into())),
                             ),
@@ -1397,7 +1397,7 @@ fn acceptance_test_14_list_creation() {
                             Term::mk_cons()
                                 .apply(
                                     Term::i_data().apply(
-                                        Term::sub_integer()
+                                        Term::subtract_integer()
                                             .apply(Term::integer(0.into()))
                                             .apply(Term::integer(1.into())),
                                     ),
@@ -1481,7 +1481,7 @@ fn acceptance_test_16_drop() {
                             .apply(Term::var("bytes"))
                             .apply(Term::var("n"))
                             .apply(
-                                Term::sub_integer()
+                                Term::subtract_integer()
                                     .apply(Term::var("length").apply(Term::var("bytes")))
                                     .apply(Term::var("n")),
                             )
@@ -1591,7 +1591,7 @@ fn acceptance_test_18_or_else() {
                         Term::equals_integer()
                             .apply(Term::integer(1.into()))
                             .apply(Term::var("subject"))
-                            .delayed_if_else(
+                            .delayed_if_then_else(
                                 Term::var("default"),
                                 Term::var("a")
                                     .lambda("a")
@@ -1654,7 +1654,7 @@ fn acceptance_test_19_map_none_wrap_int() {
                         Term::equals_integer()
                             .apply(Term::integer(1.into()))
                             .apply(Term::var("subject"))
-                            .delayed_if_else(
+                            .delayed_if_then_else(
                                 Term::data(Data::constr(1, vec![])),
                                 Term::constr_data()
                                     .apply(Term::integer(0.into()))
@@ -1724,7 +1724,7 @@ fn acceptance_test_19_map_wrap_void() {
                         Term::equals_integer()
                             .apply(Term::integer(1.into()))
                             .apply(Term::var("subject"))
-                            .delayed_if_else(
+                            .delayed_if_then_else(
                                 Term::data(Data::constr(1, vec![])),
                                 Term::constr_data()
                                     .apply(Term::integer(0.into()))
@@ -1795,7 +1795,7 @@ fn acceptance_test_20_map_some() {
                         Term::equals_integer()
                             .apply(Term::integer(1.into()))
                             .apply(Term::var("constr_index"))
-                            .delayed_if_else(
+                            .delayed_if_then_else(
                                 Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
                                 Term::constr_data()
                                     .apply(Term::integer(0.into()))
@@ -1890,7 +1890,7 @@ fn acceptance_test_22_filter_map() {
                                     Term::equals_integer()
                                         .apply(Term::integer(1.into()))
                                         .apply(Term::var("subject_index"))
-                                        .delayed_if_else(
+                                        .delayed_if_then_else(
                                             Term::var("ys"),
                                             Term::mk_cons()
                                                 .apply(Term::i_data().apply(Term::var("y")))
@@ -2082,12 +2082,12 @@ fn acceptance_test_24_map2() {
                         Term::equals_integer()
                             .apply(Term::integer(1.into()))
                             .apply(Term::var("opt_a_index"))
-                            .delayed_if_else(
+                            .delayed_if_then_else(
                                 Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
                                 Term::equals_integer()
                                     .apply(Term::integer(1.into()))
                                     .apply(Term::var("opt_b_index"))
-                                    .delayed_if_else(
+                                    .delayed_if_then_else(
                                         Term::Constant(
                                             Constant::Data(Data::constr(1, vec![])).into(),
                                         ),
@@ -2643,7 +2643,7 @@ fn expect_empty_list_on_filled_list() {
         Term::var("x")
             .delayed_choose_list(
                 Term::bool(true),
-                Term::Error.trace(Term::string("Expected no items for List")),
+                Term::Error.delayed_trace(Term::string("Expected no items for List")),
             )
             .lambda("x")
             .apply(Term::list_values(vec![
@@ -2670,7 +2670,7 @@ fn expect_empty_list_on_new_list() {
         Term::var("x")
             .delayed_choose_list(
                 Term::bool(true),
-                Term::Error.trace(Term::string("Expected no items for List")),
+                Term::Error.delayed_trace(Term::string("Expected no items for List")),
             )
             .lambda("x")
             .apply(Term::list_values(vec![])),
@@ -2694,7 +2694,7 @@ fn when_bool_is_true() {
     assert_uplc(
         src,
         Term::var("subject")
-            .delayed_if_else(Term::bool(true), Term::Error)
+            .delayed_if_then_else(Term::bool(true), Term::Error)
             .lambda("subject")
             .apply(Term::bool(true)),
         false,
@@ -2717,7 +2717,7 @@ fn when_bool_is_true_switched_cases() {
     assert_uplc(
         src,
         Term::var("subject")
-            .delayed_if_else(Term::bool(true), Term::Error)
+            .delayed_if_then_else(Term::bool(true), Term::Error)
             .lambda("subject")
             .apply(Term::bool(true)),
         false,
@@ -2740,7 +2740,7 @@ fn when_bool_is_false() {
     assert_uplc(
         src,
         Term::var("subject")
-            .delayed_if_else(Term::bool(true), Term::Error)
+            .delayed_if_then_else(Term::bool(true), Term::Error)
             .lambda("subject")
             .apply(Term::bool(false)),
         true,
@@ -2781,11 +2781,11 @@ fn when_tuple_deconstruction() {
         Term::equals_integer()
             .apply(Term::integer(0.into()))
             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("dat")))
-            .if_else(
+            .if_then_else(
                 Term::equals_integer()
                     .apply(Term::integer(0.into()))
                     .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("red")))
-                    .if_else(
+                    .if_then_else(
                         Term::equals_integer()
                             .apply(
                                 Term::un_i_data().apply(
@@ -2795,9 +2795,9 @@ fn when_tuple_deconstruction() {
                                 ),
                             )
                             .apply(Term::var("x"))
-                            .delayed_if_else(
+                            .delayed_if_then_else(
                                 Term::bool(true),
-                                Term::bool(false).trace(Term::string("a.idx == x ? False")),
+                                Term::bool(false).delayed_trace(Term::string("a.idx == x ? False")),
                             )
                             .lambda("x")
                             .apply(
@@ -2830,11 +2830,11 @@ fn when_tuple_deconstruction() {
                     .apply(Term::var("dat"))
                     .apply(Term::var("red")),
             )
-            .delayed_if_else(
+            .delayed_if_then_else(
                 Term::unit(),
                 Term::Error
                     .apply(Term::Error.force())
-                    .trace(Term::string("Validator returned false")),
+                    .delayed_trace(Term::string("Validator returned false")),
             )
             .lambda("_")
             .apply(
@@ -2844,12 +2844,12 @@ fn when_tuple_deconstruction() {
                         Term::equals_integer()
                             .apply(Term::integer(0.into()))
                             .apply(Term::var("subject"))
-                            .delayed_if_else(
+                            .delayed_if_then_else(
                                 Term::tail_list()
                                     .apply(Term::var("red_constr_fields"))
                                     .delayed_choose_list(
                                         Term::unit(),
-                                        Term::Error.trace(Term::var(TOO_MANY_ITEMS)),
+                                        Term::Error.delayed_trace(Term::var(TOO_MANY_ITEMS)),
                                     )
                                     .lambda("field_1")
                                     .apply(Term::un_i_data().apply(
@@ -2862,14 +2862,15 @@ fn when_tuple_deconstruction() {
                                 Term::equals_integer()
                                     .apply(Term::integer(1.into()))
                                     .apply(Term::var("subject"))
-                                    .delayed_if_else(
+                                    .delayed_if_then_else(
                                         Term::var(CONSTR_FIELDS_EXPOSER)
                                             .apply(Term::var("red"))
                                             .delayed_choose_list(
                                                 Term::unit(),
-                                                Term::Error.trace(Term::var(CONSTR_NOT_EMPTY)),
+                                                Term::Error
+                                                    .delayed_trace(Term::var(CONSTR_NOT_EMPTY)),
                                             ),
-                                        Term::Error.trace(Term::var(CONSTR_INDEX_MISMATCH)),
+                                        Term::Error.delayed_trace(Term::var(CONSTR_INDEX_MISMATCH)),
                                     ),
                             )
                             .lambda("subject")
@@ -2888,14 +2889,14 @@ fn when_tuple_deconstruction() {
                         Term::equals_integer()
                             .apply(Term::integer(0.into()))
                             .apply(Term::var("subject"))
-                            .delayed_if_else(
+                            .delayed_if_then_else(
                                 Term::tail_list()
                                     .apply(Term::var("dat_constr_fields"))
                                     .delayed_choose_list(
                                         Term::unit().lambda("_").apply(
                                             Term::var("expect_Thing").apply(Term::var("field_1")),
                                         ),
-                                        Term::Error.trace(Term::var(TOO_MANY_ITEMS)),
+                                        Term::Error.delayed_trace(Term::var(TOO_MANY_ITEMS)),
                                     )
                                     .lambda("field_1")
                                     .apply(Term::head_list().apply(Term::var("dat_constr_fields")))
@@ -2906,14 +2907,15 @@ fn when_tuple_deconstruction() {
                                 Term::equals_integer()
                                     .apply(Term::integer(1.into()))
                                     .apply(Term::var("subject"))
-                                    .delayed_if_else(
+                                    .delayed_if_then_else(
                                         Term::var(CONSTR_FIELDS_EXPOSER)
                                             .apply(Term::var("dat"))
                                             .delayed_choose_list(
                                                 Term::unit(),
-                                                Term::Error.trace(Term::var(CONSTR_NOT_EMPTY)),
+                                                Term::Error
+                                                    .delayed_trace(Term::var(CONSTR_NOT_EMPTY)),
                                             ),
-                                        Term::Error.trace(Term::var(CONSTR_INDEX_MISMATCH)),
+                                        Term::Error.delayed_trace(Term::var(CONSTR_INDEX_MISMATCH)),
                                     ),
                             )
                             .lambda("subject")
@@ -2925,12 +2927,12 @@ fn when_tuple_deconstruction() {
                         Term::equals_integer()
                             .apply(Term::integer(0.into()))
                             .apply(Term::var("subject"))
-                            .delayed_if_else(
+                            .delayed_if_then_else(
                                 Term::tail_list()
                                     .apply(Term::var("field_1_constr_fields"))
                                     .delayed_choose_list(
                                         Term::unit(),
-                                        Term::Error.trace(Term::var(TOO_MANY_ITEMS)),
+                                        Term::Error.delayed_trace(Term::var(TOO_MANY_ITEMS)),
                                     )
                                     .lambda("idx")
                                     .apply(Term::un_i_data().apply(
@@ -2941,7 +2943,7 @@ fn when_tuple_deconstruction() {
                                         Term::var(CONSTR_FIELDS_EXPOSER)
                                             .apply(Term::var("field_1")),
                                     ),
-                                Term::Error.trace(Term::var(CONSTR_INDEX_MISMATCH)),
+                                Term::Error.delayed_trace(Term::var(CONSTR_INDEX_MISMATCH)),
                             )
                             .lambda("subject")
                             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("field_1")))
@@ -3081,7 +3083,7 @@ fn generic_validator_type_test() {
         Term::equals_integer()
             .apply(Term::integer(0.into()))
             .apply(Term::var("subject"))
-            .delayed_if_else(
+            .delayed_if_then_else(
                 Term::bool(false),
                 Term::choose_unit(
                     Term::var("something"),
@@ -3097,7 +3099,7 @@ fn generic_validator_type_test() {
                                     .apply(Term::head_list().apply(Term::var("B_fields"))),
                             ),
                         )
-                        .delayed_if_else(Term::unit(), Term::Error),
+                        .delayed_if_then_else(Term::unit(), Term::Error),
                 )
                 .lambda("B_fields")
                 .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("field_B")))
@@ -3110,11 +3112,11 @@ fn generic_validator_type_test() {
             )
             .lambda("subject")
             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("r")))
-            .delayed_if_else(
+            .delayed_if_then_else(
                 Term::unit(),
                 Term::Error
                     .apply(Term::Error.force())
-                    .trace(Term::string("Validator returned false")),
+                    .delayed_trace(Term::string("Validator returned false")),
             )
             .lambda("_")
             .apply(
@@ -3124,17 +3126,17 @@ fn generic_validator_type_test() {
                         Term::equals_integer()
                             .apply(Term::integer(0.into()))
                             .apply(Term::var("subject"))
-                            .delayed_if_else(
+                            .delayed_if_then_else(
                                 Term::var(CONSTR_FIELDS_EXPOSER)
                                     .apply(Term::var("r"))
                                     .delayed_choose_list(
                                         Term::unit(),
-                                        Term::Error.trace(Term::var(CONSTR_NOT_EMPTY)),
+                                        Term::Error.delayed_trace(Term::var(CONSTR_NOT_EMPTY)),
                                     ),
                                 Term::equals_integer()
                                     .apply(Term::integer(1.into()))
                                     .apply(Term::var("subject"))
-                                    .delayed_if_else(
+                                    .delayed_if_then_else(
                                         Term::tail_list()
                                             .apply(Term::var("tail_1"))
                                             .delayed_choose_list(
@@ -3142,7 +3144,8 @@ fn generic_validator_type_test() {
                                                     Term::var("__expect_B")
                                                         .apply(Term::var("field_B")),
                                                 ),
-                                                Term::Error.trace(Term::var(TOO_MANY_ITEMS)),
+                                                Term::Error
+                                                    .delayed_trace(Term::var(TOO_MANY_ITEMS)),
                                             )
                                             .lambda("field_B")
                                             .apply(Term::head_list().apply(Term::var("tail_1")))
@@ -3160,14 +3163,17 @@ fn generic_validator_type_test() {
                                                             ),
                                                         ),
                                                     )
-                                                    .delayed_if_else(Term::unit(), Term::Error),
+                                                    .delayed_if_then_else(
+                                                        Term::unit(),
+                                                        Term::Error,
+                                                    ),
                                             )
                                             .lambda("r_fields")
                                             .apply(
                                                 Term::var(CONSTR_FIELDS_EXPOSER)
                                                     .apply(Term::var("r")),
                                             ),
-                                        Term::Error.trace(Term::var(CONSTR_INDEX_MISMATCH)),
+                                        Term::Error.delayed_trace(Term::var(CONSTR_INDEX_MISMATCH)),
                                     ),
                             )
                             .lambda("subject")
@@ -3179,12 +3185,12 @@ fn generic_validator_type_test() {
                         Term::equals_integer()
                             .apply(Term::integer(0.into()))
                             .apply(Term::var("subject"))
-                            .delayed_if_else(
+                            .delayed_if_then_else(
                                 Term::tail_list()
                                     .apply(Term::var("B_fields"))
                                     .delayed_choose_list(
                                         Term::unit(),
-                                        Term::Error.trace(Term::var(TOO_MANY_ITEMS)),
+                                        Term::Error.delayed_trace(Term::var(TOO_MANY_ITEMS)),
                                     )
                                     .lambda("something")
                                     .apply(
@@ -3195,14 +3201,14 @@ fn generic_validator_type_test() {
                                                     Term::head_list().apply(Term::var("B_fields")),
                                                 ),
                                             ))
-                                            .delayed_if_else(Term::unit(), Term::Error),
+                                            .delayed_if_then_else(Term::unit(), Term::Error),
                                     )
                                     .lambda("B_fields")
                                     .apply(
                                         Term::var(CONSTR_FIELDS_EXPOSER)
                                             .apply(Term::var("field_B")),
                                     ),
-                                Term::Error.trace(Term::var(CONSTR_INDEX_MISMATCH)),
+                                Term::Error.delayed_trace(Term::var(CONSTR_INDEX_MISMATCH)),
                             )
                             .lambda("subject")
                             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("field_B")))
@@ -3656,9 +3662,9 @@ fn list_fields_unwrap() {
                     vec![Data::bytestring(vec![170]), Data::integer(0.into())],
                 )),
             ]))
-            .delayed_if_else(
+            .delayed_if_then_else(
                 Term::bool(true),
-                Term::bool(true).if_else(Term::bool(false), Term::bool(true)),
+                Term::bool(true).if_then_else(Term::bool(false), Term::bool(true)),
             )
             .constr_fields_exposer(),
         false,
@@ -3762,13 +3768,13 @@ fn foldl_type_mismatch() {
                         Term::equals_integer()
                             .apply(Term::integer(1.into()))
                             .apply(Term::var("mb_b_index"))
-                            .delayed_if_else(
+                            .delayed_if_then_else(
                                 Term::equals_data()
                                     .apply(Term::head_list().apply(
                                         Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("o")),
                                     ))
                                     .apply(Term::var("addr1"))
-                                    .delayed_if_else(
+                                    .delayed_if_then_else(
                                         Term::constr_data().apply(Term::integer(0.into())).apply(
                                             Term::mk_cons()
                                                 .apply(Term::var("o"))
@@ -3878,7 +3884,7 @@ fn expect_head_no_tail() {
                 Term::equals_integer()
                     .apply(Term::var("h"))
                     .apply(Term::var("h")),
-                Term::Error.trace(Term::string(
+                Term::Error.delayed_trace(Term::string(
                     "List/Tuple/Constr contains more items than expected",
                 )),
             )
@@ -3912,19 +3918,19 @@ fn expect_head3_no_tail() {
                 Term::equals_integer()
                     .apply(Term::var("h"))
                     .apply(Term::var("h"))
-                    .delayed_if_else(
+                    .delayed_if_then_else(
                         Term::equals_integer()
                             .apply(Term::var("i"))
                             .apply(Term::var("i")),
                         Term::bool(false),
                     )
-                    .delayed_if_else(
+                    .delayed_if_then_else(
                         Term::equals_integer()
                             .apply(Term::var("j"))
                             .apply(Term::var("j")),
                         Term::bool(false),
                     ),
-                Term::Error.trace(Term::string(
+                Term::Error.delayed_trace(Term::string(
                     "List/Tuple/Constr contains more items than expected",
                 )),
             )
@@ -3966,19 +3972,19 @@ fn expect_head3_cast_data_no_tail() {
                 Term::equals_integer()
                     .apply(Term::var("h"))
                     .apply(Term::var("h"))
-                    .delayed_if_else(
+                    .delayed_if_then_else(
                         Term::equals_integer()
                             .apply(Term::var("i"))
                             .apply(Term::var("i")),
                         Term::bool(false),
                     )
-                    .delayed_if_else(
+                    .delayed_if_then_else(
                         Term::equals_integer()
                             .apply(Term::var("j"))
                             .apply(Term::var("j")),
                         Term::bool(false),
                     ),
-                Term::Error.trace(Term::string(
+                Term::Error.delayed_trace(Term::string(
                     "List/Tuple/Constr contains more items than expected",
                 )),
             )
@@ -4024,7 +4030,7 @@ fn expect_head_cast_data_no_tail() {
                 Term::equals_integer()
                     .apply(Term::var("h"))
                     .apply(Term::var("h")),
-                Term::Error.trace(Term::string(
+                Term::Error.delayed_trace(Term::string(
                     "List/Tuple/Constr contains more items than expected",
                 )),
             )
@@ -4163,7 +4169,7 @@ fn test_init_3() {
                     .apply(
                         Term::var("self")
                             .delayed_choose_list(
-                                Term::Error.trace(Term::string("unreachable")),
+                                Term::Error.delayed_trace(Term::string("unreachable")),
                                 Term::var("tail_1")
                                     .delayed_choose_list(
                                         Term::empty_list(),
@@ -4241,14 +4247,14 @@ fn list_clause_with_guard() {
                         .apply(
                             Term::var("self")
                                 .delayed_choose_list(
-                                    Term::Error.trace(Term::string("unreachable")),
+                                    Term::Error.delayed_trace(Term::string("unreachable")),
                                     Term::var("tail_1")
                                         .delayed_choose_list(
                                             Term::empty_list(),
                                             Term::var("tail_2")
                                                 .choose_list(
                                                     Term::var("clause_guard")
-                                                        .if_else(
+                                                        .if_then_else(
                                                             Term::mk_cons()
                                                                 .apply(
                                                                     Term::i_data()
@@ -4380,14 +4386,14 @@ fn list_clause_with_guard2() {
                         .apply(
                             Term::var("self")
                                 .delayed_choose_list(
-                                    Term::Error.trace(Term::string("unreachable")),
+                                    Term::Error.delayed_trace(Term::string("unreachable")),
                                     Term::var("tail_1")
                                         .delayed_choose_list(
                                             Term::empty_list(),
                                             Term::var("tail_1")
                                                 .choose_list(
                                                     Term::var("clause_guard")
-                                                        .if_else(
+                                                        .if_then_else(
                                                             Term::empty_list().delay(),
                                                             Term::var("clauses_delayed"),
                                                         )
@@ -4512,14 +4518,14 @@ fn list_clause_with_guard3() {
                         .apply(
                             Term::var("self")
                                 .delayed_choose_list(
-                                    Term::Error.trace(Term::string("unreachable")),
+                                    Term::Error.delayed_trace(Term::string("unreachable")),
                                     Term::var("tail_1")
                                         .delayed_choose_list(
                                             Term::empty_list(),
                                             Term::var("self")
                                                 .choose_list(
                                                     Term::var("clause_guard")
-                                                        .if_else(
+                                                        .if_then_else(
                                                             Term::var("g").delay(),
                                                             Term::var("clauses_delayed"),
                                                         )
@@ -4651,14 +4657,14 @@ fn list_clause_with_assign() {
                         .apply(
                             Term::var("self")
                                 .delayed_choose_list(
-                                    Term::Error.trace(Term::string("unreachable")),
+                                    Term::Error.delayed_trace(Term::string("unreachable")),
                                     Term::var("tail_1")
                                         .delayed_choose_list(
                                             Term::var("self"),
                                             Term::var("tail_2")
                                                 .choose_list(
                                                     Term::var("clause_guard")
-                                                        .if_else(
+                                                        .if_then_else(
                                                             Term::mk_cons()
                                                                 .apply(
                                                                     Term::i_data()
@@ -4797,7 +4803,7 @@ fn list_clause_with_assign2() {
                         .apply(
                             Term::var("self")
                                 .delayed_choose_list(
-                                    Term::Error.trace(Term::string("unreachable")),
+                                    Term::Error.delayed_trace(Term::string("unreachable")),
                                     Term::var("tail_1")
                                         .delayed_choose_list(
                                             Term::var("self"),
@@ -4809,7 +4815,7 @@ fn list_clause_with_assign2() {
                                                             Term::var(CONSTR_INDEX_EXPOSER)
                                                                 .apply(Term::var("n")),
                                                         )
-                                                        .if_else(
+                                                        .if_then_else(
                                                             Term::mk_cons()
                                                                 .apply(Term::var("n"))
                                                                 .apply(Term::empty_list())
@@ -4942,7 +4948,7 @@ fn opaque_value_in_datum() {
                     .apply(
                         Term::unmap_data().apply(Term::snd_pair().apply(Term::var("tuple_item_0"))),
                     ),
-                Term::Error.trace(Term::var(TOO_MANY_ITEMS)),
+                Term::Error.delayed_trace(Term::var(TOO_MANY_ITEMS)),
             )
             .lambda("tuple_item_0")
             .apply(Term::head_list().apply(Term::var("val")))
@@ -4955,18 +4961,18 @@ fn opaque_value_in_datum() {
                         .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("dat"))),
                 ),
             )
-            .delayed_if_else(
+            .delayed_if_then_else(
                 Term::unit(),
                 Term::Error
                     .apply(Term::Error.force())
-                    .trace(Term::string("Validator returned false")),
+                    .delayed_trace(Term::string("Validator returned false")),
             )
             .lambda("_")
             .apply(
                 Term::equals_integer()
                     .apply(Term::integer(0.into()))
                     .apply(Term::var("subject"))
-                    .delayed_if_else(
+                    .delayed_if_then_else(
                         Term::tail_list()
                             .apply(Term::var("tail_1"))
                             .delayed_choose_list(
@@ -4996,7 +5002,7 @@ fn opaque_value_in_datum() {
                                             .lambda("pair_outer"),
                                     ),
                                 ),
-                                Term::Error.trace(Term::var(TOO_MANY_ITEMS)),
+                                Term::Error.delayed_trace(Term::var(TOO_MANY_ITEMS)),
                             )
                             .lambda("a")
                             .apply(
@@ -5012,7 +5018,9 @@ fn opaque_value_in_datum() {
                             )
                             .lambda("dat_fields")
                             .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("param_0"))),
-                        Term::Error.trace(Term::string("Constr index didn't match a type variant")),
+                        Term::Error.delayed_trace(Term::string(
+                            "Constr index didn't match a type variant",
+                        )),
                     )
                     .lambda("subject")
                     .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("param_0")))
@@ -5115,7 +5123,7 @@ fn opaque_value_in_test() {
                     .apply(
                         Term::unmap_data().apply(Term::snd_pair().apply(Term::var("tuple_item_0"))),
                     ),
-                Term::Error.trace(Term::string(
+                Term::Error.delayed_trace(Term::string(
                     "List/Tuple/Constr contains more items than expected",
                 )),
             )
@@ -5171,9 +5179,9 @@ fn expect_none() {
         Term::equals_integer()
             .apply(Term::integer(1.into()))
             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("x")))
-            .delayed_if_else(
+            .delayed_if_then_else(
                 Term::bool(true),
-                Term::Error.trace(Term::string("Expected on incorrect Constr variant")),
+                Term::Error.delayed_trace(Term::string("Expected on incorrect Constr variant")),
             )
             .lambda("x")
             .apply(Term::Constant(
@@ -5223,24 +5231,24 @@ fn tuple_2_match() {
                 Term::equals_integer()
                     .apply(Term::integer(0.into()))
                     .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("tuple_index_0")))
-                    .if_else(
+                    .if_then_else(
                         Term::equals_integer()
                             .apply(Term::integer(0.into()))
                             .apply(
                                 Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("tuple_index_1")),
                             )
-                            .if_else(
+                            .if_then_else(
                                 Term::equals_integer()
                                     .apply(
-                                        Term::sub_integer()
+                                        Term::subtract_integer()
                                             .apply(Term::var("x2"))
                                             .apply(Term::var("x1")),
                                     )
                                     .apply(Term::integer(0.into()))
-                                    .delayed_if_else(
+                                    .delayed_if_then_else(
                                         Term::equals_integer()
                                             .apply(
-                                                Term::sub_integer()
+                                                Term::subtract_integer()
                                                     .apply(Term::var("y2"))
                                                     .apply(Term::var("y1")),
                                             )
@@ -5324,14 +5332,17 @@ fn tuple_2_match() {
                             .apply(
                                 Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("tuple_index_0")),
                             )
-                            .if_else(
+                            .if_then_else(
                                 Term::equals_integer()
                                     .apply(Term::integer(1.into()))
                                     .apply(
                                         Term::var(CONSTR_INDEX_EXPOSER)
                                             .apply(Term::var("tuple_index_1")),
                                     )
-                                    .if_else(Term::bool(true).delay(), Term::var("clauses_delayed"))
+                                    .if_then_else(
+                                        Term::bool(true).delay(),
+                                        Term::var("clauses_delayed"),
+                                    )
                                     .force()
                                     .delay(),
                                 Term::var("clauses_delayed"),
@@ -5345,14 +5356,14 @@ fn tuple_2_match() {
                                         Term::var(CONSTR_INDEX_EXPOSER)
                                             .apply(Term::var("tuple_index_0")),
                                     )
-                                    .if_else(
+                                    .if_then_else(
                                         Term::equals_integer()
                                             .apply(Term::integer(0.into()))
                                             .apply(
                                                 Term::var(CONSTR_INDEX_EXPOSER)
                                                     .apply(Term::var("tuple_index_1")),
                                             )
-                                            .if_else(
+                                            .if_then_else(
                                                 Term::bool(false).delay(),
                                                 Term::var("clauses_delayed"),
                                             )
@@ -5382,9 +5393,9 @@ fn tuple_2_match() {
             )
             .apply(Term::data(Data::constr(1, vec![])))
             .apply(Term::data(Data::constr(1, vec![])))
-            .delayed_if_else(
+            .delayed_if_then_else(
                 Term::bool(true),
-                Term::bool(true).if_else(Term::bool(false), Term::bool(true)),
+                Term::bool(true).if_then_else(Term::bool(false), Term::bool(true)),
             )
             .constr_index_exposer()
             .constr_fields_exposer(),

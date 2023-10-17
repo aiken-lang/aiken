@@ -80,8 +80,6 @@ impl<T> Term<T> {
     // Theses are in _alphabetical order_
     // The naming convention almost follows PascalCase -> snake_case
     // Exceptions include the use of `un`.
-    // FIXME: All cases of `bytearray` are "wrong" and should be `byte_string`
-    // FIXME: All missing cases are to be added as needed
 
     pub fn add_integer() -> Self {
         Term::Builtin(DefaultFunction::AddInteger)
@@ -101,6 +99,24 @@ impl<T> Term<T> {
 
     pub fn blake2b_256() -> Self {
         Term::Builtin(DefaultFunction::Blake2b_256)
+    }
+
+    pub fn choose_data(
+        self,
+        constr_case: Self,
+        map_case: Self,
+        array_case: Self,
+        int_case: Self,
+        bytes_case: Self,
+    ) -> Self {
+        Term::Builtin(DefaultFunction::ChooseData)
+            .force()
+            .apply(self)
+            .apply(constr_case)
+            .apply(map_case)
+            .apply(array_case)
+            .apply(int_case)
+            .apply(bytes_case)
     }
 
     pub fn choose_list(self, then_term: Self, else_term: Self) -> Self {
@@ -171,8 +187,7 @@ impl<T> Term<T> {
         Term::Builtin(DefaultFunction::IData)
     }
 
-    pub fn if_else(self, then_term: Self, else_term: Self) -> Self {
-        // FIXME : rename if_then_else
+    pub fn if_then_else(self, then_term: Self, else_term: Self) -> Self {
         Term::Builtin(DefaultFunction::IfThenElse)
             .force()
             .apply(self)
@@ -252,8 +267,7 @@ impl<T> Term<T> {
         Term::Builtin(DefaultFunction::SndPair).force().force()
     }
 
-    pub fn sub_integer() -> Self {
-        // FIXME :: rename subtract_integer
+    pub fn subtract_integer() -> Self {
         Term::Builtin(DefaultFunction::SubtractInteger)
     }
 
@@ -292,52 +306,22 @@ impl<T> Term<T> {
         Term::Builtin(DefaultFunction::VerifySchnorrSecp256k1Signature)
     }
 
-    // FIXME : The following builders are missing
-    // pub fn null_list() -> Self {
-    //     Term::Builtin(DefaultFunction::NullList)
-    // }
-    // pub fn choose_data() -> Self {
-    //     Term::Builtin(DefaultFunction::ChooseData)
-    // }
-    // pub fn serialise_data() -> Self {
-    //     Term::Builtin(DefaultFunction::SerialiseData)
-    // }
-    // pub fn mk_nil_data() -> Self {
-    //     Term::Builtin(DefaultFunction::MkNilData)
-    // }
-    // pub fn mk_nil_pair_data() -> Self {
-    //     Term::Builtin(DefaultFunction::MkNilPairData)
-    // }
+    // Unused bultins
+    pub fn mk_nil_data() -> Self {
+        Term::Builtin(DefaultFunction::MkNilData)
+    }
+    pub fn mk_nil_pair_data() -> Self {
+        Term::Builtin(DefaultFunction::MkNilPairData)
+    }
+    pub fn null_list() -> Self {
+        Term::Builtin(DefaultFunction::NullList)
+    }
+    pub fn serialise_data() -> Self {
+        Term::Builtin(DefaultFunction::SerialiseData)
+    }
 }
 
 impl<T> Term<T> {
-    pub fn delayed_choose_list(self, then_term: Self, else_term: Self) -> Self {
-        Term::Builtin(DefaultFunction::ChooseList)
-            .force()
-            .force()
-            .apply(self)
-            .apply(then_term.delay())
-            .apply(else_term.delay())
-            .force()
-    }
-
-    pub fn delayed_choose_unit(self, then_term: Self) -> Self {
-        Term::Builtin(DefaultFunction::ChooseUnit)
-            .force()
-            .apply(self)
-            .apply(then_term.delay())
-            .force()
-    }
-
-    pub fn delayed_if_else(self, then_term: Self, else_term: Self) -> Self {
-        Term::Builtin(DefaultFunction::IfThenElse)
-            .force()
-            .apply(self)
-            .apply(then_term.delay())
-            .apply(else_term.delay())
-            .force()
-    }
-
     pub fn delayed_choose_data(
         self,
         constr_case: Self,
@@ -357,7 +341,34 @@ impl<T> Term<T> {
             .force()
     }
 
-    pub fn trace(self, msg_term: Self) -> Self {
+    pub fn delayed_choose_list(self, then_term: Self, else_term: Self) -> Self {
+        Term::Builtin(DefaultFunction::ChooseList)
+            .force()
+            .force()
+            .apply(self)
+            .apply(then_term.delay())
+            .apply(else_term.delay())
+            .force()
+    }
+
+    pub fn delayed_choose_unit(self, then_term: Self) -> Self {
+        Term::Builtin(DefaultFunction::ChooseUnit)
+            .force()
+            .apply(self)
+            .apply(then_term.delay())
+            .force()
+    }
+
+    pub fn delayed_if_then_else(self, then_term: Self, else_term: Self) -> Self {
+        Term::Builtin(DefaultFunction::IfThenElse)
+            .force()
+            .apply(self)
+            .apply(then_term.delay())
+            .apply(else_term.delay())
+            .force()
+    }
+
+    pub fn delayed_trace(self, msg_term: Self) -> Self {
         Term::Builtin(DefaultFunction::Trace)
             .force()
             .apply(msg_term)
@@ -365,6 +376,7 @@ impl<T> Term<T> {
             .force()
     }
 
+    // Misc.
     pub fn repeat_tail_list(self, repeat: usize) -> Self {
         let mut term = self;
 
@@ -388,6 +400,7 @@ impl Term<Name> {
         Term::Var(Name::text(name).into())
     }
 
+    // Misc.
     pub fn constr_fields_exposer(self) -> Self {
         self.lambda(CONSTR_FIELDS_EXPOSER).apply(
             Term::snd_pair()

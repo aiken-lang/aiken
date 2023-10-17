@@ -3842,7 +3842,7 @@ impl<'a> CodeGenerator<'a> {
 
                 if !names_empty {
                     let error_term = if self.tracing {
-                        Term::Error.trace(Term::var(
+                        Term::Error.delayed_trace(Term::var(
                             self.special_functions.use_function(TOO_MANY_ITEMS),
                         ))
                     } else {
@@ -3864,7 +3864,7 @@ impl<'a> CodeGenerator<'a> {
                     arg_stack.push(term);
                 } else if check_last_item {
                     let trace_term = if self.tracing {
-                        Term::Error.trace(Term::var(
+                        Term::Error.delayed_trace(Term::var(
                             self.special_functions.use_function(LIST_NOT_EMPTY),
                         ))
                     } else {
@@ -4050,13 +4050,13 @@ impl<'a> CodeGenerator<'a> {
 
                 let term =
                     match name {
-                        BinOp::And => left.delayed_if_else(right, Term::bool(false)),
-                        BinOp::Or => left.delayed_if_else(Term::bool(true), right),
+                        BinOp::And => left.delayed_if_then_else(right, Term::bool(false)),
+                        BinOp::Or => left.delayed_if_then_else(Term::bool(true), right),
                         BinOp::Eq => {
                             if tipo.is_bool() {
-                                let term = left.delayed_if_else(
+                                let term = left.delayed_if_then_else(
                                     right.clone(),
-                                    right.if_else(Term::bool(false), Term::bool(true)),
+                                    right.if_then_else(Term::bool(false), Term::bool(true)),
                                 );
 
                                 arg_stack.push(term);
@@ -4098,8 +4098,10 @@ impl<'a> CodeGenerator<'a> {
                         }
                         BinOp::NotEq => {
                             if tipo.is_bool() {
-                                let term = left.delayed_if_else(
-                                    right.clone().if_else(Term::bool(false), Term::bool(true)),
+                                let term = left.delayed_if_then_else(
+                                    right
+                                        .clone()
+                                        .if_then_else(Term::bool(false), Term::bool(true)),
                                     right,
                                 );
 
@@ -4109,7 +4111,7 @@ impl<'a> CodeGenerator<'a> {
                                 let term = builtin
                                     .apply(Term::map_data().apply(left))
                                     .apply(Term::map_data().apply(right))
-                                    .if_else(Term::bool(false), Term::bool(true));
+                                    .if_then_else(Term::bool(false), Term::bool(true));
 
                                 arg_stack.push(term);
                                 return;
@@ -4123,7 +4125,7 @@ impl<'a> CodeGenerator<'a> {
                                     .apply(Term::map_data().apply(
                                         Term::mk_cons().apply(right).apply(Term::empty_map()),
                                     ))
-                                    .if_else(Term::bool(false), Term::bool(true));
+                                    .if_then_else(Term::bool(false), Term::bool(true));
 
                                 arg_stack.push(term);
                                 return;
@@ -4131,7 +4133,7 @@ impl<'a> CodeGenerator<'a> {
                                 let term = builtin
                                     .apply(Term::list_data().apply(left))
                                     .apply(Term::list_data().apply(right))
-                                    .if_else(Term::bool(false), Term::bool(true));
+                                    .if_then_else(Term::bool(false), Term::bool(true));
 
                                 arg_stack.push(term);
                                 return;
@@ -4143,7 +4145,7 @@ impl<'a> CodeGenerator<'a> {
                             builtin
                                 .apply(left)
                                 .apply(right)
-                                .if_else(Term::bool(false), Term::bool(true))
+                                .if_then_else(Term::bool(false), Term::bool(true))
                         }
                         BinOp::LtInt => Term::Builtin(DefaultFunction::LessThanInteger)
                             .apply(left)
@@ -4351,7 +4353,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
 
                 let trace_term = if self.tracing {
-                    Term::Error.trace(Term::var(
+                    Term::Error.delayed_trace(Term::var(
                         self.special_functions.use_function(INCORRECT_CONSTR),
                     ))
                 } else {
@@ -4364,7 +4366,7 @@ impl<'a> CodeGenerator<'a> {
                         Term::var(self.special_functions.use_function(CONSTR_INDEX_EXPOSER))
                             .apply(constr),
                     )
-                    .delayed_if_else(term, trace_term);
+                    .delayed_if_then_else(term, trace_term);
 
                 arg_stack.push(term);
             }
@@ -4373,7 +4375,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
 
                 let trace_term = if self.tracing {
-                    Term::Error.trace(Term::var(
+                    Term::Error.delayed_trace(Term::var(
                         self.special_functions.use_function(INCORRECT_BOOLEAN),
                     ))
                 } else {
@@ -4381,9 +4383,9 @@ impl<'a> CodeGenerator<'a> {
                 };
 
                 if is_true {
-                    term = value.delayed_if_else(term, trace_term)
+                    term = value.delayed_if_then_else(term, trace_term)
                 } else {
-                    term = value.delayed_if_else(trace_term, term)
+                    term = value.delayed_if_then_else(trace_term, term)
                 }
                 arg_stack.push(term);
             }
@@ -4438,11 +4440,11 @@ impl<'a> CodeGenerator<'a> {
                     if matches!(clause, Term::Constant(boolean) if matches!(boolean.as_ref(), UplcConstant::Bool(true)))
                     {
                         body = Term::var(subject_name)
-                            .if_else(body.delay(), other_clauses)
+                            .if_then_else(body.delay(), other_clauses)
                             .force();
                     } else {
                         body = Term::var(subject_name)
-                            .if_else(other_clauses, body.delay())
+                            .if_then_else(other_clauses, body.delay())
                             .force();
                     }
 
@@ -4474,12 +4476,12 @@ impl<'a> CodeGenerator<'a> {
 
                     if complex_clause {
                         term = condition
-                            .if_else(body.delay(), Term::var("__other_clauses_delayed"))
+                            .if_then_else(body.delay(), Term::var("__other_clauses_delayed"))
                             .force()
                             .lambda("__other_clauses_delayed")
                             .apply(term.delay());
                     } else {
-                        term = condition.delayed_if_else(body, term);
+                        term = condition.delayed_if_then_else(body, term);
                     }
                 }
 
@@ -4584,9 +4586,13 @@ impl<'a> CodeGenerator<'a> {
                     let mut term = Term::var("__other_clauses_delayed");
                     if matches!(checker, Term::Constant(boolean) if matches!(boolean.as_ref(), UplcConstant::Bool(true)))
                     {
-                        term = Term::var(subject_name).if_else(then.delay(), term).force();
+                        term = Term::var(subject_name)
+                            .if_then_else(then.delay(), term)
+                            .force();
                     } else {
-                        term = Term::var(subject_name).if_else(term, then.delay()).force();
+                        term = Term::var(subject_name)
+                            .if_then_else(term, then.delay())
+                            .force();
                     }
                     arg_stack.push(term);
                 } else {
@@ -4612,7 +4618,7 @@ impl<'a> CodeGenerator<'a> {
                     };
 
                     let term = condition
-                        .if_else(then.delay(), Term::var("__other_clauses_delayed"))
+                        .if_then_else(then.delay(), Term::var("__other_clauses_delayed"))
                         .force();
                     arg_stack.push(term);
                 }
@@ -4695,7 +4701,7 @@ impl<'a> CodeGenerator<'a> {
                 let then = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
 
-                term = condition.delayed_if_else(then, term);
+                term = condition.delayed_if_then_else(then, term);
 
                 arg_stack.push(term);
             }
@@ -4772,7 +4778,7 @@ impl<'a> CodeGenerator<'a> {
 
                 if !indices.is_empty() {
                     let error_term = if self.tracing {
-                        Term::Error.trace(Term::var(
+                        Term::Error.delayed_trace(Term::var(
                             self.special_functions.use_function(TOO_MANY_ITEMS),
                         ))
                     } else {
@@ -4798,7 +4804,7 @@ impl<'a> CodeGenerator<'a> {
                     arg_stack.push(term);
                 } else if check_last_item {
                     let trace_term = if self.tracing {
-                        Term::Error.trace(Term::var(
+                        Term::Error.delayed_trace(Term::var(
                             self.special_functions.use_function(CONSTR_NOT_EMPTY),
                         ))
                     } else {
@@ -4819,7 +4825,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
 
                 let trace_term = if self.tracing {
-                    Term::Error.trace(Term::var(
+                    Term::Error.delayed_trace(Term::var(
                         self.special_functions.use_function(CONSTR_NOT_EMPTY),
                     ))
                 } else {
@@ -4837,7 +4843,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
 
                 let trace_term = if self.tracing {
-                    Term::Error.trace(Term::var(
+                    Term::Error.delayed_trace(Term::var(
                         self.special_functions.use_function(LIST_NOT_EMPTY),
                     ))
                 } else {
@@ -5001,18 +5007,18 @@ impl<'a> CodeGenerator<'a> {
                 let value = arg_stack.pop().unwrap();
 
                 let term = match op {
-                    UnOp::Not => value.if_else(Term::bool(false), Term::bool(true)),
+                    UnOp::Not => value.if_then_else(Term::bool(false), Term::bool(true)),
                     UnOp::Negate => {
                         if let Term::Constant(c) = &value {
                             if let UplcConstant::Integer(i) = c.as_ref() {
                                 Term::integer(-i)
                             } else {
-                                Term::sub_integer()
+                                Term::subtract_integer()
                                     .apply(Term::integer(0.into()))
                                     .apply(value)
                             }
                         } else {
-                            Term::sub_integer()
+                            Term::subtract_integer()
                                 .apply(Term::integer(0.into()))
                                 .apply(value)
                         }
@@ -5066,7 +5072,7 @@ impl<'a> CodeGenerator<'a> {
                     let names_types = names.into_iter().zip(inner_types).collect_vec();
 
                     let error_term = if self.tracing {
-                        Term::Error.trace(Term::var(
+                        Term::Error.delayed_trace(Term::var(
                             self.special_functions.use_function(TOO_MANY_ITEMS),
                         ))
                     } else {
@@ -5097,7 +5103,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let term = arg_stack.pop().unwrap();
 
-                let term = term.trace(text);
+                let term = term.delayed_trace(text);
 
                 arg_stack.push(term);
             }

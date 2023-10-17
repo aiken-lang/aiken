@@ -935,7 +935,7 @@ mod tests {
                         .apply(Term::integer(2.into()))
                         .apply(Term::var("y")),
                 )
-                .delayed_if_else(
+                .delayed_if_then_else(
                     Term::length_of_bytearray().apply(Term::byte_string(vec![])),
                     Term::Error,
                 )
