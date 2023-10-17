@@ -4,16 +4,24 @@
 
 ### Added
 
-- **aiken-project**: The `plutus.json` blueprint now contains a `compiler.name` and `compiler.version` fields.
+- **aiken-project**: The `plutus.json` blueprint now contains a `compiler.name`
+  and `compiler.version` fields.
 - **aiken-prokect**: Add compiler and system information to panic error report.
 
 ### Changed
 
 - **aiken-lang**: Added validator specific error when validator returns false
+- **aiken-lang**: Running a multi-validator with traces on will let you know
+  which validator function is running
+- **aiken-lang**: Multi-validator with traces will give a better error when the
+  'spend' redeemer is not properly wrapped with a constr
+- **aiken-lang**: Code gen traces are referenced instead of being inlined
+  leading to smaller validators
 
 ### Fixed
 
 - **aiken-lang**: improved error messages for `a |> b(x)`
+- **uplc**: Fixed cost model issue when using div, quot, rem, mod
 
 ## v1.0.19-alpha - 2023-09-29
 
