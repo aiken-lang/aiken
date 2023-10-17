@@ -1194,7 +1194,7 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
         Term::equals_integer()
             .apply(Term::integer(0.into()))
             .apply(Term::fst_pair().apply(Term::unconstr_data().apply(term)))
-            .delayed_if_else(Term::unit(), Term::Error)
+            .delayed_if_then_else(Term::unit(), Term::Error)
     } else if field_type.is_map() {
         Term::unmap_data().apply(term)
     } else if field_type.is_string() {
@@ -1332,7 +1332,7 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
     } else if field_type.is_list() || field_type.is_tuple() {
         Term::list_data().apply(term)
     } else if field_type.is_bool() {
-        term.if_else(
+        term.if_then_else(
             Term::Constant(
                 UplcConstant::Data(PlutusData::Constr(Constr {
                     tag: convert_constr_to_tag(1).unwrap(),
@@ -1713,17 +1713,17 @@ pub fn wrap_as_multi_validator(
             spend_name
         );
 
-        let error_term = Term::Error.trace(Term::var("__incorrect_second_arg_type"));
+        let error_term = Term::Error.delayed_trace(Term::var("__incorrect_second_arg_type"));
 
         Term::var("__second_arg")
             .delayed_choose_data(
                 Term::equals_integer()
                     .apply(Term::integer(0.into()))
                     .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("__second_arg")))
-                    .delayed_if_else(
+                    .delayed_if_then_else(
                         mint.apply(Term::var("__first_arg"))
                             .apply(Term::var("__second_arg"))
-                            .trace(Term::string(format!(
+                            .delayed_trace(Term::string(format!(
                                 "Running 2 arg validator {}",
                                 mint_name
                             ))),
@@ -1732,7 +1732,7 @@ pub fn wrap_as_multi_validator(
                             .apply(Term::head_list().apply(
                                 Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("__second_arg")),
                             ))
-                            .trace(Term::string(format!(
+                            .delayed_trace(Term::string(format!(
                                 "Running 3 arg validator {}",
                                 spend_name
                             ))),
@@ -1750,7 +1750,7 @@ pub fn wrap_as_multi_validator(
         Term::equals_integer()
             .apply(Term::integer(0.into()))
             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("__second_arg")))
-            .delayed_if_else(
+            .delayed_if_then_else(
                 mint.apply(Term::var("__first_arg"))
                     .apply(Term::var("__second_arg")),
                 spend.apply(Term::var("__first_arg")).apply(

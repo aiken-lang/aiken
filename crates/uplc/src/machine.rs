@@ -495,7 +495,7 @@ mod tests {
                         ],
                     }
                     .into(),
-                    branches: vec![Term::Builtin(fun), Term::sub_integer()],
+                    branches: vec![Term::Builtin(fun), Term::subtract_integer()],
                 },
             };
 
