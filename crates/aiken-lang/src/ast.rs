@@ -404,8 +404,8 @@ impl TypedDefinition {
         })
         | Definition::Test(Function { body, .. }) = self
         {
-            if let Some(expression) = body.find_node(byte_index) {
-                return Some(Located::Expression(expression));
+            if let Some(located) = body.find_node(byte_index) {
+                return Some(located);
             }
         }
 
@@ -420,6 +420,7 @@ impl TypedDefinition {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Located<'a> {
     Expression(&'a TypedExpr),
+    Pattern(&'a TypedPattern, &'a TypedExpr),
     Definition(&'a TypedDefinition),
 }
 
@@ -427,6 +428,10 @@ impl<'a> Located<'a> {
     pub fn definition_location(&self) -> Option<DefinitionLocation<'_>> {
         match self {
             Self::Expression(expression) => expression.definition_location(),
+            // TODO: Revise definition location semantic for 'Pattern'
+            // e.g. for constructors, we might want to show the type definition
+            // for that constructor.
+            Self::Pattern(_, _) => None,
             Self::Definition(definition) => Some(DefinitionLocation {
                 module: None,
                 span: definition.location(),
@@ -499,7 +504,7 @@ impl CallArg<UntypedExpr> {
 }
 
 impl TypedCallArg {
-    pub fn find_node(&self, byte_index: usize) -> Option<&TypedExpr> {
+    pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
         self.value.find_node(byte_index)
     }
 }
@@ -918,6 +923,45 @@ impl<A, B> Pattern<A, B> {
     }
 }
 
+impl TypedPattern {
+    pub fn find_node<'a>(&'a self, byte_index: usize, value: &'a TypedExpr) -> Option<Located<'a>> {
+        if !self.location().contains(byte_index) {
+            return None;
+        }
+
+        match self {
+            Pattern::Int { .. }
+            | Pattern::Var { .. }
+            | Pattern::Assign { .. }
+            | Pattern::Discard { .. } => Some(Located::Pattern(self, value)),
+
+            Pattern::List { elements, .. }
+            | Pattern::Tuple {
+                elems: elements, ..
+            } => elements
+                .iter()
+                .find_map(|e| e.find_node(byte_index, value))
+                .or(Some(Located::Pattern(self, value))),
+
+            Pattern::Constructor { arguments, .. } => arguments
+                .iter()
+                .find_map(|e| e.value.find_node(byte_index, value))
+                .or(Some(Located::Pattern(self, value))),
+        }
+    }
+
+    pub fn tipo(&self, value: &TypedExpr) -> Option<Rc<Type>> {
+        match self {
+            Pattern::Int { .. } => Some(builtins::int()),
+            Pattern::Constructor { tipo, .. } => Some(tipo.clone()),
+            Pattern::Var { .. } | Pattern::Assign { .. } | Pattern::Discard { .. } => {
+                Some(value.tipo())
+            }
+            Pattern::List { .. } | Pattern::Tuple { .. } => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum ByteArrayFormatPreference {
     HexadecimalString,
@@ -977,7 +1021,7 @@ impl TypedClause {
         }
     }
 
-    pub fn find_node(&self, byte_index: usize) -> Option<&TypedExpr> {
+    pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
         self.then.find_node(byte_index)
     }
 }
@@ -1119,7 +1163,7 @@ pub struct TypedRecordUpdateArg {
 }
 
 impl TypedRecordUpdateArg {
-    pub fn find_node(&self, byte_index: usize) -> Option<&TypedExpr> {
+    pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
         self.value.find_node(byte_index)
     }
 }

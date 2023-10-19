@@ -582,6 +582,9 @@ impl ValueConstructor {
             ValueConstructorVariant::Record {
                 module, location, ..
             }
+            | ValueConstructorVariant::ModuleFn {
+                module, location, ..
+            }
             | ValueConstructorVariant::ModuleConstant {
                 location, module, ..
             } => DefinitionLocation {
@@ -589,8 +592,7 @@ impl ValueConstructor {
                 span: *location,
             },
 
-            ValueConstructorVariant::ModuleFn { location, .. }
-            | ValueConstructorVariant::LocalVariable { location } => DefinitionLocation {
+            ValueConstructorVariant::LocalVariable { location } => DefinitionLocation {
                 module: None,
                 span: *location,
             },

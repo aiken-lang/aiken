@@ -344,6 +344,9 @@ impl Server {
                 self.completion_for_import()
             }
 
+            // TODO: autocompletion for patterns
+            Some(Located::Pattern(_pattern, _value)) => None,
+
             // TODO: autocompletion for other definitions
             Some(Located::Definition(_expression)) => None,
 
@@ -458,13 +461,17 @@ impl Server {
             None => return Ok(None),
         };
 
-        let expression = match found {
-            Located::Expression(expression) => expression,
+        let (location, definition_location, tipo) = match found {
+            Located::Expression(expression) => (
+                expression.location(),
+                expression.definition_location(),
+                Some(expression.tipo()),
+            ),
+            Located::Pattern(pattern, value) => (pattern.location(), None, pattern.tipo(value)),
             Located::Definition(_) => return Ok(None),
         };
 
-        let doc = expression
-            .definition_location()
+        let doc = definition_location
             .and_then(|loc| loc.module.map(|m| (m, loc.span)))
             .and_then(|(m, span)| {
                 self.compiler
@@ -475,12 +482,16 @@ impl Server {
             .and_then(|(checked_module, span)| checked_module.ast.find_node(span.start))
             .and_then(|node| match node {
                 Located::Expression(_) => None,
+                Located::Pattern(_, _) => None,
                 Located::Definition(def) => def.doc(),
             })
             .unwrap_or_default();
 
         // Show the type of the hovered node to the user
-        let type_ = Printer::new().pretty_print(expression.tipo().as_ref(), 0);
+        let type_ = match tipo {
+            Some(t) => Printer::new().pretty_print(t.as_ref(), 0),
+            None => "?".to_string(),
+        };
 
         let contents = formatdoc! {r#"
             ```aiken
@@ -491,7 +502,7 @@ impl Server {
 
         Ok(Some(lsp_types::Hover {
             contents: lsp_types::HoverContents::Scalar(lsp_types::MarkedString::String(contents)),
-            range: Some(span_to_lsp_range(expression.location(), &line_numbers)),
+            range: Some(span_to_lsp_range(location, &line_numbers)),
         }))
     }
 

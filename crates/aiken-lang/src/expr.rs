@@ -5,7 +5,7 @@ use vec1::Vec1;
 use crate::{
     ast::{
         self, Annotation, Arg, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
-        DefinitionLocation, IfBranch, LogicalOpChainKind, ParsedCallArg, Pattern,
+        DefinitionLocation, IfBranch, Located, LogicalOpChainKind, ParsedCallArg, Pattern,
         RecordUpdateSpread, Span, TraceKind, TypedClause, TypedRecordUpdateArg, UnOp,
         UntypedClause, UntypedRecordUpdateArg,
     },
@@ -312,7 +312,7 @@ impl TypedExpr {
 
     // This could be optimised in places to exit early if the first of a series
     // of expressions is after the byte index.
-    pub fn find_node(&self, byte_index: usize) -> Option<&Self> {
+    pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
         if !self.location().contains(byte_index) {
             return None;
         }
@@ -323,18 +323,20 @@ impl TypedExpr {
             | TypedExpr::UInt { .. }
             | TypedExpr::String { .. }
             | TypedExpr::ByteArray { .. }
-            | TypedExpr::ModuleSelect { .. } => Some(self),
+            | TypedExpr::ModuleSelect { .. } => Some(Located::Expression(self)),
 
             TypedExpr::Trace { text, then, .. } => text
                 .find_node(byte_index)
                 .or_else(|| then.find_node(byte_index))
-                .or(Some(self)),
+                .or(Some(Located::Expression(self))),
 
             TypedExpr::Pipeline { expressions, .. } | TypedExpr::Sequence { expressions, .. } => {
                 expressions.iter().find_map(|e| e.find_node(byte_index))
             }
 
-            TypedExpr::Fn { body, .. } => body.find_node(byte_index).or(Some(self)),
+            TypedExpr::Fn { body, .. } => body
+                .find_node(byte_index)
+                .or(Some(Located::Expression(self))),
 
             TypedExpr::Tuple {
                 elems: elements, ..
@@ -342,19 +344,21 @@ impl TypedExpr {
             | TypedExpr::List { elements, .. } => elements
                 .iter()
                 .find_map(|e| e.find_node(byte_index))
-                .or(Some(self)),
+                .or(Some(Located::Expression(self))),
 
             TypedExpr::Call { fun, args, .. } => args
                 .iter()
                 .find_map(|arg| arg.find_node(byte_index))
                 .or_else(|| fun.find_node(byte_index))
-                .or(Some(self)),
+                .or(Some(Located::Expression(self))),
 
             TypedExpr::BinOp { left, right, .. } => left
                 .find_node(byte_index)
                 .or_else(|| right.find_node(byte_index)),
 
-            TypedExpr::Assignment { value, .. } => value.find_node(byte_index),
+            TypedExpr::Assignment { value, pattern, .. } => pattern
+                .find_node(byte_index, value)
+                .or_else(|| value.find_node(byte_index)),
 
             TypedExpr::When {
                 subject, clauses, ..
@@ -365,20 +369,22 @@ impl TypedExpr {
                         .iter()
                         .find_map(|clause| clause.find_node(byte_index))
                 })
-                .or(Some(self)),
+                .or(Some(Located::Expression(self))),
 
             TypedExpr::RecordAccess {
                 record: expression, ..
             }
             | TypedExpr::TupleIndex {
                 tuple: expression, ..
-            } => expression.find_node(byte_index).or(Some(self)),
+            } => expression
+                .find_node(byte_index)
+                .or(Some(Located::Expression(self))),
 
             TypedExpr::RecordUpdate { spread, args, .. } => args
                 .iter()
                 .find_map(|arg| arg.find_node(byte_index))
                 .or_else(|| spread.find_node(byte_index))
-                .or(Some(self)),
+                .or(Some(Located::Expression(self))),
 
             TypedExpr::If {
                 branches,
@@ -393,9 +399,11 @@ impl TypedExpr {
                         .or_else(|| branch.body.find_node(byte_index))
                 })
                 .or_else(|| final_else.find_node(byte_index))
-                .or(Some(self)),
+                .or(Some(Located::Expression(self))),
 
-            TypedExpr::UnOp { value, .. } => value.find_node(byte_index).or(Some(self)),
+            TypedExpr::UnOp { value, .. } => value
+                .find_node(byte_index)
+                .or(Some(Located::Expression(self))),
         }
     }
 }
