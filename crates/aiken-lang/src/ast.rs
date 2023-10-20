@@ -78,6 +78,18 @@ impl TypedModule {
             .find_map(|definition| definition.find_node(byte_index))
     }
 
+    pub fn has_definition(&self, name: &str) -> bool {
+        self.definitions.iter().any(|def| match def {
+            Definition::Fn(f) => f.public && f.name == name,
+            Definition::TypeAlias(_) => false,
+            Definition::DataType(_) => false,
+            Definition::Use(_) => false,
+            Definition::ModuleConstant(_) => false,
+            Definition::Test(_) => false,
+            Definition::Validator(_) => false,
+        })
+    }
+
     pub fn validate_module_name(&self) -> Result<(), Error> {
         if self.name == "aiken" || self.name == "aiken/builtin" {
             return Err(Error::ReservedModuleName {

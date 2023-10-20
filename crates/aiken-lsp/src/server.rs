@@ -6,6 +6,7 @@ use std::{
 
 use aiken_lang::{
     ast::{Definition, Located, ModuleKind, Span, Use},
+    error::ExtraData,
     parser,
     tipo::pretty::Printer,
 };
@@ -23,7 +24,8 @@ use lsp_types::{
         Notification, Progress, PublishDiagnostics, ShowMessage,
     },
     request::{
-        Completion, Formatting, GotoDefinition, HoverRequest, Request, WorkDoneProgressCreate,
+        CodeActionRequest, Completion, Formatting, GotoDefinition, HoverRequest, Request,
+        WorkDoneProgressCreate,
     },
     DocumentFormattingParams, InitializeParams, TextEdit,
 };
@@ -43,6 +45,8 @@ use self::lsp_project::LspProject;
 
 mod lsp_project;
 pub mod telemetry;
+
+const UNKNOWN_VARIABLE: &str = "aiken::check::unknown::variable";
 
 #[allow(dead_code)]
 pub struct Server {
@@ -288,6 +292,7 @@ impl Server {
                     }
                 }
             }
+
             HoverRequest::METHOD => {
                 let params = cast_request::<HoverRequest>(request)?;
 
@@ -324,6 +329,48 @@ impl Server {
                 })
             }
 
+            CodeActionRequest::METHOD => {
+                let params =
+                    cast_request::<CodeActionRequest>(request).expect("cast code action request");
+
+                // Identify any diagnostic which refers to an unknown variable. In which case, we
+                // might want to provide some imports suggestion.
+                let unknown_variables = params
+                    .context
+                    .diagnostics
+                    .into_iter()
+                    .filter(|diagnostic| {
+                        let is_error =
+                            diagnostic.severity == Some(lsp_types::DiagnosticSeverity::ERROR);
+                        let is_unknown_variable = diagnostic.code
+                            == Some(lsp_types::NumberOrString::String(
+                                UNKNOWN_VARIABLE.to_string(),
+                            ));
+
+                        is_error && is_unknown_variable
+                    })
+                    .collect::<Vec<lsp_types::Diagnostic>>();
+
+                match unknown_variables.first() {
+                    Some(diagnostic) => Ok(lsp_server::Response {
+                        id,
+                        error: None,
+                        result: Some(serde_json::to_value(
+                            self.quickfix_unknown_variable(
+                                params.text_document,
+                                diagnostic.to_owned(),
+                            )
+                            .unwrap_or(vec![]),
+                        )?),
+                    }),
+                    None => Ok(lsp_server::Response {
+                        id,
+                        error: None,
+                        result: Some(serde_json::Value::Null),
+                    }),
+                }
+            }
+
             unsupported => Err(ServerError::UnsupportedLspRequest {
                 request: unsupported.to_string(),
             }),
@@ -353,6 +400,54 @@ impl Server {
             // TODO: autocompletion for expressions
             Some(Located::Expression(_expression)) => None,
         }
+    }
+
+    fn quickfix_unknown_variable(
+        &self,
+        text_document: lsp_types::TextDocumentIdentifier,
+        diagnostic: lsp_types::Diagnostic,
+    ) -> Option<Vec<lsp_types::CodeAction>> {
+        let compiler = self.compiler.as_ref()?;
+
+        let mut actions = Vec::new();
+
+        if let Some(serde_json::Value::String(ref var_name)) = diagnostic.data {
+            for module in compiler.project.modules() {
+                let mut changes = HashMap::new();
+
+                if module.ast.has_definition(var_name) {
+                    let import_line = format!("use {}.{{{}}}", module.name, var_name);
+
+                    changes.insert(
+                        text_document.uri.clone(),
+                        vec![lsp_types::TextEdit {
+                            range: lsp_types::Range {
+                                start: lsp_types::Position::new(0, 0),
+                                end: lsp_types::Position::new(0, 0),
+                            },
+                            new_text: format!("{import_line}\n"),
+                        }],
+                    );
+
+                    actions.push(lsp_types::CodeAction {
+                        title: import_line,
+                        kind: Some(lsp_types::CodeActionKind::QUICKFIX),
+                        diagnostics: Some(vec![diagnostic.clone()]),
+                        is_preferred: Some(true),
+                        disabled: None,
+                        data: None,
+                        command: None,
+                        edit: Some(lsp_types::WorkspaceEdit {
+                            changes: Some(changes),
+                            document_changes: None,
+                            change_annotations: None,
+                        }),
+                    });
+                }
+            }
+        }
+
+        Some(actions)
     }
 
     fn completion_for_import(&self) -> Option<Vec<lsp_types::CompletionItem>> {
@@ -445,7 +540,6 @@ impl Server {
     fn module_for_uri(&self, uri: &url::Url) -> Option<&CheckedModule> {
         self.compiler.as_ref().and_then(|compiler| {
             let module_name = uri_to_module_name(uri, &self.root).expect("uri to module name");
-
             compiler.modules.get(&module_name)
         })
     }
@@ -591,7 +685,7 @@ impl Server {
     /// the `showMessage` notification instead.
     fn process_diagnostic<E>(&mut self, error: E) -> Result<(), ServerError>
     where
-        E: Diagnostic + GetSource,
+        E: Diagnostic + GetSource + ExtraData,
     {
         let (severity, typ) = match error.severity() {
             Some(severity) => match severity {
@@ -642,7 +736,7 @@ impl Server {
                     message,
                     related_information: None,
                     tags: None,
-                    data: None,
+                    data: error.extra_data().map(serde_json::Value::String),
                 };
 
                 #[cfg(not(target_os = "windows"))]
