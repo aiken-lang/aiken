@@ -1,4 +1,5 @@
 use super::Type;
+use crate::error::ExtraData;
 use crate::{
     ast::{Annotation, BinOp, CallArg, LogicalOpChainKind, Span, UntypedPattern},
     expr::{self, UntypedExpr},
@@ -922,6 +923,63 @@ The best thing to do from here is to remove it."#))]
     },
 }
 
+impl ExtraData for Error {
+    fn extra_data(&self) -> Option<String> {
+        match self {
+            Error::CastDataNoAnn { .. }
+            | Error::CouldNotUnify { .. }
+            | Error::CyclicTypeDefinitions { .. }
+            | Error::DuplicateArgument { .. }
+            | Error::DuplicateConstName { .. }
+            | Error::DuplicateField { .. }
+            | Error::DuplicateImport { .. }
+            | Error::DuplicateName { .. }
+            | Error::DuplicateTypeName { .. }
+            | Error::DuplicateVarInPattern { .. }
+            | Error::ExtraVarInAlternativePattern { .. }
+            | Error::FunctionTypeInData { .. }
+            | Error::ImplicitlyDiscardedExpression { .. }
+            | Error::IncorrectFieldsArity { .. }
+            | Error::IncorrectFunctionCallArity { .. }
+            | Error::IncorrectPatternArity { .. }
+            | Error::IncorrectTupleArity { .. }
+            | Error::IncorrectTypeArity { .. }
+            | Error::IncorrectValidatorArity { .. }
+            | Error::KeywordInModuleName { .. }
+            | Error::LastExpressionIsAssignment { .. }
+            | Error::LogicalOpChainMissingExpr { .. }
+            | Error::MissingVarInAlternativePattern { .. }
+            | Error::MultiValidatorEqualArgs { .. }
+            | Error::NonLocalClauseGuardVariable { .. }
+            | Error::NotATuple { .. }
+            | Error::NotExhaustivePatternMatch { .. }
+            | Error::NotFn { .. }
+            | Error::PositionalArgumentAfterLabeled { .. }
+            | Error::PrivateTypeLeak { .. }
+            | Error::RecordAccessUnknownType { .. }
+            | Error::RecordUpdateInvalidConstructor { .. }
+            | Error::RecursiveType { .. }
+            | Error::RedundantMatchClause { .. }
+            | Error::TupleIndexOutOfBound { .. }
+            | Error::UnexpectedLabeledArg { .. }
+            | Error::UnexpectedLabeledArgInPattern { .. }
+            | Error::UnknownLabels { .. }
+            | Error::UnknownModule { .. }
+            | Error::UnknownModuleField { .. }
+            | Error::UnknownModuleType { .. }
+            | Error::UnknownModuleValue { .. }
+            | Error::UnknownRecordField { .. }
+            | Error::UnknownType { .. }
+            | Error::UnknownTypeConstructor { .. }
+            | Error::UnnecessarySpreadOperator { .. }
+            | Error::UpdateMultiConstructorType { .. }
+            | Error::ValidatorImported { .. }
+            | Error::ValidatorMustReturnBool { .. } => None,
+            Error::UnknownVariable { name, .. } => Some(name.clone()),
+        }
+    }
+}
+
 impl Error {
     pub fn call_situation(mut self) -> Self {
         if let Error::UnknownRecordField {
@@ -1520,6 +1578,30 @@ pub enum Warning {
         location: Span,
         value: String,
     },
+}
+
+impl ExtraData for Warning {
+    fn extra_data(&self) -> Option<String> {
+        match self {
+            Warning::AllFieldsRecordUpdate { .. }
+            | Warning::ImplicitlyDiscardedResult { .. }
+            | Warning::NoFieldsRecordUpdate { .. }
+            | Warning::PubInValidatorModule { .. }
+            | Warning::SingleConstructorExpect { .. }
+            | Warning::SingleWhenClause { .. }
+            | Warning::Todo { .. }
+            | Warning::UnexpectedTypeHole { .. }
+            | Warning::UnusedConstructor { .. }
+            | Warning::UnusedImportedModule { .. }
+            | Warning::UnusedImportedValue { .. }
+            | Warning::UnusedPrivateFunction { .. }
+            | Warning::UnusedPrivateModuleConstant { .. }
+            | Warning::UnusedType { .. }
+            | Warning::UnusedVariable { .. }
+            | Warning::Utf8ByteArrayIsValidHexString { .. }
+            | Warning::ValidatorInLibraryModule { .. } => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

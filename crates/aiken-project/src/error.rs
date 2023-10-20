@@ -4,6 +4,7 @@ use crate::{
 };
 use aiken_lang::{
     ast::{self, BinOp, Span},
+    error::ExtraData,
     parser::error::ParseError,
     tipo,
 };
@@ -169,6 +170,34 @@ impl Debug for Error {
 impl From<Error> for Vec<Error> {
     fn from(value: Error) -> Self {
         vec![value]
+    }
+}
+
+impl ExtraData for Error {
+    fn extra_data(&self) -> Option<String> {
+        match self {
+            Error::DuplicateModule { .. } => None,
+            Error::FileIo { .. } => None,
+            Error::Format { .. } => None,
+            Error::StandardIo { .. } => None,
+            Error::Blueprint { .. } => None,
+            Error::MissingManifest { .. } => None,
+            Error::TomlLoading { .. } => None,
+            Error::ImportCycle { .. } => None,
+            Error::Parse { .. } => None,
+            Error::Type { error, .. } => error.extra_data(),
+            Error::TestFailure { .. } => None,
+            Error::Http { .. } => None,
+            Error::ZipExtract { .. } => None,
+            Error::JoinError { .. } => None,
+            Error::UnknownPackageVersion { .. } => None,
+            Error::UnableToResolvePackage { .. } => None,
+            Error::Json { .. } => None,
+            Error::MalformedStakeAddress { .. } => None,
+            Error::NoValidatorNotFound { .. } => None,
+            Error::MoreThanOneValidatorFound { .. } => None,
+            Error::Module { .. } => None,
+        }
     }
 }
 
@@ -479,6 +508,16 @@ pub enum Warning {
     },
     #[error("{name} is already a dependency.")]
     DependencyAlreadyExists { name: PackageName },
+}
+
+impl ExtraData for Warning {
+    fn extra_data(&self) -> Option<String> {
+        match self {
+            Warning::NoValidators { .. } => None,
+            Warning::DependencyAlreadyExists { .. } => None,
+            Warning::Type { warning, .. } => warning.extra_data(),
+        }
+    }
 }
 
 impl GetSource for Warning {
