@@ -6,7 +6,9 @@
 
 - **aiken-project**: The `plutus.json` blueprint now contains a `compiler.name`
   and `compiler.version` fields.
-- **aiken-prokect**: Add compiler and system information to panic error report.
+- **aiken-prokect**: Added compiler and system information to panic error report.
+- **aiken-lsp**: Added quickfix suggestions for unknown variables, modules and
+  constructors.
 
 ### Changed
 
@@ -20,8 +22,9 @@
 
 ### Fixed
 
-- **aiken-lang**: improved error messages for `a |> b(x)`
-- **uplc**: Fixed cost model issue when using div, quot, rem, mod
+- **aiken-lang**: improved error messages for `a |> b(x)`.
+- **uplc**: Fixed cost model issue when using div, quot, rem, mod.
+- **aiken-lsp**: Improved hovering suggestions and type annotations.
 
 ## v1.0.19-alpha - 2023-09-29
 
