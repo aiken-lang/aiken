@@ -309,11 +309,14 @@ impl<'a> Environment<'a> {
         location: Span,
     ) -> Result<&ValueConstructor, Error> {
         match module {
-            None => self.scope.get(name).ok_or_else(|| Error::UnknownVariable {
-                location,
-                name: name.to_string(),
-                variables: self.local_value_names(),
-            }),
+            None => self
+                .scope
+                .get(name)
+                .ok_or_else(|| Error::UnknownTypeConstructor {
+                    location,
+                    name: name.to_string(),
+                    constructors: self.local_constructor_names(),
+                }),
 
             Some(m) => {
                 let (_, module) =
@@ -573,6 +576,14 @@ impl<'a> Environment<'a> {
         self.scope
             .keys()
             .filter(|&t| PIPE_VARIABLE != t)
+            .map(|t| t.to_string())
+            .collect()
+    }
+
+    pub fn local_constructor_names(&self) -> Vec<String> {
+        self.scope
+            .keys()
+            .filter(|&t| t.chars().next().unwrap_or_default().is_uppercase())
             .map(|t| t.to_string())
             .collect()
     }

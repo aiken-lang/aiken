@@ -799,7 +799,7 @@ Perhaps, try the following:
         suggest_neighbor(name, constructors.iter(), "Did you forget to import it?")
     ))]
     UnknownTypeConstructor {
-        #[label]
+        #[label("unknown constructor")]
         location: Span,
         name: String,
         constructors: Vec<String>,
