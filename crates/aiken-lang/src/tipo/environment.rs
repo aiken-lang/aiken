@@ -355,33 +355,20 @@ impl<'a> Environment<'a> {
     fn handle_unused(&mut self, unused: HashMap<String, (EntityKind, Span, bool)>) {
         for (name, (kind, location, _)) in unused.into_iter().filter(|(_, (_, _, used))| !used) {
             let warning = match kind {
-                EntityKind::ImportedType | EntityKind::ImportedTypeAndConstructor => {
-                    Warning::UnusedType {
-                        name,
-                        imported: true,
-                        location,
-                    }
+                EntityKind::ImportedType
+                | EntityKind::ImportedTypeAndConstructor
+                | EntityKind::ImportedConstructor
+                | EntityKind::ImportedValue => {
+                    Warning::UnusedImportedValueOrType { name, location }
                 }
-                EntityKind::ImportedConstructor => Warning::UnusedConstructor {
-                    name,
-                    imported: true,
-                    location,
-                },
                 EntityKind::PrivateConstant => {
                     Warning::UnusedPrivateModuleConstant { name, location }
                 }
-                EntityKind::PrivateTypeConstructor(_) => Warning::UnusedConstructor {
-                    name,
-                    imported: false,
-                    location,
-                },
+                EntityKind::PrivateTypeConstructor(_) => {
+                    Warning::UnusedConstructor { name, location }
+                }
                 EntityKind::PrivateFunction => Warning::UnusedPrivateFunction { name, location },
-                EntityKind::PrivateType => Warning::UnusedType {
-                    name,
-                    imported: false,
-                    location,
-                },
-                EntityKind::ImportedValue => Warning::UnusedImportedValue { name, location },
+                EntityKind::PrivateType => Warning::UnusedType { name, location },
                 EntityKind::Variable => Warning::UnusedVariable { name, location },
             };
 

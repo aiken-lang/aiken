@@ -1437,7 +1437,6 @@ pub enum Warning {
     UnusedConstructor {
         #[label]
         location: Span,
-        imported: bool,
         name: String,
     },
 
@@ -1463,7 +1462,7 @@ pub enum Warning {
         "No big deal, but you might want to remove it to get rid of that warning."
     ))]
     #[diagnostic(code("unused:import::value"))]
-    UnusedImportedValue {
+    UnusedImportedValueOrType {
         #[label]
         location: Span,
         name: String,
@@ -1509,7 +1508,6 @@ pub enum Warning {
     UnusedType {
         #[label]
         location: Span,
-        imported: bool,
         name: String,
     },
 
