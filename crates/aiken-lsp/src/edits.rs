@@ -10,6 +10,8 @@ pub struct ParsedDocument {
     line_numbers: LineNumbers,
 }
 
+pub type AnnotatedEdit = (String, lsp_types::TextEdit);
+
 /// Parse the target document as an 'UntypedModule' alongside its line numbers. This is useful in
 /// case we need to manipulate the AST for a quickfix.
 pub fn parse_document(document: &lsp_types::TextDocumentIdentifier) -> Option<ParsedDocument> {
@@ -46,7 +48,7 @@ impl ParsedDocument {
         &self,
         import: &CheckedModule,
         unqualified: Option<&str>,
-    ) -> Option<(String, lsp_types::TextEdit)> {
+    ) -> Option<AnnotatedEdit> {
         let import_path = import.name.split('/').collect_vec();
 
         let mut last_import = None;
@@ -115,7 +117,7 @@ impl ParsedDocument {
         import: &CheckedModule,
         unqualified: &str,
         location: Span,
-    ) -> (String, lsp_types::TextEdit) {
+    ) -> AnnotatedEdit {
         let title = format!(
             "Insert new unqualified import '{}' to {}",
             unqualified, import.name
@@ -135,7 +137,7 @@ impl ParsedDocument {
         import: &CheckedModule,
         unqualified: &str,
         location: Span,
-    ) -> (String, lsp_types::TextEdit) {
+    ) -> AnnotatedEdit {
         let title = format!(
             "Add new unqualified import '{}' to {}",
             unqualified, import.name
@@ -155,7 +157,7 @@ impl ParsedDocument {
         import: &CheckedModule,
         unqualified: Option<&str>,
         location: Option<Span>,
-    ) -> (String, lsp_types::TextEdit) {
+    ) -> AnnotatedEdit {
         let import_line = format!(
             "use {}{}",
             import.name,

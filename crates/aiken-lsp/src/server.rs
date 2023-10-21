@@ -35,7 +35,7 @@ use crate::{
     cast::{cast_notification, cast_request},
     error::Error as ServerError,
     line_numbers::LineNumbers,
-    quickfix::{self, Quickfix},
+    quickfix,
     utils::{
         path_to_uri, span_to_lsp_range, text_edit_replace, uri_to_module_name,
         COMPILING_PROGRESS_TOKEN, CREATE_COMPILING_PROGRESS_TOKEN,
@@ -336,16 +336,14 @@ impl Server {
                         .expect("cast code action request");
 
                     for diagnostic in params.context.diagnostics.iter() {
-                        match quickfix::assert(diagnostic) {
-                            Some(Quickfix::UnknownVariable) => {
-                                let quickfixes = quickfix::unknown_variable(
-                                    compiler,
-                                    &params.text_document,
-                                    diagnostic,
-                                );
-                                actions.extend(quickfixes);
-                            }
-                            None => (),
+                        if let Some(strategy) = quickfix::assert(diagnostic) {
+                            let quickfixes = quickfix::quickfix(
+                                compiler,
+                                &params.text_document,
+                                diagnostic,
+                                &strategy,
+                            );
+                            actions.extend(quickfixes);
                         }
                     }
                 }

@@ -964,7 +964,6 @@ impl ExtraData for Error {
             | Error::UnexpectedLabeledArg { .. }
             | Error::UnexpectedLabeledArgInPattern { .. }
             | Error::UnknownLabels { .. }
-            | Error::UnknownModule { .. }
             | Error::UnknownModuleField { .. }
             | Error::UnknownModuleType { .. }
             | Error::UnknownModuleValue { .. }
@@ -975,7 +974,9 @@ impl ExtraData for Error {
             | Error::UpdateMultiConstructorType { .. }
             | Error::ValidatorImported { .. }
             | Error::ValidatorMustReturnBool { .. } => None,
-            Error::UnknownVariable { name, .. } => Some(name.clone()),
+            Error::UnknownVariable { name, .. } | Error::UnknownModule { name, .. } => {
+                Some(name.clone())
+            }
         }
     }
 }
