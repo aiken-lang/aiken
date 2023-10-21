@@ -69,6 +69,95 @@ impl UntypedModule {
             })
             .collect()
     }
+
+    /// Find a suitable location (Span) in the import list. The boolean in the answer indicates
+    /// whether the import is a newline or not. It is set to 'false' when adding a qualified import
+    /// to an existing list.
+    pub fn edit_import(&self, module: &[&str], unqualified: Option<&str>) -> Option<EditImport> {
+        let mut last_import = None;
+
+        for def in self.definitions() {
+            match def {
+                Definition::Use(Use {
+                    location,
+                    module: existing_module,
+                    unqualified: unqualified_list,
+                    ..
+                }) => {
+                    last_import = Some(*location);
+
+                    if module != existing_module.as_slice() {
+                        continue;
+                    }
+
+                    match unqualified {
+                        // There's already a matching qualified import, so we have nothing to do.
+                        None => return None,
+                        Some(unqualified) => {
+                            // Insert lexicographically, assuming unqualified imports are already
+                            // ordered. If they are not, it doesn't really matter where we insert
+                            // anyway.
+                            for existing_unqualified in unqualified_list {
+                                let existing_name = existing_unqualified
+                                    .as_name
+                                    .as_ref()
+                                    .unwrap_or(&existing_unqualified.name);
+
+                                // The unqualified import already exist, nothing to do.
+                                if unqualified == existing_name {
+                                    return None;
+                                // Current import is lexicographically smaller, we can insert after.
+                                } else if existing_name.as_str() < unqualified {
+                                    return Some(EditImport {
+                                        location: Span {
+                                            start: existing_unqualified.location.end,
+                                            end: existing_unqualified.location.end,
+                                        },
+                                        is_new_line: false,
+                                        is_first_unqualified: false,
+                                    });
+                                } else {
+                                    continue;
+                                }
+                            }
+
+                            // Only happens if 'unqualified_list' is empty, in which case, we
+                            // simply create a new unqualified list of import.
+                            return Some(EditImport {
+                                location: Span {
+                                    start: location.end,
+                                    end: location.end,
+                                },
+                                is_new_line: false,
+                                is_first_unqualified: true,
+                            });
+                        }
+                    }
+                }
+                _ => continue,
+            }
+        }
+
+        // If the search above didn't lead to anything, we simply insert the import either:
+        //
+        // (a) After the last import statement if any;
+        // (b) As the first statement in the module.
+        Some(EditImport {
+            location: match last_import {
+                None => Span { start: 0, end: 0 },
+                Some(Span { end, .. }) => Span { start: end, end },
+            },
+            is_new_line: true,
+            is_first_unqualified: false,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EditImport {
+    pub location: Span,
+    pub is_new_line: bool,
+    pub is_first_unqualified: bool,
 }
 
 impl TypedModule {

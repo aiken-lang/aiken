@@ -409,40 +409,78 @@ impl Server {
     ) -> Option<Vec<lsp_types::CodeAction>> {
         let compiler = self.compiler.as_ref()?;
 
+        let file_path = text_document
+            .uri
+            .to_file_path()
+            .expect("invalid text document uri?");
+
+        let source_code = fs::read_to_string(&file_path).ok()?;
+
+        let line_numbers = LineNumbers::new(&source_code);
+
+        // NOTE: The 'ModuleKind' second argument doesn't matter. This is just added to the final
+        // object but has no influence on the parsing.
+        let (untyped_module, _) = aiken_lang::parser::module(&source_code, ModuleKind::Lib).ok()?;
+
         let mut actions = Vec::new();
 
         if let Some(serde_json::Value::String(ref var_name)) = diagnostic.data {
             for module in compiler.project.modules() {
                 let mut changes = HashMap::new();
+                let module_path = module.name.split('/').collect_vec();
 
                 if module.ast.has_definition(var_name) {
-                    let import_line = format!("use {}.{{{}}}", module.name, var_name);
+                    if let Some(edit) =
+                        untyped_module.edit_import(module_path.as_slice(), Some(var_name))
+                    {
+                        let (title, new_text) = if edit.is_new_line {
+                            (
+                                format!(
+                                    "Add new import line: use {}.{{{}}}",
+                                    module.name, var_name
+                                ),
+                                format!("\nuse {}.{{{}}}", module.name, var_name),
+                            )
+                        } else if edit.is_first_unqualified {
+                            (
+                                format!(
+                                    "Add new unqualified import '{}' to {}",
+                                    var_name, module.name
+                                ),
+                                format!(".{{{}}}", var_name),
+                            )
+                        } else {
+                            (
+                                format!(
+                                    "Add new unqualified import '{}' to {}",
+                                    var_name, module.name
+                                ),
+                                format!(", {}", var_name),
+                            )
+                        };
 
-                    changes.insert(
-                        text_document.uri.clone(),
-                        vec![lsp_types::TextEdit {
-                            range: lsp_types::Range {
-                                start: lsp_types::Position::new(0, 0),
-                                end: lsp_types::Position::new(0, 0),
-                            },
-                            new_text: format!("{import_line}\n"),
-                        }],
-                    );
+                        let range = span_to_lsp_range(edit.location, &line_numbers);
 
-                    actions.push(lsp_types::CodeAction {
-                        title: import_line,
-                        kind: Some(lsp_types::CodeActionKind::QUICKFIX),
-                        diagnostics: Some(vec![diagnostic.clone()]),
-                        is_preferred: Some(true),
-                        disabled: None,
-                        data: None,
-                        command: None,
-                        edit: Some(lsp_types::WorkspaceEdit {
-                            changes: Some(changes),
-                            document_changes: None,
-                            change_annotations: None,
-                        }),
-                    });
+                        changes.insert(
+                            text_document.uri.clone(),
+                            vec![lsp_types::TextEdit { range, new_text }],
+                        );
+
+                        actions.push(lsp_types::CodeAction {
+                            title,
+                            kind: Some(lsp_types::CodeActionKind::QUICKFIX),
+                            diagnostics: Some(vec![diagnostic.clone()]),
+                            is_preferred: Some(true),
+                            disabled: None,
+                            data: None,
+                            command: None,
+                            edit: Some(lsp_types::WorkspaceEdit {
+                                changes: Some(changes),
+                                document_changes: None,
+                                change_annotations: None,
+                            }),
+                        });
+                    }
                 }
             }
         }
