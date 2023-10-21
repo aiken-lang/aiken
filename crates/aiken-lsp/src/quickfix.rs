@@ -5,13 +5,16 @@ use crate::{
 use std::collections::HashMap;
 
 const UNKNOWN_VARIABLE: &str = "aiken::check::unknown::variable";
-const UNKNOWN_MODULE: &str = "aiken::check::unknown::module";
 const UNKNOWN_TYPE: &str = "aiken::check::unknown::type";
+const UNKNOWN_CONSTRUCTOR: &str = "aiken::check::unknown::type_constructor";
+const UNKNOWN_MODULE: &str = "aiken::check::unknown::module";
 
 /// Errors for which we can provide quickfixes
+#[allow(clippy::enum_variant_names)]
 pub enum Quickfix {
     UnknownIdentifier,
     UnknownModule,
+    UnknownConstructor,
 }
 
 fn match_code(diagnostic: &lsp_types::Diagnostic, expected: &str) -> bool {
@@ -35,6 +38,10 @@ pub fn assert(diagnostic: &lsp_types::Diagnostic) -> Option<Quickfix> {
         return Some(Quickfix::UnknownIdentifier);
     }
 
+    if match_code(diagnostic, UNKNOWN_CONSTRUCTOR) {
+        return Some(Quickfix::UnknownConstructor);
+    }
+
     if match_code(diagnostic, UNKNOWN_MODULE) {
         return Some(Quickfix::UnknownModule);
     }
@@ -55,6 +62,9 @@ pub fn quickfix(
             let edits = match quickfix {
                 Quickfix::UnknownIdentifier => unknown_identifier(compiler, parsed_document, data),
                 Quickfix::UnknownModule => unknown_module(compiler, parsed_document, data),
+                Quickfix::UnknownConstructor => {
+                    unknown_constructor(compiler, parsed_document, data)
+                }
             };
 
             for (title, edit) in edits.into_iter() {
@@ -91,6 +101,24 @@ fn unknown_identifier(
     for module in compiler.project.modules() {
         if module.ast.has_definition(var_name) {
             if let Some(edit) = parsed_document.import(&module, Some(var_name)) {
+                edits.push(edit)
+            }
+        }
+    }
+
+    edits
+}
+
+fn unknown_constructor(
+    compiler: &LspProject,
+    parsed_document: &ParsedDocument,
+    constructor_name: &str,
+) -> Vec<AnnotatedEdit> {
+    let mut edits = Vec::new();
+
+    for module in compiler.project.modules() {
+        if module.ast.has_constructor(constructor_name) {
+            if let Some(edit) = parsed_document.import(&module, Some(constructor_name)) {
                 edits.push(edit)
             }
         }

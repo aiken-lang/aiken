@@ -131,10 +131,7 @@ impl ParsedDocument {
         unqualified: &str,
         location: Span,
     ) -> AnnotatedEdit {
-        let title = format!(
-            "Insert new unqualified import '{}' to {}",
-            unqualified, import.name
-        );
+        let title = format!("Use '{}' from {}", unqualified, import.name);
         (
             title,
             insert_text(
@@ -151,10 +148,7 @@ impl ParsedDocument {
         unqualified: &str,
         location: Span,
     ) -> AnnotatedEdit {
-        let title = format!(
-            "Insert new unqualified import '{}' to {}",
-            unqualified, import.name
-        );
+        let title = format!("Use '{}' from {}", unqualified, import.name);
         (
             title,
             insert_text(
@@ -171,10 +165,7 @@ impl ParsedDocument {
         unqualified: &str,
         location: Span,
     ) -> AnnotatedEdit {
-        let title = format!(
-            "Add new unqualified import '{}' to {}",
-            unqualified, import.name
-        );
+        let title = format!("Use '{}' from {}", unqualified, import.name);
         (
             title,
             insert_text(

@@ -90,6 +90,22 @@ impl TypedModule {
         })
     }
 
+    pub fn has_constructor(&self, name: &str) -> bool {
+        self.definitions.iter().any(|def| match def {
+            Definition::DataType(t) if t.public && !t.opaque => t
+                .constructors
+                .iter()
+                .any(|constructor| constructor.name == name),
+            Definition::DataType(_) => false,
+            Definition::Fn(_) => false,
+            Definition::TypeAlias(_) => false,
+            Definition::ModuleConstant(_) => false,
+            Definition::Use(_) => false,
+            Definition::Test(_) => false,
+            Definition::Validator(_) => false,
+        })
+    }
+
     pub fn validate_module_name(&self) -> Result<(), Error> {
         if self.name == "aiken" || self.name == "aiken/builtin" {
             return Err(Error::ReservedModuleName {
