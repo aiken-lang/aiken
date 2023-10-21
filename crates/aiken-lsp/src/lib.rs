@@ -5,6 +5,7 @@ use lsp_server::Connection;
 use std::env;
 
 mod cast;
+mod edits;
 pub mod error;
 mod line_numbers;
 pub mod server;
