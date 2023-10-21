@@ -33,9 +33,9 @@ use miette::Diagnostic;
 
 use crate::{
     cast::{cast_notification, cast_request},
-    edits,
     error::Error as ServerError,
     line_numbers::LineNumbers,
+    quickfix::{self, Quickfix},
     utils::{
         path_to_uri, span_to_lsp_range, text_edit_replace, uri_to_module_name,
         COMPILING_PROGRESS_TOKEN, CREATE_COMPILING_PROGRESS_TOKEN,
@@ -44,10 +44,8 @@ use crate::{
 
 use self::lsp_project::LspProject;
 
-mod lsp_project;
+pub mod lsp_project;
 pub mod telemetry;
-
-const UNKNOWN_VARIABLE: &str = "aiken::check::unknown::variable";
 
 #[allow(dead_code)]
 pub struct Server {
@@ -331,45 +329,32 @@ impl Server {
             }
 
             CodeActionRequest::METHOD => {
-                let params =
-                    cast_request::<CodeActionRequest>(request).expect("cast code action request");
+                let mut actions = Vec::new();
 
-                // Identify any diagnostic which refers to an unknown variable. In which case, we
-                // might want to provide some imports suggestion.
-                let unknown_variables = params
-                    .context
-                    .diagnostics
-                    .into_iter()
-                    .filter(|diagnostic| {
-                        let is_error =
-                            diagnostic.severity == Some(lsp_types::DiagnosticSeverity::ERROR);
-                        let is_unknown_variable = diagnostic.code
-                            == Some(lsp_types::NumberOrString::String(
-                                UNKNOWN_VARIABLE.to_string(),
-                            ));
+                if let Some(ref compiler) = self.compiler {
+                    let params = cast_request::<CodeActionRequest>(request)
+                        .expect("cast code action request");
 
-                        is_error && is_unknown_variable
-                    })
-                    .collect::<Vec<lsp_types::Diagnostic>>();
-
-                match unknown_variables.first() {
-                    Some(diagnostic) => Ok(lsp_server::Response {
-                        id,
-                        error: None,
-                        result: Some(serde_json::to_value(
-                            self.quickfix_unknown_variable(
-                                params.text_document,
-                                diagnostic.to_owned(),
-                            )
-                            .unwrap_or(vec![]),
-                        )?),
-                    }),
-                    None => Ok(lsp_server::Response {
-                        id,
-                        error: None,
-                        result: Some(serde_json::Value::Null),
-                    }),
+                    for diagnostic in params.context.diagnostics.iter() {
+                        match quickfix::assert(diagnostic) {
+                            Some(Quickfix::UnknownVariable) => {
+                                let quickfixes = quickfix::unknown_variable(
+                                    compiler,
+                                    &params.text_document,
+                                    diagnostic,
+                                );
+                                actions.extend(quickfixes);
+                            }
+                            None => (),
+                        }
+                    }
                 }
+
+                Ok(lsp_server::Response {
+                    id,
+                    error: None,
+                    result: Some(serde_json::to_value(actions)?),
+                })
             }
 
             unsupported => Err(ServerError::UnsupportedLspRequest {
@@ -401,46 +386,6 @@ impl Server {
             // TODO: autocompletion for expressions
             Some(Located::Expression(_expression)) => None,
         }
-    }
-
-    fn quickfix_unknown_variable(
-        &self,
-        text_document: lsp_types::TextDocumentIdentifier,
-        diagnostic: lsp_types::Diagnostic,
-    ) -> Option<Vec<lsp_types::CodeAction>> {
-        let compiler = self.compiler.as_ref()?;
-
-        let parsed_document = edits::parse_document(&text_document)?;
-
-        let mut actions = Vec::new();
-
-        if let Some(serde_json::Value::String(ref var_name)) = diagnostic.data {
-            for module in compiler.project.modules() {
-                let mut changes = HashMap::new();
-
-                if module.ast.has_definition(var_name) {
-                    if let Some((title, edit)) = parsed_document.import(&module, Some(var_name)) {
-                        changes.insert(text_document.uri.clone(), vec![edit]);
-                        actions.push(lsp_types::CodeAction {
-                            title,
-                            kind: Some(lsp_types::CodeActionKind::QUICKFIX),
-                            diagnostics: Some(vec![diagnostic.clone()]),
-                            is_preferred: Some(true),
-                            disabled: None,
-                            data: None,
-                            command: None,
-                            edit: Some(lsp_types::WorkspaceEdit {
-                                changes: Some(changes),
-                                document_changes: None,
-                                change_annotations: None,
-                            }),
-                        });
-                    }
-                }
-            }
-        }
-
-        Some(actions)
     }
 
     fn completion_for_import(&self) -> Option<Vec<lsp_types::CompletionItem>> {
