@@ -208,14 +208,14 @@ where
             7 => Ok(Term::Builtin(DefaultFunction::decode(d)?)),
             8 => {
                 let tag = usize::decode(d)?;
-                let fields = d.decode_list_with(|d| Term::<T>::decode(d))?;
+                let fields = d.decode_list_with(Term::<T>::decode)?;
 
                 Ok(Term::Constr { tag, fields })
             }
             9 => {
                 let constr = (Term::<T>::decode(d)?).into();
 
-                let branches = d.decode_list_with(|d| Term::<T>::decode(d))?;
+                let branches = d.decode_list_with(Term::<T>::decode)?;
 
                 Ok(Term::Case { constr, branches })
             }

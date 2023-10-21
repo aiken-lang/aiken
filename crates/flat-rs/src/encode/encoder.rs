@@ -236,12 +236,12 @@ impl Encoder {
                 self.used_bits += num_bits;
                 let unused_bits = 8 - self.used_bits;
                 match unused_bits {
-                    x if x > 0 => {
-                        self.current_byte |= val << x;
-                    }
-                    x if x == 0 => {
+                    0 => {
                         self.current_byte |= val;
                         self.next_word();
+                    }
+                    x if x > 0 => {
+                        self.current_byte |= val << x;
                     }
                     x => {
                         let used = -x;
