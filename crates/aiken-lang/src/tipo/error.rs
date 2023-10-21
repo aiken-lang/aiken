@@ -1591,14 +1591,18 @@ impl ExtraData for Warning {
             | Warning::Todo { .. }
             | Warning::UnexpectedTypeHole { .. }
             | Warning::UnusedConstructor { .. }
-            | Warning::UnusedImportedModule { .. }
-            | Warning::UnusedImportedValue { .. }
             | Warning::UnusedPrivateFunction { .. }
             | Warning::UnusedPrivateModuleConstant { .. }
             | Warning::UnusedType { .. }
             | Warning::UnusedVariable { .. }
             | Warning::Utf8ByteArrayIsValidHexString { .. }
             | Warning::ValidatorInLibraryModule { .. } => None,
+            Warning::UnusedImportedModule { location, .. } => {
+                Some(format!("{},{}", false, location.start))
+            }
+            Warning::UnusedImportedValueOrType { location, .. } => {
+                Some(format!("{},{}", true, location.start))
+            }
         }
     }
 }

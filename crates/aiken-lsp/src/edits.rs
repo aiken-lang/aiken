@@ -8,6 +8,7 @@ use std::fs;
 pub struct ParsedDocument {
     definitions: Vec<UntypedDefinition>,
     line_numbers: LineNumbers,
+    source_code: String,
 }
 
 pub type AnnotatedEdit = (String, lsp_types::TextEdit);
@@ -31,6 +32,7 @@ pub fn parse_document(document: &lsp_types::TextDocumentIdentifier) -> Option<Pa
     Some(ParsedDocument {
         definitions: untyped_module.definitions,
         line_numbers,
+        source_code,
     })
 }
 
@@ -123,6 +125,48 @@ impl ParsedDocument {
         // (a) After the last import statement if any;
         // (b) As the first statement in the module.
         Some(self.add_new_import_line(import, unqualified, last_import))
+    }
+
+    pub fn remove_import(&self, start: usize, is_qualified: bool) -> AnnotatedEdit {
+        let offset = if is_qualified {
+            let import_len = self
+                .source_code
+                .chars()
+                .skip(start)
+                .take_while(|c| c != &',' && c != &'}')
+                .count();
+
+            let has_trailing_comma = self
+                .source_code
+                .chars()
+                .skip(start + import_len)
+                .collect::<String>()
+                .starts_with(',');
+
+            import_len + if has_trailing_comma { 1 } else { 0 }
+        } else {
+            1 + self
+                .source_code
+                .chars()
+                .skip(start)
+                .take_while(|c| c != &'\n')
+                .count()
+        };
+
+        let range = span_to_lsp_range(
+            Span {
+                start,
+                end: start + offset,
+            },
+            &self.line_numbers,
+        );
+
+        let new_text = String::new();
+
+        (
+            "Remove redundant import".to_string(),
+            lsp_types::TextEdit { range, new_text },
+        )
     }
 
     fn insert_qualified_before(

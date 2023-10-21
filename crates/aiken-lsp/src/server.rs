@@ -1,3 +1,4 @@
+use crate::quickfix::Quickfix;
 use std::{
     collections::{HashMap, HashSet},
     fs,
@@ -335,16 +336,34 @@ impl Server {
                     let params = cast_request::<CodeActionRequest>(request)
                         .expect("cast code action request");
 
-                    for diagnostic in params.context.diagnostics.iter() {
-                        if let Some(strategy) = quickfix::assert(diagnostic) {
-                            let quickfixes = quickfix::quickfix(
-                                compiler,
-                                &params.text_document,
-                                diagnostic,
-                                &strategy,
-                            );
-                            actions.extend(quickfixes);
+                    let mut unused_imports = Vec::new();
+
+                    for diagnostic in params.context.diagnostics.into_iter() {
+                        match quickfix::assert(diagnostic) {
+                            None => (),
+                            Some(Quickfix::UnusedImports(diagnostics)) => {
+                                unused_imports.extend(diagnostics);
+                            }
+                            Some(strategy) => {
+                                let quickfixes =
+                                    quickfix::quickfix(compiler, &params.text_document, &strategy);
+                                actions.extend(quickfixes);
+                            }
                         }
+                    }
+
+                    // NOTE: We handle unused imports separately because we want them to be done in
+                    // a single action. Otherwise they might mess up with spans and alignments as
+                    // they remove content from the document.
+                    // Plus, it's also just much more convenient that way instead of removing each
+                    // import one-by-one.
+                    if !unused_imports.is_empty() {
+                        let quickfixes = quickfix::quickfix(
+                            compiler,
+                            &params.text_document,
+                            &Quickfix::UnusedImports(unused_imports),
+                        );
+                        actions.extend(quickfixes);
                     }
                 }
 
