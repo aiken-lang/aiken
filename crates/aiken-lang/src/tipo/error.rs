@@ -968,15 +968,15 @@ impl ExtraData for Error {
             | Error::UnknownModuleType { .. }
             | Error::UnknownModuleValue { .. }
             | Error::UnknownRecordField { .. }
-            | Error::UnknownType { .. }
-            | Error::UnknownTypeConstructor { .. }
             | Error::UnnecessarySpreadOperator { .. }
             | Error::UpdateMultiConstructorType { .. }
             | Error::ValidatorImported { .. }
             | Error::ValidatorMustReturnBool { .. } => None,
-            Error::UnknownVariable { name, .. } | Error::UnknownModule { name, .. } => {
-                Some(name.clone())
-            }
+
+            Error::UnknownType { name, .. }
+            | Error::UnknownTypeConstructor { name, .. }
+            | Error::UnknownVariable { name, .. }
+            | Error::UnknownModule { name, .. } => Some(name.clone()),
         }
     }
 }

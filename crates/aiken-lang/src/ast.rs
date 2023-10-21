@@ -81,10 +81,10 @@ impl TypedModule {
     pub fn has_definition(&self, name: &str) -> bool {
         self.definitions.iter().any(|def| match def {
             Definition::Fn(f) => f.public && f.name == name,
-            Definition::TypeAlias(_) => false,
-            Definition::DataType(_) => false,
+            Definition::TypeAlias(alias) => alias.public && alias.alias == name,
+            Definition::ModuleConstant(cst) => cst.public && cst.name == name,
+            Definition::DataType(t) => t.public && t.name == name,
             Definition::Use(_) => false,
-            Definition::ModuleConstant(_) => false,
             Definition::Test(_) => false,
             Definition::Validator(_) => false,
         })

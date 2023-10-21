@@ -5,8 +5,8 @@ use crate::{
 use std::collections::HashMap;
 
 const UNKNOWN_VARIABLE: &str = "aiken::check::unknown::variable";
-
 const UNKNOWN_MODULE: &str = "aiken::check::unknown::module";
+const UNKNOWN_TYPE: &str = "aiken::check::unknown::type";
 
 /// Errors for which we can provide quickfixes
 pub enum Quickfix {
@@ -23,11 +23,19 @@ fn match_code(diagnostic: &lsp_types::Diagnostic, expected: &str) -> bool {
 pub fn assert(diagnostic: &lsp_types::Diagnostic) -> Option<Quickfix> {
     let is_error = diagnostic.severity == Some(lsp_types::DiagnosticSeverity::ERROR);
 
-    if is_error && match_code(diagnostic, UNKNOWN_VARIABLE) {
+    if !is_error {
+        return None;
+    }
+
+    if match_code(diagnostic, UNKNOWN_VARIABLE) {
         return Some(Quickfix::UnknownIdentifier);
     }
 
-    if is_error && match_code(diagnostic, UNKNOWN_MODULE) {
+    if match_code(diagnostic, UNKNOWN_TYPE) {
+        return Some(Quickfix::UnknownIdentifier);
+    }
+
+    if match_code(diagnostic, UNKNOWN_MODULE) {
         return Some(Quickfix::UnknownModule);
     }
 
