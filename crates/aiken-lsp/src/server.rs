@@ -6,6 +6,7 @@ use std::{
 
 use aiken_lang::{
     ast::{Definition, Located, ModuleKind, Span, Use},
+    error::ExtraData,
     parser,
     tipo::pretty::Printer,
 };
@@ -23,7 +24,8 @@ use lsp_types::{
         Notification, Progress, PublishDiagnostics, ShowMessage,
     },
     request::{
-        Completion, Formatting, GotoDefinition, HoverRequest, Request, WorkDoneProgressCreate,
+        CodeActionRequest, Completion, Formatting, GotoDefinition, HoverRequest, Request,
+        WorkDoneProgressCreate,
     },
     DocumentFormattingParams, InitializeParams, TextEdit,
 };
@@ -33,6 +35,7 @@ use crate::{
     cast::{cast_notification, cast_request},
     error::Error as ServerError,
     line_numbers::LineNumbers,
+    quickfix,
     utils::{
         path_to_uri, span_to_lsp_range, text_edit_replace, uri_to_module_name,
         COMPILING_PROGRESS_TOKEN, CREATE_COMPILING_PROGRESS_TOKEN,
@@ -41,7 +44,7 @@ use crate::{
 
 use self::lsp_project::LspProject;
 
-mod lsp_project;
+pub mod lsp_project;
 pub mod telemetry;
 
 #[allow(dead_code)]
@@ -288,6 +291,7 @@ impl Server {
                     }
                 }
             }
+
             HoverRequest::METHOD => {
                 let params = cast_request::<HoverRequest>(request)?;
 
@@ -321,6 +325,33 @@ impl Server {
                     id,
                     error: None,
                     result: Some(serde_json::to_value(completions)?),
+                })
+            }
+
+            CodeActionRequest::METHOD => {
+                let mut actions = Vec::new();
+
+                if let Some(ref compiler) = self.compiler {
+                    let params = cast_request::<CodeActionRequest>(request)
+                        .expect("cast code action request");
+
+                    for diagnostic in params.context.diagnostics.iter() {
+                        if let Some(strategy) = quickfix::assert(diagnostic) {
+                            let quickfixes = quickfix::quickfix(
+                                compiler,
+                                &params.text_document,
+                                diagnostic,
+                                &strategy,
+                            );
+                            actions.extend(quickfixes);
+                        }
+                    }
+                }
+
+                Ok(lsp_server::Response {
+                    id,
+                    error: None,
+                    result: Some(serde_json::to_value(actions)?),
                 })
             }
 
@@ -445,7 +476,6 @@ impl Server {
     fn module_for_uri(&self, uri: &url::Url) -> Option<&CheckedModule> {
         self.compiler.as_ref().and_then(|compiler| {
             let module_name = uri_to_module_name(uri, &self.root).expect("uri to module name");
-
             compiler.modules.get(&module_name)
         })
     }
@@ -591,7 +621,7 @@ impl Server {
     /// the `showMessage` notification instead.
     fn process_diagnostic<E>(&mut self, error: E) -> Result<(), ServerError>
     where
-        E: Diagnostic + GetSource,
+        E: Diagnostic + GetSource + ExtraData,
     {
         let (severity, typ) = match error.severity() {
             Some(severity) => match severity {
@@ -642,7 +672,7 @@ impl Server {
                     message,
                     related_information: None,
                     tags: None,
-                    data: None,
+                    data: error.extra_data().map(serde_json::Value::String),
                 };
 
                 #[cfg(not(target_os = "windows"))]

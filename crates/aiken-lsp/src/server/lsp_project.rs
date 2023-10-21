@@ -38,8 +38,6 @@ impl LspProject {
 
         self.project.restore(checkpoint);
 
-        result?;
-
         let modules = self.project.modules();
 
         for mut module in modules.into_iter() {
@@ -60,6 +58,8 @@ impl LspProject {
             self.sources.insert(module.name.to_string(), source);
             self.modules.insert(module.name.to_string(), module);
         }
+
+        result?;
 
         Ok(())
     }
