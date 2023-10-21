@@ -71,10 +71,14 @@ impl ParsedDocument {
                         // There's already a matching qualified import, so we have nothing to do.
                         None => return None,
                         Some(unqualified) => {
+                            let mut last_unqualified = None;
+
                             // Insert lexicographically, assuming unqualified imports are already
                             // ordered. If they are not, it doesn't really matter where we insert
                             // anyway.
                             for existing_unqualified in unqualified_list {
+                                last_unqualified = Some(existing_unqualified.location);
+
                                 let existing_name = existing_unqualified
                                     .as_name
                                     .as_ref()
@@ -83,9 +87,9 @@ impl ParsedDocument {
                                 // The unqualified import already exist, nothing to do.
                                 if unqualified == existing_name {
                                     return None;
-                                // Current import is lexicographically smaller, we can insert after.
-                                } else if existing_name.as_str() < unqualified {
-                                    return Some(self.insert_into_qualified(
+                                // Current import is lexicographically greater, we can insert before
+                                } else if unqualified < existing_name.as_str() {
+                                    return Some(self.insert_qualified_before(
                                         import,
                                         unqualified,
                                         existing_unqualified.location,
@@ -95,9 +99,18 @@ impl ParsedDocument {
                                 }
                             }
 
-                            // Only happens if 'unqualified_list' is empty, in which case, we
-                            // simply create a new unqualified list of import.
-                            return Some(self.add_new_qualified(import, unqualified, *location));
+                            return match last_unqualified {
+                                // Only happens if 'unqualified_list' is empty, in which case, we
+                                // simply create a new unqualified list of import.
+                                None => {
+                                    Some(self.add_new_qualified(import, unqualified, *location))
+                                }
+                                // Happens if the new qualified import is lexicographically after
+                                // all existing ones.
+                                Some(location) => {
+                                    Some(self.insert_qualified_after(import, unqualified, location))
+                                }
+                            };
                         }
                     }
                 }
@@ -112,7 +125,27 @@ impl ParsedDocument {
         Some(self.add_new_import_line(import, unqualified, last_import))
     }
 
-    fn insert_into_qualified(
+    fn insert_qualified_before(
+        &self,
+        import: &CheckedModule,
+        unqualified: &str,
+        location: Span,
+    ) -> AnnotatedEdit {
+        let title = format!(
+            "Insert new unqualified import '{}' to {}",
+            unqualified, import.name
+        );
+        (
+            title,
+            insert_text(
+                location.start,
+                &self.line_numbers,
+                format!("{}, ", unqualified),
+            ),
+        )
+    }
+
+    fn insert_qualified_after(
         &self,
         import: &CheckedModule,
         unqualified: &str,
