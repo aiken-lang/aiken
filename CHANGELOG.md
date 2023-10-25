@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.0.20-alpha - unreleased
+## v1.0.20-alpha - 10/25/2023
 
 ### Added
 
