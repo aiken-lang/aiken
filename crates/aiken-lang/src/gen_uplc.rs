@@ -201,7 +201,10 @@ impl<'a> CodeGenerator<'a> {
             term,
         };
 
+        // println!("Program: {}", program.to_pretty());
+
         program = aiken_optimize_and_intern(program);
+        // println!("Program After: {}", program.to_pretty());
 
         // This is very important to call here.
         // If this isn't done, re-using the same instance

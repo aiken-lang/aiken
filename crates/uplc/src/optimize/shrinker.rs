@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{rc::Rc, vec};
 
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -15,10 +15,31 @@ pub struct Occurrence {
     lambda_count: usize,
 }
 
+pub struct IdGen {
+    id: u64,
+}
+
+impl IdGen {
+    pub fn new() -> Self {
+        Self { id: 0 }
+    }
+
+    pub fn next_id(&mut self) -> u64 {
+        self.id += 1;
+        self.id
+    }
+}
+
+impl Default for IdGen {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Program<Name> {
     pub fn lambda_reducer(self) -> Program<Name> {
         let mut term = self.term;
-        lambda_reducer(&mut term);
+        lambda_reducer(&mut term, &mut vec![], &mut vec![], &mut IdGen::new());
         Program {
             version: self.version,
             term,
@@ -50,7 +71,7 @@ impl Program<Name> {
 
     pub fn inline_reducer(self) -> Program<Name> {
         let mut term = self.term;
-        inline_single_occurrence_reducer(&mut term);
+        inline_single_occurrence_reducer(&mut term, &mut vec![], &mut vec![], &mut IdGen::new());
         inline_direct_reducer(&mut term);
         inline_identity_reducer(&mut term);
 
@@ -168,42 +189,63 @@ fn force_delay_reducer(term: &mut Term<Name>) {
     }
 }
 
-fn lambda_reducer(term: &mut Term<Name>) {
+fn lambda_reducer(
+    term: &mut Term<Name>,
+    reduce_stack: &mut Vec<Option<(Term<Name>, u64)>>,
+    lambda_applied_ids: &mut Vec<u64>,
+    id_gen: &mut IdGen,
+) {
     match term {
         // TODO: change this to handle any amount of consecutive applies and lambdas
         Term::Apply { function, argument } => {
-            let func = Rc::make_mut(function);
-            lambda_reducer(func);
-
             let arg = Rc::make_mut(argument);
-            lambda_reducer(arg);
+            // SO args can't have existing stack args applied to them anyway, so we pass in empty list
+            let mut arg_stack = vec![];
+            lambda_reducer(arg, &mut arg_stack, lambda_applied_ids, id_gen);
 
-            if let Term::Lambda {
-                parameter_name,
-                body,
-            } = func
-            {
-                match arg {
-                    Term::Constant(c) if matches!(c.as_ref(), Constant::String(_)) => (),
-                    Term::Constant(_) | Term::Var(_) | Term::Builtin(_) => {
-                        let body = Rc::make_mut(body);
-                        *term = substitute_term(body, parameter_name.clone(), arg);
-                    }
-                    _ => (),
-                }
+            let next_id = id_gen.next_id();
+
+            let arg_applied = match arg {
+                Term::Constant(c) if matches!(c.as_ref(), Constant::String(_)) => None,
+                Term::Constant(_) | Term::Var(_) | Term::Builtin(_) => Some((arg.clone(), next_id)),
+                _ => None,
+            };
+
+            reduce_stack.push(arg_applied);
+
+            let func = Rc::make_mut(function);
+            lambda_reducer(func, reduce_stack, lambda_applied_ids, id_gen);
+            // The reason we don't need to pop is because the Lambda case and will pop for us
+            // It is guaranteed to pop otherwise the script is not valid anyways
+            if lambda_applied_ids.contains(&next_id) {
+                // we inlined the arg so now remove the apply and arg from the program
+                *term = func.clone();
             }
         }
         Term::Delay(d) => {
             let d = Rc::make_mut(d);
-            lambda_reducer(d);
+            lambda_reducer(d, reduce_stack, lambda_applied_ids, id_gen);
         }
-        Term::Lambda { body, .. } => {
-            let body = Rc::make_mut(body);
-            lambda_reducer(body);
+        Term::Lambda {
+            parameter_name,
+            body,
+        } => {
+            // pops stack here no matter what
+            // match on only Some(Some(arg)) because we don't want to inline None
+            if let Some(Some((arg_term, arg_id))) = reduce_stack.pop() {
+                let body = Rc::make_mut(body);
+                *body = substitute_term(body, parameter_name.clone(), &arg_term);
+                lambda_reducer(body, reduce_stack, lambda_applied_ids, id_gen);
+                lambda_applied_ids.push(arg_id);
+                *term = body.clone();
+            } else {
+                let body = Rc::make_mut(body);
+                lambda_reducer(body, reduce_stack, lambda_applied_ids, id_gen);
+            }
         }
         Term::Force(f) => {
             let f = Rc::make_mut(f);
-            lambda_reducer(f);
+            lambda_reducer(f, reduce_stack, lambda_applied_ids, id_gen);
         }
         Term::Case { .. } => todo!(),
         Term::Constr { .. } => todo!(),
@@ -312,43 +354,71 @@ fn inline_identity_reducer(term: &mut Term<Name>) {
     }
 }
 
-fn inline_single_occurrence_reducer(term: &mut Term<Name>) {
+fn inline_single_occurrence_reducer(
+    term: &mut Term<Name>,
+    reduce_stack: &mut Vec<(Term<Name>, u64)>,
+    lambda_applied_ids: &mut Vec<u64>,
+    id_gen: &mut IdGen,
+) {
     match term {
-        Term::Delay(d) => {
-            let d = Rc::make_mut(d);
-            inline_single_occurrence_reducer(d);
-        }
-        Term::Lambda { body, .. } => {
-            let body = Rc::make_mut(body);
-            inline_single_occurrence_reducer(body);
-        }
         // TODO: change this to handle any amount of consecutive applies and lambdas
         Term::Apply { function, argument } => {
-            let func = Rc::make_mut(function);
             let arg = Rc::make_mut(argument);
+            // SO args can't have existing stack args applied to them anyway, so we pass in empty list
+            let mut arg_stack = vec![];
+            inline_single_occurrence_reducer(arg, &mut arg_stack, lambda_applied_ids, id_gen);
 
-            inline_single_occurrence_reducer(func);
-            inline_single_occurrence_reducer(arg);
+            let next_id = id_gen.next_id();
 
-            if let Term::Lambda {
-                parameter_name,
-                body,
-            } = func
-            {
+            let arg_applied = (arg.clone(), next_id);
+
+            reduce_stack.push(arg_applied);
+
+            let func = Rc::make_mut(function);
+            inline_single_occurrence_reducer(func, reduce_stack, lambda_applied_ids, id_gen);
+            // The reason we don't need to pop is because the Lambda case and will pop for us
+            // It is guaranteed to pop otherwise the script is not valid anyways
+            if lambda_applied_ids.contains(&next_id) {
+                // we inlined the arg so now remove the apply and arg from the program
+                *term = func.clone();
+            }
+        }
+        Term::Delay(d) => {
+            let d = Rc::make_mut(d);
+            inline_single_occurrence_reducer(d, reduce_stack, lambda_applied_ids, id_gen);
+        }
+        Term::Lambda {
+            parameter_name,
+            body,
+        } => {
+            // pops stack here no matter what
+            // match on only Some(Some(arg)) because we don't want to inline None
+
+            if let Some((arg_term, arg_id)) = reduce_stack.pop() {
+                let body = Rc::make_mut(body);
+                inline_single_occurrence_reducer(body, reduce_stack, lambda_applied_ids, id_gen);
                 let occurrences = var_occurrences(body, parameter_name.clone());
 
-                let delays = delayed_execution(body.as_ref());
+                let delays = delayed_execution(body);
+
+                let is_recursive_call = false;
+
                 if occurrences == 1 {
-                    if delays == 0 {
-                        *term = substitute_term(body.as_ref(), parameter_name.clone(), arg);
-                    } else if let Term::Var(_)
-                    | Term::Constant(_)
-                    | Term::Error
-                    | Term::Delay(_)
-                    | Term::Lambda { .. }
-                    | Term::Builtin(_) = arg
+                    if !is_recursive_call
+                        && (delays == 0
+                            || matches!(
+                                &arg_term,
+                                Term::Var(_)
+                                    | Term::Constant(_)
+                                    | Term::Delay(_)
+                                    | Term::Lambda { .. }
+                                    | Term::Builtin(_),
+                            ))
                     {
-                        *term = substitute_term(body.as_ref(), parameter_name.clone(), arg);
+                        *body = substitute_term(body, parameter_name.clone(), &arg_term);
+
+                        lambda_applied_ids.push(arg_id);
+                        *term = body.clone();
                     }
                 // This will strip out unused terms that can't throw an error by themselves
                 } else if occurrences == 0 {
@@ -356,20 +426,45 @@ fn inline_single_occurrence_reducer(term: &mut Term<Name>) {
                     | Term::Constant(_)
                     | Term::Delay(_)
                     | Term::Lambda { .. }
-                    | Term::Builtin(_) = arg
+                    | Term::Builtin(_) = &arg_term
                     {
-                        *term = body.as_ref().clone();
+                        lambda_applied_ids.push(arg_id);
+                        *term = body.clone();
                     }
                 }
+            } else {
+                let body = Rc::make_mut(body);
+                inline_single_occurrence_reducer(body, reduce_stack, lambda_applied_ids, id_gen);
             }
         }
         Term::Force(f) => {
             let f = Rc::make_mut(f);
-            inline_single_occurrence_reducer(f);
+            inline_single_occurrence_reducer(f, reduce_stack, lambda_applied_ids, id_gen);
         }
         Term::Case { .. } => todo!(),
         Term::Constr { .. } => todo!(),
         _ => {}
+    }
+}
+
+fn contains_recursive_call(body: &Term<Name>) -> bool {
+    match body {
+        Term::Delay(d) => contains_recursive_call(d.as_ref()),
+        Term::Lambda { body, .. } => contains_recursive_call(body.as_ref()),
+        Term::Apply { function, argument } => {
+            contains_recursive_call(function.as_ref())
+                || contains_recursive_call(argument.as_ref())
+                || {
+                    let func = function.as_ref();
+                    let arg = argument.as_ref();
+
+                    matches!(func, Term::Var(_)) && *func == *arg
+                }
+        }
+        Term::Force(f) => contains_recursive_call(f.as_ref()),
+        Term::Case { .. } => todo!(),
+        Term::Constr { .. } => todo!(),
+        _ => false,
     }
 }
 
