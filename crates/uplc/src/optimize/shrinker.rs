@@ -401,19 +401,16 @@ fn inline_single_occurrence_reducer(
 
                 let delays = delayed_execution(body);
 
-                let is_recursive_call = false;
-
                 if occurrences == 1 {
-                    if !is_recursive_call
-                        && (delays == 0
-                            || matches!(
-                                &arg_term,
-                                Term::Var(_)
-                                    | Term::Constant(_)
-                                    | Term::Delay(_)
-                                    | Term::Lambda { .. }
-                                    | Term::Builtin(_),
-                            ))
+                    if delays == 0
+                        || matches!(
+                            &arg_term,
+                            Term::Var(_)
+                                | Term::Constant(_)
+                                | Term::Delay(_)
+                                | Term::Lambda { .. }
+                                | Term::Builtin(_),
+                        )
                     {
                         *body = substitute_term(body, parameter_name.clone(), &arg_term);
 
@@ -444,27 +441,6 @@ fn inline_single_occurrence_reducer(
         Term::Case { .. } => todo!(),
         Term::Constr { .. } => todo!(),
         _ => {}
-    }
-}
-
-fn contains_recursive_call(body: &Term<Name>) -> bool {
-    match body {
-        Term::Delay(d) => contains_recursive_call(d.as_ref()),
-        Term::Lambda { body, .. } => contains_recursive_call(body.as_ref()),
-        Term::Apply { function, argument } => {
-            contains_recursive_call(function.as_ref())
-                || contains_recursive_call(argument.as_ref())
-                || {
-                    let func = function.as_ref();
-                    let arg = argument.as_ref();
-
-                    matches!(func, Term::Var(_)) && *func == *arg
-                }
-        }
-        Term::Force(f) => contains_recursive_call(f.as_ref()),
-        Term::Case { .. } => todo!(),
-        Term::Constr { .. } => todo!(),
-        _ => false,
     }
 }
 
