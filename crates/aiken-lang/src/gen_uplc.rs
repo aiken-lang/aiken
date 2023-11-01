@@ -195,7 +195,7 @@ impl<'a> CodeGenerator<'a> {
     fn finalize(&mut self, mut term: Term<Name>) -> Program<Name> {
         term = self.special_functions.apply_used_functions(term);
 
-        // TODO: Once SOP is implemented, new version is 1.1.0
+        // TODO: Once SOP is implemented on mainnet, new version is 1.1.0
         let mut program = Program {
             version: (1, 0, 0),
             term,
