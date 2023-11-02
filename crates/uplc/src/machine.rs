@@ -395,6 +395,9 @@ impl From<&Constant> for Type {
                 Type::Pair(Rc::new(t1.clone()), Rc::new(t2.clone()))
             }
             Constant::Data(_) => Type::Data,
+            Constant::Bls12_381G1Element(_) => Type::Bls12_381G1Element,
+            Constant::Bls12_381G2Element(_) => Type::Bls12_381G2Element,
+            Constant::Bls12_381MlResult(_) => Type::Bls12_381MlResult,
         }
     }
 }

@@ -34,6 +34,8 @@ strum = "0.24.1"
 strum_macros = "0.24.3"
 thiserror = "1.0.39"
 flat-rs = { path = "../flat-rs", version = "1.0.20-alpha" }
+blst = "0.3.11"
+once_cell = "1.18.0"
 
 [target.'cfg(not(target_family="wasm"))'.dependencies]
 secp256k1 = { version = "0.26.0" }
