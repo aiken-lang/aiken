@@ -32,8 +32,6 @@ const BLST_P1_COMPRESSED_SIZE: usize = 48;
 
 const BLST_P2_COMPRESSED_SIZE: usize = 96;
 
-// 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001;
-
 //#[derive(std::cmp::PartialEq)]
 //pub enum EvalMode {
 //    Immediate,
@@ -1231,7 +1229,6 @@ impl DefaultFunction {
 
                     blst::blst_p1_mult(
                         &mut out as *mut _,
-                        // This was true in the Cardano code
                         arg2 as *const _,
                         scalar.b.as_ptr() as *const _,
                         size_scalar * 8,
@@ -1255,11 +1252,7 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_G1_Compress => {
                 let arg1 = args[0].unwrap_bls12_381_g1_element();
 
-                let mut out = [0; BLST_P1_COMPRESSED_SIZE];
-
-                unsafe {
-                    blst::blst_p1_compress(&mut out as *mut _, arg1);
-                };
+                let out = arg1.compress();
 
                 let constant = Constant::ByteString(out.to_vec());
 
@@ -1389,7 +1382,6 @@ impl DefaultFunction {
 
                     blst::blst_p2_mult(
                         &mut out as *mut _,
-                        // This was true in the Cardano code
                         arg2 as *const _,
                         scalar.b.as_ptr() as *const _,
                         size_scalar * 8,
@@ -1413,11 +1405,7 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_G2_Compress => {
                 let arg1 = args[0].unwrap_bls12_381_g2_element();
 
-                let mut out = [0; BLST_P2_COMPRESSED_SIZE];
-
-                unsafe {
-                    blst::blst_p2_compress(&mut out as *mut _, arg1);
-                };
+                let out = arg1.compress();
 
                 let constant = Constant::ByteString(out.to_vec());
 
@@ -1526,6 +1514,34 @@ impl DefaultFunction {
                 Ok(Value::Con(constant.into()))
             }
         }
+    }
+}
+
+pub trait Compressable {
+    fn compress(&self) -> Vec<u8>;
+}
+
+impl Compressable for blst::blst_p1 {
+    fn compress(&self) -> Vec<u8> {
+        let mut out = [0; BLST_P1_COMPRESSED_SIZE];
+
+        unsafe {
+            blst::blst_p1_compress(&mut out as *mut _, self);
+        };
+
+        out.to_vec()
+    }
+}
+
+impl Compressable for blst::blst_p2 {
+    fn compress(&self) -> Vec<u8> {
+        let mut out = [0; BLST_P2_COMPRESSED_SIZE];
+
+        unsafe {
+            blst::blst_p2_compress(&mut out as *mut _, self);
+        };
+
+        out.to_vec()
     }
 }
 
