@@ -487,6 +487,9 @@ impl Encode for Constant {
 
                 cbor.encode(e)?;
             }
+            Constant::Bls12_381G1Element(_) => todo!(),
+            Constant::Bls12_381G2Element(_) => todo!(),
+            Constant::Bls12_381MlResult(_) => todo!(),
         }
 
         Ok(())
@@ -520,6 +523,9 @@ fn encode_constant_value(x: &Constant, e: &mut Encoder) -> Result<(), en::Error>
 
             cbor.encode(e)
         }
+        Constant::Bls12_381G1Element(_) => todo!(),
+        Constant::Bls12_381G2Element(_) => todo!(),
+        Constant::Bls12_381MlResult(_) => todo!(),
     }
 }
 
@@ -540,6 +546,9 @@ fn encode_type(typ: &Type, bytes: &mut Vec<u8>) {
             encode_type(type2, bytes);
         }
         Type::Data => bytes.push(8),
+        Type::Bls12_381G1Element => todo!(),
+        Type::Bls12_381G2Element => todo!(),
+        Type::Bls12_381MlResult => todo!(),
     }
 }
 
@@ -619,6 +628,9 @@ fn decode_constant_value(typ: Rc<Type>, d: &mut Decoder) -> Result<Constant, de:
 
             Ok(Constant::Data(data))
         }
+        Type::Bls12_381G1Element => todo!(),
+        Type::Bls12_381G2Element => todo!(),
+        Type::Bls12_381MlResult => todo!(),
     }
 }
 

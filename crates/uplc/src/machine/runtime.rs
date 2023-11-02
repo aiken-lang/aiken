@@ -1,6 +1,8 @@
-use std::{ops::Deref, rc::Rc};
+use std::{mem::size_of, ops::Deref, rc::Rc};
 
+use num_bigint::BigInt;
 use num_integer::Integer;
+use once_cell::sync::Lazy;
 use pallas_primitives::babbage::{Constr, PlutusData};
 
 use crate::{
@@ -14,6 +16,23 @@ use super::{
     value::{from_pallas_bigint, to_pallas_bigint},
     Error, Value,
 };
+
+static SCALAR_PERIOD: Lazy<BigInt> = Lazy::new(|| {
+    BigInt::from_bytes_be(
+        num_bigint::Sign::Plus,
+        &[
+            0x73, 0xed, 0xa7, 0x53, 0x29, 0x9d, 0x7d, 0x48, 0x33, 0x39, 0xd8, 0x08, 0x09, 0xa1,
+            0xd8, 0x05, 0x53, 0xbd, 0xa4, 0x02, 0xff, 0xfe, 0x5b, 0xfe, 0xff, 0xff, 0xff, 0xff,
+            0x00, 0x00, 0x00, 0x01,
+        ],
+    )
+});
+
+const BLST_P1_COMPRESSED_SIZE: usize = 48;
+
+const BLST_P2_COMPRESSED_SIZE: usize = 96;
+
+// 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001;
 
 //#[derive(std::cmp::PartialEq)]
 //pub enum EvalMode {
@@ -103,7 +122,9 @@ impl DefaultFunction {
             DefaultFunction::LessThanEqualsByteString => 2,
             DefaultFunction::Sha2_256 => 1,
             DefaultFunction::Sha3_256 => 1,
+            DefaultFunction::Blake2b_224 => 1,
             DefaultFunction::Blake2b_256 => 1,
+            DefaultFunction::Keccak_256 => 1,
             DefaultFunction::VerifyEd25519Signature => 3,
             DefaultFunction::VerifyEcdsaSecp256k1Signature => 3,
             DefaultFunction::VerifySchnorrSecp256k1Signature => 3,
@@ -137,6 +158,23 @@ impl DefaultFunction {
             DefaultFunction::MkPairData => 2,
             DefaultFunction::MkNilData => 1,
             DefaultFunction::MkNilPairData => 1,
+            DefaultFunction::Bls12_381_G1_Add => 2,
+            DefaultFunction::Bls12_381_G1_Neg => 1,
+            DefaultFunction::Bls12_381_G1_Scalarmul => 2,
+            DefaultFunction::Bls12_381_G1_Equal => 2,
+            DefaultFunction::Bls12_381_G1_Compress => 1,
+            DefaultFunction::Bls12_381_G1_Uncompress => 1,
+            DefaultFunction::Bls12_381_G1_Hashtogroup => 2,
+            DefaultFunction::Bls12_381_G2_Add => 2,
+            DefaultFunction::Bls12_381_G2_Neg => 1,
+            DefaultFunction::Bls12_381_G2_Scalarmul => 2,
+            DefaultFunction::Bls12_381_G2_Equal => 2,
+            DefaultFunction::Bls12_381_G2_Compress => 1,
+            DefaultFunction::Bls12_381_G2_Uncompress => 1,
+            DefaultFunction::Bls12_381_G2_Hashtogroup => 2,
+            DefaultFunction::Bls12_381_MillerLoop => 2,
+            DefaultFunction::Bls12_381_MulMlResult => 2,
+            DefaultFunction::Bls12_381_FinalVerify => 2,
         }
     }
 
@@ -162,7 +200,9 @@ impl DefaultFunction {
             DefaultFunction::LessThanEqualsByteString => 0,
             DefaultFunction::Sha2_256 => 0,
             DefaultFunction::Sha3_256 => 0,
+            DefaultFunction::Blake2b_224 => 0,
             DefaultFunction::Blake2b_256 => 0,
+            DefaultFunction::Keccak_256 => 0,
             DefaultFunction::VerifyEd25519Signature => 0,
             DefaultFunction::VerifyEcdsaSecp256k1Signature => 0,
             DefaultFunction::VerifySchnorrSecp256k1Signature => 0,
@@ -196,6 +236,23 @@ impl DefaultFunction {
             DefaultFunction::MkPairData => 0,
             DefaultFunction::MkNilData => 0,
             DefaultFunction::MkNilPairData => 0,
+            DefaultFunction::Bls12_381_G1_Add => 0,
+            DefaultFunction::Bls12_381_G1_Neg => 0,
+            DefaultFunction::Bls12_381_G1_Scalarmul => 0,
+            DefaultFunction::Bls12_381_G1_Equal => 0,
+            DefaultFunction::Bls12_381_G1_Compress => 0,
+            DefaultFunction::Bls12_381_G1_Uncompress => 0,
+            DefaultFunction::Bls12_381_G1_Hashtogroup => 0,
+            DefaultFunction::Bls12_381_G2_Add => 0,
+            DefaultFunction::Bls12_381_G2_Neg => 0,
+            DefaultFunction::Bls12_381_G2_Scalarmul => 0,
+            DefaultFunction::Bls12_381_G2_Equal => 0,
+            DefaultFunction::Bls12_381_G2_Compress => 0,
+            DefaultFunction::Bls12_381_G2_Uncompress => 0,
+            DefaultFunction::Bls12_381_G2_Hashtogroup => 0,
+            DefaultFunction::Bls12_381_MillerLoop => 0,
+            DefaultFunction::Bls12_381_MulMlResult => 0,
+            DefaultFunction::Bls12_381_FinalVerify => 0,
         }
     }
 
@@ -239,7 +296,9 @@ impl DefaultFunction {
             DefaultFunction::LessThanEqualsByteString => arg.expect_type(Type::ByteString),
             DefaultFunction::Sha2_256 => arg.expect_type(Type::ByteString),
             DefaultFunction::Sha3_256 => arg.expect_type(Type::ByteString),
+            DefaultFunction::Blake2b_224 => arg.expect_type(Type::ByteString),
             DefaultFunction::Blake2b_256 => arg.expect_type(Type::ByteString),
+            DefaultFunction::Keccak_256 => arg.expect_type(Type::ByteString),
             DefaultFunction::VerifyEd25519Signature => arg.expect_type(Type::ByteString),
             DefaultFunction::VerifyEcdsaSecp256k1Signature => arg.expect_type(Type::ByteString),
             DefaultFunction::VerifySchnorrSecp256k1Signature => arg.expect_type(Type::ByteString),
@@ -320,6 +379,42 @@ impl DefaultFunction {
             DefaultFunction::MkPairData => arg.expect_type(Type::Data),
             DefaultFunction::MkNilData => arg.expect_type(Type::Unit),
             DefaultFunction::MkNilPairData => arg.expect_type(Type::Unit),
+
+            DefaultFunction::Bls12_381_G1_Add => arg.expect_type(Type::Bls12_381G1Element),
+            DefaultFunction::Bls12_381_G1_Neg => arg.expect_type(Type::Bls12_381G1Element),
+            DefaultFunction::Bls12_381_G1_Scalarmul => {
+                if args.is_empty() {
+                    arg.expect_type(Type::Integer)
+                } else {
+                    arg.expect_type(Type::Bls12_381G1Element)
+                }
+            }
+            DefaultFunction::Bls12_381_G1_Equal => arg.expect_type(Type::Bls12_381G1Element),
+            DefaultFunction::Bls12_381_G1_Compress => arg.expect_type(Type::Bls12_381G1Element),
+            DefaultFunction::Bls12_381_G1_Uncompress => arg.expect_type(Type::ByteString),
+            DefaultFunction::Bls12_381_G1_Hashtogroup => arg.expect_type(Type::ByteString),
+            DefaultFunction::Bls12_381_G2_Add => arg.expect_type(Type::Bls12_381G2Element),
+            DefaultFunction::Bls12_381_G2_Neg => arg.expect_type(Type::Bls12_381G2Element),
+            DefaultFunction::Bls12_381_G2_Scalarmul => {
+                if args.is_empty() {
+                    arg.expect_type(Type::Integer)
+                } else {
+                    arg.expect_type(Type::Bls12_381G2Element)
+                }
+            }
+            DefaultFunction::Bls12_381_G2_Equal => arg.expect_type(Type::Bls12_381G2Element),
+            DefaultFunction::Bls12_381_G2_Compress => arg.expect_type(Type::Bls12_381G2Element),
+            DefaultFunction::Bls12_381_G2_Uncompress => arg.expect_type(Type::ByteString),
+            DefaultFunction::Bls12_381_G2_Hashtogroup => arg.expect_type(Type::ByteString),
+            DefaultFunction::Bls12_381_MillerLoop => {
+                if args.is_empty() {
+                    arg.expect_type(Type::Bls12_381G1Element)
+                } else {
+                    arg.expect_type(Type::Bls12_381G2Element)
+                }
+            }
+            DefaultFunction::Bls12_381_MulMlResult => arg.expect_type(Type::Bls12_381MlResult),
+            DefaultFunction::Bls12_381_FinalVerify => arg.expect_type(Type::Bls12_381MlResult),
         }
     }
 
@@ -567,6 +662,22 @@ impl DefaultFunction {
 
                 Ok(value)
             }
+
+            DefaultFunction::Blake2b_224 => {
+                use cryptoxide::{blake2b::Blake2b, digest::Digest};
+
+                let arg1 = args[0].unwrap_byte_string();
+
+                let mut digest = [0u8; 28];
+                let mut context = Blake2b::new(28);
+
+                context.input(arg1);
+                context.result(&mut digest);
+
+                let value = Value::byte_string(digest.to_vec());
+
+                Ok(value)
+            }
             DefaultFunction::Blake2b_256 => {
                 use cryptoxide::{blake2b::Blake2b, digest::Digest};
 
@@ -579,6 +690,23 @@ impl DefaultFunction {
                 context.result(&mut digest);
 
                 let value = Value::byte_string(digest.to_vec());
+
+                Ok(value)
+            }
+            DefaultFunction::Keccak_256 => {
+                use cryptoxide::{digest::Digest, sha3::Keccak256};
+
+                let arg1 = args[0].unwrap_byte_string();
+
+                let mut hasher = Keccak256::new();
+
+                hasher.input(arg1);
+
+                let mut bytes = vec![0; hasher.output_bytes()];
+
+                hasher.result(&mut bytes);
+
+                let value = Value::byte_string(bytes);
 
                 Ok(value)
             }
@@ -1035,6 +1163,367 @@ impl DefaultFunction {
                 let value = Value::Con(constant.into());
 
                 Ok(value)
+            }
+
+            DefaultFunction::Bls12_381_G1_Add => {
+                let arg1 = args[0].unwrap_bls12_381_g1_element();
+                let arg2 = args[1].unwrap_bls12_381_g1_element();
+
+                let mut out = blst::blst_p1::default();
+
+                unsafe {
+                    blst::blst_p1_add_or_double(
+                        &mut out as *mut _,
+                        arg1 as *const _,
+                        arg2 as *const _,
+                    );
+                }
+
+                let constant = Constant::Bls12_381G1Element(out.into());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_G1_Neg => {
+                let arg1 = args[0].unwrap_bls12_381_g1_element();
+
+                let mut out = *arg1;
+
+                unsafe {
+                    blst::blst_p1_cneg(
+                        &mut out as *mut _,
+                        // This was true in the Cardano code
+                        true,
+                    );
+                }
+
+                let constant = Constant::Bls12_381G1Element(out.into());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_G1_Scalarmul => {
+                let arg1 = args[0].unwrap_integer();
+                let arg2 = args[1].unwrap_bls12_381_g1_element();
+
+                let size_scalar = size_of::<blst::blst_scalar>();
+
+                let arg1 = arg1.mod_floor(&SCALAR_PERIOD);
+
+                let (_, mut arg1) = arg1.to_bytes_be();
+
+                if size_scalar > arg1.len() {
+                    let diff = size_scalar - arg1.len();
+
+                    let mut new_vec = vec![0; diff];
+
+                    new_vec.append(&mut arg1);
+
+                    arg1 = new_vec;
+                }
+
+                let mut out = blst::blst_p1::default();
+                let mut scalar = blst::blst_scalar::default();
+
+                unsafe {
+                    blst::blst_scalar_from_bendian(
+                        &mut scalar as *mut _,
+                        arg1.as_ptr() as *const _,
+                    );
+
+                    blst::blst_p1_mult(
+                        &mut out as *mut _,
+                        // This was true in the Cardano code
+                        arg2 as *const _,
+                        scalar.b.as_ptr() as *const _,
+                        size_scalar * 8,
+                    );
+                }
+
+                let constant = Constant::Bls12_381G1Element(out.into());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_G1_Equal => {
+                let arg1 = args[0].unwrap_bls12_381_g1_element();
+                let arg2 = args[1].unwrap_bls12_381_g1_element();
+
+                let is_equal = unsafe { blst::blst_p1_is_equal(arg1, arg2) };
+
+                let constant = Constant::Bool(is_equal);
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_G1_Compress => {
+                let arg1 = args[0].unwrap_bls12_381_g1_element();
+
+                let mut out = [0; BLST_P1_COMPRESSED_SIZE];
+
+                unsafe {
+                    blst::blst_p1_compress(&mut out as *mut _, arg1);
+                };
+
+                let constant = Constant::ByteString(out.to_vec());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_G1_Uncompress => {
+                let arg1 = args[0].unwrap_byte_string();
+
+                if arg1.len() != BLST_P1_COMPRESSED_SIZE {
+                    return Err(Error::Blst(blst::BLST_ERROR::BLST_BAD_ENCODING));
+                }
+
+                let mut affine = blst::blst_p1_affine::default();
+
+                let mut out = blst::blst_p1::default();
+
+                unsafe {
+                    let err = blst::blst_p1_uncompress(&mut affine as *mut _, arg1.as_ptr());
+
+                    if err != blst::BLST_ERROR::BLST_SUCCESS {
+                        return Err(Error::Blst(err));
+                    }
+
+                    blst::blst_p1_from_affine(&mut out as *mut _, &affine);
+
+                    let in_group = blst::blst_p1_in_g1(&out);
+
+                    if !in_group {
+                        return Err(Error::Blst(blst::BLST_ERROR::BLST_POINT_NOT_IN_GROUP));
+                    }
+                };
+
+                let constant = Constant::Bls12_381G1Element(out.into());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_G1_Hashtogroup => {
+                let arg1 = args[0].unwrap_byte_string();
+                let arg2 = args[1].unwrap_byte_string();
+
+                if arg2.len() > 255 {
+                    return Err(Error::HashToCurveDstTooBig);
+                }
+
+                let mut out = blst::blst_p1::default();
+                let aug = [];
+
+                unsafe {
+                    blst::blst_hash_to_g1(
+                        &mut out as *mut _,
+                        arg1.as_ptr(),
+                        arg1.len(),
+                        arg2.as_ptr(),
+                        arg2.len(),
+                        aug.as_ptr(),
+                        0,
+                    );
+                };
+
+                let constant = Constant::Bls12_381G1Element(out.into());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_G2_Add => {
+                let arg1 = args[0].unwrap_bls12_381_g2_element();
+                let arg2 = args[1].unwrap_bls12_381_g2_element();
+
+                let mut out = blst::blst_p2::default();
+
+                unsafe {
+                    blst::blst_p2_add_or_double(
+                        &mut out as *mut _,
+                        arg1 as *const _,
+                        arg2 as *const _,
+                    );
+                }
+
+                let constant = Constant::Bls12_381G2Element(out.into());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_G2_Neg => {
+                let arg1 = args[0].unwrap_bls12_381_g2_element();
+
+                let mut out = *arg1;
+
+                unsafe {
+                    blst::blst_p2_cneg(
+                        &mut out as *mut _,
+                        // This was true in the Cardano code
+                        true,
+                    );
+                }
+
+                let constant = Constant::Bls12_381G2Element(out.into());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_G2_Scalarmul => {
+                let arg1 = args[0].unwrap_integer();
+                let arg2 = args[1].unwrap_bls12_381_g2_element();
+
+                let size_scalar = size_of::<blst::blst_scalar>();
+
+                let arg1 = arg1.mod_floor(&SCALAR_PERIOD);
+
+                let (_, mut arg1) = arg1.to_bytes_be();
+
+                if size_scalar > arg1.len() {
+                    let diff = size_scalar - arg1.len();
+
+                    let mut new_vec = vec![0; diff];
+
+                    new_vec.append(&mut arg1);
+
+                    arg1 = new_vec;
+                }
+
+                let mut out = blst::blst_p2::default();
+                let mut scalar = blst::blst_scalar::default();
+
+                unsafe {
+                    blst::blst_scalar_from_bendian(
+                        &mut scalar as *mut _,
+                        arg1.as_ptr() as *const _,
+                    );
+
+                    blst::blst_p2_mult(
+                        &mut out as *mut _,
+                        // This was true in the Cardano code
+                        arg2 as *const _,
+                        scalar.b.as_ptr() as *const _,
+                        size_scalar * 8,
+                    );
+                }
+
+                let constant = Constant::Bls12_381G2Element(out.into());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_G2_Equal => {
+                let arg1 = args[0].unwrap_bls12_381_g2_element();
+                let arg2 = args[1].unwrap_bls12_381_g2_element();
+
+                let is_equal = unsafe { blst::blst_p2_is_equal(arg1, arg2) };
+
+                let constant = Constant::Bool(is_equal);
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_G2_Compress => {
+                let arg1 = args[0].unwrap_bls12_381_g2_element();
+
+                let mut out = [0; BLST_P2_COMPRESSED_SIZE];
+
+                unsafe {
+                    blst::blst_p2_compress(&mut out as *mut _, arg1);
+                };
+
+                let constant = Constant::ByteString(out.to_vec());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_G2_Uncompress => {
+                let arg1 = args[0].unwrap_byte_string();
+
+                if arg1.len() != BLST_P2_COMPRESSED_SIZE {
+                    return Err(Error::Blst(blst::BLST_ERROR::BLST_BAD_ENCODING));
+                }
+
+                let mut affine = blst::blst_p2_affine::default();
+
+                let mut out = blst::blst_p2::default();
+
+                unsafe {
+                    let err = blst::blst_p2_uncompress(&mut affine as *mut _, arg1.as_ptr());
+
+                    if err != blst::BLST_ERROR::BLST_SUCCESS {
+                        return Err(Error::Blst(err));
+                    }
+
+                    blst::blst_p2_from_affine(&mut out as *mut _, &affine);
+
+                    let in_group = blst::blst_p2_in_g2(&out);
+
+                    if !in_group {
+                        return Err(Error::Blst(blst::BLST_ERROR::BLST_POINT_NOT_IN_GROUP));
+                    }
+                };
+
+                let constant = Constant::Bls12_381G2Element(out.into());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_G2_Hashtogroup => {
+                let arg1 = args[0].unwrap_byte_string();
+                let arg2 = args[1].unwrap_byte_string();
+
+                if arg2.len() > 255 {
+                    return Err(Error::HashToCurveDstTooBig);
+                }
+
+                let mut out = blst::blst_p2::default();
+                let aug = [];
+
+                unsafe {
+                    blst::blst_hash_to_g2(
+                        &mut out as *mut _,
+                        arg1.as_ptr(),
+                        arg1.len(),
+                        arg2.as_ptr(),
+                        arg2.len(),
+                        aug.as_ptr(),
+                        0,
+                    );
+                };
+
+                let constant = Constant::Bls12_381G2Element(out.into());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_MillerLoop => {
+                let arg1 = args[0].unwrap_bls12_381_g1_element();
+                let arg2 = args[1].unwrap_bls12_381_g2_element();
+
+                let mut out = blst::blst_fp12::default();
+
+                let mut affine1 = blst::blst_p1_affine::default();
+                let mut affine2 = blst::blst_p2_affine::default();
+
+                unsafe {
+                    blst::blst_p1_to_affine(&mut affine1 as *mut _, arg1);
+                    blst::blst_p2_to_affine(&mut affine2 as *mut _, arg2);
+
+                    blst::blst_miller_loop(&mut out as *mut _, &affine2, &affine1);
+                }
+
+                let constant = Constant::Bls12_381MlResult(out.into());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_MulMlResult => {
+                let arg1 = args[0].unwrap_bls12_381_ml_result();
+                let arg2 = args[1].unwrap_bls12_381_ml_result();
+
+                let mut out = blst::blst_fp12::default();
+
+                unsafe {
+                    blst::blst_fp12_mul(&mut out as *mut _, arg1, arg2);
+                }
+
+                let constant = Constant::Bls12_381MlResult(out.into());
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::Bls12_381_FinalVerify => {
+                let arg1 = args[0].unwrap_bls12_381_ml_result();
+                let arg2 = args[1].unwrap_bls12_381_ml_result();
+
+                let verified = unsafe { blst::blst_fp12_finalverify(arg1, arg2) };
+
+                let constant = Constant::Bool(verified);
+
+                Ok(Value::Con(constant.into()))
             }
         }
     }

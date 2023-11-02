@@ -35,6 +35,8 @@ pub enum DefaultFunction {
     Sha2_256 = 18,
     Sha3_256 = 19,
     Blake2b_256 = 20,
+    Keccak_256 = 71,
+    Blake2b_224 = 72,
     VerifyEd25519Signature = 21,
     VerifyEcdsaSecp256k1Signature = 52,
     VerifySchnorrSecp256k1Signature = 53,
@@ -82,6 +84,25 @@ pub enum DefaultFunction {
     MkPairData = 48,
     MkNilData = 49,
     MkNilPairData = 50,
+
+    // BLS Builtins
+    Bls12_381_G1_Add = 54,
+    Bls12_381_G1_Neg = 55,
+    Bls12_381_G1_Scalarmul = 56,
+    Bls12_381_G1_Equal = 57,
+    Bls12_381_G1_Compress = 58,
+    Bls12_381_G1_Uncompress = 59,
+    Bls12_381_G1_Hashtogroup = 60,
+    Bls12_381_G2_Add = 61,
+    Bls12_381_G2_Neg = 62,
+    Bls12_381_G2_Scalarmul = 63,
+    Bls12_381_G2_Equal = 64,
+    Bls12_381_G2_Compress = 65,
+    Bls12_381_G2_Uncompress = 66,
+    Bls12_381_G2_Hashtogroup = 67,
+    Bls12_381_MillerLoop = 68,
+    Bls12_381_MulMlResult = 69,
+    Bls12_381_FinalVerify = 70,
 }
 
 impl TryFrom<u8> for DefaultFunction {
@@ -138,6 +159,7 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::Sha2_256 as u8 => Ok(DefaultFunction::Sha2_256),
             v if v == DefaultFunction::Sha3_256 as u8 => Ok(DefaultFunction::Sha3_256),
             v if v == DefaultFunction::Blake2b_256 as u8 => Ok(DefaultFunction::Blake2b_256),
+            v if v == DefaultFunction::Blake2b_224 as u8 => Ok(DefaultFunction::Blake2b_224),
             v if v == DefaultFunction::VerifyEd25519Signature as u8 => {
                 Ok(DefaultFunction::VerifyEd25519Signature)
             }
@@ -191,6 +213,58 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::MkPairData as u8 => Ok(DefaultFunction::MkPairData),
             v if v == DefaultFunction::MkNilData as u8 => Ok(DefaultFunction::MkNilData),
             v if v == DefaultFunction::MkNilPairData as u8 => Ok(DefaultFunction::MkNilPairData),
+            v if v == DefaultFunction::Bls12_381_G1_Add as u8 => {
+                Ok(DefaultFunction::Bls12_381_G1_Add)
+            }
+            v if v == DefaultFunction::Bls12_381_G1_Neg as u8 => {
+                Ok(DefaultFunction::Bls12_381_G1_Neg)
+            }
+            v if v == DefaultFunction::Bls12_381_G1_Scalarmul as u8 => {
+                Ok(DefaultFunction::Bls12_381_G1_Scalarmul)
+            }
+            v if v == DefaultFunction::Bls12_381_G1_Equal as u8 => {
+                Ok(DefaultFunction::Bls12_381_G1_Equal)
+            }
+            v if v == DefaultFunction::Bls12_381_G1_Compress as u8 => {
+                Ok(DefaultFunction::Bls12_381_G1_Compress)
+            }
+            v if v == DefaultFunction::Bls12_381_G1_Uncompress as u8 => {
+                Ok(DefaultFunction::Bls12_381_G1_Uncompress)
+            }
+            v if v == DefaultFunction::Bls12_381_G1_Hashtogroup as u8 => {
+                Ok(DefaultFunction::Bls12_381_G1_Hashtogroup)
+            }
+            v if v == DefaultFunction::Bls12_381_G2_Add as u8 => {
+                Ok(DefaultFunction::Bls12_381_G2_Add)
+            }
+            v if v == DefaultFunction::Bls12_381_G2_Neg as u8 => {
+                Ok(DefaultFunction::Bls12_381_G2_Neg)
+            }
+            v if v == DefaultFunction::Bls12_381_G2_Scalarmul as u8 => {
+                Ok(DefaultFunction::Bls12_381_G2_Scalarmul)
+            }
+            v if v == DefaultFunction::Bls12_381_G2_Equal as u8 => {
+                Ok(DefaultFunction::Bls12_381_G2_Equal)
+            }
+            v if v == DefaultFunction::Bls12_381_G2_Compress as u8 => {
+                Ok(DefaultFunction::Bls12_381_G2_Compress)
+            }
+            v if v == DefaultFunction::Bls12_381_G2_Uncompress as u8 => {
+                Ok(DefaultFunction::Bls12_381_G2_Uncompress)
+            }
+            v if v == DefaultFunction::Bls12_381_G2_Hashtogroup as u8 => {
+                Ok(DefaultFunction::Bls12_381_G2_Hashtogroup)
+            }
+            v if v == DefaultFunction::Bls12_381_MillerLoop as u8 => {
+                Ok(DefaultFunction::Bls12_381_MillerLoop)
+            }
+            v if v == DefaultFunction::Bls12_381_MulMlResult as u8 => {
+                Ok(DefaultFunction::Bls12_381_MulMlResult)
+            }
+            v if v == DefaultFunction::Bls12_381_FinalVerify as u8 => {
+                Ok(DefaultFunction::Bls12_381_FinalVerify)
+            }
+
             _ => Err(de::Error::Message(format!(
                 "Default Function not found - {v}"
             ))),
@@ -226,6 +300,8 @@ impl FromStr for DefaultFunction {
             "sha2_256" => Ok(Sha2_256),
             "sha3_256" => Ok(Sha3_256),
             "blake2b_256" => Ok(Blake2b_256),
+            "keccak_256" => Ok(Keccak_256),
+            "blake2b_224" => Ok(Blake2b_224),
             "verifyEd25519Signature" => Ok(VerifyEd25519Signature),
             "verifyEcdsaSecp256k1Signature" => Ok(VerifyEcdsaSecp256k1Signature),
             "verifySchnorrSecp256k1Signature" => Ok(VerifySchnorrSecp256k1Signature),
@@ -259,6 +335,23 @@ impl FromStr for DefaultFunction {
             "mkPairData" => Ok(MkPairData),
             "mkNilData" => Ok(MkNilData),
             "mkNilPairData" => Ok(MkNilPairData),
+            "bls12_381_g1_add" => Ok(Bls12_381_G1_Add),
+            "bls12_381_g1_neg" => Ok(Bls12_381_G1_Neg),
+            "bls12_381_g1_scalarmul" => Ok(Bls12_381_G1_Scalarmul),
+            "bls12_381_g1_equal" => Ok(Bls12_381_G1_Equal),
+            "bls12_381_g1_compress" => Ok(Bls12_381_G1_Compress),
+            "bls12_381_g1_uncompress" => Ok(Bls12_381_G1_Uncompress),
+            "bls12_381_g1_hashtogroup" => Ok(Bls12_381_G1_Hashtogroup),
+            "bls12_381_g2_add" => Ok(Bls12_381_G2_Add),
+            "bls12_381_g2_neg" => Ok(Bls12_381_G2_Neg),
+            "bls12_381_g2_scalarmul" => Ok(Bls12_381_G2_Scalarmul),
+            "bls12_381_g2_equal" => Ok(Bls12_381_G2_Equal),
+            "bls12_381_g2_compress" => Ok(Bls12_381_G2_Compress),
+            "bls12_381_g2_uncompress" => Ok(Bls12_381_G2_Uncompress),
+            "bls12_381_g2_hashtogroup" => Ok(Bls12_381_G2_Hashtogroup),
+            "bls12_381_millerloop" => Ok(Bls12_381_MillerLoop),
+            "bls12_381_mulmlresult" => Ok(Bls12_381_MulMlResult),
+            "bls12_381_finalverify" => Ok(Bls12_381_FinalVerify),
             rest => Err(format!("Default Function not found - {rest}")),
         }
     }
@@ -290,6 +383,8 @@ impl Display for DefaultFunction {
             Sha2_256 => write!(f, "sha2_256"),
             Sha3_256 => write!(f, "sha3_256"),
             Blake2b_256 => write!(f, "blake2b_256"),
+            Keccak_256 => write!(f, "keccak_256"),
+            Blake2b_224 => write!(f, "blake2b_224"),
             VerifyEd25519Signature => write!(f, "verifySignature"),
             VerifyEcdsaSecp256k1Signature => write!(f, "verifyEcdsaSecp256k1Signature"),
             VerifySchnorrSecp256k1Signature => write!(f, "verifySchnorrSecp256k1Signature"),
@@ -323,6 +418,23 @@ impl Display for DefaultFunction {
             MkPairData => write!(f, "mkPairData"),
             MkNilData => write!(f, "mkNilData"),
             MkNilPairData => write!(f, "mkNilPairData"),
+            Bls12_381_G1_Add => write!(f, "bls12_381_g1_add"),
+            Bls12_381_G1_Neg => write!(f, "bls12_381_g1_neg"),
+            Bls12_381_G1_Scalarmul => write!(f, "bls12_381_g1_scalarmul"),
+            Bls12_381_G1_Equal => write!(f, "bls12_381_g1_equal"),
+            Bls12_381_G1_Compress => write!(f, "bls12_381_g1_compress"),
+            Bls12_381_G1_Uncompress => write!(f, "bls12_381_g1_uncompress"),
+            Bls12_381_G1_Hashtogroup => write!(f, "bls12_381_g1_hashtogroup"),
+            Bls12_381_G2_Add => write!(f, "bls12_381_g2_add"),
+            Bls12_381_G2_Neg => write!(f, "bls12_381_g2_neg"),
+            Bls12_381_G2_Scalarmul => write!(f, "bls12_381_g2_scalarmul"),
+            Bls12_381_G2_Equal => write!(f, "bls12_381_g2_equal"),
+            Bls12_381_G2_Compress => write!(f, "bls12_381_g2_compress"),
+            Bls12_381_G2_Uncompress => write!(f, "bls12_381_g2_uncompress"),
+            Bls12_381_G2_Hashtogroup => write!(f, "bls12_381_g2_hashtogroup"),
+            Bls12_381_MillerLoop => write!(f, "bls12_381_millerloop"),
+            Bls12_381_MulMlResult => write!(f, "bls12_381_mulmlresult"),
+            Bls12_381_FinalVerify => write!(f, "bls12_381_finalverify"),
         }
     }
 }
@@ -352,7 +464,9 @@ impl DefaultFunction {
             LessThanEqualsByteString => "less_than_equals_bytearray",
             Sha2_256 => "sha2_256",
             Sha3_256 => "sha3_256",
+            Blake2b_224 => "blake2b_224",
             Blake2b_256 => "blake2b_256",
+            Keccak_256 => "keccak_256",
             VerifyEd25519Signature => "verify_ed25519_signature",
             VerifyEcdsaSecp256k1Signature => "verify_ecdsa_secp256k1_signature",
             VerifySchnorrSecp256k1Signature => "verify_schnorr_secp256k1_signature",
@@ -386,6 +500,23 @@ impl DefaultFunction {
             MkPairData => "mk_pair_data",
             MkNilData => "mk_nil_data",
             MkNilPairData => "mk_nil_pair_data",
+            Bls12_381_G1_Add => "bls12_381_g1_add",
+            Bls12_381_G1_Neg => "bls12_381_g1_neg",
+            Bls12_381_G1_Scalarmul => "bls12_381_g1_scalarmul",
+            Bls12_381_G1_Equal => "bls12_381_g1_equal",
+            Bls12_381_G1_Compress => "bls12_381_g1_compress",
+            Bls12_381_G1_Uncompress => "bls12_381_g1_uncompress",
+            Bls12_381_G1_Hashtogroup => "bls12_381_g1_hashtogroup",
+            Bls12_381_G2_Add => "bls12_381_g2_add",
+            Bls12_381_G2_Neg => "bls12_381_g2_neg",
+            Bls12_381_G2_Scalarmul => "bls12_381_g2_scalarmul",
+            Bls12_381_G2_Equal => "bls12_381_g2_equal",
+            Bls12_381_G2_Compress => "bls12_381_g2_compress",
+            Bls12_381_G2_Uncompress => "bls12_381_g2_uncompress",
+            Bls12_381_G2_Hashtogroup => "bls12_381_g2_hashtogroup",
+            Bls12_381_MillerLoop => "bls12_381_millerloop",
+            Bls12_381_MulMlResult => "bls12_381_mulmlresult",
+            Bls12_381_FinalVerify => "bls12_381_finalverify",
         }
         .to_string()
     }

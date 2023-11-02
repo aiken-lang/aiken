@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, ops::Deref, rc::Rc};
+use std::{collections::VecDeque, mem::size_of, ops::Deref, rc::Rc};
 
 use num_bigint::BigInt;
 use num_traits::Signed;
@@ -154,6 +154,42 @@ impl Value {
         list
     }
 
+    pub(super) fn unwrap_bls12_381_g1_element(&self) -> &blst::blst_p1 {
+        let Value::Con(inner) = self else {
+            unreachable!()
+        };
+
+        let Constant::Bls12_381G1Element(element) = inner.as_ref() else {
+            unreachable!()
+        };
+
+        element
+    }
+
+    pub(super) fn unwrap_bls12_381_g2_element(&self) -> &blst::blst_p2 {
+        let Value::Con(inner) = self else {
+            unreachable!()
+        };
+
+        let Constant::Bls12_381G2Element(element) = inner.as_ref() else {
+            unreachable!()
+        };
+
+        element
+    }
+
+    pub(super) fn unwrap_bls12_381_ml_result(&self) -> &blst::blst_fp12 {
+        let Value::Con(inner) = self else {
+            unreachable!()
+        };
+
+        let Constant::Bls12_381MlResult(element) = inner.as_ref() else {
+            unreachable!()
+        };
+
+        element
+    }
+
     pub fn is_integer(&self) -> bool {
         matches!(self, Value::Con(i) if matches!(i.as_ref(), Constant::Integer(_)))
     }
@@ -190,6 +226,9 @@ impl Value {
                     Value::Con(l.clone()).to_ex_mem() + Value::Con(r.clone()).to_ex_mem()
                 }
                 Constant::Data(item) => self.data_to_ex_mem(item),
+                Constant::Bls12_381G1Element(_) => size_of::<blst::blst_p1>() as i64 / 8,
+                Constant::Bls12_381G2Element(_) => size_of::<blst::blst_p2>() as i64 / 8,
+                Constant::Bls12_381MlResult(_) => size_of::<blst::blst_fp12>() as i64 / 8,
             },
             Value::Delay(_, _) => 1,
             Value::Lambda { .. } => 1,

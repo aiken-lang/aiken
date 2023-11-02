@@ -256,6 +256,9 @@ impl Constant {
                 .append(RcDoc::text("("))
                 .append(Self::to_doc_list_plutus_data(d))
                 .append(RcDoc::text(")")),
+            Constant::Bls12_381G1Element(_) => todo!(),
+            Constant::Bls12_381G2Element(_) => todo!(),
+            Constant::Bls12_381MlResult(_) => todo!(),
         }
     }
 
@@ -281,6 +284,9 @@ impl Constant {
                 .append(RcDoc::text(")")),
 
             Constant::Data(data) => Self::to_doc_list_plutus_data(data),
+            Constant::Bls12_381G1Element(_) => todo!(),
+            Constant::Bls12_381G2Element(_) => todo!(),
+            Constant::Bls12_381MlResult(_) => todo!(),
         }
     }
 
@@ -352,6 +358,9 @@ impl Type {
                 .append(r.to_doc())
                 .append(")"),
             Type::Data => RcDoc::text("data"),
+            Type::Bls12_381G1Element => todo!(),
+            Type::Bls12_381G2Element => todo!(),
+            Type::Bls12_381MlResult => todo!(),
         }
     }
 }

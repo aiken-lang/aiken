@@ -452,7 +452,11 @@ pub fn from_default_function(
 
             Some((tipo, 2))
         }
-        DefaultFunction::Sha2_256 | DefaultFunction::Sha3_256 | DefaultFunction::Blake2b_256 => {
+        DefaultFunction::Sha2_256
+        | DefaultFunction::Sha3_256
+        | DefaultFunction::Blake2b_224
+        | DefaultFunction::Blake2b_256
+        | DefaultFunction::Keccak_256 => {
             let tipo = function(vec![byte_array()], byte_array());
 
             Some((tipo, 1))
@@ -643,6 +647,24 @@ pub fn from_default_function(
             let tipo = function(vec![a.clone(), list(a.clone())], list(a));
             Some((tipo, 2))
         }
+
+        DefaultFunction::Bls12_381_G1_Add => todo!(),
+        DefaultFunction::Bls12_381_G1_Neg => todo!(),
+        DefaultFunction::Bls12_381_G1_Scalarmul => todo!(),
+        DefaultFunction::Bls12_381_G1_Equal => todo!(),
+        DefaultFunction::Bls12_381_G1_Compress => todo!(),
+        DefaultFunction::Bls12_381_G1_Uncompress => todo!(),
+        DefaultFunction::Bls12_381_G1_Hashtogroup => todo!(),
+        DefaultFunction::Bls12_381_G2_Add => todo!(),
+        DefaultFunction::Bls12_381_G2_Neg => todo!(),
+        DefaultFunction::Bls12_381_G2_Scalarmul => todo!(),
+        DefaultFunction::Bls12_381_G2_Equal => todo!(),
+        DefaultFunction::Bls12_381_G2_Compress => todo!(),
+        DefaultFunction::Bls12_381_G2_Uncompress => todo!(),
+        DefaultFunction::Bls12_381_G2_Hashtogroup => todo!(),
+        DefaultFunction::Bls12_381_MillerLoop => todo!(),
+        DefaultFunction::Bls12_381_MulMlResult => todo!(),
+        DefaultFunction::Bls12_381_FinalVerify => todo!(),
     };
 
     info.map(|(tipo, arity)| {

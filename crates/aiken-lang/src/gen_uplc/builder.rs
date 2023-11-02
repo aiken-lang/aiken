@@ -1292,6 +1292,9 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
                 any_constructor: None,
                 fields: vec![],
             })),
+            UplcConstant::Bls12_381G1Element(_) => todo!(),
+            UplcConstant::Bls12_381G2Element(_) => todo!(),
+            UplcConstant::Bls12_381MlResult(_) => todo!(),
         };
         new_constants.push(constant);
     }
