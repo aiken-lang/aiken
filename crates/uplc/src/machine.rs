@@ -315,14 +315,11 @@ impl Machine {
     }
 
     fn eval_builtin_app(&mut self, runtime: BuiltinRuntime) -> Result<Value, Error> {
-        let cost = match self.version {
-            Language::PlutusV1 => runtime.to_ex_budget_v1(&self.costs.builtin_costs),
-            Language::PlutusV2 => runtime.to_ex_budget_v2(&self.costs.builtin_costs),
-        };
+        let cost = runtime.to_ex_budget(&self.costs.builtin_costs);
 
         self.spend_budget(cost)?;
 
-        runtime.call(&mut self.logs)
+        runtime.call(&self.version, &mut self.logs)
     }
 
     fn lookup_var(&mut self, name: &NamedDeBruijn, env: &[Value]) -> Result<Value, Error> {

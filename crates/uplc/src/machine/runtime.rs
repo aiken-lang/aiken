@@ -3,7 +3,7 @@ use std::{mem::size_of, ops::Deref, rc::Rc};
 use num_bigint::BigInt;
 use num_integer::Integer;
 use once_cell::sync::Lazy;
-use pallas_primitives::babbage::{Constr, PlutusData};
+use pallas_primitives::babbage::{Constr, Language, PlutusData};
 
 use crate::{
     ast::{Constant, Type},
@@ -38,6 +38,20 @@ const BLST_P2_COMPRESSED_SIZE: usize = 96;
 //    Deferred,
 //}
 
+pub enum BuiltinSemantics {
+    V1,
+    V2,
+}
+
+impl From<&Language> for BuiltinSemantics {
+    fn from(language: &Language) -> Self {
+        match language {
+            Language::PlutusV1 => BuiltinSemantics::V1,
+            Language::PlutusV2 => BuiltinSemantics::V1,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct BuiltinRuntime {
     pub(super) args: Vec<Value>,
@@ -70,8 +84,8 @@ impl BuiltinRuntime {
         self.forces += 1;
     }
 
-    pub fn call(&self, logs: &mut Vec<String>) -> Result<Value, Error> {
-        self.fun.call(&self.args, logs)
+    pub fn call(&self, language: &Language, logs: &mut Vec<String>) -> Result<Value, Error> {
+        self.fun.call(language.into(), &self.args, logs)
     }
 
     pub fn push(&mut self, arg: Value) -> Result<(), Error> {
@@ -82,12 +96,8 @@ impl BuiltinRuntime {
         Ok(())
     }
 
-    pub fn to_ex_budget_v2(&self, costs: &BuiltinCosts) -> ExBudget {
-        costs.to_ex_budget_v2(self.fun, &self.args)
-    }
-
-    pub fn to_ex_budget_v1(&self, costs: &BuiltinCosts) -> ExBudget {
-        costs.to_ex_budget_v1(self.fun, &self.args)
+    pub fn to_ex_budget(&self, costs: &BuiltinCosts) -> ExBudget {
+        costs.to_ex_budget(self.fun, &self.args)
     }
 }
 
@@ -419,7 +429,12 @@ impl DefaultFunction {
     // This should be safe because we've already checked
     // the types of the args as they were pushed. Although
     // the unreachables look ugly, it's the reality of the situation.
-    pub fn call(&self, args: &[Value], logs: &mut Vec<String>) -> Result<Value, Error> {
+    pub fn call(
+        &self,
+        semantics: BuiltinSemantics,
+        args: &[Value],
+        logs: &mut Vec<String>,
+    ) -> Result<Value, Error> {
         match self {
             DefaultFunction::AddInteger => {
                 let arg1 = args[0].unwrap_integer();
@@ -545,9 +560,20 @@ impl DefaultFunction {
                 let arg1 = args[0].unwrap_integer();
                 let arg2 = args[1].unwrap_byte_string();
 
-                let wrap = arg1.mod_floor(&256.into());
+                let byte: u8 = match semantics {
+                    BuiltinSemantics::V1 => {
+                        let wrap = arg1.mod_floor(&256.into());
 
-                let byte: u8 = wrap.try_into().unwrap();
+                        wrap.try_into().unwrap()
+                    }
+                    BuiltinSemantics::V2 => {
+                        if *arg1 > 255.into() {
+                            return Err(Error::ByteStringConsBiggerThanOneByte(arg1.clone()));
+                        }
+
+                        arg1.try_into().unwrap()
+                    }
+                };
 
                 let mut ret = vec![byte];
 
@@ -1261,29 +1287,7 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_G1_Uncompress => {
                 let arg1 = args[0].unwrap_byte_string();
 
-                if arg1.len() != BLST_P1_COMPRESSED_SIZE {
-                    return Err(Error::Blst(blst::BLST_ERROR::BLST_BAD_ENCODING));
-                }
-
-                let mut affine = blst::blst_p1_affine::default();
-
-                let mut out = blst::blst_p1::default();
-
-                unsafe {
-                    let err = blst::blst_p1_uncompress(&mut affine as *mut _, arg1.as_ptr());
-
-                    if err != blst::BLST_ERROR::BLST_SUCCESS {
-                        return Err(Error::Blst(err));
-                    }
-
-                    blst::blst_p1_from_affine(&mut out as *mut _, &affine);
-
-                    let in_group = blst::blst_p1_in_g1(&out);
-
-                    if !in_group {
-                        return Err(Error::Blst(blst::BLST_ERROR::BLST_POINT_NOT_IN_GROUP));
-                    }
-                };
+                let out = blst::blst_p1::uncompress(arg1)?;
 
                 let constant = Constant::Bls12_381G1Element(out.into());
 
@@ -1414,29 +1418,7 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_G2_Uncompress => {
                 let arg1 = args[0].unwrap_byte_string();
 
-                if arg1.len() != BLST_P2_COMPRESSED_SIZE {
-                    return Err(Error::Blst(blst::BLST_ERROR::BLST_BAD_ENCODING));
-                }
-
-                let mut affine = blst::blst_p2_affine::default();
-
-                let mut out = blst::blst_p2::default();
-
-                unsafe {
-                    let err = blst::blst_p2_uncompress(&mut affine as *mut _, arg1.as_ptr());
-
-                    if err != blst::BLST_ERROR::BLST_SUCCESS {
-                        return Err(Error::Blst(err));
-                    }
-
-                    blst::blst_p2_from_affine(&mut out as *mut _, &affine);
-
-                    let in_group = blst::blst_p2_in_g2(&out);
-
-                    if !in_group {
-                        return Err(Error::Blst(blst::BLST_ERROR::BLST_POINT_NOT_IN_GROUP));
-                    }
-                };
+                let out = blst::blst_p2::uncompress(arg1)?;
 
                 let constant = Constant::Bls12_381G2Element(out.into());
 
@@ -1519,6 +1501,10 @@ impl DefaultFunction {
 
 pub trait Compressable {
     fn compress(&self) -> Vec<u8>;
+
+    fn uncompress(bytes: &[u8]) -> Result<Self, Error>
+    where
+        Self: std::marker::Sized;
 }
 
 impl Compressable for blst::blst_p1 {
@@ -1531,6 +1517,34 @@ impl Compressable for blst::blst_p1 {
 
         out.to_vec()
     }
+
+    fn uncompress(bytes: &[u8]) -> Result<Self, Error> {
+        if bytes.len() != BLST_P1_COMPRESSED_SIZE {
+            return Err(Error::Blst(blst::BLST_ERROR::BLST_BAD_ENCODING));
+        }
+
+        let mut affine = blst::blst_p1_affine::default();
+
+        let mut out = blst::blst_p1::default();
+
+        unsafe {
+            let err = blst::blst_p1_uncompress(&mut affine as *mut _, bytes.as_ptr());
+
+            if err != blst::BLST_ERROR::BLST_SUCCESS {
+                return Err(Error::Blst(err));
+            }
+
+            blst::blst_p1_from_affine(&mut out as *mut _, &affine);
+
+            let in_group = blst::blst_p1_in_g1(&out);
+
+            if !in_group {
+                return Err(Error::Blst(blst::BLST_ERROR::BLST_POINT_NOT_IN_GROUP));
+            }
+        };
+
+        Ok(out)
+    }
 }
 
 impl Compressable for blst::blst_p2 {
@@ -1542,6 +1556,34 @@ impl Compressable for blst::blst_p2 {
         };
 
         out.to_vec()
+    }
+
+    fn uncompress(bytes: &[u8]) -> Result<Self, Error> {
+        if bytes.len() != BLST_P2_COMPRESSED_SIZE {
+            return Err(Error::Blst(blst::BLST_ERROR::BLST_BAD_ENCODING));
+        }
+
+        let mut affine = blst::blst_p2_affine::default();
+
+        let mut out = blst::blst_p2::default();
+
+        unsafe {
+            let err = blst::blst_p2_uncompress(&mut affine as *mut _, bytes.as_ptr());
+
+            if err != blst::BLST_ERROR::BLST_SUCCESS {
+                return Err(Error::Blst(err));
+            }
+
+            blst::blst_p2_from_affine(&mut out as *mut _, &affine);
+
+            let in_group = blst::blst_p2_in_g2(&out);
+
+            if !in_group {
+                return Err(Error::Blst(blst::BLST_ERROR::BLST_POINT_NOT_IN_GROUP));
+            }
+        };
+
+        Ok(out)
     }
 }
 

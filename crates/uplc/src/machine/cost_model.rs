@@ -228,7 +228,9 @@ pub struct BuiltinCosts {
     // Cryptography and hashes
     pub sha2_256: CostingFun<OneArgument>,
     pub sha3_256: CostingFun<OneArgument>,
+    pub blake2b_224: CostingFun<OneArgument>,
     pub blake2b_256: CostingFun<OneArgument>,
+    pub keccak_256: CostingFun<OneArgument>,
     pub verify_ed25519_signature: CostingFun<ThreeArguments>,
     pub verify_ecdsa_secp256k1_signature: CostingFun<ThreeArguments>,
     pub verify_schnorr_secp256k1_signature: CostingFun<ThreeArguments>,
@@ -270,6 +272,24 @@ pub struct BuiltinCosts {
     pub mk_nil_data: CostingFun<OneArgument>,
     pub mk_nil_pair_data: CostingFun<OneArgument>,
     pub serialise_data: CostingFun<OneArgument>,
+    // BLST
+    bls12_381_g1_add: CostingFun<TwoArguments>,
+    bls12_381_g1_neg: CostingFun<OneArgument>,
+    bls12_381_g1_scalarmul: CostingFun<TwoArguments>,
+    bls12_381_g1_equal: CostingFun<TwoArguments>,
+    bls12_381_g1_compress: CostingFun<OneArgument>,
+    bls12_381_g1_uncompress: CostingFun<OneArgument>,
+    bls12_381_g1_hashtogroup: CostingFun<TwoArguments>,
+    bls12_381_g2_add: CostingFun<TwoArguments>,
+    bls12_381_g2_neg: CostingFun<OneArgument>,
+    bls12_381_g2_scalarmul: CostingFun<TwoArguments>,
+    bls12_381_g2_equal: CostingFun<TwoArguments>,
+    bls12_381_g2_compress: CostingFun<OneArgument>,
+    bls12_381_g2_uncompress: CostingFun<OneArgument>,
+    bls12_381_g2_hashtogroup: CostingFun<TwoArguments>,
+    bls12_381_millerloop: CostingFun<TwoArguments>,
+    bls12_381_mulmlresult: CostingFun<TwoArguments>,
+    bls12_381_finalverify: CostingFun<TwoArguments>,
 }
 
 impl BuiltinCosts {
@@ -457,11 +477,31 @@ impl BuiltinCosts {
                     slope: 82523,
                 }),
             },
+            blake2b_224: CostingFun {
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: 30000000000,
+                    slope: 30000000000,
+                }),
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 30000000000,
+                    slope: 30000000000,
+                }),
+            },
             blake2b_256: CostingFun {
                 mem: OneArgument::ConstantCost(4),
                 cpu: OneArgument::LinearCost(LinearSize {
                     intercept: 117366,
                     slope: 10475,
+                }),
+            },
+            keccak_256: CostingFun {
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: 30000000000,
+                    slope: 30000000000,
+                }),
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 30000000000,
+                    slope: 30000000000,
                 }),
             },
             verify_ed25519_signature: CostingFun {
@@ -632,6 +672,74 @@ impl BuiltinCosts {
                     intercept: 30000000000,
                     slope: 30000000000,
                 }),
+            },
+            bls12_381_g1_add: CostingFun {
+                mem: TwoArguments::ConstantCost(18),
+                cpu: TwoArguments::ConstantCost(1046420),
+            },
+            bls12_381_g1_neg: CostingFun {
+                mem: todo!(),
+                cpu: todo!(),
+            },
+            bls12_381_g1_scalarmul: CostingFun {
+                mem: todo!(),
+                cpu: todo!(),
+            },
+            bls12_381_g1_equal: CostingFun {
+                mem: todo!(),
+                cpu: todo!(),
+            },
+            bls12_381_g1_compress: CostingFun {
+                mem: todo!(),
+                cpu: todo!(),
+            },
+            bls12_381_g1_uncompress: CostingFun {
+                mem: todo!(),
+                cpu: todo!(),
+            },
+            bls12_381_g1_hashtogroup: CostingFun {
+                mem: todo!(),
+                cpu: todo!(),
+            },
+            bls12_381_g2_add: CostingFun {
+                mem: todo!(),
+                cpu: todo!(),
+            },
+            bls12_381_g2_neg: CostingFun {
+                mem: todo!(),
+                cpu: todo!(),
+            },
+            bls12_381_g2_scalarmul: CostingFun {
+                mem: todo!(),
+                cpu: todo!(),
+            },
+            bls12_381_g2_equal: CostingFun {
+                mem: todo!(),
+                cpu: todo!(),
+            },
+            bls12_381_g2_compress: CostingFun {
+                mem: todo!(),
+                cpu: todo!(),
+            },
+            bls12_381_g2_uncompress: CostingFun {
+                mem: todo!(),
+                cpu: todo!(),
+            },
+            bls12_381_g2_hashtogroup: CostingFun {
+                mem: todo!(),
+                cpu: todo!(),
+            },
+            bls12_381_millerloop: CostingFun {
+                mem: todo!(),
+                cpu: todo!(),
+            },
+            bls12_381_mulmlresult: CostingFun {
+                mem: todo!(),
+                cpu: todo!(),
+            },
+            bls12_381_finalverify: CostingFun {
+                mem: todo!(),
+                cpu: todo!(),
             },
         }
     }
@@ -999,12 +1107,31 @@ impl Default for BuiltinCosts {
                     slope: 392670,
                 }),
             },
+            blake2b_224: todo!(),
+            keccak_256: todo!(),
+            bls12_381_g1_add: todo!(),
+            bls12_381_g1_neg: todo!(),
+            bls12_381_g1_scalarmul: todo!(),
+            bls12_381_g1_equal: todo!(),
+            bls12_381_g1_compress: todo!(),
+            bls12_381_g1_uncompress: todo!(),
+            bls12_381_g1_hashtogroup: todo!(),
+            bls12_381_g2_add: todo!(),
+            bls12_381_g2_neg: todo!(),
+            bls12_381_g2_scalarmul: todo!(),
+            bls12_381_g2_equal: todo!(),
+            bls12_381_g2_compress: todo!(),
+            bls12_381_g2_uncompress: todo!(),
+            bls12_381_g2_hashtogroup: todo!(),
+            bls12_381_millerloop: todo!(),
+            bls12_381_mulmlresult: todo!(),
+            bls12_381_finalverify: todo!(),
         }
     }
 }
 
 impl BuiltinCosts {
-    pub fn to_ex_budget_v2(&self, fun: DefaultFunction, args: &[Value]) -> ExBudget {
+    pub fn to_ex_budget(&self, fun: DefaultFunction, args: &[Value]) -> ExBudget {
         match fun {
             DefaultFunction::AddInteger => ExBudget {
                 mem: self
@@ -1410,427 +1537,6 @@ impl BuiltinCosts {
                 mem: self.serialise_data.mem.cost(args[0].to_ex_mem()),
                 cpu: self.serialise_data.cpu.cost(args[0].to_ex_mem()),
             },
-            DefaultFunction::MkPairData => ExBudget {
-                mem: self
-                    .mk_pair_data
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .mk_pair_data
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::MkNilData => ExBudget {
-                mem: self.mk_nil_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.mk_nil_data.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::MkNilPairData => ExBudget {
-                mem: self.mk_nil_pair_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.mk_nil_pair_data.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::Keccak_256 => todo!(),
-            DefaultFunction::Blake2b_224 => todo!(),
-            DefaultFunction::Bls12_381_G1_Add => todo!(),
-            DefaultFunction::Bls12_381_G1_Neg => todo!(),
-            DefaultFunction::Bls12_381_G1_Scalarmul => todo!(),
-            DefaultFunction::Bls12_381_G1_Equal => todo!(),
-            DefaultFunction::Bls12_381_G1_Compress => todo!(),
-            DefaultFunction::Bls12_381_G1_Uncompress => todo!(),
-            DefaultFunction::Bls12_381_G1_Hashtogroup => todo!(),
-            DefaultFunction::Bls12_381_G2_Add => todo!(),
-            DefaultFunction::Bls12_381_G2_Neg => todo!(),
-            DefaultFunction::Bls12_381_G2_Scalarmul => todo!(),
-            DefaultFunction::Bls12_381_G2_Equal => todo!(),
-            DefaultFunction::Bls12_381_G2_Compress => todo!(),
-            DefaultFunction::Bls12_381_G2_Uncompress => todo!(),
-            DefaultFunction::Bls12_381_G2_Hashtogroup => todo!(),
-            DefaultFunction::Bls12_381_MillerLoop => todo!(),
-            DefaultFunction::Bls12_381_MulMlResult => todo!(),
-            DefaultFunction::Bls12_381_FinalVerify => todo!(),
-        }
-    }
-
-    pub fn to_ex_budget_v1(&self, fun: DefaultFunction, args: &[Value]) -> ExBudget {
-        match fun {
-            DefaultFunction::AddInteger => ExBudget {
-                mem: self
-                    .add_integer
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .add_integer
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::SubtractInteger => ExBudget {
-                mem: self
-                    .subtract_integer
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .subtract_integer
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::MultiplyInteger => ExBudget {
-                mem: self
-                    .multiply_integer
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .multiply_integer
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::DivideInteger => ExBudget {
-                mem: self
-                    .divide_integer
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .divide_integer
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::QuotientInteger => ExBudget {
-                mem: self
-                    .quotient_integer
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .quotient_integer
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::RemainderInteger => ExBudget {
-                mem: self
-                    .remainder_integer
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .remainder_integer
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::ModInteger => ExBudget {
-                mem: self
-                    .mod_integer
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .mod_integer
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::EqualsInteger => ExBudget {
-                mem: self
-                    .equals_integer
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .equals_integer
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::LessThanInteger => ExBudget {
-                mem: self
-                    .less_than_integer
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .less_than_integer
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::LessThanEqualsInteger => ExBudget {
-                mem: self
-                    .less_than_equals_integer
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .less_than_equals_integer
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::AppendByteString => ExBudget {
-                mem: self
-                    .append_byte_string
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .append_byte_string
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::ConsByteString => ExBudget {
-                mem: self
-                    .cons_byte_string
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .cons_byte_string
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::SliceByteString => ExBudget {
-                mem: self.slice_byte_string.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                ),
-                cpu: self.slice_byte_string.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                ),
-            },
-            DefaultFunction::LengthOfByteString => ExBudget {
-                mem: self.length_of_byte_string.mem.cost(args[0].to_ex_mem()),
-                cpu: self.length_of_byte_string.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::IndexByteString => ExBudget {
-                mem: self
-                    .index_byte_string
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .index_byte_string
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::EqualsByteString => ExBudget {
-                mem: self
-                    .equals_byte_string
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .equals_byte_string
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::LessThanByteString => ExBudget {
-                mem: self
-                    .less_than_byte_string
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .less_than_byte_string
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::LessThanEqualsByteString => ExBudget {
-                mem: self
-                    .less_than_equals_byte_string
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .less_than_equals_byte_string
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::Sha2_256 => ExBudget {
-                mem: self.sha2_256.mem.cost(args[0].to_ex_mem()),
-                cpu: self.sha2_256.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::Sha3_256 => ExBudget {
-                mem: self.sha3_256.mem.cost(args[0].to_ex_mem()),
-                cpu: self.sha3_256.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::Blake2b_256 => ExBudget {
-                mem: self.blake2b_256.mem.cost(args[0].to_ex_mem()),
-                cpu: self.blake2b_256.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::VerifyEd25519Signature => ExBudget {
-                mem: self.verify_ed25519_signature.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                ),
-                cpu: self.verify_ed25519_signature.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                ),
-            },
-            DefaultFunction::VerifyEcdsaSecp256k1Signature => unreachable!(),
-            DefaultFunction::VerifySchnorrSecp256k1Signature => unreachable!(),
-            DefaultFunction::AppendString => ExBudget {
-                mem: self
-                    .append_string
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .append_string
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::EqualsString => ExBudget {
-                mem: self
-                    .equals_string
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .equals_string
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::EncodeUtf8 => ExBudget {
-                mem: self.encode_utf8.mem.cost(args[0].to_ex_mem()),
-                cpu: self.encode_utf8.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::DecodeUtf8 => ExBudget {
-                mem: self.decode_utf8.mem.cost(args[0].to_ex_mem()),
-                cpu: self.decode_utf8.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::IfThenElse => ExBudget {
-                mem: self.if_then_else.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                ),
-                cpu: self.if_then_else.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                ),
-            },
-            DefaultFunction::ChooseUnit => ExBudget {
-                mem: self
-                    .choose_unit
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .choose_unit
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::Trace => ExBudget {
-                mem: self
-                    .trace
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .trace
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::FstPair => ExBudget {
-                mem: self.fst_pair.mem.cost(args[0].to_ex_mem()),
-                cpu: self.fst_pair.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::SndPair => ExBudget {
-                mem: self.snd_pair.mem.cost(args[0].to_ex_mem()),
-                cpu: self.snd_pair.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::ChooseList => ExBudget {
-                mem: self.choose_list.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                ),
-                cpu: self.choose_list.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                ),
-            },
-            DefaultFunction::MkCons => ExBudget {
-                mem: self
-                    .mk_cons
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .mk_cons
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::HeadList => ExBudget {
-                mem: self.head_list.mem.cost(args[0].to_ex_mem()),
-                cpu: self.head_list.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::TailList => ExBudget {
-                mem: self.tail_list.mem.cost(args[0].to_ex_mem()),
-                cpu: self.tail_list.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::NullList => ExBudget {
-                mem: self.null_list.mem.cost(args[0].to_ex_mem()),
-                cpu: self.null_list.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::ChooseData => ExBudget {
-                mem: self.choose_data.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                    args[3].to_ex_mem(),
-                    args[4].to_ex_mem(),
-                    args[5].to_ex_mem(),
-                ),
-                cpu: self.choose_data.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                    args[3].to_ex_mem(),
-                    args[4].to_ex_mem(),
-                    args[5].to_ex_mem(),
-                ),
-            },
-            DefaultFunction::ConstrData => ExBudget {
-                mem: self
-                    .constr_data
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .constr_data
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::MapData => ExBudget {
-                mem: self.map_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.map_data.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::ListData => ExBudget {
-                mem: self.list_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.list_data.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::IData => ExBudget {
-                mem: self.i_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.i_data.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::BData => ExBudget {
-                mem: self.b_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.b_data.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::UnConstrData => ExBudget {
-                mem: self.un_constr_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_constr_data.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::UnMapData => ExBudget {
-                mem: self.un_map_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_map_data.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::UnListData => ExBudget {
-                mem: self.un_list_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_list_data.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::UnIData => ExBudget {
-                mem: self.un_i_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_i_data.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::UnBData => ExBudget {
-                mem: self.un_b_data.mem.cost(args[0].to_ex_mem()),
-                cpu: self.un_b_data.cpu.cost(args[0].to_ex_mem()),
-            },
-            DefaultFunction::EqualsData => ExBudget {
-                mem: self
-                    .equals_data
-                    .mem
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-                cpu: self
-                    .equals_data
-                    .cpu
-                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
-            },
-            DefaultFunction::SerialiseData => unreachable!(),
             DefaultFunction::MkPairData => ExBudget {
                 mem: self
                     .mk_pair_data
@@ -3105,6 +2811,25 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                         .unwrap_or(&30000000000),
                 }),
             },
+            blake2b_224: todo!(),
+            keccak_256: todo!(),
+            bls12_381_g1_add: todo!(),
+            bls12_381_g1_neg: todo!(),
+            bls12_381_g1_scalarmul: todo!(),
+            bls12_381_g1_equal: todo!(),
+            bls12_381_g1_compress: todo!(),
+            bls12_381_g1_uncompress: todo!(),
+            bls12_381_g1_hashtogroup: todo!(),
+            bls12_381_g2_add: todo!(),
+            bls12_381_g2_neg: todo!(),
+            bls12_381_g2_scalarmul: todo!(),
+            bls12_381_g2_equal: todo!(),
+            bls12_381_g2_compress: todo!(),
+            bls12_381_g2_uncompress: todo!(),
+            bls12_381_g2_hashtogroup: todo!(),
+            bls12_381_millerloop: todo!(),
+            bls12_381_mulmlresult: todo!(),
+            bls12_381_finalverify: todo!(),
         },
     }
 }
