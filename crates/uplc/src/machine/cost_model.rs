@@ -1107,25 +1107,100 @@ impl Default for BuiltinCosts {
                     slope: 392670,
                 }),
             },
-            blake2b_224: todo!(),
-            keccak_256: todo!(),
-            bls12_381_g1_add: todo!(),
-            bls12_381_g1_neg: todo!(),
-            bls12_381_g1_scalarmul: todo!(),
-            bls12_381_g1_equal: todo!(),
-            bls12_381_g1_compress: todo!(),
-            bls12_381_g1_uncompress: todo!(),
-            bls12_381_g1_hashtogroup: todo!(),
-            bls12_381_g2_add: todo!(),
-            bls12_381_g2_neg: todo!(),
-            bls12_381_g2_scalarmul: todo!(),
-            bls12_381_g2_equal: todo!(),
-            bls12_381_g2_compress: todo!(),
-            bls12_381_g2_uncompress: todo!(),
-            bls12_381_g2_hashtogroup: todo!(),
-            bls12_381_millerloop: todo!(),
-            bls12_381_mulmlresult: todo!(),
-            bls12_381_finalverify: todo!(),
+            blake2b_224: CostingFun {
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 117_366,
+                    slope: 10_475,
+                }),
+                mem: OneArgument::ConstantCost(4),
+            },
+            keccak_256: CostingFun {
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 1_927_926,
+                    slope: 82_523,
+                }),
+                mem: OneArgument::ConstantCost(4),
+            },
+            bls12_381_g1_add: CostingFun {
+                cpu: TwoArguments::ConstantCost(1_046_420),
+                mem: TwoArguments::ConstantCost(18),
+            },
+            bls12_381_g1_neg: CostingFun {
+                cpu: OneArgument::ConstantCost(292_890),
+                mem: OneArgument::ConstantCost(18),
+            },
+            bls12_381_g1_scalarmul: CostingFun {
+                mem: TwoArguments::LinearInX(LinearSize {
+                    intercept: 94_607_019,
+                    slope: 87_060,
+                }),
+                cpu: TwoArguments::ConstantCost(18),
+            },
+            bls12_381_g1_equal: CostingFun {
+                cpu: TwoArguments::ConstantCost(545_063),
+                mem: TwoArguments::ConstantCost(1),
+            },
+            bls12_381_g1_compress: CostingFun {
+                cpu: OneArgument::ConstantCost(3_387_741),
+                mem: OneArgument::ConstantCost(1),
+            },
+            bls12_381_g1_uncompress: CostingFun {
+                cpu: OneArgument::ConstantCost(16_598_737),
+                mem: OneArgument::ConstantCost(18),
+            },
+            bls12_381_g1_hashtogroup: CostingFun {
+                mem: TwoArguments::LinearInX(LinearSize {
+                    intercept: 66_311_195,
+                    slope: 23_097,
+                }),
+                cpu: TwoArguments::ConstantCost(18),
+            },
+            bls12_381_g2_add: CostingFun {
+                cpu: TwoArguments::ConstantCost(2_359_410),
+                mem: TwoArguments::ConstantCost(36),
+            },
+            bls12_381_g2_neg: CostingFun {
+                cpu: OneArgument::ConstantCost(307_813),
+                mem: OneArgument::ConstantCost(36),
+            },
+            bls12_381_g2_scalarmul: CostingFun {
+                mem: TwoArguments::LinearInX(LinearSize {
+                    intercept: 190_191_402,
+                    slope: 85_902,
+                }),
+                cpu: TwoArguments::ConstantCost(36),
+            },
+            bls12_381_g2_equal: CostingFun {
+                cpu: TwoArguments::ConstantCost(1_102_635),
+                mem: TwoArguments::ConstantCost(1),
+            },
+            bls12_381_g2_compress: CostingFun {
+                cpu: OneArgument::ConstantCost(3_973_992),
+                mem: OneArgument::ConstantCost(12),
+            },
+            bls12_381_g2_uncompress: CostingFun {
+                cpu: OneArgument::ConstantCost(33_191_512),
+                mem: OneArgument::ConstantCost(36),
+            },
+            bls12_381_g2_hashtogroup: CostingFun {
+                mem: TwoArguments::LinearInX(LinearSize {
+                    intercept: 66_311_195,
+                    slope: 23_097,
+                }),
+                cpu: TwoArguments::ConstantCost(18),
+            },
+            bls12_381_millerloop: CostingFun {
+                cpu: TwoArguments::ConstantCost(402_099_373),
+                mem: TwoArguments::ConstantCost(72),
+            },
+            bls12_381_mulmlresult: CostingFun {
+                cpu: TwoArguments::ConstantCost(2_544_991),
+                mem: TwoArguments::ConstantCost(72),
+            },
+            bls12_381_finalverify: CostingFun {
+                cpu: TwoArguments::ConstantCost(388_656_972),
+                mem: TwoArguments::ConstantCost(1),
+            },
         }
     }
 }
