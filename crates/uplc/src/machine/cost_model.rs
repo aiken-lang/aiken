@@ -673,73 +673,86 @@ impl BuiltinCosts {
                     slope: 30000000000,
                 }),
             },
+
             bls12_381_g1_add: CostingFun {
-                mem: TwoArguments::ConstantCost(18),
-                cpu: TwoArguments::ConstantCost(1046420),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_g1_neg: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g1_scalarmul: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: TwoArguments::LinearInX(LinearSize {
+                    intercept: 30000000000,
+                    slope: 30000000000,
+                }),
+                cpu: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_g1_equal: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_g1_compress: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g1_uncompress: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g1_hashtogroup: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: TwoArguments::LinearInX(LinearSize {
+                    intercept: 30000000000,
+                    slope: 30000000000,
+                }),
+                cpu: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_g2_add: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_g2_neg: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g2_scalarmul: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: TwoArguments::LinearInX(LinearSize {
+                    intercept: 30000000000,
+                    slope: 30000000000,
+                }),
+                cpu: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_g2_equal: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_g2_compress: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g2_uncompress: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g2_hashtogroup: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                mem: TwoArguments::LinearInX(LinearSize {
+                    intercept: 30000000000,
+                    slope: 30000000000,
+                }),
+                cpu: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_millerloop: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_mulmlresult: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_finalverify: CostingFun {
-                mem: todo!(),
-                cpu: todo!(),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
         }
     }
@@ -1130,11 +1143,11 @@ impl Default for BuiltinCosts {
                 mem: OneArgument::ConstantCost(18),
             },
             bls12_381_g1_scalarmul: CostingFun {
-                mem: TwoArguments::LinearInX(LinearSize {
+                cpu: TwoArguments::LinearInX(LinearSize {
                     intercept: 94_607_019,
                     slope: 87_060,
                 }),
-                cpu: TwoArguments::ConstantCost(18),
+                mem: TwoArguments::ConstantCost(18),
             },
             bls12_381_g1_equal: CostingFun {
                 cpu: TwoArguments::ConstantCost(545_063),
@@ -1149,11 +1162,11 @@ impl Default for BuiltinCosts {
                 mem: OneArgument::ConstantCost(18),
             },
             bls12_381_g1_hashtogroup: CostingFun {
-                mem: TwoArguments::LinearInX(LinearSize {
+                cpu: TwoArguments::LinearInX(LinearSize {
                     intercept: 66_311_195,
                     slope: 23_097,
                 }),
-                cpu: TwoArguments::ConstantCost(18),
+                mem: TwoArguments::ConstantCost(18),
             },
             bls12_381_g2_add: CostingFun {
                 cpu: TwoArguments::ConstantCost(2_359_410),
@@ -1164,11 +1177,11 @@ impl Default for BuiltinCosts {
                 mem: OneArgument::ConstantCost(36),
             },
             bls12_381_g2_scalarmul: CostingFun {
-                mem: TwoArguments::LinearInX(LinearSize {
+                cpu: TwoArguments::LinearInX(LinearSize {
                     intercept: 190_191_402,
                     slope: 85_902,
                 }),
-                cpu: TwoArguments::ConstantCost(36),
+                mem: TwoArguments::ConstantCost(36),
             },
             bls12_381_g2_equal: CostingFun {
                 cpu: TwoArguments::ConstantCost(1_102_635),
@@ -1183,11 +1196,11 @@ impl Default for BuiltinCosts {
                 mem: OneArgument::ConstantCost(36),
             },
             bls12_381_g2_hashtogroup: CostingFun {
-                mem: TwoArguments::LinearInX(LinearSize {
+                cpu: TwoArguments::LinearInX(LinearSize {
                     intercept: 66_311_195,
                     slope: 23_097,
                 }),
-                cpu: TwoArguments::ConstantCost(18),
+                mem: TwoArguments::ConstantCost(18),
             },
             bls12_381_millerloop: CostingFun {
                 cpu: TwoArguments::ConstantCost(402_099_373),
@@ -1630,25 +1643,148 @@ impl BuiltinCosts {
                 mem: self.mk_nil_pair_data.mem.cost(args[0].to_ex_mem()),
                 cpu: self.mk_nil_pair_data.cpu.cost(args[0].to_ex_mem()),
             },
-            DefaultFunction::Keccak_256 => todo!(),
-            DefaultFunction::Blake2b_224 => todo!(),
-            DefaultFunction::Bls12_381_G1_Add => todo!(),
-            DefaultFunction::Bls12_381_G1_Neg => todo!(),
-            DefaultFunction::Bls12_381_G1_Scalarmul => todo!(),
-            DefaultFunction::Bls12_381_G1_Equal => todo!(),
-            DefaultFunction::Bls12_381_G1_Compress => todo!(),
-            DefaultFunction::Bls12_381_G1_Uncompress => todo!(),
-            DefaultFunction::Bls12_381_G1_Hashtogroup => todo!(),
-            DefaultFunction::Bls12_381_G2_Add => todo!(),
-            DefaultFunction::Bls12_381_G2_Neg => todo!(),
-            DefaultFunction::Bls12_381_G2_Scalarmul => todo!(),
-            DefaultFunction::Bls12_381_G2_Equal => todo!(),
-            DefaultFunction::Bls12_381_G2_Compress => todo!(),
-            DefaultFunction::Bls12_381_G2_Uncompress => todo!(),
-            DefaultFunction::Bls12_381_G2_Hashtogroup => todo!(),
-            DefaultFunction::Bls12_381_MillerLoop => todo!(),
-            DefaultFunction::Bls12_381_MulMlResult => todo!(),
-            DefaultFunction::Bls12_381_FinalVerify => todo!(),
+            DefaultFunction::Keccak_256 => ExBudget {
+                mem: self.keccak_256.mem.cost(args[0].to_ex_mem()),
+                cpu: self.keccak_256.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::Blake2b_224 => ExBudget {
+                mem: self.blake2b_224.mem.cost(args[0].to_ex_mem()),
+                cpu: self.blake2b_224.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_G1_Add => ExBudget {
+                mem: self
+                    .bls12_381_g1_add
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .bls12_381_g1_add
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_G1_Neg => ExBudget {
+                mem: self.bls12_381_g1_neg.mem.cost(args[0].to_ex_mem()),
+                cpu: self.bls12_381_g1_neg.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_G1_Scalarmul => ExBudget {
+                mem: self
+                    .bls12_381_g1_scalarmul
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .bls12_381_g1_scalarmul
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_G1_Equal => ExBudget {
+                mem: self
+                    .bls12_381_g1_equal
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .bls12_381_g1_equal
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_G1_Compress => ExBudget {
+                mem: self.bls12_381_g1_compress.mem.cost(args[0].to_ex_mem()),
+                cpu: self.bls12_381_g1_compress.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_G1_Uncompress => ExBudget {
+                mem: self.bls12_381_g1_uncompress.mem.cost(args[0].to_ex_mem()),
+                cpu: self.bls12_381_g1_uncompress.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_G1_Hashtogroup => ExBudget {
+                mem: self
+                    .bls12_381_g1_hashtogroup
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .bls12_381_g1_hashtogroup
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_G2_Add => ExBudget {
+                mem: self
+                    .bls12_381_g2_add
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .bls12_381_g2_add
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_G2_Neg => ExBudget {
+                mem: self.bls12_381_g2_neg.mem.cost(args[0].to_ex_mem()),
+                cpu: self.bls12_381_g2_neg.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_G2_Scalarmul => ExBudget {
+                mem: self
+                    .bls12_381_g2_scalarmul
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .bls12_381_g2_scalarmul
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_G2_Equal => ExBudget {
+                mem: self
+                    .bls12_381_g2_equal
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .bls12_381_g2_equal
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_G2_Compress => ExBudget {
+                mem: self.bls12_381_g2_compress.mem.cost(args[0].to_ex_mem()),
+                cpu: self.bls12_381_g2_compress.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_G2_Uncompress => ExBudget {
+                mem: self.bls12_381_g2_uncompress.mem.cost(args[0].to_ex_mem()),
+                cpu: self.bls12_381_g2_uncompress.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_G2_Hashtogroup => ExBudget {
+                mem: self
+                    .bls12_381_g2_hashtogroup
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .bls12_381_g2_hashtogroup
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_MillerLoop => ExBudget {
+                mem: self
+                    .bls12_381_millerloop
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .bls12_381_millerloop
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_MulMlResult => ExBudget {
+                mem: self
+                    .bls12_381_mulmlresult
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .bls12_381_mulmlresult
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::Bls12_381_FinalVerify => ExBudget {
+                mem: self
+                    .bls12_381_finalverify
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .bls12_381_finalverify
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
         }
     }
 }
@@ -2886,25 +3022,253 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                         .unwrap_or(&30000000000),
                 }),
             },
-            blake2b_224: todo!(),
-            keccak_256: todo!(),
-            bls12_381_g1_add: todo!(),
-            bls12_381_g1_neg: todo!(),
-            bls12_381_g1_scalarmul: todo!(),
-            bls12_381_g1_equal: todo!(),
-            bls12_381_g1_compress: todo!(),
-            bls12_381_g1_uncompress: todo!(),
-            bls12_381_g1_hashtogroup: todo!(),
-            bls12_381_g2_add: todo!(),
-            bls12_381_g2_neg: todo!(),
-            bls12_381_g2_scalarmul: todo!(),
-            bls12_381_g2_equal: todo!(),
-            bls12_381_g2_compress: todo!(),
-            bls12_381_g2_uncompress: todo!(),
-            bls12_381_g2_hashtogroup: todo!(),
-            bls12_381_millerloop: todo!(),
-            bls12_381_mulmlresult: todo!(),
-            bls12_381_finalverify: todo!(),
+            blake2b_224: CostingFun {
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: *cost_map
+                        .get("blake2b_224-cpu-arguments-intercept")
+                        .unwrap_or(&30000000000),
+                    slope: *cost_map
+                        .get("blake2b_224-cpu-arguments-slope")
+                        .unwrap_or(&30000000000),
+                }),
+                mem: OneArgument::ConstantCost(
+                    *cost_map
+                        .get("blake2b_224-mem-arguments-slope")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+            keccak_256: CostingFun {
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: *cost_map
+                        .get("keccak_256-cpu-arguments-intercept")
+                        .unwrap_or(&30000000000),
+                    slope: *cost_map
+                        .get("keccak_256-cpu-arguments-slope")
+                        .unwrap_or(&30000000000),
+                }),
+                mem: OneArgument::ConstantCost(
+                    *cost_map
+                        .get("keccak_256-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+            bls12_381_g1_add: CostingFun {
+                cpu: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g1_add-cpu-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+                mem: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g1_add-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+            bls12_381_g1_neg: CostingFun {
+                cpu: OneArgument::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g1_neg-cpu-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+                mem: OneArgument::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g1_neg-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+            bls12_381_g1_scalarmul: CostingFun {
+                cpu: TwoArguments::LinearInX(LinearSize {
+                    intercept: *cost_map
+                        .get("bls12_381_g1_scalarmul-cpu-arguments-intercept")
+                        .unwrap_or(&30000000000),
+                    slope: *cost_map
+                        .get("bls12_381_g1_scalarmul-cpu-arguments-slope")
+                        .unwrap_or(&30000000000),
+                }),
+                mem: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g1_scalarmul-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+            bls12_381_g1_equal: CostingFun {
+                cpu: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g1_equal-cpu-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+                mem: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g1_equal-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+            bls12_381_g1_compress: CostingFun {
+                cpu: OneArgument::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g1_compress-cpu-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+                mem: OneArgument::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g1_compress-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+            bls12_381_g1_uncompress: CostingFun {
+                cpu: OneArgument::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g1_uncompress-cpu-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+                mem: OneArgument::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g1_uncompress-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+            bls12_381_g1_hashtogroup: CostingFun {
+                cpu: TwoArguments::LinearInX(LinearSize {
+                    intercept: *cost_map
+                        .get("bls12_381_g1_hashtogroup-cpu-arguments-intercept")
+                        .unwrap_or(&30000000000),
+                    slope: *cost_map
+                        .get("bls12_381_g1_hashtogroup-cpu-arguments-slope")
+                        .unwrap_or(&30000000000),
+                }),
+                mem: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g1_hashtogroup-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+            bls12_381_g2_add: CostingFun {
+                cpu: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g2_add-cpu-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+                mem: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g2_add-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+            bls12_381_g2_neg: CostingFun {
+                cpu: OneArgument::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g2_neg-cpu-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+                mem: OneArgument::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g2_neg-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+            bls12_381_g2_scalarmul: CostingFun {
+                cpu: TwoArguments::LinearInX(LinearSize {
+                    intercept: *cost_map
+                        .get("bls12_381_g2_scalarmul-cpu-arguments-intercept")
+                        .unwrap_or(&30000000000),
+                    slope: *cost_map
+                        .get("bls12_381_g2_scalarmul-cpu-arguments-slope")
+                        .unwrap_or(&30000000000),
+                }),
+                mem: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g2_scalarmul-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+            bls12_381_g2_equal: CostingFun {
+                cpu: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g2_equal-cpu-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+                mem: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g2_equal-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+            bls12_381_g2_compress: CostingFun {
+                cpu: OneArgument::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g2_compress-cpu-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+                mem: OneArgument::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g2_compress-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+            bls12_381_g2_uncompress: CostingFun {
+                cpu: OneArgument::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g2_uncompress-cpu-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+                mem: OneArgument::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g2_uncompress-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+            bls12_381_g2_hashtogroup: CostingFun {
+                cpu: TwoArguments::LinearInX(LinearSize {
+                    intercept: *cost_map
+                        .get("bls12_381_g2_hashtogroup-cpu-arguments-intercept")
+                        .unwrap_or(&30000000000),
+                    slope: *cost_map
+                        .get("bls12_381_g2_hashtogroup-cpu-arguments-slope")
+                        .unwrap_or(&30000000000),
+                }),
+                mem: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_g2_hashtogroup-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+
+            bls12_381_millerloop: CostingFun {
+                cpu: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_millerloop-cpu-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+                mem: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_millerloop-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+            bls12_381_mulmlresult: CostingFun {
+                cpu: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_mulmlresult-cpu-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+                mem: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_mulmlresult-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
+            bls12_381_finalverify: CostingFun {
+                cpu: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_finalverify-cpu-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+                mem: TwoArguments::ConstantCost(
+                    *cost_map
+                        .get("bls12_381_finalverify-mem-arguments")
+                        .unwrap_or(&30000000000),
+                ),
+            },
         },
     }
 }
