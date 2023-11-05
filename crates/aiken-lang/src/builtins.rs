@@ -19,7 +19,9 @@ pub const INT: &str = "Int";
 pub const DATA: &str = "Data";
 pub const LIST: &str = "List";
 pub const VOID: &str = "Void";
-pub const RESULT: &str = "Result";
+pub const G1_ELEMENT: &str = "G1Element";
+pub const G2_ELEMENT: &str = "G2Element";
+pub const MILLER_LOOP_RESULT: &str = "MillerLoopResult";
 pub const STRING: &str = "String";
 pub const OPTION: &str = "Option";
 pub const ORDERING: &str = "Ordering";
@@ -116,6 +118,42 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
             location: Span::empty(),
             parameters: vec![],
             tipo: bool(),
+            module: "".to_string(),
+            public: true,
+        },
+    );
+
+    // G1Element
+    prelude.types.insert(
+        G1_ELEMENT.to_string(),
+        TypeConstructor {
+            parameters: vec![],
+            tipo: int(),
+            location: Span::empty(),
+            module: "".to_string(),
+            public: true,
+        },
+    );
+
+    // G2Element
+    prelude.types.insert(
+        G2_ELEMENT.to_string(),
+        TypeConstructor {
+            parameters: vec![],
+            tipo: int(),
+            location: Span::empty(),
+            module: "".to_string(),
+            public: true,
+        },
+    );
+
+    // MillerLoopResult
+    prelude.types.insert(
+        MILLER_LOOP_RESULT.to_string(),
+        TypeConstructor {
+            parameters: vec![],
+            tipo: int(),
+            location: Span::empty(),
             module: "".to_string(),
             public: true,
         },
@@ -1057,6 +1095,33 @@ pub fn byte_array() -> Rc<Type> {
     })
 }
 
+pub fn g1_element() -> Rc<Type> {
+    Rc::new(Type::App {
+        public: true,
+        module: "".to_string(),
+        name: G1_ELEMENT.to_string(),
+        args: vec![],
+    })
+}
+
+pub fn g2_element() -> Rc<Type> {
+    Rc::new(Type::App {
+        public: true,
+        module: "".to_string(),
+        name: G2_ELEMENT.to_string(),
+        args: vec![],
+    })
+}
+
+pub fn miller_loop_result() -> Rc<Type> {
+    Rc::new(Type::App {
+        public: true,
+        module: "".to_string(),
+        name: MILLER_LOOP_RESULT.to_string(),
+        args: vec![],
+    })
+}
+
 pub fn tuple(elems: Vec<Rc<Type>>) -> Rc<Type> {
     Rc::new(Type::Tuple { elems })
 }
@@ -1094,15 +1159,6 @@ pub fn void() -> Rc<Type> {
         public: true,
         name: VOID.to_string(),
         module: "".to_string(),
-    })
-}
-
-pub fn result(a: Rc<Type>, e: Rc<Type>) -> Rc<Type> {
-    Rc::new(Type::App {
-        public: true,
-        name: RESULT.to_string(),
-        module: "".to_string(),
-        args: vec![a, e],
     })
 }
 
