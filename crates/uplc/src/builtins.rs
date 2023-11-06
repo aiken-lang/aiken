@@ -160,6 +160,7 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::Sha3_256 as u8 => Ok(DefaultFunction::Sha3_256),
             v if v == DefaultFunction::Blake2b_256 as u8 => Ok(DefaultFunction::Blake2b_256),
             v if v == DefaultFunction::Blake2b_224 as u8 => Ok(DefaultFunction::Blake2b_224),
+            v if v == DefaultFunction::Keccak_256 as u8 => Ok(DefaultFunction::Keccak_256),
             v if v == DefaultFunction::VerifyEd25519Signature as u8 => {
                 Ok(DefaultFunction::VerifyEd25519Signature)
             }
