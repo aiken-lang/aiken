@@ -1,0 +1,69 @@
+---
+source: crates/aiken-project/src/blueprint/validator.rs
+description: "Code:\n\ntype Either<left, right> {\n    Left(left)\n    Right(right)\n}\n\ntype Interval<a> {\n    Finite(a)\n    Infinite\n}\n\nvalidator {\n  fn generics(redeemer: Either<ByteArray, Interval<Int>>, ctx: Void) {\n    True\n  }\n}\n"
+---
+{
+  "title": "test_module.generics",
+  "redeemer": {
+    "title": "redeemer",
+    "schema": {
+      "$ref": "#/definitions/test_module~1Either$ByteArray_test_module~1Interval$Int"
+    }
+  },
+  "compiledCode": "59016f0100003232323232323232323232223253330084a22930a99804a4811856616c696461746f722072657475726e65642066616c736500136563253330083370e900000089919299980718080010a4c2a6601600e2c6eb8c038004c01800c54ccc020cdc3a400400226464a66601c60200042649319299980599b87480000044c8c94ccc044c04c008526153300e00a16375a602200260120042a66601666e1d20020011533300f3009002149854cc0312411d4578706563746564206e6f206669656c647320666f7220436f6e7374720016153300c007163009001153300b00716300e00130060031533009004163006002490128436f6e73747220696e646578206469646e2774206d61746368206120747970652076617269616e74004901334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e20657870656374656400230063754002460086ea80055cd2b9c5573aaae7955cfaba157441",
+  "hash": "6b2032fcc8875dfe34dc93e4c9709188e60734ad668a31866ff14487",
+  "definitions": {
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "test_module/Either$ByteArray_test_module/Interval$Int": {
+      "title": "Either",
+      "anyOf": [
+        {
+          "title": "Left",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        },
+        {
+          "title": "Right",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "$ref": "#/definitions/test_module~1Interval$Int"
+            }
+          ]
+        }
+      ]
+    },
+    "test_module/Interval$Int": {
+      "title": "Interval",
+      "anyOf": [
+        {
+          "title": "Finite",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        },
+        {
+          "title": "Infinite",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    }
+  }
+}

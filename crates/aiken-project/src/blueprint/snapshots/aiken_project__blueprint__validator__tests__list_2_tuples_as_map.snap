@@ -1,0 +1,48 @@
+---
+source: crates/aiken-project/src/blueprint/validator.rs
+description: "Code:\n\ntype Dict<key, value> {\n    inner: List<(ByteArray, value)>\n}\n\ntype UUID { UUID }\n\nvalidator {\n  fn list_2_tuples_as_map(redeemer: Dict<UUID, Int>, ctx: Void) {\n    True\n  }\n}\n"
+---
+{
+  "title": "test_module.list_2_tuples_as_map",
+  "redeemer": {
+    "title": "redeemer",
+    "schema": {
+      "$ref": "#/definitions/test_module~1Dict$test_module~1UUID_Int"
+    }
+  },
+  "compiledCode": "58fe01000032323232323232223253330044a22930a99802a4811856616c696461746f722072657475726e65642066616c736500136563253330043370e9000000899192999805180600109924c646600200200444a66601800229309919801801980780119191bad300d002375c6016002601a0022a6600e921334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e206578706563746564001637566014002600e6ea800c54cc01524128436f6e73747220696e646578206469646e2774206d61746368206120747970652076617269616e74001630053754004ae695ce2ab9d5573caae7d5d0aba201",
+  "hash": "216d9334e8daaa401663667302f26cfb53c63d88fe4b14cd8e2a9c1e",
+  "definitions": {
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "List$Tuple$ByteArray_Int": {
+      "dataType": "map",
+      "keys": {
+        "$ref": "#/definitions/ByteArray"
+      },
+      "values": {
+        "$ref": "#/definitions/Int"
+      }
+    },
+    "test_module/Dict$test_module/UUID_Int": {
+      "title": "Dict",
+      "anyOf": [
+        {
+          "title": "Dict",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "inner",
+              "$ref": "#/definitions/List$Tuple$ByteArray_Int"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

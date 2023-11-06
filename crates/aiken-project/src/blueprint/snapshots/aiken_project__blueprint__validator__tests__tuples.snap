@@ -1,0 +1,56 @@
+---
+source: crates/aiken-project/src/blueprint/validator.rs
+description: "Code:\n\nvalidator {\n  fn tuples(datum: (Int, ByteArray), redeemer: (Int, Int, Int), ctx: Void) {\n    True\n  }\n}\n"
+---
+{
+  "title": "test_module.tuples",
+  "datum": {
+    "title": "datum",
+    "schema": {
+      "$ref": "#/definitions/Tuple$Int_ByteArray"
+    }
+  },
+  "redeemer": {
+    "title": "redeemer",
+    "schema": {
+      "$ref": "#/definitions/Tuple$Int_Int_Int"
+    }
+  },
+  "compiledCode": "58c6010000323232323232322223232323253330084a22930a99804a491856616c696461746f722072657475726e65642066616c73650013656323232323253330103012002149854cc0352401334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e2065787065637465640016375a602000260200046eb4c038004c038008dd698060009bac00432375c60120046eb4c01c004c8cdd81805000980518058009bac0035734ae7155ceaab9e5573eae855d11",
+  "hash": "4b4cf15504b916aff5ce2cad8cd93a57dd9d124fbdaa88837d255ed4",
+  "definitions": {
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "Tuple$Int_ByteArray": {
+      "title": "Tuple",
+      "dataType": "list",
+      "items": [
+        {
+          "$ref": "#/definitions/Int"
+        },
+        {
+          "$ref": "#/definitions/ByteArray"
+        }
+      ]
+    },
+    "Tuple$Int_Int_Int": {
+      "title": "Tuple",
+      "dataType": "list",
+      "items": [
+        {
+          "$ref": "#/definitions/Int"
+        },
+        {
+          "$ref": "#/definitions/Int"
+        },
+        {
+          "$ref": "#/definitions/Int"
+        }
+      ]
+    }
+  }
+}

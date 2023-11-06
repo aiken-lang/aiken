@@ -1,0 +1,61 @@
+---
+source: crates/aiken-project/src/blueprint/validator.rs
+description: "Code:\n\npub type Expr {\n  Val(Int)\n  Sum(Expr, Expr)\n  Mul(Expr, Expr)\n}\n\nvalidator {\n  fn recursive_types(redeemer: Expr, ctx: Void) {\n    True\n  }\n}\n"
+---
+{
+  "title": "test_module.recursive_types",
+  "redeemer": {
+    "title": "redeemer",
+    "schema": {
+      "$ref": "#/definitions/test_module~1Expr"
+    }
+  },
+  "compiledCode": "590155010000323232323232323232223253330064a22930a99803a4811856616c696461746f722072657475726e65642066616c736500136563323001001223253330083370e900000089919299980718080010a4c2a660160102c6eb4c038004c01c00854ccc020cdc3a4004002264646464a6660206024004264649319804004001198038038018a998068050b18080009808001180700098038010a99980419b87480100044c8c8c8c94ccc040c0480084c8c9263300800800233007007003153300d00a1630100013010002300e0013007002153300949128436f6e73747220696e646578206469646e2774206d61746368206120747970652076617269616e740016300937540020049201334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e20657870656374656400230053754002ae695ce2ab9d5573caae7d5d0aba21",
+  "hash": "32815bdafe7e6e86659e3f73eda8f176fd8ad17aeb2bfa4b1325f6eb",
+  "definitions": {
+    "Int": {
+      "dataType": "integer"
+    },
+    "test_module/Expr": {
+      "title": "Expr",
+      "anyOf": [
+        {
+          "title": "Val",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        },
+        {
+          "title": "Sum",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "$ref": "#/definitions/test_module~1Expr"
+            },
+            {
+              "$ref": "#/definitions/test_module~1Expr"
+            }
+          ]
+        },
+        {
+          "title": "Mul",
+          "dataType": "constructor",
+          "index": 2,
+          "fields": [
+            {
+              "$ref": "#/definitions/test_module~1Expr"
+            },
+            {
+              "$ref": "#/definitions/test_module~1Expr"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

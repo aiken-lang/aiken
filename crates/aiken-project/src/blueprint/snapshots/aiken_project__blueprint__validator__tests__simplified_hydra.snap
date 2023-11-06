@@ -1,0 +1,103 @@
+---
+source: crates/aiken-project/src/blueprint/validator.rs
+description: "Code:\n\n/// On-chain state\ntype State {\n    /// The contestation period as a number of seconds\n    contestationPeriod: ContestationPeriod,\n    /// List of public key hashes of all participants\n    parties: List<Party>,\n    utxoHash: Hash<Blake2b_256>,\n}\n\n/// A Hash digest for a given algorithm.\ntype Hash<alg> = ByteArray\n\ntype Blake2b_256 { Blake2b_256 }\n\n/// Whatever\ntype ContestationPeriod {\n  /// A positive, non-zero number of seconds.\n  ContestationPeriod(Int)\n}\n\ntype Party =\n  ByteArray\n\ntype Input {\n    CollectCom\n    Close\n    /// Abort a transaction\n    Abort\n}\n\nvalidator {\n  fn simplified_hydra(datum: State, redeemer: Input, ctx: Data) {\n    True\n  }\n}\n"
+---
+{
+  "title": "test_module.simplified_hydra",
+  "datum": {
+    "title": "datum",
+    "schema": {
+      "$ref": "#/definitions/test_module~1State"
+    }
+  },
+  "redeemer": {
+    "title": "redeemer",
+    "schema": {
+      "$ref": "#/definitions/test_module~1Input"
+    }
+  },
+  "compiledCode": "5901be0100003232323232323232323232322223232533300b4a22930a998062491856616c696461746f722072657475726e65642066616c7365001365632533300b3370e90000008a99980798040020a4c2a6601800e2c2a66601666e1d20020011533300f3008004149854cc03001c5854ccc02ccdc3a40080022a66601e60100082930a998060038b0a998060030b180400199299980519b87480000044c8c8c8c8c8c94ccc050c0580084c8c926323300100100522533301700114984c8cc00c00cc068008dd7180c00099299980899b87480000044c8c94ccc05cc064008526153301401216375a602e002601c00c2a660240182c601c00a2a6602201e2c6eb8c050004c050008dd618090009809001180800098038020a998058028b1803801a4928436f6e73747220696e646578206469646e2774206d61746368206120747970652076617269616e740049011d4578706563746564206e6f206669656c647320666f7220436f6e737472002300737540024600a6ea80052401334c6973742f5475706c652f436f6e73747220636f6e7461696e73206d6f7265206974656d73207468616e206578706563746564005734ae7155ceaab9e5573eae855d11",
+  "hash": "a2d6e5c1e686ffe47d6ad6d4c17df246d38169545c7d66af32c5aedc",
+  "definitions": {
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "List$ByteArray": {
+      "dataType": "list",
+      "items": {
+        "$ref": "#/definitions/ByteArray"
+      }
+    },
+    "test_module/ContestationPeriod": {
+      "title": "ContestationPeriod",
+      "description": "Whatever",
+      "anyOf": [
+        {
+          "title": "ContestationPeriod",
+          "description": "A positive, non-zero number of seconds.",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    },
+    "test_module/Input": {
+      "title": "Input",
+      "anyOf": [
+        {
+          "title": "CollectCom",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "Close",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        },
+        {
+          "title": "Abort",
+          "description": "Abort a transaction",
+          "dataType": "constructor",
+          "index": 2,
+          "fields": []
+        }
+      ]
+    },
+    "test_module/State": {
+      "title": "State",
+      "description": "On-chain state",
+      "anyOf": [
+        {
+          "title": "State",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "contestationPeriod",
+              "description": "The contestation period as a number of seconds",
+              "$ref": "#/definitions/test_module~1ContestationPeriod"
+            },
+            {
+              "title": "parties",
+              "description": "List of public key hashes of all participants",
+              "$ref": "#/definitions/List$ByteArray"
+            },
+            {
+              "title": "utxoHash",
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -47,6 +47,8 @@ aiken-lang = { path = "../aiken-lang", version = "1.0.20-alpha" }
 uplc = { path = '../uplc', version = "1.0.20-alpha" }
 
 [dev-dependencies]
+indoc = "2.0.1"
+insta.workspace = true
 proptest = "1.2.0"
 pretty_assertions = "1.3.0"
 
