@@ -63,7 +63,7 @@ impl Interner {
         }
     }
 
-    fn intern(&mut self, text: &str) -> Unique {
+    pub fn intern(&mut self, text: &str) -> Unique {
         if let Some(u) = self.identifiers.get(text) {
             *u
         } else {

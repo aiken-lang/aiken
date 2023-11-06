@@ -752,7 +752,7 @@ pub fn eval_redeemer(
 
                         program.eval_as(&Language::PlutusV1, costs, Some(initial_budget))
                     } else {
-                        program.eval_v1()
+                        program.eval_version(&Language::PlutusV1)
                     };
 
                     let cost = eval_result.cost();
@@ -852,7 +852,7 @@ pub fn eval_redeemer(
 
                         program.eval_as(&Language::PlutusV1, costs, Some(initial_budget))
                     } else {
-                        program.eval_v1()
+                        program.eval_version(&Language::PlutusV1)
                     };
 
                     let cost = eval_result.cost();

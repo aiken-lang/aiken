@@ -3,6 +3,7 @@ use std::{ops::Neg, rc::Rc, str::FromStr};
 use crate::{
     ast::{Constant, Name, Program, Term, Type},
     builtins::DefaultFunction,
+    machine::runtime::Compressable,
 };
 
 use interner::Interner;
@@ -18,10 +19,7 @@ pub fn program(src: &str) -> Result<Program<Name>, ParseError<LineCol>> {
     let mut interner = Interner::new();
 
     // run the generated parser
-    let mut program = uplc::program(src)?;
-
-    // assign proper unique ids in place
-    interner.program(&mut program);
+    let program = uplc::program(src, &mut interner)?;
 
     Ok(program)
 }
@@ -31,10 +29,7 @@ pub fn term(src: &str) -> Result<Term<Name>, ParseError<LineCol>> {
     let mut interner = Interner::new();
 
     // run the generated parser
-    let mut term = uplc::term(src)?;
-
-    // assign proper unique ids in place
-    interner.term(&mut term);
+    let term = uplc::term(src, &mut interner)?;
 
     Ok(term)
 }
@@ -72,9 +67,8 @@ pub fn escape(string: &str) -> String {
 
 peg::parser! {
     grammar uplc() for str {
-
-        pub rule program() -> Program<Name>
-          = _* "(" _* "program" _+ v:version() _+ t:term() _* ")" _* {
+        pub rule program(interner: &mut Interner) -> Program<Name>
+          = _* "(" _* "program" _+ v:version() _+ t:term(interner) _* ")" _* {
             Program {version: v, term: t}
           }
 
@@ -85,17 +79,17 @@ peg::parser! {
             (major, minor, patch)
           }
 
-        pub rule term() -> Term<Name>
+        pub rule term(interner: &mut Interner) -> Term<Name>
           = constant()
           / builtin()
-          / var()
-          / lambda()
-          / apply()
-          / delay()
-          / force()
+          / var(interner)
+          / lambda(interner)
+          / apply(interner)
+          / delay(interner)
+          / force(interner)
           / error()
-          / constr()
-          / case()
+          / constr(interner)
+          / case(interner)
 
         rule constant() -> Term<Name>
           = "(" _* "con" _+ con:(
@@ -105,6 +99,8 @@ peg::parser! {
             / constant_unit()
             / constant_bool()
             / constant_data()
+            / constant_g1_element()
+            / constant_g2_element()
             / constant_list()
             / constant_pair()
             ) _* ")" {
@@ -116,17 +112,16 @@ peg::parser! {
             Term::Builtin(DefaultFunction::from_str(&b).unwrap())
           }
 
-        rule var() -> Term<Name>
-          = n:name() { Term::Var(n.into()) }
+        rule var(interner: &mut Interner) -> Term<Name>
+          = n:name(interner) { Term::Var(n.into()) }
 
-        rule lambda() -> Term<Name>
-          = "(" _* "lam" _+ parameter_name:name() _+ t:term() _* ")" {
+        rule lambda(interner: &mut Interner) -> Term<Name>
+          = "(" _* "lam" _+ parameter_name:name(interner) _+ t:term(interner) _* ")" {
             Term::Lambda { parameter_name: parameter_name.into(), body: Rc::new(t) }
           }
 
-        #[cache_left_rec]
-        rule apply() -> Term<Name>
-          = "[" _* initial:term() _+ terms:(t:term() _* { t })+ "]" {
+        rule apply(interner: &mut Interner) -> Term<Name>
+          = "[" _* initial:term(interner) _+ terms:(t:term(interner) _* { t })+ "]" {
             terms
                 .into_iter()
                 .fold(initial, |lhs, rhs| Term::Apply {
@@ -135,23 +130,22 @@ peg::parser! {
                 })
           }
 
-        rule delay() -> Term<Name>
-          = "(" _* "delay" _* t:term() _* ")" { Term::Delay(Rc::new(t)) }
+        rule delay(interner: &mut Interner) -> Term<Name>
+          = "(" _* "delay" _* t:term(interner) _* ")" { Term::Delay(Rc::new(t)) }
 
-        rule force() -> Term<Name>
-          = "(" _* "force" _* t:term() _* ")" { Term::Force(Rc::new(t)) }
+        rule force(interner: &mut Interner) -> Term<Name>
+          = "(" _* "force" _* t:term(interner) _* ")" { Term::Force(Rc::new(t)) }
 
         rule error() -> Term<Name>
           = "(" _* "error" _* ")" { Term::Error }
 
-        rule constr() -> Term<Name>
-          = "(" _* "constr" _+ tag:decimal() _* fields:(t:term() _* { t })* _* ")" {
+        rule constr(interner: &mut Interner) -> Term<Name>
+          = "(" _* "constr" _+ tag:decimal() _* fields:(t:term(interner) _* { t })* _* ")" {
             Term::Constr { tag, fields }
           }
 
-        #[cache_left_rec]
-        rule case() -> Term<Name>
-          = "(" _* "case" _+ constr:term() _* branches:(t:term() _* { t })+ _* ")" {
+        rule case(interner: &mut Interner) -> Term<Name>
+          = "(" _* "case" _+ constr:term(interner) _* branches:(t:term(interner) _* { t })+ _* ")" {
             Term::Case { constr: constr.into(), branches }
           }
 
@@ -172,6 +166,16 @@ peg::parser! {
 
         rule constant_data() -> Constant
           = "data" _+ "(" _* d:data() _* ")" { Constant::Data(d) }
+
+        rule constant_g1_element() -> Constant
+          = "bls12_381_G1_element" _+ element:g1_element() {
+                Constant::Bls12_381G1Element(Box::new(element))
+            }
+
+        rule constant_g2_element() -> Constant
+          = "bls12_381_G2_element" _+ element:g2_element() {
+                Constant::Bls12_381G2Element(Box::new(element))
+            }
 
         rule constant_list() -> Constant
           = "(" _* "list" _* t:type_info() _* ")" _+ ls:list(Some(&t)) {
@@ -200,6 +204,15 @@ peg::parser! {
 
         rule bytestring() -> Vec<u8>
           = "#" i:ident()* { hex::decode(String::from_iter(i)).unwrap() }
+
+        rule bls_element() -> Vec<u8>
+          = "0x" i:ident()* { hex::decode(String::from_iter(i)).unwrap() }
+
+        rule g1_element() -> blst::blst_p1
+          = element:bls_element() { blst::blst_p1::uncompress(&element).unwrap() }
+
+        rule g2_element() -> blst::blst_p2
+          = element:bls_element() { blst::blst_p2::uncompress(&element).unwrap() }
 
         rule string() -> String
           = "\"" s:character()* "\"" { String::from_iter(s) }
@@ -276,23 +289,45 @@ peg::parser! {
                 _ => Err("found 'String' instead of expected type")
               }
             }
-          / s:data() {?
-              match type_info {
-                Some(Type::Data) => Ok(Constant::Data(s)),
-                _ => Err("found 'Data' instead of expected type")
-              }
+            / s:data() {?
+                match type_info {
+                    Some(Type::Data) => Ok(Constant::Data(s)),
+                    _ => Err("found 'Data' instead of expected type")
+                }
             }
-          / ls:list(list_sub_type(type_info)) {?
-              match type_info {
-                Some(Type::List(t)) => Ok(Constant::ProtoList(t.as_ref().clone(), ls)),
-                _ => Err("found 'List' instead of expected type")
-              }
+            / element:g1_element() {?
+                match type_info {
+                    Some(Type::Bls12_381G1Element) => Ok(Constant::Bls12_381G1Element(Box::new(element))),
+                    _ => Err("found 'Bls12_381G1Element' instead of expected type")
+
+                }
             }
-          / p:pair(pair_sub_type(type_info)) {?
-              match type_info {
-                Some(Type::Pair(l, r)) => Ok(Constant::ProtoPair(l.as_ref().clone(), r.as_ref().clone(), p.0.into(), p.1.into())),
-                _ => Err("found 'Pair' instead of expected type")
-              }
+            / element:g2_element() {?
+                match type_info {
+                    Some(Type::Bls12_381G2Element) => Ok(Constant::Bls12_381G2Element(Box::new(element))),
+                    _ => Err("found 'Bls12_381G2Element' instead of expected type")
+
+                }
+            }
+            / ls:list(list_sub_type(type_info)) {?
+                match type_info {
+                    Some(Type::List(t)) => Ok(Constant::ProtoList(t.as_ref().clone(), ls)),
+                    _ => Err("found 'List' instead of expected type")
+                }
+            }
+            / p:pair(pair_sub_type(type_info)) {?
+                match type_info {
+                    Some(Type::Pair(l, r)) =>
+                        Ok(
+                            Constant::ProtoPair(
+                                l.as_ref().clone(),
+                                r.as_ref().clone(),
+                                p.0.into(),
+                                p.1.into()
+                            )
+                        ),
+                    _ => Err("found 'Pair' instead of expected type")
+                }
             }
 
         rule type_info() -> Type
@@ -302,6 +337,8 @@ peg::parser! {
           / _* "bytestring" { Type::ByteString }
           / _* "string" { Type::String }
           / _* "data" { Type::Data }
+          / _* "bls12_381_G1_element" { Type::Bls12_381G1Element }
+          / _* "bls12_381_G1_element" { Type::Bls12_381G2Element }
           / _* "(" _* "list" _+ t:type_info() _* ")" {
               Type::List(t.into())
             }
@@ -309,8 +346,11 @@ peg::parser! {
               Type::Pair(l.into(), r.into())
             }
 
-        rule name() -> Name
-          = text:ident() { Name { text, unique: 0.into() } }
+        rule name(interner: &mut Interner) -> Name
+          = text:ident() {
+                let unique = interner.intern(&text);
+                Name { text, unique }
+            }
 
         rule ident() -> String
           = i:['a'..='z' | 'A'..='Z' | '0'..='9' | '_']+ {

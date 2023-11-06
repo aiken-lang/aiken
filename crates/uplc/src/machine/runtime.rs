@@ -168,18 +168,18 @@ impl DefaultFunction {
             DefaultFunction::MkNilPairData => 1,
             DefaultFunction::Bls12_381_G1_Add => 2,
             DefaultFunction::Bls12_381_G1_Neg => 1,
-            DefaultFunction::Bls12_381_G1_Scalarmul => 2,
+            DefaultFunction::Bls12_381_G1_ScalarMul => 2,
             DefaultFunction::Bls12_381_G1_Equal => 2,
             DefaultFunction::Bls12_381_G1_Compress => 1,
             DefaultFunction::Bls12_381_G1_Uncompress => 1,
-            DefaultFunction::Bls12_381_G1_Hashtogroup => 2,
+            DefaultFunction::Bls12_381_G1_HashToGroup => 2,
             DefaultFunction::Bls12_381_G2_Add => 2,
             DefaultFunction::Bls12_381_G2_Neg => 1,
-            DefaultFunction::Bls12_381_G2_Scalarmul => 2,
+            DefaultFunction::Bls12_381_G2_ScalarMul => 2,
             DefaultFunction::Bls12_381_G2_Equal => 2,
             DefaultFunction::Bls12_381_G2_Compress => 1,
             DefaultFunction::Bls12_381_G2_Uncompress => 1,
-            DefaultFunction::Bls12_381_G2_Hashtogroup => 2,
+            DefaultFunction::Bls12_381_G2_HashToGroup => 2,
             DefaultFunction::Bls12_381_MillerLoop => 2,
             DefaultFunction::Bls12_381_MulMlResult => 2,
             DefaultFunction::Bls12_381_FinalVerify => 2,
@@ -246,18 +246,18 @@ impl DefaultFunction {
             DefaultFunction::MkNilPairData => 0,
             DefaultFunction::Bls12_381_G1_Add => 0,
             DefaultFunction::Bls12_381_G1_Neg => 0,
-            DefaultFunction::Bls12_381_G1_Scalarmul => 0,
+            DefaultFunction::Bls12_381_G1_ScalarMul => 0,
             DefaultFunction::Bls12_381_G1_Equal => 0,
             DefaultFunction::Bls12_381_G1_Compress => 0,
             DefaultFunction::Bls12_381_G1_Uncompress => 0,
-            DefaultFunction::Bls12_381_G1_Hashtogroup => 0,
+            DefaultFunction::Bls12_381_G1_HashToGroup => 0,
             DefaultFunction::Bls12_381_G2_Add => 0,
             DefaultFunction::Bls12_381_G2_Neg => 0,
-            DefaultFunction::Bls12_381_G2_Scalarmul => 0,
+            DefaultFunction::Bls12_381_G2_ScalarMul => 0,
             DefaultFunction::Bls12_381_G2_Equal => 0,
             DefaultFunction::Bls12_381_G2_Compress => 0,
             DefaultFunction::Bls12_381_G2_Uncompress => 0,
-            DefaultFunction::Bls12_381_G2_Hashtogroup => 0,
+            DefaultFunction::Bls12_381_G2_HashToGroup => 0,
             DefaultFunction::Bls12_381_MillerLoop => 0,
             DefaultFunction::Bls12_381_MulMlResult => 0,
             DefaultFunction::Bls12_381_FinalVerify => 0,
@@ -390,7 +390,7 @@ impl DefaultFunction {
 
             DefaultFunction::Bls12_381_G1_Add => arg.expect_type(Type::Bls12_381G1Element),
             DefaultFunction::Bls12_381_G1_Neg => arg.expect_type(Type::Bls12_381G1Element),
-            DefaultFunction::Bls12_381_G1_Scalarmul => {
+            DefaultFunction::Bls12_381_G1_ScalarMul => {
                 if args.is_empty() {
                     arg.expect_type(Type::Integer)
                 } else {
@@ -400,10 +400,10 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_G1_Equal => arg.expect_type(Type::Bls12_381G1Element),
             DefaultFunction::Bls12_381_G1_Compress => arg.expect_type(Type::Bls12_381G1Element),
             DefaultFunction::Bls12_381_G1_Uncompress => arg.expect_type(Type::ByteString),
-            DefaultFunction::Bls12_381_G1_Hashtogroup => arg.expect_type(Type::ByteString),
+            DefaultFunction::Bls12_381_G1_HashToGroup => arg.expect_type(Type::ByteString),
             DefaultFunction::Bls12_381_G2_Add => arg.expect_type(Type::Bls12_381G2Element),
             DefaultFunction::Bls12_381_G2_Neg => arg.expect_type(Type::Bls12_381G2Element),
-            DefaultFunction::Bls12_381_G2_Scalarmul => {
+            DefaultFunction::Bls12_381_G2_ScalarMul => {
                 if args.is_empty() {
                     arg.expect_type(Type::Integer)
                 } else {
@@ -413,7 +413,7 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_G2_Equal => arg.expect_type(Type::Bls12_381G2Element),
             DefaultFunction::Bls12_381_G2_Compress => arg.expect_type(Type::Bls12_381G2Element),
             DefaultFunction::Bls12_381_G2_Uncompress => arg.expect_type(Type::ByteString),
-            DefaultFunction::Bls12_381_G2_Hashtogroup => arg.expect_type(Type::ByteString),
+            DefaultFunction::Bls12_381_G2_HashToGroup => arg.expect_type(Type::ByteString),
             DefaultFunction::Bls12_381_MillerLoop => {
                 if args.is_empty() {
                     arg.expect_type(Type::Bls12_381G1Element)
@@ -1224,7 +1224,7 @@ impl DefaultFunction {
 
                 Ok(Value::Con(constant.into()))
             }
-            DefaultFunction::Bls12_381_G1_Scalarmul => {
+            DefaultFunction::Bls12_381_G1_ScalarMul => {
                 let arg1 = args[0].unwrap_integer();
                 let arg2 = args[1].unwrap_bls12_381_g1_element();
 
@@ -1293,7 +1293,7 @@ impl DefaultFunction {
 
                 Ok(Value::Con(constant.into()))
             }
-            DefaultFunction::Bls12_381_G1_Hashtogroup => {
+            DefaultFunction::Bls12_381_G1_HashToGroup => {
                 let arg1 = args[0].unwrap_byte_string();
                 let arg2 = args[1].unwrap_byte_string();
 
@@ -1355,7 +1355,7 @@ impl DefaultFunction {
 
                 Ok(Value::Con(constant.into()))
             }
-            DefaultFunction::Bls12_381_G2_Scalarmul => {
+            DefaultFunction::Bls12_381_G2_ScalarMul => {
                 let arg1 = args[0].unwrap_integer();
                 let arg2 = args[1].unwrap_bls12_381_g2_element();
 
@@ -1424,7 +1424,7 @@ impl DefaultFunction {
 
                 Ok(Value::Con(constant.into()))
             }
-            DefaultFunction::Bls12_381_G2_Hashtogroup => {
+            DefaultFunction::Bls12_381_G2_HashToGroup => {
                 let arg1 = args[0].unwrap_byte_string();
                 let arg2 = args[1].unwrap_byte_string();
 

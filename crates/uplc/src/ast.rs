@@ -727,12 +727,17 @@ impl Program<NamedDeBruijn> {
     }
 
     /// Evaluate a Program as PlutusV1
-    pub fn eval_v1(self) -> EvalResult {
-        let mut machine = Machine::new(Language::PlutusV1, CostModel::v1(), ExBudget::v1(), 200);
+    pub fn eval_version(self, version: &Language) -> EvalResult {
+        let mut machine = Machine::new(
+            version.clone(),
+            CostModel::default(),
+            ExBudget::default(),
+            200,
+        );
 
         let term = machine.run(self.term);
 
-        EvalResult::new(term, machine.ex_budget, ExBudget::v1(), machine.logs)
+        EvalResult::new(term, machine.ex_budget, ExBudget::default(), machine.logs)
     }
 
     pub fn eval_as(
@@ -741,10 +746,7 @@ impl Program<NamedDeBruijn> {
         costs: &[i64],
         initial_budget: Option<&ExBudget>,
     ) -> EvalResult {
-        let budget = match initial_budget {
-            Some(b) => *b,
-            None => ExBudget::default(),
-        };
+        let budget = initial_budget.copied().unwrap_or_default();
 
         let mut machine = Machine::new(
             version.clone(),
