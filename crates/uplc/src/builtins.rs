@@ -88,18 +88,18 @@ pub enum DefaultFunction {
     // BLS Builtins
     Bls12_381_G1_Add = 54,
     Bls12_381_G1_Neg = 55,
-    Bls12_381_G1_Scalarmul = 56,
+    Bls12_381_G1_ScalarMul = 56,
     Bls12_381_G1_Equal = 57,
     Bls12_381_G1_Compress = 58,
     Bls12_381_G1_Uncompress = 59,
-    Bls12_381_G1_Hashtogroup = 60,
+    Bls12_381_G1_HashToGroup = 60,
     Bls12_381_G2_Add = 61,
     Bls12_381_G2_Neg = 62,
-    Bls12_381_G2_Scalarmul = 63,
+    Bls12_381_G2_ScalarMul = 63,
     Bls12_381_G2_Equal = 64,
     Bls12_381_G2_Compress = 65,
     Bls12_381_G2_Uncompress = 66,
-    Bls12_381_G2_Hashtogroup = 67,
+    Bls12_381_G2_HashToGroup = 67,
     Bls12_381_MillerLoop = 68,
     Bls12_381_MulMlResult = 69,
     Bls12_381_FinalVerify = 70,
@@ -220,8 +220,8 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::Bls12_381_G1_Neg as u8 => {
                 Ok(DefaultFunction::Bls12_381_G1_Neg)
             }
-            v if v == DefaultFunction::Bls12_381_G1_Scalarmul as u8 => {
-                Ok(DefaultFunction::Bls12_381_G1_Scalarmul)
+            v if v == DefaultFunction::Bls12_381_G1_ScalarMul as u8 => {
+                Ok(DefaultFunction::Bls12_381_G1_ScalarMul)
             }
             v if v == DefaultFunction::Bls12_381_G1_Equal as u8 => {
                 Ok(DefaultFunction::Bls12_381_G1_Equal)
@@ -232,8 +232,8 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::Bls12_381_G1_Uncompress as u8 => {
                 Ok(DefaultFunction::Bls12_381_G1_Uncompress)
             }
-            v if v == DefaultFunction::Bls12_381_G1_Hashtogroup as u8 => {
-                Ok(DefaultFunction::Bls12_381_G1_Hashtogroup)
+            v if v == DefaultFunction::Bls12_381_G1_HashToGroup as u8 => {
+                Ok(DefaultFunction::Bls12_381_G1_HashToGroup)
             }
             v if v == DefaultFunction::Bls12_381_G2_Add as u8 => {
                 Ok(DefaultFunction::Bls12_381_G2_Add)
@@ -241,8 +241,8 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::Bls12_381_G2_Neg as u8 => {
                 Ok(DefaultFunction::Bls12_381_G2_Neg)
             }
-            v if v == DefaultFunction::Bls12_381_G2_Scalarmul as u8 => {
-                Ok(DefaultFunction::Bls12_381_G2_Scalarmul)
+            v if v == DefaultFunction::Bls12_381_G2_ScalarMul as u8 => {
+                Ok(DefaultFunction::Bls12_381_G2_ScalarMul)
             }
             v if v == DefaultFunction::Bls12_381_G2_Equal as u8 => {
                 Ok(DefaultFunction::Bls12_381_G2_Equal)
@@ -253,8 +253,8 @@ impl TryFrom<u8> for DefaultFunction {
             v if v == DefaultFunction::Bls12_381_G2_Uncompress as u8 => {
                 Ok(DefaultFunction::Bls12_381_G2_Uncompress)
             }
-            v if v == DefaultFunction::Bls12_381_G2_Hashtogroup as u8 => {
-                Ok(DefaultFunction::Bls12_381_G2_Hashtogroup)
+            v if v == DefaultFunction::Bls12_381_G2_HashToGroup as u8 => {
+                Ok(DefaultFunction::Bls12_381_G2_HashToGroup)
             }
             v if v == DefaultFunction::Bls12_381_MillerLoop as u8 => {
                 Ok(DefaultFunction::Bls12_381_MillerLoop)
@@ -336,23 +336,23 @@ impl FromStr for DefaultFunction {
             "mkPairData" => Ok(MkPairData),
             "mkNilData" => Ok(MkNilData),
             "mkNilPairData" => Ok(MkNilPairData),
-            "bls12_381_g1_add" => Ok(Bls12_381_G1_Add),
-            "bls12_381_g1_neg" => Ok(Bls12_381_G1_Neg),
-            "bls12_381_g1_scalarmul" => Ok(Bls12_381_G1_Scalarmul),
-            "bls12_381_g1_equal" => Ok(Bls12_381_G1_Equal),
-            "bls12_381_g1_compress" => Ok(Bls12_381_G1_Compress),
-            "bls12_381_g1_uncompress" => Ok(Bls12_381_G1_Uncompress),
-            "bls12_381_g1_hashtogroup" => Ok(Bls12_381_G1_Hashtogroup),
-            "bls12_381_g2_add" => Ok(Bls12_381_G2_Add),
-            "bls12_381_g2_neg" => Ok(Bls12_381_G2_Neg),
-            "bls12_381_g2_scalarmul" => Ok(Bls12_381_G2_Scalarmul),
-            "bls12_381_g2_equal" => Ok(Bls12_381_G2_Equal),
-            "bls12_381_g2_compress" => Ok(Bls12_381_G2_Compress),
-            "bls12_381_g2_uncompress" => Ok(Bls12_381_G2_Uncompress),
-            "bls12_381_g2_hashtogroup" => Ok(Bls12_381_G2_Hashtogroup),
-            "bls12_381_millerloop" => Ok(Bls12_381_MillerLoop),
-            "bls12_381_mulmlresult" => Ok(Bls12_381_MulMlResult),
-            "bls12_381_finalverify" => Ok(Bls12_381_FinalVerify),
+            "bls12_381_G1_add" => Ok(Bls12_381_G1_Add),
+            "bls12_381_G1_neg" => Ok(Bls12_381_G1_Neg),
+            "bls12_381_G1_scalarMul" => Ok(Bls12_381_G1_ScalarMul),
+            "bls12_381_G1_equal" => Ok(Bls12_381_G1_Equal),
+            "bls12_381_G1_compress" => Ok(Bls12_381_G1_Compress),
+            "bls12_381_G1_uncompress" => Ok(Bls12_381_G1_Uncompress),
+            "bls12_381_G1_hashToGroup" => Ok(Bls12_381_G1_HashToGroup),
+            "bls12_381_G2_add" => Ok(Bls12_381_G2_Add),
+            "bls12_381_G2_neg" => Ok(Bls12_381_G2_Neg),
+            "bls12_381_G2_scalarMul" => Ok(Bls12_381_G2_ScalarMul),
+            "bls12_381_G2_equal" => Ok(Bls12_381_G2_Equal),
+            "bls12_381_G2_compress" => Ok(Bls12_381_G2_Compress),
+            "bls12_381_G2_uncompress" => Ok(Bls12_381_G2_Uncompress),
+            "bls12_381_G2_hashToGroup" => Ok(Bls12_381_G2_HashToGroup),
+            "bls12_381_millerLoop" => Ok(Bls12_381_MillerLoop),
+            "bls12_381_mulMlResult" => Ok(Bls12_381_MulMlResult),
+            "bls12_381_finalVerify" => Ok(Bls12_381_FinalVerify),
             rest => Err(format!("Default Function not found - {rest}")),
         }
     }
@@ -419,23 +419,23 @@ impl Display for DefaultFunction {
             MkPairData => write!(f, "mkPairData"),
             MkNilData => write!(f, "mkNilData"),
             MkNilPairData => write!(f, "mkNilPairData"),
-            Bls12_381_G1_Add => write!(f, "bls12_381_g1_add"),
-            Bls12_381_G1_Neg => write!(f, "bls12_381_g1_neg"),
-            Bls12_381_G1_Scalarmul => write!(f, "bls12_381_g1_scalarmul"),
-            Bls12_381_G1_Equal => write!(f, "bls12_381_g1_equal"),
-            Bls12_381_G1_Compress => write!(f, "bls12_381_g1_compress"),
-            Bls12_381_G1_Uncompress => write!(f, "bls12_381_g1_uncompress"),
-            Bls12_381_G1_Hashtogroup => write!(f, "bls12_381_g1_hashtogroup"),
-            Bls12_381_G2_Add => write!(f, "bls12_381_g2_add"),
-            Bls12_381_G2_Neg => write!(f, "bls12_381_g2_neg"),
-            Bls12_381_G2_Scalarmul => write!(f, "bls12_381_g2_scalarmul"),
-            Bls12_381_G2_Equal => write!(f, "bls12_381_g2_equal"),
-            Bls12_381_G2_Compress => write!(f, "bls12_381_g2_compress"),
-            Bls12_381_G2_Uncompress => write!(f, "bls12_381_g2_uncompress"),
-            Bls12_381_G2_Hashtogroup => write!(f, "bls12_381_g2_hashtogroup"),
-            Bls12_381_MillerLoop => write!(f, "bls12_381_millerloop"),
-            Bls12_381_MulMlResult => write!(f, "bls12_381_mulmlresult"),
-            Bls12_381_FinalVerify => write!(f, "bls12_381_finalverify"),
+            Bls12_381_G1_Add => write!(f, "bls12_381_G1_add"),
+            Bls12_381_G1_Neg => write!(f, "bls12_381_G1_neg"),
+            Bls12_381_G1_ScalarMul => write!(f, "bls12_381_G1_scalarMul"),
+            Bls12_381_G1_Equal => write!(f, "bls12_381_G1_equal"),
+            Bls12_381_G1_Compress => write!(f, "bls12_381_G1_compress"),
+            Bls12_381_G1_Uncompress => write!(f, "bls12_381_G1_uncompress"),
+            Bls12_381_G1_HashToGroup => write!(f, "bls12_381_G1_hashToGroup"),
+            Bls12_381_G2_Add => write!(f, "bls12_381_G2_add"),
+            Bls12_381_G2_Neg => write!(f, "bls12_381_G2_neg"),
+            Bls12_381_G2_ScalarMul => write!(f, "bls12_381_G2_scalarMul"),
+            Bls12_381_G2_Equal => write!(f, "bls12_381_G2_equal"),
+            Bls12_381_G2_Compress => write!(f, "bls12_381_G2_compress"),
+            Bls12_381_G2_Uncompress => write!(f, "bls12_381_G2_uncompress"),
+            Bls12_381_G2_HashToGroup => write!(f, "bls12_381_G2_hashToGroup"),
+            Bls12_381_MillerLoop => write!(f, "bls12_381_millerLoop"),
+            Bls12_381_MulMlResult => write!(f, "bls12_381_mulMlResult"),
+            Bls12_381_FinalVerify => write!(f, "bls12_381_finalVerify"),
         }
     }
 }
@@ -503,18 +503,18 @@ impl DefaultFunction {
             MkNilPairData => "mk_nil_pair_data",
             Bls12_381_G1_Add => "bls12_381_g1_add",
             Bls12_381_G1_Neg => "bls12_381_g1_neg",
-            Bls12_381_G1_Scalarmul => "bls12_381_g1_scalar_mul",
+            Bls12_381_G1_ScalarMul => "bls12_381_g1_scalar_mul",
             Bls12_381_G1_Equal => "bls12_381_g1_equal",
             Bls12_381_G1_Compress => "bls12_381_g1_compress",
             Bls12_381_G1_Uncompress => "bls12_381_g1_uncompress",
-            Bls12_381_G1_Hashtogroup => "bls12_381_g1_hash_to_group",
+            Bls12_381_G1_HashToGroup => "bls12_381_g1_hash_to_group",
             Bls12_381_G2_Add => "bls12_381_g2_add",
             Bls12_381_G2_Neg => "bls12_381_g2_neg",
-            Bls12_381_G2_Scalarmul => "bls12_381_g2_scalar_mul",
+            Bls12_381_G2_ScalarMul => "bls12_381_g2_scalar_mul",
             Bls12_381_G2_Equal => "bls12_381_g2_equal",
             Bls12_381_G2_Compress => "bls12_381_g2_compress",
             Bls12_381_G2_Uncompress => "bls12_381_g2_uncompress",
-            Bls12_381_G2_Hashtogroup => "bls12_381_g2_hash_to_group",
+            Bls12_381_G2_HashToGroup => "bls12_381_g2_hash_to_group",
             Bls12_381_MillerLoop => "bls12_381_miller_loop",
             Bls12_381_MulMlResult => "bls12_381_mul_miller_loop_result",
             Bls12_381_FinalVerify => "bls12_381_final_verify",

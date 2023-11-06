@@ -693,7 +693,7 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
 
             (tipo, 1)
         }
-        DefaultFunction::Bls12_381_G1_Scalarmul => {
+        DefaultFunction::Bls12_381_G1_ScalarMul => {
             let tipo = function(vec![int(), g1_element()], g1_element());
 
             (tipo, 2)
@@ -708,7 +708,7 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
 
             (tipo, 1)
         }
-        DefaultFunction::Bls12_381_G1_Hashtogroup => {
+        DefaultFunction::Bls12_381_G1_HashToGroup => {
             let tipo = function(vec![byte_array(), byte_array()], g1_element());
 
             (tipo, 2)
@@ -724,7 +724,7 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
 
             (tipo, 1)
         }
-        DefaultFunction::Bls12_381_G2_Scalarmul => {
+        DefaultFunction::Bls12_381_G2_ScalarMul => {
             let tipo = function(vec![int(), g2_element()], g2_element());
 
             (tipo, 2)
@@ -739,7 +739,7 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
 
             (tipo, 1)
         }
-        DefaultFunction::Bls12_381_G2_Hashtogroup => {
+        DefaultFunction::Bls12_381_G2_HashToGroup => {
             let tipo = function(vec![byte_array(), byte_array()], g2_element());
 
             (tipo, 2)
