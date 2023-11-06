@@ -135,6 +135,8 @@ dependencies = [
  "hex",
  "ignore",
  "indexmap",
+ "indoc",
+ "insta",
  "itertools",
  "miette",
  "minicbor",

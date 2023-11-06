@@ -1,0 +1,33 @@
+---
+source: crates/aiken-project/src/blueprint/validator.rs
+description: "Code:\n\npub opaque type Dict<key, value> {\n    inner: List<(ByteArray, value)>\n}\n\ntype UUID { UUID }\n\nvalidator {\n  fn opaque_singleton_variants(redeemer: Dict<UUID, Int>, ctx: Void) {\n    True\n  }\n}\n"
+---
+{
+  "title": "test_module.opaque_singleton_variants",
+  "redeemer": {
+    "title": "redeemer",
+    "schema": {
+      "$ref": "#/definitions/test_module~1Dict$test_module~1UUID_Int"
+    }
+  },
+  "compiledCode": "58700100003232323232323222323253330054a22930a9980324811856616c696461746f722072657475726e65642066616c73650013656323300100100222533300a00114984c8cc00c00cc034008c8c8dd698058011bae3009001300b0013756004ae695ce2ab9d5573caae7d5d0aba201",
+  "hash": "8a89baa6035d083e7d59575b8fa1e8bd3fe485df94d0af356557b224",
+  "definitions": {
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "test_module/Dict$test_module/UUID_Int": {
+      "title": "Dict",
+      "dataType": "map",
+      "keys": {
+        "$ref": "#/definitions/ByteArray"
+      },
+      "values": {
+        "$ref": "#/definitions/Int"
+      }
+    }
+  }
+}

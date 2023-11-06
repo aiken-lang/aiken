@@ -1,0 +1,32 @@
+---
+source: crates/aiken-project/src/blueprint/validator.rs
+description: "Code:\n\nvalidator(utxo_ref: Int) {\n  fn mint(redeemer: Data, ctx: Data) {\n    True\n  }\n}\n// "
+---
+{
+  "title": "test_module.mint",
+  "redeemer": {
+    "title": "redeemer",
+    "schema": {
+      "$ref": "#/definitions/Data"
+    }
+  },
+  "parameters": [
+    {
+      "title": "utxo_ref",
+      "schema": {
+        "$ref": "#/definitions/Int"
+      }
+    }
+  ],
+  "compiledCode": "583701000032322322253330054a22930a998032491856616c696461746f722072657475726e65642066616c73650013656375a002ae695ce1",
+  "hash": "2837caccfd96d636a07e0da584ebbef94069bd7bfa4447096ecd9b80",
+  "definitions": {
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    },
+    "Int": {
+      "dataType": "integer"
+    }
+  }
+}
