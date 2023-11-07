@@ -682,9 +682,13 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             let tipo = function(vec![a.clone(), list(a.clone())], list(a));
             (tipo, 2)
         }
-
-        DefaultFunction::Bls12_381_G1_Add | DefaultFunction::Bls12_381_G1_Equal => {
+        DefaultFunction::Bls12_381_G1_Add => {
             let tipo = function(vec![g1_element(), g1_element()], g1_element());
+
+            (tipo, 2)
+        }
+        DefaultFunction::Bls12_381_G1_Equal => {
+            let tipo = function(vec![g1_element(), g1_element()], bool());
 
             (tipo, 2)
         }
@@ -714,8 +718,13 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             (tipo, 2)
         }
 
-        DefaultFunction::Bls12_381_G2_Add | DefaultFunction::Bls12_381_G2_Equal => {
+        DefaultFunction::Bls12_381_G2_Add => {
             let tipo = function(vec![g2_element(), g2_element()], g2_element());
+
+            (tipo, 2)
+        }
+        DefaultFunction::Bls12_381_G2_Equal => {
+            let tipo = function(vec![g2_element(), g2_element()], bool());
 
             (tipo, 2)
         }
