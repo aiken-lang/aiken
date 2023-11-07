@@ -82,6 +82,7 @@ dependencies = [
 name = "aiken-lang"
 version = "1.0.20-alpha"
 dependencies = [
+ "blst",
  "chumsky",
  "hex",
  "indexmap",

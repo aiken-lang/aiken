@@ -4,7 +4,7 @@ use vec1::Vec1;
 
 use crate::{
     ast::{
-        self, Annotation, Arg, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
+        self, Annotation, Arg, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg, Curve,
         DefinitionLocation, IfBranch, Located, LogicalOpChainKind, ParsedCallArg, Pattern,
         RecordUpdateSpread, Span, TraceKind, TypedClause, TypedRecordUpdateArg, UnOp,
         UntypedClause, UntypedRecordUpdateArg,
@@ -32,6 +32,12 @@ pub enum TypedExpr {
         location: Span,
         tipo: Rc<Type>,
         bytes: Vec<u8>,
+    },
+
+    CurvePoint {
+        location: Span,
+        tipo: Rc<Type>,
+        point: Curve,
     },
 
     Sequence {
@@ -186,7 +192,8 @@ impl TypedExpr {
             | Self::Assignment { tipo, .. }
             | Self::ModuleSelect { tipo, .. }
             | Self::RecordAccess { tipo, .. }
-            | Self::RecordUpdate { tipo, .. } => tipo.clone(),
+            | Self::RecordUpdate { tipo, .. }
+            | Self::CurvePoint { tipo, .. } => tipo.clone(),
             Self::Pipeline { expressions, .. } | Self::Sequence { expressions, .. } => {
                 expressions.last().map(TypedExpr::tipo).unwrap_or_else(void)
             }
@@ -227,7 +234,8 @@ impl TypedExpr {
             | TypedExpr::ByteArray { .. }
             | TypedExpr::Assignment { .. }
             | TypedExpr::TupleIndex { .. }
-            | TypedExpr::RecordAccess { .. } => None,
+            | TypedExpr::RecordAccess { .. }
+            | TypedExpr::CurvePoint { .. } => None,
             TypedExpr::If { .. } => None,
 
             // TODO: test
@@ -269,7 +277,8 @@ impl TypedExpr {
             | Self::TupleIndex { location, .. }
             | Self::ModuleSelect { location, .. }
             | Self::RecordAccess { location, .. }
-            | Self::RecordUpdate { location, .. } => *location,
+            | Self::RecordUpdate { location, .. }
+            | Self::CurvePoint { location, .. } => *location,
 
             Self::If { branches, .. } => branches.first().body.type_defining_location(),
 
@@ -306,7 +315,8 @@ impl TypedExpr {
             | Self::TupleIndex { location, .. }
             | Self::ModuleSelect { location, .. }
             | Self::RecordAccess { location, .. }
-            | Self::RecordUpdate { location, .. } => *location,
+            | Self::RecordUpdate { location, .. }
+            | Self::CurvePoint { location, .. } => *location,
         }
     }
 
@@ -323,7 +333,8 @@ impl TypedExpr {
             | TypedExpr::UInt { .. }
             | TypedExpr::String { .. }
             | TypedExpr::ByteArray { .. }
-            | TypedExpr::ModuleSelect { .. } => Some(Located::Expression(self)),
+            | TypedExpr::ModuleSelect { .. }
+            | TypedExpr::CurvePoint { .. } => Some(Located::Expression(self)),
 
             TypedExpr::Trace { text, then, .. } => text
                 .find_node(byte_index)
@@ -469,6 +480,12 @@ pub enum UntypedExpr {
     ByteArray {
         location: Span,
         bytes: Vec<u8>,
+        preferred_format: ByteArrayFormatPreference,
+    },
+
+    CurvePoint {
+        location: Span,
+        point: Curve,
         preferred_format: ByteArrayFormatPreference,
     },
 
@@ -733,7 +750,8 @@ impl UntypedExpr {
             | Self::RecordUpdate { location, .. }
             | Self::UnOp { location, .. }
             | Self::LogicalOpChain { location, .. }
-            | Self::If { location, .. } => *location,
+            | Self::If { location, .. }
+            | Self::CurvePoint { location, .. } => *location,
             Self::Sequence {
                 location,
                 expressions,

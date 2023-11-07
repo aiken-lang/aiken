@@ -3,13 +3,13 @@ use vec1::Vec1;
 
 use crate::{
     ast::{
-        Annotation, Arg, ArgName, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
-        ClauseGuard, Constant, IfBranch, LogicalOpChainKind, RecordUpdateSpread, Span, TraceKind,
-        Tracing, TypedArg, TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch,
-        TypedPattern, TypedRecordUpdateArg, UnOp, UntypedArg, UntypedClause, UntypedClauseGuard,
-        UntypedIfBranch, UntypedPattern, UntypedRecordUpdateArg,
+        Annotation, Arg, ArgName, AssignmentKind, BinOp, Bls12_381Point, ByteArrayFormatPreference,
+        CallArg, ClauseGuard, Constant, Curve, IfBranch, LogicalOpChainKind, RecordUpdateSpread,
+        Span, TraceKind, Tracing, TypedArg, TypedCallArg, TypedClause, TypedClauseGuard,
+        TypedIfBranch, TypedPattern, TypedRecordUpdateArg, UnOp, UntypedArg, UntypedClause,
+        UntypedClauseGuard, UntypedIfBranch, UntypedPattern, UntypedRecordUpdateArg,
     },
-    builtins::{bool, byte_array, function, int, list, string, tuple},
+    builtins::{bool, byte_array, function, g1_element, g2_element, int, list, string, tuple},
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
     tipo::fields::FieldMap,
@@ -321,6 +321,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 location,
             } => self.infer_bytearray(bytes, preferred_format, location),
 
+            UntypedExpr::CurvePoint {
+                location, point, ..
+            } => self.infer_curve_point(point, location),
+
             UntypedExpr::RecordUpdate {
                 location,
                 constructor,
@@ -360,6 +364,21 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             location,
             bytes,
             tipo: byte_array(),
+        })
+    }
+
+    fn infer_curve_point(&mut self, curve: Curve, location: Span) -> Result<TypedExpr, Error> {
+        let tipo = match curve {
+            Curve::Bls12_381(point) => match point {
+                Bls12_381Point::G1(_) => g1_element(),
+                Bls12_381Point::G2(_) => g2_element(),
+            },
+        };
+
+        Ok(TypedExpr::CurvePoint {
+            location,
+            point: curve,
+            tipo,
         })
     }
 
@@ -1345,6 +1364,15 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     preferred_format,
                 })
             }
+            Constant::CurvePoint {
+                location,
+                point,
+                preferred_format,
+            } => Ok(Constant::CurvePoint {
+                location,
+                point,
+                preferred_format,
+            }),
         }?;
 
         // Check type annotation is accurate.
@@ -2000,7 +2028,8 @@ fn assert_no_assignment(expr: &UntypedExpr) -> Result<(), Error> {
         | UntypedExpr::Var { .. }
         | UntypedExpr::LogicalOpChain { .. }
         | UntypedExpr::TraceIfFalse { .. }
-        | UntypedExpr::When { .. } => Ok(()),
+        | UntypedExpr::When { .. }
+        | UntypedExpr::CurvePoint { .. } => Ok(()),
     }
 }
 fn assert_assignment(expr: &UntypedExpr) -> Result<(), Error> {

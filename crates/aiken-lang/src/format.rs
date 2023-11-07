@@ -1,11 +1,11 @@
 use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
-        ClauseGuard, Constant, DataType, Definition, Function, IfBranch, LogicalOpChainKind,
-        ModuleConstant, Pattern, RecordConstructor, RecordConstructorArg, RecordUpdateSpread, Span,
-        TraceKind, TypeAlias, TypedArg, UnOp, UnqualifiedImport, UntypedArg, UntypedClause,
-        UntypedClauseGuard, UntypedDefinition, UntypedFunction, UntypedModule, UntypedPattern,
-        UntypedRecordUpdateArg, Use, Validator, CAPTURE_VARIABLE,
+        ClauseGuard, Constant, CurveType, DataType, Definition, Function, IfBranch,
+        LogicalOpChainKind, ModuleConstant, Pattern, RecordConstructor, RecordConstructorArg,
+        RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg, UnOp, UnqualifiedImport,
+        UntypedArg, UntypedClause, UntypedClauseGuard, UntypedDefinition, UntypedFunction,
+        UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use, Validator, CAPTURE_VARIABLE,
     },
     docvec,
     expr::{FnStyle, UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
@@ -352,7 +352,12 @@ impl<'comments> Formatter<'comments> {
                 bytes,
                 preferred_format,
                 ..
-            } => self.bytearray(bytes, preferred_format),
+            } => self.bytearray(bytes, None, preferred_format),
+            Constant::CurvePoint {
+                point,
+                preferred_format,
+                ..
+            } => self.bytearray(&point.compress(), Some(point.into()), preferred_format),
             Constant::Int { value, base, .. } => self.int(value, base),
             Constant::String { value, .. } => self.string(value),
         }
@@ -676,17 +681,24 @@ impl<'comments> Formatter<'comments> {
 
     pub fn bytearray<'a>(
         &mut self,
-        bytes: &'a [u8],
+        bytes: &[u8],
+        curve: Option<CurveType>,
         preferred_format: &ByteArrayFormatPreference,
     ) -> Document<'a> {
         match preferred_format {
             ByteArrayFormatPreference::HexadecimalString => "#"
                 .to_doc()
+                .append(Document::String(
+                    curve.map(|c| c.to_string()).unwrap_or_default(),
+                ))
                 .append("\"")
                 .append(Document::String(hex::encode(bytes)))
                 .append("\""),
             ByteArrayFormatPreference::ArrayOfBytes(Base::Decimal { .. }) => "#"
                 .to_doc()
+                .append(Document::String(
+                    curve.map(|c| c.to_string()).unwrap_or_default(),
+                ))
                 .append(
                     flex_break("[", "[")
                         .append(join(bytes.iter().map(|b| b.to_doc()), break_(",", ", ")))
@@ -697,6 +709,9 @@ impl<'comments> Formatter<'comments> {
                 .group(),
             ByteArrayFormatPreference::ArrayOfBytes(Base::Hexadecimal) => "#"
                 .to_doc()
+                .append(Document::String(
+                    curve.map(|c| c.to_string()).unwrap_or_default(),
+                ))
                 .append(
                     flex_break("[", "[")
                         .append(join(
@@ -771,7 +786,13 @@ impl<'comments> Formatter<'comments> {
                 bytes,
                 preferred_format,
                 ..
-            } => self.bytearray(bytes, preferred_format),
+            } => self.bytearray(bytes, None, preferred_format),
+
+            UntypedExpr::CurvePoint {
+                point,
+                preferred_format,
+                ..
+            } => self.bytearray(&point.compress(), Some(point.into()), preferred_format),
 
             UntypedExpr::If {
                 branches,
