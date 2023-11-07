@@ -3,7 +3,7 @@ use std::rc::Rc;
 use uplc::builtins::DefaultFunction;
 
 use crate::{
-    ast::{BinOp, UnOp},
+    ast::{BinOp, Curve, UnOp},
     tipo::{Type, ValueConstructor},
 };
 
@@ -18,6 +18,9 @@ pub enum Air {
     },
     ByteArray {
         bytes: Vec<u8>,
+    },
+    CurvePoint {
+        point: Curve,
     },
     Bool {
         value: bool,

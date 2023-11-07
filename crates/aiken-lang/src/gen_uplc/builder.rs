@@ -506,6 +506,7 @@ pub fn constants_ir(literal: &Constant) -> AirTree {
         Constant::Int { value, .. } => AirTree::int(value),
         Constant::String { value, .. } => AirTree::string(value),
         Constant::ByteArray { bytes, .. } => AirTree::byte_array(bytes.clone()),
+        Constant::CurvePoint { point, .. } => AirTree::curve(*point.as_ref()),
     }
 }
 
@@ -1217,6 +1218,8 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
         Term::bls12_381_g1_uncompress().apply(Term::un_b_data().apply(term))
     } else if field_type.is_bls381_12_g2() {
         Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(term))
+    } else if field_type.is_ml_result() {
+        panic!("ML Result not supported")
     } else {
         term
     }
@@ -1302,7 +1305,7 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
             UplcConstant::Bls12_381G2Element(b) => UplcConstant::Data(PlutusData::BoundedBytes(
                 b.deref().clone().compress().into(),
             )),
-            UplcConstant::Bls12_381MlResult(_) => unreachable!(),
+            UplcConstant::Bls12_381MlResult(_) => unreachable!("Bls12_381MlResult not supported"),
         };
         new_constants.push(constant);
     }
@@ -1365,6 +1368,8 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
         Term::bls12_381_g1_compress().apply(Term::b_data().apply(term))
     } else if field_type.is_bls381_12_g2() {
         Term::bls12_381_g2_compress().apply(Term::b_data().apply(term))
+    } else if field_type.is_ml_result() {
+        panic!("ML Result not supported")
     } else {
         term
     }

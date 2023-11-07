@@ -66,7 +66,7 @@ pub fn value() -> impl Parser<Token, ast::Constant, Error = ParseError> {
 
                 ast::Constant::CurvePoint {
                     location,
-                    point: ast::Curve::Bls12_381(point),
+                    point: ast::Curve::Bls12_381(point).into(),
                     preferred_format,
                 }
             }

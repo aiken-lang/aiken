@@ -1,5 +1,5 @@
 use crate::{
-    builtins::{self, bool},
+    builtins::{self, bool, g1_element, g2_element},
     expr::{TypedExpr, UntypedExpr},
     parser::token::{Base, Token},
     tipo::{PatternConstructor, Type, TypeInfo},
@@ -496,7 +496,7 @@ pub enum Constant {
 
     CurvePoint {
         location: Span,
-        point: Curve,
+        point: Box<Curve>,
         preferred_format: ByteArrayFormatPreference,
     },
 }
@@ -507,7 +507,7 @@ impl Constant {
             Constant::Int { .. } => builtins::int(),
             Constant::String { .. } => builtins::string(),
             Constant::ByteArray { .. } => builtins::byte_array(),
-            Constant::CurvePoint { point, .. } => match point {
+            Constant::CurvePoint { point, .. } => match point.as_ref() {
                 Curve::Bls12_381(Bls12_381Point::G1(_)) => builtins::g1_element(),
                 Curve::Bls12_381(Bls12_381Point::G2(_)) => builtins::g2_element(),
             },
@@ -1067,12 +1067,27 @@ impl Curve {
             },
         }
     }
+
+    pub fn tipo(&self) -> Rc<Type> {
+        match self {
+            Curve::Bls12_381(point) => point.tipo(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Bls12_381Point {
     G1(blst::blst_p1),
     G2(blst::blst_p2),
+}
+
+impl Bls12_381Point {
+    pub fn tipo(&self) -> Rc<Type> {
+        match self {
+            Bls12_381Point::G1(_) => g1_element(),
+            Bls12_381Point::G2(_) => g2_element(),
+        }
+    }
 }
 
 impl Default for Bls12_381Point {
