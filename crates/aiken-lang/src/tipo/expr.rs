@@ -323,7 +323,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             UntypedExpr::CurvePoint {
                 location, point, ..
-            } => self.infer_curve_point(point, location),
+            } => self.infer_curve_point(*point, location),
 
             UntypedExpr::RecordUpdate {
                 location,
@@ -377,7 +377,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         Ok(TypedExpr::CurvePoint {
             location,
-            point: curve,
+            point: curve.into(),
             tipo,
         })
     }

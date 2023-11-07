@@ -37,7 +37,7 @@ pub enum TypedExpr {
     CurvePoint {
         location: Span,
         tipo: Rc<Type>,
-        point: Curve,
+        point: Box<Curve>,
     },
 
     Sequence {
@@ -485,7 +485,7 @@ pub enum UntypedExpr {
 
     CurvePoint {
         location: Span,
-        point: Curve,
+        point: Box<Curve>,
         preferred_format: ByteArrayFormatPreference,
     },
 

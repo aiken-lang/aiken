@@ -27,7 +27,7 @@ pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
 
                 UntypedExpr::CurvePoint {
                     location,
-                    point: ast::Curve::Bls12_381(point),
+                    point: ast::Curve::Bls12_381(point).into(),
                     preferred_format,
                 }
             }

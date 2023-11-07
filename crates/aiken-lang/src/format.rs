@@ -357,7 +357,11 @@ impl<'comments> Formatter<'comments> {
                 point,
                 preferred_format,
                 ..
-            } => self.bytearray(&point.compress(), Some(point.into()), preferred_format),
+            } => self.bytearray(
+                &point.compress(),
+                Some(point.as_ref().into()),
+                preferred_format,
+            ),
             Constant::Int { value, base, .. } => self.int(value, base),
             Constant::String { value, .. } => self.string(value),
         }
@@ -792,7 +796,11 @@ impl<'comments> Formatter<'comments> {
                 point,
                 preferred_format,
                 ..
-            } => self.bytearray(&point.compress(), Some(point.into()), preferred_format),
+            } => self.bytearray(
+                &point.compress(),
+                Some(point.as_ref().into()),
+                preferred_format,
+            ),
 
             UntypedExpr::If {
                 branches,

@@ -19,8 +19,8 @@ use uplc::{
 
 use crate::{
     ast::{
-        AssignmentKind, BinOp, Pattern, Span, TypedArg, TypedClause, TypedDataType, TypedFunction,
-        TypedPattern, TypedValidator, UnOp,
+        AssignmentKind, BinOp, Bls12_381Point, Curve, Pattern, Span, TypedArg, TypedClause,
+        TypedDataType, TypedFunction, TypedPattern, TypedValidator, UnOp,
     },
     builtins::{bool, data, int, list, string, void},
     expr::TypedExpr,
@@ -725,6 +725,7 @@ impl<'a> CodeGenerator<'a> {
             }
 
             TypedExpr::UnOp { value, op, .. } => AirTree::unop(*op, self.build(value)),
+            TypedExpr::CurvePoint { point, .. } => AirTree::curve(*point.as_ref()),
         }
     }
 
@@ -3550,6 +3551,10 @@ impl<'a> CodeGenerator<'a> {
             Air::Bool { value } => {
                 arg_stack.push(Term::bool(value));
             }
+            Air::CurvePoint { point, .. } => match point {
+                Curve::Bls12_381(Bls12_381Point::G1(g1)) => arg_stack.push(Term::bls12_381_g1(g1)),
+                Curve::Bls12_381(Bls12_381Point::G2(g2)) => arg_stack.push(Term::bls12_381_g2(g2)),
+            },
             Air::Var {
                 name,
                 constructor,

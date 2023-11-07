@@ -4,7 +4,7 @@ use std::{borrow::BorrowMut, rc::Rc, slice::Iter};
 use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 
 use crate::{
-    ast::{BinOp, Span, UnOp},
+    ast::{BinOp, Curve, Span, UnOp},
     builtins::{bool, byte_array, data, int, list, string, void},
     tipo::{Type, ValueConstructor, ValueConstructorVariant},
 };
@@ -197,6 +197,9 @@ pub enum AirExpression {
     ByteArray {
         bytes: Vec<u8>,
     },
+    CurvePoint {
+        point: Curve,
+    },
     Bool {
         value: bool,
     },
@@ -340,6 +343,9 @@ impl AirTree {
     }
     pub fn byte_array(bytes: Vec<u8>) -> AirTree {
         AirTree::Expression(AirExpression::ByteArray { bytes })
+    }
+    pub fn curve(point: Curve) -> AirTree {
+        AirTree::Expression(AirExpression::CurvePoint { point })
     }
     pub fn bool(value: bool) -> AirTree {
         AirTree::Expression(AirExpression::Bool { value })
@@ -1058,6 +1064,9 @@ impl AirTree {
                 AirExpression::ByteArray { bytes } => air_vec.push(Air::ByteArray {
                     bytes: bytes.clone(),
                 }),
+                AirExpression::CurvePoint { point } => {
+                    air_vec.push(Air::CurvePoint { point: *point })
+                }
                 AirExpression::Bool { value } => air_vec.push(Air::Bool { value: *value }),
                 AirExpression::List { tipo, tail, items } => {
                     air_vec.push(Air::List {
@@ -1286,6 +1295,7 @@ impl AirTree {
                 AirExpression::String { .. } => string(),
                 AirExpression::ByteArray { .. } => byte_array(),
                 AirExpression::Bool { .. } => bool(),
+                AirExpression::CurvePoint { point } => point.tipo(),
                 AirExpression::List { tipo, .. }
                 | AirExpression::Tuple { tipo, .. }
                 | AirExpression::Call { tipo, .. }

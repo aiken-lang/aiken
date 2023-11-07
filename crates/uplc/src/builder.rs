@@ -38,6 +38,14 @@ impl<T> Term<T> {
         Term::Constant(Constant::ByteString(b).into())
     }
 
+    pub fn bls12_381_g1(b: blst::blst_p1) -> Self {
+        Term::Constant(Constant::Bls12_381G1Element(b.into()).into())
+    }
+
+    pub fn bls12_381_g2(b: blst::blst_p2) -> Self {
+        Term::Constant(Constant::Bls12_381G2Element(b.into()).into())
+    }
+
     pub fn bool(b: bool) -> Self {
         Term::Constant(Constant::Bool(b).into())
     }
