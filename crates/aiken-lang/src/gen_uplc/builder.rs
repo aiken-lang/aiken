@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap, ops::Deref, rc::Rc};
 
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
@@ -7,7 +7,7 @@ use uplc::{
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
     builtins::DefaultFunction,
     machine::{
-        runtime::{convert_constr_to_tag, ANY_TAG},
+        runtime::{convert_constr_to_tag, Compressable, ANY_TAG},
         value::to_pallas_bigint,
     },
     Constr, KeyValuePairs, PlutusData,
@@ -1213,6 +1213,10 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
         Term::equals_integer()
             .apply(Term::integer(1.into()))
             .apply(Term::fst_pair().apply(Term::unconstr_data().apply(term)))
+    } else if field_type.is_bls381_12_g1() {
+        Term::bls12_381_g1_uncompress().apply(Term::un_b_data().apply(term))
+    } else if field_type.is_bls381_12_g2() {
+        Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(term))
     } else {
         term
     }
@@ -1292,9 +1296,13 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
                 any_constructor: None,
                 fields: vec![],
             })),
-            UplcConstant::Bls12_381G1Element(_) => todo!(),
-            UplcConstant::Bls12_381G2Element(_) => todo!(),
-            UplcConstant::Bls12_381MlResult(_) => todo!(),
+            UplcConstant::Bls12_381G1Element(b) => UplcConstant::Data(PlutusData::BoundedBytes(
+                b.deref().clone().compress().into(),
+            )),
+            UplcConstant::Bls12_381G2Element(b) => UplcConstant::Data(PlutusData::BoundedBytes(
+                b.deref().clone().compress().into(),
+            )),
+            UplcConstant::Bls12_381MlResult(_) => unreachable!(),
         };
         new_constants.push(constant);
     }
@@ -1353,6 +1361,10 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
                 .into(),
             ),
         )
+    } else if field_type.is_bls381_12_g1() {
+        Term::bls12_381_g1_compress().apply(Term::b_data().apply(term))
+    } else if field_type.is_bls381_12_g2() {
+        Term::bls12_381_g2_compress().apply(Term::b_data().apply(term))
     } else {
         term
     }
