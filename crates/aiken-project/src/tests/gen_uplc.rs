@@ -2346,7 +2346,7 @@ fn acceptance_test_26_foldr() {
 }
 
 #[test]
-fn acceptance_test_27() {
+fn acceptance_test_27_flat_map() {
     let src = r#"
       pub fn foldr(xs: List<a>, f: fn(a, b) -> b, zero: b) -> b {
         when xs is {
@@ -2487,33 +2487,33 @@ fn acceptance_test_27() {
 }
 
 #[test]
-fn acceptance_test_30() {
+fn acceptance_test_28_unique_empty_list() {
     let src = r#"
-      pub fn foldr(xs: List<a>, f: fn(a, b) -> b, zero: b) -> b {
-        when xs is {
-          [] ->
-            zero
-          [x, ..rest] ->
-            f(x, foldr(rest, f, zero))
-        }
-      }
-      
-      pub fn concat(left: List<a>, right: List<a>) -> List<a> {
-        foldr(left, fn(x, xs) { [x, ..xs] }, right)
-      }
-      
-      pub fn flat_map(xs: List<a>, f: fn(a) -> List<b>) -> List<b> {
+      pub fn filter(xs: List<a>, f: fn(a) -> Bool) -> List<a> {
         when xs is {
           [] ->
             []
           [x, ..rest] ->
-            concat(f(x), flat_map(rest, f))
+            if f(x) {
+              [x, ..filter(rest, f)]
+            } else {
+              filter(rest, f)
+            }
         }
       }
       
-      test flat_map_2() {
-        flat_map([1, 2, 3], fn(a) { [a, a] }) == [1, 1, 2, 2, 3, 3]
+      pub fn unique(xs: List<a>) -> List<a> {
+        when xs is {
+          [] ->
+            []
+          [x, ..rest] ->
+            [x, ..unique(filter(rest, fn(y) { y != x }))]
+        }
       }
+      
+      test unique_1() {
+        unique([]) == []
+      }  
     "#;
 
     assert_uplc(
@@ -2521,67 +2521,171 @@ fn acceptance_test_30() {
         Term::equals_data()
             .apply(
                 Term::list_data().apply(
-                    Term::var("flat_map")
-                        .lambda("flat_map")
+                    Term::var("unique")
+                        .lambda("unique")
+                        .apply(Term::var("unique").apply(Term::var("unique")))
+                        .lambda("unique")
                         .apply(
-                            Term::var("flat_map")
-                                .apply(Term::var("flat_map"))
+                            Term::var("xs")
+                                .delayed_choose_list(
+                                    Term::empty_list(),
+                                    Term::mk_cons()
+                                        .apply(Term::var("x"))
+                                        .apply(
+                                            Term::var("unique").apply(Term::var("unique")).apply(
+                                                Term::var("filter").apply(Term::var("rest")).apply(
+                                                    Term::equals_data()
+                                                        .apply(Term::var("y"))
+                                                        .apply(Term::var("x"))
+                                                        .if_then_else(
+                                                            Term::bool(false),
+                                                            Term::bool(true),
+                                                        )
+                                                        .lambda("y"),
+                                                ),
+                                            ),
+                                        )
+                                        .lambda("rest")
+                                        .apply(Term::tail_list().apply(Term::var("xs")))
+                                        .lambda("x")
+                                        .apply(Term::head_list().apply(Term::var("xs"))),
+                                )
+                                .lambda("xs")
+                                .lambda("unique"),
+                        )
+                        .lambda("filter")
+                        .apply(
+                            Term::var("filter")
+                                .apply(Term::var("filter"))
                                 .apply(Term::var("xs"))
-                                .lambda("flat_map")
+                                .lambda("filter")
                                 .apply(
                                     Term::var("xs")
                                         .delayed_choose_list(
                                             Term::empty_list(),
-                                            Term::var("concat")
-                                                .apply(Term::var("f").apply(Term::var("x")))
-                                                .apply(
-                                                    Term::var("flat_map")
-                                                        .apply(Term::var("flat_map"))
+                                            Term::var("f")
+                                                .apply(Term::var("x"))
+                                                .delayed_if_then_else(
+                                                    Term::mk_cons().apply(Term::var("x")).apply(
+                                                        Term::var("filter")
+                                                            .apply(Term::var("filter"))
+                                                            .apply(Term::var("rest")),
+                                                    ),
+                                                    Term::var("filter")
+                                                        .apply(Term::var("filter"))
                                                         .apply(Term::var("rest")),
                                                 )
                                                 .lambda("rest")
                                                 .apply(Term::tail_list().apply(Term::var("xs")))
                                                 .lambda("x")
-                                                .apply(Term::un_i_data().apply(
-                                                    Term::head_list().apply(Term::var("xs")),
-                                                )),
+                                                .apply(Term::head_list().apply(Term::var("xs"))),
                                         )
                                         .lambda("xs")
-                                        .lambda("flat_map"),
+                                        .lambda("filter"),
                                 )
                                 .lambda("f")
                                 .lambda("xs"),
                         )
-                        .lambda("concat")
+                        .apply(Term::empty_list()),
+                ),
+            )
+            .apply(Term::data(Data::list(vec![]))),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_28_unique_list() {
+    let src = r#"
+      pub fn filter(xs: List<a>, f: fn(a) -> Bool) -> List<a> {
+        when xs is {
+          [] ->
+            []
+          [x, ..rest] ->
+            if f(x) {
+              [x, ..filter(rest, f)]
+            } else {
+              filter(rest, f)
+            }
+        }
+      }
+      
+      pub fn unique(xs: List<a>) -> List<a> {
+        when xs is {
+          [] ->
+            []
+          [x, ..rest] ->
+            [x, ..unique(filter(rest, fn(y) { y != x }))]
+        }
+      }
+      
+      test unique_1() {
+        unique([1,2,3,1]) == [1,2,3]
+      }  
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::list_data().apply(
+                    Term::var("unique")
+                        .lambda("unique")
+                        .apply(Term::var("unique").apply(Term::var("unique")))
+                        .lambda("unique")
                         .apply(
-                            Term::var("foldr")
-                                .apply(Term::var("left"))
-                                .apply(
+                            Term::var("xs")
+                                .delayed_choose_list(
+                                    Term::empty_list(),
                                     Term::mk_cons()
                                         .apply(Term::i_data().apply(Term::var("x")))
-                                        .apply(Term::var("xs"))
-                                        .lambda("xs")
-                                        .lambda("x"),
+                                        .apply(
+                                            Term::var("unique").apply(Term::var("unique")).apply(
+                                                Term::var("filter").apply(Term::var("rest")).apply(
+                                                    Term::equals_integer()
+                                                        .apply(Term::var("y"))
+                                                        .apply(Term::var("x"))
+                                                        .if_then_else(
+                                                            Term::bool(false),
+                                                            Term::bool(true),
+                                                        )
+                                                        .lambda("y"),
+                                                ),
+                                            ),
+                                        )
+                                        .lambda("rest")
+                                        .apply(Term::tail_list().apply(Term::var("xs")))
+                                        .lambda("x")
+                                        .apply(
+                                            Term::un_i_data()
+                                                .apply(Term::head_list().apply(Term::var("xs"))),
+                                        ),
                                 )
-                                .apply(Term::var("right"))
-                                .lambda("right")
-                                .lambda("left"),
+                                .lambda("xs")
+                                .lambda("unique"),
                         )
-                        .lambda("foldr")
+                        .lambda("filter")
                         .apply(
-                            Term::var("foldr")
-                                .apply(Term::var("foldr"))
+                            Term::var("filter")
+                                .apply(Term::var("filter"))
                                 .apply(Term::var("xs"))
-                                .lambda("foldr")
+                                .lambda("filter")
                                 .apply(
                                     Term::var("xs")
                                         .delayed_choose_list(
-                                            Term::var("zero"),
+                                            Term::empty_list(),
                                             Term::var("f")
                                                 .apply(Term::var("x"))
-                                                .apply(
-                                                    Term::var("foldr")
-                                                        .apply(Term::var("foldr"))
+                                                .delayed_if_then_else(
+                                                    Term::mk_cons()
+                                                        .apply(Term::i_data().apply(Term::var("x")))
+                                                        .apply(
+                                                            Term::var("filter")
+                                                                .apply(Term::var("filter"))
+                                                                .apply(Term::var("rest")),
+                                                        ),
+                                                    Term::var("filter")
+                                                        .apply(Term::var("filter"))
                                                         .apply(Term::var("rest")),
                                                 )
                                                 .lambda("rest")
@@ -2592,9 +2696,8 @@ fn acceptance_test_30() {
                                                 )),
                                         )
                                         .lambda("xs")
-                                        .lambda("foldr"),
+                                        .lambda("filter"),
                                 )
-                                .lambda("zero")
                                 .lambda("f")
                                 .lambda("xs"),
                         )
@@ -2602,27 +2705,169 @@ fn acceptance_test_30() {
                             Constant::Data(Data::integer(1.into())),
                             Constant::Data(Data::integer(2.into())),
                             Constant::Data(Data::integer(3.into())),
-                        ]))
-                        .apply(
-                            Term::mk_cons()
-                                .apply(Term::i_data().apply(Term::var("a")))
-                                .apply(
-                                    Term::mk_cons()
-                                        .apply(Term::i_data().apply(Term::var("a")))
-                                        .apply(Term::empty_list()),
-                                )
-                                .lambda("a"),
-                        ),
+                            Constant::Data(Data::integer(1.into())),
+                        ])),
                 ),
             )
-            .apply(Term::list_data().apply(Term::list_values(vec![
-                Constant::Data(Data::integer(1.into())),
-                Constant::Data(Data::integer(1.into())),
-                Constant::Data(Data::integer(2.into())),
-                Constant::Data(Data::integer(2.into())),
-                Constant::Data(Data::integer(3.into())),
-                Constant::Data(Data::integer(3.into())),
+            .apply(Term::data(Data::list(vec![
+                Data::integer(1.into()),
+                Data::integer(2.into()),
+                Data::integer(3.into()),
             ]))),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_29_union() {
+    let src = r#"
+      pub opaque type AssocList<key, value> {
+        inner: List<(key, value)>,
+      }
+      
+      pub fn new() -> AssocList<key, value> {
+        AssocList { inner: [] }
+      }
+      
+      pub fn from_list(xs: List<(key, value)>) -> AssocList<key, value> {
+        AssocList { inner: do_from_list(xs) }
+      }
+      
+      fn do_from_list(xs: List<(key, value)>) -> List<(key, value)> {
+        when xs is {
+          [] ->
+            []
+          [(k, v), ..rest] ->
+            do_insert(do_from_list(rest), k, v)
+        }
+      }
+      
+      pub fn insert(
+        in m: AssocList<key, value>,
+        key k: key,
+        value v: value,
+      ) -> AssocList<key, value> {
+        AssocList { inner: do_insert(m.inner, k, v) }
+      }
+      
+      fn do_insert(elems: List<(key, value)>, k: key, v: value) -> List<(key, value)> {
+        when elems is {
+          [] ->
+            [(k, v)]
+          [(k2, v2), ..rest] ->
+            if k == k2 {
+              [(k, v), ..rest]
+            } else {
+              [(k2, v2), ..do_insert(rest, k, v)]
+            }
+        }
+      }
+      
+      pub fn union(
+        left: AssocList<key, value>,
+        right: AssocList<key, value>,
+      ) -> AssocList<key, value> {
+        AssocList { inner: do_union(left.inner, right.inner) }
+      }
+      
+      fn do_union(
+        left: List<(key, value)>,
+        right: List<(key, value)>,
+      ) -> List<(key, value)> {
+        when left is {
+          [] ->
+            right
+          [(k, v), ..rest] ->
+            do_union(rest, do_insert(right, k, v))
+        }
+      }
+      
+      fn fixture_1() {
+        new()
+          |> insert("foo", 42)
+          |> insert("bar", 14)
+      }
+      
+      test union_1() {
+        union(fixture_1(), new()) == fixture_1()
+      }
+      
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::map_data().apply(
+                    Term::var("union")
+                        .apply(Term::map_values(vec![
+                            Constant::ProtoPair(
+                                Type::Data,
+                                Type::Data,
+                                Constant::Data(Data::bytestring("foo".as_bytes().to_vec())).into(),
+                                Constant::Data(Data::integer(42.into())).into(),
+                            ),
+                            Constant::ProtoPair(
+                                Type::Data,
+                                Type::Data,
+                                Constant::Data(Data::bytestring("bar".as_bytes().to_vec())).into(),
+                                Constant::Data(Data::integer(14.into())).into(),
+                            ),
+                        ]))
+                        .apply(Term::empty_map()),
+                ),
+            )
+            .apply(Term::data(Data::map(vec![
+                (
+                    Data::bytestring("foo".as_bytes().to_vec()),
+                    Data::integer(42.into()),
+                ),
+                (
+                    Data::bytestring("bar".as_bytes().to_vec()),
+                    Data::integer(14.into()),
+                ),
+            ]))),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_30_abs() {
+    let src = r#"
+      pub fn abs(a: Int) -> Int {
+        if a < 0 {
+          -a
+        } else {
+          a
+        }
+      }
+      
+      test abs_1() {
+        abs(-14) == 14
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_integer()
+            .apply(
+                Term::var("abs")
+                    .lambda("abs")
+                    .apply(
+                        Term::less_than_integer()
+                            .apply(Term::var("a"))
+                            .apply(Term::integer(0.into()))
+                            .delayed_if_then_else(
+                                Term::subtract_integer()
+                                    .apply(Term::integer(0.into()))
+                                    .apply(Term::var("a")),
+                                Term::var("a"),
+                            )
+                            .lambda("a"),
+                    )
+                    .apply(Term::integer((-14).into())),
+            )
+            .apply(Term::integer(14.into())),
         false,
     );
 }
