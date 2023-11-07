@@ -1,4 +1,7 @@
-use crate::{ast::Span, parser::token::Token};
+use crate::{
+    ast::{CurveType, Span},
+    parser::token::Token,
+};
 use indoc::formatdoc;
 use miette::Diagnostic;
 use owo_colors::{OwoColorize, Stream::Stdout};
@@ -43,6 +46,32 @@ impl ParseError {
             while_parsing: None,
             expected: HashSet::new(),
             label: Some("invalid clause guard"),
+        }
+    }
+
+    pub fn point_not_on_curve(curve: CurveType, span: Span) -> Self {
+        Self {
+            kind: ErrorKind::PointNotOnCurve { curve },
+            span,
+            while_parsing: None,
+            expected: HashSet::new(),
+            label: Some("out off curve"),
+        }
+    }
+
+    pub fn unknown_point_curve(curve: String, point: Option<String>, span: Span) -> Self {
+        let label = if point.is_some() {
+            Some("unknown curve")
+        } else {
+            Some("unknown point")
+        };
+
+        Self {
+            kind: ErrorKind::UnknownCurvePoint { curve, point },
+            span,
+            while_parsing: None,
+            expected: HashSet::new(),
+            label,
         }
     }
 
@@ -134,6 +163,15 @@ pub enum ErrorKind {
         hint: Option<String>,
     },
 
+    #[error("I tripped over a {}", fmt_curve_type(.curve))]
+    PointNotOnCurve { curve: CurveType },
+
+    #[error("I tripped over a {}", fmt_unknown_curve(.curve, .point))]
+    UnknownCurvePoint {
+        curve: String,
+        point: Option<String>,
+    },
+
     #[error("I tripped over a malformed hexadecimal digits.")]
     #[diagnostic(help("{}", formatdoc! {
         r#"When numbers starts with '0x', they are treated as hexadecimal numbers. Thus, only digits from 0-9 or letter from a-f (or A-F) can be used following a '0x' number declaration. Plus, hexadecimal digits always go by pairs, so the total number of digits must be even (not counting leading zeros)."#
@@ -184,6 +222,32 @@ pub enum ErrorKind {
         , bad = "✖️".if_supports_color(Stdout, |s| s.red())
     }))]
     InvalidWhenClause,
+}
+
+fn fmt_curve_type(curve: &CurveType) -> String {
+    match curve {
+        CurveType::Bls12_381(point) => {
+            format!("{point} point that is not in the bls12_381 curve")
+        }
+    }
+}
+
+fn fmt_unknown_curve(curve: &String, point: &Option<String>) -> String {
+    match point {
+        Some(point) => {
+            format!(
+                "{} which is an unknown point for curve {}",
+                point.if_supports_color(Stdout, |s| s.purple()),
+                curve.if_supports_color(Stdout, |s| s.purple()),
+            )
+        }
+        None => {
+            format!(
+                "{} which is an unknown curve",
+                curve.if_supports_color(Stdout, |s| s.purple())
+            )
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Diagnostic, thiserror::Error)]

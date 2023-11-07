@@ -11,6 +11,7 @@ use std::{
     ops::Range,
     rc::Rc,
 };
+use uplc::machine::runtime::Compressable;
 use vec1::Vec1;
 
 pub const CAPTURE_VARIABLE: &str = "_capture";
@@ -492,6 +493,12 @@ pub enum Constant {
         bytes: Vec<u8>,
         preferred_format: ByteArrayFormatPreference,
     },
+
+    CurvePoint {
+        location: Span,
+        point: Curve,
+        preferred_format: ByteArrayFormatPreference,
+    },
 }
 
 impl Constant {
@@ -500,6 +507,10 @@ impl Constant {
             Constant::Int { .. } => builtins::int(),
             Constant::String { .. } => builtins::string(),
             Constant::ByteArray { .. } => builtins::byte_array(),
+            Constant::CurvePoint { point, .. } => match point {
+                Curve::Bls12_381(Bls12_381Point::G1(_)) => builtins::g1_element(),
+                Curve::Bls12_381(Bls12_381Point::G2(_)) => builtins::g2_element(),
+            },
         }
     }
 
@@ -507,7 +518,8 @@ impl Constant {
         match self {
             Constant::Int { location, .. }
             | Constant::String { location, .. }
-            | Constant::ByteArray { location, .. } => *location,
+            | Constant::ByteArray { location, .. }
+            | Constant::CurvePoint { location, .. } => *location,
         }
     }
 }
@@ -995,6 +1007,78 @@ pub enum ByteArrayFormatPreference {
     HexadecimalString,
     ArrayOfBytes(Base),
     Utf8String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum CurveType {
+    Bls12_381(Bls12_381PointType),
+}
+
+impl Display for CurveType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CurveType::Bls12_381(point) => write!(f, "<Bls12_381, {point}>"),
+        }
+    }
+}
+impl From<&Curve> for CurveType {
+    fn from(value: &Curve) -> Self {
+        match value {
+            Curve::Bls12_381(point) => CurveType::Bls12_381(point.into()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum Bls12_381PointType {
+    G1,
+    G2,
+}
+
+impl From<&Bls12_381Point> for Bls12_381PointType {
+    fn from(value: &Bls12_381Point) -> Self {
+        match value {
+            Bls12_381Point::G1(_) => Bls12_381PointType::G1,
+            Bls12_381Point::G2(_) => Bls12_381PointType::G2,
+        }
+    }
+}
+
+impl Display for Bls12_381PointType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Bls12_381PointType::G1 => write!(f, "G1"),
+            Bls12_381PointType::G2 => write!(f, "G2"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum Curve {
+    Bls12_381(Bls12_381Point),
+}
+
+impl Curve {
+    pub fn compress(&self) -> Vec<u8> {
+        match self {
+            Curve::Bls12_381(point) => match point {
+                Bls12_381Point::G1(g1) => g1.compress(),
+                Bls12_381Point::G2(g2) => g2.compress(),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum Bls12_381Point {
+    G1(blst::blst_p1),
+    G2(blst::blst_p2),
+}
+
+impl Default for Bls12_381Point {
+    fn default() -> Self {
+        Bls12_381Point::G1(Default::default())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
