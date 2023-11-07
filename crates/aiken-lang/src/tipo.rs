@@ -1,6 +1,7 @@
 use self::{environment::Environment, pretty::Printer};
 use crate::{
     ast::{Constant, DefinitionLocation, ModuleKind, Span},
+    builtins::{G1_ELEMENT, G2_ELEMENT, MILLER_LOOP_RESULT},
     tipo::fields::FieldMap,
 };
 use std::{cell::RefCell, collections::HashMap, ops::Deref, rc::Rc};
@@ -126,6 +127,33 @@ impl Type {
         match self {
             Self::App { module, name, .. } if "ByteArray" == name && module.is_empty() => true,
             Self::Var { tipo } => tipo.borrow().is_bytearray(),
+            _ => false,
+        }
+    }
+
+    pub fn is_bls381_12_g1(&self) -> bool {
+        match self {
+            Self::App { module, name, .. } => G1_ELEMENT == name && module.is_empty(),
+
+            Self::Var { tipo } => tipo.borrow().is_bls381_12_g1(),
+            _ => false,
+        }
+    }
+
+    pub fn is_bls381_12_g2(&self) -> bool {
+        match self {
+            Self::App { module, name, .. } => G2_ELEMENT == name && module.is_empty(),
+
+            Self::Var { tipo } => tipo.borrow().is_bls381_12_g2(),
+            _ => false,
+        }
+    }
+
+    pub fn is_ml_result(&self) -> bool {
+        match self {
+            Self::App { module, name, .. } => MILLER_LOOP_RESULT == name && module.is_empty(),
+
+            Self::Var { tipo } => tipo.borrow().is_ml_result(),
             _ => false,
         }
     }
@@ -292,7 +320,7 @@ impl Type {
                     }
                 }
                 Self::Var { tipo } => tipo.borrow().get_uplc_type().unwrap(),
-                _ => todo!(),
+                _ => unreachable!(),
             }
         } else {
             UplcType::Data
@@ -452,6 +480,26 @@ impl TypeVar {
     pub fn is_bytearray(&self) -> bool {
         match self {
             Self::Link { tipo } => tipo.is_bytearray(),
+            _ => false,
+        }
+    }
+
+    pub fn is_bls381_12_g1(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_bls381_12_g1(),
+            _ => false,
+        }
+    }
+
+    pub fn is_bls381_12_g2(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_bls381_12_g2(),
+            _ => false,
+        }
+    }
+    pub fn is_ml_result(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_ml_result(),
             _ => false,
         }
     }
