@@ -1,6 +1,6 @@
 use aiken::cmd::{
     blueprint::{self, address},
-    build, check, completion, docs, fmt, lsp, new,
+    build, check, watch, completion, docs, fmt, lsp, new,
     packages::{self, add},
     tx, uplc, Cmd,
 };
@@ -17,6 +17,7 @@ fn main() -> miette::Result<()> {
         Cmd::Build(args) => build::exec(args),
         Cmd::Address(args) => address::exec(args),
         Cmd::Check(args) => check::exec(args),
+        Cmd::Watch(args) => watch::exec(args),
         Cmd::Docs(args) => docs::exec(args),
         Cmd::Add(args) => add::exec(args),
         Cmd::Blueprint(args) => blueprint::exec(args),

@@ -18,6 +18,10 @@ pub struct Args {
     #[clap(long)]
     debug: bool,
 
+    // When enabled, re-run the command on file changes instead of exiting
+    #[clap(long)]
+    watch: bool,
+
     /// Only run tests if they match any of these strings.
     /// You can match a module with `-m aiken/list` or `-m list`.
     /// You can match a test with `-m "aiken/list.{map}"` or `-m "aiken/option.{flatten_1}"`
@@ -43,6 +47,7 @@ pub fn exec(
         match_tests,
         exact_match,
         no_traces,
+        watch,
     }: Args,
 ) -> miette::Result<()> {
     crate::with_project(directory, deny, |p| {

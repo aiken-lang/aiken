@@ -4,6 +4,7 @@ use clap::Parser;
 pub mod blueprint;
 pub mod build;
 pub mod check;
+pub mod watch;
 pub mod completion;
 pub mod docs;
 pub mod fmt;
@@ -23,6 +24,7 @@ pub enum Cmd {
     Build(build::Args),
     Address(blueprint::address::Args),
     Check(check::Args),
+    Watch(watch::Args),
     Docs(docs::Args),
     Add(packages::add::Args),
 

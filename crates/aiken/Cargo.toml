@@ -25,6 +25,7 @@ hex = "0.4.3"
 ignore = "0.4.20"
 indoc = "2.0"
 miette = { version = "5.5.0", features = ["fancy"] }
+notify = "6.1.1"
 owo-colors = { version = "3.5.0", features = ["supports-colors"] }
 pallas-addresses = "0.18.0"
 pallas-codec = "0.18.0"

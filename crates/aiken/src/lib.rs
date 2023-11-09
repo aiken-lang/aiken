@@ -94,6 +94,88 @@ where
     Ok(())
 }
 
+// TODO: we probably want to rework with_project slightly to avoid duplication here,
+// but this is a quick hack to get the aiken watch working
+pub fn with_project_ok<A>(directory: Option<PathBuf>, deny: bool, mut action: A) -> miette::Result<()>
+where
+    A: FnMut(&mut Project<Terminal>) -> Result<(), Vec<aiken_project::error::Error>>,
+{
+    let project_path = if let Some(d) = directory {
+        d
+    } else {
+        env::current_dir().into_diagnostic()?
+    };
+
+    let mut project = match Project::new(project_path, Terminal) {
+        Ok(p) => p,
+        Err(e) => {
+            e.report();
+            return Ok(());
+        }
+    };
+
+    let build_result = action(&mut project);
+
+    let warnings = project.warnings();
+
+    let warning_count = warnings.len();
+
+    for warning in &warnings {
+        warning.report()
+    }
+
+    let plural = if warning_count == 1 { "" } else { "s" };
+
+    if let Err(errs) = build_result {
+        for err in &errs {
+            err.report()
+        }
+
+        eprintln!(
+            "\n{}",
+            "Summary"
+                .if_supports_color(Stderr, |s| s.purple())
+                .if_supports_color(Stderr, |s| s.bold())
+        );
+
+        let warning_text = format!("{warning_count} warning{plural}");
+
+        let plural = if errs.len() == 1 { "" } else { "s" };
+
+        let error_text = format!("{} error{}", errs.len(), plural);
+
+        let full_summary = format!(
+            "    {}, {}",
+            error_text.if_supports_color(Stderr, |s| s.red()),
+            warning_text.if_supports_color(Stderr, |s| s.yellow())
+        );
+
+        eprintln!("{full_summary}");
+
+        return Ok(());
+    } else {
+        eprintln!(
+            "\n{}",
+            "Summary"
+                .if_supports_color(Stderr, |s| s.purple())
+                .if_supports_color(Stderr, |s| s.bold())
+        );
+
+        let warning_text = format!("{warning_count} warning{plural}");
+
+        eprintln!(
+            "    0 errors, {}",
+            warning_text.if_supports_color(Stderr, |s| s.yellow()),
+        );
+    }
+
+    if warning_count > 0 && deny {
+        return Ok(());
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Terminal;
 
