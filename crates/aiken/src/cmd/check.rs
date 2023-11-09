@@ -47,7 +47,7 @@ pub fn exec(
         match_tests,
         exact_match,
         no_traces,
-        watch,
+        ..
     }: Args,
 ) -> miette::Result<()> {
     crate::with_project(directory, deny, |p| {

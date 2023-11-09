@@ -96,7 +96,11 @@ where
 
 // TODO: we probably want to rework with_project slightly to avoid duplication here,
 // but this is a quick hack to get the aiken watch working
-pub fn with_project_ok<A>(directory: Option<PathBuf>, deny: bool, mut action: A) -> miette::Result<()>
+pub fn with_project_ok<A>(
+    directory: Option<PathBuf>,
+    deny: bool,
+    mut action: A,
+) -> miette::Result<()>
 where
     A: FnMut(&mut Project<Terminal>) -> Result<(), Vec<aiken_project::error::Error>>,
 {

@@ -4,7 +4,6 @@ use clap::Parser;
 pub mod blueprint;
 pub mod build;
 pub mod check;
-pub mod watch;
 pub mod completion;
 pub mod docs;
 pub mod fmt;
@@ -13,6 +12,7 @@ pub mod new;
 pub mod packages;
 pub mod tx;
 pub mod uplc;
+pub mod watch;
 
 /// Aiken: a smart-contract language and toolchain for Cardano
 #[derive(Parser)]
