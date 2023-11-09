@@ -1,8 +1,8 @@
 use aiken::cmd::{
     blueprint::{self, address},
-    build, check, watch, completion, docs, fmt, lsp, new,
+    build, check, completion, docs, fmt, lsp, new,
     packages::{self, add},
-    tx, uplc, Cmd,
+    tx, uplc, watch, Cmd,
 };
 use aiken_project::{config, pretty};
 
