@@ -30,13 +30,14 @@ pub fn default_filter(evt: &Event) -> bool {
 
 /// Run a function each time a file in the project changes
 ///
-/// ```
+/// ```text
+/// // Note: doctest disabled, because aiken_project doesn't have an implementation of EventListener I can use
 /// use aiken_project::watch::{watch_project, default_filter};
-/// use aiken_project::Project;
+/// use aiken_project::{Project};
 /// watch_project(None, Terminal, default_filter, 500, |project| {
 ///   println!("Project changed!");
 ///   Ok(())
-/// })
+/// });
 /// ```
 pub fn watch_project<T, F, A>(
     directory: Option<PathBuf>,
