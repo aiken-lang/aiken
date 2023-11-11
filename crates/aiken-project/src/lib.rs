@@ -14,6 +14,7 @@ pub mod script;
 pub mod telemetry;
 #[cfg(test)]
 mod tests;
+pub mod watch;
 
 use crate::blueprint::{
     definitions::Definitions,
