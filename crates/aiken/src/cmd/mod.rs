@@ -12,7 +12,6 @@ pub mod new;
 pub mod packages;
 pub mod tx;
 pub mod uplc;
-pub mod watch;
 
 /// Aiken: a smart-contract language and toolchain for Cardano
 #[derive(Parser)]
@@ -24,7 +23,6 @@ pub enum Cmd {
     Build(build::Args),
     Address(blueprint::address::Args),
     Check(check::Args),
-    Watch(watch::Args),
     Docs(docs::Args),
     Add(packages::add::Args),
 
