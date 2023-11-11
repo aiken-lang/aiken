@@ -3,6 +3,7 @@ use notify::{Event, RecursiveMode, Watcher};
 use std::{
     collections::VecDeque,
     env,
+    ffi::OsStr,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -15,12 +16,13 @@ pub fn default_filter(evt: &Event) -> bool {
     let source_file = evt
         .paths
         .iter()
-        .any(|p| p.ends_with(".ak") || p.ends_with("aiken.toml"));
+        .any(|p| p.extension() == Some(OsStr::new("ak")) || p.ends_with("aiken.toml"));
     let build_dir = evt
         .paths
         .iter()
         .all(|p| p.ancestors().any(|a| a.ends_with("build")));
     match evt.kind {
+        notify::EventKind::Any => true,
         notify::EventKind::Create(_)
         | notify::EventKind::Modify(_)
         | notify::EventKind::Remove(_) => source_file && !build_dir,
@@ -56,8 +58,11 @@ where
     // Set up a queue for events, primarily so we can debounce on related events
     let queue = Arc::new(Mutex::new(VecDeque::new()));
 
-    // pre-seed that queue with a single event, so it builds once at the start
-    queue.lock().unwrap().push_back(Event::default());
+    // Run the action once, to start
+    queue
+        .lock()
+        .expect("lock queue")
+        .push_back(Event::default());
 
     // Spawn a file-watcher that will put each change event on the queue
     let queue_write = queue.clone();
