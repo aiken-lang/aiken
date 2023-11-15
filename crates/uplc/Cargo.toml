@@ -45,3 +45,4 @@ k256 = { version = "0.13.0" }
 [dev-dependencies]
 hex = "0.4.3"
 indoc = "2.0.1"
+walkdir.workspace = true
