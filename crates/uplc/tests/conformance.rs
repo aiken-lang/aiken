@@ -28,7 +28,9 @@ fn actual_evaluation_result(file: &Path) -> Result<Program<Name>, String> {
 
     let program = parser::program(&code).map_err(|_| PARSE_ERROR.to_string())?;
 
-    let program: Program<NamedDeBruijn> = program.try_into().unwrap();
+    let program: Program<NamedDeBruijn> = program
+        .try_into()
+        .map_err(|_| EVALUATION_FAILURE.to_string())?;
 
     let version = program.version;
 

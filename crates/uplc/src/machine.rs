@@ -242,7 +242,7 @@ impl Machine {
                     )),
                     None => todo!(),
                 },
-                _ => todo!(),
+                _ => todo!("return a proper evaluation error"),
             },
         }
     }
