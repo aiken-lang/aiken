@@ -3037,6 +3037,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "thiserror",
+ "walkdir",
 ]
 
 [[package]]
