@@ -16,8 +16,10 @@ const EVALUATION_FAILURE: &str = "evaluation failure";
 fn expected_to_program(expected_file: &PathBuf) -> Result<Program<Name>, String> {
     let code = fs::read_to_string(expected_file).expect("Failed to read .uplc.expected file");
 
-    if code == PARSE_ERROR || code == EVALUATION_FAILURE {
-        Err(code)
+    if code.contains(PARSE_ERROR) {
+        Err(PARSE_ERROR.to_string())
+    } else if code.contains(EVALUATION_FAILURE) {
+        Err(EVALUATION_FAILURE.to_string())
     } else {
         parser::program(&code).map_err(|_| code)
     }

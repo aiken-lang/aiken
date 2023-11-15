@@ -203,16 +203,24 @@ peg::parser! {
           = b:$("True" / "False") { b == "True" }
 
         rule bytestring() -> Vec<u8>
-          = "#" i:ident()* { hex::decode(String::from_iter(i)).unwrap() }
+          = "#" i:ident()* {?
+              hex::decode(String::from_iter(i)).map_err(|_| "Invalid bytestring")
+          }
 
         rule bls_element() -> Vec<u8>
-          = "0x" i:ident()* { hex::decode(String::from_iter(i)).unwrap() }
+          = "0x" i:ident()* {?
+              hex::decode(String::from_iter(i)).map_err(|_| "Invalid bls element hex")
+            }
 
         rule g1_element() -> blst::blst_p1
-          = element:bls_element() { blst::blst_p1::uncompress(&element).unwrap() }
+          = element:bls_element() {?
+              blst::blst_p1::uncompress(&element).map_err(|_| "Invalid bls g1 element encoding")
+            }
 
         rule g2_element() -> blst::blst_p2
-          = element:bls_element() { blst::blst_p2::uncompress(&element).unwrap() }
+          = element:bls_element() {?
+              blst::blst_p2::uncompress(&element).map_err(|_| "Invalid bls g2 element encoding")
+        }
 
         rule string() -> String
           = "\"" s:character()* "\"" { String::from_iter(s) }
