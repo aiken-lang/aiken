@@ -69,125 +69,138 @@ impl Value {
         Value::Con(constant.into())
     }
 
-    pub(super) fn unwrap_integer(&self) -> &BigInt {
-        let Value::Con(inner) = self else {
-            unreachable!()
-        };
-        let Constant::Integer(integer) = inner.as_ref() else {
-            unreachable!()
+    pub(super) fn unwrap_integer(&self) -> Result<&BigInt, Error> {
+        let inner = self.unwrap_constant()?;
+
+        let Constant::Integer(integer) = inner else {
+            return Err(Error::TypeMismatch(Type::Integer, inner.into()));
         };
 
-        integer
+        Ok(integer)
     }
 
-    pub(super) fn unwrap_byte_string(&self) -> &Vec<u8> {
-        let Value::Con(inner) = self else {
-            unreachable!()
-        };
-        let Constant::ByteString(byte_string) = inner.as_ref() else {
-            unreachable!()
+    pub(super) fn unwrap_byte_string(&self) -> Result<&Vec<u8>, Error> {
+        let inner = self.unwrap_constant()?;
+
+        let Constant::ByteString(byte_string) = inner else {
+            return Err(Error::TypeMismatch(Type::ByteString, inner.into()));
         };
 
-        byte_string
+        Ok(byte_string)
     }
 
-    pub(super) fn unwrap_string(&self) -> &String {
-        let Value::Con(inner) = self else {
-            unreachable!()
-        };
-        let Constant::String(string) = inner.as_ref() else {
-            unreachable!()
+    pub(super) fn unwrap_string(&self) -> Result<&String, Error> {
+        let inner = self.unwrap_constant()?;
+
+        let Constant::String(string) = inner else {
+            return Err(Error::TypeMismatch(Type::String, inner.into()));
         };
 
-        string
+        Ok(string)
     }
 
-    pub(super) fn unwrap_bool(&self) -> &bool {
-        let Value::Con(inner) = self else {
-            unreachable!()
-        };
-        let Constant::Bool(condition) = inner.as_ref() else {
-            unreachable!()
+    pub(super) fn unwrap_bool(&self) -> Result<&bool, Error> {
+        let inner = self.unwrap_constant()?;
+
+        let Constant::Bool(condition) = inner else {
+            return Err(Error::TypeMismatch(Type::Bool, inner.into()));
         };
 
-        condition
+        Ok(condition)
     }
 
-    pub(super) fn unwrap_pair(&self) -> (&Type, &Type, &Rc<Constant>, &Rc<Constant>) {
-        let Value::Con(inner) = self else {
-            unreachable!()
-        };
-        let Constant::ProtoPair(t1, t2, first, second) = inner.as_ref() else {
-            unreachable!()
+    #[allow(clippy::type_complexity)]
+    pub(super) fn unwrap_pair(
+        &self,
+    ) -> Result<(&Type, &Type, &Rc<Constant>, &Rc<Constant>), Error> {
+        let inner = self.unwrap_constant()?;
+
+        let Constant::ProtoPair(t1, t2, first, second) = inner else {
+            return Err(Error::PairTypeMismatch(inner.into()));
         };
 
-        (t1, t2, first, second)
+        Ok((t1, t2, first, second))
     }
 
-    pub(super) fn unwrap_list(&self) -> (&Type, &Vec<Constant>) {
-        let Value::Con(inner) = self else {
-            unreachable!()
-        };
-        let Constant::ProtoList(t, list) = inner.as_ref() else {
-            unreachable!()
+    pub(super) fn unwrap_list(&self) -> Result<(&Type, &Vec<Constant>), Error> {
+        let inner = self.unwrap_constant()?;
+
+        let Constant::ProtoList(t, list) = inner else {
+            return Err(Error::ListTypeMismatch(inner.into()));
         };
 
-        (t, list)
+        Ok((t, list))
     }
 
-    pub(super) fn unwrap_constant(&self) -> &Constant {
+    pub(super) fn unwrap_data(&self) -> Result<&PlutusData, Error> {
+        let inner = self.unwrap_constant()?;
+
+        let Constant::Data(data) = inner else {
+            return Err(Error::TypeMismatch(Type::Data, inner.into()));
+        };
+
+        Ok(data)
+    }
+
+    pub(super) fn unwrap_unit(&self) -> Result<(), Error> {
+        let inner = self.unwrap_constant()?;
+
+        let Constant::Unit = inner else {
+            return Err(Error::TypeMismatch(Type::Unit, inner.into()));
+        };
+
+        Ok(())
+    }
+
+    pub(super) fn unwrap_constant(&self) -> Result<&Constant, Error> {
         let Value::Con(item) = self else {
-            unreachable!()
+            return Err(Error::NotAConstant(self.clone()));
         };
 
-        item.as_ref()
+        Ok(item.as_ref())
     }
 
-    pub(super) fn unwrap_data_list(&self) -> &Vec<Constant> {
-        let Value::Con(inner) = self else {
-            unreachable!()
-        };
-        let Constant::ProtoList(Type::Data, list) = inner.as_ref() else {
-            unreachable!()
+    pub(super) fn unwrap_data_list(&self) -> Result<&Vec<Constant>, Error> {
+        let inner = self.unwrap_constant()?;
+
+        let Constant::ProtoList(Type::Data, list) = inner else {
+            return Err(Error::TypeMismatch(
+                Type::List(Type::Data.into()),
+                inner.into(),
+            ));
         };
 
-        list
+        Ok(list)
     }
 
-    pub(super) fn unwrap_bls12_381_g1_element(&self) -> &blst::blst_p1 {
-        let Value::Con(inner) = self else {
-            unreachable!()
+    pub(super) fn unwrap_bls12_381_g1_element(&self) -> Result<&blst::blst_p1, Error> {
+        let inner = self.unwrap_constant()?;
+
+        let Constant::Bls12_381G1Element(element) = inner else {
+            return Err(Error::TypeMismatch(Type::Bls12_381G1Element, inner.into()));
         };
 
-        let Constant::Bls12_381G1Element(element) = inner.as_ref() else {
-            unreachable!()
-        };
-
-        element
+        Ok(element)
     }
 
-    pub(super) fn unwrap_bls12_381_g2_element(&self) -> &blst::blst_p2 {
-        let Value::Con(inner) = self else {
-            unreachable!()
+    pub(super) fn unwrap_bls12_381_g2_element(&self) -> Result<&blst::blst_p2, Error> {
+        let inner = self.unwrap_constant()?;
+
+        let Constant::Bls12_381G2Element(element) = inner else {
+            return Err(Error::TypeMismatch(Type::Bls12_381G2Element, inner.into()));
         };
 
-        let Constant::Bls12_381G2Element(element) = inner.as_ref() else {
-            unreachable!()
-        };
-
-        element
+        Ok(element)
     }
 
-    pub(super) fn unwrap_bls12_381_ml_result(&self) -> &blst::blst_fp12 {
-        let Value::Con(inner) = self else {
-            unreachable!()
+    pub(super) fn unwrap_bls12_381_ml_result(&self) -> Result<&blst::blst_fp12, Error> {
+        let inner = self.unwrap_constant()?;
+
+        let Constant::Bls12_381MlResult(element) = inner else {
+            return Err(Error::TypeMismatch(Type::Bls12_381MlResult, inner.into()));
         };
 
-        let Constant::Bls12_381MlResult(element) = inner.as_ref() else {
-            unreachable!()
-        };
-
-        element
+        Ok(element)
     }
 
     pub fn is_integer(&self) -> bool {
