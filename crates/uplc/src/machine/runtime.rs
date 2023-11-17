@@ -262,9 +262,6 @@ impl DefaultFunction {
         }
     }
 
-    // This should be safe because we've already checked
-    // the types of the args as they were pushed. Although
-    // the unreachables look ugly, it's the reality of the situation.
     pub fn call(
         &self,
         semantics: BuiltinSemantics,
