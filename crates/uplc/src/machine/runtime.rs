@@ -262,168 +262,6 @@ impl DefaultFunction {
         }
     }
 
-    pub fn check_type(&self, arg: &Value, args: &[Value]) -> Result<(), Error> {
-        match self {
-            DefaultFunction::AddInteger => arg.expect_type(Type::Integer),
-            DefaultFunction::SubtractInteger => arg.expect_type(Type::Integer),
-            DefaultFunction::MultiplyInteger => arg.expect_type(Type::Integer),
-            DefaultFunction::DivideInteger => arg.expect_type(Type::Integer),
-            DefaultFunction::QuotientInteger => arg.expect_type(Type::Integer),
-            DefaultFunction::RemainderInteger => arg.expect_type(Type::Integer),
-            DefaultFunction::ModInteger => arg.expect_type(Type::Integer),
-            DefaultFunction::EqualsInteger => arg.expect_type(Type::Integer),
-            DefaultFunction::LessThanInteger => arg.expect_type(Type::Integer),
-            DefaultFunction::LessThanEqualsInteger => arg.expect_type(Type::Integer),
-            DefaultFunction::AppendByteString => arg.expect_type(Type::ByteString),
-            DefaultFunction::ConsByteString => {
-                if args.is_empty() {
-                    arg.expect_type(Type::Integer)
-                } else {
-                    arg.expect_type(Type::ByteString)
-                }
-            }
-            DefaultFunction::SliceByteString => {
-                if args.len() < 2 {
-                    arg.expect_type(Type::Integer)
-                } else {
-                    arg.expect_type(Type::ByteString)
-                }
-            }
-            DefaultFunction::LengthOfByteString => arg.expect_type(Type::ByteString),
-            DefaultFunction::IndexByteString => {
-                if args.is_empty() {
-                    arg.expect_type(Type::ByteString)
-                } else {
-                    arg.expect_type(Type::Integer)
-                }
-            }
-            DefaultFunction::EqualsByteString => arg.expect_type(Type::ByteString),
-            DefaultFunction::LessThanByteString => arg.expect_type(Type::ByteString),
-            DefaultFunction::LessThanEqualsByteString => arg.expect_type(Type::ByteString),
-            DefaultFunction::Sha2_256 => arg.expect_type(Type::ByteString),
-            DefaultFunction::Sha3_256 => arg.expect_type(Type::ByteString),
-            DefaultFunction::Blake2b_224 => arg.expect_type(Type::ByteString),
-            DefaultFunction::Blake2b_256 => arg.expect_type(Type::ByteString),
-            DefaultFunction::Keccak_256 => arg.expect_type(Type::ByteString),
-            DefaultFunction::VerifyEd25519Signature => arg.expect_type(Type::ByteString),
-            DefaultFunction::VerifyEcdsaSecp256k1Signature => arg.expect_type(Type::ByteString),
-            DefaultFunction::VerifySchnorrSecp256k1Signature => arg.expect_type(Type::ByteString),
-            DefaultFunction::AppendString => arg.expect_type(Type::String),
-            DefaultFunction::EqualsString => arg.expect_type(Type::String),
-            DefaultFunction::EncodeUtf8 => arg.expect_type(Type::String),
-            DefaultFunction::DecodeUtf8 => arg.expect_type(Type::ByteString),
-            DefaultFunction::IfThenElse => {
-                if args.is_empty() {
-                    arg.expect_type(Type::Bool)
-                } else {
-                    Ok(())
-                }
-            }
-            DefaultFunction::ChooseUnit => {
-                if args.is_empty() {
-                    arg.expect_type(Type::Unit)
-                } else {
-                    Ok(())
-                }
-            }
-            DefaultFunction::Trace => {
-                if args.is_empty() {
-                    arg.expect_type(Type::String)
-                } else {
-                    Ok(())
-                }
-            }
-            DefaultFunction::FstPair => arg.expect_pair(),
-            DefaultFunction::SndPair => arg.expect_pair(),
-            DefaultFunction::ChooseList => {
-                if args.is_empty() {
-                    arg.expect_list()
-                } else {
-                    Ok(())
-                }
-            }
-            DefaultFunction::MkCons => {
-                if args.is_empty() {
-                    Ok(())
-                } else {
-                    let first = &args[0];
-
-                    arg.expect_type(Type::List(Rc::new(first.try_into()?)))
-                }
-            }
-            DefaultFunction::HeadList => arg.expect_list(),
-            DefaultFunction::TailList => arg.expect_list(),
-            DefaultFunction::NullList => arg.expect_list(),
-            DefaultFunction::ChooseData => {
-                if args.is_empty() {
-                    arg.expect_type(Type::Data)
-                } else {
-                    Ok(())
-                }
-            }
-            DefaultFunction::ConstrData => {
-                if args.is_empty() {
-                    arg.expect_type(Type::Integer)
-                } else {
-                    arg.expect_type(Type::List(Rc::new(Type::Data)))
-                }
-            }
-            DefaultFunction::MapData => arg.expect_type(Type::List(Rc::new(Type::Pair(
-                Rc::new(Type::Data),
-                Rc::new(Type::Data),
-            )))),
-            DefaultFunction::ListData => arg.expect_type(Type::List(Rc::new(Type::Data))),
-            DefaultFunction::IData => arg.expect_type(Type::Integer),
-            DefaultFunction::BData => arg.expect_type(Type::ByteString),
-            DefaultFunction::UnConstrData => arg.expect_type(Type::Data),
-            DefaultFunction::UnMapData => arg.expect_type(Type::Data),
-            DefaultFunction::UnListData => arg.expect_type(Type::Data),
-            DefaultFunction::UnIData => arg.expect_type(Type::Data),
-            DefaultFunction::UnBData => arg.expect_type(Type::Data),
-            DefaultFunction::EqualsData => arg.expect_type(Type::Data),
-            DefaultFunction::SerialiseData => arg.expect_type(Type::Data),
-            DefaultFunction::MkPairData => arg.expect_type(Type::Data),
-            DefaultFunction::MkNilData => arg.expect_type(Type::Unit),
-            DefaultFunction::MkNilPairData => arg.expect_type(Type::Unit),
-
-            DefaultFunction::Bls12_381_G1_Add => arg.expect_type(Type::Bls12_381G1Element),
-            DefaultFunction::Bls12_381_G1_Neg => arg.expect_type(Type::Bls12_381G1Element),
-            DefaultFunction::Bls12_381_G1_ScalarMul => {
-                if args.is_empty() {
-                    arg.expect_type(Type::Integer)
-                } else {
-                    arg.expect_type(Type::Bls12_381G1Element)
-                }
-            }
-            DefaultFunction::Bls12_381_G1_Equal => arg.expect_type(Type::Bls12_381G1Element),
-            DefaultFunction::Bls12_381_G1_Compress => arg.expect_type(Type::Bls12_381G1Element),
-            DefaultFunction::Bls12_381_G1_Uncompress => arg.expect_type(Type::ByteString),
-            DefaultFunction::Bls12_381_G1_HashToGroup => arg.expect_type(Type::ByteString),
-            DefaultFunction::Bls12_381_G2_Add => arg.expect_type(Type::Bls12_381G2Element),
-            DefaultFunction::Bls12_381_G2_Neg => arg.expect_type(Type::Bls12_381G2Element),
-            DefaultFunction::Bls12_381_G2_ScalarMul => {
-                if args.is_empty() {
-                    arg.expect_type(Type::Integer)
-                } else {
-                    arg.expect_type(Type::Bls12_381G2Element)
-                }
-            }
-            DefaultFunction::Bls12_381_G2_Equal => arg.expect_type(Type::Bls12_381G2Element),
-            DefaultFunction::Bls12_381_G2_Compress => arg.expect_type(Type::Bls12_381G2Element),
-            DefaultFunction::Bls12_381_G2_Uncompress => arg.expect_type(Type::ByteString),
-            DefaultFunction::Bls12_381_G2_HashToGroup => arg.expect_type(Type::ByteString),
-            DefaultFunction::Bls12_381_MillerLoop => {
-                if args.is_empty() {
-                    arg.expect_type(Type::Bls12_381G1Element)
-                } else {
-                    arg.expect_type(Type::Bls12_381G2Element)
-                }
-            }
-            DefaultFunction::Bls12_381_MulMlResult => arg.expect_type(Type::Bls12_381MlResult),
-            DefaultFunction::Bls12_381_FinalVerify => arg.expect_type(Type::Bls12_381MlResult),
-        }
-    }
-
     // This should be safe because we've already checked
     // the types of the args as they were pushed. Although
     // the unreachables look ugly, it's the reality of the situation.
@@ -893,15 +731,14 @@ impl DefaultFunction {
                 Ok(value)
             }
             DefaultFunction::ChooseData => {
-                let con = args[0].unwrap_constant()?;
+                let con = args[0].unwrap_data()?;
 
                 match con {
-                    Constant::Data(PlutusData::Constr(_)) => Ok(args[1].clone()),
-                    Constant::Data(PlutusData::Map(_)) => Ok(args[2].clone()),
-                    Constant::Data(PlutusData::Array(_)) => Ok(args[3].clone()),
-                    Constant::Data(PlutusData::BigInt(_)) => Ok(args[4].clone()),
-                    Constant::Data(PlutusData::BoundedBytes(_)) => Ok(args[5].clone()),
-                    _ => unreachable!(),
+                    PlutusData::Constr(_) => Ok(args[1].clone()),
+                    PlutusData::Map(_) => Ok(args[2].clone()),
+                    PlutusData::Array(_) => Ok(args[3].clone()),
+                    PlutusData::BigInt(_) => Ok(args[4].clone()),
+                    PlutusData::BoundedBytes(_) => Ok(args[5].clone()),
                 }
             }
             DefaultFunction::ConstrData => {
@@ -929,7 +766,17 @@ impl DefaultFunction {
                 Ok(value)
             }
             DefaultFunction::MapData => {
-                let (_, list) = args[0].unwrap_list()?;
+                let (r#type, list) = args[0].unwrap_list()?;
+
+                if *r#type != Type::Pair(Rc::new(Type::Data), Rc::new(Type::Data)) {
+                    return Err(Error::TypeMismatch(
+                        Type::List(Rc::new(Type::Pair(
+                            Rc::new(Type::Data),
+                            Rc::new(Type::Data),
+                        ))),
+                        r#type.clone(),
+                    ));
+                }
 
                 let mut map = Vec::new();
 
@@ -938,12 +785,13 @@ impl DefaultFunction {
                         unreachable!()
                     };
 
-                    match (left.as_ref(), right.as_ref()) {
-                        (Constant::Data(key), Constant::Data(value)) => {
-                            map.push((key.clone(), value.clone()));
-                        }
-                        _ => unreachable!(),
-                    }
+                    let (Constant::Data(key), Constant::Data(value)) =
+                        (left.as_ref(), right.as_ref())
+                    else {
+                        unreachable!()
+                    };
+
+                    map.push((key.clone(), value.clone()));
                 }
 
                 let value = Value::data(PlutusData::Map(map.into()));
@@ -951,7 +799,7 @@ impl DefaultFunction {
                 Ok(value)
             }
             DefaultFunction::ListData => {
-                let (_, list) = args[0].unwrap_list()?;
+                let list = args[0].unwrap_data_list()?;
 
                 let data_list: Vec<PlutusData> = list
                     .iter()
