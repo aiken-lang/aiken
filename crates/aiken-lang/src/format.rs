@@ -1578,7 +1578,7 @@ impl<'comments> Formatter<'comments> {
             | UntypedExpr::Sequence { .. }
             | UntypedExpr::Assignment { .. } => "{"
                 .to_doc()
-                .append(line().append(self.expr(expr, false)).nest(INDENT))
+                .append(line().append(self.expr(expr, true)).nest(INDENT))
                 .append(line())
                 .append("}")
                 .force_break(),
