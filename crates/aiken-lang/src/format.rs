@@ -659,8 +659,6 @@ impl<'comments> Formatter<'comments> {
         kind: AssignmentKind,
         annotation: &'a Option<Annotation>,
     ) -> Document<'a> {
-        self.pop_empty_lines(pattern.location().end);
-
         let keyword = match kind {
             AssignmentKind::Let => "let",
             AssignmentKind::Expect => "expect",
@@ -673,6 +671,8 @@ impl<'comments> Formatter<'comments> {
                 keyword.to_doc().append(self.case_clause_value(value))
             }
             _ => {
+                self.pop_empty_lines(pattern.location().end);
+
                 let pattern = self.pattern(pattern);
 
                 let annotation = annotation
