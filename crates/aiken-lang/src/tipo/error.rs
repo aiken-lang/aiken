@@ -1630,7 +1630,7 @@ pub enum UnknownRecordFieldSituation {
 
 fn format_suggestion(sample: &UntypedExpr) -> String {
     Formatter::new()
-        .expr(sample)
+        .expr(sample, false)
         .to_pretty_string(70)
         .lines()
         .enumerate()
