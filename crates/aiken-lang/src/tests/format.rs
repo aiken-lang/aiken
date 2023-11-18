@@ -63,6 +63,31 @@ fn format_if() {
 }
 
 #[test]
+fn format_logic_op_with_code_block() {
+    assert_format!(
+        r#"
+        fn foo() {
+          True || {
+            let bar = 1
+            bar == bar
+          }
+        }
+        "#
+    );
+}
+
+#[test]
+fn format_grouped_expression() {
+    assert_format!(
+        r#"
+        fn foo() {
+           y == { x |> f }
+        }
+        "#
+    );
+}
+
+#[test]
 fn format_validator() {
     assert_format!(
         r#"
