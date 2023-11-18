@@ -121,6 +121,19 @@ fn format_grouped_expression_4() {
 }
 
 #[test]
+fn format_preserve_newline_after_bool_expect() {
+    assert_format!(
+        r#"
+        fn foo() {
+          expect 1 == 1
+
+          False
+        }
+        "#
+    );
+}
+
+#[test]
 fn format_validator() {
     assert_format!(
         r#"

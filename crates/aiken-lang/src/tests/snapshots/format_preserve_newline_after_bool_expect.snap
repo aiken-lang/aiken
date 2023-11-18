@@ -1,0 +1,10 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n  expect 1 == 1\n\n  False\n}\n"
+---
+fn foo() {
+  expect 1 == 1
+
+  False
+}
+

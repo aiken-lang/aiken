@@ -124,6 +124,7 @@ fn check_mint_and_outputs(
           expected_assets,
           fn(expected_asset) { expected_asset == minted_asset_name },
         )
+
       expect
         list.any(
           outputs,
@@ -132,6 +133,7 @@ fn check_mint_and_outputs(
             datum == InlineDatum(minted_asset_name) && address.payment_credential == validator_cred
           },
         )
+
       quantity == 1 && check_mint_and_outputs(
         rest_assets,
         outputs,
