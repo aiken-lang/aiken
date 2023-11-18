@@ -240,9 +240,12 @@ impl Machine {
                         env,
                         t.clone(),
                     )),
-                    None => todo!(),
+                    None => Err(Error::MissingCaseBranch(
+                        branches,
+                        Value::Constr { tag, fields },
+                    )),
                 },
-                _ => todo!("return a proper evaluation error"),
+                v => Err(Error::NonConstrScrutinized(v)),
             },
         }
     }

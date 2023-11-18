@@ -145,7 +145,7 @@ peg::parser! {
           }
 
         rule case(interner: &mut Interner) -> Term<Name>
-          = "(" _* "case" _+ constr:term(interner) _* branches:(t:term(interner) _* { t })+ _* ")" {
+          = "(" _* "case" _+ constr:term(interner) _* branches:(t:term(interner) _* { t })* _* ")" {
             Term::Case { constr: constr.into(), branches }
           }
 

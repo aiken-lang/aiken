@@ -186,12 +186,12 @@ impl Default for MachineCosts {
             },
             // Placeholder values
             constr: ExBudget {
-                mem: 30000000000,
-                cpu: 30000000000,
+                mem: 100,
+                cpu: 23000,
             },
             case: ExBudget {
-                mem: 30000000000,
-                cpu: 30000000000,
+                mem: 100,
+                cpu: 23000,
             },
         }
     }
