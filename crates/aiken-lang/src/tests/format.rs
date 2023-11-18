@@ -88,6 +88,39 @@ fn format_grouped_expression() {
 }
 
 #[test]
+fn format_grouped_expression_2() {
+    assert_format!(
+        r#"
+        fn foo() {
+           ( y == x ) |> f
+        }
+        "#
+    );
+}
+
+#[test]
+fn format_grouped_expression_3() {
+    assert_format!(
+        r#"
+        fn foo() {
+          { x |> f } == y
+        }
+        "#
+    );
+}
+
+#[test]
+fn format_grouped_expression_4() {
+    assert_format!(
+        r#"
+        fn foo() {
+          x |> { f == y }
+        }
+        "#
+    );
+}
+
+#[test]
 fn format_validator() {
     assert_format!(
         r#"

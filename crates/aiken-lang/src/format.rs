@@ -1146,7 +1146,7 @@ impl<'comments> Formatter<'comments> {
         let precedence = name.precedence();
 
         let left_precedence = left.binop_precedence();
-        let right_precedence = right.binop_precedence();
+        let right_precedence = dbg!(right).binop_precedence();
 
         let left = self.expr(left, false);
         let right = self.expr(right, false);
@@ -1155,7 +1155,7 @@ impl<'comments> Formatter<'comments> {
             .append(" ")
             .append(name)
             .append(" ")
-            .append(self.operator_side(right, precedence, right_precedence - 1))
+            .append(self.operator_side(right, precedence, right_precedence.saturating_sub(1)))
     }
 
     pub fn operator_side<'a>(&mut self, doc: Document<'a>, op: u8, side: u8) -> Document<'a> {
@@ -1745,7 +1745,7 @@ impl<'comments> Formatter<'comments> {
         let right = self.clause_guard(right);
         self.operator_side(left, name_precedence, left_precedence)
             .append(name)
-            .append(self.operator_side(right, name_precedence, right_precedence - 1))
+            .append(self.operator_side(right, name_precedence, right_precedence.saturating_sub(1)))
     }
 
     fn clause_guard<'a>(&mut self, clause_guard: &'a UntypedClauseGuard) -> Document<'a> {
