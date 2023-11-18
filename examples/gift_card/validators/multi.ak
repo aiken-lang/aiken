@@ -119,12 +119,12 @@ fn check_mint_and_outputs(
   when minted_assets is {
     [] -> True
     [(minted_asset_name, quantity), ..rest_assets] -> {
-      expect True =
+      expect
         list.any(
           expected_assets,
           fn(expected_asset) { expected_asset == minted_asset_name },
         )
-      expect True =
+      expect
         list.any(
           outputs,
           fn(output) {

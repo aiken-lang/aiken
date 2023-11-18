@@ -610,9 +610,9 @@ impl<'comments> Formatter<'comments> {
         let args = wrap_args(args.iter().map(|e| (self.fn_arg(e), false))).group();
         let body = match body {
             UntypedExpr::Trace { .. } | UntypedExpr::When { .. } => {
-                self.expr(body, false).force_break()
+                self.expr(body, true).force_break()
             }
-            _ => self.expr(body, false),
+            _ => self.expr(body, true),
         };
 
         let header = "fn".to_doc().append(args);
@@ -1071,7 +1071,7 @@ impl<'comments> Formatter<'comments> {
 
         let else_begin = line().append("} else {");
 
-        let else_body = line().append(self.expr(final_else, false)).nest(INDENT);
+        let else_body = line().append(self.expr(final_else, true)).nest(INDENT);
 
         let else_end = line().append("}");
 
@@ -1092,7 +1092,7 @@ impl<'comments> Formatter<'comments> {
             .append(break_("{", " {"))
             .group();
 
-        let if_body = line().append(self.expr(&branch.body, false)).nest(INDENT);
+        let if_body = line().append(self.expr(&branch.body, true)).nest(INDENT);
 
         if_begin.append(if_body)
     }
@@ -1146,7 +1146,7 @@ impl<'comments> Formatter<'comments> {
         let precedence = name.precedence();
 
         let left_precedence = left.binop_precedence();
-        let right_precedence = dbg!(right).binop_precedence();
+        let right_precedence = right.binop_precedence();
 
         let left = self.expr(left, false);
         let right = self.expr(right, false);
