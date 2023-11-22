@@ -35,17 +35,39 @@ where
     pub fn from_cbor(bytes: &'b [u8], buffer: &'b mut Vec<u8>) -> Result<Self, de::Error> {
         let mut cbor_decoder = pallas_codec::minicbor::Decoder::new(bytes);
 
-        let flat_bytes = cbor_decoder
+        let flat_or_cbor_bytes = cbor_decoder
             .bytes()
-            .map_err(|err| de::Error::Message(err.to_string()))?;
+            .map_err(|err| de::Error::Message(
+                "We expected the first few bytes to be the cbor encoding. Did you pass the cbor flag accidentally?\n".to_string() +
+                &err.to_string()
+            
+            ))?;
 
-        buffer.extend(flat_bytes);
+        let mut second_cbor_decoder = pallas_codec::minicbor::Decoder::new(flat_or_cbor_bytes);
 
-        Self::unflat(buffer)
+        let flat_bytes = second_cbor_decoder
+            .bytes()
+            .map_err(|err| de::Error::Message(err.to_string()));
+
+        match flat_bytes {
+            Ok(flat_bytes) => {
+                buffer.extend(flat_bytes);
+                Self::unflat(buffer)
+            }
+            _ => {
+                buffer.extend(flat_or_cbor_bytes);
+                Self::unflat(buffer)
+            }
+        }
     }
 
     pub fn from_flat(bytes: &'b [u8]) -> Result<Self, de::Error> {
-        Self::unflat(bytes)
+        Self::unflat(bytes).map_err(|err| 
+            de::Error::Message(
+                "We expected to encounter flat encoding. Did you forget to pass the cbor flag?\n".to_string() +
+                &err.to_string()
+            )
+        )
     }
 
     pub fn from_hex(
