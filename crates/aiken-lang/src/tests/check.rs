@@ -67,6 +67,25 @@ fn validator_illegal_return_type() {
 }
 
 #[test]
+fn validator_useless_pub() {
+    let source_code = r#"
+      type Datum {
+        thing: Int
+      }
+
+      validator {
+        pub fn foo(_d: Datum, _r, _c) {
+          True
+        }
+      }
+    "#;
+
+    let (warnings, _) = check_validator(parse(source_code)).unwrap();
+
+    assert!(matches!(warnings[0], Warning::PubInValidatorModule { .. }))
+}
+
+#[test]
 fn validator_illegal_arity() {
     let source_code = r#"
       validator {
