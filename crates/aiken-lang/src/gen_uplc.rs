@@ -4049,6 +4049,12 @@ impl<'a> CodeGenerator<'a> {
                     Term::equals_string()
                 } else if tipo.is_bytearray() {
                     Term::equals_bytestring()
+                } else if tipo.is_bls381_12_g1() {
+                    Term::bls12_381_g1_equal()
+                } else if tipo.is_bls381_12_g2() {
+                    Term::bls12_381_g2_equal()
+                } else if tipo.is_ml_result() {
+                    panic!("ML Result equality is not supported")
                 } else {
                     Term::equals_data()
                 };
