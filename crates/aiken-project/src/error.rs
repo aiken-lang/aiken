@@ -1,9 +1,6 @@
-use crate::{
-    blueprint::error as blueprint, deps::manifest::Package, package_name::PackageName, pretty,
-    script::EvalHint,
-};
+use crate::{blueprint::error as blueprint, deps::manifest::Package, package_name::PackageName};
 use aiken_lang::{
-    ast::{self, BinOp, Span},
+    ast::{self, Span},
     error::ExtraData,
     parser::error::ParseError,
     tipo,
@@ -18,7 +15,6 @@ use std::{
     ops::Deref,
     path::{Path, PathBuf},
 };
-use uplc::machine::cost_model::ExBudget;
 use zip::result::ZipError;
 
 #[allow(dead_code)]
@@ -97,7 +93,7 @@ pub enum Error {
         path: PathBuf,
         verbose: bool,
         src: String,
-        evaluation_hint: Option<EvalHint>,
+        evaluation_hint: Option<String>,
     },
 
     #[error(
@@ -313,33 +309,9 @@ impl Diagnostic for Error {
             Error::MissingManifest { .. } => Some(Box::new("Try running `aiken new <REPOSITORY/PROJECT>` to initialise a project with an example manifest.")),
             Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
-            Error::TestFailure { evaluation_hint, .. }  =>{
-                match evaluation_hint {
-                    None => None,
-                    Some(hint) => {
-                        let budget = ExBudget { mem: i64::MAX, cpu: i64::MAX, };
-                        let left = pretty::boxed("left", &match hint.left.clone().eval(budget).result() {
-                            Ok(term) => format!("{term}"),
-                            Err(err) => format!("{err}"),
-                        });
-                        let right = pretty::boxed("right", &match hint.right.clone().eval(budget).result() {
-                            Ok(term) => format!("{term}"),
-                            Err(err) => format!("{err}"),
-                        });
-                        let msg = match hint.bin_op {
-                            BinOp::And => Some(format!("{left}\n\nand\n\n{right}\n\nshould both be true.")),
-                            BinOp::Or => Some(format!("{left}\n\nor\n\n{right}\n\nshould be true.")),
-                            BinOp::Eq => Some(format!("{left}\n\nshould be equal to\n\n{right}")),
-                            BinOp::NotEq => Some(format!("{left}\n\nshould not be equal to\n\n{right}")),
-                            BinOp::LtInt => Some(format!("{left}\n\nshould be lower than\n\n{right}")),
-                            BinOp::LtEqInt => Some(format!("{left}\n\nshould be lower than or equal to\n\n{right}")),
-                            BinOp::GtEqInt => Some(format!("{left}\n\nshould be greater than\n\n{right}")),
-                            BinOp::GtInt => Some(format!("{left}\n\nshould be greater than or equal to\n\n{right}")),
-                            _ => None
-                        }?;
-                        Some(Box::new(msg))
-                    }
-                }
+            Error::TestFailure { evaluation_hint, .. }  => match evaluation_hint {
+                None => None,
+                Some(hint) => Some(Box::new(hint.to_string()))
             },
             Error::Http(_) => None,
             Error::ZipExtract(_) => None,
