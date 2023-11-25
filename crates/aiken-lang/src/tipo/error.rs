@@ -1131,15 +1131,15 @@ fn suggest_constructor_pattern(
 }
 
 fn suggest_unify(
-    expected: &Rc<Type>,
-    given: &Rc<Type>,
+    expected: &Type,
+    given: &Type,
     situation: &Option<UnifyErrorSituation>,
     rigid_type_names: &HashMap<u64, String>,
 ) -> String {
     let expected_str = expected.to_pretty_with_names(rigid_type_names.clone(), 0);
     let given_str = given.to_pretty_with_names(rigid_type_names.clone(), 0);
 
-    let (expected, given) = match (expected.as_ref(), given.as_ref()) {
+    let (expected, given) = match (expected, given) {
         (
             Type::App {
                 module: expected_module,
