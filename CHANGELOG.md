@@ -1,6 +1,20 @@
 # Changelog
 
-## v1.0.20-alpha - 10/25/2023
+## v1.0.21-alpha - unreleased
+
+### Added
+
+- **aiken**: `--watch` flag on the `build`, `check` and `docs` commands to automatically watch and re-execute the command on file changes.
+
+### Changed
+
+N/A
+
+### Fixed
+
+N/A
+
+## v1.0.20-alpha - 2023-10-25
 
 ### Added
 
