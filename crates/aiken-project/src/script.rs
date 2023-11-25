@@ -81,7 +81,7 @@ impl Display for EvalHint {
             )),
             _ => None,
         }
-        .ok_or(fmt::Error::default())?;
+        .ok_or(fmt::Error)?;
 
         f.write_str(&msg)
     }

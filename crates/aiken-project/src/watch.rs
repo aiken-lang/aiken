@@ -31,7 +31,7 @@ struct Summary {
 impl Display for Summary {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str(&format!(
-            "{}\n    {} {}, {} {}",
+            "      {} {} {}, {} {}",
             "Summary"
                 .if_supports_color(Stderr, |s| s.purple())
                 .if_supports_color(Stderr, |s| s.bold()),
@@ -41,14 +41,16 @@ impl Display for Summary {
             } else {
                 "errors"
             }
-            .if_supports_color(Stderr, |s| s.red()),
+            .if_supports_color(Stderr, |s| s.red())
+            .if_supports_color(Stderr, |s| s.bold()),
             self.warning_count,
             if self.warning_count == 1 {
                 "warning"
             } else {
                 "warnings"
             }
-            .if_supports_color(Stderr, |s| s.yellow()),
+            .if_supports_color(Stderr, |s| s.yellow())
+            .if_supports_color(Stderr, |s| s.bold()),
         ))
     }
 }
@@ -107,7 +109,7 @@ where
         }
 
         eprintln!(
-            "\n{}",
+            "{}",
             Summary {
                 warning_count,
                 error_count: errs.len(),
@@ -117,7 +119,7 @@ where
         return Err(ExitFailure::into_report());
     } else {
         eprintln!(
-            "\n{}",
+            "{}",
             Summary {
                 error_count: 0,
                 warning_count
