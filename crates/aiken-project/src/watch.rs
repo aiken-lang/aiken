@@ -1,14 +1,57 @@
-use miette::IntoDiagnostic;
+use crate::{telemetry::Terminal, Project};
+use miette::{Diagnostic, IntoDiagnostic};
 use notify::{Event, RecursiveMode, Watcher};
+use owo_colors::{OwoColorize, Stream::Stderr};
 use std::{
     collections::VecDeque,
     env,
     ffi::OsStr,
-    path::PathBuf,
+    fmt::{self, Display},
+    path::Path,
     sync::{Arc, Mutex},
 };
 
-use crate::{telemetry, Project};
+#[derive(Debug, Diagnostic, thiserror::Error)]
+enum ExitFailure {
+    #[error("")]
+    ExitFailure,
+}
+
+impl ExitFailure {
+    fn into_report() -> miette::Report {
+        ExitFailure::ExitFailure.into()
+    }
+}
+
+struct Summary {
+    warning_count: usize,
+    error_count: usize,
+}
+
+impl Display for Summary {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(&format!(
+            "{}\n    {} {}, {} {}",
+            "Summary"
+                .if_supports_color(Stderr, |s| s.purple())
+                .if_supports_color(Stderr, |s| s.bold()),
+            self.error_count,
+            if self.error_count == 1 {
+                "error"
+            } else {
+                "errors"
+            }
+            .if_supports_color(Stderr, |s| s.red()),
+            self.warning_count,
+            if self.warning_count == 1 {
+                "warning"
+            } else {
+                "warnings"
+            }
+            .if_supports_color(Stderr, |s| s.yellow()),
+        ))
+    }
+}
 
 /// A default filter for file events that catches the most relevant "source" changes
 pub fn default_filter(evt: &Event) -> bool {
@@ -30,6 +73,65 @@ pub fn default_filter(evt: &Event) -> bool {
     }
 }
 
+pub fn with_project<A>(directory: Option<&Path>, deny: bool, mut action: A) -> miette::Result<()>
+where
+    A: FnMut(&mut Project<Terminal>) -> Result<(), Vec<crate::error::Error>>,
+{
+    let project_path = if let Some(d) = directory {
+        d.to_path_buf()
+    } else {
+        env::current_dir().into_diagnostic()?
+    };
+
+    let mut project = match Project::new(project_path, Terminal) {
+        Ok(p) => Ok(p),
+        Err(e) => {
+            e.report();
+            Err(ExitFailure::into_report())
+        }
+    }?;
+
+    let build_result = action(&mut project);
+
+    let warnings = project.warnings();
+
+    let warning_count = warnings.len();
+
+    for warning in &warnings {
+        warning.report()
+    }
+
+    if let Err(errs) = build_result {
+        for err in &errs {
+            err.report()
+        }
+
+        eprintln!(
+            "\n{}",
+            Summary {
+                warning_count,
+                error_count: errs.len(),
+            }
+        );
+
+        return Err(ExitFailure::into_report());
+    } else {
+        eprintln!(
+            "\n{}",
+            Summary {
+                error_count: 0,
+                warning_count
+            }
+        );
+    }
+
+    if warning_count > 0 && deny {
+        Err(ExitFailure::into_report())
+    } else {
+        Ok(())
+    }
+}
+
 /// Run a function each time a file in the project changes
 ///
 /// ```text
@@ -41,19 +143,19 @@ pub fn default_filter(evt: &Event) -> bool {
 ///   Ok(())
 /// });
 /// ```
-pub fn watch_project<T, F, A>(
-    directory: Option<PathBuf>,
-    events: T,
+pub fn watch_project<F, A>(
+    directory: Option<&Path>,
     filter: F,
     debounce: u32,
     mut action: A,
 ) -> miette::Result<()>
 where
-    T: Copy + telemetry::EventListener,
     F: Fn(&Event) -> bool,
-    A: FnMut(&mut Project<T>) -> Result<(), Vec<crate::error::Error>>,
+    A: FnMut(&mut Project<Terminal>) -> Result<(), Vec<crate::error::Error>>,
 {
-    let project_path = directory.unwrap_or(env::current_dir().into_diagnostic()?);
+    let project_path = directory
+        .map(|p| p.to_path_buf())
+        .unwrap_or(env::current_dir().into_diagnostic()?);
 
     // Set up a queue for events, primarily so we can debounce on related events
     let queue = Arc::new(Mutex::new(VecDeque::new()));
@@ -108,18 +210,14 @@ where
 
         // If we have an event that survived the filter, then we can construct the project and invoke the action
         if latest.is_some() {
-            let mut project = match Project::new(project_path.clone(), events) {
-                Ok(p) => p,
-                Err(e) => {
-                    // TODO: what should we actually do here?
-                    e.report();
-                    return Err(miette::Report::msg("??"));
-                }
-            };
-
-            // Invoke the action, and abort on an error
-            // TODO: what should we actually do with the error here?
-            action(&mut project).or(Err(miette::Report::msg("??")))?;
+            print!("{esc}c", esc = 27 as char);
+            println!(
+                "{} ...",
+                "     Watching"
+                    .if_supports_color(Stderr, |s| s.bold())
+                    .if_supports_color(Stderr, |s| s.purple()),
+            );
+            with_project(directory, false, &mut action).unwrap_or(())
         }
     }
 }

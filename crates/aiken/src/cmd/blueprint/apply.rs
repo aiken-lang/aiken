@@ -1,4 +1,3 @@
-use crate::with_project;
 use aiken_project::{
     blueprint::{
         self,
@@ -7,6 +6,7 @@ use aiken_project::{
     },
     error::Error,
     pretty::multiline,
+    watch::with_project,
 };
 use inquire;
 use num_bigint::BigInt;

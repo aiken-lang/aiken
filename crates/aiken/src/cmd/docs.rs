@@ -1,3 +1,4 @@
+use aiken_project::watch::with_project;
 use std::path::PathBuf;
 
 #[derive(clap::Args)]
@@ -22,5 +23,5 @@ pub fn exec(
         destination,
     }: Args,
 ) -> miette::Result<()> {
-    crate::with_project(directory, deny, |p| p.docs(destination.clone()))
+    with_project(directory.as_deref(), deny, |p| p.docs(destination.clone()))
 }

@@ -1,5 +1,5 @@
-use crate::with_project;
 use aiken_lang::ast::Tracing;
+use aiken_project::watch::with_project;
 use std::path::PathBuf;
 
 /// Compute a minting scripts Policy ID
@@ -29,7 +29,7 @@ pub fn exec(
         rebuild,
     }: Args,
 ) -> miette::Result<()> {
-    with_project(directory, false, |p| {
+    with_project(directory.as_deref(), false, |p| {
         if rebuild {
             p.build(false, Tracing::NoTraces)?;
         }

@@ -1,12 +1,14 @@
-use aiken::cmd::{
+use aiken_project::{config, pretty};
+use cmd::{
     blueprint::{self, address},
     build, check, completion, docs, fmt, lsp, new,
     packages::{self, add},
     tx, uplc, Cmd,
 };
-use aiken_project::{config, pretty};
 use owo_colors::OwoColorize;
 use std::process;
+
+mod cmd;
 
 fn main() {
     panic_handler();
