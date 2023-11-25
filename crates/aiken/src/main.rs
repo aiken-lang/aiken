@@ -5,13 +5,13 @@ use aiken::cmd::{
     tx, uplc, Cmd,
 };
 use aiken_project::{config, pretty};
-
 use owo_colors::OwoColorize;
+use std::process;
 
-fn main() -> miette::Result<()> {
+fn main() {
     panic_handler();
 
-    match Cmd::default() {
+    let result = match Cmd::default() {
         Cmd::New(args) => new::exec(args),
         Cmd::Fmt(args) => fmt::exec(args),
         Cmd::Build(args) => build::exec(args),
@@ -25,6 +25,11 @@ fn main() -> miette::Result<()> {
         Cmd::Tx(sub_cmd) => tx::exec(sub_cmd),
         Cmd::Uplc(sub_cmd) => uplc::exec(sub_cmd),
         Cmd::Completion(sub_cmd) => completion::exec(sub_cmd),
+    };
+
+    match result {
+        Ok(()) => (),
+        Err(_) => process::exit(1),
     }
 }
 
