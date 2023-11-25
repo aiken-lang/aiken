@@ -1,0 +1,8 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n  { x |> f } == y\n}\n"
+---
+fn foo() {
+  ( x |> f ) == y
+}
+

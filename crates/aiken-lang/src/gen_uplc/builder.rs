@@ -579,6 +579,12 @@ pub fn get_variant_name(t: &Rc<Type>) -> String {
         "_bool".to_string()
     } else if t.is_bytearray() {
         "_bytearray".to_string()
+    } else if t.is_bls381_12_g1() {
+        "_bls381_12_g1".to_string()
+    } else if t.is_bls381_12_g2() {
+        "_bls381_12_g2".to_string()
+    } else if t.is_ml_result() {
+        "_ml_result".to_string()
     } else if t.is_map() {
         let mut full_type = vec!["_map".to_string()];
         let pair_type = &t.get_inner_types()[0];
@@ -1305,7 +1311,7 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
             UplcConstant::Bls12_381G2Element(b) => UplcConstant::Data(PlutusData::BoundedBytes(
                 b.deref().clone().compress().into(),
             )),
-            UplcConstant::Bls12_381MlResult(_) => unreachable!("Bls12_381MlResult not supported"),
+            UplcConstant::Bls12_381MlResult(_) => panic!("Bls12_381MlResult not supported"),
         };
         new_constants.push(constant);
     }

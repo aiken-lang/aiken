@@ -516,7 +516,7 @@ impl<'comments> Formatter<'comments> {
         .group();
 
         // Format body
-        let body = self.expr(body);
+        let body = self.expr(body, true);
 
         // Add any trailing comments
         let body = match printed_comments(self.pop_comments(end_location), false) {
@@ -609,8 +609,10 @@ impl<'comments> Formatter<'comments> {
     ) -> Document<'a> {
         let args = wrap_args(args.iter().map(|e| (self.fn_arg(e), false))).group();
         let body = match body {
-            UntypedExpr::Trace { .. } | UntypedExpr::When { .. } => self.expr(body).force_break(),
-            _ => self.expr(body),
+            UntypedExpr::Trace { .. } | UntypedExpr::When { .. } => {
+                self.expr(body, true).force_break()
+            }
+            _ => self.expr(body, true),
         };
 
         let header = "fn".to_doc().append(args);
@@ -634,15 +636,19 @@ impl<'comments> Formatter<'comments> {
     fn sequence<'a>(&mut self, expressions: &'a [UntypedExpr]) -> Document<'a> {
         let count = expressions.len();
         let mut documents = Vec::with_capacity(count * 2);
+
         for (i, expression) in expressions.iter().enumerate() {
             let preceding_newline = self.pop_empty_lines(expression.start_byte_index());
+
             if i != 0 && preceding_newline {
                 documents.push(lines(2));
             } else if i != 0 {
                 documents.push(lines(1));
             }
-            documents.push(self.expr(expression).group());
+
+            documents.push(self.expr(expression, false).group());
         }
+
         documents.to_doc().force_break()
     }
 
@@ -653,8 +659,6 @@ impl<'comments> Formatter<'comments> {
         kind: AssignmentKind,
         annotation: &'a Option<Annotation>,
     ) -> Document<'a> {
-        self.pop_empty_lines(pattern.location().end);
-
         let keyword = match kind {
             AssignmentKind::Let => "let",
             AssignmentKind::Expect => "expect",
@@ -667,6 +671,8 @@ impl<'comments> Formatter<'comments> {
                 keyword.to_doc().append(self.case_clause_value(value))
             }
             _ => {
+                self.pop_empty_lines(pattern.location().end);
+
                 let pattern = self.pattern(pattern);
 
                 let annotation = annotation
@@ -782,7 +788,7 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
-    pub fn expr<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
+    pub fn expr<'a>(&mut self, expr: &'a UntypedExpr, is_top_level: bool) -> Document<'a> {
         let comments = self.pop_comments(expr.start_byte_index());
 
         let document = match expr {
@@ -821,7 +827,18 @@ impl<'comments> Formatter<'comments> {
 
             UntypedExpr::String { value, .. } => self.string(value),
 
-            UntypedExpr::Sequence { expressions, .. } => self.sequence(expressions),
+            UntypedExpr::Sequence { expressions, .. } => {
+                let sequence = self.sequence(expressions);
+
+                if is_top_level {
+                    sequence
+                } else {
+                    "{".to_doc()
+                        .append(line().append(sequence).nest(INDENT).group())
+                        .append(line())
+                        .append("}")
+                }
+            }
 
             UntypedExpr::Var { name, .. } if name.contains(CAPTURE_VARIABLE) => "_".to_doc(),
 
@@ -878,7 +895,10 @@ impl<'comments> Formatter<'comments> {
 
             UntypedExpr::FieldAccess {
                 label, container, ..
-            } => self.expr(container).append(".").append(label.as_str()),
+            } => self
+                .expr(container, false)
+                .append(".")
+                .append(label.as_str()),
 
             UntypedExpr::RecordUpdate {
                 constructor,
@@ -893,7 +913,7 @@ impl<'comments> Formatter<'comments> {
 
             UntypedExpr::TupleIndex { index, tuple, .. } => {
                 let suffix = Ordinal(*index + 1).suffix().to_doc();
-                self.expr(tuple)
+                self.expr(tuple, false)
                     .append(".".to_doc())
                     .append((index + 1).to_doc())
                     .append(suffix)
@@ -953,7 +973,7 @@ impl<'comments> Formatter<'comments> {
                 } else {
                     line()
                 })
-                .append(self.expr(then)),
+                .append(self.expr(then, false)),
         }
     }
 
@@ -1027,7 +1047,7 @@ impl<'comments> Formatter<'comments> {
             false
         };
 
-        self.expr(fun)
+        self.expr(fun, false)
             .append(wrap_args(
                 args.iter()
                     .map(|a| (self.call_arg(a, needs_curly), needs_curly)),
@@ -1051,7 +1071,7 @@ impl<'comments> Formatter<'comments> {
 
         let else_begin = line().append("} else {");
 
-        let else_body = line().append(self.expr(final_else)).nest(INDENT);
+        let else_body = line().append(self.expr(final_else, true)).nest(INDENT);
 
         let else_end = line().append("}");
 
@@ -1072,7 +1092,7 @@ impl<'comments> Formatter<'comments> {
             .append(break_("{", " {"))
             .group();
 
-        let if_body = line().append(self.expr(&branch.body)).nest(INDENT);
+        let if_body = line().append(self.expr(&branch.body, true)).nest(INDENT);
 
         if_begin.append(if_body)
     }
@@ -1110,8 +1130,8 @@ impl<'comments> Formatter<'comments> {
         args: &'a [UntypedRecordUpdateArg],
     ) -> Document<'a> {
         use std::iter::once;
-        let constructor_doc = self.expr(constructor);
-        let spread_doc = "..".to_doc().append(self.expr(&spread.base));
+        let constructor_doc = self.expr(constructor, false);
+        let spread_doc = "..".to_doc().append(self.expr(&spread.base, false));
         let arg_docs = args.iter().map(|a| (self.record_update_arg(a), true));
         let all_arg_docs = once((spread_doc, true)).chain(arg_docs);
         constructor_doc.append(wrap_args(all_arg_docs)).group()
@@ -1128,14 +1148,14 @@ impl<'comments> Formatter<'comments> {
         let left_precedence = left.binop_precedence();
         let right_precedence = right.binop_precedence();
 
-        let left = self.expr(left);
-        let right = self.expr(right);
+        let left = self.expr(left, false);
+        let right = self.expr(right, false);
 
         self.operator_side(left, precedence, left_precedence)
             .append(" ")
             .append(name)
             .append(" ")
-            .append(self.operator_side(right, precedence, right_precedence - 1))
+            .append(self.operator_side(right, precedence, right_precedence.saturating_sub(1)))
     }
 
     pub fn operator_side<'a>(&mut self, doc: Document<'a>, op: u8, side: u8) -> Document<'a> {
@@ -1161,7 +1181,9 @@ impl<'comments> Formatter<'comments> {
             .append(
                 line()
                     .append(join(
-                        expressions.iter().map(|expression| self.expr(expression)),
+                        expressions
+                            .iter()
+                            .map(|expression| self.expr(expression, false)),
                         ",".to_doc().append(line()),
                     ))
                     .nest(INDENT)
@@ -1241,10 +1263,10 @@ impl<'comments> Formatter<'comments> {
 
         if hole_in_first_position && args.len() == 1 {
             // x |> fun(_)
-            self.expr(fun)
+            self.expr(fun, false)
         } else if hole_in_first_position {
             // x |> fun(_, 2, 3)
-            self.expr(fun).append(
+            self.expr(fun, false).append(
                 wrap_args(
                     args.iter()
                         .skip(1)
@@ -1254,7 +1276,7 @@ impl<'comments> Formatter<'comments> {
             )
         } else {
             // x |> fun(1, _, 3)
-            self.expr(fun)
+            self.expr(fun, false)
                 .append(wrap_args(args.iter().map(|a| (self.call_arg(a, false), false))).group())
         }
     }
@@ -1267,14 +1289,14 @@ impl<'comments> Formatter<'comments> {
                 ..
             } => match args.as_slice() {
                 [first, second] if is_breakable_expr(&second.value) && first.is_capture_hole() => {
-                    self.expr(fun)
+                    self.expr(fun, false)
                         .append("(_, ")
                         .append(self.call_arg(second, false))
                         .append(")")
                         .group()
                 }
 
-                _ => self.expr(fun).append(
+                _ => self.expr(fun, false).append(
                     wrap_args(args.iter().map(|a| (self.call_arg(a, false), false))).group(),
                 ),
             },
@@ -1556,12 +1578,12 @@ impl<'comments> Formatter<'comments> {
             | UntypedExpr::Sequence { .. }
             | UntypedExpr::Assignment { .. } => "{"
                 .to_doc()
-                .append(line().append(self.expr(expr)).nest(INDENT))
+                .append(line().append(self.expr(expr, true)).nest(INDENT))
                 .append(line())
                 .append("}")
                 .force_break(),
 
-            _ => self.expr(expr),
+            _ => self.expr(expr, false),
         }
     }
 
@@ -1598,18 +1620,21 @@ impl<'comments> Formatter<'comments> {
             | UntypedExpr::Sequence { .. }
             | UntypedExpr::Assignment { .. } => " {"
                 .to_doc()
-                .append(line().append(self.expr(expr)).nest(INDENT).group())
+                .append(line().append(self.expr(expr, true)).nest(INDENT).group())
                 .append(line())
                 .append("}")
                 .force_break(),
 
             UntypedExpr::Fn { .. } | UntypedExpr::List { .. } => {
-                line().append(self.expr(expr)).nest(INDENT).group()
+                line().append(self.expr(expr, false)).nest(INDENT).group()
             }
 
-            UntypedExpr::When { .. } => line().append(self.expr(expr)).nest(INDENT).group(),
+            UntypedExpr::When { .. } => line().append(self.expr(expr, false)).nest(INDENT).group(),
 
-            _ => break_("", " ").append(self.expr(expr)).nest(INDENT).group(),
+            _ => break_("", " ")
+                .append(self.expr(expr, false))
+                .nest(INDENT)
+                .group(),
         }
     }
 
@@ -1647,7 +1672,7 @@ impl<'comments> Formatter<'comments> {
                 || break_(",", ", ")
             };
         let elements_document = join(elements.iter().map(|e| self.wrap_expr(e)), comma());
-        let tail = tail.map(|e| self.expr(e));
+        let tail = tail.map(|e| self.expr(e, false));
         list(elements_document, elements.len(), tail)
     }
 
@@ -1720,7 +1745,7 @@ impl<'comments> Formatter<'comments> {
         let right = self.clause_guard(right);
         self.operator_side(left, name_precedence, left_precedence)
             .append(name)
-            .append(self.operator_side(right, name_precedence, right_precedence - 1))
+            .append(self.operator_side(right, name_precedence, right_precedence.saturating_sub(1)))
     }
 
     fn clause_guard<'a>(&mut self, clause_guard: &'a UntypedClauseGuard) -> Document<'a> {
@@ -1771,7 +1796,7 @@ impl<'comments> Formatter<'comments> {
 
     fn wrap_unary_op<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
         match expr {
-            UntypedExpr::BinOp { .. } => "(".to_doc().append(self.expr(expr)).append(")"),
+            UntypedExpr::BinOp { .. } => "(".to_doc().append(self.expr(expr, false)).append(")"),
             _ => self.wrap_expr(expr),
         }
     }

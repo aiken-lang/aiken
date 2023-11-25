@@ -426,7 +426,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             tipo: string(),
             value: format!(
                 "{} ? False",
-                format::Formatter::new().expr(&value).to_pretty_string(999)
+                format::Formatter::new()
+                    .expr(&value, false)
+                    .to_pretty_string(999)
             ),
         };
 

@@ -1,3 +1,4 @@
+use aiken_project::watch::{self, watch_project, with_project};
 use std::path::PathBuf;
 
 #[derive(clap::Args)]
@@ -9,6 +10,10 @@ pub struct Args {
     /// Deny warnings; warnings will be treated as errors
     #[clap(short = 'D', long)]
     deny: bool,
+
+    /// When enabled, re-run the command on file changes instead of exiting
+    #[clap(short, long)]
+    watch: bool,
 
     /// Also dump textual uplc
     #[clap(short, long)]
@@ -23,9 +28,18 @@ pub fn exec(
     Args {
         directory,
         deny,
+        watch,
         uplc,
         keep_traces,
     }: Args,
 ) -> miette::Result<()> {
-    crate::with_project(directory, deny, |p| p.build(uplc, keep_traces.into()))
+    if watch {
+        watch_project(directory.as_deref(), watch::default_filter, 500, |p| {
+            p.build(uplc, keep_traces.into())
+        })
+    } else {
+        with_project(directory.as_deref(), deny, |p| {
+            p.build(uplc, keep_traces.into())
+        })
+    }
 }

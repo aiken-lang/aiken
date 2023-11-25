@@ -1,9 +1,6 @@
-use crate::{
-    blueprint::error as blueprint, deps::manifest::Package, package_name::PackageName, pretty,
-    script::EvalHint,
-};
+use crate::{blueprint::error as blueprint, deps::manifest::Package, package_name::PackageName};
 use aiken_lang::{
-    ast::{self, BinOp, Span},
+    ast::{self, Span},
     error::ExtraData,
     parser::error::ParseError,
     tipo,
@@ -18,7 +15,6 @@ use std::{
     ops::Deref,
     path::{Path, PathBuf},
 };
-use uplc::machine::cost_model::ExBudget;
 use zip::result::ZipError;
 
 #[allow(dead_code)]
@@ -97,7 +93,7 @@ pub enum Error {
         path: PathBuf,
         verbose: bool,
         src: String,
-        evaluation_hint: Option<EvalHint>,
+        evaluation_hint: Option<String>,
     },
 
     #[error(
@@ -266,31 +262,45 @@ impl Diagnostic for Error {
     }
 
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        fn boxed<'a>(s: Box<dyn Display + 'a>) -> Box<dyn Display + 'a> {
+            Box::new(format!(
+                "        {} {}",
+                "Error"
+                    .if_supports_color(Stdout, |s| s.red())
+                    .if_supports_color(Stdout, |s| s.bold()),
+                format!("{s}").if_supports_color(Stdout, |s| s.red())
+            ))
+        }
+
         match self {
-            Error::DuplicateModule { .. } => Some(Box::new("aiken::module::duplicate")),
+            Error::DuplicateModule { .. } => Some(boxed(Box::new("aiken::module::duplicate"))),
             Error::FileIo { .. } => None,
-            Error::Blueprint(e) => e.code(),
-            Error::ImportCycle { .. } => Some(Box::new("aiken::module::cyclical")),
-            Error::Parse { .. } => Some(Box::new("aiken::parser")),
-            Error::Type { error, .. } => Some(Box::new(format!(
+            Error::Blueprint(e) => e.code().map(boxed),
+            Error::ImportCycle { .. } => Some(boxed(Box::new("aiken::module::cyclical"))),
+            Error::Parse { .. } => Some(boxed(Box::new("aiken::parser"))),
+            Error::Type { error, .. } => Some(boxed(Box::new(format!(
                 "aiken::check{}",
                 error.code().map(|s| format!("::{s}")).unwrap_or_default()
-            ))),
+            )))),
             Error::StandardIo(_) => None,
             Error::MissingManifest { .. } => None,
-            Error::TomlLoading { .. } => Some(Box::new("aiken::loading::toml")),
+            Error::TomlLoading { .. } => Some(boxed(Box::new("aiken::loading::toml"))),
             Error::Format { .. } => None,
-            Error::TestFailure { path, .. } => Some(Box::new(path.to_str().unwrap_or(""))),
+            Error::TestFailure { path, .. } => Some(boxed(Box::new(path.to_str().unwrap_or("")))),
             Error::Http(_) => Some(Box::new("aiken::packages::download")),
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
-            Error::UnknownPackageVersion { .. } => Some(Box::new("aiken::packages::resolve")),
-            Error::UnableToResolvePackage { .. } => Some(Box::new("aiken::package::download")),
+            Error::UnknownPackageVersion { .. } => {
+                Some(boxed(Box::new("aiken::packages::resolve")))
+            }
+            Error::UnableToResolvePackage { .. } => {
+                Some(boxed(Box::new("aiken::package::download")))
+            }
             Error::Json { .. } => None,
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
-            Error::Module(e) => e.code(),
+            Error::Module(e) => e.code().map(boxed),
         }
     }
 
@@ -313,33 +323,9 @@ impl Diagnostic for Error {
             Error::MissingManifest { .. } => Some(Box::new("Try running `aiken new <REPOSITORY/PROJECT>` to initialise a project with an example manifest.")),
             Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
-            Error::TestFailure { evaluation_hint, .. }  =>{
-                match evaluation_hint {
-                    None => None,
-                    Some(hint) => {
-                        let budget = ExBudget { mem: i64::MAX, cpu: i64::MAX, };
-                        let left = pretty::boxed("left", &match hint.left.clone().eval(budget).result() {
-                            Ok(term) => format!("{term}"),
-                            Err(err) => format!("{err}"),
-                        });
-                        let right = pretty::boxed("right", &match hint.right.clone().eval(budget).result() {
-                            Ok(term) => format!("{term}"),
-                            Err(err) => format!("{err}"),
-                        });
-                        let msg = match hint.bin_op {
-                            BinOp::And => Some(format!("{left}\n\nand\n\n{right}\n\nshould both be true.")),
-                            BinOp::Or => Some(format!("{left}\n\nor\n\n{right}\n\nshould be true.")),
-                            BinOp::Eq => Some(format!("{left}\n\nshould be equal to\n\n{right}")),
-                            BinOp::NotEq => Some(format!("{left}\n\nshould not be equal to\n\n{right}")),
-                            BinOp::LtInt => Some(format!("{left}\n\nshould be lower than\n\n{right}")),
-                            BinOp::LtEqInt => Some(format!("{left}\n\nshould be lower than or equal to\n\n{right}")),
-                            BinOp::GtEqInt => Some(format!("{left}\n\nshould be greater than\n\n{right}")),
-                            BinOp::GtInt => Some(format!("{left}\n\nshould be greater than or equal to\n\n{right}")),
-                            _ => None
-                        }?;
-                        Some(Box::new(msg))
-                    }
-                }
+            Error::TestFailure { evaluation_hint, .. }  => match evaluation_hint {
+                None => None,
+                Some(hint) => Some(Box::new(hint.to_string()))
             },
             Error::Http(_) => None,
             Error::ZipExtract(_) => None,
@@ -560,14 +546,24 @@ impl Diagnostic for Warning {
     }
 
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        fn boxed<'a>(s: Box<dyn Display + 'a>) -> Box<dyn Display + 'a> {
+            Box::new(format!(
+                "      {} {}",
+                "Warning"
+                    .if_supports_color(Stdout, |s| s.yellow())
+                    .if_supports_color(Stdout, |s| s.bold()),
+                format!("{s}").if_supports_color(Stdout, |s| s.yellow())
+            ))
+        }
+
         match self {
-            Warning::Type { warning, .. } => Some(Box::new(format!(
+            Warning::Type { warning, .. } => Some(boxed(Box::new(format!(
                 "aiken::check{}",
                 warning.code().map(|s| format!("::{s}")).unwrap_or_default()
-            ))),
-            Warning::NoValidators => Some(Box::new("aiken::check")),
+            )))),
+            Warning::NoValidators => Some(boxed(Box::new("aiken::check"))),
             Warning::DependencyAlreadyExists { .. } => {
-                Some(Box::new("aiken::packages::already_exists"))
+                Some(boxed(Box::new("aiken::packages::already_exists")))
             }
         }
     }

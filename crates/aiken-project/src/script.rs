@@ -1,6 +1,9 @@
-use crate::{ExBudget, Term};
+use crate::{pretty, ExBudget, Term};
 use aiken_lang::ast::BinOp;
-use std::path::PathBuf;
+use std::{
+    fmt::{self, Display},
+    path::PathBuf,
+};
 use uplc::ast::{NamedDeBruijn, Program};
 
 #[derive(Debug, Clone)]
@@ -40,6 +43,48 @@ pub struct EvalHint {
     pub bin_op: BinOp,
     pub left: Program<NamedDeBruijn>,
     pub right: Program<NamedDeBruijn>,
+}
+
+impl Display for EvalHint {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let unlimited_budget = ExBudget {
+            mem: i64::MAX,
+            cpu: i64::MAX,
+        };
+
+        let left = pretty::boxed(
+            "left",
+            &match self.left.clone().eval(unlimited_budget).result() {
+                Ok(term) => format!("{term}"),
+                Err(err) => format!("{err}"),
+            },
+        );
+        let right = pretty::boxed(
+            "right",
+            &match self.right.clone().eval(unlimited_budget).result() {
+                Ok(term) => format!("{term}"),
+                Err(err) => format!("{err}"),
+            },
+        );
+        let msg = match self.bin_op {
+            BinOp::And => Some(format!("{left}\n\nand\n\n{right}\n\nshould both be true.")),
+            BinOp::Or => Some(format!("{left}\n\nor\n\n{right}\n\nshould be true.")),
+            BinOp::Eq => Some(format!("{left}\n\nshould be equal to\n\n{right}")),
+            BinOp::NotEq => Some(format!("{left}\n\nshould not be equal to\n\n{right}")),
+            BinOp::LtInt => Some(format!("{left}\n\nshould be lower than\n\n{right}")),
+            BinOp::LtEqInt => Some(format!(
+                "{left}\n\nshould be lower than or equal to\n\n{right}"
+            )),
+            BinOp::GtEqInt => Some(format!("{left}\n\nshould be greater than\n\n{right}")),
+            BinOp::GtInt => Some(format!(
+                "{left}\n\nshould be greater than or equal to\n\n{right}"
+            )),
+            _ => None,
+        }
+        .ok_or(fmt::Error)?;
+
+        f.write_str(&msg)
+    }
 }
 
 #[derive(Debug)]

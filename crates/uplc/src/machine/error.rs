@@ -20,6 +20,10 @@ pub enum Error {
     NonPolymorphicInstantiation(Value),
     #[error("Attempted to apply a non-function:\n\n{0:#?} to argument:\n\n{1:#?}")]
     NonFunctionalApplication(Value, Value),
+    #[error("Attempted to case a non-const:\n\n{0:#?}")]
+    NonConstrScrutinized(Value),
+    #[error("Cases: {0:#?}\n\n are missing branch for constr:\n\n{1:#?}")]
+    MissingCaseBranch(Vec<Term<NamedDeBruijn>>, Value),
     #[error("Type mismatch expected '{0}' got '{1}'")]
     TypeMismatch(Type, Type),
     #[error("Type mismatch expected '(list a)' got '{0}'")]
@@ -36,6 +40,7 @@ pub enum Error {
     NotAConstant(Value),
     #[error("The evaluation never reached a final state")]
     MachineNeverReachedDone,
+
     #[error("Decoding utf8")]
     Utf8(#[from] FromUtf8Error),
     #[error("Out of Bounds\n\nindex: {}\nbytestring: {}\npossible: 0 - {}", .0, hex::encode(.1), .1.len() - 1)]

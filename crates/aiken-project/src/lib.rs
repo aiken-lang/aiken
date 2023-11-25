@@ -14,6 +14,7 @@ pub mod script;
 pub mod telemetry;
 #[cfg(test)]
 mod tests;
+pub mod watch;
 
 use crate::blueprint::{
     definitions::Definitions,
@@ -328,7 +329,11 @@ where
                             Some(Error::TestFailure {
                                 name: e.script.name.clone(),
                                 path: e.script.input_path.clone(),
-                                evaluation_hint: e.script.evaluation_hint.clone(),
+                                evaluation_hint: e
+                                    .script
+                                    .evaluation_hint
+                                    .as_ref()
+                                    .map(|hint| hint.to_string()),
                                 src: e.script.program.to_pretty(),
                                 verbose,
                             })

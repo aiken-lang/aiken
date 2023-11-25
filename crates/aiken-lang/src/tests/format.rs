@@ -63,6 +63,77 @@ fn format_if() {
 }
 
 #[test]
+fn format_logic_op_with_code_block() {
+    assert_format!(
+        r#"
+        fn foo() {
+          True || {
+            let bar = 1
+            bar == bar
+          }
+        }
+        "#
+    );
+}
+
+#[test]
+fn format_grouped_expression() {
+    assert_format!(
+        r#"
+        fn foo() {
+           y == { x |> f }
+        }
+        "#
+    );
+}
+
+#[test]
+fn format_grouped_expression_2() {
+    assert_format!(
+        r#"
+        fn foo() {
+           ( y == x ) |> f
+        }
+        "#
+    );
+}
+
+#[test]
+fn format_grouped_expression_3() {
+    assert_format!(
+        r#"
+        fn foo() {
+          { x |> f } == y
+        }
+        "#
+    );
+}
+
+#[test]
+fn format_grouped_expression_4() {
+    assert_format!(
+        r#"
+        fn foo() {
+          x |> { f == y }
+        }
+        "#
+    );
+}
+
+#[test]
+fn format_preserve_newline_after_bool_expect() {
+    assert_format!(
+        r#"
+        fn foo() {
+          expect 1 == 1
+
+          False
+        }
+        "#
+    );
+}
+
+#[test]
 fn format_validator() {
     assert_format!(
         r#"

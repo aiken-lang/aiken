@@ -1,0 +1,11 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n  True || {\n    let bar = 1\n    bar == bar\n  }\n}\n"
+---
+fn foo() {
+  True || {
+    let bar = 1
+    bar == bar
+  }
+}
+

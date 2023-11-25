@@ -150,9 +150,9 @@ impl FieldMap {
 
         self.fields
             .keys()
-            .cloned()
             .filter(|f| !given.contains(f))
             .sorted()
+            .cloned()
             .collect()
     }
 }
