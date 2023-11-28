@@ -440,7 +440,7 @@ fn exhaustiveness_missing_constr_with_args() {
         }
 
         fn foo() {
-          let thing = Bar 
+          let thing = Bar
           when thing is {
             Bar -> True
           }
@@ -1191,7 +1191,7 @@ fn discarded_let_bindings() {
     let (warnings, ast) = check(parse(source_code)).unwrap();
 
     assert!(matches!(warnings[0], Warning::UnusedVariable { ref name, .. } if name == "unused"));
-    assert!(matches!(warnings[1], Warning::UnusedVariable { ref name, .. } if name == "_"));
+    assert!(matches!(warnings[1], Warning::DiscardedLetAssignment { ref name, .. } if name == "_"));
 
     // Controls that unused let-bindings have been erased from the transformed AST.
     match ast.definitions.first() {

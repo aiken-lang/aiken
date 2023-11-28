@@ -1536,6 +1536,28 @@ pub enum Warning {
     },
 
     #[error(
+        "I came across a discarded variable in a let assignment: {}.\n",
+        name.if_supports_color(Stderr, |s| s.purple())
+    )]
+    #[diagnostic(help("{}", formatdoc! {
+        r#"If you do want to enforce some side-effects, use {keyword_expect} with {name} instead of {keyword_let}.
+
+           You should also know that, unlike in typical imperative languages, unused let-bindings are {fully_ignored} in Aiken.
+           They will not produce any side-effect (such as error calls). Programs with or without unused variables are semantically equivalent.
+        "#,
+        fully_ignored = "fully_ignored".if_supports_color(Stderr, |s| s.bold()),
+        keyword_expect = "expect".if_supports_color(Stderr, |s| s.yellow()),
+        keyword_let = "let".if_supports_color(Stderr, |s| s.yellow()),
+        name = name.if_supports_color(Stderr, |s| s.yellow())
+    }))]
+    #[diagnostic(code("unused::discarded_let_assignment"))]
+    DiscardedLetAssignment {
+        #[label("discarded")]
+        location: Span,
+        name: String,
+    },
+
+    #[error(
         "I came across a validator in a {} module which means\nI'm going to ignore it.\n",
         "lib/".if_supports_color(Stderr, |s| s.purple())
     )]
@@ -1595,6 +1617,7 @@ impl ExtraData for Warning {
             | Warning::UnusedPrivateModuleConstant { .. }
             | Warning::UnusedType { .. }
             | Warning::UnusedVariable { .. }
+            | Warning::DiscardedLetAssignment { .. }
             | Warning::Utf8ByteArrayIsValidHexString { .. }
             | Warning::ValidatorInLibraryModule { .. } => None,
             Warning::UnusedImportedModule { location, .. } => {

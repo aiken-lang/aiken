@@ -10,7 +10,7 @@ use itertools::Itertools;
 
 use super::{
     environment::{assert_no_labeled_arguments, collapse_links, EntityKind, Environment},
-    error::Error,
+    error::{Error, Warning},
     hydrator::Hydrator,
     PatternConstructor, Type, ValueConstructorVariant,
 };
@@ -150,7 +150,11 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                 if is_assignment {
                     // Register declaration for the unused variable detection
                     self.environment
-                        .init_usage(name.to_string(), EntityKind::Variable, location);
+                        .warnings
+                        .push(Warning::DiscardedLetAssignment {
+                            name: name.clone(),
+                            location,
+                        });
                 };
                 Ok(Pattern::Discard { name, location })
             }

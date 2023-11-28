@@ -1707,7 +1707,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             .warnings
             .iter()
             .filter_map(|w| match w {
-                Warning::UnusedVariable { location, .. } => Some(*location),
+                Warning::UnusedVariable { location, .. }
+                | Warning::DiscardedLetAssignment { location, .. } => Some(*location),
                 _ => None,
             })
             .collect::<Vec<_>>();
