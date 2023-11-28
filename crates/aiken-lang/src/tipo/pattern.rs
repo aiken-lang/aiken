@@ -314,6 +314,8 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                     self.environment
                         .get_value_constructor(module.as_ref(), &name, location)?;
 
+                let has_no_fields = cons.field_map().is_none();
+
                 match cons.field_map() {
                     // The fun has a field map so labelled arguments may be present and need to be reordered.
                     Some(field_map) => {
@@ -399,8 +401,37 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                     &mut HashMap::new(),
                     self.hydrator,
                 );
+
                 match instantiated_constructor_type.deref() {
                     Type::Fn { args, ret } => {
+                        if with_spread && has_no_fields {
+                            if pattern_args.len() == args.len() {
+                                return Err(Error::UnnecessarySpreadOperator {
+                                    location: Span {
+                                        start: location.end - 3,
+                                        end: location.end - 1,
+                                    },
+                                    arity: args.len(),
+                                });
+                            }
+
+                            while pattern_args.len() < args.len() {
+                                let location = Span {
+                                    start: location.end - 3,
+                                    end: location.end - 1,
+                                };
+
+                                pattern_args.push(CallArg {
+                                    value: Pattern::Discard {
+                                        name: "_".to_string(),
+                                        location,
+                                    },
+                                    location,
+                                    label: None,
+                                });
+                            }
+                        }
+
                         if args.len() == pattern_args.len() {
                             let pattern_args = pattern_args
                                 .into_iter()

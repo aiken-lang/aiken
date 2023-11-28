@@ -982,6 +982,46 @@ fn list_pattern_6() {
 }
 
 #[test]
+fn spread_with_positional_constr_args() {
+    let source_code = r#"
+        type Redeemer {
+          First(Int)
+          Second
+        }
+
+        fn foo(redeemer: Redeemer) {
+          when redeemer is {
+            First(..) -> True
+            Second -> True
+          }
+        }
+    "#;
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn unnecessary_spread_with_positional_constr_args() {
+    let source_code = r#"
+        type Redeemer {
+          First(Int)
+          Second
+        }
+
+        fn foo(redeemer: Redeemer) {
+          when redeemer is {
+            First(x, ..) -> True
+            Second -> True
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::UnnecessarySpreadOperator { .. }))
+    ))
+}
+
+#[test]
 fn trace_strings() {
     let source_code = r#"
         fn bar() {
