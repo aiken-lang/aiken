@@ -1169,8 +1169,10 @@ impl TypedClause {
         }
     }
 
-    pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
-        self.then.find_node(byte_index)
+    pub fn find_node(&self, byte_index: usize, subject_type: &Rc<Type>) -> Option<Located<'_>> {
+        self.pattern
+            .find_node(byte_index, subject_type)
+            .or_else(|| self.then.find_node(byte_index))
     }
 }
 

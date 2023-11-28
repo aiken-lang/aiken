@@ -378,7 +378,7 @@ impl TypedExpr {
                 .or_else(|| {
                     clauses
                         .iter()
-                        .find_map(|clause| clause.find_node(byte_index))
+                        .find_map(|clause| clause.find_node(byte_index, &subject.tipo()))
                 })
                 .or(Some(Located::Expression(self))),
 
