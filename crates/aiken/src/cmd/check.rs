@@ -1,5 +1,5 @@
 use aiken_project::watch::{self, watch_project, with_project};
-use std::path::PathBuf;
+use std::{path::PathBuf, process};
 
 #[derive(clap::Args)]
 /// Type-check an Aiken project
@@ -52,7 +52,7 @@ pub fn exec(
         ..
     }: Args,
 ) -> miette::Result<()> {
-    if watch {
+    let result = if watch {
         watch_project(directory.as_deref(), watch::default_filter, 500, |p| {
             p.check(
                 skip_tests,
@@ -72,5 +72,7 @@ pub fn exec(
                 (!no_traces).into(),
             )
         })
-    }
+    };
+
+    result.map_err(|_| process::exit(1))
 }

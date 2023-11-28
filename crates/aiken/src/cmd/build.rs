@@ -1,5 +1,5 @@
 use aiken_project::watch::{self, watch_project, with_project};
-use std::path::PathBuf;
+use std::{path::PathBuf, process};
 
 #[derive(clap::Args)]
 /// Build an Aiken project
@@ -33,7 +33,7 @@ pub fn exec(
         keep_traces,
     }: Args,
 ) -> miette::Result<()> {
-    if watch {
+    let result = if watch {
         watch_project(directory.as_deref(), watch::default_filter, 500, |p| {
             p.build(uplc, keep_traces.into())
         })
@@ -41,5 +41,7 @@ pub fn exec(
         with_project(directory.as_deref(), deny, |p| {
             p.build(uplc, keep_traces.into())
         })
-    }
+    };
+
+    result.map_err(|_| process::exit(1))
 }

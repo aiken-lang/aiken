@@ -147,6 +147,7 @@ pub fn exec(
 
         Ok(())
     })
+    .map_err(|_| std::process::exit(1))
 }
 
 fn ask_schema(

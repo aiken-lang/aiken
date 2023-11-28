@@ -6,14 +6,13 @@ use cmd::{
     tx, uplc, Cmd,
 };
 use owo_colors::OwoColorize;
-use std::process;
 
 mod cmd;
 
-fn main() {
+fn main() -> miette::Result<()> {
     panic_handler();
 
-    let result = match Cmd::default() {
+    match Cmd::default() {
         Cmd::New(args) => new::exec(args),
         Cmd::Fmt(args) => fmt::exec(args),
         Cmd::Build(args) => build::exec(args),
@@ -27,11 +26,6 @@ fn main() {
         Cmd::Tx(sub_cmd) => tx::exec(sub_cmd),
         Cmd::Uplc(sub_cmd) => uplc::exec(sub_cmd),
         Cmd::Completion(sub_cmd) => completion::exec(sub_cmd),
-    };
-
-    match result {
-        Ok(()) => (),
-        Err(_) => process::exit(1),
     }
 }
 

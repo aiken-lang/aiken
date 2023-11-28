@@ -1,5 +1,5 @@
 use aiken_project::watch::{self, watch_project, with_project};
-use std::path::PathBuf;
+use std::{path::PathBuf, process};
 
 #[derive(clap::Args)]
 /// Build the documentation for an Aiken project
@@ -28,11 +28,13 @@ pub fn exec(
         destination,
     }: Args,
 ) -> miette::Result<()> {
-    if watch {
+    let result = if watch {
         watch_project(directory.as_deref(), watch::default_filter, 500, |p| {
             p.docs(destination.clone())
         })
     } else {
         with_project(directory.as_deref(), deny, |p| p.docs(destination.clone()))
-    }
+    };
+
+    result.map_err(|_| process::exit(1))
 }
