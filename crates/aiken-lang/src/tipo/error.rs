@@ -479,7 +479,7 @@ If you really meant to return that last expression, try to replace it with the f
     },
 
     #[error("{}\n", if *is_let {
-          "I noticed a let assignment matching a value with more than one constructor.".to_string()
+          "I noticed a let assignment matching a value with more than one pattern.".to_string()
       } else {
           format!(
               "I realized that a given '{keyword_when}/{keyword_is}' expression is non-exhaustive.",
