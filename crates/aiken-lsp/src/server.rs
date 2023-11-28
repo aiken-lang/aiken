@@ -516,7 +516,7 @@ impl Server {
                 expression.definition_location(),
                 Some(expression.tipo()),
             ),
-            Located::Pattern(pattern, value) => (pattern.location(), None, pattern.tipo(value)),
+            Located::Pattern(pattern, tipo) => (pattern.location(), None, Some(tipo)),
             Located::Definition(_) => return Ok(None),
         };
 

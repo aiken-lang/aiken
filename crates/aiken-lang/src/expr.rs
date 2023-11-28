@@ -368,7 +368,7 @@ impl TypedExpr {
                 .or_else(|| right.find_node(byte_index)),
 
             TypedExpr::Assignment { value, pattern, .. } => pattern
-                .find_node(byte_index, value)
+                .find_node(byte_index, &value.tipo())
                 .or_else(|| value.find_node(byte_index)),
 
             TypedExpr::When {

@@ -449,7 +449,7 @@ impl TypedDefinition {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Located<'a> {
     Expression(&'a TypedExpr),
-    Pattern(&'a TypedPattern, &'a TypedExpr),
+    Pattern(&'a TypedPattern, Rc<Type>),
     Definition(&'a TypedDefinition),
 }
 
@@ -964,7 +964,7 @@ impl<A, B> Pattern<A, B> {
 }
 
 impl TypedPattern {
-    pub fn find_node<'a>(&'a self, byte_index: usize, value: &'a TypedExpr) -> Option<Located<'a>> {
+    pub fn find_node<'a>(&'a self, byte_index: usize, value: &Rc<Type>) -> Option<Located<'a>> {
         if !self.location().contains(byte_index) {
             return None;
         }
@@ -973,20 +973,41 @@ impl TypedPattern {
             Pattern::Int { .. }
             | Pattern::Var { .. }
             | Pattern::Assign { .. }
-            | Pattern::Discard { .. } => Some(Located::Pattern(self, value)),
+            | Pattern::Discard { .. } => Some(Located::Pattern(self, value.clone())),
 
             Pattern::List { elements, .. }
             | Pattern::Tuple {
                 elems: elements, ..
-            } => elements
-                .iter()
-                .find_map(|e| e.find_node(byte_index, value))
-                .or(Some(Located::Pattern(self, value))),
+            } => match &**value {
+                Type::Tuple { elems } => elements
+                    .iter()
+                    .zip(elems.iter())
+                    .find_map(|(e, t)| e.find_node(byte_index, t))
+                    .or(Some(Located::Pattern(self, value.clone()))),
+                Type::App {
+                    module, name, args, ..
+                } if module.is_empty() && name == "List" => elements
+                    .iter()
+                    // this is the same as above but this uses
+                    // cycle to repeat the single type arg for a list
+                    // there's probably a cleaner way to re-use the code
+                    // from this branch and the above.
+                    .zip(args.iter().cycle())
+                    .find_map(|(e, t)| e.find_node(byte_index, t))
+                    .or(Some(Located::Pattern(self, value.clone()))),
+                _ => None,
+            },
 
-            Pattern::Constructor { arguments, .. } => arguments
-                .iter()
-                .find_map(|e| e.value.find_node(byte_index, value))
-                .or(Some(Located::Pattern(self, value))),
+            Pattern::Constructor {
+                arguments, tipo, ..
+            } => match &**tipo {
+                Type::Fn { args, .. } => arguments
+                    .iter()
+                    .zip(args.iter())
+                    .find_map(|(e, t)| e.value.find_node(byte_index, t))
+                    .or(Some(Located::Pattern(self, value.clone()))),
+                _ => None,
+            },
         }
     }
 
