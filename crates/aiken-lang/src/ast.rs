@@ -426,16 +426,31 @@ impl TypedDefinition {
     pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
         // Note that the fn span covers the function head, not
         // the entire statement.
-        if let Definition::Fn(Function { body, .. })
-        | Definition::Validator(Validator {
-            fun: Function { body, .. },
-            ..
-        })
-        | Definition::Test(Function { body, .. }) = self
-        {
-            if let Some(located) = body.find_node(byte_index) {
-                return Some(located);
+        match self {
+            Definition::Fn(Function { body, .. }) | Definition::Test(Function { body, .. }) => {
+                if let Some(located) = body.find_node(byte_index) {
+                    return Some(located);
+                }
             }
+
+            Definition::Validator(Validator {
+                fun: Function { body, .. },
+                other_fun:
+                    Some(Function {
+                        body: other_body, ..
+                    }),
+                ..
+            }) => {
+                if let Some(located) = body.find_node(byte_index) {
+                    return Some(located);
+                }
+
+                if let Some(located) = other_body.find_node(byte_index) {
+                    return Some(located);
+                }
+            }
+
+            _ => (),
         }
 
         if self.location().contains(byte_index) {
