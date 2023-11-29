@@ -474,9 +474,7 @@ impl Server {
         &self,
         params: &lsp_types::TextDocumentPositionParams,
     ) -> Option<(LineNumbers, Located<'_>)> {
-        let module = self.module_for_uri(&params.text_document.uri);
-
-        let module = module?;
+        let module = self.module_for_uri(&params.text_document.uri)?;
 
         let line_numbers = LineNumbers::new(&module.code);
 
@@ -485,9 +483,7 @@ impl Server {
             params.position.character as usize,
         );
 
-        let node = module.find_node(byte_index);
-
-        let node = node?;
+        let node = module.find_node(byte_index)?;
 
         Some((line_numbers, node))
     }
