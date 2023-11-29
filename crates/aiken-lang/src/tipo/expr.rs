@@ -1661,7 +1661,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             .into_iter()
             .rev()
             .reduce(|acc, typed_expression| TypedExpr::BinOp {
-                location: Span::empty(),
+                location,
                 tipo: bool(),
                 name,
                 left: typed_expression.into(),

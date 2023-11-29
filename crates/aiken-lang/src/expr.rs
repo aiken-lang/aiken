@@ -365,7 +365,8 @@ impl TypedExpr {
 
             TypedExpr::BinOp { left, right, .. } => left
                 .find_node(byte_index)
-                .or_else(|| right.find_node(byte_index)),
+                .or_else(|| right.find_node(byte_index))
+                .or(Some(Located::Expression(self))),
 
             TypedExpr::Assignment { value, pattern, .. } => pattern
                 .find_node(byte_index, &value.tipo())
