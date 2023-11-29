@@ -1183,7 +1183,7 @@ fn pipe_with_wrong_type_and_full_args() {
     "#;
 
     assert!(matches!(
-        dbg!(check(parse(source_code))),
+        check(parse(source_code)),
         Err((
             _,
             Error::CouldNotUnify {
