@@ -10,6 +10,8 @@ const UNKNOWN_CONSTRUCTOR: &str = "aiken::check::unknown::type_constructor";
 const UNKNOWN_MODULE: &str = "aiken::check::unknown::module";
 const UNUSED_IMPORT_VALUE: &str = "aiken::check::unused:import::value";
 const UNUSED_IMPORT_MODULE: &str = "aiken::check::unused::import::module";
+const UTF8_BYTE_ARRAY_IS_VALID_HEX_STRING: &str =
+    "aiken::check::syntax::bytearray_literal_is_hex_string";
 
 /// Errors for which we can provide quickfixes
 #[allow(clippy::enum_variant_names)]
@@ -18,6 +20,7 @@ pub enum Quickfix {
     UnknownModule(lsp_types::Diagnostic),
     UnknownConstructor(lsp_types::Diagnostic),
     UnusedImports(Vec<lsp_types::Diagnostic>),
+    Utf8ByteArrayIsValidHexString(lsp_types::Diagnostic),
 }
 
 fn match_code(
@@ -52,6 +55,14 @@ pub fn assert(diagnostic: lsp_types::Diagnostic) -> Option<Quickfix> {
         || match_code(&diagnostic, Severity::WARNING, UNUSED_IMPORT_MODULE)
     {
         return Some(Quickfix::UnusedImports(vec![diagnostic]));
+    }
+
+    if match_code(
+        &diagnostic,
+        Severity::WARNING,
+        UTF8_BYTE_ARRAY_IS_VALID_HEX_STRING,
+    ) {
+        return Some(Quickfix::Utf8ByteArrayIsValidHexString(diagnostic));
     }
 
     None
@@ -98,6 +109,12 @@ pub fn quickfix(
                         .map(|diagnostic| diagnostic.data.as_ref())
                         .collect(),
                 ),
+            ),
+            Quickfix::Utf8ByteArrayIsValidHexString(diagnostic) => each_as_distinct_action(
+                &mut actions,
+                text_document,
+                diagnostic,
+                utf8_byte_array_is_hex_string(diagnostic),
             ),
         };
     }
@@ -248,6 +265,22 @@ fn unused_imports(
                 }
             }
         }
+    }
+
+    edits
+}
+
+fn utf8_byte_array_is_hex_string(diagnostic: &lsp_types::Diagnostic) -> Vec<AnnotatedEdit> {
+    let mut edits = Vec::new();
+
+    if let Some(serde_json::Value::String(ref value)) = diagnostic.data.as_ref() {
+        edits.push((
+            "Prefix with #".to_string(),
+            lsp_types::TextEdit {
+                range: diagnostic.range,
+                new_text: format!("#\"{value}\""),
+            },
+        ))
     }
 
     edits

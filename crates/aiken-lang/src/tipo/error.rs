@@ -1618,8 +1618,8 @@ impl ExtraData for Warning {
             | Warning::UnusedType { .. }
             | Warning::UnusedVariable { .. }
             | Warning::DiscardedLetAssignment { .. }
-            | Warning::Utf8ByteArrayIsValidHexString { .. }
             | Warning::ValidatorInLibraryModule { .. } => None,
+            Warning::Utf8ByteArrayIsValidHexString { value, .. } => Some(value.clone()),
             Warning::UnusedImportedModule { location, .. } => {
                 Some(format!("{},{}", false, location.start))
             }
