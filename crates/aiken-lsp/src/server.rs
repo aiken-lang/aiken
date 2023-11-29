@@ -679,9 +679,14 @@ impl Server {
                         &line_numbers,
                     ),
                     severity: Some(severity),
-                    code: error
-                        .code()
-                        .map(|c| lsp_types::NumberOrString::String(c.to_string())),
+                    code: error.code().map(|c| {
+                        lsp_types::NumberOrString::String(
+                            c.to_string()
+                                .trim()
+                                .replace("Warning ", "")
+                                .replace("Error ", ""),
+                        )
+                    }),
                     code_description: None,
                     source: None,
                     message,
