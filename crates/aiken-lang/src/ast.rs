@@ -427,12 +427,6 @@ impl TypedDefinition {
         // Note that the fn span covers the function head, not
         // the entire statement.
         match self {
-            Definition::Fn(Function { body, .. }) | Definition::Test(Function { body, .. }) => {
-                if let Some(located) = body.find_node(byte_index) {
-                    return Some(located);
-                }
-            }
-
             Definition::Validator(Validator {
                 fun: Function { body, .. },
                 other_fun:
@@ -446,6 +440,17 @@ impl TypedDefinition {
                 }
 
                 if let Some(located) = other_body.find_node(byte_index) {
+                    return Some(located);
+                }
+            }
+
+            Definition::Fn(Function { body, .. })
+            | Definition::Test(Function { body, .. })
+            | Definition::Validator(Validator {
+                fun: Function { body, .. },
+                ..
+            }) => {
+                if let Some(located) = body.find_node(byte_index) {
                     return Some(located);
                 }
             }
