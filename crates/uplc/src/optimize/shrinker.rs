@@ -223,7 +223,7 @@ impl Program<Name> {
                         args.push(arg);
                     }
                 }
-                // Pass in either args up to function arity.
+                // Pass in args up to function arity.
                 with(None, term, args, scope);
             }
             term => {
@@ -351,7 +351,7 @@ impl Program<Name> {
         .traverse_uplc_with(&mut |id, term, mut arg_stack, _scope| {
             match term {
                 Term::Apply { function, .. } => {
-                    // We are apply some arg so now we unwrap the id of the applied arg
+                    // We are applying some arg so now we unwrap the id of the applied arg
                     let id = id.unwrap();
 
                     if identity_applied_ids.contains(&id) {
@@ -399,7 +399,7 @@ impl Program<Name> {
         })
         .traverse_uplc_with(&mut |id, term, mut arg_stack, _scope| match term {
             Term::Apply { function, .. } => {
-                // We are apply some arg so now we unwrap the id of the applied arg
+                // We are applying some arg so now we unwrap the id of the applied arg
                 let id = id.unwrap();
 
                 if lambda_applied_ids.contains(&id) {
