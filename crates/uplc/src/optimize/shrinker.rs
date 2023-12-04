@@ -597,24 +597,17 @@ impl Program<Name> {
     // WIP
     pub fn builtin_curry_reducer(self) -> Program<Name> {
         let mut curried_terms = vec![];
-        let mut applied_ids = vec![];
+        let mut curry_applied_ids: Vec<usize> = vec![];
 
-        self.traverse_uplc_with(&mut |id, term, mut arg_stack, scope| match term {
-            Term::Apply { function, argument } => {
-                // We are apply some arg so now we unwrap the id of the applied arg
-                let id = id.unwrap();
-
-                if applied_ids.contains(&id) {
-                    let func = Rc::make_mut(function);
-                    // we inlined the arg so now remove the apply and arg from the program
-                    *term = func.clone();
-                }
-            }
+        self.traverse_uplc_with(&mut |_id, term, mut arg_stack, scope| match term {
             Term::Builtin(func) => {
-                if can_curry_builtin(*func) {
-                    let mut scope = scope.pop();
+                if can_curry_builtin(*func) && arg_stack.len() == func.arity() {
+                    let mut scope = scope.clone();
 
-                    let arg_number = func.arity();
+                    // Get upper scope of the function plus args
+                    for _ in 0..func.arity() {
+                        scope = scope.pop();
+                    }
 
                     let is_order_agnostic = is_order_agnostic_builtin(*func);
 
@@ -623,6 +616,30 @@ impl Program<Name> {
                         .find(|curried_term: &&mut CurriedBuiltin| curried_term.func == *func)
                     {
                         let mut current_children = &mut curried_builtin.children;
+
+                        let ordered_args =
+                            arg_stack
+                                .into_iter()
+                                .map(|(_, arg)| arg)
+                                .sorted_by(|arg1, arg2| {
+                                    if is_order_agnostic {
+                                        if matches!(arg1, Term::Constant(_))
+                                            && matches!(arg2, Term::Constant(_))
+                                        {
+                                            std::cmp::Ordering::Equal
+                                        } else if matches!(arg1, Term::Constant(_)) {
+                                            std::cmp::Ordering::Greater
+                                        } else if matches!(arg2, Term::Constant(_)) {
+                                            std::cmp::Ordering::Less
+                                        } else {
+                                            std::cmp::Ordering::Equal
+                                        }
+                                    } else {
+                                        std::cmp::Ordering::Equal
+                                    }
+                                });
+
+                        todo!("Finish this")
                     } else {
                         let Some(curried_tree) = arg_stack
                             .into_iter()
