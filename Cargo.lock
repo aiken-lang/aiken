@@ -51,7 +51,7 @@ dependencies = [
 
 [[package]]
 name = "aiken"
-version = "1.0.20-alpha"
+version = "1.0.21-alpha"
 dependencies = [
  "aiken-lang",
  "aiken-lsp",
@@ -80,7 +80,7 @@ dependencies = [
 
 [[package]]
 name = "aiken-lang"
-version = "1.0.20-alpha"
+version = "1.0.21-alpha"
 dependencies = [
  "blst",
  "chumsky",
@@ -103,7 +103,7 @@ dependencies = [
 
 [[package]]
 name = "aiken-lsp"
-version = "1.0.20-alpha"
+version = "1.0.21-alpha"
 dependencies = [
  "aiken-lang",
  "aiken-project",
@@ -124,7 +124,7 @@ dependencies = [
 
 [[package]]
 name = "aiken-project"
-version = "1.0.20-alpha"
+version = "1.0.21-alpha"
 dependencies = [
  "aiken-lang",
  "askama",
@@ -3450,7 +3450,7 @@ checksum = "c0edd1e5b14653f783770bce4a4dabb4a5108a5370a5f5d8cfe8710c361f6c8b"
 
 [[package]]
 name = "uplc"
-version = "1.0.20-alpha"
+version = "1.0.21-alpha"
 dependencies = [
  "anyhow",
  "blst",
