@@ -17,8 +17,11 @@
 
 ### Changed
 
+- **aiken**: update to pallas v0.20.0 @rvcas
 - **aiken-project**: switch blueprint validator tests now uses insta @MicroProofs
+- **aiken-project**: update to pallas v0.20.0 @rvcas
 - **aiken-lang**: use a better algorithm for inlining single occurrences @MicroProofs
+- **uplc**: update to pallas v0.20.0 @rvcas
 
 ### Fixed
 

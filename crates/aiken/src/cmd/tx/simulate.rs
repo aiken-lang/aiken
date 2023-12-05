@@ -79,9 +79,7 @@ pub fn exec(
         )
     };
 
-    let tx = MultiEraTx::decode(Era::Babbage, &tx_bytes)
-        .or_else(|_| MultiEraTx::decode(Era::Alonzo, &tx_bytes))
-        .into_diagnostic()?;
+    let tx = MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes).into_diagnostic()?;
 
     eprintln!(
         "{} {}",
