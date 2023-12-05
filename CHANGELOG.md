@@ -1,18 +1,33 @@
 # Changelog
 
-## v1.0.21-alpha - unreleased
+## v1.0.21-alpha - 2023-12-04
 
 ### Added
 
-- **aiken**: `--watch` flag on the `build`, `check` and `docs` commands to automatically watch and re-execute the command on file changes.
+- **aiken**: `--watch` flag on the `build`, `check` and `docs` commands to automatically watch and re-execute the command on file changes. @Quantumplation & @KtorZ
+- acceptance tests 28-30 @MicroProofs
+- **aiken-lang**: expose BLS builtins and types @MicroProofs & @rvcas
+- **aiken-lsp**: implement hover info for tuples, lists, and contructor pattern elements @rvcas
+- **aiken-lsp**: implement hover on when clause patterns @rvcas
+- **aiken-lsp**: hover support for the optional multi validator fn @rvcas
+- **aiken-lsp**: implement quickfix for "utf8 byte array is valid hex string" warning @rvcas
+- **uplc**: add all BLS builtins and types @MicroProofs & @rvcas
+- **uplc**: add plutus conformance tests from [here](https://github.com/input-output-hk/plutus/tree/master/plutus-conformance/test-cases/uplc/evaluation). @MicroProofs & @rvcas
+- **uplc**: case and constr cost models @MicroProofs
 
 ### Changed
 
-N/A
+- **aiken-project**: switch blueprint validator tests now uses insta @MicroProofs
+- **aiken-lang**: use a better algorithm for inlining single occurrences @MicroProofs
 
 ### Fixed
 
-N/A
+- **aiken-lang**: formatting unable to have newline after expect bool shortcut @rvcas
+- **aiken-lang**: formatter incorrectly erasing blocks in certain situations @rvcas
+- **aiken-lang**: use a distinct warning for discarded let assignments to avoid confusion @rvcas
+- **aiken-lang**: allow spread operator on positional constructor arguments @rvcas
+- **aiken-lsp**: and/or chains hovering on nested elements not working @rvcas
+- **uplc**: delay typemismatch errors in the machine runtime (caught by conformance tests) @rvcas
 
 ## v1.0.20-alpha - 2023-10-25
 
