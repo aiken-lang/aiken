@@ -22,6 +22,7 @@
 - **aiken-project**: update to pallas v0.20.0 @rvcas
 - **aiken-lang**: use a better algorithm for inlining single occurrences @MicroProofs
 - **uplc**: update to pallas v0.20.0 @rvcas
+- **uplc**: remove `flat-rs` crate and use it through pallas_codec instead
 
 ### Fixed
 

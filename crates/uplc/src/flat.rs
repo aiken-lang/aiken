@@ -1,3 +1,12 @@
+use std::{collections::VecDeque, fmt::Debug, rc::Rc};
+
+use pallas_codec::flat::{
+    de::{self, Decode, Decoder},
+    en::{self, Encode, Encoder},
+    Flat,
+};
+use pallas_primitives::{babbage::PlutusData, Fragment};
+
 use crate::{
     ast::{
         Constant, DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term, Type, Unique,
@@ -5,16 +14,6 @@ use crate::{
     builtins::DefaultFunction,
     machine::runtime::Compressable,
 };
-
-use anyhow::anyhow;
-
-use flat_rs::{
-    de::{self, Decode, Decoder},
-    en::{self, Encode, Encoder},
-    Flat,
-};
-use pallas_primitives::{babbage::PlutusData, Fragment};
-use std::{collections::VecDeque, fmt::Debug, rc::Rc};
 
 const BUILTIN_TAG_WIDTH: u32 = 7;
 const CONST_TAG_WIDTH: u32 = 4;
@@ -117,7 +116,10 @@ where
 
         match term_option {
             Ok(term) => Ok(Program { version, term }),
-            Err(error) => Err(de::Error::ParseError(state_log.join(""), anyhow!(error))),
+            Err(error) => Err(de::Error::Message(format!(
+                "{} {error}",
+                state_log.join("")
+            ))),
         }
     }
 }
@@ -948,8 +950,8 @@ mod tests {
         ast::{DeBruijn, Name, Type},
         parser,
     };
-    use flat_rs::Flat;
     use indoc::indoc;
+    use pallas_codec::flat::Flat;
 
     #[test]
     fn flat_encode_integer() {

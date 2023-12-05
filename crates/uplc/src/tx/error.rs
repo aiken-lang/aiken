@@ -7,7 +7,7 @@ pub enum Error {
     #[error("Only shelley reward addresses can be a part of withdrawals")]
     BadWithdrawalAddress,
     #[error("{0}")]
-    FlatDecode(#[from] flat_rs::de::Error),
+    FlatDecode(#[from] pallas_codec::flat::de::Error),
     #[error("{0}")]
     FragmentDecode(#[from] pallas_primitives::Error),
     #[error("{}\n\n{:#?}\n\n{}", .0, .1, .2.join("\n"))]

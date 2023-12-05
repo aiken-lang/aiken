@@ -1,8 +1,7 @@
 use std::{fmt::Display, rc::Rc, str::FromStr};
 
+use pallas_codec::flat::de;
 use strum_macros::EnumIter;
-
-use flat_rs::de;
 
 use crate::ast::Term;
 
