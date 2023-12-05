@@ -63,10 +63,10 @@ jobs:
             platform: win32
             target: x86_64-pc-windows-msvc
             arch: amd64
-          - os: windows-latest
-            platform: win32
-            target: aarch64-pc-windows-msvc
-            arch: arm64
+          # - os: windows-latest
+          #   platform: win32
+          #   target: aarch64-pc-windows-msvc
+          #   arch: arm64
 
     steps:
       - name: Checkout
