@@ -3968,7 +3968,7 @@ impl<'a> CodeGenerator<'a> {
 
                             let mut program: Program<Name> = Program {
                                 version: (1, 0, 0),
-                                term,
+                                term: self.special_functions.apply_used_functions(term),
                             };
 
                             let mut interner = Interner::new();
