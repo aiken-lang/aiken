@@ -251,7 +251,14 @@ peg::parser! {
             PlutusData::Map(pallas_codec::utils::KeyValuePairs::Def(kvps))
           }
           / _* "List" _+ ls:plutus_list() { PlutusData::Array(ls) }
-          / _* "I" _+ n:number() {? Ok(PlutusData::BigInt(pallas_primitives::babbage::BigInt::Int(i64::try_from(n).or(Err("int"))?.into()))) }
+          / _* "I" _+ n:big_number() { match i64::try_from(n.clone()) {
+            Ok(n) => PlutusData::BigInt(pallas_primitives::alonzo::BigInt::Int(n.into())),
+            Err(_) => if n < 0.into() {
+              PlutusData::BigInt(pallas_primitives::babbage::BigInt::BigNInt(n.to_bytes_be().1.into()))
+            } else {
+              PlutusData::BigInt(pallas_primitives::babbage::BigInt::BigUInt(n.to_bytes_be().1.into()))
+            }
+          } }
           / _* "B" _+ "#" i:ident()* {?
             Ok(PlutusData::BoundedBytes(
               hex::decode(String::from_iter(i)).or(Err("bytes"))?.into()
