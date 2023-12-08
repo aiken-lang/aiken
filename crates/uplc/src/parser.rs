@@ -232,7 +232,10 @@ peg::parser! {
           / "\\\"" { '\"' } // double quote
           / "\\'"  { '\'' } // single quote
           / "\\\\" { '\\' } // backslash
-          / "\\x" i:character() i2:character() { hex::decode([i, i2].iter().collect::<String>()).unwrap()[0].into() }
+          / "\\x" i:character() i2:character() {? match hex::decode([i,i2].iter().collect::<String>()) {
+              Ok(res) => {Ok(res[0].into())},
+              Err(_) => {Err("Invalid hex encoding of escaped byte")},
+          } } // hex encoded byte
           / [ ^ '"' ]
           / expected!("or any valid ascii character")
 
