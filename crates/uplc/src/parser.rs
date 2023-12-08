@@ -232,6 +232,7 @@ peg::parser! {
           / "\\\"" { '\"' } // double quote
           / "\\'"  { '\'' } // single quote
           / "\\\\" { '\\' } // backslash
+          / "\\x" i:character() i2:character() { hex::decode([i, i2].iter().collect::<String>()).unwrap()[0].into() }
           / [ ^ '"' ]
           / expected!("or any valid ascii character")
 

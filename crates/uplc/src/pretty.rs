@@ -281,7 +281,7 @@ impl Constant {
                         .collect(),
                 )
                 .unwrap(),
-            )),
+            )) .append(RcDoc::text("\"")),
             Constant::Unit => RcDoc::text("()"),
             Constant::Bool(b) => RcDoc::text(if *b { "True" } else { "False" }),
             Constant::ProtoList(_, items) => RcDoc::text("[")
