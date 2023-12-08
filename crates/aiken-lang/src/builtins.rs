@@ -128,7 +128,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         G1_ELEMENT.to_string(),
         TypeConstructor {
             parameters: vec![],
-            tipo: int(),
+            tipo: g1_element(),
             location: Span::empty(),
             module: "".to_string(),
             public: true,
@@ -140,7 +140,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         G2_ELEMENT.to_string(),
         TypeConstructor {
             parameters: vec![],
-            tipo: int(),
+            tipo: g2_element(),
             location: Span::empty(),
             module: "".to_string(),
             public: true,
