@@ -273,9 +273,15 @@ impl Constant {
         match self {
             Constant::Integer(i) => RcDoc::as_string(i),
             Constant::ByteString(bs) => RcDoc::text("#").append(RcDoc::text(hex::encode(bs))),
-            Constant::String(s) => RcDoc::text("\"")
-                .append(RcDoc::text(s))
-                .append(RcDoc::text("\"")),
+            Constant::String(s) => RcDoc::text("\"").append(RcDoc::text(
+                String::from_utf8(
+                    s.as_bytes()
+                        .iter()
+                        .flat_map(|c| escape_default(*c).collect::<Vec<u8>>())
+                        .collect(),
+                )
+                .unwrap(),
+            )),
             Constant::Unit => RcDoc::text("()"),
             Constant::Bool(b) => RcDoc::text(if *b { "True" } else { "False" }),
             Constant::ProtoList(_, items) => RcDoc::text("[")
