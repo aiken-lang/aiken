@@ -55,11 +55,11 @@ fn constant_pair_unit_string() {
                 Type::Unit,
                 Type::String,
                 Constant::Unit.into(),
-                Constant::String("hello universe".into()).into(),
+                Constant::String("hello universe\0".into()).into(),
             )
             .into(),
         ),
-        "(con (pair unit string) ((), \"hello universe\"))",
+        "(con (pair unit string) ((), \"hello universe\\x00\"))",
     )
 }
 
