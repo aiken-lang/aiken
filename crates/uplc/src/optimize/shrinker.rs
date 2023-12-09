@@ -553,7 +553,7 @@ impl Program<Name> {
                             );
                         }
                     }
-                    Term::Builtin(func) => {
+                    Term::Builtin(func) if func.force_count() == 1 => {
                         builtin_map.insert(*func as u8, ());
                         *term = Term::Var(
                             Name {
