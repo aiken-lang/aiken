@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{
     ast::{
         ArgName, DataType, Definition, Function, Layer, ModuleConstant, ModuleKind,
-        RecordConstructor, RecordConstructorArg, Span, Tracing, TypeAlias, TypedDefinition,
+        RecordConstructor, RecordConstructorArg, Tracing, TypeAlias, TypedDefinition,
         TypedFunction, TypedModule, UntypedDefinition, UntypedModule, Use, Validator,
     },
     builtins,
@@ -19,8 +19,6 @@ use super::{
     TypeInfo, ValueConstructor, ValueConstructorVariant,
 };
 
-const PUB_OFFSET: usize = 3;
-
 impl UntypedModule {
     pub fn infer(
         mut self,
@@ -33,7 +31,7 @@ impl UntypedModule {
     ) -> Result<TypedModule, Error> {
         let name = self.name.clone();
         let docs = std::mem::take(&mut self.docs);
-        let mut environment = Environment::new(id_gen.clone(), &name, modules, warnings);
+        let mut environment = Environment::new(id_gen.clone(), &name, &kind, modules, warnings);
 
         let mut type_names = HashMap::with_capacity(self.definitions.len());
         let mut value_names = HashMap::with_capacity(self.definitions.len());
@@ -82,7 +80,7 @@ impl UntypedModule {
 
         for def in consts.into_iter().chain(not_consts) {
             let definition =
-                infer_definition(def, &name, &mut hydrators, &mut environment, tracing, kind)?;
+                infer_definition(def, &name, &mut hydrators, &mut environment, tracing)?;
             definitions.push(definition);
         }
 
@@ -148,7 +146,6 @@ fn infer_definition(
     hydrators: &mut HashMap<String, Hydrator>,
     environment: &mut Environment<'_>,
     tracing: Tracing,
-    kind: ModuleKind,
 ) -> Result<TypedDefinition, Error> {
     match def {
         Definition::Fn(Function {
@@ -163,15 +160,6 @@ fn infer_definition(
             can_error,
             ..
         }) => {
-            if public && kind.is_validator() {
-                environment.warnings.push(Warning::PubInValidatorModule {
-                    location: Span {
-                        start: location.start,
-                        end: location.start + PUB_OFFSET,
-                    },
-                })
-            }
-
             let preregistered_fn = environment
                 .get_variable(&name)
                 .expect("Could not find preregistered type for function");
@@ -306,7 +294,6 @@ fn infer_definition(
                     hydrators,
                     environment,
                     tracing,
-                    kind,
                 )?
                 else {
                     unreachable!(
@@ -357,7 +344,6 @@ fn infer_definition(
                             hydrators,
                             environment,
                             tracing,
-                            kind,
                         )?
                         else {
                             unreachable!(
@@ -419,7 +405,6 @@ fn infer_definition(
                 hydrators,
                 environment,
                 tracing,
-                kind,
             )? {
                 environment.unify(f.return_type.clone(), builtins::bool(), f.location, false)?;
 
@@ -438,15 +423,6 @@ fn infer_definition(
             annotation,
             ..
         }) => {
-            if public && kind.is_validator() {
-                environment.warnings.push(Warning::PubInValidatorModule {
-                    location: Span {
-                        start: location.start,
-                        end: location.start + PUB_OFFSET,
-                    },
-                })
-            }
-
             let tipo = environment
                 .get_type_constructor(&None, &alias, location)
                 .expect("Could not find existing type for type alias")
@@ -474,15 +450,6 @@ fn infer_definition(
             constructors: untyped_constructors,
             ..
         }) => {
-            if public && kind.is_validator() {
-                environment.warnings.push(Warning::PubInValidatorModule {
-                    location: Span {
-                        start: location.start,
-                        end: location.start + PUB_OFFSET,
-                    },
-                })
-            }
-
             let constructors = untyped_constructors
                 .into_iter()
                 .map(
@@ -617,15 +584,6 @@ fn infer_definition(
             value,
             ..
         }) => {
-            if public && kind.is_validator() {
-                environment.warnings.push(Warning::PubInValidatorModule {
-                    location: Span {
-                        start: location.start,
-                        end: location.start + PUB_OFFSET,
-                    },
-                })
-            }
-
             let typed_expr =
                 ExprTyper::new(environment, tracing).infer_const(&annotation, *value)?;
 

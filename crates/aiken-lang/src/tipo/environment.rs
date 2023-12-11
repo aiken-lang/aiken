@@ -33,6 +33,7 @@ pub struct Environment<'a> {
     /// Accessors defined in the current module
     pub accessors: HashMap<String, AccessorsMap>,
     pub current_module: &'a String,
+    pub current_kind: &'a ModuleKind,
     /// entity_usages is a stack of scopes. When an entity is created it is
     /// added to the top scope. When an entity is used we crawl down the scope
     /// stack for an entity with that name and mark it as used.
@@ -244,12 +245,44 @@ impl<'a> Environment<'a> {
                     can_error,
                 })
             }
+            Definition::Validator(Validator {
+                doc,
+                end_position,
+                fun,
+                other_fun,
+                location,
+                params,
+            }) => {
+                let Definition::Fn(fun) =
+                    self.generalise_definition(Definition::Fn(fun), module_name)
+                else {
+                    unreachable!()
+                };
+
+                let other_fun = other_fun.map(|other_fun| {
+                    let Definition::Fn(other_fun) =
+                        self.generalise_definition(Definition::Fn(other_fun), module_name)
+                    else {
+                        unreachable!()
+                    };
+
+                    other_fun
+                });
+
+                Definition::Validator(Validator {
+                    doc,
+                    end_position,
+                    fun,
+                    other_fun,
+                    location,
+                    params,
+                })
+            }
 
             definition @ (Definition::TypeAlias { .. }
             | Definition::DataType { .. }
             | Definition::Use { .. }
             | Definition::Test { .. }
-            | Definition::Validator { .. }
             | Definition::ModuleConstant { .. }) => definition,
         }
     }
@@ -600,6 +633,7 @@ impl<'a> Environment<'a> {
     pub fn new(
         id_gen: IdGenerator,
         current_module: &'a String,
+        current_kind: &'a ModuleKind,
         importable_modules: &'a HashMap<String, TypeInfo>,
         warnings: &'a mut Vec<Warning>,
     ) -> Self {
@@ -622,6 +656,7 @@ impl<'a> Environment<'a> {
             importable_modules,
             imported_types: HashSet::new(),
             current_module,
+            current_kind,
             warnings,
             entity_usages: vec![HashMap::new()],
         }
@@ -677,7 +712,9 @@ impl<'a> Environment<'a> {
                             imported_modules: self.imported_modules.keys().cloned().collect(),
                         })?;
 
-                if module_info.kind.is_validator() {
+                if module_info.kind.is_validator()
+                    && (self.current_kind.is_lib() || !self.current_module.starts_with("tests"))
+                {
                     return Err(Error::ValidatorImported {
                         location: *location,
                         name,
@@ -1086,7 +1123,7 @@ impl<'a> Environment<'a> {
                     &fun.location,
                 )?;
 
-                if !fun.public && kind.is_lib() {
+                if !fun.public {
                     self.init_usage(fun.name.clone(), EntityKind::PrivateFunction, fun.location);
                 }
             }

@@ -1363,13 +1363,6 @@ pub enum Warning {
         location: Span,
     },
 
-    #[error("I found a public definition in a validator module.\nDefinitions in validator modules do not need to be public.\n")]
-    #[diagnostic(code("redundant::pub"))]
-    PubInValidatorModule {
-        #[label]
-        location: Span,
-    },
-
     #[error("I found a when expression with a single clause.")]
     #[diagnostic(
         code("single_when_clause"),
@@ -1607,7 +1600,6 @@ impl ExtraData for Warning {
             Warning::AllFieldsRecordUpdate { .. }
             | Warning::ImplicitlyDiscardedResult { .. }
             | Warning::NoFieldsRecordUpdate { .. }
-            | Warning::PubInValidatorModule { .. }
             | Warning::SingleConstructorExpect { .. }
             | Warning::SingleWhenClause { .. }
             | Warning::Todo { .. }
