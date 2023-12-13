@@ -17,6 +17,51 @@ pub enum BuiltinArgs {
 }
 
 impl BuiltinArgs {
+    fn args_from_arg_stack(stack: Vec<(usize, Term<Name>)>, is_order_agnostic: bool) -> Self {
+        let mut ordered_arg_stack =
+            stack
+                .into_iter()
+                .rev()
+                .map(|(_, arg)| arg)
+                .sorted_by(|arg1, arg2| {
+                    // sort by constant first if the builtin is order agnostic
+                    if is_order_agnostic {
+                        if matches!(arg1, Term::Constant(_)) && matches!(arg2, Term::Constant(_)) {
+                            std::cmp::Ordering::Equal
+                        } else if matches!(arg1, Term::Constant(_)) {
+                            std::cmp::Ordering::Less
+                        } else if matches!(arg2, Term::Constant(_)) {
+                            std::cmp::Ordering::Greater
+                        } else {
+                            std::cmp::Ordering::Equal
+                        }
+                    } else {
+                        std::cmp::Ordering::Equal
+                    }
+                });
+
+        if ordered_arg_stack.len() == 2 && is_order_agnostic {
+            // This is the special case where the order of args is irrelevant to the builtin
+            // An example is addInteger or multiplyInteger
+            BuiltinArgs::TwoArgsAnyOrder(
+                ordered_arg_stack.next().unwrap(),
+                ordered_arg_stack.next().unwrap(),
+            )
+        } else if ordered_arg_stack.len() == 2 {
+            BuiltinArgs::TwoArgs(
+                ordered_arg_stack.next().unwrap(),
+                ordered_arg_stack.next().unwrap(),
+            )
+        } else {
+            // println!("ARG STACK FOR FUNC {:#?}, {:#?}", ordered_arg_stack, func);
+            BuiltinArgs::ThreeArgs(
+                ordered_arg_stack.next().unwrap(),
+                ordered_arg_stack.next().unwrap(),
+                ordered_arg_stack.next().unwrap(),
+            )
+        }
+    }
+
     fn args_to_curried_tree(self, scope: &Scope) -> CurriedTree {
         match self {
             BuiltinArgs::TwoArgs(arg1, arg2) | BuiltinArgs::TwoArgsAnyOrder(arg1, arg2) => {
@@ -882,48 +927,8 @@ impl Program<Name> {
 
                     // In the case of order agnostic builtins we want to sort the args by constant first
                     // This gives us the opportunity to curry constants that often pop up in the code
-                    let mut ordered_arg_stack = arg_stack
-                        .into_iter()
-                        .map(|(_, arg)| arg)
-                        .sorted_by(|arg1, arg2| {
-                            // sort by constant first if the builtin is order agnostic
-                            if is_order_agnostic {
-                                if matches!(arg1, Term::Constant(_))
-                                    && matches!(arg2, Term::Constant(_))
-                                {
-                                    std::cmp::Ordering::Equal
-                                } else if matches!(arg1, Term::Constant(_)) {
-                                    std::cmp::Ordering::Less
-                                } else if matches!(arg2, Term::Constant(_)) {
-                                    std::cmp::Ordering::Greater
-                                } else {
-                                    std::cmp::Ordering::Equal
-                                }
-                            } else {
-                                std::cmp::Ordering::Equal
-                            }
-                        });
-
-                    let builtin_args = if ordered_arg_stack.len() == 2 && is_order_agnostic {
-                        // This is the special case where the order of args is irrelevant to the builtin
-                        // An example is addInteger or multiplyInteger
-                        BuiltinArgs::TwoArgsAnyOrder(
-                            ordered_arg_stack.next().unwrap(),
-                            ordered_arg_stack.next().unwrap(),
-                        )
-                    } else if ordered_arg_stack.len() == 2 {
-                        BuiltinArgs::TwoArgs(
-                            ordered_arg_stack.next().unwrap(),
-                            ordered_arg_stack.next().unwrap(),
-                        )
-                    } else {
-                        // println!("ARG STACK FOR FUNC {:#?}, {:#?}", ordered_arg_stack, func);
-                        BuiltinArgs::ThreeArgs(
-                            ordered_arg_stack.next().unwrap(),
-                            ordered_arg_stack.next().unwrap(),
-                            ordered_arg_stack.next().unwrap(),
-                        )
-                    };
+                    let builtin_args =
+                        BuiltinArgs::args_from_arg_stack(arg_stack, is_order_agnostic);
 
                     // First we see if we have already curried this builtin before
                     if let Some(curried_builtin) = curried_terms
@@ -957,11 +962,44 @@ impl Program<Name> {
             .collect_vec();
 
         println!("CURRIED ARGS");
-        for (index, curried_term) in curried_terms.into_iter().enumerate() {
+        for (index, curried_term) in curried_terms.iter().enumerate() {
             println!("index is {:#?}, term is {:#?}", index, curried_term);
         }
 
-        a
+        // TODO: add function to generate names for curried_terms for generating vars to insert
+        a.traverse_uplc_with(&mut |_id, term, arg_stack, scope| match term {
+            Term::Builtin(func) => {
+                if can_curry_builtin(*func) {
+                    let Some(curried_builtin) =
+                        curried_terms.iter().find(|curry| curry.func == *func)
+                    else {
+                        return;
+                    };
+
+                    let arg_stack_ids = arg_stack.iter().map(|(id, _)| *id).collect_vec();
+
+                    let builtin_args = BuiltinArgs::args_from_arg_stack(
+                        arg_stack,
+                        is_order_agnostic_builtin(*func),
+                    );
+
+                    if let Some(_) = curried_builtin.children.iter().find(|child| {
+                        let x = (*child)
+                            .clone()
+                            .merge_node_by_path(builtin_args.clone(), scope);
+
+                        *child == &x
+                    }) {
+                        curry_applied_ids.extend(arg_stack_ids);
+                    } else {
+                    }
+                }
+            }
+            Term::Apply { function, argument } => todo!(),
+            Term::Constr { .. } => todo!(),
+            Term::Case { .. } => todo!(),
+            _ => {}
+        })
     }
 }
 
