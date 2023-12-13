@@ -17,7 +17,7 @@ pub enum BuiltinArgs {
 }
 
 impl BuiltinArgs {
-    fn args_from_arg_stack(stack: Vec<(usize, Term<Name>)>, is_order_agnostic: bool) -> Self {
+    fn _args_from_arg_stack(stack: Vec<(usize, Term<Name>)>, is_order_agnostic: bool) -> Self {
         let mut ordered_arg_stack =
             stack
                 .into_iter()
@@ -907,100 +907,100 @@ impl Program<Name> {
         })
     }
     // WIP
-    pub fn builtin_curry_reducer(self) -> Program<Name> {
-        let mut curried_terms = vec![];
-        let mut curry_applied_ids: Vec<usize> = vec![];
+    // pub fn builtin_curry_reducer(self) -> Program<Name> {
+    //     let mut curried_terms = vec![];
+    //     let mut curry_applied_ids: Vec<usize> = vec![];
 
-        let a = self.traverse_uplc_with(&mut |_id, term, arg_stack, scope| match term {
-            Term::Builtin(func) => {
-                if can_curry_builtin(*func) && arg_stack.len() == func.arity() {
-                    let mut scope = scope.clone();
+    //     let a = self.traverse_uplc_with(&mut |_id, term, arg_stack, scope| match term {
+    //         Term::Builtin(func) => {
+    //             if can_curry_builtin(*func) && arg_stack.len() == func.arity() {
+    //                 let mut scope = scope.clone();
 
-                    // Get upper scope of the function plus args
-                    // So for example if the scope is [.., ARG, ARG, FUNC]
-                    // we want to pop off the last 3 to get the scope right above the function applications
-                    for _ in 0..func.arity() {
-                        scope = scope.pop();
-                    }
+    //                 // Get upper scope of the function plus args
+    //                 // So for example if the scope is [.., ARG, ARG, FUNC]
+    //                 // we want to pop off the last 3 to get the scope right above the function applications
+    //                 for _ in 0..func.arity() {
+    //                     scope = scope.pop();
+    //                 }
 
-                    let is_order_agnostic = is_order_agnostic_builtin(*func);
+    //                 let is_order_agnostic = is_order_agnostic_builtin(*func);
 
-                    // In the case of order agnostic builtins we want to sort the args by constant first
-                    // This gives us the opportunity to curry constants that often pop up in the code
-                    let builtin_args =
-                        BuiltinArgs::args_from_arg_stack(arg_stack, is_order_agnostic);
+    //                 // In the case of order agnostic builtins we want to sort the args by constant first
+    //                 // This gives us the opportunity to curry constants that often pop up in the code
+    //                 let builtin_args =
+    //                     BuiltinArgs::args_from_arg_stack(arg_stack, is_order_agnostic);
 
-                    // First we see if we have already curried this builtin before
-                    if let Some(curried_builtin) = curried_terms
-                        .iter_mut()
-                        .find(|curried_term: &&mut CurriedBuiltin| curried_term.func == *func)
-                    {
-                        // We found it the builtin was curried before
-                        // So now we merge the new args into the existing curried builtin
-                        *curried_builtin = (*curried_builtin)
-                            .clone()
-                            .merge_node_by_path(builtin_args, &scope);
-                    } else {
-                        // Brand new buitlin so we add it to the list
-                        curried_terms.push(CurriedBuiltin {
-                            func: *func,
-                            children: vec![builtin_args.args_to_curried_tree(&scope)],
-                        });
-                    }
-                }
-            }
+    //                 // First we see if we have already curried this builtin before
+    //                 if let Some(curried_builtin) = curried_terms
+    //                     .iter_mut()
+    //                     .find(|curried_term: &&mut CurriedBuiltin| curried_term.func == *func)
+    //                 {
+    //                     // We found it the builtin was curried before
+    //                     // So now we merge the new args into the existing curried builtin
+    //                     *curried_builtin = (*curried_builtin)
+    //                         .clone()
+    //                         .merge_node_by_path(builtin_args, &scope);
+    //                 } else {
+    //                     // Brand new buitlin so we add it to the list
+    //                     curried_terms.push(CurriedBuiltin {
+    //                         func: *func,
+    //                         children: vec![builtin_args.args_to_curried_tree(&scope)],
+    //                     });
+    //                 }
+    //             }
+    //         }
 
-            Term::Constr { .. } => todo!(),
-            Term::Case { .. } => todo!(),
-            _ => {}
-        });
+    //         Term::Constr { .. } => todo!(),
+    //         Term::Case { .. } => todo!(),
+    //         _ => {}
+    //     });
 
-        curried_terms = curried_terms
-            .into_iter()
-            .map(|func| func.prune_single_occurrences())
-            .filter(|func| !func.children.is_empty())
-            .collect_vec();
+    //     curried_terms = curried_terms
+    //         .into_iter()
+    //         .map(|func| func.prune_single_occurrences())
+    //         .filter(|func| !func.children.is_empty())
+    //         .collect_vec();
 
-        println!("CURRIED ARGS");
-        for (index, curried_term) in curried_terms.iter().enumerate() {
-            println!("index is {:#?}, term is {:#?}", index, curried_term);
-        }
+    //     println!("CURRIED ARGS");
+    //     for (index, curried_term) in curried_terms.iter().enumerate() {
+    //         println!("index is {:#?}, term is {:#?}", index, curried_term);
+    //     }
 
-        // TODO: add function to generate names for curried_terms for generating vars to insert
-        a.traverse_uplc_with(&mut |_id, term, arg_stack, scope| match term {
-            Term::Builtin(func) => {
-                if can_curry_builtin(*func) {
-                    let Some(curried_builtin) =
-                        curried_terms.iter().find(|curry| curry.func == *func)
-                    else {
-                        return;
-                    };
+    //     // TODO: add function to generate names for curried_terms for generating vars to insert
+    //     a.traverse_uplc_with(&mut |_id, term, arg_stack, scope| match term {
+    //         Term::Builtin(func) => {
+    //             if can_curry_builtin(*func) {
+    //                 let Some(curried_builtin) =
+    //                     curried_terms.iter().find(|curry| curry.func == *func)
+    //                 else {
+    //                     return;
+    //                 };
 
-                    let arg_stack_ids = arg_stack.iter().map(|(id, _)| *id).collect_vec();
+    //                 let arg_stack_ids = arg_stack.iter().map(|(id, _)| *id).collect_vec();
 
-                    let builtin_args = BuiltinArgs::args_from_arg_stack(
-                        arg_stack,
-                        is_order_agnostic_builtin(*func),
-                    );
+    //                 let builtin_args = BuiltinArgs::args_from_arg_stack(
+    //                     arg_stack,
+    //                     is_order_agnostic_builtin(*func),
+    //                 );
 
-                    if let Some(_) = curried_builtin.children.iter().find(|child| {
-                        let x = (*child)
-                            .clone()
-                            .merge_node_by_path(builtin_args.clone(), scope);
+    //                 if let Some(_) = curried_builtin.children.iter().find(|child| {
+    //                     let x = (*child)
+    //                         .clone()
+    //                         .merge_node_by_path(builtin_args.clone(), scope);
 
-                        *child == &x
-                    }) {
-                        curry_applied_ids.extend(arg_stack_ids);
-                    } else {
-                    }
-                }
-            }
-            Term::Apply { function, argument } => todo!(),
-            Term::Constr { .. } => todo!(),
-            Term::Case { .. } => todo!(),
-            _ => {}
-        })
-    }
+    //                     *child == &x
+    //                 }) {
+    //                     curry_applied_ids.extend(arg_stack_ids);
+    //                 } else {
+    //                 }
+    //             }
+    //         }
+    //         Term::Apply { function, argument } => todo!(),
+    //         Term::Constr { .. } => todo!(),
+    //         Term::Case { .. } => todo!(),
+    //         _ => {}
+    //     })
+    // }
 }
 
 fn var_occurrences(term: &Term<Name>, search_for: Rc<Name>) -> usize {
