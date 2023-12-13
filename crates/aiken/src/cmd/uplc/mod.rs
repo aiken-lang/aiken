@@ -2,6 +2,7 @@ mod decode;
 mod encode;
 mod eval;
 mod fmt;
+mod shrink;
 
 use clap::{Subcommand, ValueEnum};
 
@@ -21,6 +22,8 @@ pub enum Cmd {
     Encode(encode::Args),
     #[clap(alias = "unflat")]
     Decode(decode::Args),
+    #[clap(alias = "optimize")]
+    Shrink(shrink::Args)
 }
 
 pub fn exec(cmd: Cmd) -> miette::Result<()> {
@@ -29,5 +32,6 @@ pub fn exec(cmd: Cmd) -> miette::Result<()> {
         Cmd::Eval(args) => eval::exec(args),
         Cmd::Encode(args) => encode::exec(args),
         Cmd::Decode(args) => decode::exec(args),
+        Cmd::Shrink(args) => shrink::exec(args),
     }
 }

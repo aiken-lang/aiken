@@ -57,7 +57,7 @@ pub fn exec(
     }
 }
 
-fn encode<'a, T>(program: Program<T>, cbor: bool, hex: bool) -> miette::Result<()>
+pub(crate) fn encode<'a, T>(program: Program<T>, cbor: bool, hex: bool) -> miette::Result<()>
 where
     T: Binder<'a> + std::fmt::Debug,
 {
