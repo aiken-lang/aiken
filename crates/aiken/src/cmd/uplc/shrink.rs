@@ -1,5 +1,5 @@
 use miette::IntoDiagnostic;
-use std::{path::PathBuf};
+use std::path::PathBuf;
 use uplc::ast::{DeBruijn, Name, NamedDeBruijn, Program};
 use uplc::optimize::aiken_optimize_and_intern;
 
@@ -63,7 +63,6 @@ pub fn exec(
             };
 
             program.try_into().unwrap()
-
         }
         Format::Debruijn => {
             let program: Program<DeBruijn> = if cbor {
@@ -74,7 +73,6 @@ pub fn exec(
             };
 
             program.try_into().unwrap()
-
         }
     };
 

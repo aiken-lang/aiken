@@ -23,7 +23,7 @@ pub enum Cmd {
     #[clap(alias = "unflat")]
     Decode(decode::Args),
     #[clap(alias = "optimize")]
-    Shrink(shrink::Args)
+    Shrink(shrink::Args),
 }
 
 pub fn exec(cmd: Cmd) -> miette::Result<()> {
