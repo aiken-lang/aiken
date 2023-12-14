@@ -194,10 +194,9 @@ impl Program<Name> {
                             Term::Constant(c) if matches!(c.as_ref(), Constant::String(_)) => {}
                             Term::Constant(_) | Term::Var(_) | Term::Builtin(_) => {
                                 let body = Rc::make_mut(body);
-                                // mutates body to replace all var occurrences with the arg
-                                *body = substitute_var(body, parameter_name.clone(), &arg_term);
                                 lambda_applied_ids.push(arg_id);
-                                *term = body.clone();
+                                // creates new body that replaces all var occurrences with the arg
+                                *term = substitute_var(body, parameter_name.clone(), &arg_term);
                             }
                             _ => {}
                         }
