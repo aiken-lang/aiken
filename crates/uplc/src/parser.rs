@@ -8,6 +8,8 @@ use crate::{
 
 use interner::Interner;
 use num_bigint::BigInt;
+use num_bigint::Sign;
+use num_traits::ToPrimitive;
 use pallas_primitives::alonzo::PlutusData;
 use peg::{error::ParseError, str::LineCol};
 
@@ -251,12 +253,11 @@ peg::parser! {
             PlutusData::Map(pallas_codec::utils::KeyValuePairs::Def(kvps))
           }
           / _* "List" _+ ls:plutus_list() { PlutusData::Array(ls) }
-          / _* "I" _+ n:big_number() { match i64::try_from(n.clone()) {
-            Ok(n) => PlutusData::BigInt(pallas_primitives::alonzo::BigInt::Int(n.into())),
-            Err(_) => if n < 0.into() {
-              PlutusData::BigInt(pallas_primitives::babbage::BigInt::BigNInt(n.to_bytes_be().1.into()))
-            } else {
-              PlutusData::BigInt(pallas_primitives::babbage::BigInt::BigUInt(n.to_bytes_be().1.into()))
+          / _* "I" _+ n:big_number() { match n.to_i64() {
+            Some(n) => PlutusData::BigInt(pallas_primitives::alonzo::BigInt::Int(n.into())),
+            None => match n.sign() {
+              Sign::Minus => PlutusData::BigInt(pallas_primitives::babbage::BigInt::BigNInt(n.to_bytes_be().1.into())),
+              _ => PlutusData::BigInt(pallas_primitives::babbage::BigInt::BigUInt(n.to_bytes_be().1.into()))
             }
           } }
           / _* "B" _+ "#" i:ident()* {?
