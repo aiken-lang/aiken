@@ -398,7 +398,9 @@ pub fn from_pallas_bigint(n: &pallas::BigInt) -> BigInt {
     match n {
         pallas::BigInt::Int(i) => i128::from(*i).into(),
         pallas::BigInt::BigUInt(bytes) => BigInt::from_bytes_be(num_bigint::Sign::Plus, bytes),
-        pallas::BigInt::BigNInt(bytes) => BigInt::from_bytes_be(num_bigint::Sign::Minus, bytes),
+        pallas::BigInt::BigNInt(bytes) => {
+            BigInt::from_bytes_be(num_bigint::Sign::Minus, bytes) - 1
+        },
     }
 }
 
