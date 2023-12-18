@@ -256,7 +256,10 @@ peg::parser! {
           / _* "I" _+ n:big_number() { match n.to_i64() {
             Some(n) => PlutusData::BigInt(pallas_primitives::alonzo::BigInt::Int(n.into())),
             None => match n.sign() {
-              Sign::Minus => PlutusData::BigInt(pallas_primitives::babbage::BigInt::BigNInt(n.to_bytes_be().1.into())),
+              Sign::Minus => {
+                    let m: BigInt = n+1;
+                    PlutusData::BigInt(pallas_primitives::babbage::BigInt::BigNInt(m.to_bytes_be().1.into()))
+                },
               _ => PlutusData::BigInt(pallas_primitives::babbage::BigInt::BigUInt(n.to_bytes_be().1.into()))
             }
           } }
