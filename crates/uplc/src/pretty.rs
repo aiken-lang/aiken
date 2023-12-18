@@ -3,10 +3,10 @@ use crate::{
     flat::Binder,
     machine::runtime::Compressable,
 };
-use pallas_primitives::babbage::{Constr, PlutusData};
-use pretty::RcDoc;
 use num_bigint::BigInt;
 use num_bigint::Sign;
+use pallas_primitives::babbage::{Constr, PlutusData};
+use pretty::RcDoc;
 use std::ascii::escape_default;
 
 impl<'a, T> Program<T>
@@ -340,8 +340,12 @@ impl Constant {
                 .append(RcDoc::text("]")),
             PlutusData::BigInt(bi) => RcDoc::text("I").append(RcDoc::space()).append(match bi {
                 pallas_primitives::babbage::BigInt::Int(v) => RcDoc::text(v.to_string()),
-                pallas_primitives::babbage::BigInt::BigUInt(v) => RcDoc::text(BigInt::from_bytes_be(Sign::Plus, v).to_string()),
-                pallas_primitives::babbage::BigInt::BigNInt(v) => RcDoc::text(BigInt::from_bytes_be(Sign::Minus, v).to_string()),
+                pallas_primitives::babbage::BigInt::BigUInt(v) => {
+                    RcDoc::text(BigInt::from_bytes_be(Sign::Plus, v).to_string())
+                }
+                pallas_primitives::babbage::BigInt::BigNInt(v) => {
+                    RcDoc::text(BigInt::from_bytes_be(Sign::Minus, v).to_string())
+                }
             }),
             PlutusData::BoundedBytes(bs) => RcDoc::text("B")
                 .append(RcDoc::space())

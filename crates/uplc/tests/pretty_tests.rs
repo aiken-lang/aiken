@@ -167,17 +167,26 @@ fn constant_data_int() {
         "(con data (I 2))",
     );
 
-    let term = Term::<Name>::Constant(Constant::Data(
-        PlutusData::BigInt(pallas_primitives::alonzo::BigInt::BigUInt(vec![2,3,4].into())),
-    ).into());
+    let term = Term::<Name>::Constant(
+        Constant::Data(PlutusData::BigInt(
+            pallas_primitives::alonzo::BigInt::BigUInt(vec![2, 3, 4].into()),
+        ))
+        .into(),
+    );
     assert_eq!(term.to_pretty(), "(con data (I 131844))");
-    let term = Term::<Name>::Constant(Constant::Data(
-        PlutusData::BigInt(pallas_primitives::alonzo::BigInt::BigUInt(vec![0].into())),
-    ).into());
+    let term = Term::<Name>::Constant(
+        Constant::Data(PlutusData::BigInt(
+            pallas_primitives::alonzo::BigInt::BigUInt(vec![0].into()),
+        ))
+        .into(),
+    );
     assert_eq!(term.to_pretty(), "(con data (I 0))");
-    let term = Term::<Name>::Constant(Constant::Data(
-        PlutusData::BigInt(pallas_primitives::alonzo::BigInt::BigNInt(vec![2,3,4].into())),
-    ).into());
+    let term = Term::<Name>::Constant(
+        Constant::Data(PlutusData::BigInt(
+            pallas_primitives::alonzo::BigInt::BigNInt(vec![2, 3, 4].into()),
+        ))
+        .into(),
+    );
     assert_eq!(term.to_pretty(), "(con data (I -131844))");
 }
 
