@@ -167,17 +167,14 @@ fn constant_data_int() {
         "(con data (I 2))",
     );
 
-    // TODO: large integers currently encode as bytestrings, which isn't great
-    /*
-    let term = Term::<DeBruijn>::Constant(Constant::Data(
+    let term = Term::<Name>::Constant(Constant::Data(
         PlutusData::BigInt(pallas_primitives::alonzo::BigInt::BigUInt(vec![2,3,4].into())),
     ).into());
     assert_eq!(term.to_pretty(), "(con data (I 131844))");
-    let term = Term::<DeBruijn>::Constant(Constant::Data(
-        PlutusData::BigInt(pallas_primitives::alonzo::BigInt::BigNInt(vec![FF,FD,FC,FC].into())),
+    let term = Term::<Name>::Constant(Constant::Data(
+        PlutusData::BigInt(pallas_primitives::alonzo::BigInt::BigNInt(vec![2,3,4].into())),
     ).into());
     assert_eq!(term.to_pretty(), "(con data (I -131844))");
-    */
 }
 
 #[test]
