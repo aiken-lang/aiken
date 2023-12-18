@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, mem::size_of, ops::Deref, rc::Rc};
 
 use num_bigint::BigInt;
-use num_traits::Signed;
+use num_traits::{Signed, ToPrimitive};
 use pallas_primitives::babbage::{self as pallas, PlutusData};
 
 use crate::{
@@ -403,13 +403,15 @@ pub fn from_pallas_bigint(n: &pallas::BigInt) -> BigInt {
 }
 
 pub fn to_pallas_bigint(n: &BigInt) -> pallas::BigInt {
-    if let Ok(i) = <&BigInt as TryInto<i64>>::try_into(n) {
+    if let Some(i) = n.to_i64() {
         let pallas_int: pallas_codec::utils::Int = i.into();
         pallas::BigInt::Int(pallas_int)
     } else if n.is_positive() {
         let (_, bytes) = n.to_bytes_be();
         pallas::BigInt::BigUInt(bytes.into())
     } else {
+        // Note that this would break if n == 0
+        // BUT n == 0 always fits into 64bits and hence would end up in the first branch.
         let n: BigInt = n + 1;
         let (_, bytes) = n.to_bytes_be();
         pallas::BigInt::BigNInt(bytes.into())
