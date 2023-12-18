@@ -2,6 +2,7 @@ use crate::{
     ast::{Constant, Program, Term, Type},
     flat::Binder,
     machine::runtime::Compressable,
+    machine::value::from_pallas_bigint,
 };
 use pallas_primitives::babbage::{Constr, PlutusData};
 use pretty::RcDoc;
@@ -336,11 +337,9 @@ impl Constant {
                     RcDoc::text(", "),
                 ))
                 .append(RcDoc::text("]")),
-            PlutusData::BigInt(bi) => RcDoc::text("I").append(RcDoc::space()).append(match bi {
-                pallas_primitives::babbage::BigInt::Int(v) => RcDoc::text(v.to_string()),
-                pallas_primitives::babbage::BigInt::BigUInt(v) => RcDoc::text(v.to_string()),
-                pallas_primitives::babbage::BigInt::BigNInt(v) => RcDoc::text(v.to_string()),
-            }),
+            PlutusData::BigInt(bi) => RcDoc::text("I")
+                .append(RcDoc::space())
+                .append(RcDoc::text(from_pallas_bigint(bi).to_string())),
             PlutusData::BoundedBytes(bs) => RcDoc::text("B")
                 .append(RcDoc::space())
                 .append(RcDoc::text("#"))

@@ -4,12 +4,11 @@ use crate::{
     ast::{Constant, Name, Program, Term, Type},
     builtins::DefaultFunction,
     machine::runtime::Compressable,
+    machine::value::to_pallas_bigint,
 };
 
 use interner::Interner;
 use num_bigint::BigInt;
-use num_bigint::Sign;
-use num_traits::ToPrimitive;
 use pallas_primitives::alonzo::PlutusData;
 use peg::{error::ParseError, str::LineCol};
 
@@ -253,16 +252,7 @@ peg::parser! {
             PlutusData::Map(pallas_codec::utils::KeyValuePairs::Def(kvps))
           }
           / _* "List" _+ ls:plutus_list() { PlutusData::Array(ls) }
-          / _* "I" _+ n:big_number() { match n.to_i64() {
-            Some(n) => PlutusData::BigInt(pallas_primitives::alonzo::BigInt::Int(n.into())),
-            None => match n.sign() {
-              Sign::Minus => {
-                    let m: BigInt = n+1;
-                    PlutusData::BigInt(pallas_primitives::babbage::BigInt::BigNInt(m.to_bytes_be().1.into()))
-                },
-              _ => PlutusData::BigInt(pallas_primitives::babbage::BigInt::BigUInt(n.to_bytes_be().1.into()))
-            }
-          } }
+          / _* "I" _+ n:big_number() { PlutusData::BigInt(to_pallas_bigint(&n)) }
           / _* "B" _+ "#" i:ident()* {?
             Ok(PlutusData::BoundedBytes(
               hex::decode(String::from_iter(i)).or(Err("bytes"))?.into()
