@@ -410,6 +410,7 @@ pub fn to_pallas_bigint(n: &BigInt) -> pallas::BigInt {
         let (_, bytes) = n.to_bytes_be();
         pallas::BigInt::BigUInt(bytes.into())
     } else {
+        let n: BigInt = n + 1;
         let (_, bytes) = n.to_bytes_be();
         pallas::BigInt::BigNInt(bytes.into())
     }
