@@ -47,7 +47,7 @@ impl From<&Language> for BuiltinSemantics {
     fn from(language: &Language) -> Self {
         match language {
             Language::PlutusV1 => BuiltinSemantics::V1,
-            Language::PlutusV2 => BuiltinSemantics::V1,
+            Language::PlutusV2 => BuiltinSemantics::V2,
         }
     }
 }
