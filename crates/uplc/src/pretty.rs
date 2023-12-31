@@ -1,7 +1,7 @@
 use crate::{
     ast::{Constant, Program, Term, Type},
     flat::Binder,
-    machine::runtime::Compressable,
+    machine::runtime::{convert_tag_to_constr, Compressable},
     machine::value::from_pallas_bigint,
 };
 use pallas_primitives::babbage::{Constr, PlutusData};
@@ -317,15 +317,11 @@ impl Constant {
                 tag,
                 any_constructor,
                 fields,
-                ..
             }) => RcDoc::text("Constr")
                 .append(RcDoc::space())
-                .append(RcDoc::as_string(match tag {
-                    121..=127 => tag - 121,
-                    1280..=1400 => tag - 1280 + 7,
-                    102 => any_constructor.unwrap(),
-                    _ => panic!("unknown tag {}", tag),
-                }))
+                .append(RcDoc::as_string(
+                    convert_tag_to_constr(*tag).unwrap_or_else(|| any_constructor.unwrap()),
+                ))
                 .append(RcDoc::space())
                 .append(RcDoc::text("["))
                 .append(RcDoc::intersperse(
