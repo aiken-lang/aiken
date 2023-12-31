@@ -109,7 +109,7 @@ fn constant_data_constr() {
     round_trip(
         Term::<Name>::Constant(
             Constant::Data(PlutusData::Constr(Constr::<PlutusData> {
-                tag: 1,
+                tag: 122,
                 any_constructor: None,
                 fields: vec![PlutusData::BigInt(pallas_primitives::alonzo::BigInt::Int(
                     2.into(),
