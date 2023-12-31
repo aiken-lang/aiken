@@ -242,11 +242,10 @@ peg::parser! {
 
         rule data() -> PlutusData
           = _* "Constr" _+ t:decimal() _+ fs:plutus_list() {?
-            Ok(PlutusData::Constr(pallas_primitives::babbage::Constr {
-                tag: u64::try_from(t).or(Err("tag"))?,
-                any_constructor: None,
-                fields: fs
-            }))
+            Ok(crate::ast::Data::constr(
+                u64::try_from(t).or(Err("tag"))?,
+                fs,
+            ))
           }
           / _* "Map" _+ kvps:plutus_key_value_pairs() {
             PlutusData::Map(pallas_codec::utils::KeyValuePairs::Def(kvps))
