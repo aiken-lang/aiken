@@ -3,10 +3,10 @@ use std::{mem::size_of, ops::Deref, rc::Rc};
 use num_bigint::BigInt;
 use num_integer::Integer;
 use once_cell::sync::Lazy;
-use pallas_primitives::babbage::{Constr, Language, PlutusData};
+use pallas_primitives::babbage::{Language, PlutusData};
 
 use crate::{
-    ast::{Constant, Type},
+    ast::{Constant, Data, Type},
     builtins::DefaultFunction,
     plutus_data_to_bytes,
 };
@@ -752,11 +752,7 @@ impl DefaultFunction {
 
                 let i: u64 = i.try_into().unwrap();
 
-                let constr_data = PlutusData::Constr(Constr {
-                    tag: convert_constr_to_tag(i).unwrap_or(ANY_TAG),
-                    any_constructor: convert_constr_to_tag(i).map_or(Some(i), |_| None),
-                    fields: data_list,
-                });
+                let constr_data = Data::constr(i, data_list);
 
                 let value = Value::data(constr_data);
 
