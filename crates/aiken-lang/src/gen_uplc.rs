@@ -45,7 +45,7 @@ use self::{
         lookup_data_type_by_tipo, modify_cyclic_calls, modify_self_calls, rearrange_list_clauses,
         AssignmentProperties, ClauseProperties, CodeGenSpecialFuncs, CycleFunctionNames,
         DataTypeKey, FunctionAccessKey, HoistableFunction, Variant, CONSTR_NOT_EMPTY,
-        INCORRECT_CONSTR, LIST_NOT_EMPTY, TOO_MANY_ITEMS,
+        LIST_NOT_EMPTY, TOO_MANY_ITEMS,
     },
     tree::{AirExpression, AirTree, TreePath},
 };

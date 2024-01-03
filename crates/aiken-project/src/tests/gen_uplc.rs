@@ -5542,7 +5542,7 @@ fn expect_none() {
             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("x")))
             .delayed_if_then_else(
                 Term::bool(true),
-                Term::Error.delayed_trace(Term::string("Expected on incorrect Constr variant")),
+                Term::Error.delayed_trace(Term::string("expect None = x")),
             )
             .lambda("x")
             .apply(Term::Constant(
