@@ -18,7 +18,7 @@ use crate::{
         AssignmentKind, DataType, Pattern, Span, TypedArg, TypedClause, TypedClauseGuard,
         TypedDataType, TypedPattern,
     },
-    builtins::{bool, void},
+    builtins::{bool, data, function, int, list, string, void},
     expr::TypedExpr,
     tipo::{PatternConstructor, TypeVar, ValueConstructor, ValueConstructorVariant},
 };
@@ -82,8 +82,7 @@ pub struct AssignmentProperties {
     pub kind: AssignmentKind,
     pub remove_unused: bool,
     pub full_check: bool,
-    pub location: Span,
-    pub module_name: String,
+    pub msg_func: AirTree,
 }
 
 #[derive(Clone, Debug)]
@@ -193,7 +192,7 @@ impl ClauseProperties {
 #[derive(Clone, Debug)]
 pub struct CodeGenSpecialFuncs {
     pub used_funcs: Vec<String>,
-    pub key_to_func: IndexMap<String, Term<Name>>,
+    pub key_to_func: IndexMap<String, (Term<Name>, Rc<Type>)>,
 }
 
 impl CodeGenSpecialFuncs {
@@ -202,46 +201,30 @@ impl CodeGenSpecialFuncs {
 
         key_to_func.insert(
             CONSTR_FIELDS_EXPOSER.to_string(),
-            Term::snd_pair()
-                .apply(Term::unconstr_data().apply(Term::var("__constr_var")))
-                .lambda("__constr_var"),
+            (
+                Term::snd_pair()
+                    .apply(Term::unconstr_data().apply(Term::var("__constr_var")))
+                    .lambda("__constr_var"),
+                function(vec![data()], list(data())),
+            ),
         );
 
         key_to_func.insert(
             CONSTR_INDEX_EXPOSER.to_string(),
-            Term::fst_pair()
-                .apply(Term::unconstr_data().apply(Term::var("__constr_var")))
-                .lambda("__constr_var"),
+            (
+                Term::fst_pair()
+                    .apply(Term::unconstr_data().apply(Term::var("__constr_var")))
+                    .lambda("__constr_var"),
+                function(vec![data()], int()),
+            ),
         );
 
         key_to_func.insert(
             TOO_MANY_ITEMS.to_string(),
-            Term::string("List/Tuple/Constr contains more items than expected"),
-        );
-
-        key_to_func.insert(
-            LIST_NOT_EMPTY.to_string(),
-            Term::string("Expected no items for List"),
-        );
-
-        key_to_func.insert(
-            CONSTR_NOT_EMPTY.to_string(),
-            Term::string("Expected no fields for Constr"),
-        );
-
-        key_to_func.insert(
-            INCORRECT_BOOLEAN.to_string(),
-            Term::string("Expected on incorrect Boolean variant"),
-        );
-
-        key_to_func.insert(
-            INCORRECT_CONSTR.to_string(),
-            Term::string("Expected on incorrect Constr variant"),
-        );
-
-        key_to_func.insert(
-            CONSTR_INDEX_MISMATCH.to_string(),
-            Term::string("Constr index didn't match a type variant"),
+            (
+                Term::string("List/Tuple/Constr contains more items than expected"),
+                string(),
+            ),
         );
 
         CodeGenSpecialFuncs {
@@ -250,15 +233,26 @@ impl CodeGenSpecialFuncs {
         }
     }
 
-    pub fn use_function(&mut self, func_name: &'static str) -> &'static str {
-        if !self.used_funcs.contains(&func_name.to_string()) {
+    pub fn use_function_tree(&mut self, func_name: String) -> AirTree {
+        if !self.used_funcs.contains(&func_name) {
             self.used_funcs.push(func_name.to_string());
         }
+
+        let tipo = self.key_to_func.get(&func_name).unwrap().1.clone();
+
+        AirTree::local_var(func_name, tipo)
+    }
+
+    pub fn use_function_uplc(&mut self, func_name: String) -> String {
+        if !self.used_funcs.contains(&func_name) {
+            self.used_funcs.push(func_name.to_string());
+        }
+
         func_name
     }
 
     pub fn get_function(&self, func_name: &String) -> Term<Name> {
-        self.key_to_func[func_name].clone()
+        self.key_to_func[func_name].0.clone()
     }
 
     pub fn apply_used_functions(&self, mut term: Term<Name>) -> Term<Name> {
@@ -266,6 +260,18 @@ impl CodeGenSpecialFuncs {
             term = term.lambda(func_name).apply(self.get_function(func_name));
         }
         term
+    }
+
+    pub fn insert_new_function(
+        &mut self,
+        func_name: String,
+        function: Term<Name>,
+        function_type: Rc<Type>,
+    ) {
+        if !self.key_to_func.contains_key(&func_name) {
+            self.key_to_func
+                .insert(func_name, (function, function_type));
+        }
     }
 }
 

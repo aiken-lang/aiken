@@ -127,12 +127,12 @@ pub enum AirStatement {
     AssertConstr {
         constr_index: usize,
         constr: Box<AirTree>,
-        msg: String,
+        msg: Box<AirTree>,
     },
     AssertBool {
         is_true: bool,
         value: Box<AirTree>,
-        msg: String,
+        msg: Box<AirTree>,
     },
     // Clause Guards
     ClauseGuard {
@@ -154,16 +154,16 @@ pub enum AirStatement {
     // Field Access
     FieldsExpose {
         indices: Vec<(usize, String, Rc<Type>)>,
-        check_last_item: bool,
         record: Box<AirTree>,
+        msg: Box<Option<AirTree>>,
     },
     // List Access
     ListAccessor {
         tipo: Rc<Type>,
         names: Vec<String>,
         tail: bool,
-        check_last_item: bool,
         list: Box<AirTree>,
+        msg: Box<Option<AirTree>>,
     },
     ListExpose {
         tipo: Rc<Type>,
@@ -174,15 +174,17 @@ pub enum AirStatement {
     TupleAccessor {
         names: Vec<String>,
         tipo: Rc<Type>,
-        check_last_item: bool,
         tuple: Box<AirTree>,
+        msg: Box<Option<AirTree>>,
     },
     // Misc.
     FieldsEmpty {
         constr: Box<AirTree>,
+        msg: Box<AirTree>,
     },
     ListEmpty {
         list: Box<AirTree>,
+        msg: Box<AirTree>,
     },
     NoOp,
 }
@@ -494,22 +496,22 @@ impl AirTree {
             value: value.into(),
         })
     }
-    pub fn assert_constr_index(constr_index: usize, constr: AirTree, msg: String) -> AirTree {
+    pub fn assert_constr_index(constr_index: usize, constr: AirTree, msg: AirTree) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::AssertConstr {
                 constr_index,
                 constr: constr.into(),
-                msg,
+                msg: msg.into(),
             },
             hoisted_over: None,
         }
     }
-    pub fn assert_bool(is_true: bool, value: AirTree, msg: String) -> AirTree {
+    pub fn assert_bool(is_true: bool, value: AirTree, msg: AirTree) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::AssertBool {
                 is_true,
                 value: value.into(),
-                msg,
+                msg: msg.into(),
             },
             hoisted_over: None,
         }
@@ -714,14 +716,14 @@ impl AirTree {
 
     pub fn fields_expose(
         indices: Vec<(usize, String, Rc<Type>)>,
-        check_last_item: bool,
         record: AirTree,
+        msg: Option<AirTree>,
     ) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::FieldsExpose {
                 indices,
-                check_last_item,
                 record: record.into(),
+                msg: msg.into(),
             },
             hoisted_over: None,
         }
@@ -730,16 +732,16 @@ impl AirTree {
         names: Vec<String>,
         tipo: Rc<Type>,
         tail: bool,
-        check_last_item: bool,
         list: AirTree,
+        msg: Option<AirTree>,
     ) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::ListAccessor {
                 tipo,
                 names,
                 tail,
-                check_last_item,
                 list: list.into(),
+                msg: msg.into(),
             },
             hoisted_over: None,
         }
@@ -761,15 +763,15 @@ impl AirTree {
     pub fn tuple_access(
         names: Vec<String>,
         tipo: Rc<Type>,
-        check_last_item: bool,
         tuple: AirTree,
+        msg: Option<AirTree>,
     ) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::TupleAccessor {
                 names,
                 tipo,
-                check_last_item,
                 tuple: tuple.into(),
+                msg: msg.into(),
             },
             hoisted_over: None,
         }
@@ -804,17 +806,21 @@ impl AirTree {
             hoisted_over: None,
         }
     }
-    pub fn fields_empty(constr: AirTree) -> AirTree {
+    pub fn fields_empty(constr: AirTree, msg: AirTree) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::FieldsEmpty {
                 constr: constr.into(),
+                msg: msg.into(),
             },
             hoisted_over: None,
         }
     }
-    pub fn list_empty(list: AirTree) -> AirTree {
+    pub fn list_empty(list: AirTree, msg: AirTree) -> AirTree {
         AirTree::Statement {
-            statement: AirStatement::ListEmpty { list: list.into() },
+            statement: AirStatement::ListEmpty {
+                list: list.into(),
+                msg: msg.into(),
+            },
             hoisted_over: None,
         }
     }
@@ -952,20 +958,18 @@ impl AirTree {
                     } => {
                         air_vec.push(Air::AssertConstr {
                             constr_index: *constr_index,
-                            msg: msg.clone(),
                         });
                         constr.create_air_vec(air_vec);
+                        msg.create_air_vec(air_vec);
                     }
                     AirStatement::AssertBool {
                         is_true,
                         value,
                         msg,
                     } => {
-                        air_vec.push(Air::AssertBool {
-                            is_true: *is_true,
-                            msg: msg.clone(),
-                        });
+                        air_vec.push(Air::AssertBool { is_true: *is_true });
                         value.create_air_vec(air_vec);
+                        msg.create_air_vec(air_vec);
                     }
                     AirStatement::ClauseGuard {
                         subject_name,
@@ -1005,29 +1009,35 @@ impl AirTree {
                     }
                     AirStatement::FieldsExpose {
                         indices,
-                        check_last_item,
                         record,
+                        msg,
                     } => {
                         air_vec.push(Air::FieldsExpose {
                             indices: indices.clone(),
-                            check_last_item: *check_last_item,
+                            is_expect: msg.is_some(),
                         });
                         record.create_air_vec(air_vec);
+                        msg.iter().for_each(|msg| {
+                            msg.create_air_vec(air_vec);
+                        });
                     }
                     AirStatement::ListAccessor {
                         tipo,
                         names,
                         tail,
-                        check_last_item,
                         list,
+                        msg,
                     } => {
                         air_vec.push(Air::ListAccessor {
                             tipo: tipo.clone(),
                             names: names.clone(),
                             tail: *tail,
-                            check_last_item: *check_last_item,
+                            is_expect: msg.is_some(),
                         });
                         list.create_air_vec(air_vec);
+                        msg.iter().for_each(|msg| {
+                            msg.create_air_vec(air_vec);
+                        });
                     }
                     AirStatement::ListExpose {
                         tipo,
@@ -1043,26 +1053,31 @@ impl AirTree {
                     AirStatement::TupleAccessor {
                         names,
                         tipo,
-                        check_last_item,
                         tuple,
+                        msg,
                     } => {
                         air_vec.push(Air::TupleAccessor {
                             names: names.clone(),
                             tipo: tipo.clone(),
-                            check_last_item: *check_last_item,
+                            is_expect: msg.is_some(),
                         });
                         tuple.create_air_vec(air_vec);
+                        msg.iter().for_each(|msg| {
+                            msg.create_air_vec(air_vec);
+                        });
                     }
                     AirStatement::NoOp => {
                         air_vec.push(Air::NoOp);
                     }
-                    AirStatement::FieldsEmpty { constr } => {
+                    AirStatement::FieldsEmpty { constr, msg } => {
                         air_vec.push(Air::FieldsEmpty);
                         constr.create_air_vec(air_vec);
+                        msg.create_air_vec(air_vec);
                     }
-                    AirStatement::ListEmpty { list } => {
+                    AirStatement::ListEmpty { list, msg } => {
                         air_vec.push(Air::ListEmpty);
                         list.create_air_vec(air_vec);
+                        msg.create_air_vec(air_vec);
                     }
                 };
                 exp.create_air_vec(air_vec);
@@ -1527,7 +1542,7 @@ impl AirTree {
                     );
                 }
                 AirStatement::NoOp => {}
-                AirStatement::FieldsEmpty { constr } => {
+                AirStatement::FieldsEmpty { constr, .. } => {
                     constr.do_traverse_tree_with(
                         tree_path,
                         current_depth + 1,
@@ -1536,7 +1551,7 @@ impl AirTree {
                         apply_with_func_last,
                     );
                 }
-                AirStatement::ListEmpty { list } => {
+                AirStatement::ListEmpty { list, .. } => {
                     list.do_traverse_tree_with(
                         tree_path,
                         current_depth + 1,
@@ -1997,7 +2012,7 @@ impl AirTree {
                     }
                     AirStatement::DefineFunc { .. } => unreachable!(),
                     AirStatement::DefineCyclicFuncs { .. } => unreachable!(),
-                    AirStatement::FieldsEmpty { constr } => {
+                    AirStatement::FieldsEmpty { constr, .. } => {
                         if *index == 0 {
                             constr.as_mut().do_find_air_tree_node(tree_path_iter)
                         } else if *index == 1 {
@@ -2006,7 +2021,7 @@ impl AirTree {
                             panic!("Tree Path index outside tree children nodes")
                         }
                     }
-                    AirStatement::ListEmpty { list } => {
+                    AirStatement::ListEmpty { list, .. } => {
                         if *index == 0 {
                             list.as_mut().do_find_air_tree_node(tree_path_iter)
                         } else if *index == 1 {

@@ -89,11 +89,9 @@ pub enum Air {
     },
     AssertConstr {
         constr_index: usize,
-        msg: String,
     },
     AssertBool {
         is_true: bool,
-        msg: String,
     },
     // When
     When {
@@ -154,14 +152,14 @@ pub enum Air {
     // Field Access
     FieldsExpose {
         indices: Vec<(usize, String, Rc<Type>)>,
-        check_last_item: bool,
+        is_expect: bool,
     },
     // ListAccess
     ListAccessor {
         tipo: Rc<Type>,
         names: Vec<String>,
         tail: bool,
-        check_last_item: bool,
+        is_expect: bool,
     },
     ListExpose {
         tipo: Rc<Type>,
@@ -172,7 +170,7 @@ pub enum Air {
     TupleAccessor {
         names: Vec<String>,
         tipo: Rc<Type>,
-        check_last_item: bool,
+        is_expect: bool,
     },
     // Misc.
     ErrorTerm {
