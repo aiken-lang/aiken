@@ -41,7 +41,7 @@ use crate::{
 use self::{
     air::Air,
     builder::{
-        cast_validator_args, constants_ir, convert_type_to_data, extract_constant,
+        air_holds_msg, cast_validator_args, constants_ir, convert_type_to_data, extract_constant,
         lookup_data_type_by_tipo, modify_cyclic_calls, modify_self_calls, rearrange_list_clauses,
         AssignmentProperties, ClauseProperties, CodeGenSpecialFuncs, CycleFunctionNames,
         DataTypeKey, FunctionAccessKey, HoistableFunction, Variant,
@@ -3680,6 +3680,16 @@ impl<'a> CodeGenerator<'a> {
 
     fn gen_uplc(&mut self, ir: Air, arg_stack: &mut Vec<Term<Name>>) {
         // Going to mark the changes made to code gen after air tree implementation
+        let error_term = if self.tracing && air_holds_msg(&ir) {
+            // In the case of an air that holds a msg and tracing is active
+            // we pop the msg off the stack first
+            let msg = arg_stack.pop().unwrap();
+
+            Term::Error.delayed_trace(msg)
+        } else {
+            Term::Error
+        };
+
         match ir {
             Air::Int { value } => {
                 arg_stack.push(Term::integer(value.parse().unwrap()));
@@ -3965,13 +3975,6 @@ impl<'a> CodeGenerator<'a> {
                 is_expect,
             } => {
                 let value = arg_stack.pop().unwrap();
-
-                let error_term = if self.tracing && is_expect {
-                    let msg = arg_stack.pop().unwrap();
-                    Term::Error.delayed_trace(msg)
-                } else {
-                    Term::Error
-                };
 
                 let mut term = arg_stack.pop().unwrap();
 
@@ -4495,13 +4498,6 @@ impl<'a> CodeGenerator<'a> {
             Air::AssertConstr { constr_index } => {
                 let constr = arg_stack.pop().unwrap();
 
-                let trace_term = if self.tracing {
-                    let msg = arg_stack.pop().unwrap();
-                    Term::Error.delayed_trace(msg)
-                } else {
-                    Term::Error
-                };
-
                 let mut term = arg_stack.pop().unwrap();
 
                 term = Term::equals_integer()
@@ -4513,27 +4509,19 @@ impl<'a> CodeGenerator<'a> {
                         )
                         .apply(constr),
                     )
-                    .delayed_if_then_else(term, trace_term);
+                    .delayed_if_then_else(term, error_term);
 
                 arg_stack.push(term);
             }
             Air::AssertBool { is_true } => {
                 let value = arg_stack.pop().unwrap();
 
-                let trace_term = if self.tracing {
-                    let msg = arg_stack.pop().unwrap();
-
-                    Term::Error.delayed_trace(msg)
-                } else {
-                    Term::Error
-                };
-
                 let mut term = arg_stack.pop().unwrap();
 
                 if is_true {
-                    term = value.delayed_if_then_else(term, trace_term)
+                    term = value.delayed_if_then_else(term, error_term)
                 } else {
-                    term = value.delayed_if_then_else(trace_term, term)
+                    term = value.delayed_if_then_else(error_term, term)
                 }
                 arg_stack.push(term);
             }
@@ -4911,13 +4899,6 @@ impl<'a> CodeGenerator<'a> {
 
                 let value = arg_stack.pop().unwrap();
 
-                let error_term = if self.tracing && is_expect {
-                    let msg = arg_stack.pop().unwrap();
-                    Term::Error.delayed_trace(msg)
-                } else {
-                    Term::Error
-                };
-
                 let mut term = arg_stack.pop().unwrap();
                 let list_id = self.id_gen.next();
 
@@ -4972,13 +4953,6 @@ impl<'a> CodeGenerator<'a> {
             Air::FieldsEmpty => {
                 let value = arg_stack.pop().unwrap();
 
-                let error_term = if self.tracing {
-                    let msg = arg_stack.pop().unwrap();
-                    Term::Error.delayed_trace(msg)
-                } else {
-                    Term::Error
-                };
-
                 let mut term = arg_stack.pop().unwrap();
 
                 term = Term::var(
@@ -4992,13 +4966,6 @@ impl<'a> CodeGenerator<'a> {
             }
             Air::ListEmpty => {
                 let value = arg_stack.pop().unwrap();
-
-                let error_term = if self.tracing {
-                    let msg = arg_stack.pop().unwrap();
-                    Term::Error.delayed_trace(msg)
-                } else {
-                    Term::Error
-                };
 
                 let mut term = arg_stack.pop().unwrap();
 
@@ -5189,13 +5156,6 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 let inner_types = tipo.get_inner_types();
                 let value = arg_stack.pop().unwrap();
-
-                let error_term = if self.tracing && is_expect && !tipo.is_2_tuple() {
-                    let msg = arg_stack.pop().unwrap();
-                    Term::Error.delayed_trace(msg)
-                } else {
-                    Term::Error
-                };
 
                 let mut term = arg_stack.pop().unwrap();
                 let list_id = self.id_gen.next();
