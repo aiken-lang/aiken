@@ -3004,7 +3004,7 @@ fn expect_empty_list_on_filled_list() {
         Term::var("x")
             .delayed_choose_list(
                 Term::bool(true),
-                Term::Error.delayed_trace(Term::string("Expected no items for List")),
+                Term::Error.delayed_trace(Term::string("expect [] = x")),
             )
             .lambda("x")
             .apply(Term::list_values(vec![
@@ -3031,7 +3031,7 @@ fn expect_empty_list_on_new_list() {
         Term::var("x")
             .delayed_choose_list(
                 Term::bool(true),
-                Term::Error.delayed_trace(Term::string("Expected no items for List")),
+                Term::Error.delayed_trace(Term::string("expect [] = x")),
             )
             .lambda("x")
             .apply(Term::list_values(vec![])),
@@ -3210,7 +3210,7 @@ fn when_tuple_deconstruction() {
                                     .apply(Term::var("red_constr_fields"))
                                     .delayed_choose_list(
                                         Term::unit(),
-                                        Term::Error.delayed_trace(Term::var(TOO_MANY_ITEMS)),
+                                        Term::Error.delayed_trace(Term::var("red:RedSpend")),
                                     )
                                     .lambda("field_1")
                                     .apply(Term::un_i_data().apply(
@@ -3229,9 +3229,9 @@ fn when_tuple_deconstruction() {
                                             .delayed_choose_list(
                                                 Term::unit(),
                                                 Term::Error
-                                                    .delayed_trace(Term::var(CONSTR_NOT_EMPTY)),
+                                                    .delayed_trace(Term::var("red:RedSpend")),
                                             ),
-                                        Term::Error.delayed_trace(Term::var(CONSTR_INDEX_MISMATCH)),
+                                        Term::Error.delayed_trace(Term::var("red:RedSpend")),
                                     ),
                             )
                             .lambda("subject")
@@ -3257,7 +3257,7 @@ fn when_tuple_deconstruction() {
                                         Term::unit().lambda("_").apply(
                                             Term::var("expect_Thing").apply(Term::var("field_1")),
                                         ),
-                                        Term::Error.delayed_trace(Term::var(TOO_MANY_ITEMS)),
+                                        Term::Error.delayed_trace(Term::var("dat:Datum")),
                                     )
                                     .lambda("field_1")
                                     .apply(Term::head_list().apply(Term::var("dat_constr_fields")))
@@ -3273,10 +3273,9 @@ fn when_tuple_deconstruction() {
                                             .apply(Term::var("dat"))
                                             .delayed_choose_list(
                                                 Term::unit(),
-                                                Term::Error
-                                                    .delayed_trace(Term::var(CONSTR_NOT_EMPTY)),
+                                                Term::Error.delayed_trace(Term::var("dat:Datum")),
                                             ),
-                                        Term::Error.delayed_trace(Term::var(CONSTR_INDEX_MISMATCH)),
+                                        Term::Error.delayed_trace(Term::var("dat:Datum")),
                                     ),
                             )
                             .lambda("subject")
@@ -3293,7 +3292,7 @@ fn when_tuple_deconstruction() {
                                     .apply(Term::var("field_1_constr_fields"))
                                     .delayed_choose_list(
                                         Term::unit(),
-                                        Term::Error.delayed_trace(Term::var(TOO_MANY_ITEMS)),
+                                        Term::Error.delayed_trace(Term::var("dat:Datum")),
                                     )
                                     .lambda("idx")
                                     .apply(Term::un_i_data().apply(
@@ -3304,7 +3303,7 @@ fn when_tuple_deconstruction() {
                                         Term::var(CONSTR_FIELDS_EXPOSER)
                                             .apply(Term::var("field_1")),
                                     ),
-                                Term::Error.delayed_trace(Term::var(CONSTR_INDEX_MISMATCH)),
+                                Term::Error.delayed_trace(Term::var("dat:Datum")),
                             )
                             .lambda("subject")
                             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("field_1")))
@@ -3323,20 +3322,16 @@ fn when_tuple_deconstruction() {
                     .apply(Term::unconstr_data().apply(Term::var("x")))
                     .lambda("x"),
             )
-            .lambda(CONSTR_INDEX_MISMATCH)
-            .apply(Term::string("Constr index didn't match a type variant"))
-            .lambda(TOO_MANY_ITEMS)
-            .apply(Term::string(
-                "List/Tuple/Constr contains more items than expected",
-            ))
+            .lambda("dat:Datum")
+            .apply(Term::string("dat: Datum"))
+            .lambda("red:RedSpend")
+            .apply(Term::string("red: RedSpend"))
             .lambda(CONSTR_INDEX_EXPOSER)
             .apply(
                 Term::fst_pair()
                     .apply(Term::unconstr_data().apply(Term::var("x")))
                     .lambda("x"),
-            )
-            .lambda(CONSTR_NOT_EMPTY)
-            .apply(Term::string("Expected no fields for Constr")),
+            ),
         false,
     );
 }
@@ -3492,7 +3487,7 @@ fn generic_validator_type_test() {
                                     .apply(Term::var("r"))
                                     .delayed_choose_list(
                                         Term::unit(),
-                                        Term::Error.delayed_trace(Term::var(CONSTR_NOT_EMPTY)),
+                                        Term::Error.delayed_trace(Term::var("r:A<B>")),
                                     ),
                                 Term::equals_integer()
                                     .apply(Term::integer(1.into()))
@@ -3505,8 +3500,7 @@ fn generic_validator_type_test() {
                                                     Term::var("__expect_B")
                                                         .apply(Term::var("field_B")),
                                                 ),
-                                                Term::Error
-                                                    .delayed_trace(Term::var(TOO_MANY_ITEMS)),
+                                                Term::Error.delayed_trace(Term::var("r:A<B>")),
                                             )
                                             .lambda("field_B")
                                             .apply(Term::head_list().apply(Term::var("tail_1")))
@@ -3534,7 +3528,7 @@ fn generic_validator_type_test() {
                                                 Term::var(CONSTR_FIELDS_EXPOSER)
                                                     .apply(Term::var("r")),
                                             ),
-                                        Term::Error.delayed_trace(Term::var(CONSTR_INDEX_MISMATCH)),
+                                        Term::Error.delayed_trace(Term::var("r:A<B>")),
                                     ),
                             )
                             .lambda("subject")
@@ -3551,7 +3545,7 @@ fn generic_validator_type_test() {
                                     .apply(Term::var("B_fields"))
                                     .delayed_choose_list(
                                         Term::unit(),
-                                        Term::Error.delayed_trace(Term::var(TOO_MANY_ITEMS)),
+                                        Term::Error.delayed_trace(Term::var("r:A<B>")),
                                     )
                                     .lambda("something")
                                     .apply(
@@ -3569,7 +3563,7 @@ fn generic_validator_type_test() {
                                         Term::var(CONSTR_FIELDS_EXPOSER)
                                             .apply(Term::var("field_B")),
                                     ),
-                                Term::Error.delayed_trace(Term::var(CONSTR_INDEX_MISMATCH)),
+                                Term::Error.delayed_trace(Term::var("r:A<B>")),
                             )
                             .lambda("subject")
                             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("field_B")))
@@ -3581,14 +3575,8 @@ fn generic_validator_type_test() {
             .apply(Term::var("r"))
             .lambda("_ctx")
             .lambda("r")
-            .lambda(CONSTR_NOT_EMPTY)
-            .apply(Term::string("Expected no fields for Constr"))
-            .lambda(CONSTR_INDEX_MISMATCH)
-            .apply(Term::string("Constr index didn't match a type variant"))
-            .lambda(TOO_MANY_ITEMS)
-            .apply(Term::string(
-                "List/Tuple/Constr contains more items than expected",
-            ))
+            .lambda("r:A<B>")
+            .apply(Term::string("r: A<B>"))
             .lambda(CONSTR_FIELDS_EXPOSER)
             .apply(
                 Term::snd_pair()
@@ -4245,9 +4233,7 @@ fn expect_head_no_tail() {
                 Term::equals_integer()
                     .apply(Term::var("h"))
                     .apply(Term::var("h")),
-                Term::Error.delayed_trace(Term::string(
-                    "List/Tuple/Constr contains more items than expected",
-                )),
+                Term::Error.delayed_trace(Term::string("expect [h] = a")),
             )
             .lambda("h")
             .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("a"))))
@@ -4291,9 +4277,7 @@ fn expect_head3_no_tail() {
                             .apply(Term::var("j")),
                         Term::bool(false),
                     ),
-                Term::Error.delayed_trace(Term::string(
-                    "List/Tuple/Constr contains more items than expected",
-                )),
+                Term::Error.delayed_trace(Term::string("expect [h, i, j] = a")),
             )
             .lambda("j")
             .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("tail_2"))))
@@ -4345,9 +4329,7 @@ fn expect_head3_cast_data_no_tail() {
                             .apply(Term::var("j")),
                         Term::bool(false),
                     ),
-                Term::Error.delayed_trace(Term::string(
-                    "List/Tuple/Constr contains more items than expected",
-                )),
+                Term::Error.delayed_trace(Term::string("expect [h, i, j]: List<Int> = a")),
             )
             .lambda("j")
             .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("tail_2"))))
@@ -4391,9 +4373,7 @@ fn expect_head_cast_data_no_tail() {
                 Term::equals_integer()
                     .apply(Term::var("h"))
                     .apply(Term::var("h")),
-                Term::Error.delayed_trace(Term::string(
-                    "List/Tuple/Constr contains more items than expected",
-                )),
+                Term::Error.delayed_trace(Term::string("expect [h]: List<Int> = a")),
             )
             .lambda("h")
             .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("unwrap_a"))))
@@ -5309,7 +5289,7 @@ fn opaque_value_in_datum() {
                     .apply(
                         Term::unmap_data().apply(Term::snd_pair().apply(Term::var("tuple_item_0"))),
                     ),
-                Term::Error.delayed_trace(Term::var(TOO_MANY_ITEMS)),
+                Term::Error.delayed_trace(Term::string("expect [(_, amount)] = val.inner.inner")),
             )
             .lambda("tuple_item_0")
             .apply(Term::head_list().apply(Term::var("val")))
@@ -5363,7 +5343,7 @@ fn opaque_value_in_datum() {
                                             .lambda("pair_outer"),
                                     ),
                                 ),
-                                Term::Error.delayed_trace(Term::var(TOO_MANY_ITEMS)),
+                                Term::Error.delayed_trace(Term::var("dat:Dat")),
                             )
                             .lambda("a")
                             .apply(
@@ -5379,9 +5359,7 @@ fn opaque_value_in_datum() {
                             )
                             .lambda("dat_fields")
                             .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("param_0"))),
-                        Term::Error.delayed_trace(Term::string(
-                            "Constr index didn't match a type variant",
-                        )),
+                        Term::Error.delayed_trace(Term::var("dat:Dat")),
                     )
                     .lambda("subject")
                     .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("param_0")))
@@ -5419,10 +5397,8 @@ fn opaque_value_in_datum() {
             .lambda("dat")
             .constr_fields_exposer()
             .constr_index_exposer()
-            .lambda(TOO_MANY_ITEMS)
-            .apply(Term::string(
-                "List/Tuple/Constr contains more items than expected",
-            )),
+            .lambda("dat:Dat")
+            .apply(Term::string("dat: Dat")),
         false,
     );
 }
@@ -5484,9 +5460,7 @@ fn opaque_value_in_test() {
                     .apply(
                         Term::unmap_data().apply(Term::snd_pair().apply(Term::var("tuple_item_0"))),
                     ),
-                Term::Error.delayed_trace(Term::string(
-                    "List/Tuple/Constr contains more items than expected",
-                )),
+                Term::Error.delayed_trace(Term::string("expect [(_, amount)] = val.inner.inner")),
             )
             .lambda("tuple_item_0")
             .apply(Term::head_list().apply(Term::var("val")))
