@@ -45,7 +45,7 @@ use self::{
         lookup_data_type_by_tipo, modify_cyclic_calls, modify_self_calls, rearrange_list_clauses,
         AssignmentProperties, ClauseProperties, CodeGenSpecialFuncs, CycleFunctionNames,
         DataTypeKey, FunctionAccessKey, HoistableFunction, Variant, CONSTR_NOT_EMPTY,
-        INCORRECT_BOOLEAN, INCORRECT_CONSTR, LIST_NOT_EMPTY, TOO_MANY_ITEMS,
+        INCORRECT_CONSTR, LIST_NOT_EMPTY, TOO_MANY_ITEMS,
     },
     tree::{AirExpression, AirTree, TreePath},
 };
@@ -1062,9 +1062,16 @@ impl<'a> CodeGenerator<'a> {
 
                             sequence.push(constructor_val);
 
+                            let msg = get_src_code_by_span(
+                                &props.module_name,
+                                &props.location,
+                                &self.module_src,
+                            );
+
                             let assert_constr = AirTree::assert_constr_index(
                                 index,
                                 AirTree::local_var(&constructor_name, tipo.clone()),
+                                msg,
                             );
 
                             sequence.push(assert_constr);
@@ -4442,15 +4449,13 @@ impl<'a> CodeGenerator<'a> {
 
                 arg_stack.push(term);
             }
-            Air::AssertConstr { constr_index } => {
+            Air::AssertConstr { constr_index, msg } => {
                 let constr = arg_stack.pop().unwrap();
 
                 let mut term = arg_stack.pop().unwrap();
 
                 let trace_term = if self.tracing {
-                    Term::Error.delayed_trace(Term::var(
-                        self.special_functions.use_function(INCORRECT_CONSTR),
-                    ))
+                    Term::Error.delayed_trace(Term::string(msg))
                 } else {
                     Term::Error
                 };

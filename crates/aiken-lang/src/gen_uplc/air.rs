@@ -89,6 +89,7 @@ pub enum Air {
     },
     AssertConstr {
         constr_index: usize,
+        msg: String,
     },
     AssertBool {
         is_true: bool,
