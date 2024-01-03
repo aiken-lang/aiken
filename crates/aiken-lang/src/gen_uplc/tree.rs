@@ -131,6 +131,7 @@ pub enum AirStatement {
     AssertBool {
         is_true: bool,
         value: Box<AirTree>,
+        msg: String,
     },
     // Clause Guards
     ClauseGuard {
@@ -501,11 +502,12 @@ impl AirTree {
             hoisted_over: None,
         }
     }
-    pub fn assert_bool(is_true: bool, value: AirTree) -> AirTree {
+    pub fn assert_bool(is_true: bool, value: AirTree, msg: String) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::AssertBool {
                 is_true,
                 value: value.into(),
+                msg,
             },
             hoisted_over: None,
         }
@@ -950,8 +952,15 @@ impl AirTree {
                         });
                         constr.create_air_vec(air_vec);
                     }
-                    AirStatement::AssertBool { is_true, value } => {
-                        air_vec.push(Air::AssertBool { is_true: *is_true });
+                    AirStatement::AssertBool {
+                        is_true,
+                        value,
+                        msg,
+                    } => {
+                        air_vec.push(Air::AssertBool {
+                            is_true: *is_true,
+                            msg: msg.clone(),
+                        });
                         value.create_air_vec(air_vec);
                     }
                     AirStatement::ClauseGuard {

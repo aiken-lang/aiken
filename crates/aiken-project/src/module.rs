@@ -370,6 +370,8 @@ impl CheckedModules {
             data_types.insert(k.clone(), v);
         }
 
+        let mut module_src = IndexMap::new();
+
         for module in self.values() {
             for def in module.ast.definitions() {
                 match def {
@@ -399,12 +401,19 @@ impl CheckedModules {
                     | Definition::Use(_) => {}
                 }
             }
+            module_src.insert(module.name.clone(), module.code.clone());
         }
 
         let mut module_types_index = IndexMap::new();
         module_types_index.extend(module_types);
 
-        CodeGenerator::new(functions, data_types, module_types_index, tracing)
+        CodeGenerator::new(
+            functions,
+            data_types,
+            module_types_index,
+            module_src,
+            tracing,
+        )
     }
 }
 

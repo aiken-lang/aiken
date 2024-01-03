@@ -82,6 +82,8 @@ pub struct AssignmentProperties {
     pub kind: AssignmentKind,
     pub remove_unused: bool,
     pub full_check: bool,
+    pub location: Span,
+    pub module_name: String,
 }
 
 #[derive(Clone, Debug)]
@@ -1860,4 +1862,18 @@ pub fn extract_constant(term: &Term<Name>) -> Option<Rc<UplcConstant>> {
         }
     }
     constant
+}
+
+pub fn get_src_code_by_span(
+    module_name: &String,
+    span: &Span,
+    module_src: &IndexMap<String, String>,
+) -> String {
+    let src = module_src
+        .get(module_name)
+        .unwrap_or_else(|| panic!("Missing module {module_name}"));
+
+    src.get(span.start..span.end)
+        .expect("Out of bounds span")
+        .to_string()
 }

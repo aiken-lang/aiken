@@ -785,7 +785,6 @@ where
             generator.insert_function(
                 module_name.to_string(),
                 testable_validator.name.clone(),
-                String::new(),
                 testable_validator,
             );
         }
@@ -808,13 +807,13 @@ where
             let evaluation_hint = func_def.test_hint().map(|(bin_op, left_src, right_src)| {
                 let left = generator
                     .clone()
-                    .generate_test(&left_src)
+                    .generate_test(&left_src, &module_name)
                     .try_into()
                     .unwrap();
 
                 let right = generator
                     .clone()
-                    .generate_test(&right_src)
+                    .generate_test(&right_src, &module_name)
                     .try_into()
                     .unwrap();
 
@@ -825,7 +824,7 @@ where
                 }
             });
 
-            let program = generator.generate_test(body);
+            let program = generator.generate_test(body, &module_name);
 
             let script = Script::new(
                 input_path,
