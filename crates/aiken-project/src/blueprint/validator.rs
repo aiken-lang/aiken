@@ -49,7 +49,7 @@ impl Validator {
         module: &CheckedModule,
         def: &TypedValidator,
     ) -> Vec<Result<Validator, Error>> {
-        let program = generator.generate(def).try_into().unwrap();
+        let program = generator.generate(def, &module.name).try_into().unwrap();
 
         let is_multi_validator = def.other_fun.is_some();
 

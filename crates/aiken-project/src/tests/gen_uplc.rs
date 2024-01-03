@@ -60,7 +60,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
 
     match &script.2 {
         TestType::Func(Function { body: func, .. }) => {
-            let program = generator.generate_test(func);
+            let program = generator.generate_test(func, &script.1);
 
             let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
 
@@ -89,7 +89,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
             }
         }
         TestType::Validator(func) => {
-            let program = generator.generate(func);
+            let program = generator.generate(func, &script.1);
 
             let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
 

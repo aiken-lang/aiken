@@ -92,6 +92,7 @@ pub enum Air {
     },
     AssertBool {
         is_true: bool,
+        msg: String,
     },
     // When
     When {
