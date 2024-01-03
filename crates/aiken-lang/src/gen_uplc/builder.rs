@@ -28,7 +28,10 @@ use crate::{
     tipo::Type,
 };
 
-use super::tree::{AirExpression, AirStatement, AirTree, TreePath};
+use super::{
+    air::Air,
+    tree::{AirExpression, AirStatement, AirTree, TreePath},
+};
 
 pub type Variant = String;
 
@@ -1882,4 +1885,17 @@ pub fn get_src_code_by_span(
     src.get(span.start..span.end)
         .expect("Out of bounds span")
         .to_string()
+}
+
+pub fn air_holds_msg(air: &Air) -> bool {
+    match air {
+        Air::AssertConstr { .. } | Air::AssertBool { .. } | Air::FieldsEmpty | Air::ListEmpty => {
+            true
+        }
+        Air::FieldsExpose { is_expect, .. }
+        | Air::ListAccessor { is_expect, .. }
+        | Air::TupleAccessor { is_expect, .. } => *is_expect,
+
+        _ => false,
+    }
 }

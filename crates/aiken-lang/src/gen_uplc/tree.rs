@@ -959,8 +959,10 @@ impl AirTree {
                         air_vec.push(Air::AssertConstr {
                             constr_index: *constr_index,
                         });
-                        constr.create_air_vec(air_vec);
+                        // msg is first so we can pop it off first in uplc_gen
+                        // if traces are on
                         msg.create_air_vec(air_vec);
+                        constr.create_air_vec(air_vec);
                     }
                     AirStatement::AssertBool {
                         is_true,
@@ -968,8 +970,8 @@ impl AirTree {
                         msg,
                     } => {
                         air_vec.push(Air::AssertBool { is_true: *is_true });
-                        value.create_air_vec(air_vec);
                         msg.create_air_vec(air_vec);
+                        value.create_air_vec(air_vec);
                     }
                     AirStatement::ClauseGuard {
                         subject_name,
@@ -1016,10 +1018,12 @@ impl AirTree {
                             indices: indices.clone(),
                             is_expect: msg.is_some(),
                         });
-                        record.create_air_vec(air_vec);
+
                         msg.iter().for_each(|msg| {
                             msg.create_air_vec(air_vec);
                         });
+
+                        record.create_air_vec(air_vec);
                     }
                     AirStatement::ListAccessor {
                         tipo,
@@ -1034,10 +1038,12 @@ impl AirTree {
                             tail: *tail,
                             is_expect: msg.is_some(),
                         });
-                        list.create_air_vec(air_vec);
+
                         msg.iter().for_each(|msg| {
                             msg.create_air_vec(air_vec);
                         });
+
+                        list.create_air_vec(air_vec);
                     }
                     AirStatement::ListExpose {
                         tipo,
@@ -1061,23 +1067,25 @@ impl AirTree {
                             tipo: tipo.clone(),
                             is_expect: msg.is_some(),
                         });
-                        tuple.create_air_vec(air_vec);
+
                         msg.iter().for_each(|msg| {
                             msg.create_air_vec(air_vec);
                         });
+
+                        tuple.create_air_vec(air_vec);
                     }
                     AirStatement::NoOp => {
                         air_vec.push(Air::NoOp);
                     }
                     AirStatement::FieldsEmpty { constr, msg } => {
                         air_vec.push(Air::FieldsEmpty);
-                        constr.create_air_vec(air_vec);
                         msg.create_air_vec(air_vec);
+                        constr.create_air_vec(air_vec);
                     }
                     AirStatement::ListEmpty { list, msg } => {
                         air_vec.push(Air::ListEmpty);
-                        list.create_air_vec(air_vec);
                         msg.create_air_vec(air_vec);
+                        list.create_air_vec(air_vec);
                     }
                 };
                 exp.create_air_vec(air_vec);
