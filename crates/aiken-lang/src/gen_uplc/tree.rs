@@ -127,6 +127,7 @@ pub enum AirStatement {
     AssertConstr {
         constr_index: usize,
         constr: Box<AirTree>,
+        msg: String,
     },
     AssertBool {
         is_true: bool,
@@ -493,11 +494,12 @@ impl AirTree {
             value: value.into(),
         })
     }
-    pub fn assert_constr_index(constr_index: usize, constr: AirTree) -> AirTree {
+    pub fn assert_constr_index(constr_index: usize, constr: AirTree, msg: String) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::AssertConstr {
                 constr_index,
                 constr: constr.into(),
+                msg,
             },
             hoisted_over: None,
         }
@@ -946,9 +948,11 @@ impl AirTree {
                     AirStatement::AssertConstr {
                         constr,
                         constr_index,
+                        msg,
                     } => {
                         air_vec.push(Air::AssertConstr {
                             constr_index: *constr_index,
+                            msg: msg.clone(),
                         });
                         constr.create_air_vec(air_vec);
                     }
