@@ -30,7 +30,7 @@ use crate::{
 
 use super::{
     air::Air,
-    tree::{AirExpression, AirStatement, AirTree, TreePath},
+    tree::{AirExpression, AirMsg, AirStatement, AirTree, TreePath},
 };
 
 pub type Variant = String;
@@ -85,7 +85,7 @@ pub struct AssignmentProperties {
     pub kind: AssignmentKind,
     pub remove_unused: bool,
     pub full_check: bool,
-    pub msg_func: AirTree,
+    pub msg_func: AirMsg,
 }
 
 #[derive(Clone, Debug)]
@@ -244,6 +244,14 @@ impl CodeGenSpecialFuncs {
         let tipo = self.key_to_func.get(&func_name).unwrap().1.clone();
 
         AirTree::local_var(func_name, tipo)
+    }
+
+    pub fn use_function_msg(&mut self, func_name: String) -> AirMsg {
+        if !self.used_funcs.contains(&func_name) {
+            self.used_funcs.push(func_name.to_string());
+        }
+
+        AirMsg::LocalVar(func_name)
     }
 
     pub fn use_function_uplc(&mut self, func_name: String) -> String {
