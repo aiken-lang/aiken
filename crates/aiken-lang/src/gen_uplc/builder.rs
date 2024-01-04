@@ -85,7 +85,7 @@ pub struct AssignmentProperties {
     pub kind: AssignmentKind,
     pub remove_unused: bool,
     pub full_check: bool,
-    pub msg_func: AirMsg,
+    pub msg_func: Option<AirMsg>,
 }
 
 #[derive(Clone, Debug)]
@@ -1753,7 +1753,7 @@ pub fn wrap_as_multi_validator(
 ) -> Term<Name> {
     if trace {
         let trace_string = format!(
-            "Incorrect redeemer type for validator {}. 
+            "Incorrect redeemer type for validator {}.
             Double check you have wrapped the redeemer type as specified in your plutus.json",
             spend_name
         );

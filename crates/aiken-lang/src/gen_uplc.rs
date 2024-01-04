@@ -479,9 +479,9 @@ impl<'a> CodeGenerator<'a> {
                 );
 
                 let msg_func = if self.tracing && kind.is_expect() {
-                    self.special_functions.use_function_msg(msg_func_name)
+                    Some(self.special_functions.use_function_msg(msg_func_name))
                 } else {
-                    AirMsg::Void
+                    None
                 };
 
                 self.assignment(
@@ -534,7 +534,7 @@ impl<'a> CodeGenerator<'a> {
                             kind: AssignmentKind::Let,
                             remove_unused: false,
                             full_check: false,
-                            msg_func: AirMsg::Void,
+                            msg_func: None,
                         },
                     );
 
@@ -1027,7 +1027,8 @@ impl<'a> CodeGenerator<'a> {
                         tipo.clone(),
                         tail.is_some(),
                         value,
-                        Some(props.msg_func),
+                        props.msg_func,
+                        true,
                     )
                 };
 
@@ -1180,12 +1181,12 @@ impl<'a> CodeGenerator<'a> {
                     if check_replaceable_opaque_type(tipo, &self.data_types) {
                         sequence.push(AirTree::let_assignment(&indices[0].1, value));
                     } else {
-                        let msg = if props.full_check {
-                            Some(props.msg_func)
+                        let (is_expect, msg) = if props.full_check {
+                            (true, props.msg_func)
                         } else {
-                            None
+                            (false, None)
                         };
-                        sequence.push(AirTree::fields_expose(indices, value, msg));
+                        sequence.push(AirTree::fields_expose(indices, value, msg, is_expect));
                     }
 
                     sequence.append(
@@ -1266,15 +1267,21 @@ impl<'a> CodeGenerator<'a> {
 
                 let indices = elems.iter().map(|(name, _)| name.to_string()).collect_vec();
 
-                let msg = if props.full_check {
-                    Some(props.msg_func)
+                let (is_expect, msg) = if props.full_check {
+                    (true, props.msg_func)
                 } else {
-                    None
+                    (false, None)
                 };
 
                 // This `value` is either value param that was passed in or
                 // local var
-                sequence.push(AirTree::tuple_access(indices, tipo.clone(), value, msg));
+                sequence.push(AirTree::tuple_access(
+                    indices,
+                    tipo.clone(),
+                    value,
+                    msg,
+                    is_expect,
+                ));
 
                 sequence.append(&mut elems.into_iter().map(|(_, field)| field).collect_vec());
 
@@ -1289,7 +1296,7 @@ impl<'a> CodeGenerator<'a> {
         value: AirTree,
         defined_data_types: &mut IndexMap<String, u64>,
         location: Span,
-        msg_func: AirMsg,
+        msg_func: Option<AirMsg>,
     ) -> AirTree {
         assert!(tipo.get_generic().is_none());
         let tipo = &convert_opaque_type(tipo, &self.data_types);
@@ -1317,6 +1324,7 @@ impl<'a> CodeGenerator<'a> {
                 inner_list_type.clone(),
                 AirTree::local_var(&pair_name, inner_list_type.clone()),
                 None,
+                false,
             );
 
             let expect_fst = self.expect_type_assign(
@@ -1469,6 +1477,7 @@ impl<'a> CodeGenerator<'a> {
                 tipo.clone(),
                 AirTree::local_var(pair_name, tipo.clone()),
                 None,
+                false,
             );
 
             let expect_fst = self.expect_type_assign(
@@ -1534,7 +1543,8 @@ impl<'a> CodeGenerator<'a> {
                 tuple_index_names,
                 tipo.clone(),
                 AirTree::local_var(tuple_name, tipo.clone()),
-                Some(msg_func),
+                msg_func,
+                true,
             );
 
             let mut tuple_expects = tuple_expect_items
@@ -1580,15 +1590,15 @@ impl<'a> CodeGenerator<'a> {
                     let msg = AirMsg::LocalVar("__param_msg".to_string());
 
                     (
-                        msg.clone(),
+                        Some(msg.clone()),
                         AirTree::trace(
-                            msg.to_air_tree().unwrap(),
+                            msg.to_air_tree(),
                             tipo.clone(),
                             AirTree::error(tipo.clone(), false),
                         ),
                     )
                 } else {
-                    (msg_func.clone(), AirTree::error(tipo.clone(), false))
+                    (None, AirTree::error(tipo.clone(), false))
                 };
 
                 defined_data_types.insert(data_type_name.clone(), 1);
@@ -1659,7 +1669,8 @@ impl<'a> CodeGenerator<'a> {
                                     ),
                                     tipo.clone(),
                                 ),
-                                Some(msg_term.clone()),
+                                msg_term.clone(),
+                                true,
                             );
 
                             assigns.insert(0, expose);
@@ -1727,7 +1738,12 @@ impl<'a> CodeGenerator<'a> {
             }
 
             let args = if self.tracing {
-                vec![value, msg_func.to_air_tree().unwrap()]
+                vec![
+                    value,
+                    msg_func
+                        .expect("should be unreachable: no msg func with tracing enabled.")
+                        .to_air_tree(),
+                ]
             } else {
                 vec![value]
             };
@@ -2255,6 +2271,7 @@ impl<'a> CodeGenerator<'a> {
                         // So for the msg we pass in empty string if tracing is on
                         // Since check_last_item is false this will never get added to the final uplc anyway
                         None,
+                        false,
                     )
                 } else {
                     assert!(defined_tails.len() >= defined_heads.len());
@@ -2398,6 +2415,7 @@ impl<'a> CodeGenerator<'a> {
                                     subject_tipo.clone(),
                                 ),
                                 None,
+                                false,
                             )
                         };
 
@@ -2532,6 +2550,7 @@ impl<'a> CodeGenerator<'a> {
                             subject_tipo.clone(),
                             AirTree::local_var(&props.original_subject_name, subject_tipo.clone()),
                             None,
+                            false,
                         ),
                     );
                 }
@@ -2744,9 +2763,9 @@ impl<'a> CodeGenerator<'a> {
                     );
 
                     let msg_func = if self.tracing && !actual_type.is_data() {
-                        self.special_functions.use_function_msg(msg_func_name)
+                        Some(self.special_functions.use_function_msg(msg_func_name))
                     } else {
-                        AirMsg::Void
+                        None
                     };
 
                     let assign = self.assignment(
