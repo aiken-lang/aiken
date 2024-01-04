@@ -183,5 +183,4 @@ pub enum Air {
     NoOp,
     FieldsEmpty,
     ListEmpty,
-    VoidMsg,
 }

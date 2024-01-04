@@ -91,6 +91,23 @@ impl Default for IndexCounter {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum AirMsg {
+    Void,
+    LocalVar(String),
+    Msg(String),
+}
+
+impl AirMsg {
+    pub fn to_air_tree(&self) -> Option<AirTree> {
+        match self {
+            AirMsg::Void => None,
+            AirMsg::LocalVar(name) => Some(AirTree::local_var(name, string())),
+            AirMsg::Msg(msg) => Some(AirTree::string(msg)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum AirTree {
     Statement {
         statement: AirStatement,
@@ -127,12 +144,12 @@ pub enum AirStatement {
     AssertConstr {
         constr_index: usize,
         constr: Box<AirTree>,
-        msg: Box<AirTree>,
+        msg: AirMsg,
     },
     AssertBool {
         is_true: bool,
         value: Box<AirTree>,
-        msg: Box<AirTree>,
+        msg: AirMsg,
     },
     // Clause Guards
     ClauseGuard {
@@ -155,7 +172,7 @@ pub enum AirStatement {
     FieldsExpose {
         indices: Vec<(usize, String, Rc<Type>)>,
         record: Box<AirTree>,
-        msg: Box<Option<AirTree>>,
+        msg: Option<AirMsg>,
     },
     // List Access
     ListAccessor {
@@ -163,7 +180,7 @@ pub enum AirStatement {
         names: Vec<String>,
         tail: bool,
         list: Box<AirTree>,
-        msg: Box<Option<AirTree>>,
+        msg: Option<AirMsg>,
     },
     ListExpose {
         tipo: Rc<Type>,
@@ -175,16 +192,16 @@ pub enum AirStatement {
         names: Vec<String>,
         tipo: Rc<Type>,
         tuple: Box<AirTree>,
-        msg: Box<Option<AirTree>>,
+        msg: Option<AirMsg>,
     },
     // Misc.
     FieldsEmpty {
         constr: Box<AirTree>,
-        msg: Box<AirTree>,
+        msg: AirMsg,
     },
     ListEmpty {
         list: Box<AirTree>,
-        msg: Box<AirTree>,
+        msg: AirMsg,
     },
     NoOp,
 }
@@ -332,7 +349,6 @@ pub enum AirExpression {
         msg: Box<AirTree>,
         then: Box<AirTree>,
     },
-    VoidMsg,
 }
 
 impl AirTree {
@@ -497,22 +513,22 @@ impl AirTree {
             value: value.into(),
         })
     }
-    pub fn assert_constr_index(constr_index: usize, constr: AirTree, msg: AirTree) -> AirTree {
+    pub fn assert_constr_index(constr_index: usize, constr: AirTree, msg: AirMsg) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::AssertConstr {
                 constr_index,
                 constr: constr.into(),
-                msg: msg.into(),
+                msg,
             },
             hoisted_over: None,
         }
     }
-    pub fn assert_bool(is_true: bool, value: AirTree, msg: AirTree) -> AirTree {
+    pub fn assert_bool(is_true: bool, value: AirTree, msg: AirMsg) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::AssertBool {
                 is_true,
                 value: value.into(),
-                msg: msg.into(),
+                msg,
             },
             hoisted_over: None,
         }
@@ -718,13 +734,13 @@ impl AirTree {
     pub fn fields_expose(
         indices: Vec<(usize, String, Rc<Type>)>,
         record: AirTree,
-        msg: Option<AirTree>,
+        msg: Option<AirMsg>,
     ) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::FieldsExpose {
                 indices,
                 record: record.into(),
-                msg: msg.into(),
+                msg,
             },
             hoisted_over: None,
         }
@@ -734,7 +750,7 @@ impl AirTree {
         tipo: Rc<Type>,
         tail: bool,
         list: AirTree,
-        msg: Option<AirTree>,
+        msg: Option<AirMsg>,
     ) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::ListAccessor {
@@ -742,7 +758,7 @@ impl AirTree {
                 names,
                 tail,
                 list: list.into(),
-                msg: msg.into(),
+                msg,
             },
             hoisted_over: None,
         }
@@ -765,14 +781,14 @@ impl AirTree {
         names: Vec<String>,
         tipo: Rc<Type>,
         tuple: AirTree,
-        msg: Option<AirTree>,
+        msg: Option<AirMsg>,
     ) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::TupleAccessor {
                 names,
                 tipo,
                 tuple: tuple.into(),
-                msg: msg.into(),
+                msg,
             },
             hoisted_over: None,
         }
@@ -807,26 +823,23 @@ impl AirTree {
             hoisted_over: None,
         }
     }
-    pub fn fields_empty(constr: AirTree, msg: AirTree) -> AirTree {
+    pub fn fields_empty(constr: AirTree, msg: AirMsg) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::FieldsEmpty {
                 constr: constr.into(),
-                msg: msg.into(),
+                msg,
             },
             hoisted_over: None,
         }
     }
-    pub fn list_empty(list: AirTree, msg: AirTree) -> AirTree {
+    pub fn list_empty(list: AirTree, msg: AirMsg) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::ListEmpty {
                 list: list.into(),
-                msg: msg.into(),
+                msg,
             },
             hoisted_over: None,
         }
-    }
-    pub fn void_msg() -> AirTree {
-        AirTree::Expression(AirExpression::VoidMsg)
     }
 
     pub fn hoist_over(mut self, next_exp: AirTree) -> AirTree {
@@ -966,7 +979,11 @@ impl AirTree {
                         });
                         // msg is first so we can pop it off first in uplc_gen
                         // if traces are on
-                        msg.create_air_vec(air_vec);
+
+                        if let Some(msg) = msg.to_air_tree() {
+                            msg.create_air_vec(air_vec);
+                        }
+
                         constr.create_air_vec(air_vec);
                     }
                     AirStatement::AssertBool {
@@ -975,7 +992,11 @@ impl AirTree {
                         msg,
                     } => {
                         air_vec.push(Air::AssertBool { is_true: *is_true });
-                        msg.create_air_vec(air_vec);
+
+                        if let Some(msg) = msg.to_air_tree() {
+                            msg.create_air_vec(air_vec);
+                        }
+
                         value.create_air_vec(air_vec);
                     }
                     AirStatement::ClauseGuard {
@@ -1024,9 +1045,9 @@ impl AirTree {
                             is_expect: msg.is_some(),
                         });
 
-                        msg.iter().for_each(|msg| {
+                        if let Some(msg) = msg.as_ref().and_then(|item| item.to_air_tree()) {
                             msg.create_air_vec(air_vec);
-                        });
+                        }
 
                         record.create_air_vec(air_vec);
                     }
@@ -1044,9 +1065,9 @@ impl AirTree {
                             is_expect: msg.is_some(),
                         });
 
-                        msg.iter().for_each(|msg| {
+                        if let Some(msg) = msg.as_ref().and_then(|item| item.to_air_tree()) {
                             msg.create_air_vec(air_vec);
-                        });
+                        }
 
                         list.create_air_vec(air_vec);
                     }
@@ -1073,9 +1094,9 @@ impl AirTree {
                             is_expect: msg.is_some(),
                         });
 
-                        msg.iter().for_each(|msg| {
+                        if let Some(msg) = msg.as_ref().and_then(|item| item.to_air_tree()) {
                             msg.create_air_vec(air_vec);
-                        });
+                        }
 
                         tuple.create_air_vec(air_vec);
                     }
@@ -1084,12 +1105,20 @@ impl AirTree {
                     }
                     AirStatement::FieldsEmpty { constr, msg } => {
                         air_vec.push(Air::FieldsEmpty);
-                        msg.create_air_vec(air_vec);
+
+                        if let Some(msg) = msg.to_air_tree() {
+                            msg.create_air_vec(air_vec);
+                        }
+
                         constr.create_air_vec(air_vec);
                     }
                     AirStatement::ListEmpty { list, msg } => {
                         air_vec.push(Air::ListEmpty);
-                        msg.create_air_vec(air_vec);
+
+                        if let Some(msg) = msg.to_air_tree() {
+                            msg.create_air_vec(air_vec);
+                        }
+
                         list.create_air_vec(air_vec);
                     }
                 };
@@ -1317,7 +1346,6 @@ impl AirTree {
                     msg.create_air_vec(air_vec);
                     then.create_air_vec(air_vec);
                 }
-                AirExpression::VoidMsg => air_vec.push(Air::VoidMsg),
             },
             AirTree::UnhoistedSequence(_) => {
                 unreachable!("FIRST RESOLVE ALL UNHOISTED SEQUENCES")
@@ -1350,7 +1378,7 @@ impl AirTree {
                 | AirExpression::RecordUpdate { tipo, .. }
                 | AirExpression::ErrorTerm { tipo, .. }
                 | AirExpression::Trace { tipo, .. } => tipo.clone(),
-                AirExpression::Void | AirExpression::VoidMsg => void(),
+                AirExpression::Void => void(),
                 AirExpression::Var { constructor, .. } => constructor.tipo.clone(),
                 AirExpression::Fn { func_body, .. } => func_body.return_type(),
                 AirExpression::UnOp { op, .. } => match op {
