@@ -1,9 +1,6 @@
 use pretty_assertions::assert_eq;
 
-use aiken_lang::{
-    ast::{Definition, Function, TypedFunction, TypedValidator},
-    gen_uplc::builder::{CONSTR_INDEX_MISMATCH, CONSTR_NOT_EMPTY, TOO_MANY_ITEMS},
-};
+use aiken_lang::ast::{Definition, Function, TypedFunction, TypedValidator};
 use uplc::{
     ast::{Constant, Data, DeBruijn, Name, Program, Term, Type},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
