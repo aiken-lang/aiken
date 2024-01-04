@@ -1574,17 +1574,19 @@ impl<'a> CodeGenerator<'a> {
             let data_type_name = format!("__expect_{}_{}", data_type.name, data_type_variant);
             let function = self.code_gen_functions.get(&data_type_name);
 
-            let error_term = if self.tracing {
-                AirTree::trace(
-                    msg_func.clone(),
-                    tipo.clone(),
-                    AirTree::error(tipo.clone(), false),
-                )
-            } else {
-                AirTree::error(tipo.clone(), false)
-            };
-
+            // mutate code_gen_funcs and defined_data_types in this if branch
             if function.is_none() && defined_data_types.get(&data_type_name).is_none() {
+                let (msg_term, error_term) = if self.tracing {
+                    let msg = AirTree::local_var("__param_msg", string());
+
+                    (
+                        msg.clone(),
+                        AirTree::trace(msg, tipo.clone(), AirTree::error(tipo.clone(), false)),
+                    )
+                } else {
+                    (msg_func.clone(), AirTree::error(tipo.clone(), false))
+                };
+
                 defined_data_types.insert(data_type_name.clone(), 1);
 
                 let current_defined = defined_data_types.clone();
@@ -1610,7 +1612,7 @@ impl<'a> CodeGenerator<'a> {
                                         AirTree::local_var(&arg_name, arg_tipo.clone()),
                                         defined_data_types,
                                         location,
-                                        msg_func.clone(),
+                                        msg_term.clone(),
                                     ),
                                 );
 
@@ -1639,7 +1641,7 @@ impl<'a> CodeGenerator<'a> {
                                     ),
                                     tipo.clone(),
                                 ),
-                                msg_func.clone(),
+                                msg_term.clone(),
                             );
 
                             assigns.insert(0, empty);
@@ -1653,7 +1655,7 @@ impl<'a> CodeGenerator<'a> {
                                     ),
                                     tipo.clone(),
                                 ),
-                                Some(msg_func.clone()),
+                                Some(msg_term.clone()),
                             );
 
                             assigns.insert(0, expose);
@@ -1700,9 +1702,16 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
 
-                let code_gen_func = CodeGenFunction::Function {
-                    body: func_body,
-                    params: vec!["__param_0".to_string()],
+                let code_gen_func = if self.tracing {
+                    CodeGenFunction::Function {
+                        body: func_body,
+                        params: vec!["__param_0".to_string(), "__param_msg".to_string()],
+                    }
+                } else {
+                    CodeGenFunction::Function {
+                        body: func_body,
+                        params: vec!["__param_0".to_string()],
+                    }
                 };
 
                 self.code_gen_functions
@@ -1713,23 +1722,41 @@ impl<'a> CodeGenerator<'a> {
                 defined_data_types.insert(data_type_name.to_string(), 1);
             }
 
-            let func_var = AirTree::var(
-                ValueConstructor::public(
-                    tipo.clone(),
-                    ValueConstructorVariant::ModuleFn {
-                        name: data_type_name.to_string(),
-                        field_map: None,
-                        module: "".to_string(),
-                        arity: 1,
-                        location: Span::empty(),
-                        builtin: None,
-                    },
-                ),
-                data_type_name,
-                "",
-            );
+            if self.tracing {
+                let module_fn = ValueConstructorVariant::ModuleFn {
+                    name: data_type_name.to_string(),
+                    field_map: None,
+                    module: "".to_string(),
+                    arity: 2,
+                    location,
+                    builtin: None,
+                };
 
-            AirTree::call(func_var, void(), vec![value])
+                let func_var = AirTree::var(
+                    ValueConstructor::public(tipo.clone(), module_fn),
+                    data_type_name,
+                    "",
+                );
+
+                AirTree::call(func_var, void(), vec![value, msg_func])
+            } else {
+                let module_fn = ValueConstructorVariant::ModuleFn {
+                    name: data_type_name.to_string(),
+                    field_map: None,
+                    module: "".to_string(),
+                    arity: 1,
+                    location,
+                    builtin: None,
+                };
+
+                let func_var = AirTree::var(
+                    ValueConstructor::public(tipo.clone(), module_fn),
+                    data_type_name,
+                    "",
+                );
+
+                AirTree::call(func_var, void(), vec![value])
+            }
         }
     }
 
