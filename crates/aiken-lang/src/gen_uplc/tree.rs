@@ -332,6 +332,7 @@ pub enum AirExpression {
         msg: Box<AirTree>,
         then: Box<AirTree>,
     },
+    VoidMsg,
 }
 
 impl AirTree {
@@ -824,6 +825,10 @@ impl AirTree {
             hoisted_over: None,
         }
     }
+    pub fn void_msg() -> AirTree {
+        AirTree::Expression(AirExpression::VoidMsg)
+    }
+
     pub fn hoist_over(mut self, next_exp: AirTree) -> AirTree {
         match &mut self {
             AirTree::Statement { hoisted_over, .. } => {
@@ -1312,6 +1317,7 @@ impl AirTree {
                     msg.create_air_vec(air_vec);
                     then.create_air_vec(air_vec);
                 }
+                AirExpression::VoidMsg => air_vec.push(Air::VoidMsg),
             },
             AirTree::UnhoistedSequence(_) => {
                 unreachable!("FIRST RESOLVE ALL UNHOISTED SEQUENCES")
@@ -1344,7 +1350,7 @@ impl AirTree {
                 | AirExpression::RecordUpdate { tipo, .. }
                 | AirExpression::ErrorTerm { tipo, .. }
                 | AirExpression::Trace { tipo, .. } => tipo.clone(),
-                AirExpression::Void => void(),
+                AirExpression::Void | AirExpression::VoidMsg => void(),
                 AirExpression::Var { constructor, .. } => constructor.tipo.clone(),
                 AirExpression::Fn { func_body, .. } => func_body.return_type(),
                 AirExpression::UnOp { op, .. } => match op {

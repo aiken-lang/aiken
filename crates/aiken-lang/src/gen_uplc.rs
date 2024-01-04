@@ -478,10 +478,10 @@ impl<'a> CodeGenerator<'a> {
                     string(),
                 );
 
-                let msg_func = if self.tracing {
+                let msg_func = if self.tracing && kind.is_expect() {
                     self.special_functions.use_function_tree(msg_func_name)
                 } else {
-                    AirTree::no_op()
+                    AirTree::void_msg()
                 };
 
                 self.assignment(
@@ -534,7 +534,7 @@ impl<'a> CodeGenerator<'a> {
                             kind: AssignmentKind::Let,
                             remove_unused: false,
                             full_check: false,
-                            msg_func: AirTree::no_op(),
+                            msg_func: AirTree::void_msg(),
                         },
                     );
 
@@ -2752,10 +2752,10 @@ impl<'a> CodeGenerator<'a> {
                         string(),
                     );
 
-                    let msg_func = if self.tracing {
+                    let msg_func = if self.tracing && !actual_type.is_data() {
                         self.special_functions.use_function_tree(msg_func_name)
                     } else {
-                        AirTree::no_op()
+                        AirTree::void_msg()
                     };
 
                     let assign = self.assignment(
@@ -5255,7 +5255,7 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
 
-            Air::NoOp => {}
+            Air::NoOp | Air::VoidMsg => {}
         }
     }
 }
