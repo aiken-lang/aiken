@@ -13,8 +13,9 @@ use num_traits::ToPrimitive;
 use pallas_addresses::{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart};
 use pallas_primitives::{
     alonzo::{self as pallas, Constr, PlutusData},
-    babbage::{self as cardano, Language},
+    babbage::{self as cardano},
 };
+pub use pallas_primitives::babbage::Language;
 use pallas_traverse::ComputeHash;
 use serde::{
     self,
