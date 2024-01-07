@@ -11,11 +11,11 @@ use crate::{
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 use pallas_addresses::{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart};
+pub use pallas_primitives::babbage::Language;
 use pallas_primitives::{
     alonzo::{self as pallas, Constr, PlutusData},
     babbage::{self as cardano},
 };
-pub use pallas_primitives::babbage::Language;
 use pallas_traverse::ComputeHash;
 use serde::{
     self,
