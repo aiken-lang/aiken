@@ -1462,20 +1462,18 @@ pub fn list_access_to_uplc(
                         .delayed_choose_list(acc, error_term.clone())
                         .lambda(name)
                         .apply(head_list)
-                        .lambda("tail_name")
+                        .lambda(tail_name)
                 } else {
-                    acc.lambda(name)
-                        .apply(head_list)
-                        .lambda(tail_name.to_string())
+                    acc.lambda(name).apply(head_list).lambda(tail_name)
                 }
             } else if name == "_" {
                 acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
-                    .lambda(tail_name.to_string())
+                    .lambda(tail_name)
             } else {
                 acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
                     .lambda(name)
                     .apply(head_list)
-                    .lambda(tail_name.to_string())
+                    .lambda(tail_name)
             }
         },
     )
