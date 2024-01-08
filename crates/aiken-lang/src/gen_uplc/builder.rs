@@ -1400,7 +1400,6 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn list_access_to_uplc(
     names_types_ids: &[(String, Rc<Type>, u64)],
     tail: bool,
