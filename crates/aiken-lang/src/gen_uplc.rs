@@ -3709,13 +3709,16 @@ impl<'a> CodeGenerator<'a> {
     fn uplc_code_gen(&mut self, mut ir_stack: Vec<Air>) -> Term<Name> {
         let mut arg_stack: Vec<Term<Name>> = vec![];
 
-        while let Some(ir_element) = ir_stack.pop() {
-            self.gen_uplc(ir_element, &mut arg_stack);
+        while let Some(air_element) = ir_stack.pop() {
+            let arg = self.gen_uplc(air_element, &mut arg_stack);
+            if let Some(arg) = arg {
+                arg_stack.push(arg);
+            }
         }
         arg_stack.pop().unwrap()
     }
 
-    fn gen_uplc(&mut self, ir: Air, arg_stack: &mut Vec<Term<Name>>) {
+    fn gen_uplc(&mut self, ir: Air, arg_stack: &mut Vec<Term<Name>>) -> Option<Term<Name>> {
         // Going to mark the changes made to code gen after air tree implementation
         let error_term = if self.tracing && air_holds_msg(&ir) {
             // In the case of an air that holds a msg and tracing is active
@@ -3728,196 +3731,183 @@ impl<'a> CodeGenerator<'a> {
         };
 
         match ir {
-            Air::Int { value } => {
-                arg_stack.push(Term::integer(value.parse().unwrap()));
-            }
-            Air::String { value } => {
-                arg_stack.push(Term::string(value));
-            }
-            Air::ByteArray { bytes } => {
-                arg_stack.push(Term::byte_string(bytes));
-            }
-            Air::Bool { value } => {
-                arg_stack.push(Term::bool(value));
-            }
+            Air::Int { value } => Some(Term::integer(value.parse().unwrap())),
+            Air::String { value } => Some(Term::string(value)),
+            Air::ByteArray { bytes } => Some(Term::byte_string(bytes)),
+            Air::Bool { value } => Some(Term::bool(value)),
             Air::CurvePoint { point, .. } => match point {
-                Curve::Bls12_381(Bls12_381Point::G1(g1)) => arg_stack.push(Term::bls12_381_g1(g1)),
-                Curve::Bls12_381(Bls12_381Point::G2(g2)) => arg_stack.push(Term::bls12_381_g2(g2)),
+                Curve::Bls12_381(Bls12_381Point::G1(g1)) => Some(Term::bls12_381_g1(g1)),
+                Curve::Bls12_381(Bls12_381Point::G2(g2)) => Some(Term::bls12_381_g2(g2)),
             },
             Air::Var {
                 name,
                 constructor,
                 variant_name,
-            } => {
-                match &constructor.variant {
-                    ValueConstructorVariant::LocalVariable { .. } => arg_stack.push(Term::Var(
-                        Name {
-                            text: name,
-                            unique: 0.into(),
-                        }
-                        .into(),
-                    )),
-                    ValueConstructorVariant::ModuleConstant { .. } => {
-                        unreachable!("{:#?}, {}", constructor, name)
+            } => match &constructor.variant {
+                ValueConstructorVariant::LocalVariable { .. } => Some(Term::Var(
+                    Name {
+                        text: name,
+                        unique: 0.into(),
                     }
+                    .into(),
+                )),
+                ValueConstructorVariant::ModuleConstant { .. } => {
+                    unreachable!("{:#?}, {}", constructor, name)
+                }
 
-                    ValueConstructorVariant::ModuleFn {
-                        builtin: Some(builtin),
-                        ..
-                    } => {
-                        let term = match builtin {
-                            DefaultFunction::IfThenElse
-                            | DefaultFunction::ChooseUnit
-                            | DefaultFunction::Trace
-                            | DefaultFunction::ChooseList
-                            | DefaultFunction::ChooseData
-                            | DefaultFunction::UnConstrData => {
-                                builder::special_case_builtin(builtin, 0, vec![])
-                            }
+                ValueConstructorVariant::ModuleFn {
+                    builtin: Some(builtin),
+                    ..
+                } => {
+                    let term = match builtin {
+                        DefaultFunction::IfThenElse
+                        | DefaultFunction::ChooseUnit
+                        | DefaultFunction::Trace
+                        | DefaultFunction::ChooseList
+                        | DefaultFunction::ChooseData
+                        | DefaultFunction::UnConstrData => {
+                            builder::special_case_builtin(builtin, 0, vec![])
+                        }
 
-                            DefaultFunction::FstPair
-                            | DefaultFunction::SndPair
-                            | DefaultFunction::HeadList => builder::undata_builtin(
-                                builtin,
-                                0,
-                                &constructor.tipo.return_type().unwrap(),
-                                vec![],
-                            ),
+                        DefaultFunction::FstPair
+                        | DefaultFunction::SndPair
+                        | DefaultFunction::HeadList => builder::undata_builtin(
+                            builtin,
+                            0,
+                            &constructor.tipo.return_type().unwrap(),
+                            vec![],
+                        ),
 
-                            DefaultFunction::MkCons | DefaultFunction::MkPairData => {
-                                unimplemented!("MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z).\n")
-                            }
-                            _ => {
-                                let mut term: Term<Name> = (*builtin).into();
+                        DefaultFunction::MkCons | DefaultFunction::MkPairData => {
+                            unimplemented!("MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z).\n")
+                        }
+                        _ => {
+                            let mut term: Term<Name> = (*builtin).into();
 
-                                term = builder::apply_builtin_forces(term, builtin.force_count());
+                            term = builder::apply_builtin_forces(term, builtin.force_count());
 
-                                term
-                            }
+                            term
+                        }
+                    };
+                    Some(term)
+                }
+                ValueConstructorVariant::ModuleFn {
+                    name: func_name,
+                    module,
+                    ..
+                } => {
+                    if let Some((names, index, cyclic_name)) = self.cyclic_functions.get(&(
+                        FunctionAccessKey {
+                            module_name: module.clone(),
+                            function_name: func_name.clone(),
+                        },
+                        variant_name.clone(),
+                    )) {
+                        let cyclic_var_name = if cyclic_name.module_name.is_empty() {
+                            cyclic_name.function_name.to_string()
+                        } else {
+                            format!("{}_{}", cyclic_name.module_name, cyclic_name.function_name)
                         };
-                        arg_stack.push(term);
-                    }
-                    ValueConstructorVariant::ModuleFn {
-                        name: func_name,
-                        module,
-                        ..
-                    } => {
-                        if let Some((names, index, cyclic_name)) = self.cyclic_functions.get(&(
-                            FunctionAccessKey {
-                                module_name: module.clone(),
-                                function_name: func_name.clone(),
-                            },
-                            variant_name.clone(),
-                        )) {
-                            let cyclic_var_name = if cyclic_name.module_name.is_empty() {
-                                cyclic_name.function_name.to_string()
-                            } else {
-                                format!("{}_{}", cyclic_name.module_name, cyclic_name.function_name)
-                            };
 
-                            let index_name = names[*index].clone();
+                        let index_name = names[*index].clone();
 
-                            let mut arg_var = Term::var(index_name.clone());
+                        let mut arg_var = Term::var(index_name.clone());
 
-                            for name in names.iter().rev() {
-                                arg_var = arg_var.lambda(name);
-                            }
-
-                            let term = Term::var(cyclic_var_name).apply(arg_var);
-
-                            arg_stack.push(term);
-                        } else {
-                            let name = if (*func_name == name
-                                || name == format!("{module}_{func_name}"))
-                                && !module.is_empty()
-                            {
-                                format!("{module}_{func_name}{variant_name}")
-                            } else {
-                                format!("{func_name}{variant_name}")
-                            };
-
-                            arg_stack.push(Term::Var(
-                                Name {
-                                    text: name,
-                                    unique: 0.into(),
-                                }
-                                .into(),
-                            ));
+                        for name in names.iter().rev() {
+                            arg_var = arg_var.lambda(name);
                         }
-                    }
-                    ValueConstructorVariant::Record {
-                        name: constr_name, ..
-                    } => {
-                        if constructor.tipo.is_bool() {
-                            arg_stack.push(Term::bool(constr_name == "True"));
-                        } else if constructor.tipo.is_void() {
-                            arg_stack.push(Term::Constant(UplcConstant::Unit.into()));
-                        } else {
-                            let data_type = builder::lookup_data_type_by_tipo(
-                                &self.data_types,
-                                &constructor.tipo,
-                            )
-                            .unwrap();
 
-                            let (constr_index, constr_type) = data_type
-                                .constructors
-                                .iter()
-                                .enumerate()
-                                .find(|(_, x)| x.name == *constr_name)
+                        let term = Term::var(cyclic_var_name).apply(arg_var);
+
+                        Some(term)
+                    } else {
+                        let name = if (*func_name == name
+                            || name == format!("{module}_{func_name}"))
+                            && !module.is_empty()
+                        {
+                            format!("{module}_{func_name}{variant_name}")
+                        } else {
+                            format!("{func_name}{variant_name}")
+                        };
+
+                        Some(Term::Var(
+                            Name {
+                                text: name,
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        ))
+                    }
+                }
+                ValueConstructorVariant::Record {
+                    name: constr_name, ..
+                } => {
+                    if constructor.tipo.is_bool() {
+                        Some(Term::bool(constr_name == "True"))
+                    } else if constructor.tipo.is_void() {
+                        Some(Term::Constant(UplcConstant::Unit.into()))
+                    } else {
+                        let data_type =
+                            builder::lookup_data_type_by_tipo(&self.data_types, &constructor.tipo)
                                 .unwrap();
 
-                            let mut term = Term::empty_list();
+                        let (constr_index, constr_type) = data_type
+                            .constructors
+                            .iter()
+                            .enumerate()
+                            .find(|(_, x)| x.name == *constr_name)
+                            .unwrap();
 
-                            if constr_type.arguments.is_empty() {
-                                term = Term::constr_data()
-                                    .apply(Term::integer(constr_index.try_into().unwrap()))
+                        let mut term = Term::empty_list();
+
+                        if constr_type.arguments.is_empty() {
+                            term = Term::constr_data()
+                                .apply(Term::integer(constr_index.try_into().unwrap()))
+                                .apply(term);
+
+                            let mut program: Program<Name> = Program {
+                                version: (1, 0, 0),
+                                term,
+                            };
+
+                            let mut interner = Interner::new();
+
+                            interner.program(&mut program);
+
+                            let eval_program: Program<NamedDeBruijn> = program.try_into().unwrap();
+
+                            let evaluated_term: Term<NamedDeBruijn> =
+                                eval_program.eval(ExBudget::default()).result().unwrap();
+                            term = evaluated_term.try_into().unwrap();
+                        } else {
+                            for (index, arg) in constr_type.arguments.iter().enumerate().rev() {
+                                term = Term::mk_cons()
+                                    .apply(convert_type_to_data(
+                                        Term::var(
+                                            arg.label
+                                                .clone()
+                                                .unwrap_or_else(|| format!("arg_{index}")),
+                                        ),
+                                        &arg.tipo,
+                                    ))
                                     .apply(term);
-
-                                let mut program: Program<Name> = Program {
-                                    version: (1, 0, 0),
-                                    term,
-                                };
-
-                                let mut interner = Interner::new();
-
-                                interner.program(&mut program);
-
-                                let eval_program: Program<NamedDeBruijn> =
-                                    program.try_into().unwrap();
-
-                                let evaluated_term: Term<NamedDeBruijn> =
-                                    eval_program.eval(ExBudget::default()).result().unwrap();
-                                term = evaluated_term.try_into().unwrap();
-                            } else {
-                                for (index, arg) in constr_type.arguments.iter().enumerate().rev() {
-                                    term = Term::mk_cons()
-                                        .apply(convert_type_to_data(
-                                            Term::var(
-                                                arg.label
-                                                    .clone()
-                                                    .unwrap_or_else(|| format!("arg_{index}")),
-                                            ),
-                                            &arg.tipo,
-                                        ))
-                                        .apply(term);
-                                }
-
-                                term = Term::constr_data()
-                                    .apply(Term::integer(constr_index.into()))
-                                    .apply(term);
-
-                                for (index, arg) in constr_type.arguments.iter().enumerate().rev() {
-                                    term = term.lambda(
-                                        arg.label.clone().unwrap_or_else(|| format!("arg_{index}")),
-                                    )
-                                }
                             }
-                            arg_stack.push(term);
+
+                            term = Term::constr_data()
+                                .apply(Term::integer(constr_index.into()))
+                                .apply(term);
+
+                            for (index, arg) in constr_type.arguments.iter().enumerate().rev() {
+                                term = term.lambda(
+                                    arg.label.clone().unwrap_or_else(|| format!("arg_{index}")),
+                                )
+                            }
                         }
+                        Some(term)
                     }
-                };
-            }
-            Air::Void => arg_stack.push(Term::Constant(UplcConstant::Unit.into())),
+                }
+            },
+            Air::Void => Some(Term::Constant(UplcConstant::Unit.into())),
             Air::List { count, tipo, tail } => {
                 let mut args = vec![];
 
@@ -3978,7 +3968,7 @@ impl<'a> CodeGenerator<'a> {
                         )
                     };
 
-                    arg_stack.push(list);
+                    Some(list)
                 } else {
                     let mut term = if tail {
                         args.pop().unwrap()
@@ -3999,7 +3989,7 @@ impl<'a> CodeGenerator<'a> {
                         };
                         term = Term::mk_cons().apply(list_item).apply(term);
                     }
-                    arg_stack.push(term);
+                    Some(term)
                 }
             }
             Air::ListAccessor {
@@ -4020,11 +4010,9 @@ impl<'a> CodeGenerator<'a> {
                 let mut id_list = vec![];
                 id_list.push(list_id);
 
-                for _ in 0..names.len() {
+                names.iter().for_each(|_| {
                     id_list.push(self.id_gen.next());
-                }
-
-                let names_empty = names.is_empty();
+                });
 
                 let names_types = tipo
                     .get_inner_types()
@@ -4032,30 +4020,21 @@ impl<'a> CodeGenerator<'a> {
                     .cycle()
                     .take(names.len())
                     .zip(names)
-                    .map(|(tipo, name)| (name, tipo))
+                    .zip(id_list)
+                    .map(|((tipo, name), id)| (name, tipo, id))
                     .collect_vec();
 
-                if !names_empty {
-                    term = builder::list_access_to_uplc(
-                        &names_types,
-                        &id_list,
-                        tail,
-                        0,
-                        term,
-                        is_expect && !tail,
-                        true,
-                        error_term,
-                    )
-                    .apply(value);
+                term = builder::list_access_to_uplc(
+                    &names_types,
+                    tail,
+                    term,
+                    is_expect && !tail,
+                    true,
+                    error_term,
+                )
+                .apply(value);
 
-                    arg_stack.push(term);
-                } else if is_expect {
-                    term = value.delayed_choose_list(term, error_term);
-
-                    arg_stack.push(term);
-                } else {
-                    arg_stack.push(term);
-                }
+                Some(term)
             }
             Air::ListExpose {
                 tail_head_names,
@@ -4084,7 +4063,7 @@ impl<'a> CodeGenerator<'a> {
                     term = term.lambda(head_name).apply(head_list);
                 }
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::Fn { params } => {
                 let mut term = arg_stack.pop().unwrap();
@@ -4094,9 +4073,9 @@ impl<'a> CodeGenerator<'a> {
                 }
 
                 if params.is_empty() {
-                    arg_stack.push(term.delay())
+                    Some(term.delay())
                 } else {
-                    arg_stack.push(term);
+                    Some(term)
                 }
             }
             Air::Call { count, .. } => {
@@ -4108,7 +4087,7 @@ impl<'a> CodeGenerator<'a> {
 
                         term = term.apply(arg);
                     }
-                    arg_stack.push(term);
+                    Some(term)
                 } else {
                     let term = arg_stack.pop().unwrap();
 
@@ -4154,9 +4133,9 @@ impl<'a> CodeGenerator<'a> {
                             let evaluated_term: Term<NamedDeBruijn> =
                                 eval_program.eval(ExBudget::max()).result().unwrap();
 
-                            arg_stack.push(evaluated_term.try_into().unwrap());
+                            Some(evaluated_term.try_into().unwrap())
                         } else {
-                            arg_stack.push(term.force())
+                            Some(term.force())
                         }
                     } else {
                         unreachable!("Shouldn't call anything other than var")
@@ -4206,7 +4185,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 };
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::BinOp {
                 name,
@@ -4244,15 +4223,13 @@ impl<'a> CodeGenerator<'a> {
                                     right.if_then_else(Term::bool(false), Term::bool(true)),
                                 );
 
-                                arg_stack.push(term);
-                                return;
+                                return Some(term);
                             } else if tipo.is_map() {
                                 let term = builtin
                                     .apply(Term::map_data().apply(left))
                                     .apply(Term::map_data().apply(right));
 
-                                arg_stack.push(term);
-                                return;
+                                return Some(term);
                             } else if tipo.is_tuple()
                                 && matches!(tipo.get_uplc_type(), UplcType::Pair(_, _))
                             {
@@ -4264,19 +4241,17 @@ impl<'a> CodeGenerator<'a> {
                                         Term::mk_cons().apply(right).apply(Term::empty_map()),
                                     ));
 
-                                arg_stack.push(term);
-                                return;
+                                return Some(term);
                             } else if tipo.is_list() || tipo.is_tuple() {
                                 let term = builtin
                                     .apply(Term::list_data().apply(left))
                                     .apply(Term::list_data().apply(right));
 
-                                arg_stack.push(term);
-                                return;
+                                return Some(term);
                             } else if tipo.is_void() {
                                 let term = left.choose_unit(right.choose_unit(Term::bool(true)));
-                                arg_stack.push(term);
-                                return;
+
+                                return Some(term);
                             }
 
                             builtin.apply(left).apply(right)
@@ -4290,16 +4265,14 @@ impl<'a> CodeGenerator<'a> {
                                     right,
                                 );
 
-                                arg_stack.push(term);
-                                return;
+                                return Some(term);
                             } else if tipo.is_map() {
                                 let term = builtin
                                     .apply(Term::map_data().apply(left))
                                     .apply(Term::map_data().apply(right))
                                     .if_then_else(Term::bool(false), Term::bool(true));
 
-                                arg_stack.push(term);
-                                return;
+                                return Some(term);
                             } else if tipo.is_tuple()
                                 && matches!(tipo.get_uplc_type(), UplcType::Pair(_, _))
                             {
@@ -4312,19 +4285,16 @@ impl<'a> CodeGenerator<'a> {
                                     ))
                                     .if_then_else(Term::bool(false), Term::bool(true));
 
-                                arg_stack.push(term);
-                                return;
+                                return Some(term);
                             } else if tipo.is_list() || tipo.is_tuple() {
                                 let term = builtin
                                     .apply(Term::list_data().apply(left))
                                     .apply(Term::list_data().apply(right))
                                     .if_then_else(Term::bool(false), Term::bool(true));
 
-                                arg_stack.push(term);
-                                return;
+                                return Some(term);
                             } else if tipo.is_void() {
-                                arg_stack.push(Term::bool(false));
-                                return;
+                                return Some(Term::bool(false));
                             }
 
                             builtin
@@ -4358,7 +4328,7 @@ impl<'a> CodeGenerator<'a> {
                             .apply(left)
                             .apply(right),
                     };
-                arg_stack.push(term);
+                Some(term)
             }
             Air::DefineFunc {
                 func_name,
@@ -4388,7 +4358,7 @@ impl<'a> CodeGenerator<'a> {
                 if !recursive {
                     term = term.lambda(func_name).apply(func_body);
 
-                    arg_stack.push(term);
+                    Some(term)
                 } else {
                     func_body = func_body.lambda(func_name.clone());
 
@@ -4422,7 +4392,7 @@ impl<'a> CodeGenerator<'a> {
                         term = term.lambda(&func_name).apply(outer_func_body);
                     }
 
-                    arg_stack.push(term);
+                    Some(term)
                 }
             }
             Air::DefineCyclicFuncs {
@@ -4469,7 +4439,7 @@ impl<'a> CodeGenerator<'a> {
                     .lambda(&func_name)
                     .apply(cyclic_body.lambda("__chooser").lambda(func_name));
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::Let { name } => {
                 let arg = arg_stack.pop().unwrap();
@@ -4478,7 +4448,7 @@ impl<'a> CodeGenerator<'a> {
 
                 term = term.lambda(name).apply(arg);
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::CastFromData { tipo } => {
                 let mut term = arg_stack.pop().unwrap();
@@ -4504,7 +4474,7 @@ impl<'a> CodeGenerator<'a> {
                     term = builder::convert_data_to_type(term, &tipo);
                 }
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::CastToData { tipo } => {
                 let mut term = arg_stack.pop().unwrap();
@@ -4530,7 +4500,7 @@ impl<'a> CodeGenerator<'a> {
                     term = builder::convert_type_to_data(term, &tipo);
                 }
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::AssertConstr { constr_index } => {
                 let constr = arg_stack.pop().unwrap();
@@ -4548,7 +4518,7 @@ impl<'a> CodeGenerator<'a> {
                     )
                     .delayed_if_then_else(term, error_term);
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::AssertBool { is_true } => {
                 let value = arg_stack.pop().unwrap();
@@ -4560,7 +4530,7 @@ impl<'a> CodeGenerator<'a> {
                 } else {
                     term = value.delayed_if_then_else(error_term, term)
                 }
-                arg_stack.push(term);
+                Some(term)
             }
             Air::When {
                 subject_name,
@@ -4590,7 +4560,7 @@ impl<'a> CodeGenerator<'a> {
 
                 term = term.lambda(subject_name).apply(subject);
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::Clause {
                 subject_tipo: tipo,
@@ -4661,7 +4631,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::ListClause {
                 tail_name,
@@ -4690,7 +4660,7 @@ impl<'a> CodeGenerator<'a> {
                     term = Term::var(tail_name).delayed_choose_list(body, arg);
                 }
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::WrapClause => {
                 // no longer need to pop off discard
@@ -4699,7 +4669,7 @@ impl<'a> CodeGenerator<'a> {
 
                 term = term.lambda("__other_clauses_delayed").apply(arg.delay());
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::TupleClause {
                 subject_tipo: tipo,
@@ -4748,7 +4718,7 @@ impl<'a> CodeGenerator<'a> {
                             ));
                     }
                 }
-                arg_stack.push(term);
+                Some(term)
             }
             Air::ClauseGuard {
                 subject_name,
@@ -4770,7 +4740,7 @@ impl<'a> CodeGenerator<'a> {
                             .if_then_else(term, then.delay())
                             .force();
                     }
-                    arg_stack.push(term);
+                    Some(term)
                 } else {
                     let condition = if tipo.is_int() {
                         Term::equals_integer()
@@ -4799,7 +4769,7 @@ impl<'a> CodeGenerator<'a> {
                     let term = condition
                         .if_then_else(then.delay(), Term::var("__other_clauses_delayed"))
                         .force();
-                    arg_stack.push(term);
+                    Some(term)
                 }
             }
             Air::ListClauseGuard {
@@ -4831,7 +4801,7 @@ impl<'a> CodeGenerator<'a> {
                         .force();
                 }
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::TupleGuard {
                 subject_tipo: tipo,
@@ -4870,10 +4840,12 @@ impl<'a> CodeGenerator<'a> {
                             ));
                     }
                 }
-                arg_stack.push(term);
+                Some(term)
             }
             Air::Finally => {
                 let _clause = arg_stack.pop().unwrap();
+
+                None
             }
             Air::If { .. } => {
                 let condition = arg_stack.pop().unwrap();
@@ -4882,7 +4854,7 @@ impl<'a> CodeGenerator<'a> {
 
                 term = condition.delayed_if_then_else(then, term);
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::Constr {
                 tag: constr_index,
@@ -4929,7 +4901,7 @@ impl<'a> CodeGenerator<'a> {
                     term = evaluated_term.try_into().unwrap();
                 }
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::FieldsExpose { indices, is_expect } => {
                 let mut id_list = vec![];
@@ -4941,24 +4913,26 @@ impl<'a> CodeGenerator<'a> {
 
                 id_list.push(list_id);
 
-                for _ in 0..indices.len() {
+                indices.iter().for_each(|_| {
                     id_list.push(self.id_gen.next());
-                }
-
-                let current_index = 0;
+                });
 
                 let names_types = indices
                     .iter()
                     .cloned()
-                    .map(|item| (item.1, item.2))
+                    .zip(id_list)
+                    .map(|(item, id)| (item.1, item.2, id))
                     .collect_vec();
 
-                if !indices.is_empty() {
+                let named_indices = names_types
+                    .iter()
+                    .skip_while(|(name, _, _)| name.is_empty())
+                    .collect_vec();
+
+                if !named_indices.is_empty() || is_expect {
                     term = builder::list_access_to_uplc(
                         &names_types,
-                        &id_list,
                         false,
-                        current_index,
                         term,
                         is_expect,
                         false,
@@ -4973,19 +4947,10 @@ impl<'a> CodeGenerator<'a> {
                         .apply(value),
                     );
 
-                    arg_stack.push(term);
-                } else if is_expect {
-                    term = Term::var(
-                        self.special_functions
-                            .use_function_uplc(CONSTR_FIELDS_EXPOSER.to_string()),
-                    )
-                    .apply(value)
-                    .delayed_choose_list(term, error_term);
-
-                    arg_stack.push(term);
+                    Some(term)
                 } else {
-                    arg_stack.push(term);
-                };
+                    Some(term)
+                }
             }
             Air::FieldsEmpty => {
                 let value = arg_stack.pop().unwrap();
@@ -4999,7 +4964,7 @@ impl<'a> CodeGenerator<'a> {
                 .apply(value)
                 .delayed_choose_list(term, error_term);
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::ListEmpty => {
                 let value = arg_stack.pop().unwrap();
@@ -5008,7 +4973,7 @@ impl<'a> CodeGenerator<'a> {
 
                 term = value.delayed_choose_list(term, error_term);
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::Tuple { count, tipo } => {
                 let mut args = vec![];
@@ -5040,12 +5005,12 @@ impl<'a> CodeGenerator<'a> {
                             )
                             .into(),
                         );
-                        arg_stack.push(term);
+                        Some(term)
                     } else {
                         let term = Term::Constant(
                             UplcConstant::ProtoList(UplcType::Data, data_constants).into(),
                         );
-                        arg_stack.push(term);
+                        Some(term)
                     }
                 } else if count == 2 {
                     let term = Term::mk_pair_data()
@@ -5058,7 +5023,7 @@ impl<'a> CodeGenerator<'a> {
                             &tuple_sub_types[1],
                         ));
 
-                    arg_stack.push(term);
+                    Some(term)
                 } else {
                     let mut term = Term::empty_list();
                     for (arg, tipo) in args.into_iter().zip(tuple_sub_types.into_iter()).rev() {
@@ -5066,7 +5031,7 @@ impl<'a> CodeGenerator<'a> {
                             .apply(builder::convert_type_to_data(arg, &tipo))
                             .apply(term);
                     }
-                    arg_stack.push(term);
+                    Some(term)
                 }
             }
             Air::RecordUpdate {
@@ -5160,7 +5125,7 @@ impl<'a> CodeGenerator<'a> {
                     .apply(record),
                 );
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::UnOp { op } => {
                 let value = arg_stack.pop().unwrap();
@@ -5184,7 +5149,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 };
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::TupleAccessor {
                 tipo,
@@ -5220,22 +5185,25 @@ impl<'a> CodeGenerator<'a> {
 
                     term = term.lambda(format!("__tuple_{list_id}")).apply(value);
 
-                    arg_stack.push(term);
-                } else if !names.is_empty() {
+                    Some(term)
+                } else {
                     let mut id_list = vec![];
                     id_list.push(list_id);
 
-                    for _ in 0..names.len() {
+                    names.iter().for_each(|_| {
                         id_list.push(self.id_gen.next());
-                    }
+                    });
 
-                    let names_types = names.into_iter().zip(inner_types).collect_vec();
+                    let names_types = names
+                        .into_iter()
+                        .zip(inner_types)
+                        .zip(id_list)
+                        .map(|((name, tipo), id)| (name, tipo, id))
+                        .collect_vec();
 
                     term = builder::list_access_to_uplc(
                         &names_types,
-                        &id_list,
                         false,
-                        0,
                         term,
                         is_expect,
                         false,
@@ -5243,9 +5211,7 @@ impl<'a> CodeGenerator<'a> {
                     )
                     .apply(value);
 
-                    arg_stack.push(term);
-                } else {
-                    unreachable!("HOW DID YOU DO THIS");
+                    Some(term)
                 }
             }
             Air::Trace { .. } => {
@@ -5255,17 +5221,17 @@ impl<'a> CodeGenerator<'a> {
 
                 let term = term.delayed_trace(text);
 
-                arg_stack.push(term);
+                Some(term)
             }
             Air::ErrorTerm { validator, .. } => {
                 if validator {
-                    arg_stack.push(Term::Error.apply(Term::Error.force()))
+                    Some(Term::Error.apply(Term::Error.force()))
                 } else {
-                    arg_stack.push(Term::Error);
+                    Some(Term::Error)
                 }
             }
 
-            Air::NoOp => {}
+            Air::NoOp => None,
         }
     }
 }
