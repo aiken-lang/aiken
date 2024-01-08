@@ -1402,189 +1402,83 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
 
 #[allow(clippy::too_many_arguments)]
 pub fn list_access_to_uplc(
-    names_types: &[(String, Rc<Type>)],
-    id_list: &[u64],
+    names_types_ids: &[(String, Rc<Type>, u64)],
     tail: bool,
-    current_index: usize,
     term: Term<Name>,
     check_last_item: bool,
     is_list_accessor: bool,
     error_term: Term<Name>,
 ) -> Term<Name> {
-    if let Some(((first, current_tipo), names_types)) = names_types.split_first() {
-        let head_list =
-            if matches!(current_tipo.get_uplc_type(), UplcType::Pair(_, _)) && is_list_accessor {
-                Term::head_list().apply(Term::var(format!(
-                    "tail_index_{}_{}",
-                    current_index, id_list[current_index]
-                )))
-            } else {
-                convert_data_to_type(
-                    Term::head_list().apply(Term::var(format!(
-                        "tail_index_{}_{}",
-                        current_index, id_list[current_index]
-                    ))),
-                    &current_tipo.to_owned(),
-                )
-            };
+    let names_len = names_types_ids.len();
 
-        if names_types.len() == 1 && tail {
-            if first == "_" && names_types[0].0 == "_" {
-                term.lambda("_")
-            } else if first == "_" {
-                term.lambda(&names_types[0].0)
-                    .apply(Term::tail_list().apply(Term::var(format!(
-                        "tail_index_{}_{}",
-                        current_index, id_list[current_index]
-                    ))))
-                    .lambda(format!(
-                        "tail_index_{}_{}",
-                        current_index, id_list[current_index]
-                    ))
-            } else if names_types[0].0 == "_" {
-                term.lambda(first).apply(head_list).lambda(format!(
-                    "tail_index_{}_{}",
-                    current_index, id_list[current_index]
-                ))
-            } else {
-                term.lambda(&names_types[0].0)
-                    .apply(Term::tail_list().apply(Term::var(format!(
-                        "tail_index_{}_{}",
-                        current_index, id_list[current_index]
-                    ))))
-                    .lambda(first)
-                    .apply(head_list)
-                    .lambda(format!(
-                        "tail_index_{}_{}",
-                        current_index, id_list[current_index]
-                    ))
-            }
-        } else if names_types.is_empty() {
-            if first == "_" {
-                if check_last_item {
-                    Term::tail_list()
-                        .apply(Term::var(format!(
-                            "tail_index_{}_{}",
-                            current_index, id_list[current_index]
-                        )))
-                        .delayed_choose_list(term, error_term)
-                } else {
-                    term
-                }
-                .lambda(if check_last_item {
-                    format!("tail_index_{}_{}", current_index, id_list[current_index])
-                } else {
-                    "_".to_string()
-                })
-            } else {
-                if check_last_item {
-                    Term::tail_list()
-                        .apply(Term::var(format!(
-                            "tail_index_{}_{}",
-                            current_index, id_list[current_index]
-                        )))
-                        .delayed_choose_list(term, error_term)
-                } else {
-                    term
-                }
-                .lambda(first.clone())
-                .apply(head_list)
-                .lambda(format!(
-                    "tail_index_{}_{}",
-                    current_index, id_list[current_index]
-                ))
-            }
-        } else if first == "_" {
-            let mut list_access_inner = list_access_to_uplc(
-                names_types,
-                id_list,
-                tail,
-                current_index + 1,
-                term,
-                check_last_item,
-                is_list_accessor,
-                error_term,
-            );
+    let mut no_tailing_discards = names_types_ids
+        .iter()
+        .rev()
+        .skip_while(|(name, _, _)| name == "_")
+        .collect_vec();
 
-            list_access_inner = match &list_access_inner {
-                Term::Lambda {
-                    parameter_name,
-                    body,
-                } => {
-                    if &parameter_name.text == "_" {
-                        body.as_ref().clone()
-                    } else {
-                        list_access_inner
-                            .apply(Term::tail_list().apply(Term::var(format!(
-                                "tail_index_{}_{}",
-                                current_index, id_list[current_index]
-                            ))))
-                            .lambda(format!(
-                                "tail_index_{}_{}",
-                                current_index, id_list[current_index]
-                            ))
-                    }
-                }
-                _ => list_access_inner,
-            };
-
-            match &list_access_inner {
-                Term::Lambda { .. } => list_access_inner,
-                _ => list_access_inner.lambda("_"),
-            }
-        } else {
-            let mut list_access_inner = list_access_to_uplc(
-                names_types,
-                id_list,
-                tail,
-                current_index + 1,
-                term,
-                check_last_item,
-                is_list_accessor,
-                error_term,
-            );
-
-            list_access_inner = match &list_access_inner {
-                Term::Lambda {
-                    parameter_name,
-                    body,
-                } => {
-                    if &parameter_name.text == "_" {
-                        body.as_ref()
-                            .clone()
-                            .lambda(first.clone())
-                            .apply(head_list)
-                            .lambda(format!(
-                                "tail_index_{}_{}",
-                                current_index, id_list[current_index]
-                            ))
-                    } else {
-                        list_access_inner
-                            .apply(Term::tail_list().apply(Term::var(format!(
-                                "tail_index_{}_{}",
-                                current_index, id_list[current_index]
-                            ))))
-                            .lambda(first.clone())
-                            .apply(head_list)
-                            .lambda(format!(
-                                "tail_index_{}_{}",
-                                current_index, id_list[current_index]
-                            ))
-                    }
-                }
-                _ => list_access_inner
-                    .lambda(first.clone())
-                    .apply(head_list)
-                    .lambda(format!(
-                        "tail_index_{}_{}",
-                        current_index, id_list[current_index]
-                    )),
-            };
-            list_access_inner
-        }
-    } else {
-        term
+    // If the the is just discards and check_last_item then we check for empty list
+    if no_tailing_discards.is_empty() && !tail && check_last_item {
+        return Term::var("empty_list")
+            .delayed_choose_list(term, error_term)
+            .lambda("empty_list");
     }
+
+    // reverse back to original order
+    no_tailing_discards.reverse();
+
+    let no_tailing_len = no_tailing_discards.len();
+
+    // If we cut off at least one element then that was tail and possibly some heads
+    let tail = tail && no_tailing_discards.len() == names_len;
+
+    no_tailing_discards.into_iter().enumerate().rev().fold(
+        term,
+        |acc, (index, (name, tipo, id))| {
+            let tail_name = format!("tail_index_{}_{}", index, id);
+
+            let head_list =
+                if matches!(tipo.get_uplc_type(), UplcType::Pair(_, _)) && is_list_accessor {
+                    Term::head_list().apply(Term::var(tail_name.to_string()))
+                } else {
+                    convert_data_to_type(
+                        Term::head_list().apply(Term::var(tail_name.to_string())),
+                        &tipo.to_owned(),
+                    )
+                };
+
+            // handle tail case
+            // name is guaranteed to not be discard at this point
+            if index == no_tailing_len - 1 && tail {
+                // simply lambda for tail name
+                acc.lambda(name)
+            } else if index == no_tailing_len - 1 {
+                // case for no tail
+                // name is guaranteed to not be discard at this point
+
+                if check_last_item {
+                    Term::tail_list()
+                        .apply(Term::var(tail_name.to_string()))
+                        .delayed_choose_list(acc, error_term.clone())
+                        .lambda(name)
+                        .apply(head_list)
+                        .lambda("tail_name")
+                } else {
+                    acc.lambda(name)
+                        .apply(head_list)
+                        .lambda(tail_name.to_string())
+                }
+            } else if name == "_" {
+                acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
+                    .lambda(tail_name.to_string())
+            } else {
+                acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
+                    .lambda(name)
+                    .apply(head_list)
+                    .lambda(tail_name.to_string())
+            }
+        },
+    )
 }
 
 pub fn apply_builtin_forces(mut term: Term<Name>, force_count: u32) -> Term<Name> {
