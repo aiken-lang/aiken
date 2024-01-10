@@ -973,7 +973,7 @@ impl<'comments> Formatter<'comments> {
                 } else {
                     line()
                 })
-                .append(self.expr(then, false)),
+                .append(self.expr(then, true)),
         }
     }
 
