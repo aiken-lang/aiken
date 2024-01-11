@@ -820,7 +820,7 @@ impl DefaultFunction {
             DefaultFunction::BData => {
                 let b = args[0].unwrap_byte_string()?;
 
-                let value = Value::data(PlutusData::BoundedBytes(b.clone().try_into().unwrap()));
+                let value = Value::data(PlutusData::BoundedBytes(b.clone().into()));
 
                 Ok(value)
             }

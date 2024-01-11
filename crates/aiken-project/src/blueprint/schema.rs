@@ -250,7 +250,7 @@ impl Annotated<Schema> {
 
                         "Option" => {
                             let generic = Annotated::do_from_type(
-                                args.get(0)
+                                args.first()
                                     .expect("Option types have always one generic argument"),
                                 modules,
                                 type_parameters,
@@ -283,7 +283,7 @@ impl Annotated<Schema> {
 
                         "List" => {
                             let generic = Annotated::do_from_type(
-                                args.get(0)
+                                args.first()
                                     .expect("List types have always one generic argument"),
                                 modules,
                                 type_parameters,

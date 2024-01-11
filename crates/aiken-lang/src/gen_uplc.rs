@@ -928,7 +928,7 @@ impl<'a> CodeGenerator<'a> {
                 let list_elem_types = tipo.get_inner_types();
 
                 let list_elem_type = list_elem_types
-                    .get(0)
+                    .first()
                     .unwrap_or_else(|| unreachable!("No list element type?"));
 
                 let mut elems = elements
@@ -2172,7 +2172,7 @@ impl<'a> CodeGenerator<'a> {
                 let list_elem_types = subject_tipo.get_inner_types();
 
                 let list_elem_type = list_elem_types
-                    .get(0)
+                    .first()
                     .unwrap_or_else(|| unreachable!("No list element type?"));
 
                 let defined_tails = defined_tails.clone();
@@ -3862,7 +3862,7 @@ impl<'a> CodeGenerator<'a> {
 
                         if constr_type.arguments.is_empty() {
                             term = Term::constr_data()
-                                .apply(Term::integer(constr_index.try_into().unwrap()))
+                                .apply(Term::integer(constr_index.into()))
                                 .apply(term);
 
                             let mut program: Program<Name> = Program {

@@ -263,7 +263,7 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
                 function(vec![self.argument_type.clone()], return_type.clone()),
                 func.location(),
                 if let Type::Fn { args, .. } = func.tipo().deref() {
-                    if let Some(typ) = args.get(0) {
+                    if let Some(typ) = args.first() {
                         typ.is_data()
                     } else {
                         false
@@ -300,7 +300,7 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
 
         match types {
             (Type::Fn { args: a, .. }, Type::Fn { args: b, .. }) if a.len() == b.len() => {
-                match (a.get(0), b.get(0)) {
+                match (a.first(), b.first()) {
                     (Some(a), Some(b)) => self
                         .expr_typer
                         .environment

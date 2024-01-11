@@ -1256,11 +1256,11 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
         let constant = match constant.as_ref() {
             UplcConstant::Integer(i) => UplcConstant::Data(PlutusData::BigInt(to_pallas_bigint(i))),
             UplcConstant::ByteString(b) => {
-                UplcConstant::Data(PlutusData::BoundedBytes(b.clone().try_into().unwrap()))
+                UplcConstant::Data(PlutusData::BoundedBytes(b.clone().into()))
             }
-            UplcConstant::String(s) => UplcConstant::Data(PlutusData::BoundedBytes(
-                s.as_bytes().to_vec().try_into().unwrap(),
-            )),
+            UplcConstant::String(s) => {
+                UplcConstant::Data(PlutusData::BoundedBytes(s.as_bytes().to_vec().into()))
+            }
 
             UplcConstant::Bool(b) => UplcConstant::Data(PlutusData::Constr(Constr {
                 tag: convert_constr_to_tag((*b).into()).unwrap_or(ANY_TAG),

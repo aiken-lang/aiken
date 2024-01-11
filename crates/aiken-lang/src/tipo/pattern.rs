@@ -207,7 +207,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
             } => match tipo.get_app_args(true, "", "List", 1, self.environment) {
                 Some(args) => {
                     let tipo = args
-                        .get(0)
+                        .first()
                         .expect("Failed to get type argument of List")
                         .clone();
 
