@@ -26,14 +26,19 @@ pub fn first_piece(board: ChessSet) -> Tile {
 }
 
 pub fn delete_first(board: ChessSet) -> ChessSet {
-  let visited = board.visited
+  let ChessSet { move_number, visited, .. } = board
 
   expect Some(deleted_first) = list.init(visited)
 
-  ChessSet { ..board, start: second_last(visited), visited: deleted_first }
+  ChessSet {
+    ..board,
+    move_number: move_number - 1,
+    start: second_last(visited),
+    visited: deleted_first,
+  }
 }
 
-pub fn second_last(visited: List<a>) -> Option<a> {
+fn second_last(visited: List<a>) -> Option<a> {
   when visited is {
     [] -> None
     [_, ..rest] -> {
@@ -50,6 +55,14 @@ pub fn second_last(visited: List<a>) -> Option<a> {
       }
     }
   }
+}
+
+pub fn is_square_free(board: ChessSet, tile: Tile) -> Bool {
+  not_in(board.visited, tile)
+}
+
+pub fn not_in(tiles: List<a>, tile: a) -> Bool {
+  !list.has(tiles, tile)
 }
 // {-# INLINABLE createBoard #-}
 // createBoard :: Integer -> Tile -> ChessSet
