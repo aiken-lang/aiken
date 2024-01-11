@@ -1,0 +1,14 @@
+name = "aiken/benchmarks"
+version = "0.0.0"
+license = "Apache-2.0"
+description = "Aiken contracts for project 'aiken/benchmarks'"
+
+[repository]
+user = "aiken"
+project = "benchmarks"
+platform = "github"
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "1.7.0"
+source = "github"

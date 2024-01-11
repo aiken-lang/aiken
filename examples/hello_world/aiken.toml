@@ -5,5 +5,5 @@ description = "Aiken contracts for project 'aiken-lang/hello_world'"
 
 [[dependencies]]
 name = "aiken-lang/stdlib"
-version = "main"
+version = "1.7.0"
 source = "github"
