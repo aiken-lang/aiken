@@ -186,15 +186,10 @@ impl Type {
         match self {
             Self::App {
                 module, name, args, ..
-            } if "List" == name && module.is_empty() => {
-                if let Type::Tuple { elems } = &*args[0] {
-                    elems.len() == 2
-                } else if let Type::Var { tipo } = &*args[0] {
-                    matches!(tipo.borrow().get_uplc_type(), Some(UplcType::Pair(_, _)))
-                } else {
-                    false
-                }
-            }
+            } if "List" == name && module.is_empty() => args
+                .first()
+                .expect("unreachable: List should have an inner type")
+                .is_2_tuple(),
             Self::Var { tipo } => tipo.borrow().is_map(),
             _ => false,
         }
@@ -322,6 +317,12 @@ impl Type {
                 Self::Var { tipo } => tipo.borrow().get_uplc_type().unwrap(),
                 _ => unreachable!(),
             }
+        } else if self.is_bls381_12_g1() {
+            UplcType::Bls12_381G1Element
+        } else if self.is_bls381_12_g2() {
+            UplcType::Bls12_381G2Element
+        } else if self.is_ml_result() {
+            UplcType::Bls12_381MlResult
         } else {
             UplcType::Data
         }
