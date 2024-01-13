@@ -27,7 +27,7 @@ use crate::{
     gen_uplc::builder::{
         check_replaceable_opaque_type, convert_opaque_type, erase_opaque_type_operations,
         find_and_replace_generics, find_list_clause_or_default_first, get_arg_type_name,
-        get_generic_id_and_type, get_src_code_by_span, get_variant_name, monomorphize,
+        get_generic_id_and_type, get_generic_variant_name, get_src_code_by_span, monomorphize,
         pattern_has_conditions, wrap_as_multi_validator, wrap_validator_condition, CodeGenFunction,
         SpecificClause,
     },
@@ -3547,6 +3547,7 @@ impl<'a> CodeGenerator<'a> {
                                 .push((generic_function_key.clone(), "".to_string()));
                         }
 
+                        // Code gen functions are already monomorphized
                         if let Some(func_variants) = function_usage.get_mut(&generic_function_key) {
                             let (path, _) = func_variants.get_mut("").unwrap();
                             *path = path.common_ancestor(tree_path);
@@ -3606,20 +3607,20 @@ impl<'a> CodeGenerator<'a> {
 
                     let mono_types: IndexMap<u64, Rc<Type>> = if !function_def_types.is_empty() {
                         function_def_types
-                            .into_iter()
-                            .zip(function_var_types)
+                            .iter()
+                            .zip(function_var_types.iter())
                             .flat_map(|(func_tipo, var_tipo)| {
-                                get_generic_id_and_type(&func_tipo, &var_tipo)
+                                get_generic_id_and_type(func_tipo, var_tipo)
                             })
                             .collect()
                     } else {
                         IndexMap::new()
                     };
 
+                    // Don't sort here. Mono types map is already in argument order.
                     let variant = mono_types
                         .iter()
-                        .sorted_by(|(id, _), (id2, _)| id.cmp(id2))
-                        .map(|(_, tipo)| get_variant_name(tipo))
+                        .map(|(_, tipo)| get_generic_variant_name(tipo))
                         .join("");
 
                     *variant_name = variant.clone();

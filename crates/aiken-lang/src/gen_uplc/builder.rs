@@ -589,7 +589,7 @@ pub fn handle_clause_guard(clause_guard: &TypedClauseGuard) -> AirTree {
     }
 }
 
-pub fn get_variant_name(t: &Rc<Type>) -> String {
+pub fn get_generic_variant_name(t: &Rc<Type>) -> String {
     if t.is_string() {
         "_string".to_string()
     } else if t.is_int() {
@@ -605,27 +605,13 @@ pub fn get_variant_name(t: &Rc<Type>) -> String {
     } else if t.is_ml_result() {
         "_ml_result".to_string()
     } else if t.is_map() {
-        let mut full_type = vec!["_map".to_string()];
-        let pair_type = &t.get_inner_types()[0];
-        let fst_type = &pair_type.get_inner_types()[0];
-        let snd_type = &pair_type.get_inner_types()[1];
-        full_type.push(get_variant_name(fst_type));
-        full_type.push(get_variant_name(snd_type));
-        full_type.join("")
+        "_map".to_string()
+    } else if t.is_2_tuple() {
+        "_pair".to_string()
     } else if t.is_list() {
-        let full_type = "_list".to_string();
-        let list_type = &t.get_inner_types()[0];
-
-        format!("{}{}", full_type, get_variant_name(list_type))
+        "_list".to_string()
     } else if t.is_tuple() {
-        let mut full_type = vec!["_tuple".to_string()];
-
-        let inner_types = t.get_inner_types();
-
-        for arg_type in inner_types {
-            full_type.push(get_variant_name(&arg_type));
-        }
-        full_type.join("")
+        "_tuple".to_string()
     } else if t.is_unbound() {
         "_unbound".to_string()
     } else {
