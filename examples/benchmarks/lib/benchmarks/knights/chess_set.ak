@@ -25,6 +25,18 @@ pub fn first_piece(board: ChessSet) -> Tile {
   tile
 }
 
+// {-# INLINABLE lastPiece #-}
+// lastPiece :: ChessSet -> Tile
+// lastPiece (Board _ _ _ (t:_)) = t
+// lastPiece _                   = Tx.error ()
+
+pub fn last_piece(board: ChessSet) -> Tile {
+  when board.visited is {
+    [] -> fail
+    [x, ..] -> x
+  }
+}
+
 pub fn delete_first(board: ChessSet) -> ChessSet {
   let ChessSet { move_number, visited, .. } = board
 
@@ -64,70 +76,9 @@ pub fn is_square_free(board: ChessSet, tile: Tile) -> Bool {
 pub fn not_in(tiles: List<a>, tile: a) -> Bool {
   !list.has(tiles, tile)
 }
-// {-# INLINABLE createBoard #-}
-// createBoard :: Integer -> Tile -> ChessSet
-// createBoard x t = Board x 1 (Just t) [t]
-
-// {-# INLINABLE sizeBoard #-}
-// sizeBoard :: ChessSet -> Integer
-// sizeBoard (Board s _ _ _) = s
-
-// {-# INLINABLE noPieces #-}
-// noPieces :: ChessSet -> Integer
-// noPieces (Board _ n _ _) = n
-
-// {-# INLINABLE addPiece #-}
-// addPiece :: Tile -> ChessSet -> ChessSet
-// addPiece t (Board s n f ts) = Board s (n+1) f (t:ts)
-
-// -- % Remove the last element from a list
-// {-# INLINABLE init #-}
-// init :: [a] -> [a]
-// init l = case reverse l of
-//            _:as -> reverse as
-//            []   -> Tx.error ()
-
-// {-# INLINABLE secondLast #-}
-// secondLast :: [a] -> Maybe a
-// secondLast l =
-//     case reverse l of
-//       []    -> Tx.error ()
-//       [_]   -> Nothing
-//       _:a:_ -> Just a
-
-// {-%  Note [deleteFirst].
-//     deleteFirst removes the first position from the tour.
-//     Since the sequence of positions (ts) is stored in reverse this involves
-//     deleting the last element of ts and also storing the second-last element of
-//     ts as the new starting position.  In the strict world this will *fail* if the
-//     length of ts is 1.  The lazy version got away with this because the starting
-//     position is never examined in that case (possibly just through luck: with
-//     enough backtracking that might still happen).  To solve this we have to store
-//     the starting position as a Maybe value, deferring any error until we actually
-//     look at it.
-// %-}
-
-// {-# INLINABLE deleteFirst #-}
-// deleteFirst :: ChessSet -> ChessSet
-// deleteFirst (Board s n _ ts) =
-//     Board s (n-1) f' ts'
-//         where ts' = init ts
-//               f' = secondLast ts
-
 // {-# INLINABLE positionPiece #-}
 // positionPiece :: Integer -> ChessSet -> Tile
 // positionPiece x (Board _ n _ ts) = ts Tx.!! (n - x)
-
-// {-# INLINABLE lastPiece #-}
-// lastPiece :: ChessSet -> Tile
-// lastPiece (Board _ _ _ (t:_)) = t
-// lastPiece _                   = Tx.error ()
-
-// {-# INLINABLE firstPiece #-}
-// firstPiece :: ChessSet -> Tile
-// firstPiece (Board _ _ f _) =
-//     case f of Just tile -> tile
-//               Nothing   -> Tx.error ()
 
 // {-# INLINABLE pieceAtTile #-}
 // pieceAtTile :: Tile -> ChessSet -> Integer
@@ -138,15 +89,6 @@ pub fn not_in(tiles: List<a>, tile: a) -> Bool {
 //         findPiece x (y:xs)
 //            | x == y    = 1 + Tx.length xs
 //            | otherwise = findPiece x xs
-
-// {-# INLINABLE notIn #-}
-// notIn :: Eq a => a  -> [a] -> Bool
-// notIn _ []     = True
-// notIn x (a:as) = (x /= a) && (notIn x as)
-
-// {-# INLINABLE isSquareFree #-}
-// isSquareFree :: Tile -> ChessSet -> Bool
-// isSquareFree x (Board _ _ _ ts) = notIn x ts
 
 // -- % Everything below here is only needed for printing boards.
 // -- % This is useful for debugging.

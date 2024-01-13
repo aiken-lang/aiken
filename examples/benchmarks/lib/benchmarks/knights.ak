@@ -7,11 +7,11 @@ use benchmarks/queue.{
 }
 
 test run_knights0() {
-  run_knights(0, 0) == []
+  run_knights(100, 0) == []
 }
 
 test run_knights1() {
-  run_knights(2, 2) == []
+  run_knights(100, 2) == []
 }
 
 fn run_knights(depth: Int, board_size: Int) -> Solution {
