@@ -1543,7 +1543,14 @@ pub fn special_case_builtin(
     mut args: Vec<Term<Name>>,
 ) -> Term<Name> {
     match func {
-        DefaultFunction::IfThenElse
+        DefaultFunction::ChooseUnit if count > 0 => {
+            let term = args.pop().unwrap();
+            let unit = args.pop().unwrap();
+
+            term.lambda("_").apply(unit)
+        }
+        DefaultFunction::ChooseUnit
+        | DefaultFunction::IfThenElse
         | DefaultFunction::ChooseList
         | DefaultFunction::ChooseData
         | DefaultFunction::Trace => {
@@ -1579,16 +1586,6 @@ pub fn special_case_builtin(
             }
 
             term
-        }
-        DefaultFunction::ChooseUnit => {
-            if count == 0 {
-                unimplemented!("Honestly, why are you doing this?")
-            } else {
-                let term = args.pop().unwrap();
-                let unit = args.pop().unwrap();
-
-                term.lambda("_").apply(unit)
-            }
         }
         DefaultFunction::UnConstrData => {
             let mut term: Term<Name> = (*func).into();

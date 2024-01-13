@@ -3770,14 +3770,25 @@ impl<'a> CodeGenerator<'a> {
                             builder::special_case_builtin(builtin, 0, vec![])
                         }
 
-                        DefaultFunction::FstPair
-                        | DefaultFunction::SndPair
-                        | DefaultFunction::HeadList => builder::undata_builtin(
-                            builtin,
-                            0,
-                            &constructor.tipo.return_type().unwrap(),
-                            vec![],
-                        ),
+                        DefaultFunction::FstPair | DefaultFunction::SndPair => {
+                            builder::undata_builtin(
+                                builtin,
+                                0,
+                                &constructor.tipo.return_type().unwrap(),
+                                vec![],
+                            )
+                        }
+
+                        DefaultFunction::HeadList
+                            if !constructor.tipo.return_type().unwrap().is_2_tuple() =>
+                        {
+                            builder::undata_builtin(
+                                builtin,
+                                0,
+                                &constructor.tipo.return_type().unwrap(),
+                                vec![],
+                            )
+                        }
 
                         DefaultFunction::MkCons | DefaultFunction::MkPairData => {
                             unimplemented!("MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z).\n")
@@ -4164,9 +4175,11 @@ impl<'a> CodeGenerator<'a> {
                         builder::special_case_builtin(&func, count, arg_vec)
                     }
 
-                    DefaultFunction::FstPair
-                    | DefaultFunction::SndPair
-                    | DefaultFunction::HeadList => {
+                    DefaultFunction::FstPair | DefaultFunction::SndPair => {
+                        builder::undata_builtin(&func, count, tipo, arg_vec)
+                    }
+
+                    DefaultFunction::HeadList if !tipo.is_2_tuple() => {
                         builder::undata_builtin(&func, count, tipo, arg_vec)
                     }
 
