@@ -5558,6 +5558,56 @@ fn expect_none() {
 }
 
 #[test]
+fn head_list_on_map() {
+    let src = r#"
+        use aiken/builtin
+
+        test exp_none() {
+          let x = [(1, ""), (2, #"aa")]
+          builtin.head_list(x) == (1, "")
+        }
+  "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::map_data().apply(
+                    Term::mk_cons()
+                        .apply(Term::head_list().apply(Term::var("x")))
+                        .apply(Term::empty_map()),
+                ),
+            )
+            .apply(
+                Term::map_data().apply(
+                    Term::mk_cons()
+                        .apply(Term::pair_values(
+                            Constant::Data(Data::integer(1.into())),
+                            Constant::Data(Data::bytestring(vec![])),
+                        ))
+                        .apply(Term::empty_map()),
+                ),
+            )
+            .lambda("x")
+            .apply(Term::map_values(vec![
+                Constant::ProtoPair(
+                    Type::Data,
+                    Type::Data,
+                    Constant::Data(Data::integer(1.into())).into(),
+                    Constant::Data(Data::bytestring(vec![])).into(),
+                ),
+                Constant::ProtoPair(
+                    Type::Data,
+                    Type::Data,
+                    Constant::Data(Data::integer(2.into())).into(),
+                    Constant::Data(Data::bytestring(vec![170])).into(),
+                ),
+            ])),
+        false,
+    );
+}
+
+#[test]
 fn tuple_2_match() {
     let src = r#"
         type CurveInt {
