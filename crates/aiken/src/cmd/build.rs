@@ -22,6 +22,10 @@ pub struct Args {
     /// Do not remove traces when generating code
     #[clap(short, long)]
     keep_traces: bool,
+
+    /// Add code gen traces when generating code
+    #[clap(short, long)]
+    code_gen_traces: bool,
 }
 
 pub fn exec(
@@ -31,15 +35,16 @@ pub fn exec(
         watch,
         uplc,
         keep_traces,
+        code_gen_traces,
     }: Args,
 ) -> miette::Result<()> {
     let result = if watch {
         watch_project(directory.as_deref(), watch::default_filter, 500, |p| {
-            p.build(uplc, keep_traces.into())
+            p.build(uplc, keep_traces.into(), code_gen_traces.into())
         })
     } else {
         with_project(directory.as_deref(), deny, |p| {
-            p.build(uplc, keep_traces.into())
+            p.build(uplc, keep_traces.into(), code_gen_traces.into())
         })
     };
 

@@ -32,9 +32,14 @@ impl LspProject {
     pub fn compile(&mut self) -> Result<(), Vec<ProjectError>> {
         let checkpoint = self.project.checkpoint();
 
-        let result = self
-            .project
-            .check(true, None, false, false, Tracing::NoTraces);
+        let result = self.project.check(
+            true,
+            None,
+            false,
+            false,
+            Tracing::NoTraces,
+            Tracing::NoTraces,
+        );
 
         self.project.restore(checkpoint);
 

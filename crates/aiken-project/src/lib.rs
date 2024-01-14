@@ -151,10 +151,16 @@ where
         self.defined_modules = checkpoint.defined_modules;
     }
 
-    pub fn build(&mut self, uplc: bool, tracing: Tracing) -> Result<(), Vec<Error>> {
+    pub fn build(
+        &mut self,
+        uplc: bool,
+        tracing: Tracing,
+        code_gen_tracing: Tracing,
+    ) -> Result<(), Vec<Error>> {
         let options = Options {
             code_gen_mode: CodeGenMode::Build(uplc),
             tracing,
+            code_gen_tracing,
         };
 
         self.compile(options)
@@ -210,9 +216,11 @@ where
         verbose: bool,
         exact_match: bool,
         tracing: Tracing,
+        code_gen_tracing: Tracing,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
             tracing,
+            code_gen_tracing,
             code_gen_mode: if skip_tests {
                 CodeGenMode::NoOp
             } else {
@@ -282,7 +290,7 @@ where
                     &self.functions,
                     &self.data_types,
                     &self.module_types,
-                    options.tracing.into(),
+                    options.code_gen_tracing.into(),
                 );
 
                 let blueprint = Blueprint::new(&self.config, &self.checked_modules, &mut generator)
@@ -311,8 +319,12 @@ where
                 verbose,
                 exact_match,
             } => {
-                let tests =
-                    self.collect_tests(verbose, match_tests, exact_match, options.tracing.into())?;
+                let tests = self.collect_tests(
+                    verbose,
+                    match_tests,
+                    exact_match,
+                    options.code_gen_tracing.into(),
+                )?;
 
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningTests);
@@ -675,7 +687,7 @@ where
         verbose: bool,
         match_tests: Option<Vec<String>>,
         exact_match: bool,
-        tracing: bool,
+        code_gen_tracing: bool,
     ) -> Result<Vec<Script>, Error> {
         let mut scripts = Vec::new();
         let mut testable_validators = Vec::new();
@@ -778,7 +790,7 @@ where
             &self.functions,
             &self.data_types,
             &self.module_types,
-            tracing,
+            code_gen_tracing,
         );
 
         for (module_name, testable_validator) in &testable_validators {

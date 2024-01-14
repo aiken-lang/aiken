@@ -37,6 +37,10 @@ pub struct Args {
     /// Remove traces when generating code (including tests)
     #[clap(long)]
     no_traces: bool,
+
+    /// Remove code gen traces when generating code (including tests)
+    #[clap(long)]
+    no_code_gen_traces: bool,
 }
 
 pub fn exec(
@@ -48,8 +52,8 @@ pub fn exec(
         match_tests,
         exact_match,
         no_traces,
+        no_code_gen_traces,
         watch,
-        ..
     }: Args,
 ) -> miette::Result<()> {
     let result = if watch {
@@ -60,6 +64,7 @@ pub fn exec(
                 debug,
                 exact_match,
                 (!no_traces).into(),
+                (!no_code_gen_traces).into(),
             )
         })
     } else {
@@ -70,6 +75,7 @@ pub fn exec(
                 debug,
                 exact_match,
                 (!no_traces).into(),
+                (!no_code_gen_traces).into(),
             )
         })
     };
