@@ -22,7 +22,10 @@ use crate::blueprint::{
     Blueprint,
 };
 use aiken_lang::{
-    ast::{Definition, Function, ModuleKind, Tracing, TypedDataType, TypedFunction, Validator},
+    ast::{
+        Definition, Function, ModuleKind, TraceLevel, Tracing, TypedDataType, TypedFunction,
+        Validator,
+    },
     builtins,
     gen_uplc::builder::{DataTypeKey, FunctionAccessKey},
     tipo::TypeInfo,
@@ -151,16 +154,10 @@ where
         self.defined_modules = checkpoint.defined_modules;
     }
 
-    pub fn build(
-        &mut self,
-        uplc: bool,
-        tracing: Tracing,
-        code_gen_tracing: Tracing,
-    ) -> Result<(), Vec<Error>> {
+    pub fn build(&mut self, uplc: bool, tracing: Tracing) -> Result<(), Vec<Error>> {
         let options = Options {
             code_gen_mode: CodeGenMode::Build(uplc),
             tracing,
-            code_gen_tracing,
         };
 
         self.compile(options)
@@ -182,7 +179,7 @@ where
 
         let parsed_modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(parsed_modules, Tracing::NoTraces, false)?;
+        self.type_check(parsed_modules, Tracing::silent(), false)?;
 
         self.event_listener.handle_event(Event::GeneratingDocFiles {
             output_path: destination.clone(),
@@ -216,11 +213,9 @@ where
         verbose: bool,
         exact_match: bool,
         tracing: Tracing,
-        code_gen_tracing: Tracing,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
             tracing,
-            code_gen_tracing,
             code_gen_mode: if skip_tests {
                 CodeGenMode::NoOp
             } else {
@@ -290,7 +285,10 @@ where
                     &self.functions,
                     &self.data_types,
                     &self.module_types,
-                    options.code_gen_tracing.into(),
+                    match options.tracing.trace_level(true) {
+                        TraceLevel::Silent => false,
+                        TraceLevel::Verbose => true,
+                    },
                 );
 
                 let blueprint = Blueprint::new(&self.config, &self.checked_modules, &mut generator)
@@ -323,7 +321,10 @@ where
                     verbose,
                     match_tests,
                     exact_match,
-                    options.code_gen_tracing.into(),
+                    match options.tracing.trace_level(true) {
+                        TraceLevel::Silent => false,
+                        TraceLevel::Verbose => true,
+                    },
                 )?;
 
                 if !tests.is_empty() {
@@ -530,7 +531,7 @@ where
 
             let parsed_modules = self.parse_sources(package.name)?;
 
-            self.type_check(parsed_modules, Tracing::NoTraces, true)?;
+            self.type_check(parsed_modules, Tracing::silent(), true)?;
         }
 
         Ok(())

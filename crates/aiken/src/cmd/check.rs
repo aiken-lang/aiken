@@ -1,3 +1,5 @@
+use super::build::{keep_traces_parser, trace_level_parser};
+use aiken_lang::ast::{TraceLevel, Tracing};
 use aiken_project::watch::{self, watch_project, with_project};
 use std::{path::PathBuf, process};
 
@@ -34,13 +36,17 @@ pub struct Args {
     #[clap(short, long)]
     exact_match: bool,
 
-    /// Remove traces when generating code (including tests)
-    #[clap(long)]
-    no_traces: bool,
+    /// Do not remove traces when generating code
+    #[clap(short, long, value_parser=keep_traces_parser(), default_missing_value="all")]
+    keep_traces: Option<fn(TraceLevel) -> Tracing>,
 
-    /// Remove code gen traces when generating code (including tests)
-    #[clap(long)]
-    no_code_gen_traces: bool,
+    /// Choose the level of tracing
+    ///   - silent: disable traces altogether
+    ///   - compact: only culprit line numbers are shown on failures
+    ///   - verbose: enable full verbose traces as provided by the user or the compiler
+    /// [optional]
+    #[clap(short, long, value_parser=trace_level_parser(), default_value_t=TraceLevel::Verbose, verbatim_doc_comment)]
+    trace_level: TraceLevel,
 }
 
 pub fn exec(
@@ -51,9 +57,9 @@ pub fn exec(
         debug,
         match_tests,
         exact_match,
-        no_traces,
-        no_code_gen_traces,
         watch,
+        keep_traces,
+        trace_level,
     }: Args,
 ) -> miette::Result<()> {
     let result = if watch {
@@ -63,8 +69,10 @@ pub fn exec(
                 match_tests.clone(),
                 debug,
                 exact_match,
-                (!no_traces).into(),
-                (!no_code_gen_traces).into(),
+                match keep_traces {
+                    Some(keep_traces) => keep_traces(trace_level),
+                    None => Tracing::All(trace_level),
+                },
             )
         })
     } else {
@@ -74,8 +82,10 @@ pub fn exec(
                 match_tests.clone(),
                 debug,
                 exact_match,
-                (!no_traces).into(),
-                (!no_code_gen_traces).into(),
+                match keep_traces {
+                    Some(keep_traces) => keep_traces(trace_level),
+                    None => Tracing::All(trace_level),
+                },
             )
         })
     };

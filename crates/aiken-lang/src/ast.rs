@@ -1360,25 +1360,50 @@ pub enum TraceKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tracing {
-    NoTraces,
-    KeepTraces,
+    UserDefined(TraceLevel),
+    CompilerGenerated(TraceLevel),
+    All(TraceLevel),
 }
 
-impl From<bool> for Tracing {
-    fn from(keep: bool) -> Self {
-        if keep {
-            Tracing::KeepTraces
-        } else {
-            Tracing::NoTraces
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TraceLevel {
+    Silent, // No traces
+    //    Compact, // Line numbers only
+    Verbose, // Full verbose traces as provided by the user or the compiler
+}
+
+impl Tracing {
+    pub fn silent() -> Self {
+        Tracing::All(TraceLevel::Silent)
+    }
+
+    /// Get the tracing level based on the context we're in.
+    pub fn trace_level(&self, is_code_gen: bool) -> TraceLevel {
+        match self {
+            Tracing::UserDefined(lvl) => {
+                if is_code_gen {
+                    TraceLevel::Silent
+                } else {
+                    *lvl
+                }
+            }
+            Tracing::CompilerGenerated(lvl) => {
+                if is_code_gen {
+                    *lvl
+                } else {
+                    TraceLevel::Silent
+                }
+            }
+            Tracing::All(lvl) => *lvl,
         }
     }
 }
 
-impl From<Tracing> for bool {
-    fn from(value: Tracing) -> Self {
-        match value {
-            Tracing::NoTraces => false,
-            Tracing::KeepTraces => true,
+impl Display for TraceLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            TraceLevel::Silent => f.write_str("silent"),
+            TraceLevel::Verbose => f.write_str("verbose"),
         }
     }
 }
