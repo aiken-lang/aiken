@@ -15,7 +15,9 @@
 
         osxDependencies = with pkgs;
           lib.optionals stdenv.isDarwin
-          [ darwin.apple_sdk.frameworks.Security ];
+          [ darwin.apple_sdk.frameworks.Security
+            darwin.apple_sdk.frameworks.CoreServices
+          ];
 
         cargoTomlContents = builtins.readFile ./crates/aiken/Cargo.toml;
         version = (builtins.fromTOML cargoTomlContents).package.version;
