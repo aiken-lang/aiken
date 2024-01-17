@@ -217,7 +217,11 @@ impl Validator {
 mod tests {
     use std::collections::HashMap;
 
-    use aiken_lang::{self, builtins};
+    use aiken_lang::{
+        self,
+        ast::{TraceLevel, Tracing},
+        builtins,
+    };
     use uplc::ast as uplc_ast;
 
     use crate::tests::TestProject;
@@ -240,7 +244,7 @@ mod tests {
                 &project.functions,
                 &project.data_types,
                 &project.module_types,
-                true,
+                Tracing::All(TraceLevel::Verbose),
             );
 
             let (validator, def) = modules

@@ -22,10 +22,7 @@ use crate::blueprint::{
     Blueprint,
 };
 use aiken_lang::{
-    ast::{
-        Definition, Function, ModuleKind, TraceLevel, Tracing, TypedDataType, TypedFunction,
-        Validator,
-    },
+    ast::{Definition, Function, ModuleKind, Tracing, TypedDataType, TypedFunction, Validator},
     builtins,
     gen_uplc::builder::{DataTypeKey, FunctionAccessKey},
     tipo::TypeInfo,
@@ -285,10 +282,7 @@ where
                     &self.functions,
                     &self.data_types,
                     &self.module_types,
-                    match options.tracing.trace_level(true) {
-                        TraceLevel::Silent => false,
-                        TraceLevel::Verbose => true,
-                    },
+                    options.tracing,
                 );
 
                 let blueprint = Blueprint::new(&self.config, &self.checked_modules, &mut generator)
@@ -317,15 +311,8 @@ where
                 verbose,
                 exact_match,
             } => {
-                let tests = self.collect_tests(
-                    verbose,
-                    match_tests,
-                    exact_match,
-                    match options.tracing.trace_level(true) {
-                        TraceLevel::Silent => false,
-                        TraceLevel::Verbose => true,
-                    },
-                )?;
+                let tests =
+                    self.collect_tests(verbose, match_tests, exact_match, options.tracing)?;
 
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningTests);
@@ -688,7 +675,7 @@ where
         verbose: bool,
         match_tests: Option<Vec<String>>,
         exact_match: bool,
-        code_gen_tracing: bool,
+        tracing: Tracing,
     ) -> Result<Vec<Script>, Error> {
         let mut scripts = Vec::new();
         let mut testable_validators = Vec::new();
@@ -791,7 +778,7 @@ where
             &self.functions,
             &self.data_types,
             &self.module_types,
-            code_gen_tracing,
+            tracing,
         );
 
         for (module_name, testable_validator) in &testable_validators {

@@ -1,7 +1,7 @@
 use crate::error::Error;
 use aiken_lang::{
     ast::{
-        DataType, Definition, Function, Located, ModuleKind, TypedDataType, TypedFunction,
+        DataType, Definition, Function, Located, ModuleKind, Tracing, TypedDataType, TypedFunction,
         TypedModule, TypedValidator, UntypedModule, Validator,
     },
     gen_uplc::{
@@ -358,7 +358,7 @@ impl CheckedModules {
         builtin_functions: &'a IndexMap<FunctionAccessKey, TypedFunction>,
         builtin_data_types: &'a IndexMap<DataTypeKey, TypedDataType>,
         module_types: &'a HashMap<String, TypeInfo>,
-        tracing: bool,
+        tracing: Tracing,
     ) -> CodeGenerator<'a> {
         let mut functions = IndexMap::new();
         for (k, v) in builtin_functions {
@@ -412,7 +412,7 @@ impl CheckedModules {
             data_types,
             module_types_index,
             module_src,
-            tracing,
+            tracing.trace_level(true),
         )
     }
 }

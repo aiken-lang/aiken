@@ -19,8 +19,8 @@ use uplc::{
 
 use crate::{
     ast::{
-        AssignmentKind, BinOp, Bls12_381Point, Curve, Pattern, Span, TypedArg, TypedClause,
-        TypedDataType, TypedFunction, TypedPattern, TypedValidator, UnOp,
+        AssignmentKind, BinOp, Bls12_381Point, Curve, Pattern, Span, TraceLevel, TypedArg,
+        TypedClause, TypedDataType, TypedFunction, TypedPattern, TypedValidator, UnOp,
     },
     builtins::{bool, data, int, list, string, void},
     expr::TypedExpr,
@@ -57,7 +57,7 @@ pub struct CodeGenerator<'a> {
     module_types: IndexMap<&'a String, &'a TypeInfo>,
     module_src: IndexMap<String, String>,
     /// immutable option
-    tracing: bool,
+    tracing: TraceLevel,
     /// mutable index maps that are reset
     defined_functions: IndexMap<FunctionAccessKey, ()>,
     special_functions: CodeGenSpecialFuncs,
@@ -75,7 +75,7 @@ impl<'a> CodeGenerator<'a> {
         data_types: IndexMap<DataTypeKey, &'a TypedDataType>,
         module_types: IndexMap<&'a String, &'a TypeInfo>,
         module_src: IndexMap<String, String>,
-        tracing: bool,
+        tracing: TraceLevel,
     ) -> Self {
         CodeGenerator {
             functions,
@@ -478,10 +478,12 @@ impl<'a> CodeGenerator<'a> {
                     string(),
                 );
 
-                let msg_func = if self.tracing && kind.is_expect() {
-                    Some(self.special_functions.use_function_msg(msg_func_name))
-                } else {
-                    None
+                // TODO
+                let msg_func = match self.tracing {
+                    TraceLevel::Verbose if kind.is_expect() => {
+                        Some(self.special_functions.use_function_msg(msg_func_name))
+                    }
+                    _ => None,
                 };
 
                 self.assignment(
@@ -1586,19 +1588,20 @@ impl<'a> CodeGenerator<'a> {
 
             // mutate code_gen_funcs and defined_data_types in this if branch
             if function.is_none() && defined_data_types.get(&data_type_name).is_none() {
-                let (msg_term, error_term) = if self.tracing {
-                    let msg = AirMsg::LocalVar("__param_msg".to_string());
+                let (msg_term, error_term) = match self.tracing {
+                    TraceLevel::Verbose => {
+                        let msg = AirMsg::LocalVar("__param_msg".to_string());
 
-                    (
-                        Some(msg.clone()),
-                        AirTree::trace(
-                            msg.to_air_tree(),
-                            tipo.clone(),
-                            AirTree::error(tipo.clone(), false),
-                        ),
-                    )
-                } else {
-                    (None, AirTree::error(tipo.clone(), false))
+                        (
+                            Some(msg.clone()),
+                            AirTree::trace(
+                                msg.to_air_tree(),
+                                tipo.clone(),
+                                AirTree::error(tipo.clone(), false),
+                            ),
+                        )
+                    }
+                    TraceLevel::Silent => (None, AirTree::error(tipo.clone(), false)),
                 };
 
                 defined_data_types.insert(data_type_name.clone(), 1);
@@ -1717,16 +1720,15 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
 
-                let code_gen_func = if self.tracing {
-                    CodeGenFunction::Function {
+                let code_gen_func = match self.tracing {
+                    TraceLevel::Verbose => CodeGenFunction::Function {
                         body: func_body,
                         params: vec!["__param_0".to_string(), "__param_msg".to_string()],
-                    }
-                } else {
-                    CodeGenFunction::Function {
+                    },
+                    TraceLevel::Silent => CodeGenFunction::Function {
                         body: func_body,
                         params: vec!["__param_0".to_string()],
-                    }
+                    },
                 };
 
                 self.code_gen_functions
@@ -1737,15 +1739,14 @@ impl<'a> CodeGenerator<'a> {
                 defined_data_types.insert(data_type_name.to_string(), 1);
             }
 
-            let args = if self.tracing {
-                vec![
+            let args = match self.tracing {
+                TraceLevel::Silent => vec![value],
+                TraceLevel::Verbose => vec![
                     value,
                     msg_func
                         .expect("should be unreachable: no msg func with tracing enabled.")
                         .to_air_tree(),
-                ]
-            } else {
-                vec![value]
+                ],
             };
 
             let module_fn = ValueConstructorVariant::ModuleFn {
@@ -2762,10 +2763,12 @@ impl<'a> CodeGenerator<'a> {
                         string(),
                     );
 
-                    let msg_func = if self.tracing && !actual_type.is_data() {
-                        Some(self.special_functions.use_function_msg(msg_func_name))
-                    } else {
-                        None
+                    // TODO
+                    let msg_func = match self.tracing {
+                        TraceLevel::Verbose => {
+                            Some(self.special_functions.use_function_msg(msg_func_name))
+                        }
+                        _ => None,
                     };
 
                     let assign = self.assignment(
@@ -3721,14 +3724,14 @@ impl<'a> CodeGenerator<'a> {
 
     fn gen_uplc(&mut self, ir: Air, arg_stack: &mut Vec<Term<Name>>) -> Option<Term<Name>> {
         // Going to mark the changes made to code gen after air tree implementation
-        let error_term = if self.tracing && air_holds_msg(&ir) {
-            // In the case of an air that holds a msg and tracing is active
-            // we pop the msg off the stack first
-            let msg = arg_stack.pop().unwrap();
+        // TODO
+        let error_term = match self.tracing {
+            TraceLevel::Verbose if air_holds_msg(&ir) => {
+                let msg = arg_stack.pop().unwrap();
 
-            Term::Error.delayed_trace(msg)
-        } else {
-            Term::Error
+                Term::Error.delayed_trace(msg)
+            }
+            _ => Term::Error,
         };
 
         match ir {
