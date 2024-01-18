@@ -1,6 +1,7 @@
 use crate::{
     builtins::{self, bool, g1_element, g2_element},
     expr::{TypedExpr, UntypedExpr},
+    line_numbers::LineNumbers,
     parser::token::{Base, Token},
     tipo::{PatternConstructor, Type, TypeInfo},
 };
@@ -42,6 +43,7 @@ pub struct Module<Info, Definitions> {
     pub docs: Vec<String>,
     pub type_info: Info,
     pub definitions: Vec<Definitions>,
+    pub lines: LineNumbers,
     pub kind: ModuleKind,
 }
 

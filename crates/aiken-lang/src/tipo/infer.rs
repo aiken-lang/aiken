@@ -8,6 +8,7 @@ use crate::{
     },
     builtins,
     builtins::function,
+    line_numbers::LineNumbers,
     IdGenerator,
 };
 
@@ -79,8 +80,14 @@ impl UntypedModule {
         }
 
         for def in consts.into_iter().chain(not_consts) {
-            let definition =
-                infer_definition(def, &name, &mut hydrators, &mut environment, tracing)?;
+            let definition = infer_definition(
+                def,
+                &name,
+                &mut hydrators,
+                &mut environment,
+                &self.lines,
+                tracing,
+            )?;
             definitions.push(definition);
         }
 
@@ -127,6 +134,7 @@ impl UntypedModule {
             name: name.clone(),
             definitions,
             kind,
+            lines: self.lines,
             type_info: TypeInfo {
                 name,
                 types,
@@ -145,6 +153,7 @@ fn infer_definition(
     module_name: &String,
     hydrators: &mut HashMap<String, Hydrator>,
     environment: &mut Environment<'_>,
+    lines: &LineNumbers,
     tracing: Tracing,
 ) -> Result<TypedDefinition, Error> {
     match def {
@@ -181,7 +190,7 @@ fn infer_definition(
                         .map(|(arg_name, tipo)| arg_name.set_type(tipo.clone()))
                         .collect();
 
-                    let mut expr_typer = ExprTyper::new(environment, tracing);
+                    let mut expr_typer = ExprTyper::new(environment, lines, tracing);
 
                     expr_typer.hydrator = hydrators
                         .remove(&name)
@@ -293,6 +302,7 @@ fn infer_definition(
                     module_name,
                     hydrators,
                     environment,
+                    lines,
                     tracing,
                 )?
                 else {
@@ -343,6 +353,7 @@ fn infer_definition(
                             module_name,
                             hydrators,
                             environment,
+                            lines,
                             tracing,
                         )?
                         else {
@@ -404,6 +415,7 @@ fn infer_definition(
                 module_name,
                 hydrators,
                 environment,
+                lines,
                 tracing,
             )? {
                 environment.unify(f.return_type.clone(), builtins::bool(), f.location, false)?;
@@ -585,7 +597,7 @@ fn infer_definition(
             ..
         }) => {
             let typed_expr =
-                ExprTyper::new(environment, tracing).infer_const(&annotation, *value)?;
+                ExprTyper::new(environment, lines, tracing).infer_const(&annotation, *value)?;
 
             let tipo = typed_expr.tipo();
 

@@ -48,5 +48,18 @@ Module {
             },
         ),
     ],
+    lines: LineNumbers {
+        line_starts: [
+            0,
+            11,
+            27,
+            31,
+            33,
+        ],
+        length: 33,
+        last: Some(
+            33,
+        ),
+    },
     kind: Validator,
 }

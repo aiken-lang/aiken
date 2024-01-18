@@ -20,6 +20,7 @@ use crate::{
     },
     builtins::{bool, data, function, int, list, string, void},
     expr::TypedExpr,
+    line_numbers::{LineColumn, LineNumbers},
     tipo::{PatternConstructor, TypeVar, ValueConstructor, ValueConstructorVariant},
 };
 
@@ -1775,15 +1776,29 @@ pub fn extract_constant(term: &Term<Name>) -> Option<Rc<UplcConstant>> {
 pub fn get_src_code_by_span(
     module_name: &String,
     span: &Span,
-    module_src: &IndexMap<String, String>,
+    module_src: &IndexMap<String, (String, LineNumbers)>,
 ) -> String {
-    let src = module_src
+    let (src, _) = module_src
         .get(module_name)
         .unwrap_or_else(|| panic!("Missing module {module_name}"));
 
     src.get(span.start..span.end)
         .expect("Out of bounds span")
         .to_string()
+}
+
+pub fn get_line_columns_by_span(
+    module_name: &String,
+    span: &Span,
+    module_src: &IndexMap<String, (String, LineNumbers)>,
+) -> LineColumn {
+    let (_, lines) = module_src
+        .get(module_name)
+        .unwrap_or_else(|| panic!("Missing module {module_name}"));
+
+    lines
+        .line_and_column_number(span.start)
+        .expect("Out of bounds span")
 }
 
 pub fn air_holds_msg(air: &Air) -> bool {

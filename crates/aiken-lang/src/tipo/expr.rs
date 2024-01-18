@@ -1,3 +1,4 @@
+use crate::line_numbers::LineNumbers;
 use std::{cmp::Ordering, collections::HashMap, rc::Rc};
 use vec1::Vec1;
 
@@ -26,6 +27,8 @@ use super::{
 
 #[derive(Debug)]
 pub(crate) struct ExprTyper<'a, 'b> {
+    pub(crate) lines: &'a LineNumbers,
+
     pub(crate) environment: &'a mut Environment<'b>,
 
     // We tweak the tracing behavior during type-check. Traces are either kept or left out of the
@@ -435,7 +438,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             TraceLevel::Compact => Some(TypedExpr::String {
                 location,
                 tipo: string(),
-                value: format!("{}", location.start),
+                value: self
+                    .lines
+                    .line_and_column_number(location.start)
+                    .expect("Spans are within bounds.")
+                    .to_string(),
             }),
             TraceLevel::Silent => None,
         };
@@ -1827,7 +1834,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         match self.tracing.trace_level(false) {
             TraceLevel::Silent => Ok(then),
-            // TODO: use line numbers & cols
             TraceLevel::Compact => Ok(TypedExpr::Trace {
                 location,
                 tipo,
@@ -1835,7 +1841,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 text: Box::new(TypedExpr::String {
                     location,
                     tipo: string(),
-                    value: format!("{}", location.start),
+                    value: self
+                        .lines
+                        .line_and_column_number(location.start)
+                        .expect("Spans are within bounds.")
+                        .to_string(),
                 }),
             }),
             TraceLevel::Verbose => Ok(TypedExpr::Trace {
@@ -1995,12 +2005,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         self.environment.instantiate(t, ids, &self.hydrator)
     }
 
-    pub fn new(environment: &'a mut Environment<'b>, tracing: Tracing) -> Self {
+    pub fn new(
+        environment: &'a mut Environment<'b>,
+        lines: &'a LineNumbers,
+        tracing: Tracing,
+    ) -> Self {
         Self {
             hydrator: Hydrator::new(),
             environment,
             tracing,
             ungeneralised_function_used: false,
+            lines,
         }
     }
 

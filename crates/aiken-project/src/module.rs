@@ -8,6 +8,7 @@ use aiken_lang::{
         builder::{DataTypeKey, FunctionAccessKey},
         CodeGenerator,
     },
+    line_numbers::LineNumbers,
     parser::extra::{comments_before, Comment, ModuleExtra},
     tipo::TypeInfo,
 };
@@ -401,7 +402,10 @@ impl CheckedModules {
                     | Definition::Use(_) => {}
                 }
             }
-            module_src.insert(module.name.clone(), module.code.clone());
+            module_src.insert(
+                module.name.clone(),
+                (module.code.clone(), LineNumbers::new(&module.code)),
+            );
         }
 
         let mut module_types_index = IndexMap::new();
