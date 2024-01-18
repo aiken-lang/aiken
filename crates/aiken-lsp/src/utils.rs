@@ -1,11 +1,11 @@
 use std::path::{Path, PathBuf};
 
-use aiken_lang::ast::Span;
+use aiken_lang::{ast::Span, line_numbers::LineNumbers};
 use itertools::Itertools;
 use lsp_types::TextEdit;
 use urlencoding::decode;
 
-use crate::{error::Error, line_numbers::LineNumbers};
+use crate::error::Error;
 
 pub const COMPILING_PROGRESS_TOKEN: &str = "compiling-aiken";
 pub const CREATE_COMPILING_PROGRESS_TOKEN: &str = "create-compiling-progress-token";
@@ -37,8 +37,12 @@ pub fn path_to_uri(path: PathBuf) -> Result<lsp_types::Url, Error> {
 }
 
 pub fn span_to_lsp_range(location: Span, line_numbers: &LineNumbers) -> lsp_types::Range {
-    let start = line_numbers.line_and_column_number(location.start);
-    let end = line_numbers.line_and_column_number(location.end);
+    let start = line_numbers
+        .line_and_column_number(location.start)
+        .expect("Spans are within bounds");
+    let end = line_numbers
+        .line_and_column_number(location.end)
+        .expect("Spans are within bounds");
 
     lsp_types::Range {
         start: lsp_types::Position {

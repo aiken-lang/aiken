@@ -10,6 +10,7 @@ pub mod expr;
 pub mod format;
 pub mod gen_uplc;
 pub mod levenshtein;
+pub mod line_numbers;
 pub mod parser;
 pub mod pretty;
 pub mod tipo;

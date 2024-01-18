@@ -8,6 +8,7 @@ use std::{
 use aiken_lang::{
     ast::{Definition, Located, ModuleKind, Span, Use},
     error::ExtraData,
+    line_numbers::LineNumbers,
     parser,
     tipo::pretty::Printer,
 };
@@ -35,7 +36,6 @@ use miette::Diagnostic;
 use crate::{
     cast::{cast_notification, cast_request},
     error::Error as ServerError,
-    line_numbers::LineNumbers,
     quickfix,
     utils::{
         path_to_uri, span_to_lsp_range, text_edit_replace, uri_to_module_name,
