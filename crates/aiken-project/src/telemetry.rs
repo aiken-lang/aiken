@@ -316,7 +316,11 @@ fn fmt_test(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize, styled: bool) 
                 format!(
                     "{arrow} {styled_line}",
                     arrow = "↳".if_supports_color(Stderr, |s| s.bright_yellow()),
-                    styled_line = line.if_supports_color(Stderr, |s| s.bright_black())
+                    styled_line = line
+                        .split('\n')
+                        .map(|l| format!("{}", l.if_supports_color(Stderr, |s| s.bright_black())))
+                        .collect::<Vec<_>>()
+                        .join("\n")
                 )
             })
             .collect::<Vec<_>>()
