@@ -1627,7 +1627,7 @@ pub fn wrap_as_multi_validator(
     mint_name: String,
 ) -> Term<Name> {
     match trace {
-        TraceLevel::Silent => Term::equals_integer()
+        TraceLevel::Silent | TraceLevel::Compact => Term::equals_integer()
             .apply(Term::integer(0.into()))
             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("__second_arg")))
             .delayed_if_then_else(
@@ -1640,16 +1640,12 @@ pub fn wrap_as_multi_validator(
             )
             .lambda("__second_arg")
             .lambda("__first_arg"),
-        TraceLevel::Verbose | TraceLevel::Compact => {
-            let trace_string = match trace {
-                TraceLevel::Verbose => format!(
+        TraceLevel::Verbose => {
+            let trace_string = format!(
                     "Incorrect redeemer type for validator {}.
                     Double check you have wrapped the redeemer type as specified in your plutus.json",
                     spend_name
-                ),
-                TraceLevel::Compact => "RX".to_string(),
-                TraceLevel::Silent => unreachable!("Filtered-out from the pattern guards."),
-            };
+                );
 
             let error_term = Term::Error.delayed_trace(Term::var("__incorrect_second_arg_type"));
 
@@ -1668,22 +1664,14 @@ pub fn wrap_as_multi_validator(
                         .apply(Term::integer(0.into()))
                         .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("__second_arg")))
                         .delayed_if_then_else(
-                            if trace == TraceLevel::Verbose {
-                                then_term.delayed_trace(Term::string(format!(
-                                    "Running 2 arg validator {}",
-                                    mint_name
-                                )))
-                            } else {
-                                then_term
-                            },
-                            if trace == TraceLevel::Verbose {
-                                else_term.delayed_trace(Term::string(format!(
-                                    "Running 3 arg validator {}",
-                                    spend_name
-                                )))
-                            } else {
-                                else_term
-                            },
+                            then_term.delayed_trace(Term::string(format!(
+                                "Running 2 arg validator {}",
+                                mint_name
+                            ))),
+                            else_term.delayed_trace(Term::string(format!(
+                                "Running 3 arg validator {}",
+                                spend_name
+                            ))),
                         ),
                     error_term.clone(),
                     error_term.clone(),
@@ -1736,10 +1724,7 @@ pub fn cast_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Nam
 pub fn wrap_validator_condition(air_tree: AirTree, trace: TraceLevel) -> AirTree {
     let success_branch = vec![(air_tree, AirTree::void())];
     let otherwise = match trace {
-        TraceLevel::Silent => AirTree::error(void(), true),
-        TraceLevel::Compact => {
-            AirTree::trace(AirTree::string("VX"), void(), AirTree::error(void(), true))
-        }
+        TraceLevel::Silent | TraceLevel::Compact => AirTree::error(void(), true),
         TraceLevel::Verbose => AirTree::trace(
             AirTree::string("Validator returned false"),
             void(),
