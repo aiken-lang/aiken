@@ -2,9 +2,23 @@
 
 ## UNRELEASED
 
+### Added
+
+- **aiken**: New `--trace-level` option for the `check` and `build` commands to allow chosing the verbosity level of traces amongst three levels: silent, compact & verbose. @MicroProofs @KtorZ
+- **aiken**: New `--filter-traces` option for the `check` and `build` commands to enable restricting traces with more granularity between user-defined traces, compiler-generated traces or both. @MicroProofs @KtorZ.
+
 ### Fixed
 
 - **aiken-lang**: Fix flat encoding and decoding of large integer values. @KtorZ
+
+### Removed
+
+- **aiken**: The options `--keep-traces` (on the `build` command) and `--no-traces` (on the `check` command) have been removed; superseded by the new options. @MicroProofs @KtorZ
+
+  > ![TIP]
+  >
+  > - If you've been using `aiken check --no-traces`, you can recover the old behavior by doing `aiken check --trace-level silent`.
+  > - If you've been using `aiken build --keep-traces`, you can recover the old behavior by doing `aiken build --trace-level verbose`.
 
 ## v1.0.21-alpha - 2023-12-04
 
