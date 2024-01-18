@@ -20,8 +20,12 @@ pub mod uplc;
 pub enum Cmd {
     New(new::Args),
     Fmt(fmt::Args),
+
+    #[clap(visible_alias("b"))]
     Build(build::Args),
     Address(blueprint::address::Args),
+
+    #[clap(visible_alias("c"))]
     Check(check::Args),
     Docs(docs::Args),
     Add(packages::add::Args),
