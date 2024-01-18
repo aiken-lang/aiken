@@ -4,8 +4,8 @@ use super::{
 };
 use aiken_lang::ast::Span;
 use miette::{Diagnostic, NamedSource};
-use minicbor as cbor;
 use owo_colors::{OwoColorize, Stream::Stdout};
+use pallas_codec::minicbor as cbor;
 use std::fmt::Debug;
 use uplc::ast::Constant;
 

@@ -3,7 +3,7 @@ use pallas_codec::utils::{AnyUInt, Bytes, Int, KeyValuePairs};
 use pallas_crypto::hash::Hash;
 use pallas_primitives::babbage::{AssetName, BigInt, Constr, Mint, PlutusData, ScriptRef};
 use pallas_primitives::babbage::{
-    Certificate, DatumOption, Redeemer, Script, StakeCredential, TransactionInput,
+    Certificate, DatumOption, PseudoScript, Redeemer, StakeCredential, TransactionInput,
     TransactionOutput, Value,
 };
 use pallas_traverse::ComputeHash;
@@ -276,10 +276,12 @@ impl ToPlutusData for MintValue {
 
 impl ToPlutusData for ScriptRef {
     fn to_plutus_data(&self) -> PlutusData {
-        match &self.0 {
-            Script::NativeScript(native_script) => native_script.compute_hash().to_plutus_data(),
-            Script::PlutusV1Script(plutus_v1) => plutus_v1.compute_hash().to_plutus_data(),
-            Script::PlutusV2Script(plutus_v2) => plutus_v2.compute_hash().to_plutus_data(),
+        match &self {
+            PseudoScript::NativeScript(native_script) => {
+                native_script.compute_hash().to_plutus_data()
+            }
+            PseudoScript::PlutusV1Script(plutus_v1) => plutus_v1.compute_hash().to_plutus_data(),
+            PseudoScript::PlutusV2Script(plutus_v2) => plutus_v2.compute_hash().to_plutus_data(),
         }
     }
 }
@@ -335,7 +337,11 @@ impl ToPlutusData for TxOut {
                             .to_plutus_data(),
                         post_alonzo_output.value.to_plutus_data(),
                         post_alonzo_output.datum_option.to_plutus_data(),
-                        post_alonzo_output.script_ref.to_plutus_data(),
+                        post_alonzo_output
+                            .script_ref
+                            .as_ref()
+                            .map(|s| s.clone().unwrap())
+                            .to_plutus_data(),
                     ],
                 ),
             },
