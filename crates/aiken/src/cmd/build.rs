@@ -86,8 +86,9 @@ pub fn keep_traces_parser(
 
 #[allow(clippy::type_complexity)]
 pub fn trace_level_parser() -> MapValueParser<PossibleValuesParser, fn(String) -> TraceLevel> {
-    PossibleValuesParser::new(["silent", "verbose"]).map(|s| match s.as_str() {
+    PossibleValuesParser::new(["silent", "compact", "verbose"]).map(|s| match s.as_str() {
         "silent" => TraceLevel::Silent,
+        "compact" => TraceLevel::Compact,
         "verbose" => TraceLevel::Verbose,
         _ => unreachable!(),
     })

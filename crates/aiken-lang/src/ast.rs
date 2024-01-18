@@ -1367,8 +1367,8 @@ pub enum Tracing {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TraceLevel {
-    Silent, // No traces
-    //    Compact, // Line numbers only
+    Silent,  // No traces
+    Compact, // Line numbers only
     Verbose, // Full verbose traces as provided by the user or the compiler
 }
 
@@ -1403,6 +1403,7 @@ impl Display for TraceLevel {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
         match self {
             TraceLevel::Silent => f.write_str("silent"),
+            TraceLevel::Compact => f.write_str("compact"),
             TraceLevel::Verbose => f.write_str("verbose"),
         }
     }

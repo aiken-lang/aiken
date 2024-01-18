@@ -421,15 +421,23 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             },
         };
 
-        let text = TypedExpr::String {
-            location,
-            tipo: string(),
-            value: format!(
-                "{} ? False",
-                format::Formatter::new()
-                    .expr(&value, false)
-                    .to_pretty_string(999)
-            ),
+        let text = match self.tracing.trace_level(false) {
+            TraceLevel::Verbose => Some(TypedExpr::String {
+                location,
+                tipo: string(),
+                value: format!(
+                    "{} ? False",
+                    format::Formatter::new()
+                        .expr(&value, false)
+                        .to_pretty_string(999)
+                ),
+            }),
+            TraceLevel::Compact => Some(TypedExpr::String {
+                location,
+                tipo: string(),
+                value: format!("{}", location.start),
+            }),
+            TraceLevel::Silent => None,
         };
 
         let typed_value = self.infer(value)?;
@@ -438,7 +446,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         match self.tracing.trace_level(false) {
             TraceLevel::Silent => Ok(typed_value),
-            TraceLevel::Verbose => Ok(TypedExpr::If {
+            TraceLevel::Verbose | TraceLevel::Compact => Ok(TypedExpr::If {
                 location,
                 branches: vec1::vec1![IfBranch {
                     condition: typed_value,
@@ -448,7 +456,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 final_else: Box::new(TypedExpr::Trace {
                     location,
                     tipo: bool(),
-                    text: Box::new(text),
+                    text: Box::new(text.expect("TraceLevel::Silent excluded from pattern-guard")),
                     then: Box::new(var_false),
                 }),
                 tipo: bool(),
@@ -1819,6 +1827,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         match self.tracing.trace_level(false) {
             TraceLevel::Silent => Ok(then),
+            // TODO: use line numbers & cols
+            TraceLevel::Compact => Ok(TypedExpr::Trace {
+                location,
+                tipo,
+                then: Box::new(then),
+                text: Box::new(TypedExpr::String {
+                    location,
+                    tipo: string(),
+                    value: format!("{}", location.start),
+                }),
+            }),
             TraceLevel::Verbose => Ok(TypedExpr::Trace {
                 location,
                 tipo,

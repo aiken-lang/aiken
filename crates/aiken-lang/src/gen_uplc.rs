@@ -468,22 +468,32 @@ impl<'a> CodeGenerator<'a> {
 
                 let air_value = self.build(value, module_name);
 
-                let msg = get_src_code_by_span(module_name, location, &self.module_src);
-
-                let msg_func_name = msg.split_whitespace().join("");
-
-                self.special_functions.insert_new_function(
-                    msg_func_name.clone(),
-                    Term::string(msg),
-                    string(),
-                );
-
-                // TODO
                 let msg_func = match self.tracing {
-                    TraceLevel::Verbose if kind.is_expect() => {
-                        Some(self.special_functions.use_function_msg(msg_func_name))
+                    TraceLevel::Silent => None,
+                    TraceLevel::Verbose | TraceLevel::Compact => {
+                        if kind.is_expect() {
+                            let msg = match self.tracing {
+                                TraceLevel::Silent => unreachable!("excluded from pattern guards"),
+                                // TODO: line number & col
+                                TraceLevel::Compact => format!("{}", location.start),
+                                TraceLevel::Verbose => {
+                                    get_src_code_by_span(module_name, location, &self.module_src)
+                                }
+                            };
+
+                            let msg_func_name = msg.split_whitespace().join("");
+
+                            self.special_functions.insert_new_function(
+                                msg_func_name.clone(),
+                                Term::string(msg),
+                                string(),
+                            );
+
+                            Some(self.special_functions.use_function_msg(msg_func_name))
+                        } else {
+                            None
+                        }
                     }
-                    _ => None,
                 };
 
                 self.assignment(
@@ -1589,9 +1599,9 @@ impl<'a> CodeGenerator<'a> {
             // mutate code_gen_funcs and defined_data_types in this if branch
             if function.is_none() && defined_data_types.get(&data_type_name).is_none() {
                 let (msg_term, error_term) = match self.tracing {
-                    TraceLevel::Verbose => {
+                    TraceLevel::Silent => (None, AirTree::error(tipo.clone(), false)),
+                    TraceLevel::Compact | TraceLevel::Verbose => {
                         let msg = AirMsg::LocalVar("__param_msg".to_string());
-
                         (
                             Some(msg.clone()),
                             AirTree::trace(
@@ -1601,7 +1611,6 @@ impl<'a> CodeGenerator<'a> {
                             ),
                         )
                     }
-                    TraceLevel::Silent => (None, AirTree::error(tipo.clone(), false)),
                 };
 
                 defined_data_types.insert(data_type_name.clone(), 1);
@@ -1721,13 +1730,13 @@ impl<'a> CodeGenerator<'a> {
                 }
 
                 let code_gen_func = match self.tracing {
-                    TraceLevel::Verbose => CodeGenFunction::Function {
-                        body: func_body,
-                        params: vec!["__param_0".to_string(), "__param_msg".to_string()],
-                    },
                     TraceLevel::Silent => CodeGenFunction::Function {
                         body: func_body,
                         params: vec!["__param_0".to_string()],
+                    },
+                    TraceLevel::Compact | TraceLevel::Verbose => CodeGenFunction::Function {
+                        body: func_body,
+                        params: vec!["__param_0".to_string(), "__param_msg".to_string()],
                     },
                 };
 
@@ -1741,7 +1750,7 @@ impl<'a> CodeGenerator<'a> {
 
             let args = match self.tracing {
                 TraceLevel::Silent => vec![value],
-                TraceLevel::Verbose => vec![
+                TraceLevel::Compact | TraceLevel::Verbose => vec![
                     value,
                     msg_func
                         .expect("should be unreachable: no msg func with tracing enabled.")
@@ -2750,25 +2759,29 @@ impl<'a> CodeGenerator<'a> {
 
                     let actual_type = convert_opaque_type(&arg.tipo, &self.data_types);
 
-                    let msg = src_code
-                        .get(arg_span.start..arg_span.end)
-                        .expect("Out of bounds span")
-                        .to_string();
-
-                    let msg_func_name = msg.split_whitespace().join("");
-
-                    self.special_functions.insert_new_function(
-                        msg_func_name.to_string(),
-                        Term::string(msg),
-                        string(),
-                    );
-
-                    // TODO
                     let msg_func = match self.tracing {
-                        TraceLevel::Verbose => {
+                        TraceLevel::Silent => None,
+                        TraceLevel::Compact | TraceLevel::Verbose => {
+                            let msg = match self.tracing {
+                                TraceLevel::Silent => unreachable!("excluded from pattern guards"),
+                                // TODO: Show line number + column
+                                TraceLevel::Compact => format!("{}", arg_span.start),
+                                TraceLevel::Verbose => src_code
+                                    .get(arg_span.start..arg_span.end)
+                                    .expect("Out of bounds span")
+                                    .to_string(),
+                            };
+
+                            let msg_func_name = msg.split_whitespace().join("");
+
+                            self.special_functions.insert_new_function(
+                                msg_func_name.to_string(),
+                                Term::string(msg),
+                                string(),
+                            );
+
                             Some(self.special_functions.use_function_msg(msg_func_name))
                         }
-                        _ => None,
                     };
 
                     let assign = self.assignment(
@@ -3724,14 +3737,16 @@ impl<'a> CodeGenerator<'a> {
 
     fn gen_uplc(&mut self, ir: Air, arg_stack: &mut Vec<Term<Name>>) -> Option<Term<Name>> {
         // Going to mark the changes made to code gen after air tree implementation
-        // TODO
         let error_term = match self.tracing {
-            TraceLevel::Verbose if air_holds_msg(&ir) => {
-                let msg = arg_stack.pop().unwrap();
-
-                Term::Error.delayed_trace(msg)
+            TraceLevel::Silent => Term::Error,
+            TraceLevel::Compact | TraceLevel::Verbose => {
+                if air_holds_msg(&ir) {
+                    let msg = arg_stack.pop().unwrap();
+                    Term::Error.delayed_trace(msg)
+                } else {
+                    Term::Error
+                }
             }
-            _ => Term::Error,
         };
 
         match ir {
