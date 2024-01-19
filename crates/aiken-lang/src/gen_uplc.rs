@@ -475,29 +475,35 @@ impl<'a> CodeGenerator<'a> {
                 let air_value = self.build(value, module_name);
 
                 let msg_func = match self.tracing {
-                    TraceLevel::Verbose | TraceLevel::Compact if kind.is_expect() => {
-                        let msg = match self.tracing {
-                            TraceLevel::Silent => unreachable!("excluded from pattern guards"),
-                            TraceLevel::Compact => {
-                                get_line_columns_by_span(module_name, location, &self.module_src)
-                                    .to_string()
-                            }
-                            TraceLevel::Verbose => {
-                                get_src_code_by_span(module_name, location, &self.module_src)
-                            }
-                        };
+                    TraceLevel::Silent => None,
+                    TraceLevel::Verbose | TraceLevel::Compact => {
+                        if kind.is_expect() {
+                            let msg = match self.tracing {
+                                TraceLevel::Silent => unreachable!("excluded from pattern guards"),
+                                TraceLevel::Compact => get_line_columns_by_span(
+                                    module_name,
+                                    location,
+                                    &self.module_src,
+                                )
+                                .to_string(),
+                                TraceLevel::Verbose => {
+                                    get_src_code_by_span(module_name, location, &self.module_src)
+                                }
+                            };
 
-                        let msg_func_name = msg.split_whitespace().join("");
+                            let msg_func_name = msg.split_whitespace().join("");
 
-                        self.special_functions.insert_new_function(
-                            msg_func_name.clone(),
-                            Term::string(msg),
-                            string(),
-                        );
+                            self.special_functions.insert_new_function(
+                                msg_func_name.clone(),
+                                Term::string(msg),
+                                string(),
+                            );
 
-                        Some(self.special_functions.use_function_msg(msg_func_name))
+                            Some(self.special_functions.use_function_msg(msg_func_name))
+                        } else {
+                            None
+                        }
                     }
-                    _ => None,
                 };
 
                 self.assignment(
