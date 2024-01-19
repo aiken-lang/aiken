@@ -5242,14 +5242,14 @@ impl<'a> CodeGenerator<'a> {
                             .lambda(names[0].clone())
                             .apply(if error_term != Term::Error {
                                 builder::convert_data_to_type_debug(
-                                    Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                                    &inner_types[1],
+                                    Term::fst_pair().apply(Term::var(format!("__tuple_{list_id}"))),
+                                    &inner_types[0],
                                     error_term,
                                 )
                             } else {
                                 builder::convert_data_to_type(
-                                    Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                                    &inner_types[1],
+                                    Term::fst_pair().apply(Term::var(format!("__tuple_{list_id}"))),
+                                    &inner_types[0],
                                 )
                             })
                     }
