@@ -32,7 +32,10 @@
 
           src = pkgs.lib.cleanSourceWith { src = self; };
 
-          cargoLock.lockFile = ./Cargo.lock;
+          cargoLock = { 
+            lockFile = ./Cargo.lock;
+            outputHashes = { "pallas-0.21.0" = "sha256-QuJwwyNaPpXBi7GzLh/V2cIRYz29Xsd3HUeG4yPt8VQ="; };
+          };
 
           GIT_COMMIT_HASH_SHORT = self.shortRev or "unknown";
           postPatch = ''
