@@ -176,7 +176,7 @@ where
 
         let parsed_modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(parsed_modules, Tracing::NoTraces, false)?;
+        self.type_check(parsed_modules, Tracing::silent(), false)?;
 
         self.event_listener.handle_event(Event::GeneratingDocFiles {
             output_path: destination.clone(),
@@ -282,7 +282,7 @@ where
                     &self.functions,
                     &self.data_types,
                     &self.module_types,
-                    options.tracing.into(),
+                    options.tracing,
                 );
 
                 let blueprint = Blueprint::new(&self.config, &self.checked_modules, &mut generator)
@@ -312,7 +312,7 @@ where
                 exact_match,
             } => {
                 let tests =
-                    self.collect_tests(verbose, match_tests, exact_match, options.tracing.into())?;
+                    self.collect_tests(verbose, match_tests, exact_match, options.tracing)?;
 
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningTests);
@@ -518,7 +518,7 @@ where
 
             let parsed_modules = self.parse_sources(package.name)?;
 
-            self.type_check(parsed_modules, Tracing::NoTraces, true)?;
+            self.type_check(parsed_modules, Tracing::silent(), true)?;
         }
 
         Ok(())
@@ -675,7 +675,7 @@ where
         verbose: bool,
         match_tests: Option<Vec<String>>,
         exact_match: bool,
-        tracing: bool,
+        tracing: Tracing,
     ) -> Result<Vec<Script>, Error> {
         let mut scripts = Vec::new();
         let mut testable_validators = Vec::new();

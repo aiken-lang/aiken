@@ -1,6 +1,6 @@
 use pretty_assertions::assert_eq;
 
-use aiken_lang::ast::{Definition, Function, TypedFunction, TypedValidator};
+use aiken_lang::ast::{Definition, Function, TraceLevel, Tracing, TypedFunction, TypedValidator};
 use uplc::{
     ast::{Constant, Data, DeBruijn, Name, Program, Term, Type},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
@@ -26,7 +26,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
         &project.functions,
         &project.data_types,
         &project.module_types,
-        true,
+        Tracing::All(TraceLevel::Verbose),
     );
 
     let Some(checked_module) = modules.values().next() else {
@@ -115,7 +115,7 @@ fn acceptance_test_1_length() {
               1 + length(rest)
           }
         }
-            
+
         test length_1() {
           length([1, 2, 3]) == 3
         }
@@ -167,7 +167,7 @@ fn acceptance_test_2_repeat() {
             [x, ..repeat(x, n - 1)]
           }
         }
-          
+
         test repeat_1() {
           repeat("aiken", 2) == ["aiken", "aiken"]
         }
@@ -232,11 +232,11 @@ fn acceptance_test_3_concat() {
               f(x, foldr(rest, f, zero))
           }
         }
-          
+
         pub fn concat(left: List<a>, right: List<a>) -> List<a> {
           foldr(left, fn(x, xs) { [x, ..xs] }, right)
         }
-          
+
         test concat_1() {
           concat([1, 2, 3], [4, 5, 6]) == [1, 2, 3, 4, 5, 6]
         }
@@ -329,15 +329,15 @@ fn acceptance_test_4_concat_no_anon_func() {
               f(x, foldr(rest, f, zero))
           }
         }
-        
+
         pub fn prepend(x: a, xs: List<a>) -> List<a> {
           [x, ..xs]
         }
-        
+
         pub fn concat(left: List<a>, right: List<a>) -> List<a> {
           foldr(left, prepend, right)
         }
-        
+
         test concat_1() {
           concat([1, 2, 3], [4, 5, 6]) == [1, 2, 3, 4, 5, 6]
         }
@@ -425,7 +425,7 @@ fn acceptance_test_4_concat_no_anon_func() {
 fn acceptance_test_5_direct_head() {
     let src = r#"
         use aiken/builtin.{head_list}
-        
+
         test head_1() {
           let head = fn(xs){
               when xs is {
@@ -433,9 +433,9 @@ fn acceptance_test_5_direct_head() {
                 _ -> Some(head_list(xs))
               }
             }
-        
+
           head([1, 2, 3]) == Some(1)
-        }     
+        }
     "#;
 
     assert_uplc(
@@ -473,7 +473,7 @@ fn acceptance_test_5_direct_head() {
 fn acceptance_test_5_direct_2_heads() {
     let src = r#"
         use aiken/builtin.{head_list}
-        
+
         test head_2() {
           let head = fn(xs: List<Int>){
               when xs is {
@@ -482,9 +482,9 @@ fn acceptance_test_5_direct_2_heads() {
                 [a, b, ..] -> Some([a,b])
               }
             }
-        
+
           head([1, 2, 3]) == Some([1, 2])
-        }     
+        }
     "#;
 
     assert_uplc(
@@ -583,10 +583,10 @@ fn acceptance_test_5_head_not_empty() {
             _ -> Some(head_list(xs))
           }
         }
-        
+
         test head_1() {
           head([1, 2, 3]) == Some(1)
-        }     
+        }
     "#;
 
     assert_uplc(
@@ -631,10 +631,10 @@ fn acceptance_test_5_head_empty() {
             _ -> Some(head_list(xs))
           }
         }
-        
+
         test head_1() {
           head([]) == None
-        }     
+        }
     "#;
 
     assert_uplc(
@@ -744,10 +744,10 @@ fn acceptance_test_7_unzip() {
           }
         }
       }
-      
+
       test unzip1() {
         let x = [(3, #"55"), (4, #"7799")]
-      
+
         unzip(x) == ([3, 4], [#"55", #"7799"])
       }
     "#;
@@ -869,7 +869,7 @@ fn acceptance_test_8_is_empty() {
       pub fn is_empty(bytes: ByteArray) -> Bool {
         builtin.length_of_bytearray(bytes) == 0
       }
-    
+
       test is_empty_1() {
         is_empty(#"") == True
       }
@@ -902,7 +902,7 @@ fn acceptance_test_8_is_not_empty() {
       pub fn is_empty(bytes: ByteArray) -> Bool {
         builtin.length_of_bytearray(bytes) == 0
       }
-    
+
       test is_empty_1() {
         is_empty(#"01") == False
       }
@@ -935,7 +935,7 @@ fn acceptance_test_9_is_empty() {
       pub fn is_empty(bytes: ByteArray) -> Bool {
         length_of_bytearray(bytes) == 0
       }
-    
+
       test is_empty_1() {
         is_empty(#"") == True
       }
@@ -971,14 +971,14 @@ fn acceptance_test_10_map_none() {
             Some(f(a))
         }
       }
-      
+
       fn add_one(n: Int) -> Int {
         n + 1
       }
-      
+
       test map_1() {
         map(None, add_one) == None
-      }      
+      }
     "#;
 
     assert_uplc(
@@ -1053,14 +1053,14 @@ fn acceptance_test_10_map_some() {
             Some(f(a))
         }
       }
-      
+
       fn add_one(n: Int) -> Int {
         n + 1
       }
-      
+
       test map_1() {
         map(Some(1), add_one) == Some(2)
-      }      
+      }
     "#;
 
     assert_uplc(
@@ -1135,10 +1135,10 @@ fn acceptance_test_11_map_empty() {
             [f(x), ..map(rest, f)]
         }
       }
-      
+
       test map_1() {
         map([], fn(n) { n + 1 }) == []
-      }      
+      }
     "#;
 
     assert_uplc(
@@ -1206,10 +1206,10 @@ fn acceptance_test_11_map_filled() {
             [f(x), ..map(rest, f)]
         }
       }
-      
+
       test map_1() {
         map([6, 7, 8], fn(n) { n + 1 }) == [7, 8, 9]
-      }      
+      }
     "#;
 
     assert_uplc(
@@ -1291,7 +1291,7 @@ fn acceptance_test_12_filter_even() {
             }
         }
       }
-    
+
       test filter_1() {
         filter([1, 2, 3, 4, 5, 6], fn(x) { builtin.mod_integer(x, 2) == 0 }) == [2, 4, 6]
       }
@@ -1776,10 +1776,10 @@ fn acceptance_test_20_map_some() {
             Some(f(a))
         }
       }
-      
+
       test map_1() {
         map(Some(14), fn(n){ n + 1 }) == Some(15)
-      }      
+      }
     "#;
 
     assert_uplc(
@@ -1967,15 +1967,15 @@ fn acceptance_test_23_to_list() {
       pub opaque type AssocList<key, value> {
         inner: List<(key, value)>,
       }
-      
+
       pub fn new() -> AssocList<key, value> {
         AssocList { inner: [] }
       }
-      
+
       pub fn to_list(m: AssocList<key, value>) -> List<(key, value)> {
         m.inner
       }
-      
+
       pub fn insert(
         in m: AssocList<key, value>,
         key k: key,
@@ -1983,7 +1983,7 @@ fn acceptance_test_23_to_list() {
       ) -> AssocList<key, value> {
         AssocList { inner: do_insert(m.inner, k, v) }
       }
-      
+
       fn do_insert(elems: List<(key, value)>, k: key, v: value) -> List<(key, value)> {
         when elems is {
           [] ->
@@ -1996,13 +1996,13 @@ fn acceptance_test_23_to_list() {
             }
         }
       }
-      
+
       fn fixture_1() {
         new()
           |> insert("foo", 42)
           |> insert("bar", 14)
       }
-      
+
       test to_list_2() {
         to_list(fixture_1()) == [("foo", 42), ("bar", 14)]
       }
@@ -2063,10 +2063,10 @@ fn acceptance_test_24_map2() {
             }
         }
       }
-      
+
       test map2_3() {
         map2(Some(14), Some(42), fn(a, b) { (a, b) }) == Some((14, 42))
-      }      
+      }
     "#;
 
     assert_uplc(
@@ -2191,7 +2191,7 @@ fn acceptance_test_25_void_equal() {
     let src = r#"
       test nil_1() {
         Void == Void
-      }      
+      }
     "#;
 
     assert_uplc(
@@ -2212,11 +2212,11 @@ fn acceptance_test_26_foldr() {
             f(x, foldr(rest, f, zero))
         }
       }
-      
+
       pub fn concat(left: List<a>, right: List<a>) -> List<a> {
         foldr(left, fn(x, xs) { [x, ..xs] }, right)
       }
-      
+
       pub fn flat_map(xs: List<a>, f: fn(a) -> List<b>) -> List<b> {
         when xs is {
           [] ->
@@ -2225,7 +2225,7 @@ fn acceptance_test_26_foldr() {
             concat(f(x), flat_map(rest, f))
         }
       }
-      
+
       test flat_map_2() {
         flat_map([1, 2, 3], fn(a) { [a, a] }) == [1, 1, 2, 2, 3, 3]
       }
@@ -2353,11 +2353,11 @@ fn acceptance_test_27_flat_map() {
             f(x, foldr(rest, f, zero))
         }
       }
-      
+
       pub fn concat(left: List<a>, right: List<a>) -> List<a> {
         foldr(left, fn(x, xs) { [x, ..xs] }, right)
       }
-      
+
       pub fn flat_map(xs: List<a>, f: fn(a) -> List<b>) -> List<b> {
         when xs is {
           [] ->
@@ -2366,7 +2366,7 @@ fn acceptance_test_27_flat_map() {
             concat(f(x), flat_map(rest, f))
         }
       }
-      
+
       test flat_map_2() {
         flat_map([1, 2, 3], fn(a) { [a, a] }) == [1, 1, 2, 2, 3, 3]
       }
@@ -2498,7 +2498,7 @@ fn acceptance_test_28_unique_empty_list() {
             }
         }
       }
-      
+
       pub fn unique(xs: List<a>) -> List<a> {
         when xs is {
           [] ->
@@ -2507,10 +2507,10 @@ fn acceptance_test_28_unique_empty_list() {
             [x, ..unique(filter(rest, fn(y) { y != x }))]
         }
       }
-      
+
       test unique_1() {
         unique([]) == []
-      }  
+      }
     "#;
 
     assert_uplc(
@@ -2606,7 +2606,7 @@ fn acceptance_test_28_unique_list() {
             }
         }
       }
-      
+
       pub fn unique(xs: List<a>) -> List<a> {
         when xs is {
           [] ->
@@ -2615,10 +2615,10 @@ fn acceptance_test_28_unique_list() {
             [x, ..unique(filter(rest, fn(y) { y != x }))]
         }
       }
-      
+
       test unique_1() {
         unique([1,2,3,1]) == [1,2,3]
-      }  
+      }
     "#;
 
     assert_uplc(
@@ -2721,15 +2721,15 @@ fn acceptance_test_29_union() {
       pub opaque type AssocList<key, value> {
         inner: List<(key, value)>,
       }
-      
+
       pub fn new() -> AssocList<key, value> {
         AssocList { inner: [] }
       }
-      
+
       pub fn from_list(xs: List<(key, value)>) -> AssocList<key, value> {
         AssocList { inner: do_from_list(xs) }
       }
-      
+
       fn do_from_list(xs: List<(key, value)>) -> List<(key, value)> {
         when xs is {
           [] ->
@@ -2738,7 +2738,7 @@ fn acceptance_test_29_union() {
             do_insert(do_from_list(rest), k, v)
         }
       }
-      
+
       pub fn insert(
         in m: AssocList<key, value>,
         key k: key,
@@ -2746,7 +2746,7 @@ fn acceptance_test_29_union() {
       ) -> AssocList<key, value> {
         AssocList { inner: do_insert(m.inner, k, v) }
       }
-      
+
       fn do_insert(elems: List<(key, value)>, k: key, v: value) -> List<(key, value)> {
         when elems is {
           [] ->
@@ -2759,14 +2759,14 @@ fn acceptance_test_29_union() {
             }
         }
       }
-      
+
       pub fn union(
         left: AssocList<key, value>,
         right: AssocList<key, value>,
       ) -> AssocList<key, value> {
         AssocList { inner: do_union(left.inner, right.inner) }
       }
-      
+
       fn do_union(
         left: List<(key, value)>,
         right: List<(key, value)>,
@@ -2778,17 +2778,17 @@ fn acceptance_test_29_union() {
             do_union(rest, do_insert(right, k, v))
         }
       }
-      
+
       fn fixture_1() {
         new()
           |> insert("foo", 42)
           |> insert("bar", 14)
       }
-      
+
       test union_1() {
         union(fixture_1(), new()) == fixture_1()
       }
-      
+
     "#;
 
     assert_uplc(
@@ -2954,7 +2954,7 @@ fn acceptance_test_30_abs() {
           a
         }
       }
-      
+
       test abs_1() {
         abs(-14) == 14
       }
@@ -2987,13 +2987,13 @@ fn acceptance_test_30_abs() {
 
 #[test]
 fn expect_empty_list_on_filled_list() {
-    let src = r#"  
+    let src = r#"
       test empty_list1() {
         let x = [1,2]
         expect [] = x
 
         True
-      }      
+      }
     "#;
 
     assert_uplc(
@@ -3014,13 +3014,13 @@ fn expect_empty_list_on_filled_list() {
 
 #[test]
 fn expect_empty_list_on_new_list() {
-    let src = r#"  
+    let src = r#"
       test empty_list1() {
         let x = []
         expect [] = x
 
         True
-      }      
+      }
     "#;
 
     assert_uplc(
@@ -3038,7 +3038,7 @@ fn expect_empty_list_on_new_list() {
 
 #[test]
 fn when_bool_is_true() {
-    let src = r#"  
+    let src = r#"
       test it() {
         when True is {
           True ->
@@ -3046,7 +3046,7 @@ fn when_bool_is_true() {
           False ->
             fail
         }
-      }    
+      }
     "#;
 
     assert_uplc(
@@ -3061,7 +3061,7 @@ fn when_bool_is_true() {
 
 #[test]
 fn when_bool_is_true_switched_cases() {
-    let src = r#"  
+    let src = r#"
       test it() {
         when True is {
           False ->
@@ -3069,7 +3069,7 @@ fn when_bool_is_true_switched_cases() {
           True ->
             True
         }
-      } 
+      }
     "#;
 
     assert_uplc(
@@ -3084,7 +3084,7 @@ fn when_bool_is_true_switched_cases() {
 
 #[test]
 fn when_bool_is_false() {
-    let src = r#"  
+    let src = r#"
       test it() {
         when False is {
           False ->
@@ -3092,7 +3092,7 @@ fn when_bool_is_false() {
           True ->
             True
         }
-      }  
+      }
     "#;
 
     assert_uplc(
@@ -3607,15 +3607,15 @@ fn pass_constr_as_function() {
         a: Int,
         b: SubMake
       }
-      
+
       type SubMake {
         c: Int
       }
-      
+
       fn hi(sm: SubMake, to_make: fn (Int, SubMake) -> Make) -> Make {
         to_make(3, sm)
       }
-      
+
       test cry() {
         Make(3, SubMake(1)) == hi(SubMake(1), Make)
       }
@@ -3668,23 +3668,23 @@ fn record_update_output_2_vals() {
       type Address {
         thing: ByteArray,
       }
-      
+
       type Datum {
         NoDatum
         InlineDatum(Data)
       }
-      
+
       type Output {
         address: Address,
         value: List<(ByteArray, List<(ByteArray, Int)>)>,
         datum: Datum,
         script_ref: Option<ByteArray>,
       }
-      
+
       type MyDatum {
         a: Int,
       }
-      
+
       test huh() {
         let prev_output =
           Output {
@@ -3693,10 +3693,10 @@ fn record_update_output_2_vals() {
             datum: InlineDatum(MyDatum{a: 3}),
             script_ref: None,
           }
-      
+
         let next_output =
           Output { ..prev_output, value: [], datum: prev_output.datum }
-      
+
         prev_output == next_output
       }
     "#;
@@ -3770,23 +3770,23 @@ fn record_update_output_1_val() {
       type Address {
         thing: ByteArray,
       }
-      
+
       type Datum {
         NoDatum
         InlineDatum(Data)
       }
-      
+
       type Output {
         address: Address,
         value: List<(ByteArray, List<(ByteArray, Int)>)>,
         datum: Datum,
         script_ref: Option<ByteArray>,
       }
-      
+
       type MyDatum {
         a: Int,
       }
-      
+
       test huh() {
         let prev_output =
           Output {
@@ -3795,10 +3795,10 @@ fn record_update_output_1_val() {
             datum: InlineDatum(MyDatum{a: 3}),
             script_ref: None,
           }
-      
+
         let next_output =
           Output { ..prev_output, datum: prev_output.datum }
-      
+
         prev_output == next_output
       }
     "#;
@@ -3871,23 +3871,23 @@ fn record_update_output_first_last_val() {
       type Address {
         thing: ByteArray,
       }
-      
+
       type Datum {
         NoDatum
         InlineDatum(Data)
       }
-      
+
       type Output {
         address: Address,
         value: List<(ByteArray, List<(ByteArray, Int)>)>,
         datum: Datum,
         script_ref: Option<ByteArray>,
       }
-      
+
       type MyDatum {
         a: Int,
       }
-      
+
       test huh() {
         let prev_output =
           Output {
@@ -3896,10 +3896,10 @@ fn record_update_output_first_last_val() {
             datum: InlineDatum(MyDatum{a: 3}),
             script_ref: None,
           }
-      
+
         let next_output =
           Output { ..prev_output, script_ref: None, address: Address{thing: "script_hash_0"} }
-      
+
         prev_output == next_output
       }
     "#;
@@ -3969,14 +3969,14 @@ fn list_fields_unwrap() {
         a: ByteArray,
         b: Int,
       }
-      
+
       fn data_fields(){
         [
-            Fields{a: #"", b: 14}, 
+            Fields{a: #"", b: 14},
             Fields{a: #"AA", b: 0}
         ]
       }
-      
+
       test list_fields_unwr_0() {
         when data_fields() is {
           [Fields { b, .. }, ..] ->
@@ -4035,27 +4035,27 @@ fn foldl_type_mismatch() {
         payment_credential: ByteArray,
         stake_credential: Option<ByteArray>,
       }
-      
+
       type Output {
         address: Address,
         value: List<Int>,
         datum: Option<Int>,
         reference_script: Option<Int>,
       }
-      
+
       pub fn foldl(self: List<a>, with: fn(a, b) -> b, zero: b) -> b {
         when self is {
           [] -> zero
           [x, ..xs] -> foldl(xs, with, with(x, zero))
         }
       }
-      
+
       test hi() {
         let addr1 = Address { payment_credential: "adff", stake_credential: None }
-      
+
         let out =
           Output { address: addr1, value: [], datum: None, reference_script: None }
-      
+
         let outputs: List<Output> =
           [out, out, out]
         let cry =
@@ -4074,7 +4074,7 @@ fn foldl_type_mismatch() {
             },
             None,
           )
-      
+
         cry == cry
       }
     "#;
@@ -4466,14 +4466,14 @@ fn expect_head_cast_data_with_tail() {
 #[test]
 fn test_init_3() {
     let src = r#"
-      
+
       pub fn init(self: List<a>) -> Option<List<a>> {
         when self is {
           [] -> None
           _ -> Some(do_init(self))
         }
       }
-      
+
       fn do_init(self: List<a>) -> List<a> {
         when self is {
           [] -> fail @"unreachable"
@@ -4483,7 +4483,7 @@ fn test_init_3() {
             [x, ..do_init(xs)]
         }
       }
-      
+
       test init_3() {
         init([1, 2, 3, 4]) == Some([1, 2, 3])
       }
@@ -4579,7 +4579,7 @@ fn list_clause_with_guard() {
           }
         }
       }
-      
+
       test init_3() {
         do_init([1, 3]) == [1]
       }
@@ -4718,7 +4718,7 @@ fn list_clause_with_guard2() {
           }
         }
       }
-      
+
       test init_3() {
         do_init([1, 3]) == [1]
       }
@@ -4850,7 +4850,7 @@ fn list_clause_with_guard3() {
           }
         }
       }
-      
+
       test init_3() {
         do_init([1, 3]) == [1]
       }
@@ -4989,7 +4989,7 @@ fn list_clause_with_assign() {
           }
         }
       }
-      
+
       test init_3() {
         do_init([1, 3]) == [1]
       }
@@ -5135,7 +5135,7 @@ fn list_clause_with_assign2() {
           }
         }
       }
-      
+
       test init_3() {
         do_init([Some(1), None]) == [Some(1)]
       }
@@ -5262,10 +5262,10 @@ fn opaque_value_in_datum() {
           a: Value
       }
 
-      
+
       validator {
         fn spend(dat: Dat, red: Data, ctx: Data) {
-          let val = dat.a 
+          let val = dat.a
 
           expect [(_, amount)] = val.inner.inner
 
@@ -5452,22 +5452,22 @@ fn opaque_value_in_test() {
         pub fn dat_new() -> Dat {
           let v = Value { inner: Dict { inner: [("", [(#"aa", 4)] |> Dict)] } }
           Dat {
-            c: 0, 
+            c: 0,
             a: v
           }
         }
 
-        
+
         test spend() {
           let dat = dat_new()
 
-          let val = dat.a 
+          let val = dat.a
 
           expect [(_, amount)] = val.inner.inner
 
           let final_amount = [(#"AA", 4)] |> Dict
 
-          final_amount == amount  
+          final_amount == amount
         }
   "#;
 

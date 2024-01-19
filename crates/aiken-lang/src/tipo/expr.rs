@@ -1,3 +1,4 @@
+use crate::line_numbers::LineNumbers;
 use std::{cmp::Ordering, collections::HashMap, rc::Rc};
 use vec1::Vec1;
 
@@ -5,9 +6,9 @@ use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, Bls12_381Point, ByteArrayFormatPreference,
         CallArg, ClauseGuard, Constant, Curve, IfBranch, LogicalOpChainKind, RecordUpdateSpread,
-        Span, TraceKind, Tracing, TypedArg, TypedCallArg, TypedClause, TypedClauseGuard,
-        TypedIfBranch, TypedPattern, TypedRecordUpdateArg, UnOp, UntypedArg, UntypedClause,
-        UntypedClauseGuard, UntypedIfBranch, UntypedPattern, UntypedRecordUpdateArg,
+        Span, TraceKind, TraceLevel, Tracing, TypedArg, TypedCallArg, TypedClause,
+        TypedClauseGuard, TypedIfBranch, TypedPattern, TypedRecordUpdateArg, UnOp, UntypedArg,
+        UntypedClause, UntypedClauseGuard, UntypedIfBranch, UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{bool, byte_array, function, g1_element, g2_element, int, list, string, tuple},
     expr::{FnStyle, TypedExpr, UntypedExpr},
@@ -26,6 +27,8 @@ use super::{
 
 #[derive(Debug)]
 pub(crate) struct ExprTyper<'a, 'b> {
+    pub(crate) lines: &'a LineNumbers,
+
     pub(crate) environment: &'a mut Environment<'b>,
 
     // We tweak the tracing behavior during type-check. Traces are either kept or left out of the
@@ -421,24 +424,36 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             },
         };
 
-        let text = TypedExpr::String {
-            location,
-            tipo: string(),
-            value: format!(
-                "{} ? False",
-                format::Formatter::new()
-                    .expr(&value, false)
-                    .to_pretty_string(999)
-            ),
+        let text = match self.tracing.trace_level(false) {
+            TraceLevel::Verbose => Some(TypedExpr::String {
+                location,
+                tipo: string(),
+                value: format!(
+                    "{} ? False",
+                    format::Formatter::new()
+                        .expr(&value, false)
+                        .to_pretty_string(999)
+                ),
+            }),
+            TraceLevel::Compact => Some(TypedExpr::String {
+                location,
+                tipo: string(),
+                value: self
+                    .lines
+                    .line_and_column_number(location.start)
+                    .expect("Spans are within bounds.")
+                    .to_string(),
+            }),
+            TraceLevel::Silent => None,
         };
 
         let typed_value = self.infer(value)?;
 
         self.unify(bool(), typed_value.tipo(), typed_value.location(), false)?;
 
-        match self.tracing {
-            Tracing::NoTraces => Ok(typed_value),
-            Tracing::KeepTraces => Ok(TypedExpr::If {
+        match self.tracing.trace_level(false) {
+            TraceLevel::Silent => Ok(typed_value),
+            TraceLevel::Verbose | TraceLevel::Compact => Ok(TypedExpr::If {
                 location,
                 branches: vec1::vec1![IfBranch {
                     condition: typed_value,
@@ -448,7 +463,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 final_else: Box::new(TypedExpr::Trace {
                     location,
                     tipo: bool(),
-                    text: Box::new(text),
+                    text: Box::new(text.expect("TraceLevel::Silent excluded from pattern-guard")),
                     then: Box::new(var_false),
                 }),
                 tipo: bool(),
@@ -1817,9 +1832,23 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             })
         }
 
-        match self.tracing {
-            Tracing::NoTraces => Ok(then),
-            Tracing::KeepTraces => Ok(TypedExpr::Trace {
+        match self.tracing.trace_level(false) {
+            TraceLevel::Silent => Ok(then),
+            TraceLevel::Compact => Ok(TypedExpr::Trace {
+                location,
+                tipo,
+                then: Box::new(then),
+                text: Box::new(TypedExpr::String {
+                    location,
+                    tipo: string(),
+                    value: self
+                        .lines
+                        .line_and_column_number(location.start)
+                        .expect("Spans are within bounds.")
+                        .to_string(),
+                }),
+            }),
+            TraceLevel::Verbose => Ok(TypedExpr::Trace {
                 location,
                 tipo,
                 then: Box::new(then),
@@ -1976,12 +2005,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         self.environment.instantiate(t, ids, &self.hydrator)
     }
 
-    pub fn new(environment: &'a mut Environment<'b>, tracing: Tracing) -> Self {
+    pub fn new(
+        environment: &'a mut Environment<'b>,
+        lines: &'a LineNumbers,
+        tracing: Tracing,
+    ) -> Self {
         Self {
             hydrator: Hydrator::new(),
             environment,
             tracing,
             ungeneralised_function_used: false,
+            lines,
         }
     }
 

@@ -1,9 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use aiken_lang::ast::Tracing;
+use aiken_lang::{ast::Tracing, line_numbers::LineNumbers};
 use aiken_project::{config::Config, error::Error as ProjectError, module::CheckedModule, Project};
-
-use crate::line_numbers::LineNumbers;
 
 #[derive(Debug)]
 pub struct SourceInfo {
@@ -34,7 +32,7 @@ impl LspProject {
 
         let result = self
             .project
-            .check(true, None, false, false, Tracing::NoTraces);
+            .check(true, None, false, false, Tracing::silent());
 
         self.project.restore(checkpoint);
 

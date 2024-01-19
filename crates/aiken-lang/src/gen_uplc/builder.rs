@@ -15,11 +15,12 @@ use uplc::{
 
 use crate::{
     ast::{
-        AssignmentKind, DataType, Pattern, Span, TypedArg, TypedClause, TypedClauseGuard,
-        TypedDataType, TypedPattern,
+        AssignmentKind, DataType, Pattern, Span, TraceLevel, TypedArg, TypedClause,
+        TypedClauseGuard, TypedDataType, TypedPattern,
     },
     builtins::{bool, data, function, int, list, string, void},
     expr::TypedExpr,
+    line_numbers::{LineColumn, LineNumbers},
     tipo::{PatternConstructor, TypeVar, ValueConstructor, ValueConstructorVariant},
 };
 
@@ -1621,52 +1622,12 @@ pub fn special_case_builtin(
 pub fn wrap_as_multi_validator(
     spend: Term<Name>,
     mint: Term<Name>,
-    trace: bool,
+    trace: TraceLevel,
     spend_name: String,
     mint_name: String,
 ) -> Term<Name> {
-    if trace {
-        let trace_string = format!(
-            "Incorrect redeemer type for validator {}.
-            Double check you have wrapped the redeemer type as specified in your plutus.json",
-            spend_name
-        );
-
-        let error_term = Term::Error.delayed_trace(Term::var("__incorrect_second_arg_type"));
-
-        Term::var("__second_arg")
-            .delayed_choose_data(
-                Term::equals_integer()
-                    .apply(Term::integer(0.into()))
-                    .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("__second_arg")))
-                    .delayed_if_then_else(
-                        mint.apply(Term::var("__first_arg"))
-                            .apply(Term::var("__second_arg"))
-                            .delayed_trace(Term::string(format!(
-                                "Running 2 arg validator {}",
-                                mint_name
-                            ))),
-                        spend
-                            .apply(Term::var("__first_arg"))
-                            .apply(Term::head_list().apply(
-                                Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("__second_arg")),
-                            ))
-                            .delayed_trace(Term::string(format!(
-                                "Running 3 arg validator {}",
-                                spend_name
-                            ))),
-                    ),
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                error_term,
-            )
-            .lambda("__incorrect_second_arg_type")
-            .apply(Term::string(trace_string))
-            .lambda("__second_arg")
-            .lambda("__first_arg")
-    } else {
-        Term::equals_integer()
+    match trace {
+        TraceLevel::Silent | TraceLevel::Compact => Term::equals_integer()
             .apply(Term::integer(0.into()))
             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("__second_arg")))
             .delayed_if_then_else(
@@ -1678,7 +1639,50 @@ pub fn wrap_as_multi_validator(
                 ),
             )
             .lambda("__second_arg")
-            .lambda("__first_arg")
+            .lambda("__first_arg"),
+        TraceLevel::Verbose => {
+            let trace_string = format!(
+                    "Incorrect redeemer type for validator {}.
+                    Double check you have wrapped the redeemer type as specified in your plutus.json",
+                    spend_name
+                );
+
+            let error_term = Term::Error.delayed_trace(Term::var("__incorrect_second_arg_type"));
+
+            let then_term = mint
+                .apply(Term::var("__first_arg"))
+                .apply(Term::var("__second_arg"));
+
+            let else_term = spend.apply(Term::var("__first_arg")).apply(
+                Term::head_list()
+                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("__second_arg"))),
+            );
+
+            Term::var("__second_arg")
+                .delayed_choose_data(
+                    Term::equals_integer()
+                        .apply(Term::integer(0.into()))
+                        .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("__second_arg")))
+                        .delayed_if_then_else(
+                            then_term.delayed_trace(Term::string(format!(
+                                "Running 2 arg validator {}",
+                                mint_name
+                            ))),
+                            else_term.delayed_trace(Term::string(format!(
+                                "Running 3 arg validator {}",
+                                spend_name
+                            ))),
+                        ),
+                    error_term.clone(),
+                    error_term.clone(),
+                    error_term.clone(),
+                    error_term,
+                )
+                .lambda("__incorrect_second_arg_type")
+                .apply(Term::string(trace_string))
+                .lambda("__second_arg")
+                .lambda("__first_arg")
+        }
     }
 }
 
@@ -1717,16 +1721,15 @@ pub fn cast_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Nam
     term
 }
 
-pub fn wrap_validator_condition(air_tree: AirTree, trace: bool) -> AirTree {
+pub fn wrap_validator_condition(air_tree: AirTree, trace: TraceLevel) -> AirTree {
     let success_branch = vec![(air_tree, AirTree::void())];
-    let otherwise = if trace {
-        AirTree::trace(
+    let otherwise = match trace {
+        TraceLevel::Silent | TraceLevel::Compact => AirTree::error(void(), true),
+        TraceLevel::Verbose => AirTree::trace(
             AirTree::string("Validator returned false"),
             void(),
             AirTree::error(void(), true),
-        )
-    } else {
-        AirTree::error(void(), true)
+        ),
     };
 
     AirTree::if_branches(success_branch, void(), otherwise)
@@ -1758,15 +1761,29 @@ pub fn extract_constant(term: &Term<Name>) -> Option<Rc<UplcConstant>> {
 pub fn get_src_code_by_span(
     module_name: &String,
     span: &Span,
-    module_src: &IndexMap<String, String>,
+    module_src: &IndexMap<String, (String, LineNumbers)>,
 ) -> String {
-    let src = module_src
+    let (src, _) = module_src
         .get(module_name)
         .unwrap_or_else(|| panic!("Missing module {module_name}"));
 
     src.get(span.start..span.end)
         .expect("Out of bounds span")
         .to_string()
+}
+
+pub fn get_line_columns_by_span(
+    module_name: &String,
+    span: &Span,
+    module_src: &IndexMap<String, (String, LineNumbers)>,
+) -> LineColumn {
+    let (_, lines) = module_src
+        .get(module_name)
+        .unwrap_or_else(|| panic!("Missing module {module_name}"));
+
+    lines
+        .line_and_column_number(span.start)
+        .expect("Out of bounds span")
 }
 
 pub fn air_holds_msg(air: &Air) -> bool {

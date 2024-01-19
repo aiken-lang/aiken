@@ -1,5 +1,8 @@
-use crate::{line_numbers::LineNumbers, utils::span_to_lsp_range};
-use aiken_lang::ast::{Definition, ModuleKind, Span, UntypedDefinition, Use};
+use crate::utils::span_to_lsp_range;
+use aiken_lang::{
+    ast::{Definition, ModuleKind, Span, UntypedDefinition, Use},
+    line_numbers::LineNumbers,
+};
 use aiken_project::module::CheckedModule;
 use itertools::Itertools;
 use std::fs;

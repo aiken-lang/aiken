@@ -7,7 +7,6 @@ use std::env;
 mod cast;
 mod edits;
 pub mod error;
-mod line_numbers;
 mod quickfix;
 pub mod server;
 mod utils;

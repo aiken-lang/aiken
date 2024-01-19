@@ -15,7 +15,7 @@ pub use definition::parser as definition;
 pub use expr::parser as expression;
 pub use pattern::parser as pattern;
 
-use crate::ast;
+use crate::{ast, line_numbers::LineNumbers};
 use chumsky::prelude::*;
 use error::ParseError;
 use extra::ModuleExtra;
@@ -30,8 +30,11 @@ pub fn module(
 
     let definitions = definition().repeated().then_ignore(end()).parse(stream)?;
 
+    let lines = LineNumbers::new(src);
+
     let module = ast::UntypedModule {
         kind,
+        lines,
         definitions,
         docs: vec![],
         name: "".to_string(),

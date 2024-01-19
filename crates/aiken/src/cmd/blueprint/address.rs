@@ -36,7 +36,7 @@ pub fn exec(
 ) -> miette::Result<()> {
     with_project(directory.as_deref(), false, |p| {
         if rebuild {
-            p.build(false, Tracing::NoTraces)?;
+            p.build(false, Tracing::silent())?;
         }
 
         let title = module.as_ref().map(|m| {

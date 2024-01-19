@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use aiken_lang::{
-    ast::{ModuleKind, Tracing, TypedDataType, TypedFunction},
+    ast::{ModuleKind, TraceLevel, Tracing, TypedDataType, TypedFunction},
     gen_uplc::builder::{DataTypeKey, FunctionAccessKey},
     parser,
     tipo::TypeInfo,
@@ -81,7 +81,7 @@ impl TestProject {
                 module.kind,
                 &self.package.to_string(),
                 &self.module_types,
-                Tracing::KeepTraces,
+                Tracing::All(TraceLevel::Verbose),
                 &mut warnings,
             )
             .expect("Failed to type-check module");

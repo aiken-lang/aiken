@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Definition, ModuleKind, Tracing, TypedModule, UntypedModule},
+    ast::{Definition, ModuleKind, TraceLevel, Tracing, TypedModule, UntypedModule},
     builtins,
     expr::TypedExpr,
     parser,
@@ -31,7 +31,7 @@ fn check_module(
         kind,
         "test/project",
         &module_types,
-        Tracing::KeepTraces,
+        Tracing::All(TraceLevel::Verbose),
         &mut warnings,
     );
 
