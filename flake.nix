@@ -39,7 +39,7 @@
 
           GIT_COMMIT_HASH_SHORT = self.shortRev or "unknown";
           postPatch = ''
-            substituteInPlace crates/aiken/src/cmd/mod.rs \
+            substituteInPlace crates/aiken-project/src/config.rs \
               --replace  "built_info::GIT_COMMIT_HASH_SHORT" \
               "Some(\"$GIT_COMMIT_HASH_SHORT\")"
           '';
