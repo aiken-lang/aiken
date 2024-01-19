@@ -43,6 +43,7 @@ pub struct EvalHint {
     pub bin_op: BinOp,
     pub left: Program<NamedDeBruijn>,
     pub right: Program<NamedDeBruijn>,
+    pub can_error: bool,
 }
 
 impl Display for EvalHint {
@@ -66,20 +67,42 @@ impl Display for EvalHint {
                 Err(err) => format!("{err}"),
             },
         );
-        let msg = match self.bin_op {
-            BinOp::And => Some(format!("{left}\n\nand\n\n{right}\n\nshould both be true.")),
-            BinOp::Or => Some(format!("{left}\n\nor\n\n{right}\n\nshould be true.")),
-            BinOp::Eq => Some(format!("{left}\n\nshould be equal to\n\n{right}")),
-            BinOp::NotEq => Some(format!("{left}\n\nshould not be equal to\n\n{right}")),
-            BinOp::LtInt => Some(format!("{left}\n\nshould be lower than\n\n{right}")),
-            BinOp::LtEqInt => Some(format!(
-                "{left}\n\nshould be lower than or equal to\n\n{right}"
-            )),
-            BinOp::GtEqInt => Some(format!("{left}\n\nshould be greater than\n\n{right}")),
-            BinOp::GtInt => Some(format!(
-                "{left}\n\nshould be greater than or equal to\n\n{right}"
-            )),
-            _ => None,
+        let msg = if self.can_error {
+            match self.bin_op {
+                BinOp::And => Some(format!(
+                    "{left}\n\nand\n\n{right}\n\nare both true but shouldn't."
+                )),
+                BinOp::Or => Some(format!(
+                    "neither\n\n{left}\n\nnor\n\n{right}\n\nshould be true."
+                )),
+                BinOp::Eq => Some(format!("{left}\n\nshould not be equal to\n\n{right}")),
+                BinOp::NotEq => Some(format!("{left}\n\nshould be equal to\n\n{right}")),
+                BinOp::LtInt => Some(format!(
+                    "{left}\n\nshould be greater than or equal to\n\n{right}"
+                )),
+                BinOp::LtEqInt => Some(format!("{left}\n\nshould be greater than\n\n{right}")),
+                BinOp::GtEqInt => Some(format!(
+                    "{left}\n\nshould be lower than or equal\n\n{right}"
+                )),
+                BinOp::GtInt => Some(format!("{left}\n\nshould be lower than\n\n{right}")),
+                _ => None,
+            }
+        } else {
+            match self.bin_op {
+                BinOp::And => Some(format!("{left}\n\nand\n\n{right}\n\nshould both be true.")),
+                BinOp::Or => Some(format!("{left}\n\nor\n\n{right}\n\nshould be true.")),
+                BinOp::Eq => Some(format!("{left}\n\nshould be equal to\n\n{right}")),
+                BinOp::NotEq => Some(format!("{left}\n\nshould not be equal to\n\n{right}")),
+                BinOp::LtInt => Some(format!("{left}\n\nshould be lower than\n\n{right}")),
+                BinOp::LtEqInt => Some(format!(
+                    "{left}\n\nshould be lower than or equal to\n\n{right}"
+                )),
+                BinOp::GtEqInt => Some(format!("{left}\n\nshould be greater than\n\n{right}")),
+                BinOp::GtInt => Some(format!(
+                    "{left}\n\nshould be greater than or equal to\n\n{right}"
+                )),
+                _ => None,
+            }
         }
         .ok_or(fmt::Error)?;
 

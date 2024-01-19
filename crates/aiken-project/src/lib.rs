@@ -821,6 +821,7 @@ where
                     bin_op,
                     left,
                     right,
+                    can_error: *can_error,
                 }
             });
 

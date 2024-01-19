@@ -10,6 +10,7 @@
 ### Fixed
 
 - **aiken-lang**: Fix flat encoding and decoding of large integer values. @KtorZ
+- **aiken**: Ensures that test expected to fail that return `False` are considered to pass & improve error reporting when they fail. @KtorZ
 
 ### Removed
 

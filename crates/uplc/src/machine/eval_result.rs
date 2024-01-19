@@ -35,6 +35,7 @@ impl EvalResult {
     pub fn failed(&self, can_error: bool) -> bool {
         if can_error {
             self.result.is_ok()
+                && !matches!(self.result, Ok(Term::Constant(ref con)) if matches!(con.as_ref(), Constant::Bool(false)))
         } else {
             self.result.is_err()
                 || matches!(self.result, Ok(Term::Error))
