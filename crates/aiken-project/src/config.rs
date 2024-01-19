@@ -129,7 +129,7 @@ pub fn compiler_version(include_commit_hash: bool) -> String {
             built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown")
         )
     } else {
-        format!("v{}", built_info::PKG_VERSION_MAJOR,)
+        format!("v{}", built_info::PKG_VERSION,)
     }
 }
 
