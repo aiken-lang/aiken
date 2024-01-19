@@ -20,11 +20,11 @@ miette = "5.5.0"
 num-bigint = "0.4.3"
 num-integer = "0.1.45"
 num-traits = "0.2.15"
-pallas-addresses = "0.20.0"
-pallas-codec = "0.20.0"
-pallas-crypto = "0.20.0"
-pallas-primitives = "0.20.0"
-pallas-traverse = "0.20.0"
+pallas-addresses = { git = "https://github.com/txpipe/pallas.git", rev = "7cb1ffe100befaa6236f14c14081961c44d6ad21" } # 0.21.0 patched
+pallas-codec = { git = "https://github.com/txpipe/pallas.git", rev = "7cb1ffe100befaa6236f14c14081961c44d6ad21", features = ["num-bigint"] } # 0.21.0 patched
+pallas-crypto = { git = "https://github.com/txpipe/pallas.git", rev = "7cb1ffe100befaa6236f14c14081961c44d6ad21" } # 0.21.0 patched
+pallas-primitives = { git = "https://github.com/txpipe/pallas.git", rev = "7cb1ffe100befaa6236f14c14081961c44d6ad21" } # 0.21.0 patched
+pallas-traverse = { git = "https://github.com/txpipe/pallas.git", rev = "7cb1ffe100befaa6236f14c14081961c44d6ad21" } # 0.21.0 patched
 peg = "0.8.1"
 pretty = "0.11.3"
 pretty_assertions = "1.3.0"

@@ -1,5 +1,11 @@
 # Changelog
 
+## UNRELEASED
+
+### Fixed
+
+- **aiken-lang**: Fix flat encoding and decoding of large integer values. @KtorZ
+
 ## v1.0.21-alpha - 2023-12-04
 
 ### Added
