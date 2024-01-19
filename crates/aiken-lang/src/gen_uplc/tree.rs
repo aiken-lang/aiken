@@ -9,7 +9,7 @@ use crate::{
     tipo::{Type, ValueConstructor, ValueConstructorVariant},
 };
 
-use super::air::Air;
+use super::air::{Air, ExpectLevel};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TreePath {
@@ -179,7 +179,7 @@ pub enum AirStatement {
         names: Vec<String>,
         tail: bool,
         list: Box<AirTree>,
-        is_expect: bool,
+        expect_level: ExpectLevel,
         msg: Option<AirMsg>,
     },
     ListExpose {
@@ -272,6 +272,7 @@ pub enum AirExpression {
     CastFromData {
         tipo: Rc<Type>,
         value: Box<AirTree>,
+        msg: Option<AirMsg>,
     },
     CastToData {
         tipo: Rc<Type>,
@@ -502,10 +503,11 @@ impl AirTree {
             hoisted_over: None,
         }
     }
-    pub fn cast_from_data(value: AirTree, tipo: Rc<Type>) -> AirTree {
+    pub fn cast_from_data(value: AirTree, tipo: Rc<Type>, msg: Option<AirMsg>) -> AirTree {
         AirTree::Expression(AirExpression::CastFromData {
             tipo,
             value: value.into(),
+            msg,
         })
     }
     pub fn cast_to_data(value: AirTree, tipo: Rc<Type>) -> AirTree {
@@ -733,6 +735,7 @@ impl AirTree {
                 vec![list_of_fields],
             ),
             tipo.clone(),
+            None,
         )
     }
 
@@ -758,7 +761,7 @@ impl AirTree {
         tail: bool,
         list: AirTree,
         msg: Option<AirMsg>,
-        is_expect: bool,
+        expect_level: ExpectLevel,
     ) -> AirTree {
         AirTree::Statement {
             statement: AirStatement::ListAccessor {
@@ -766,7 +769,7 @@ impl AirTree {
                 names,
                 tail,
                 list: list.into(),
-                is_expect,
+                expect_level,
                 msg,
             },
             hoisted_over: None,
@@ -816,6 +819,7 @@ impl AirTree {
                 vec![tuple],
             ),
             tipo.clone(),
+            None,
         )
     }
     pub fn error(tipo: Rc<Type>, validator: bool) -> AirTree {
@@ -1069,13 +1073,13 @@ impl AirTree {
                         tail,
                         list,
                         msg,
-                        is_expect,
+                        expect_level,
                     } => {
                         air_vec.push(Air::ListAccessor {
                             tipo: tipo.clone(),
                             names: names.clone(),
                             tail: *tail,
-                            is_expect: *is_expect,
+                            expect_level: *expect_level,
                         });
 
                         if let Some(msg) = msg {
@@ -1227,8 +1231,16 @@ impl AirTree {
                     air_vec.push(Air::UnOp { op: *op });
                     arg.create_air_vec(air_vec);
                 }
-                AirExpression::CastFromData { tipo, value } => {
-                    air_vec.push(Air::CastFromData { tipo: tipo.clone() });
+                AirExpression::CastFromData { tipo, value, msg } => {
+                    air_vec.push(Air::CastFromData {
+                        tipo: tipo.clone(),
+                        is_expect: msg.is_some(),
+                    });
+
+                    if let Some(msg) = msg {
+                        msg.to_air_tree().create_air_vec(air_vec);
+                    }
+
                     value.create_air_vec(air_vec);
                 }
                 AirExpression::CastToData { tipo, value } => {

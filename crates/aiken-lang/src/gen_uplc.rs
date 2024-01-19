@@ -24,12 +24,15 @@ use crate::{
     },
     builtins::{bool, data, int, list, string, void},
     expr::TypedExpr,
-    gen_uplc::builder::{
-        check_replaceable_opaque_type, convert_opaque_type, erase_opaque_type_operations,
-        find_and_replace_generics, find_list_clause_or_default_first, get_arg_type_name,
-        get_generic_id_and_type, get_generic_variant_name, get_line_columns_by_span,
-        get_src_code_by_span, monomorphize, pattern_has_conditions, wrap_as_multi_validator,
-        wrap_validator_condition, CodeGenFunction, SpecificClause,
+    gen_uplc::{
+        air::ExpectLevel,
+        builder::{
+            check_replaceable_opaque_type, convert_opaque_type, erase_opaque_type_operations,
+            find_and_replace_generics, find_list_clause_or_default_first, get_arg_type_name,
+            get_generic_id_and_type, get_generic_variant_name, get_line_columns_by_span,
+            get_src_code_by_span, monomorphize, pattern_has_conditions, wrap_as_multi_validator,
+            wrap_validator_condition, CodeGenFunction, SpecificClause,
+        },
     },
     line_numbers::LineNumbers,
     tipo::{
@@ -840,7 +843,7 @@ impl<'a> CodeGenerator<'a> {
 
         // Cast value to or from data so we don't have to worry from this point onward
         if props.value_type.is_data() && props.kind.is_expect() && !tipo.is_data() {
-            value = AirTree::cast_from_data(value, tipo.clone());
+            value = AirTree::cast_from_data(value, tipo.clone(), props.msg_func.clone());
         } else if !props.value_type.is_data() && tipo.is_data() {
             value = AirTree::cast_to_data(value, props.value_type.clone());
         }
@@ -1050,7 +1053,11 @@ impl<'a> CodeGenerator<'a> {
                         tail.is_some(),
                         value,
                         props.msg_func,
-                        true,
+                        if props.full_check {
+                            ExpectLevel::Full
+                        } else {
+                            ExpectLevel::Items
+                        },
                     )
                 };
 
@@ -1345,8 +1352,8 @@ impl<'a> CodeGenerator<'a> {
                 vec![fst_name.clone(), snd_name.clone()],
                 inner_list_type.clone(),
                 AirTree::local_var(&pair_name, inner_list_type.clone()),
-                None,
-                false,
+                msg_func.clone(),
+                msg_func.is_some(),
             );
 
             let expect_fst = self.expect_type_assign(
@@ -1431,6 +1438,7 @@ impl<'a> CodeGenerator<'a> {
                     AirTree::cast_from_data(
                         AirTree::local_var(&item_name, data()),
                         inner_list_type.clone(),
+                        msg_func.clone(),
                     ),
                     defined_data_types,
                     location,
@@ -2291,7 +2299,7 @@ impl<'a> CodeGenerator<'a> {
                         // So for the msg we pass in empty string if tracing is on
                         // Since check_last_item is false this will never get added to the final uplc anyway
                         None,
-                        false,
+                        ExpectLevel::None,
                     )
                 } else {
                     assert!(defined_tails.len() >= defined_heads.len());
@@ -4042,7 +4050,7 @@ impl<'a> CodeGenerator<'a> {
                 // tipo here refers to the list type while the actual return
                 // type is nothing since this is an assignment over some expression
                 tipo,
-                is_expect,
+                expect_level,
             } => {
                 let value = arg_stack.pop().unwrap();
 
@@ -4071,8 +4079,8 @@ impl<'a> CodeGenerator<'a> {
                     &names_types,
                     tail,
                     term,
-                    is_expect && !tail,
                     true,
+                    expect_level,
                     error_term,
                 )
                 .apply(value);
@@ -4495,12 +4503,16 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(term)
             }
-            Air::CastFromData { tipo } => {
+            Air::CastFromData { tipo, .. } => {
                 let mut term = arg_stack.pop().unwrap();
 
-                if extract_constant(&term).is_some() {
-                    term = builder::convert_data_to_type(term, &tipo);
+                term = if error_term == Term::Error {
+                    builder::convert_data_to_type(term, &tipo)
+                } else {
+                    builder::convert_data_to_type_debug(term, &tipo, error_term)
+                };
 
+                if extract_constant(&term).is_some() {
                     let mut program: Program<Name> = Program {
                         version: (1, 0, 0),
                         term,
@@ -4515,8 +4527,6 @@ impl<'a> CodeGenerator<'a> {
                     let evaluated_term: Term<NamedDeBruijn> =
                         eval_program.eval(ExBudget::default()).result().unwrap();
                     term = evaluated_term.try_into().unwrap();
-                } else {
-                    term = builder::convert_data_to_type(term, &tipo);
                 }
 
                 Some(term)
@@ -4979,8 +4989,8 @@ impl<'a> CodeGenerator<'a> {
                         &names_types,
                         false,
                         term,
-                        is_expect,
                         false,
+                        is_expect.into(),
                         error_term,
                     );
 
@@ -5213,19 +5223,35 @@ impl<'a> CodeGenerator<'a> {
                     if names[1] != "_" {
                         term = term
                             .lambda(names[1].clone())
-                            .apply(builder::convert_data_to_type(
-                                Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                                &inner_types[1],
-                            ));
+                            .apply(if error_term != Term::Error {
+                                builder::convert_data_to_type_debug(
+                                    Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
+                                    &inner_types[1],
+                                    error_term.clone(),
+                                )
+                            } else {
+                                builder::convert_data_to_type(
+                                    Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
+                                    &inner_types[1],
+                                )
+                            });
                     }
 
                     if names[0] != "_" {
                         term = term
                             .lambda(names[0].clone())
-                            .apply(builder::convert_data_to_type(
-                                Term::fst_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                                &inner_types[0],
-                            ))
+                            .apply(if error_term != Term::Error {
+                                builder::convert_data_to_type_debug(
+                                    Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
+                                    &inner_types[1],
+                                    error_term,
+                                )
+                            } else {
+                                builder::convert_data_to_type(
+                                    Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
+                                    &inner_types[1],
+                                )
+                            })
                     }
 
                     term = term.lambda(format!("__tuple_{list_id}")).apply(value);
@@ -5250,8 +5276,8 @@ impl<'a> CodeGenerator<'a> {
                         &names_types,
                         false,
                         term,
-                        is_expect,
                         false,
+                        is_expect.into(),
                         error_term,
                     )
                     .apply(value);
