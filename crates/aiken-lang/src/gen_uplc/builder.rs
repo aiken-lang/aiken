@@ -30,7 +30,7 @@ use crate::{
 };
 
 use super::{
-    air::Air,
+    air::{Air, ExpectLevel},
     tree::{AirExpression, AirMsg, AirStatement, AirTree, TreePath},
 };
 
@@ -1237,6 +1237,140 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
     }
 }
 
+pub fn convert_data_to_type_debug(
+    term: Term<Name>,
+    field_type: &Rc<Type>,
+    error_term: Term<Name>,
+) -> Term<Name> {
+    if field_type.is_int() {
+        Term::var("__val")
+            .delayed_choose_data(
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+                Term::un_i_data().apply(Term::var("__val")),
+                error_term.clone(),
+            )
+            .lambda("__val")
+            .apply(term)
+    } else if field_type.is_bytearray() {
+        Term::var("__val")
+            .delayed_choose_data(
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+                Term::un_b_data().apply(Term::var("__val")),
+            )
+            .lambda("__val")
+            .apply(term)
+    } else if field_type.is_void() {
+        Term::var("__val")
+            .delayed_choose_data(
+                Term::equals_integer()
+                    .apply(Term::integer(0.into()))
+                    .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("__val"))))
+                    .delayed_if_then_else(Term::unit(), Term::Error),
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+            )
+            .lambda("__val")
+            .apply(term)
+    } else if field_type.is_map() {
+        Term::var("__val")
+            .delayed_choose_data(
+                error_term.clone(),
+                Term::unmap_data().apply(Term::var("__val")),
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+            )
+            .lambda("__val")
+            .apply(term)
+    } else if field_type.is_string() {
+        Term::var("__val")
+            .delayed_choose_data(
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+                Term::Builtin(DefaultFunction::DecodeUtf8)
+                    .apply(Term::un_b_data().apply(Term::var("__val"))),
+            )
+            .lambda("__val")
+            .apply(term)
+    } else if field_type.is_tuple() && matches!(field_type.get_uplc_type(), UplcType::Pair(_, _)) {
+        Term::var("__val")
+            .delayed_choose_data(
+                error_term.clone(),
+                error_term.clone(),
+                Term::mk_pair_data()
+                    .apply(Term::head_list().apply(Term::var("__list_data")))
+                    .apply(Term::head_list().apply(Term::var("__tail")))
+                    .lambda("__tail")
+                    .apply(Term::tail_list().apply(Term::var("__list_data")))
+                    .lambda("__list_data")
+                    .apply(Term::unlist_data().apply(Term::var("__val"))),
+                error_term.clone(),
+                error_term.clone(),
+            )
+            .lambda("__val")
+            .apply(term)
+    } else if field_type.is_list() || field_type.is_tuple() {
+        Term::var("__val")
+            .delayed_choose_data(
+                error_term.clone(),
+                error_term.clone(),
+                Term::unlist_data().apply(Term::var("__val")),
+                error_term.clone(),
+                error_term.clone(),
+            )
+            .lambda("__val")
+            .apply(term)
+    } else if field_type.is_bool() {
+        Term::var("__val")
+            .delayed_choose_data(
+                Term::equals_integer()
+                    .apply(Term::integer(1.into()))
+                    .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("__val")))),
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+            )
+            .lambda("__val")
+            .apply(term)
+    } else if field_type.is_bls381_12_g1() {
+        Term::var("__val")
+            .delayed_choose_data(
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+                Term::bls12_381_g1_uncompress().apply(Term::un_b_data().apply(Term::var("__val"))),
+            )
+            .lambda("__val")
+            .apply(term)
+    } else if field_type.is_bls381_12_g2() {
+        Term::var("__val")
+            .delayed_choose_data(
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+                Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(Term::var("__val"))),
+            )
+            .lambda("__val")
+            .apply(term)
+    } else if field_type.is_ml_result() {
+        panic!("ML Result not supported")
+    } else {
+        term
+    }
+}
+
 pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcConstant> {
     let mut new_constants = vec![];
     for constant in constants {
@@ -1391,8 +1525,8 @@ pub fn list_access_to_uplc(
     names_types_ids: &[(String, Rc<Type>, u64)],
     tail: bool,
     term: Term<Name>,
-    check_last_item: bool,
     is_list_accessor: bool,
+    expect_level: ExpectLevel,
     error_term: Term<Name>,
 ) -> Term<Name> {
     let names_len = names_types_ids.len();
@@ -1404,7 +1538,10 @@ pub fn list_access_to_uplc(
         .collect_vec();
 
     // If the the is just discards and check_last_item then we check for empty list
-    if no_tailing_discards.is_empty() && !tail && check_last_item {
+    if no_tailing_discards.is_empty()
+        && !tail
+        && matches!(expect_level, ExpectLevel::Full | ExpectLevel::Items)
+    {
         return Term::var("empty_list")
             .delayed_choose_list(term, error_term)
             .lambda("empty_list");
@@ -1426,6 +1563,12 @@ pub fn list_access_to_uplc(
             let head_list =
                 if matches!(tipo.get_uplc_type(), UplcType::Pair(_, _)) && is_list_accessor {
                     Term::head_list().apply(Term::var(tail_name.to_string()))
+                } else if matches!(expect_level, ExpectLevel::Full) && error_term != Term::Error {
+                    convert_data_to_type_debug(
+                        Term::head_list().apply(Term::var(tail_name.to_string())),
+                        &tipo.to_owned(),
+                        error_term.clone(),
+                    )
                 } else {
                     convert_data_to_type(
                         Term::head_list().apply(Term::var(tail_name.to_string())),
@@ -1442,7 +1585,7 @@ pub fn list_access_to_uplc(
                 // case for no tail
                 // name is guaranteed to not be discard at this point
 
-                if check_last_item {
+                if matches!(expect_level, ExpectLevel::Full | ExpectLevel::Items) {
                     Term::tail_list()
                         .apply(Term::var(tail_name.to_string()))
                         .delayed_choose_list(acc, error_term.clone())
@@ -1453,7 +1596,29 @@ pub fn list_access_to_uplc(
                     acc.lambda(name).apply(head_list).lambda(tail_name)
                 }
             } else if name == "_" {
-                acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
+                if matches!(expect_level, ExpectLevel::Full | ExpectLevel::Items)
+                    && error_term != Term::Error
+                {
+                    Term::var(tail_name.to_string())
+                        .delayed_choose_list(
+                            error_term.clone(),
+                            acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string()))),
+                        )
+                        .lambda(tail_name)
+                } else {
+                    acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
+                        .lambda(tail_name)
+                }
+            } else if matches!(expect_level, ExpectLevel::Full | ExpectLevel::Items)
+                && error_term != Term::Error
+            {
+                Term::var(tail_name.to_string())
+                    .delayed_choose_list(
+                        error_term.clone(),
+                        acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
+                            .lambda(name)
+                            .apply(head_list),
+                    )
                     .lambda(tail_name)
             } else {
                 acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
@@ -1791,9 +1956,14 @@ pub fn air_holds_msg(air: &Air) -> bool {
         Air::AssertConstr { .. } | Air::AssertBool { .. } | Air::FieldsEmpty | Air::ListEmpty => {
             true
         }
+
         Air::FieldsExpose { is_expect, .. }
-        | Air::ListAccessor { is_expect, .. }
-        | Air::TupleAccessor { is_expect, .. } => *is_expect,
+        | Air::TupleAccessor { is_expect, .. }
+        | Air::CastFromData { is_expect, .. } => *is_expect,
+
+        Air::ListAccessor { expect_level, .. } => {
+            matches!(expect_level, ExpectLevel::Full | ExpectLevel::Items)
+        }
 
         _ => false,
     }
