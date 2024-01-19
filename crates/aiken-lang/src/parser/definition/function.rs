@@ -109,4 +109,15 @@ mod tests {
             "#
         );
     }
+
+    #[test]
+    fn function_assignment_only() {
+        assert_definition!(
+            r#"
+            fn run() {
+              let x = 1 + 1
+            }
+            "#
+        );
+    }
 }

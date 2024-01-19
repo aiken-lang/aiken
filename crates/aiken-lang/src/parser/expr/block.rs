@@ -11,7 +11,17 @@ pub fn parser(
     choice((
         sequence
             .clone()
-            .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
+            .delimited_by(just(Token::LeftBrace), just(Token::RightBrace))
+            .map_with_span(|e, span| {
+                if matches!(e, UntypedExpr::Assignment { .. }) {
+                    UntypedExpr::Sequence {
+                        location: span,
+                        expressions: vec![e],
+                    }
+                } else {
+                    e
+                }
+            }),
         sequence.clone().delimited_by(
             choice((just(Token::LeftParen), just(Token::NewLineLeftParen))),
             just(Token::RightParen),

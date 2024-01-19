@@ -1650,6 +1650,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let mut typed_expressions = vec![];
 
         for expression in expressions {
+            assert_no_assignment(&expression)?;
+
             let typed_expression = self.infer(expression)?;
 
             self.unify(

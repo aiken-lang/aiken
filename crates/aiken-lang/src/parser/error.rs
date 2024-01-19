@@ -28,6 +28,16 @@ impl ParseError {
         self
     }
 
+    pub fn invalid_assignment_right_hand_side(span: Span) -> Self {
+        Self {
+            kind: ErrorKind::InvalidAssignmentRightHandSide,
+            span,
+            while_parsing: None,
+            expected: HashSet::new(),
+            label: Some("invalid assignment right hand side"),
+        }
+    }
+
     pub fn invalid_tuple_index(span: Span, index: String, suffix: Option<String>) -> Self {
         let hint = suffix.map(|suffix| format!("Did you mean '{index}{suffix}'?"));
         Self {
@@ -162,6 +172,16 @@ pub enum ErrorKind {
         #[help]
         hint: Option<String>,
     },
+
+    #[error("I discovered an invalid assignment.")]
+    #[diagnostic(
+        help(
+            "{} and {} bindings must be followed by a valid expression.",
+            "let".if_supports_color(Stdout, |s| s.yellow()),
+            "expect".if_supports_color(Stdout, |s| s.yellow()),
+        ),
+    )]
+    InvalidAssignmentRightHandSide,
 
     #[error("I tripped over a {}", fmt_curve_type(.curve))]
     PointNotOnCurve { curve: CurveType },

@@ -14,15 +14,19 @@ pub fn let_(
         .then(just(Token::Colon).ignore_then(annotation()).or_not())
         .then_ignore(just(Token::Equal))
         .then(r.clone())
-        .map_with_span(
-            move |((pattern, annotation), value), span| UntypedExpr::Assignment {
+        .validate(move |((pattern, annotation), value), span, emit| {
+            if matches!(value, UntypedExpr::Assignment { .. }) {
+                emit(ParseError::invalid_assignment_right_hand_side(span))
+            }
+
+            UntypedExpr::Assignment {
                 location: span,
                 value: Box::new(value),
                 pattern,
                 kind: ast::AssignmentKind::Let,
                 annotation,
-            },
-        )
+            }
+        })
 }
 
 pub fn expect(
@@ -36,7 +40,7 @@ pub fn expect(
                 .or_not(),
         )
         .then(r.clone())
-        .map_with_span(move |(opt_pattern, value), span| {
+        .validate(move |(opt_pattern, value), span, emit| {
             let (pattern, annotation) = opt_pattern.unwrap_or_else(|| {
                 (
                     ast::UntypedPattern::Constructor {
@@ -52,6 +56,10 @@ pub fn expect(
                     None,
                 )
             });
+
+            if matches!(value, UntypedExpr::Assignment { .. }) {
+                emit(ParseError::invalid_assignment_right_hand_side(span))
+            }
 
             UntypedExpr::Assignment {
                 location: span,
