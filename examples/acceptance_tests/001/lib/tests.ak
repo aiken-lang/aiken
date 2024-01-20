@@ -1,9 +1,7 @@
 pub fn length(xs: List<a>) -> Int {
   when xs is {
-    [] ->
-      0
-    [_, ..rest] ->
-      1 + length(rest)
+    [] -> 0
+    [_, ..rest] -> 1 + length(rest)
   }
 }
 

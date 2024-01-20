@@ -14,8 +14,7 @@ fn do_from_list(xs: List<(key, value)>) -> List<(key, value)> {
   when xs is {
     [] ->
       []
-    [(k, v), ..rest] ->
-      do_insert(do_from_list(rest), k, v)
+    [(k, v), ..rest] -> do_insert(do_from_list(rest), k, v)
   }
 }
 
@@ -52,10 +51,8 @@ fn do_union(
   right: List<(key, value)>,
 ) -> List<(key, value)> {
   when left is {
-    [] ->
-      right
-    [(k, v), ..rest] ->
-      do_union(rest, do_insert(right, k, v))
+    [] -> right
+    [(k, v), ..rest] -> do_union(rest, do_insert(right, k, v))
   }
 }
 

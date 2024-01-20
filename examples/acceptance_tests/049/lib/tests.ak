@@ -1,7 +1,6 @@
 pub fn when_tuple(a: (Int, Int)) -> Int {
   when a is {
-    (a, b) ->
-      a
+    (a, b) -> a
   }
 }
 

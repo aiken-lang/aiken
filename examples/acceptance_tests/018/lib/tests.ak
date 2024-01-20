@@ -1,9 +1,7 @@
 pub fn or_else(opt: Option<a>, default: a) -> a {
   when opt is {
-    None ->
-      default
-    Some(a) ->
-      a
+    None -> default
+    Some(a) -> a
   }
 }
 

@@ -27,7 +27,7 @@ fn compare_value(
   if
   value.quantity_of(val1, sym, loan_id) == value.quantity_of(val2, sym, loan_id){
   
-    error @"Should not be equal"
+    fail @"Should not be equal"
   } else {
     Less
   }

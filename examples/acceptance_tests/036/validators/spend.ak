@@ -3,8 +3,7 @@ use aiken/list
 use aiken/transaction.{Output, OutputReference, ScriptContext}
 use aiken/transaction/value.{PolicyId}
 
-const my_policy_id: PolicyId =
-  #"0000000000"
+const my_policy_id: PolicyId = #"0000000000"
 
 pub fn has_policy_id(self: Output, policy_id: PolicyId) -> Bool {
   self.value
@@ -28,10 +27,8 @@ validator(output_reference: OutputReference) {
         fn(input) { input.output_reference == output_reference },
       )
     is {
-      Some(_) ->
-        True
-      None ->
-        False
+      Some(_) -> True
+      None -> False
     }
   }
 }

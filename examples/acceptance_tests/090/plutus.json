@@ -5,7 +5,7 @@
     "plutusVersion": "v2",
     "compiler": {
       "name": "Aiken",
-      "version": "v1.0.21-alpha+9f263c4"
+      "version": "v1.0.21-alpha+bf96c3a"
     }
   },
   "validators": [

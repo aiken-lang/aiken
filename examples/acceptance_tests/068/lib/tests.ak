@@ -40,8 +40,7 @@ pub fn add(left v0: Value, right v1: Value) -> Value {
           a0,
           a1,
           fn(_, q0, q1) {
-            let q =
-              q0 + q1
+            let q = q0 + q1
             if q == 0 {
               None
             } else {
@@ -78,8 +77,7 @@ pub fn flatten_with(
         assets,
         fn(asset_name, quantity, xs) {
           when transform(policy_id, asset_name, quantity) is {
-            None ->
-              xs
+            None -> xs
             Some(x) ->
               [x, ..xs]
           }

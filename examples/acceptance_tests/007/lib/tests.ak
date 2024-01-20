@@ -9,7 +9,8 @@ pub fn unzip(xs: List<(a, b)>) -> (List<a>, List<b>) {
 }
 
 test unzip1() {
-  let x = [(3, #"55"), (4, #"7799")]
+  let x =
+    [(3, #"55"), (4, #"7799")]
 
   unzip(x) == ([3, 4], [#"55", #"7799"])
 }

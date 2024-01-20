@@ -10,4 +10,3 @@ test bar() {
     False
   }
 }
-

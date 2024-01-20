@@ -25,12 +25,9 @@ pub type ProofItem {
 // Function returning a hash of a given Merkle Tree element
 pub fn root_hash(self: MerkleTree<a>) -> Hash<Sha2_256, ByteArray> {
   when self is {
-    Empty ->
-      #""
-    Leaf { hash } ->
-      hash
-    Node { hash, .. } ->
-      hash
+    Empty -> #""
+    Leaf { hash } -> hash
+    Node { hash, .. } -> hash
   }
 }
 
@@ -42,12 +39,9 @@ pub fn is_equal(left: MerkleTree<a>, right: MerkleTree<a>) -> Bool {
 /// Function returns a total numbers of leaves in the tree.
 pub fn size(self: MerkleTree<a>) -> Int {
   when self is {
-    Empty ->
-      0
-    Leaf { .. } ->
-      1
-    Node { left, right, .. } ->
-      size(left) + size(right)
+    Empty -> 0
+    Leaf { .. } -> 1
+    Node { left, right, .. } -> size(left) + size(right)
   }
 }
 
@@ -61,10 +55,8 @@ fn combine_hash(
 /// Function that returns whether merkle tree has any elements
 pub fn is_empty(self: MerkleTree<a>) -> Bool {
   when self is {
-    Empty ->
-      True
-    _ ->
-      False
+    Empty -> True
+    _ -> False
   }
 }
 
@@ -75,8 +67,7 @@ fn do_proof(
   serialise_fn: fn(a) -> ByteArray,
 ) -> Option<Proof> {
   when self is {
-    Empty ->
-      None
+    Empty -> None
     Leaf { hash } ->
       if hash == item_hash {
         Some(proof)
@@ -84,10 +75,8 @@ fn do_proof(
         None
       }
     Node { left, right, .. } -> {
-      let rh =
-        root_hash(right)
-      let lh =
-        root_hash(left)
+      let rh = root_hash(right)
+      let lh = root_hash(left)
       let go_left: Option<Proof> =
         do_proof(
           left,
@@ -127,16 +116,13 @@ fn do_from_list(
   serialise_fn: fn(a) -> ByteArray,
 ) -> MerkleTree<a> {
   when items is {
-    [] ->
-      Empty
+    [] -> Empty
     [item] -> {
-      let hashed_item =
-        sha2_256(serialise_fn(item))
+      let hashed_item = sha2_256(serialise_fn(item))
       Leaf { hash: hashed_item }
     }
     all -> {
-      let cutoff: Int =
-        len / 2
+      let cutoff: Int = len / 2
       let left =
         all
           |> list.take(cutoff)
@@ -145,8 +131,7 @@ fn do_from_list(
         all
           |> list.drop(cutoff)
           |> do_from_list(len - cutoff, serialise_fn)
-      let hash =
-        combine_hash(root_hash(left), root_hash(right))
+      let hash = combine_hash(root_hash(left), root_hash(right))
       Node { hash, left, right }
     }
   }
@@ -167,13 +152,10 @@ fn do_from_hashes_list(
   len: Int,
 ) -> MerkleTree<a> {
   when items is {
-    [] ->
-      Empty
-    [hashed_item] ->
-      Leaf { hash: hashed_item }
+    [] -> Empty
+    [hashed_item] -> Leaf { hash: hashed_item }
     all -> {
-      let cutoff: Int =
-        len / 2
+      let cutoff: Int = len / 2
       let left =
         all
           |> list.take(cutoff)
@@ -182,8 +164,7 @@ fn do_from_hashes_list(
         all
           |> list.drop(cutoff)
           |> do_from_hashes_list(len - cutoff)
-      let hash =
-        combine_hash(root_hash(left), root_hash(right))
+      let hash = combine_hash(root_hash(left), root_hash(right))
       Node { hash, left, right }
     }
   }
@@ -207,8 +188,7 @@ pub fn member_from_hash(
   serialise_fn: fn(a) -> ByteArray,
 ) -> Bool {
   when proof is {
-    [] ->
-      root_hash == item_hash
+    [] -> root_hash == item_hash
     [head, ..tail] ->
       when head is {
         Left { hash: l } ->
@@ -237,8 +217,7 @@ pub fn member(
   proof: Proof,
   serialise_fn: fn(a) -> ByteArray,
 ) -> Bool {
-  let item_hash =
-    sha2_256(serialise_fn(item))
+  let item_hash = sha2_256(serialise_fn(item))
   member_from_hash(item_hash, root_hash, proof, serialise_fn)
 }
 
@@ -247,16 +226,12 @@ pub fn member_from_tree(
   item: a,
   serialise_fn: fn(a) -> ByteArray,
 ) -> Bool {
-  let proof: Option<Proof> =
-    get_proof(tree, item, serialise_fn)
-  let rh =
-    root_hash(tree)
+  let proof: Option<Proof> = get_proof(tree, item, serialise_fn)
+  let rh = root_hash(tree)
 
   when proof is {
-    Some(p) ->
-      member(item, rh, p, serialise_fn)
-    None ->
-      False
+    Some(p) -> member(item, rh, p, serialise_fn)
+    None -> False
   }
 }
 
@@ -266,25 +241,18 @@ fn create_string_item_serialise_fn() -> fn(String) -> ByteArray {
 }
 
 test from_hashes_list_5() {
-  let dog =
-    @"dog"
-  let cat =
-    @"cat"
-  let mouse =
-    @"mouse"
-  let horse =
-    @"horse"
+  let dog = @"dog"
+  let cat = @"cat"
+  let mouse = @"mouse"
+  let horse = @"horse"
 
-  let serialise_fn =
-    create_string_item_serialise_fn()
+  let serialise_fn = create_string_item_serialise_fn()
 
   let items =
     [dog, cat, mouse, horse]
-  let hashes_items =
-    list.map(items, fn(item) { sha2_256(serialise_fn(item)) })
+  let hashes_items = list.map(items, fn(item) { sha2_256(serialise_fn(item)) })
 
-  let mt =
-    from_hashes_list(hashes_items)
+  let mt = from_hashes_list(hashes_items)
 
   let left_node_hash =
     sha2_256(
@@ -298,8 +266,7 @@ test from_hashes_list_5() {
       ),
     )
 
-  let root_hash =
-    sha2_256(bytearray.concat(left_node_hash, right_node_hash))
+  let root_hash = sha2_256(bytearray.concat(left_node_hash, right_node_hash))
 
   Node {
     hash: root_hash,

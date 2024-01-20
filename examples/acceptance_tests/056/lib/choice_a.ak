@@ -1,12 +1,9 @@
 // Could possibly be forbidden by the parser instead if we have no intent to support that.
 pub fn choice(self: List<Option<a>>) -> Option<a> {
   when self is {
-    [] ->
-      None
-    [Some(_) as result, ..] ->
-      result
-    [None, ..others] ->
-      choice(others)
+    [] -> None
+    [Some(_) as result, ..] -> result
+    [None, ..others] -> choice(others)
   }
 }
 

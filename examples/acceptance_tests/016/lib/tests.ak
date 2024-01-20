@@ -13,7 +13,6 @@ pub fn drop(bytes: ByteArray, n: Int) -> ByteArray {
 }
 
 test drop_1() {
-  let x =
-    #"01020304050607"
+  let x = #"01020304050607"
   drop(x, 2) == #"0304050607"
 }

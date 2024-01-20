@@ -4,8 +4,7 @@ fn must_be_signed(signatories) {
       trace @"no signatories"
       False
     }
-    [sig, ..] ->
-      (sig == "#ffff")?
+    [sig, ..] -> (sig == "#ffff")?
   }
 }
 

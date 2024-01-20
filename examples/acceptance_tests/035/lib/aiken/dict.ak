@@ -37,8 +37,7 @@ fn do_union_with(
   with: fn(ByteArray, value, value) -> Option<value>,
 ) -> List<(ByteArray, value)> {
   when left is {
-    [] ->
-      right
+    [] -> right
     [(k, v), ..rest] ->
       do_union_with(rest, do_insert_with(right, k, v, with), with)
   }
@@ -58,8 +57,7 @@ fn do_insert_with(
         when with(k, v, v2) is {
           Some(combined) ->
             [(k, combined), ..rest]
-          None ->
-            rest
+          None -> rest
         }
       } else {
         [(k2, v2), ..do_insert_with(rest, k, v, with)]

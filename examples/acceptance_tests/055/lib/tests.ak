@@ -1,7 +1,7 @@
 use aiken/bytearray
 use aiken/dict
 use aiken/hash.{Hash, Sha2_256, sha2_256}
-use aiken/interval.{between, intersection, is_empty, entirely_between}
+use aiken/interval.{between, entirely_between, intersection, is_empty}
 use aiken/list
 use aiken/transaction.{InlineDatum}
 
@@ -15,12 +15,9 @@ pub type MerkleTree {
 
 pub fn root_hash(t: MerkleTree) -> Hash<Sha2_256, ByteArray> {
   when t is {
-    Empty ->
-      #""
-    Leaf { hash, .. } ->
-      hash
-    Node { hash, .. } ->
-      hash
+    Empty -> #""
+    Leaf { hash, .. } -> hash
+    Node { hash, .. } -> hash
   }
 }
 
@@ -30,12 +27,9 @@ pub fn is_equal(a: MerkleTree, b: MerkleTree) -> Bool {
 
 pub fn size(t: MerkleTree) -> Int {
   when t is {
-    Empty ->
-      0
-    Leaf { .. } ->
-      1
-    Node { left, right, .. } ->
-      size(left) + size(right)
+    Empty -> 0
+    Leaf { .. } -> 1
+    Node { left, right, .. } -> size(left) + size(right)
   }
 }
 
@@ -49,13 +43,10 @@ pub fn from_list(items0: List<ByteArray>) -> MerkleTree {
 
 fn do_from_list(items: List<ByteArray>, len: Int) -> MerkleTree {
   when items is {
-    [] ->
-      Empty
-    [value] ->
-      Leaf { hash: sha2_256(value), value }
+    [] -> Empty
+    [value] -> Leaf { hash: sha2_256(value), value }
     all -> {
-      let cutoff: Int =
-        len / 2
+      let cutoff: Int = len / 2
       let left =
         all
           |> list.take(cutoff)
@@ -64,8 +55,7 @@ fn do_from_list(items: List<ByteArray>, len: Int) -> MerkleTree {
         all
           |> list.drop(cutoff)
           |> do_from_list(len - cutoff)
-      let hash =
-        combine_hash(root_hash(left), root_hash(right))
+      let hash = combine_hash(root_hash(left), root_hash(right))
       Node { hash, left, right }
     }
   }
@@ -74,8 +64,7 @@ fn do_from_list(items: List<ByteArray>, len: Int) -> MerkleTree {
 test foo() {
   let items =
     [#"aa", #"bb", #"cc"]
-  let mt =
-    from_list(items)
+  let mt = from_list(items)
   size(mt) == 3
 }
 
@@ -84,19 +73,15 @@ test some_test1() {
 }
 
 test intersection_3() {
-  let iv1 =
-    between(0, 1)
-  let iv2 =
-    entirely_between(1, 2)
+  let iv1 = between(0, 1)
+  let iv2 = entirely_between(1, 2)
   intersection(iv1, iv2)
     |> is_empty
 }
 
-const fooz =
-  #"666f6f"
+const fooz = #"666f6f"
 
-const bar =
-  #"626172"
+const bar = #"626172"
 
 fn fixture_1() {
   dict.new()

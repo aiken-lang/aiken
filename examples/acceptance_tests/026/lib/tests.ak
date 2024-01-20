@@ -1,9 +1,7 @@
 pub fn foldr(xs: List<a>, f: fn(a, b) -> b, zero: b) -> b {
   when xs is {
-    [] ->
-      zero
-    [x, ..rest] ->
-      f(x, foldr(rest, f, zero))
+    [] -> zero
+    [x, ..rest] -> f(x, foldr(rest, f, zero))
   }
 }
 
@@ -15,8 +13,7 @@ pub fn flat_map(xs: List<a>, f: fn(a) -> List<b>) -> List<b> {
   when xs is {
     [] ->
       []
-    [x, ..rest] ->
-      concat(f(x), flat_map(rest, f))
+    [x, ..rest] -> concat(f(x), flat_map(rest, f))
   }
 }
 

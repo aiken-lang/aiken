@@ -4,14 +4,11 @@ pub fn map2(
   f: fn(a, b) -> result,
 ) -> Option<result> {
   when opt_a is {
-    None ->
-      None
+    None -> None
     Some(a) ->
       when opt_b is {
-        None ->
-          None
-        Some(b) ->
-          Some(f(a, b))
+        None -> None
+        Some(b) -> Some(f(a, b))
       }
   }
 }

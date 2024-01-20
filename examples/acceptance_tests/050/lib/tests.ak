@@ -5,55 +5,46 @@ pub type Thing {
 }
 
 test let_1() {
-  let x: Data =
-    1
+  let x: Data = 1
 
   x == builtin.i_data(1)
 }
 
 test let_2() {
-  let x: Data =
-    1
+  let x: Data = 1
 
-  expect y: Int =
-    x
+  expect y: Int = x
 
   y == 1
 }
 
 test assert_1() {
-  expect thing: Thing =
-    builtin.constr_data(0, [builtin.i_data(1)])
+  expect thing: Thing = builtin.constr_data(0, [builtin.i_data(1)])
 
   thing.wow == 1
 }
 
 fn cast_to_thing(x: Data) -> Thing {
-  expect x: Thing =
-    x
+  expect x: Thing = x
 
   x
 }
 
 test assert_2() {
-  let thing =
-    Thing { wow: 1 }
+  let thing = Thing { wow: 1 }
 
-  let still_thing =
-    cast_to_thing(thing)
+  let still_thing = cast_to_thing(thing)
 
   still_thing.wow == 1
 }
 
 test tuple_1() {
-  let thing =
-    (#"aa", #"bb", #"cc")
+  let thing = (#"aa", #"bb", #"cc")
   thing.1st == #"aa"
 }
 
 test pair_1() {
-  let thing =
-    (#"aa", #"bb")
+  let thing = (#"aa", #"bb")
   thing.1st == #"aa"
 }
 // should not typecheck

@@ -1,48 +1,34 @@
 test foo_1() {
-  let a =
-    False
+  let a = False
   when a is {
-    a if a ->
-      False
-    _ ->
-      True
+    a if a -> False
+    _ -> True
   }
 }
 
 test foo_2() {
-  let point =
-    (14, 42)
+  let point = (14, 42)
   when point is {
-    (x, _) if x > 100 ->
-      False
-    (x, _) if x > 10 ->
-      True
-    _ ->
-      False
+    (x, _) if x > 100 -> False
+    (x, _) if x > 10 -> True
+    _ -> False
   }
 }
 
 test foo_3() {
-  let point =
-    (14, 42)
+  let point = (14, 42)
   when point is {
-    (x, y) if x == 14 && y <= 100 ->
-      True
-    _ ->
-      False
+    (x, y) if x == 14 && y <= 100 -> True
+    _ -> False
   }
 }
 
 test foo_4() {
-  let a =
-    False
-  let point =
-    (14, 42)
+  let a = False
+  let point = (14, 42)
   when point is {
-    (x, y) if !a ->
-      x + y == 56
-    _ ->
-      False
+    (x, y) if !a -> x + y == 56
+    _ -> False
   }
 }
 
@@ -55,12 +41,9 @@ type Seasons {
 
 fn is_cold(season, hour) {
   when season is {
-    Winter | Fall ->
-      True
-    _ if hour >= 18 ->
-      True
-    _ ->
-      False
+    Winter | Fall -> True
+    _ if hour >= 18 -> True
+    _ -> False
   }
 }
 
@@ -70,8 +53,7 @@ test foo_5() {
 
 fn when_tuple(a: (Int, Int)) -> Int {
   when a is {
-    (a, _b) ->
-      a
+    (a, _b) -> a
   }
 }
 

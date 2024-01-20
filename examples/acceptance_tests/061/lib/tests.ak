@@ -8,11 +8,9 @@ use aiken/transaction/credential.{
 }
 use aiken/transaction/value
 
-const keyhash =
-  #"010203040506"
+const keyhash = #"010203040506"
 
-const scripthash =
-  #"060504030201"
+const scripthash = #"060504030201"
 
 pub fn keyhash_address(with_stake_credential: Option<StakeCredential>) {
   Address {
@@ -34,8 +32,7 @@ type SampleData {
 }
 
 pub fn tx_1() -> Transaction {
-  let sample_datum =
-    SampleData { a: 1, b: #"01" }
+  let sample_datum = SampleData { a: 1, b: #"01" }
   let tx =
     Transaction {
       inputs: [

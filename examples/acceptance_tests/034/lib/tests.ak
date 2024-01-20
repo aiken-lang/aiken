@@ -1,9 +1,7 @@
 pub fn foldr(self: List<a>, with: fn(a, b) -> b, zero: b) -> b {
   when self is {
-    [] ->
-      zero
-    [x, ..xs] ->
-      with(x, foldr(xs, with, zero))
+    [] -> zero
+    [x, ..xs] -> with(x, foldr(xs, with, zero))
   }
 }
 
