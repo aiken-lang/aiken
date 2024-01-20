@@ -1,0 +1,44 @@
+---
+source: crates/aiken-lang/src/parser/definition/function.rs
+description: "Code:\n\nfn run() {\n  let x = 1 + 1\n}\n"
+---
+Fn(
+    Function {
+        arguments: [],
+        body: Assignment {
+            location: 13..26,
+            value: BinOp {
+                location: 21..26,
+                name: AddInt,
+                left: UInt {
+                    location: 21..22,
+                    value: "1",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+                right: UInt {
+                    location: 25..26,
+                    value: "1",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+            },
+            pattern: Var {
+                location: 17..18,
+                name: "x",
+            },
+            kind: Let,
+            annotation: None,
+        },
+        doc: None,
+        location: 0..8,
+        name: "run",
+        public: false,
+        return_annotation: None,
+        return_type: (),
+        end_position: 27,
+        can_error: true,
+    },
+)

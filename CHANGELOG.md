@@ -10,6 +10,10 @@
 ### Fixed
 
 - **aiken-lang**: Fix flat encoding and decoding of large integer values. @KtorZ
+- **aiken-lang**: Traces should not have following expressions formatted into a block. @rvcas
+- **aiken-lang**: Sequences should not be erased if the sole expression is an assignment. @rvcas
+- **aiken-lang**: Should not be able to assign an assignment to an assignment. @rvcas
+- **aiken-lang**: Should not be able to have an assignment in a logical op chain. @rvcas
 - **aiken**: Ensures that test expected to fail that return `False` are considered to pass & improve error reporting when they fail. @KtorZ
 
 ### Removed

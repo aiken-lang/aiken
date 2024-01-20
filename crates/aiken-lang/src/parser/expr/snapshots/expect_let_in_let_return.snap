@@ -1,0 +1,38 @@
+---
+source: crates/aiken-lang/src/parser/expr/assignment.rs
+description: "Code:\n\nlet a = {\n  let b = 42\n  b\n}\n"
+---
+Assignment {
+    location: 0..28,
+    value: Sequence {
+        location: 12..26,
+        expressions: [
+            Assignment {
+                location: 12..22,
+                value: UInt {
+                    location: 20..22,
+                    value: "42",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+                pattern: Var {
+                    location: 16..17,
+                    name: "b",
+                },
+                kind: Let,
+                annotation: None,
+            },
+            Var {
+                location: 25..26,
+                name: "b",
+            },
+        ],
+    },
+    pattern: Var {
+        location: 4..5,
+        name: "a",
+    },
+    kind: Let,
+    annotation: None,
+}

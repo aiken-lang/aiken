@@ -17,6 +17,16 @@ pub fn parser(
             just(Token::RightParen),
         ),
     ))
+    .map_with_span(|e, span| {
+        if matches!(e, UntypedExpr::Assignment { .. }) {
+            UntypedExpr::Sequence {
+                location: span,
+                expressions: vec![e],
+            }
+        } else {
+            e
+        }
+    })
 }
 
 #[cfg(test)]
