@@ -1,0 +1,39 @@
+{
+  "preamble": {
+    "title": "aiken-lang/acceptance_test_090",
+    "version": "0.0.0",
+    "plutusVersion": "v2",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.0.21-alpha+9f263c4"
+    }
+  },
+  "validators": [
+    {
+      "title": "foo.spend",
+      "datum": {
+        "title": "datum",
+        "schema": {
+          "$ref": "#/definitions/Int"
+        }
+      },
+      "redeemer": {
+        "title": "_redeemer",
+        "schema": {
+          "$ref": "#/definitions/Data"
+        }
+      },
+      "compiledCode": "583f010000322223253330053370e00290487777c9cfdde5c8f27bf4c1637fc55b5eeef7d8c4d9e0d4454967ff7d6e7ee6e242eb60c6318a4c26cac6eb400d5cd1",
+      "hash": "d18aa035514acb988a34d33fc246420c5b0eca4f3f947ce95e294447"
+    }
+  ],
+  "definitions": {
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    },
+    "Int": {
+      "dataType": "integer"
+    }
+  }
+}

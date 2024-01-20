@@ -1,0 +1,15 @@
+---
+source: crates/aiken-lang/src/parser/expr/assignment.rs
+description: "Invalid code (parse error):\n\nlet a =\n// foo\nlet b = 42\n"
+---
+[
+    ParseError {
+        kind: UnfinishedAssignmentRightHandSide,
+        span: 0..25,
+        while_parsing: None,
+        expected: {},
+        label: Some(
+            "invalid assignment right-hand side",
+        ),
+    },
+]

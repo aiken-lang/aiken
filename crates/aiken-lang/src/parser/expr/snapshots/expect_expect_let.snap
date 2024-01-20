@@ -1,0 +1,40 @@
+---
+source: crates/aiken-lang/src/parser/expr/assignment.rs
+description: "Code:\n\nexpect { let a = 42 } = foo"
+---
+Assignment {
+    location: 0..21,
+    value: Sequence {
+        location: 7..21,
+        expressions: [
+            Assignment {
+                location: 9..19,
+                value: UInt {
+                    location: 17..19,
+                    value: "42",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+                pattern: Var {
+                    location: 13..14,
+                    name: "a",
+                },
+                kind: Let,
+                annotation: None,
+            },
+        ],
+    },
+    pattern: Constructor {
+        is_record: false,
+        location: 0..21,
+        name: "True",
+        arguments: [],
+        module: None,
+        constructor: (),
+        with_spread: false,
+        tipo: (),
+    },
+    kind: Expect,
+    annotation: None,
+}

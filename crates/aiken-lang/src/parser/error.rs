@@ -30,7 +30,7 @@ impl ParseError {
 
     pub fn invalid_assignment_right_hand_side(span: Span) -> Self {
         Self {
-            kind: ErrorKind::InvalidAssignmentRightHandSide,
+            kind: ErrorKind::UnfinishedAssignmentRightHandSide,
             span,
             while_parsing: None,
             expected: HashSet::new(),
@@ -173,7 +173,7 @@ pub enum ErrorKind {
         hint: Option<String>,
     },
 
-    #[error("I discovered an invalid assignment.")]
+    #[error("I discovered an unfinished assignment.")]
     #[diagnostic(
         help(
             "{} and {} bindings must be followed by a valid expression.",
@@ -181,7 +181,7 @@ pub enum ErrorKind {
             "expect".if_supports_color(Stdout, |s| s.yellow()),
         ),
     )]
-    InvalidAssignmentRightHandSide,
+    UnfinishedAssignmentRightHandSide,
 
     #[error("I tripped over a {}", fmt_curve_type(.curve))]
     PointNotOnCurve { curve: CurveType },

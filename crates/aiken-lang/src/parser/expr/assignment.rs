@@ -94,4 +94,42 @@ mod tests {
     fn expect_trace_if_false() {
         assert_expr!("expect foo?");
     }
+
+    #[test]
+    fn expect_unfinished_let() {
+        assert_expr!(
+            "
+            let a =
+            // foo
+            let b = 42
+            "
+        );
+    }
+
+    #[test]
+    fn expect_let_in_let() {
+        assert_expr!("let a = { let b = 42 }");
+    }
+
+    #[test]
+    fn expect_let_in_let_return() {
+        assert_expr!(
+            "
+            let a = {
+              let b = 42
+              b
+            }
+            "
+        );
+    }
+
+    #[test]
+    fn expect_let_in_let_parens() {
+        assert_expr!("let a = ( let b = 42 )");
+    }
+
+    #[test]
+    fn expect_expect_let() {
+        assert_expr!("expect { let a = 42 } = foo");
+    }
 }
