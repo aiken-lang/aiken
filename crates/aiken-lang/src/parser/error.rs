@@ -173,10 +173,10 @@ pub enum ErrorKind {
         hint: Option<String>,
     },
 
-    #[error("I discovered an unfinished assignment.")]
+    #[error("I spotted an unfinished assignment.")]
     #[diagnostic(
         help(
-            "{} and {} bindings must be followed by a valid expression.",
+            "{} and {} bindings must be followed by a valid, complete, expression.",
             "let".if_supports_color(Stdout, |s| s.yellow()),
             "expect".if_supports_color(Stdout, |s| s.yellow()),
         ),

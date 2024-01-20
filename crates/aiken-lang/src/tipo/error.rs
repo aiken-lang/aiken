@@ -407,10 +407,10 @@ Perhaps, try the following:
     as, expect, check, const, else, fn, if, is, let, opaque, pub, test, todo, trace, type, use, when"#))]
     KeywordInModuleName { name: String, keyword: String },
 
-    #[error("I discovered a function which is ending with an assignment.\n")]
+    #[error("I discovered a block which is ending with an assignment.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/functions#named-functions"))]
     #[diagnostic(code("illegal::return"))]
-    #[diagnostic(help(r#"In Aiken, functions must return an explicit result in the form of an expression. While assignments are technically speaking expressions, they aren't allowed to be the last expression of a function because they convey a different meaning and this could be error-prone.
+    #[diagnostic(help(r#"In Aiken, code blocks (such as function bodies) must return an explicit result in the form of an expression. While assignments are technically speaking expressions, they aren't allowed to be the last expression of a function because they convey a different meaning and this could be error-prone.
 
 If you really meant to return that last expression, try to replace it with the following:
 
