@@ -1585,33 +1585,34 @@ pub fn list_access_to_uplc(
                 // case for no tail
                 // name is guaranteed to not be discard at this point
 
-                if matches!(expect_level, ExpectLevel::Full | ExpectLevel::Items) {
+                if matches!(expect_level, ExpectLevel::None) {
+                    acc.lambda(name).apply(head_list).lambda(tail_name)
+                } else {
                     Term::tail_list()
                         .apply(Term::var(tail_name.to_string()))
                         .delayed_choose_list(acc, error_term.clone())
                         .lambda(name)
                         .apply(head_list)
                         .lambda(tail_name)
-                } else {
-                    acc.lambda(name).apply(head_list).lambda(tail_name)
                 }
             } else if name == "_" {
-                if matches!(expect_level, ExpectLevel::Full | ExpectLevel::Items)
-                    && error_term != Term::Error
-                {
+                if matches!(expect_level, ExpectLevel::None) || error_term == Term::Error {
+                    acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
+                        .lambda(tail_name)
+                } else {
                     Term::var(tail_name.to_string())
                         .delayed_choose_list(
                             error_term.clone(),
                             acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string()))),
                         )
                         .lambda(tail_name)
-                } else {
-                    acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
-                        .lambda(tail_name)
                 }
-            } else if matches!(expect_level, ExpectLevel::Full | ExpectLevel::Items)
-                && error_term != Term::Error
-            {
+            } else if matches!(expect_level, ExpectLevel::None) || error_term == Term::Error {
+                acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
+                    .lambda(name)
+                    .apply(head_list)
+                    .lambda(tail_name)
+            } else {
                 Term::var(tail_name.to_string())
                     .delayed_choose_list(
                         error_term.clone(),
@@ -1619,11 +1620,6 @@ pub fn list_access_to_uplc(
                             .lambda(name)
                             .apply(head_list),
                     )
-                    .lambda(tail_name)
-            } else {
-                acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
-                    .lambda(name)
-                    .apply(head_list)
                     .lambda(tail_name)
             }
         },
