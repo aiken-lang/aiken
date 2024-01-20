@@ -34,7 +34,7 @@ impl ParseError {
             span,
             while_parsing: None,
             expected: HashSet::new(),
-            label: Some("invalid assignment right hand side"),
+            label: Some("invalid assignment right-hand side"),
         }
     }
 
