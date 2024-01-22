@@ -1587,12 +1587,23 @@ pub fn list_access_to_uplc(
 
                 if matches!(expect_level, ExpectLevel::None) {
                     acc.lambda(name).apply(head_list).lambda(tail_name)
-                } else {
+                } else if error_term == Term::Error {
                     Term::tail_list()
                         .apply(Term::var(tail_name.to_string()))
                         .delayed_choose_list(acc, error_term.clone())
                         .lambda(name)
                         .apply(head_list)
+                        .lambda(tail_name)
+                } else {
+                    Term::var(tail_name.to_string())
+                        .delayed_choose_list(
+                            error_term.clone(),
+                            Term::tail_list()
+                                .apply(Term::var(tail_name.to_string()))
+                                .delayed_choose_list(acc, error_term.clone())
+                                .lambda(name)
+                                .apply(head_list),
+                        )
                         .lambda(tail_name)
                 }
             } else if name == "_" {
