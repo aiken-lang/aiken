@@ -1523,7 +1523,7 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
 
 pub fn list_access_to_uplc(
     names_types_ids: &[(String, Rc<Type>, u64)],
-    tail: bool,
+    tail_present: bool,
     term: Term<Name>,
     is_list_accessor: bool,
     expect_level: ExpectLevel,
@@ -1539,7 +1539,7 @@ pub fn list_access_to_uplc(
 
     // If the the is just discards and check_last_item then we check for empty list
     if no_tailing_discards.is_empty()
-        && !tail
+        && !tail_present
         && matches!(expect_level, ExpectLevel::Full | ExpectLevel::Items)
     {
         return Term::var("empty_list")
@@ -1553,7 +1553,7 @@ pub fn list_access_to_uplc(
     let no_tailing_len = no_tailing_discards.len();
 
     // If we cut off at least one element then that was tail and possibly some heads
-    let tail = tail && no_tailing_discards.len() == names_len;
+    let tail_wasnt_cutoff = tail_present && no_tailing_discards.len() == names_len;
 
     no_tailing_discards.into_iter().enumerate().rev().fold(
         term,
@@ -1578,15 +1578,21 @@ pub fn list_access_to_uplc(
 
             // handle tail case
             // name is guaranteed to not be discard at this point
-            if index == no_tailing_len - 1 && tail {
+            if index == no_tailing_len - 1 && tail_wasnt_cutoff {
                 // simply lambda for tail name
                 acc.lambda(name)
             } else if index == no_tailing_len - 1 {
                 // case for no tail
                 // name is guaranteed to not be discard at this point
 
-                if matches!(expect_level, ExpectLevel::None) {
+                if matches!(expect_level, ExpectLevel::None)
+                    || (error_term == Term::Error && tail_present)
+                {
                     acc.lambda(name).apply(head_list).lambda(tail_name)
+                } else if tail_present {
+                    Term::var(tail_name.to_string())
+                        .delayed_choose_list(error_term.clone(), acc.lambda(name).apply(head_list))
+                        .lambda(tail_name)
                 } else if error_term == Term::Error {
                     Term::tail_list()
                         .apply(Term::var(tail_name.to_string()))
