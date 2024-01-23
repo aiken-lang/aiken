@@ -3770,6 +3770,14 @@ impl<'a> CodeGenerator<'a> {
             }
         };
 
+        let convert_data_to_type = |term, tipo| {
+            if error_term == Term::Error {
+                builder::convert_data_to_type(term, tipo)
+            } else {
+                builder::convert_data_to_type_debug(term, tipo, error_term.clone())
+            }
+        };
+
         match ir {
             Air::Int { value } => Some(Term::integer(value.parse().unwrap())),
             Air::String { value } => Some(Term::string(value)),
@@ -4506,11 +4514,7 @@ impl<'a> CodeGenerator<'a> {
             Air::CastFromData { tipo, .. } => {
                 let mut term = arg_stack.pop().unwrap();
 
-                term = if error_term == Term::Error {
-                    builder::convert_data_to_type(term, &tipo)
-                } else {
-                    builder::convert_data_to_type_debug(term, &tipo, error_term)
-                };
+                term = convert_data_to_type(term, &tipo);
 
                 if extract_constant(&term).is_some() {
                     let mut program: Program<Name> = Program {
@@ -5221,37 +5225,17 @@ impl<'a> CodeGenerator<'a> {
                     assert!(names.len() == 2);
 
                     if names[1] != "_" {
-                        term = term
-                            .lambda(names[1].clone())
-                            .apply(if error_term == Term::Error {
-                                builder::convert_data_to_type(
-                                    Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                                    &inner_types[1],
-                                )
-                            } else {
-                                builder::convert_data_to_type_debug(
-                                    Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                                    &inner_types[1],
-                                    error_term.clone(),
-                                )
-                            });
+                        term = term.lambda(names[1].clone()).apply(convert_data_to_type(
+                            Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
+                            &inner_types[1],
+                        ));
                     }
 
                     if names[0] != "_" {
-                        term = term
-                            .lambda(names[0].clone())
-                            .apply(if error_term == Term::Error {
-                                builder::convert_data_to_type(
-                                    Term::fst_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                                    &inner_types[0],
-                                )
-                            } else {
-                                builder::convert_data_to_type_debug(
-                                    Term::fst_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                                    &inner_types[0],
-                                    error_term,
-                                )
-                            })
+                        term = term.lambda(names[0].clone()).apply(convert_data_to_type(
+                            Term::fst_pair().apply(Term::var(format!("__tuple_{list_id}"))),
+                            &inner_types[0],
+                        ))
                     }
 
                     term = term.lambda(format!("__tuple_{list_id}")).apply(value);
