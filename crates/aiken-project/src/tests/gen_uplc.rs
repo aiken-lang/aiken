@@ -4270,17 +4270,23 @@ fn expect_head_discard_tail() {
 
     assert_uplc(
         src,
-        Term::equals_integer()
-            .apply(Term::var("h"))
-            .apply(Term::var("h"))
-            .lambda("h")
-            .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("a"))))
+        Term::var("a")
+            .delayed_choose_list(
+                Term::Error.delayed_trace(Term::var("expect[h,..]=a")),
+                Term::equals_integer()
+                    .apply(Term::var("h"))
+                    .apply(Term::var("h"))
+                    .lambda("h")
+                    .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("a")))),
+            )
             .lambda("a")
             .apply(Term::list_values(vec![
                 Constant::Data(Data::integer(1.into())),
                 Constant::Data(Data::integer(2.into())),
                 Constant::Data(Data::integer(3.into())),
-            ])),
+            ]))
+            .lambda("expect[h,..]=a")
+            .apply(Term::string("expect [h, ..] = a")),
         false,
     );
 }
