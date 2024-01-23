@@ -3496,35 +3496,74 @@ fn generic_validator_type_test() {
                                     .apply(Term::integer(1.into()))
                                     .apply(Term::var("subject"))
                                     .delayed_if_then_else(
-                                        Term::tail_list()
-                                            .apply(Term::var("tail_1"))
+                                        Term::var("r_fields")
                                             .delayed_choose_list(
-                                                Term::unit().lambda("_").apply(
-                                                    Term::var("__expect_B")
-                                                        .apply(Term::var("field_B"))
-                                                        .apply(Term::var("param_msg")),
-                                                ),
                                                 Term::Error.delayed_trace(Term::var("param_msg")),
-                                            )
-                                            .lambda("field_B")
-                                            .apply(Term::head_list().apply(Term::var("tail_1")))
-                                            .lambda("tail_1")
-                                            .apply(Term::tail_list().apply(Term::var("r_fields")))
-                                            .lambda("field_0")
-                                            .apply(
-                                                Term::equals_integer()
-                                                    .apply(Term::integer(0.into()))
+                                                Term::var("tail_1")
+                                                    .delayed_choose_list(
+                                                        Term::Error
+                                                            .delayed_trace(Term::var("param_msg")),
+                                                        Term::tail_list()
+                                                            .apply(Term::var("tail_1"))
+                                                            .delayed_choose_list(
+                                                                Term::unit().lambda("_").apply(
+                                                                    Term::var("__expect_B")
+                                                                        .apply(Term::var("field_B"))
+                                                                        .apply(Term::var(
+                                                                            "param_msg",
+                                                                        )),
+                                                                ),
+                                                                Term::Error.delayed_trace(
+                                                                    Term::var("param_msg"),
+                                                                ),
+                                                            )
+                                                            .lambda("field_B")
+                                                            .apply(
+                                                                Term::head_list()
+                                                                    .apply(Term::var("tail_1")),
+                                                            ),
+                                                    )
+                                                    .lambda("tail_1")
                                                     .apply(
-                                                        Term::fst_pair().apply(
-                                                            Term::unconstr_data().apply(
+                                                        Term::tail_list()
+                                                            .apply(Term::var("r_fields")),
+                                                    )
+                                                    .lambda("field_0")
+                                                    .apply(
+                                                        Term::var("__val")
+                                                            .delayed_choose_data(
+                                                                Term::equals_integer()
+                                                                    .apply(Term::integer(0.into()))
+                                                                    .apply(
+                                                                        Term::fst_pair().apply(
+                                                                            Term::unconstr_data()
+                                                                                .apply(Term::var(
+                                                                                    "__val",
+                                                                                )),
+                                                                        ),
+                                                                    )
+                                                                    .delayed_if_then_else(
+                                                                        Term::unit(),
+                                                                        Term::Error,
+                                                                    ),
+                                                                Term::Error.delayed_trace(
+                                                                    Term::var("param_msg"),
+                                                                ),
+                                                                Term::Error.delayed_trace(
+                                                                    Term::var("param_msg"),
+                                                                ),
+                                                                Term::Error.delayed_trace(
+                                                                    Term::var("param_msg"),
+                                                                ),
+                                                                Term::Error.delayed_trace(
+                                                                    Term::var("param_msg"),
+                                                                ),
+                                                            )
+                                                            .lambda("__val")
+                                                            .apply(
                                                                 Term::head_list()
                                                                     .apply(Term::var("r_fields")),
                                                             ),
-                                                        ),
-                                                    )
-                                                    .delayed_if_then_else(
-                                                        Term::unit(),
-                                                        Term::Error,
                                                     ),
                                             )
                                             .lambda("r_fields")
@@ -3546,22 +3585,46 @@ fn generic_validator_type_test() {
                             .apply(Term::integer(0.into()))
                             .apply(Term::var("subject"))
                             .delayed_if_then_else(
-                                Term::tail_list()
-                                    .apply(Term::var("B_fields"))
+                                Term::var("B_fields")
                                     .delayed_choose_list(
-                                        Term::unit(),
                                         Term::Error.delayed_trace(Term::var("param_msg")),
-                                    )
-                                    .lambda("something")
-                                    .apply(
-                                        Term::equals_integer()
-                                            .apply(Term::integer(0.into()))
-                                            .apply(Term::fst_pair().apply(
-                                                Term::unconstr_data().apply(
-                                                    Term::head_list().apply(Term::var("B_fields")),
-                                                ),
-                                            ))
-                                            .delayed_if_then_else(Term::unit(), Term::Error),
+                                        Term::tail_list()
+                                            .apply(Term::var("B_fields"))
+                                            .delayed_choose_list(
+                                                Term::unit(),
+                                                Term::Error.delayed_trace(Term::var("param_msg")),
+                                            )
+                                            .lambda("something")
+                                            .apply(
+                                                Term::var("__val")
+                                                    .delayed_choose_data(
+                                                        Term::equals_integer()
+                                                            .apply(Term::integer(0.into()))
+                                                            .apply(
+                                                                Term::fst_pair().apply(
+                                                                    Term::unconstr_data()
+                                                                        .apply(Term::var("__val")),
+                                                                ),
+                                                            )
+                                                            .delayed_if_then_else(
+                                                                Term::unit(),
+                                                                Term::Error,
+                                                            ),
+                                                        Term::Error
+                                                            .delayed_trace(Term::var("param_msg")),
+                                                        Term::Error
+                                                            .delayed_trace(Term::var("param_msg")),
+                                                        Term::Error
+                                                            .delayed_trace(Term::var("param_msg")),
+                                                        Term::Error
+                                                            .delayed_trace(Term::var("param_msg")),
+                                                    )
+                                                    .lambda("__val")
+                                                    .apply(
+                                                        Term::head_list()
+                                                            .apply(Term::var("B_fields")),
+                                                    ),
+                                            ),
                                     )
                                     .lambda("B_fields")
                                     .apply(
@@ -4519,65 +4582,142 @@ fn expect_head_cast_data_with_tail() {
       test hi() {
         let a: Data = [1, 2, 3]
         expect [h, j, ..]: List<Int> = a
-        h == h
+        h == h && j == j
       }
     "#;
 
     assert_uplc(
         src,
-        Term::equals_integer()
-            .apply(Term::var("h"))
-            .apply(Term::var("h"))
-            .lambda("_")
-            .apply(
-                Term::var("expect_on_list")
-                    .lambda("expect_on_list")
-                    .apply(
-                        Term::var("expect_on_list")
-                            .apply(Term::var("expect_on_list"))
-                            .apply(Term::var("list_to_check"))
-                            .lambda("expect_on_list")
+        Term::var("unwrap_a")
+            .delayed_choose_list(
+                Term::Error.delayed_trace(Term::var("expect[h,j,..]:List<Int>=a")),
+                Term::var("tail_1")
+                    .delayed_choose_list(
+                        Term::Error.delayed_trace(Term::var("expect[h,j,..]:List<Int>=a")),
+                        Term::equals_integer()
+                            .apply(Term::var("h"))
+                            .apply(Term::var("h"))
+                            .delayed_if_then_else(
+                                Term::equals_integer()
+                                    .apply(Term::var("j"))
+                                    .apply(Term::var("j")),
+                                Term::bool(false),
+                            )
+                            .lambda("_")
                             .apply(
-                                Term::var("list_to_check")
-                                    .delayed_choose_list(
-                                        Term::unit(),
+                                Term::var("expect_on_list")
+                                    .lambda("expect_on_list")
+                                    .apply(
                                         Term::var("expect_on_list")
                                             .apply(Term::var("expect_on_list"))
+                                            .apply(Term::var("list_to_check"))
+                                            .lambda("expect_on_list")
                                             .apply(
-                                                Term::tail_list().apply(Term::var("list_to_check")),
+                                                Term::var("list_to_check")
+                                                    .delayed_choose_list(
+                                                        Term::unit(),
+                                                        Term::var("expect_on_list")
+                                                            .apply(Term::var("expect_on_list"))
+                                                            .apply(
+                                                                Term::tail_list().apply(Term::var(
+                                                                    "list_to_check",
+                                                                )),
+                                                            )
+                                                            .lambda("_")
+                                                            .apply(Term::var("check_with").apply(
+                                                                Term::head_list().apply(Term::var(
+                                                                    "list_to_check",
+                                                                )),
+                                                            )),
+                                                    )
+                                                    .lambda("list_to_check")
+                                                    .lambda("expect_on_list"),
                                             )
-                                            .lambda("_")
-                                            .apply(Term::var("check_with").apply(
-                                                Term::head_list().apply(Term::var("list_to_check")),
-                                            )),
+                                            .lambda("check_with")
+                                            .lambda("list_to_check"),
                                     )
-                                    .lambda("list_to_check")
-                                    .lambda("expect_on_list"),
+                                    .apply(Term::var("tail_2"))
+                                    .apply(
+                                        Term::var("__val")
+                                            .delayed_choose_data(
+                                                Term::Error.delayed_trace(Term::var(
+                                                    "expect[h,j,..]:List<Int>=a",
+                                                )),
+                                                Term::Error.delayed_trace(Term::var(
+                                                    "expect[h,j,..]:List<Int>=a",
+                                                )),
+                                                Term::Error.delayed_trace(Term::var(
+                                                    "expect[h,j,..]:List<Int>=a",
+                                                )),
+                                                Term::un_i_data().apply(Term::var("__val")),
+                                                Term::Error.delayed_trace(Term::var(
+                                                    "expect[h,j,..]:List<Int>=a",
+                                                )),
+                                            )
+                                            .lambda("__val")
+                                            .apply(Term::var("list_item"))
+                                            .lambda("list_item"),
+                                    ),
                             )
-                            .lambda("check_with")
-                            .lambda("list_to_check"),
+                            .lambda("tail_2")
+                            .apply(Term::tail_list().apply(Term::var("tail_1")))
+                            .lambda("j")
+                            .apply(
+                                Term::var("__val")
+                                    .delayed_choose_data(
+                                        Term::Error
+                                            .delayed_trace(Term::var("expect[h,j,..]:List<Int>=a")),
+                                        Term::Error
+                                            .delayed_trace(Term::var("expect[h,j,..]:List<Int>=a")),
+                                        Term::Error
+                                            .delayed_trace(Term::var("expect[h,j,..]:List<Int>=a")),
+                                        Term::un_i_data().apply(Term::var("__val")),
+                                        Term::Error
+                                            .delayed_trace(Term::var("expect[h,j,..]:List<Int>=a")),
+                                    )
+                                    .lambda("__val")
+                                    .apply(Term::head_list().apply(Term::var("tail_1"))),
+                            ),
                     )
-                    .apply(Term::var("tail_2"))
+                    .lambda("tail_1")
+                    .apply(Term::tail_list().apply(Term::var("unwrap_a")))
+                    .lambda("h")
                     .apply(
-                        Term::un_i_data()
-                            .apply(Term::var("list_item"))
-                            .lambda("list_item"),
+                        Term::var("__val")
+                            .delayed_choose_data(
+                                Term::Error.delayed_trace(Term::var("expect[h,j,..]:List<Int>=a")),
+                                Term::Error.delayed_trace(Term::var("expect[h,j,..]:List<Int>=a")),
+                                Term::Error.delayed_trace(Term::var("expect[h,j,..]:List<Int>=a")),
+                                Term::un_i_data().apply(Term::var("__val")),
+                                Term::Error.delayed_trace(Term::var("expect[h,j,..]:List<Int>=a")),
+                            )
+                            .lambda("__val")
+                            .apply(Term::head_list().apply(Term::var("unwrap_a"))),
                     ),
             )
-            .lambda("tail_2")
-            .apply(Term::tail_list().apply(Term::var("tail_1")))
-            .lambda("j")
-            .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("tail_1"))))
-            .lambda("tail_1")
-            .apply(Term::tail_list().apply(Term::var("unwrap_a")))
-            .lambda("h")
-            .apply(Term::un_i_data().apply(Term::head_list().apply(Term::var("unwrap_a"))))
             .lambda("unwrap_a")
-            .apply(Term::list_values(vec![
-                Constant::Data(Data::integer(1.into())),
-                Constant::Data(Data::integer(2.into())),
-                Constant::Data(Data::integer(3.into())),
-            ])),
+            .apply(
+                Term::var("__val")
+                    .delayed_choose_data(
+                        Term::Error.delayed_trace(Term::var("expect[h,j,..]:List<Int>=a")),
+                        Term::Error.delayed_trace(Term::var("expect[h,j,..]:List<Int>=a")),
+                        Term::list_values(vec![
+                            Constant::Data(Data::integer(1.into())),
+                            Constant::Data(Data::integer(2.into())),
+                            Constant::Data(Data::integer(3.into())),
+                        ]),
+                        Term::Error.delayed_trace(Term::var("expect[h,j,..]:List<Int>=a")),
+                        Term::Error.delayed_trace(Term::var("expect[h,j,..]:List<Int>=a")),
+                    )
+                    .lambda("__val")
+                    .apply(Term::data(Data::list(vec![
+                        Data::integer(1.into()),
+                        Data::integer(2.into()),
+                        Data::integer(3.into()),
+                    ]))),
+            )
+            .lambda("expect[h,j,..]:List<Int>=a")
+            .apply(Term::string("expect [h, j, ..]: List<Int> = a")),
         false,
     );
 }
