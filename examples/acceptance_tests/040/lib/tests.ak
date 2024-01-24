@@ -66,13 +66,68 @@ test expect_list3() {
   a == 5 && d == [6, 7]
 }
 
+test expect_list4() {
+  let initial_car =
+    [4, 5, 6, 7]
+  expect [a, b, ..] = initial_car
+  a == 4 && b == 5
+}
+
+test expect_list5() {
+  let initial_car: Data =
+    [4, 6, 6]
+  expect [a, b, ..]: List<Int> = initial_car
+  a == 4 && b == 6
+}
+
+test expect_list6() {
+  let initial_car =
+    [4, 6]
+  expect [a, b, ..] = initial_car
+  a == 4 && b == 6
+}
+
+test expect_list7() {
+  let initial_car: Data =
+    [4, 6]
+  expect [a, b, ..]: List<Int> = initial_car
+  a == 4 && b == 6
+}
+
+test expect_list8() fail {
+  let initial_car =
+    [4, 6]
+  expect [a] = initial_car
+  a == 4
+}
+
+test expect_list9() fail {
+  let initial_car: Data =
+    [4, 6, 7]
+  expect [a]: List<Int> = initial_car
+  a == 4
+}
+
+test expect_list10() {
+  let initial_car: Data =
+    [4]
+  expect [a]: List<Int> = initial_car
+  a == 4
+}
+
 type Redeemer {
   CreateVoteBatch { id: ByteArray }
 }
 
-test single_field_expect() {
+test single_field_let() {
   let redeemer = CreateVoteBatch { id: #"" }
-  expect CreateVoteBatch { id } = redeemer
+  let CreateVoteBatch { id } = redeemer
+  id == #""
+}
+
+test single_field_expect() {
+  let redeemer: Data = CreateVoteBatch { id: #"" }
+  expect CreateVoteBatch { id }: Redeemer = redeemer
   id == #""
 }
 
