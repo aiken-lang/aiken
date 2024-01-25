@@ -30,22 +30,17 @@ validator(utxo_ref: OutputReference) {
     let ScriptContext { transaction, purpose } = ctx
     let Transaction { inputs, .. } = transaction
 
-    trace @"Here"
-
-    
     expect Mint(_policy_id) = purpose
 
-    trace @"Here1"
-
-    
     expect Some(_input) =
       list.find(inputs, fn(input) { input.output_reference == utxo_ref })
 
-    trace @"Here2"
-
-    True
-      
-    
+    let input =
+      list.find(inputs, fn(input) { input.output_reference == utxo_ref })
+    when input is {
+      Some(_) -> True
+      None -> False
+    }
   }
 }
 
