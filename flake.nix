@@ -32,18 +32,15 @@
 
           src = pkgs.lib.cleanSourceWith { src = self; };
 
-          cargoLock = { 
-            lockFile = ./Cargo.lock;
-            outputHashes = { "pallas-0.21.0" = "sha256-QuJwwyNaPpXBi7GzLh/V2cIRYz29Xsd3HUeG4yPt8VQ="; };
-          };
+          cargoLock.lockFile = ./Cargo.lock;
 
           GIT_COMMIT_HASH_SHORT = self.shortRev or "unknown";
           postPatch = ''
-            substituteInPlace crates/aiken-project/src/config.rs \
+            substituteInPlace crates/aiken/src/cmd/mod.rs \
               --replace  "built_info::GIT_COMMIT_HASH_SHORT" \
               "Some(\"$GIT_COMMIT_HASH_SHORT\")"
           '';
-          
+
           postInstall = ''
             mkdir -p $out/share/zsh/site-functions
             $out/bin/aiken completion zsh > $out/share/zsh/site-functions/_aiken
