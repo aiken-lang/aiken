@@ -10,7 +10,7 @@
 - **aiken**: New `--filter-traces` option for the `check` and `build` commands
   to enable restricting traces with more granularity between user-defined
   traces, compiler-generated traces or both. @MicroProofs @KtorZ.
-- **aiken-lang**: Most builtin errors are now caught and instead catched errors
+- **aiken-lang**: Most builtin errors are now caught and instead catched trace errors
   are thrown. The exception is BLS primitives.
 
 ### Fixed
