@@ -1538,13 +1538,14 @@ pub fn list_access_to_uplc(
         .collect_vec();
 
     // If the the is just discards and check_last_item then we check for empty list
-    if no_tailing_discards.is_empty()
-        && !tail_present
-        && matches!(expect_level, ExpectLevel::Full | ExpectLevel::Items)
-    {
-        return Term::var("empty_list")
-            .delayed_choose_list(term, error_term)
-            .lambda("empty_list");
+    if no_tailing_discards.is_empty() {
+        if !tail_present && matches!(expect_level, ExpectLevel::Full | ExpectLevel::Items) {
+            return Term::var("empty_list")
+                .delayed_choose_list(term, error_term)
+                .lambda("empty_list");
+        } else {
+            return term.lambda("_");
+        }
     }
 
     // reverse back to original order
@@ -1585,32 +1586,41 @@ pub fn list_access_to_uplc(
                 // case for no tail
                 // name is guaranteed to not be discard at this point
 
-                if matches!(expect_level, ExpectLevel::None)
-                    || (error_term == Term::Error && tail_present)
-                {
-                    acc.lambda(name).apply(head_list).lambda(tail_name)
-                } else if tail_present {
-                    Term::var(tail_name.to_string())
-                        .delayed_choose_list(error_term.clone(), acc.lambda(name).apply(head_list))
-                        .lambda(tail_name)
-                } else if error_term == Term::Error {
-                    Term::tail_list()
-                        .apply(Term::var(tail_name.to_string()))
-                        .delayed_choose_list(acc, error_term.clone())
-                        .lambda(name)
-                        .apply(head_list)
-                        .lambda(tail_name)
-                } else {
-                    Term::var(tail_name.to_string())
-                        .delayed_choose_list(
-                            error_term.clone(),
+                match expect_level {
+                    ExpectLevel::None => acc.lambda(name).apply(head_list).lambda(tail_name),
+                    ExpectLevel::Full | ExpectLevel::Items => {
+                        if error_term == Term::Error && tail_present {
+                            acc.lambda(name).apply(head_list).lambda(tail_name)
+                        } else if tail_present {
+                            // Custom error instead of trying to do head_list on a possibly empty list.
+                            Term::var(tail_name.to_string())
+                                .delayed_choose_list(
+                                    error_term.clone(),
+                                    acc.lambda(name).apply(head_list),
+                                )
+                                .lambda(tail_name)
+                        } else if error_term == Term::Error {
+                            // Check head is last item in this list
                             Term::tail_list()
                                 .apply(Term::var(tail_name.to_string()))
                                 .delayed_choose_list(acc, error_term.clone())
                                 .lambda(name)
-                                .apply(head_list),
-                        )
-                        .lambda(tail_name)
+                                .apply(head_list)
+                                .lambda(tail_name)
+                        } else {
+                            // Custom error if list is not empty after this head
+                            Term::var(tail_name.to_string())
+                                .delayed_choose_list(
+                                    error_term.clone(),
+                                    Term::tail_list()
+                                        .apply(Term::var(tail_name.to_string()))
+                                        .delayed_choose_list(acc, error_term.clone())
+                                        .lambda(name)
+                                        .apply(head_list),
+                                )
+                                .lambda(tail_name)
+                        }
+                    }
                 }
             } else if name == "_" {
                 if matches!(expect_level, ExpectLevel::None) || error_term == Term::Error {

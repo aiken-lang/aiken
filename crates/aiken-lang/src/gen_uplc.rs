@@ -4985,7 +4985,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let named_indices = names_types
                     .iter()
-                    .skip_while(|(name, _, _)| name.is_empty())
+                    .skip_while(|(name, _, _)| name == "_")
                     .collect_vec();
 
                 if !named_indices.is_empty() || is_expect {
