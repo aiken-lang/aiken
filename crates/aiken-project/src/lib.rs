@@ -35,8 +35,9 @@ use package_name::PackageName;
 use pallas::ledger::{
     addresses::{Address, Network, ShelleyAddress, ShelleyDelegationPart, StakePayload},
     primitives::babbage::{self as cardano, PolicyId},
+    traverse::ComputeHash,
 };
-use pallas_traverse::ComputeHash;
+
 use script::{EvalHint, EvalInfo, Script};
 use std::{
     collections::HashMap,

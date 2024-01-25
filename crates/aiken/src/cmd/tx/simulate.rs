@@ -1,10 +1,13 @@
 use miette::IntoDiagnostic;
 use owo_colors::{OwoColorize, Stream::Stderr};
-use pallas_primitives::{
-    babbage::{Redeemer, TransactionInput, TransactionOutput},
-    Fragment,
+use pallas::ledger::{
+    primitives::{
+        babbage::{Redeemer, TransactionInput, TransactionOutput},
+        Fragment,
+    },
+    traverse::{Era, MultiEraTx},
 };
-use pallas_traverse::{Era, MultiEraTx};
+
 use std::{fmt, fs, path::PathBuf, process};
 use uplc::{
     machine::cost_model::ExBudget,

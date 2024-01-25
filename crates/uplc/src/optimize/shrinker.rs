@@ -3,7 +3,7 @@ use std::{rc::Rc, vec};
 use indexmap::IndexMap;
 use itertools::Itertools;
 
-use pallas_primitives::babbage::{BigInt, PlutusData};
+use pallas::ledger::primitives::babbage::{BigInt, PlutusData};
 
 use crate::{
     ast::{Constant, Data, Name, Program, Term, Type},
@@ -676,7 +676,7 @@ fn replace_identity_usage(term: &Term<Name>, original: Rc<Name>) -> Term<Name> {
 #[cfg(test)]
 mod tests {
 
-    use pallas_primitives::babbage::{BigInt, PlutusData};
+    use pallas::ledger::primitives::babbage::{BigInt, PlutusData};
     use pretty_assertions::assert_eq;
 
     use crate::{

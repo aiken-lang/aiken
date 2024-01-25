@@ -80,7 +80,8 @@ pub fn exec(
 
                 let mut double_cbor_bytes = Vec::new();
 
-                let mut cbor_encoder = pallas_codec::minicbor::Encoder::new(&mut double_cbor_bytes);
+                let mut cbor_encoder =
+                    pallas::codec::minicbor::Encoder::new(&mut double_cbor_bytes);
 
                 cbor_encoder.bytes(&cbor_bytes).unwrap();
 

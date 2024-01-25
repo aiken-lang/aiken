@@ -10,13 +10,15 @@ use crate::{
 };
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
-use pallas_addresses::{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart};
-pub use pallas_primitives::babbage::Language;
-use pallas_primitives::{
-    alonzo::{self as pallas, Constr, PlutusData},
-    babbage::{self as cardano},
+use pallas::ledger::{
+    addresses::{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart},
+    primitives::{
+        alonzo::{self, Constr, PlutusData},
+        babbage::{self, Language},
+    },
+    traverse::ComputeHash,
 };
-use pallas_traverse::ComputeHash;
+
 use serde::{
     self,
     de::{self, Deserialize, Deserializer, MapAccess, Visitor},
@@ -98,7 +100,7 @@ impl Serialize for Program<DeBruijn> {
         let cbor = self.to_cbor().unwrap();
         let mut s = serializer.serialize_struct("Program<DeBruijn>", 2)?;
         s.serialize_field("compiledCode", &hex::encode(&cbor))?;
-        s.serialize_field("hash", &cardano::PlutusV2Script(cbor.into()).compute_hash())?;
+        s.serialize_field("hash", &babbage::PlutusV2Script(cbor.into()).compute_hash())?;
         s.end()
     }
 }
@@ -159,7 +161,7 @@ impl<'a> Deserialize<'a> for Program<DeBruijn> {
 impl Program<DeBruijn> {
     pub fn address(&self, network: Network, delegation: ShelleyDelegationPart) -> ShelleyAddress {
         let cbor = self.to_cbor().unwrap();
-        let validator_hash = cardano::PlutusV2Script(cbor.into()).compute_hash();
+        let validator_hash = babbage::PlutusV2Script(cbor.into()).compute_hash();
         ShelleyAddress::new(
             network,
             ShelleyPaymentPart::Script(validator_hash),
@@ -273,21 +275,21 @@ pub struct Data {}
 impl Data {
     pub fn to_hex(data: PlutusData) -> String {
         let mut bytes = Vec::new();
-        pallas_codec::minicbor::Encoder::new(&mut bytes)
+        pallas::codec::minicbor::Encoder::new(&mut bytes)
             .encode(data)
             .expect("failed to encode Plutus Data as cbor?");
         hex::encode(bytes)
     }
     pub fn integer(i: BigInt) -> PlutusData {
         match i.to_i64() {
-            Some(i) => PlutusData::BigInt(pallas::BigInt::Int(i.into())),
+            Some(i) => PlutusData::BigInt(alonzo::BigInt::Int(i.into())),
             None => {
                 let (sign, bytes) = i.to_bytes_be();
                 match sign {
                     num_bigint::Sign::Minus => {
-                        PlutusData::BigInt(pallas::BigInt::BigNInt(bytes.into()))
+                        PlutusData::BigInt(alonzo::BigInt::BigNInt(bytes.into()))
                     }
-                    _ => PlutusData::BigInt(pallas::BigInt::BigUInt(bytes.into())),
+                    _ => PlutusData::BigInt(alonzo::BigInt::BigUInt(bytes.into())),
                 }
             }
         }

@@ -1,12 +1,12 @@
-use pallas_addresses::{Address, ShelleyDelegationPart, ShelleyPaymentPart, StakePayload};
-use pallas_codec::utils::{AnyUInt, Bytes, Int, KeyValuePairs};
-use pallas_crypto::hash::Hash;
-use pallas_primitives::babbage::{AssetName, BigInt, Constr, Mint, PlutusData, ScriptRef};
-use pallas_primitives::babbage::{
+use pallas::codec::utils::{AnyUInt, Bytes, Int, KeyValuePairs};
+use pallas::crypto::hash::Hash;
+use pallas::ledger::addresses::{Address, ShelleyDelegationPart, ShelleyPaymentPart, StakePayload};
+use pallas::ledger::primitives::babbage::{AssetName, BigInt, Constr, Mint, PlutusData, ScriptRef};
+use pallas::ledger::primitives::babbage::{
     Certificate, DatumOption, PseudoScript, Redeemer, StakeCredential, TransactionInput,
     TransactionOutput, Value,
 };
-use pallas_traverse::ComputeHash;
+use pallas::ledger::traverse::ComputeHash;
 
 use crate::machine::runtime::{convert_constr_to_tag, ANY_TAG};
 

@@ -12,7 +12,7 @@ use inquire;
 use num_bigint::BigInt;
 use ordinal::Ordinal;
 use owo_colors::{OwoColorize, Stream::Stderr};
-use pallas_primitives::alonzo::PlutusData;
+use pallas::ledger::primitives::alonzo::PlutusData;
 use std::str::FromStr;
 use std::{fs, path::PathBuf, process, rc::Rc};
 use uplc::ast::{Constant, Data as UplcData, DeBruijn, Term};

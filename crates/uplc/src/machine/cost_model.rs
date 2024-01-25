@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use pallas_primitives::babbage::Language;
+use pallas::ledger::primitives::babbage::Language;
 
 use crate::builtins::DefaultFunction;
 

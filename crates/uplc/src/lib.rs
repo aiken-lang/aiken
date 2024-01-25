@@ -9,14 +9,13 @@ pub mod parser;
 mod pretty;
 pub mod tx;
 
-pub use pallas_codec::utils::KeyValuePairs;
-pub use pallas_crypto::hash::Hash;
-pub use pallas_primitives::{
+pub use pallas::codec::utils::KeyValuePairs;
+pub use pallas::crypto::hash::Hash;
+pub use pallas::ledger::primitives::{
     alonzo::{BigInt, Constr, PlutusData},
     babbage::{PostAlonzoTransactionOutput, TransactionInput, TransactionOutput, Value},
+    Error, Fragment,
 };
-
-use pallas_primitives::{Error, Fragment};
 
 pub fn plutus_data(bytes: &[u8]) -> Result<PlutusData, Error> {
     PlutusData::decode_fragment(bytes)

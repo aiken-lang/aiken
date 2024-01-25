@@ -3,7 +3,7 @@ use std::{mem::size_of, ops::Deref, rc::Rc};
 use num_bigint::BigInt;
 use num_integer::Integer;
 use once_cell::sync::Lazy;
-use pallas_primitives::babbage::{Language, PlutusData};
+use pallas::ledger::primitives::babbage::{Language, PlutusData};
 
 use crate::{
     ast::{Constant, Data, Type},

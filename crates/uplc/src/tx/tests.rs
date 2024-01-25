@@ -1,9 +1,9 @@
-use pallas_codec::utils::MaybeIndefArray;
-use pallas_primitives::{
+use pallas::codec::utils::MaybeIndefArray;
+use pallas::ledger::primitives::{
     babbage::{CostMdls, TransactionInput, TransactionOutput},
     Fragment,
 };
-use pallas_traverse::{Era, MultiEraTx};
+use pallas::ledger::traverse::{Era, MultiEraTx};
 
 use crate::machine::cost_model::ExBudget;
 

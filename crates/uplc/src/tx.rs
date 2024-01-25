@@ -1,8 +1,8 @@
-use pallas_primitives::{
+use pallas::ledger::primitives::{
     babbage::{CostMdls, MintedTx, Redeemer, TransactionInput, TransactionOutput},
     Fragment,
 };
-use pallas_traverse::{Era, MultiEraTx};
+use pallas::ledger::traverse::{Era, MultiEraTx};
 
 use error::Error;
 pub use phase_one::eval_phase_one;
