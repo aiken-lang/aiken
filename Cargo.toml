@@ -11,7 +11,7 @@ tag-name = "v{{version}}"
 
 [workspace.dependencies]
 walkdir = "2.3.2"
-pallas = { git = "https://github.com/txpipe/pallas", rev = "7cb1ffe100befaa6236f14c14081961c44d6ad21" }
+pallas = "0.22.0"
 insta = { version = "1.30.0", features = ["yaml", "json"] }
 
 [profile.dev.package.insta]
