@@ -1,7 +1,7 @@
 [package]
 name = "aiken-lang"
 description = "The Aiken compiler"
-version = "1.0.21-alpha"
+version = "1.0.22-alpha"
 edition = "2021"
 repository = "https://github.com/aiken-lang/aiken"
 homepage = "https://github.com/aiken-lang/aiken"
@@ -24,7 +24,7 @@ owo-colors = { version = "3.5.0", features = ["supports-colors"] }
 strum = "0.24.1"
 thiserror = "1.0.39"
 vec1 = "1.10.1"
-uplc = { path = '../uplc', version = "1.0.21-alpha" }
+uplc = { path = '../uplc', version = "1.0.22-alpha" }
 num-bigint = "0.4.3"
 petgraph = "0.6.3"
 blst = "0.3.11"
