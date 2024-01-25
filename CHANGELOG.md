@@ -1,6 +1,6 @@
 # Changelog
 
-## UNRELEASED
+## v1.0.22-alpha - 2024-01-24
 
 ### Added
 
@@ -37,10 +37,11 @@
   new options. @MicroProofs @KtorZ
 
   > ![TIP]
+  >
   > - If you've been using `aiken check --no-traces`, you can recover the old
-    > behavior by doing `aiken check --trace-level silent`.
+  >   behavior by doing `aiken check --trace-level silent`.
   > - If you've been using `aiken build --keep-traces`, you can recover the old
-    > behavior by doing `aiken build --trace-level verbose`.
+  >   behavior by doing `aiken build --trace-level verbose`.
 
 ## v1.0.21-alpha - 2023-12-04
 
