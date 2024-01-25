@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.0.23-alpha - 2024-01-24
+
+### Fixed
+
+- **aiken-lang**: Now using correct discard match for constructor field access.
+- **aiken-lang**: The list_access_to_uplc now always returns a lambda wrapped
+  term even with only discards. This fixes an apply error being seen by a few
+  people.
+
 ## v1.0.22-alpha - 2024-01-24
 
 ### Added
@@ -10,8 +19,8 @@
 - **aiken**: New `--filter-traces` option for the `check` and `build` commands
   to enable restricting traces with more granularity between user-defined
   traces, compiler-generated traces or both. @MicroProofs @KtorZ.
-- **aiken-lang**: Most builtin errors are now caught and instead catched trace errors
-  are thrown. The exception is BLS primitives.
+- **aiken-lang**: Most builtin errors are now caught and instead catched trace
+  errors are thrown. The exception is BLS primitives.
 
 ### Fixed
 
@@ -37,11 +46,10 @@
   new options. @MicroProofs @KtorZ
 
   > ![TIP]
-  >
   > - If you've been using `aiken check --no-traces`, you can recover the old
-  >   behavior by doing `aiken check --trace-level silent`.
+    > behavior by doing `aiken check --trace-level silent`.
   > - If you've been using `aiken build --keep-traces`, you can recover the old
-  >   behavior by doing `aiken build --trace-level verbose`.
+    > behavior by doing `aiken build --trace-level verbose`.
 
 ## v1.0.21-alpha - 2023-12-04
 
