@@ -4,59 +4,89 @@
 
 ### Added
 
-- **aiken**: New `--trace-level` option for the `check` and `build` commands to allow chosing the verbosity level of traces amongst three levels: silent, compact & verbose. @MicroProofs @KtorZ
-- **aiken**: New `--filter-traces` option for the `check` and `build` commands to enable restricting traces with more granularity between user-defined traces, compiler-generated traces or both. @MicroProofs @KtorZ.
+- **aiken**: New `--trace-level` option for the `check` and `build` commands to
+  allow chosing the verbosity level of traces amongst three levels: silent,
+  compact & verbose. @MicroProofs @KtorZ
+- **aiken**: New `--filter-traces` option for the `check` and `build` commands
+  to enable restricting traces with more granularity between user-defined
+  traces, compiler-generated traces or both. @MicroProofs @KtorZ.
+- **aiken-lang**: Most builtin errors are now caught and instead catched errors
+  are thrown. The exception is BLS primitives.
 
 ### Fixed
 
 - **aiken-lang**: Fix flat encoding and decoding of large integer values. @KtorZ
-- **aiken-lang**: Traces should not have following expressions formatted into a block. @rvcas
-- **aiken-lang**: Sequences should not be erased if the sole expression is an assignment. @rvcas
-- **aiken-lang**: Should not be able to assign an assignment to an assignment. @rvcas
-- **aiken-lang**: Should not be able to have an assignment in a logical op chain. @rvcas
-- **aiken**: Ensures that test expected to fail that return `False` are considered to pass & improve error reporting when they fail. @KtorZ
+- **aiken-lang**: Traces should not have following expressions formatted into a
+  block. @rvcas
+- **aiken-lang**: Sequences should not be erased if the sole expression is an
+  assignment. @rvcas
+- **aiken-lang**: Should not be able to assign an assignment to an assignment.
+  @rvcas
+- **aiken-lang**: Should not be able to have an assignment in a logical op
+  chain. @rvcas
+- **aiken**: Ensures that test expected to fail that return `False` are
+  considered to pass & improve error reporting when they fail. @KtorZ
+- **aiken-lang**: Fix generic edge case involving tuples.
+- **aiken**: `aiken new` now uses the current version for the github action.
+- **aiken-lang**: Using the head_list builtin on assoc lists now works.
 
 ### Removed
 
-- **aiken**: The options `--keep-traces` (on the `build` command) and `--no-traces` (on the `check` command) have been removed; superseded by the new options. @MicroProofs @KtorZ
+- **aiken**: The options `--keep-traces` (on the `build` command) and
+  `--no-traces` (on the `check` command) have been removed; superseded by the
+  new options. @MicroProofs @KtorZ
 
   > ![TIP]
-  >
-  > - If you've been using `aiken check --no-traces`, you can recover the old behavior by doing `aiken check --trace-level silent`.
-  > - If you've been using `aiken build --keep-traces`, you can recover the old behavior by doing `aiken build --trace-level verbose`.
+  > - If you've been using `aiken check --no-traces`, you can recover the old
+    > behavior by doing `aiken check --trace-level silent`.
+  > - If you've been using `aiken build --keep-traces`, you can recover the old
+    > behavior by doing `aiken build --trace-level verbose`.
 
 ## v1.0.21-alpha - 2023-12-04
 
 ### Added
 
-- **aiken**: `--watch` flag on the `build`, `check` and `docs` commands to automatically watch and re-execute the command on file changes. @Quantumplation & @KtorZ
+- **aiken**: `--watch` flag on the `build`, `check` and `docs` commands to
+  automatically watch and re-execute the command on file changes.
+  @Quantumplation & @KtorZ
 - acceptance tests 28-30 @MicroProofs
 - **aiken-lang**: expose BLS builtins and types @MicroProofs & @rvcas
-- **aiken-lsp**: implement hover info for tuples, lists, and contructor pattern elements @rvcas
+- **aiken-lsp**: implement hover info for tuples, lists, and contructor pattern
+  elements @rvcas
 - **aiken-lsp**: implement hover on when clause patterns @rvcas
 - **aiken-lsp**: hover support for the optional multi validator fn @rvcas
-- **aiken-lsp**: implement quickfix for "utf8 byte array is valid hex string" warning @rvcas
+- **aiken-lsp**: implement quickfix for "utf8 byte array is valid hex string"
+  warning @rvcas
 - **uplc**: add all BLS builtins and types @MicroProofs & @rvcas
-- **uplc**: add plutus conformance tests from [here](https://github.com/input-output-hk/plutus/tree/master/plutus-conformance/test-cases/uplc/evaluation). @MicroProofs & @rvcas
+- **uplc**: add plutus conformance tests from
+  [here](https://github.com/input-output-hk/plutus/tree/master/plutus-conformance/test-cases/uplc/evaluation).
+  @MicroProofs & @rvcas
 - **uplc**: case and constr cost models @MicroProofs
 
 ### Changed
 
 - **aiken**: update to pallas v0.20.0 @rvcas
-- **aiken-project**: switch blueprint validator tests now uses insta @MicroProofs
+- **aiken-project**: switch blueprint validator tests now uses insta
+  @MicroProofs
 - **aiken-project**: update to pallas v0.20.0 @rvcas
-- **aiken-lang**: use a better algorithm for inlining single occurrences @MicroProofs
+- **aiken-lang**: use a better algorithm for inlining single occurrences
+  @MicroProofs
 - **uplc**: update to pallas v0.20.0 @rvcas
 - **uplc**: remove `flat-rs` crate and use it through pallas_codec instead
 
 ### Fixed
 
-- **aiken-lang**: formatting unable to have newline after expect bool shortcut @rvcas
-- **aiken-lang**: formatter incorrectly erasing blocks in certain situations @rvcas
-- **aiken-lang**: use a distinct warning for discarded let assignments to avoid confusion @rvcas
-- **aiken-lang**: allow spread operator on positional constructor arguments @rvcas
+- **aiken-lang**: formatting unable to have newline after expect bool shortcut
+  @rvcas
+- **aiken-lang**: formatter incorrectly erasing blocks in certain situations
+  @rvcas
+- **aiken-lang**: use a distinct warning for discarded let assignments to avoid
+  confusion @rvcas
+- **aiken-lang**: allow spread operator on positional constructor arguments
+  @rvcas
 - **aiken-lsp**: and/or chains hovering on nested elements not working @rvcas
-- **uplc**: delay typemismatch errors in the machine runtime (caught by conformance tests) @rvcas
+- **uplc**: delay typemismatch errors in the machine runtime (caught by
+  conformance tests) @rvcas
 
 ## v1.0.20-alpha - 2023-10-25
 
@@ -64,7 +94,8 @@
 
 - **aiken-project**: The `plutus.json` blueprint now contains a `compiler.name`
   and `compiler.version` fields.
-- **aiken-prokect**: Added compiler and system information to panic error report.
+- **aiken-prokect**: Added compiler and system information to panic error
+  report.
 - **aiken-lsp**: Added quickfix suggestions for unknown variables, modules and
   constructors.
 
