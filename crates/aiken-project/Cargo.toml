@@ -16,7 +16,6 @@ build = "build.rs"
 
 [dependencies]
 askama = "0.12.0"
-assert-json-diff = "2.0.2"
 dirs = "4.0.0"
 fslock = "0.2.1"
 futures = "0.3.26"

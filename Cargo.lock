@@ -56,7 +56,6 @@ dependencies = [
  "aiken-lang",
  "aiken-lsp",
  "aiken-project",
- "anyhow",
  "clap",
  "clap_complete",
  "hex",
@@ -124,7 +123,6 @@ version = "1.0.23-alpha"
 dependencies = [
  "aiken-lang",
  "askama",
- "assert-json-diff",
  "built",
  "dirs",
  "fslock",
@@ -265,16 +263,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acb1161c6b64d1c3d83108213c2a2533a342ac225aabd0bda218278c2ddb00c0"
 dependencies = [
  "nom",
-]
-
-[[package]]
-name = "assert-json-diff"
-version = "2.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47e4f2b81832e72834d7518d8487a0396a28cc408186a2e8854c0f98011faf12"
-dependencies = [
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -3455,7 +3443,6 @@ checksum = "e51733f11c9c4f72aa0c160008246859e340b00807569a0da0e7a1079b27ba85"
 name = "uplc"
 version = "1.0.23-alpha"
 dependencies = [
- "anyhow",
  "blst",
  "cryptoxide",
  "hex",
