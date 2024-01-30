@@ -1,5 +1,11 @@
 # Changelog
 
+## unreleased
+
+### Added
+
+- **aiken**: New aliases for `check` (aiken c) and `build` (aiken b) commands. @Kuly14
+
 ## v1.0.23-alpha - 2024-01-24
 
 ### Fixed
@@ -45,11 +51,12 @@
   `--no-traces` (on the `check` command) have been removed; superseded by the
   new options. @MicroProofs @KtorZ
 
-  > ![TIP]
-  > - If you've been using `aiken check --no-traces`, you can recover the old
-    > behavior by doing `aiken check --trace-level silent`.
-  > - If you've been using `aiken build --keep-traces`, you can recover the old
-    > behavior by doing `aiken build --trace-level verbose`.
+> [!TIP]
+>
+> - If you've been using `aiken check --no-traces`, you can recover the old
+>   behavior by doing `aiken check --trace-level silent`.
+> - If you've been using `aiken build --keep-traces`, you can recover the old
+>   behavior by doing `aiken build --trace-level verbose`.
 
 ## v1.0.21-alpha - 2023-12-04
 
