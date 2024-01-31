@@ -1,7 +1,7 @@
 use std::{collections::HashMap, ops::Deref, rc::Rc};
 
 use indexmap::{IndexMap, IndexSet};
-use itertools::Itertools;
+use itertools::{Itertools, Position};
 use uplc::{
     ast::{Constant as UplcConstant, Name, Term, Type as UplcType},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
@@ -1530,127 +1530,152 @@ pub fn list_access_to_uplc(
     error_term: Term<Name>,
 ) -> Term<Name> {
     let names_len = names_types_ids.len();
+    // Should never be expect level none on a list
+    assert!(!(matches!(expect_level, ExpectLevel::None) && is_list_accessor));
 
     let mut no_tailing_discards = names_types_ids
         .iter()
         .rev()
-        .skip_while(|(name, _, _)| name == "_")
+        .with_position()
+        .skip_while(|pos| match pos {
+            // Items are reversed order
+            Position::Last((name, _, _)) | Position::Middle((name, _, _)) => {
+                name == "_" && matches!(expect_level, ExpectLevel::None)
+            }
+            Position::First((name, _, _)) | Position::Only((name, _, _)) => {
+                name == "_" && (tail_present || matches!(expect_level, ExpectLevel::None))
+            }
+        })
+        .map(|position| match position {
+            Position::First(a) | Position::Middle(a) | Position::Last(a) | Position::Only(a) => a,
+        })
         .collect_vec();
 
-    // If the the is just discards and check_last_item then we check for empty list
+    // If is just discards and check_last_item then we check for empty list
     if no_tailing_discards.is_empty() {
-        if !tail_present && matches!(expect_level, ExpectLevel::Full | ExpectLevel::Items) {
+        if tail_present || matches!(expect_level, ExpectLevel::None) {
+            return term.lambda("_");
+        } else {
             return Term::var("empty_list")
                 .delayed_choose_list(term, error_term)
                 .lambda("empty_list");
-        } else {
-            return term.lambda("_");
         }
     }
 
     // reverse back to original order
     no_tailing_discards.reverse();
 
-    let no_tailing_len = no_tailing_discards.len();
-
     // If we cut off at least one element then that was tail and possibly some heads
     let tail_wasnt_cutoff = tail_present && no_tailing_discards.len() == names_len;
 
-    no_tailing_discards.into_iter().enumerate().rev().fold(
-        term,
-        |acc, (index, (name, tipo, id))| {
-            let tail_name = format!("tail_index_{}_{}", index, id);
+    let tail_name = |id| format!("tail_id_{}", id);
 
-            let head_list =
-                if matches!(tipo.get_uplc_type(), UplcType::Pair(_, _)) && is_list_accessor {
-                    Term::head_list().apply(Term::var(tail_name.to_string()))
-                } else if matches!(expect_level, ExpectLevel::Full) && error_term != Term::Error {
-                    convert_data_to_type_debug(
-                        Term::head_list().apply(Term::var(tail_name.to_string())),
-                        &tipo.to_owned(),
-                        error_term.clone(),
-                    )
-                } else {
-                    convert_data_to_type(
-                        Term::head_list().apply(Term::var(tail_name.to_string())),
-                        &tipo.to_owned(),
-                    )
-                };
+    let head_item = |name, tipo: &Rc<Type>, tail_name: &str| {
+        if name == "_" {
+            Term::unit()
+        } else if matches!(tipo.get_uplc_type(), UplcType::Pair(_, _)) && is_list_accessor {
+            Term::head_list().apply(Term::var(tail_name.to_string()))
+        } else if matches!(expect_level, ExpectLevel::Full) && error_term != Term::Error {
+            convert_data_to_type_debug(
+                Term::head_list().apply(Term::var(tail_name.to_string())),
+                &tipo.to_owned(),
+                error_term.clone(),
+            )
+        } else {
+            convert_data_to_type(
+                Term::head_list().apply(Term::var(tail_name.to_string())),
+                &tipo.to_owned(),
+            )
+        }
+    };
 
-            // handle tail case
-            // name is guaranteed to not be discard at this point
-            if index == no_tailing_len - 1 && tail_wasnt_cutoff {
-                // simply lambda for tail name
-                acc.lambda(name)
-            } else if index == no_tailing_len - 1 {
-                // case for no tail
-                // name is guaranteed to not be discard at this point
+    // Remember we reverse here so the First or Only is the last item
+    no_tailing_discards
+        .into_iter()
+        .rev()
+        .with_position()
+        .fold(term, |acc, position| {
+            match position {
+                Position::First((name, _, _)) | Position::Only((name, _, _))
+                    if tail_wasnt_cutoff =>
+                {
+                    // case for tail as the last item
+                    acc.lambda(name)
+                }
 
-                match expect_level {
-                    ExpectLevel::None => acc.lambda(name).apply(head_list).lambda(tail_name),
-                    ExpectLevel::Full | ExpectLevel::Items => {
-                        if error_term == Term::Error && tail_present {
-                            acc.lambda(name).apply(head_list).lambda(tail_name)
-                        } else if tail_present {
-                            // Custom error instead of trying to do head_list on a possibly empty list.
-                            Term::var(tail_name.to_string())
-                                .delayed_choose_list(
-                                    error_term.clone(),
-                                    acc.lambda(name).apply(head_list),
-                                )
-                                .lambda(tail_name)
-                        } else if error_term == Term::Error {
-                            // Check head is last item in this list
-                            Term::tail_list()
-                                .apply(Term::var(tail_name.to_string()))
-                                .delayed_choose_list(acc, error_term.clone())
-                                .lambda(name)
-                                .apply(head_list)
-                                .lambda(tail_name)
-                        } else {
-                            // Custom error if list is not empty after this head
-                            Term::var(tail_name.to_string())
-                                .delayed_choose_list(
-                                    error_term.clone(),
-                                    Term::tail_list()
-                                        .apply(Term::var(tail_name.to_string()))
-                                        .delayed_choose_list(acc, error_term.clone())
-                                        .lambda(name)
-                                        .apply(head_list),
-                                )
-                                .lambda(tail_name)
+                Position::First((name, tipo, id)) | Position::Only((name, tipo, id)) => {
+                    // case for no tail, but last item
+                    let tail_name = tail_name(id);
+
+                    let head_item = head_item(name, tipo, &tail_name);
+
+                    match expect_level {
+                        ExpectLevel::None => acc.lambda(name).apply(head_item).lambda(tail_name),
+
+                        ExpectLevel::Full | ExpectLevel::Items => {
+                            if error_term == Term::Error && tail_present {
+                                // No need to check last item if tail was present
+                                acc.lambda(name).apply(head_item).lambda(tail_name)
+                            } else if tail_present {
+                                // Custom error instead of trying to do head_item on a possibly empty list.
+                                Term::var(tail_name.to_string())
+                                    .delayed_choose_list(
+                                        error_term.clone(),
+                                        acc.lambda(name).apply(head_item),
+                                    )
+                                    .lambda(tail_name)
+                            } else if error_term == Term::Error {
+                                // Check head is last item in this list
+                                Term::tail_list()
+                                    .apply(Term::var(tail_name.to_string()))
+                                    .delayed_choose_list(acc, error_term.clone())
+                                    .lambda(name)
+                                    .apply(head_item)
+                                    .lambda(tail_name)
+                            } else {
+                                // Custom error if list is not empty after this head
+                                Term::var(tail_name.to_string())
+                                    .delayed_choose_list(
+                                        error_term.clone(),
+                                        Term::tail_list()
+                                            .apply(Term::var(tail_name.to_string()))
+                                            .delayed_choose_list(acc, error_term.clone())
+                                            .lambda(name)
+                                            .apply(head_item),
+                                    )
+                                    .lambda(tail_name)
+                            }
                         }
                     }
                 }
-            } else if name == "_" {
-                if matches!(expect_level, ExpectLevel::None) || error_term == Term::Error {
-                    acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
-                        .lambda(tail_name)
-                } else {
-                    Term::var(tail_name.to_string())
-                        .delayed_choose_list(
-                            error_term.clone(),
-                            acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string()))),
-                        )
-                        .lambda(tail_name)
-                }
-            } else if matches!(expect_level, ExpectLevel::None) || error_term == Term::Error {
-                acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
-                    .lambda(name)
-                    .apply(head_list)
-                    .lambda(tail_name)
-            } else {
-                Term::var(tail_name.to_string())
-                    .delayed_choose_list(
-                        error_term.clone(),
+
+                Position::Middle((name, tipo, id)) | Position::Last((name, tipo, id)) => {
+                    // case for every item except the last item
+                    let tail_name = tail_name(id);
+
+                    let head_item = head_item(name, tipo, &tail_name);
+
+                    if matches!(expect_level, ExpectLevel::None) || error_term == Term::Error {
                         acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
                             .lambda(name)
-                            .apply(head_list),
-                    )
-                    .lambda(tail_name)
+                            .apply(head_item)
+                            .lambda(tail_name)
+                    } else {
+                        // case for a custom error if the list is empty at this point
+                        Term::var(tail_name.to_string())
+                            .delayed_choose_list(
+                                error_term.clone(),
+                                acc.apply(
+                                    Term::tail_list().apply(Term::var(tail_name.to_string())),
+                                )
+                                .lambda(name)
+                                .apply(head_item),
+                            )
+                            .lambda(tail_name)
+                    }
+                }
             }
-        },
-    )
+        })
 }
 
 pub fn apply_builtin_forces(mut term: Term<Name>, force_count: u32) -> Term<Name> {
