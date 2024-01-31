@@ -236,7 +236,7 @@ impl<'a> CodeGenerator<'a> {
         program
     }
 
-    fn build(&mut self, body: &TypedExpr, module_name: &String) -> AirTree {
+    fn build(&mut self, body: &TypedExpr, module_build_name: &String) -> AirTree {
         match body {
             TypedExpr::UInt { value, .. } => AirTree::int(value),
             TypedExpr::String { value, .. } => AirTree::string(value),
@@ -251,11 +251,11 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut last_exp = self.build(
                     &expressions.pop().unwrap_or_else(|| unreachable!()),
-                    module_name,
+                    module_build_name,
                 );
 
                 while let Some(expression) = expressions.pop() {
-                    let exp_tree = self.build(&expression, module_name);
+                    let exp_tree = self.build(&expression, module_build_name);
 
                     last_exp = exp_tree.hoist_over(last_exp);
                 }
@@ -273,7 +273,7 @@ impl<'a> CodeGenerator<'a> {
                 args.iter()
                     .map(|arg| arg.arg_name.get_variable_name().unwrap_or("_").to_string())
                     .collect_vec(),
-                self.build(body, module_name),
+                self.build(body, module_build_name),
             ),
 
             TypedExpr::List {
@@ -284,10 +284,11 @@ impl<'a> CodeGenerator<'a> {
             } => AirTree::list(
                 elements
                     .iter()
-                    .map(|elem| self.build(elem, module_name))
+                    .map(|elem| self.build(elem, module_build_name))
                     .collect_vec(),
                 tipo.clone(),
-                tail.as_ref().map(|tail| self.build(tail, module_name)),
+                tail.as_ref()
+                    .map(|tail| self.build(tail, module_build_name)),
             ),
 
             TypedExpr::Call {
@@ -330,11 +331,11 @@ impl<'a> CodeGenerator<'a> {
                         .map(|(arg, tipo)| {
                             if tipo.is_data() {
                                 AirTree::cast_to_data(
-                                    self.build(&arg.value, module_name),
+                                    self.build(&arg.value, module_build_name),
                                     arg.value.tipo(),
                                 )
                             } else {
-                                self.build(&arg.value, module_name)
+                                self.build(&arg.value, module_build_name)
                             }
                         })
                         .collect_vec();
@@ -361,7 +362,7 @@ impl<'a> CodeGenerator<'a> {
                         .iter()
                         .zip(fun_arg_types)
                         .map(|(arg, arg_tipo)| {
-                            let mut arg_val = self.build(&arg.value, module_name);
+                            let mut arg_val = self.build(&arg.value, module_build_name);
 
                             if arg_tipo.is_data() && !arg.value.tipo().is_data() {
                                 arg_val = AirTree::cast_to_data(arg_val, arg.value.tipo())
@@ -374,7 +375,7 @@ impl<'a> CodeGenerator<'a> {
                         AirTree::builtin(*func, tipo.clone(), func_args)
                     } else {
                         AirTree::call(
-                            self.build(fun.as_ref(), module_name),
+                            self.build(fun.as_ref(), module_build_name),
                             tipo.clone(),
                             func_args,
                         )
@@ -404,7 +405,7 @@ impl<'a> CodeGenerator<'a> {
                         .iter()
                         .zip(fun_arg_types)
                         .map(|(arg, arg_tipo)| {
-                            let mut arg_val = self.build(&arg.value, module_name);
+                            let mut arg_val = self.build(&arg.value, module_build_name);
 
                             if arg_tipo.is_data() && !arg.value.tipo().is_data() {
                                 arg_val = AirTree::cast_to_data(arg_val, arg.value.tipo())
@@ -417,7 +418,7 @@ impl<'a> CodeGenerator<'a> {
                         AirTree::builtin(*func, tipo.clone(), func_args)
                     } else {
                         AirTree::call(
-                            self.build(fun.as_ref(), module_name),
+                            self.build(fun.as_ref(), module_build_name),
                             tipo.clone(),
                             func_args,
                         )
@@ -435,7 +436,7 @@ impl<'a> CodeGenerator<'a> {
                         .iter()
                         .zip(fun_arg_types)
                         .map(|(arg, arg_tipo)| {
-                            let mut arg_val = self.build(&arg.value, module_name);
+                            let mut arg_val = self.build(&arg.value, module_build_name);
 
                             if arg_tipo.is_data() && !arg.value.tipo().is_data() {
                                 arg_val = AirTree::cast_to_data(arg_val, arg.value.tipo())
@@ -445,7 +446,7 @@ impl<'a> CodeGenerator<'a> {
                         .collect_vec();
 
                     AirTree::call(
-                        self.build(fun.as_ref(), module_name),
+                        self.build(fun.as_ref(), module_build_name),
                         tipo.clone(),
                         func_args,
                     )
@@ -460,8 +461,8 @@ impl<'a> CodeGenerator<'a> {
             } => AirTree::binop(
                 *name,
                 tipo.clone(),
-                self.build(left, module_name),
-                self.build(right, module_name),
+                self.build(left, module_build_name),
+                self.build(right, module_build_name),
                 left.tipo(),
             ),
 
@@ -475,7 +476,7 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 let replaced_type = convert_opaque_type(tipo, &self.data_types);
 
-                let air_value = self.build(value, module_name);
+                let air_value = self.build(value, module_build_name);
 
                 let msg_func = match self.tracing {
                     TraceLevel::Silent => None,
@@ -484,14 +485,16 @@ impl<'a> CodeGenerator<'a> {
                             let msg = match self.tracing {
                                 TraceLevel::Silent => unreachable!("excluded from pattern guards"),
                                 TraceLevel::Compact => get_line_columns_by_span(
-                                    module_name,
+                                    module_build_name,
                                     location,
                                     &self.module_src,
                                 )
                                 .to_string(),
-                                TraceLevel::Verbose => {
-                                    get_src_code_by_span(module_name, location, &self.module_src)
-                                }
+                                TraceLevel::Verbose => get_src_code_by_span(
+                                    module_build_name,
+                                    location,
+                                    &self.module_src,
+                                ),
                             };
 
                             let msg_func_name = msg.split_whitespace().join("");
@@ -526,9 +529,9 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::Trace {
                 tipo, then, text, ..
             } => AirTree::trace(
-                self.build(text, module_name),
+                self.build(text, module_build_name),
                 tipo.clone(),
-                self.build(then, module_name),
+                self.build(then, module_build_name),
             ),
 
             TypedExpr::When {
@@ -544,11 +547,11 @@ impl<'a> CodeGenerator<'a> {
                 } else if clauses.len() == 1 {
                     let last_clause = clauses.pop().unwrap();
 
-                    let clause_then = self.build(&last_clause.then, module_name);
+                    let clause_then = self.build(&last_clause.then, module_build_name);
 
                     let subject_type = subject.tipo();
 
-                    let subject_val = self.build(subject, module_name);
+                    let subject_val = self.build(subject, module_build_name);
 
                     let assignment = self.assignment(
                         &last_clause.pattern,
@@ -594,11 +597,13 @@ impl<'a> CodeGenerator<'a> {
                             constr_var.clone(),
                             subject_name.clone(),
                         ),
-                        module_name,
+                        module_build_name,
                     );
 
-                    let constr_assign =
-                        AirTree::let_assignment(&constr_var, self.build(subject, module_name));
+                    let constr_assign = AirTree::let_assignment(
+                        &constr_var,
+                        self.build(subject, module_build_name),
+                    );
 
                     let when_assign = AirTree::when(
                         subject_name,
@@ -622,13 +627,13 @@ impl<'a> CodeGenerator<'a> {
                     .iter()
                     .map(|branch| {
                         (
-                            self.build(&branch.condition, module_name),
-                            self.build(&branch.body, module_name),
+                            self.build(&branch.condition, module_build_name),
+                            self.build(&branch.body, module_build_name),
                         )
                     })
                     .collect_vec(),
                 tipo.clone(),
-                self.build(final_else, module_name),
+                self.build(final_else, module_build_name),
             ),
 
             TypedExpr::RecordAccess {
@@ -638,7 +643,7 @@ impl<'a> CodeGenerator<'a> {
                 ..
             } => {
                 if check_replaceable_opaque_type(&record.tipo(), &self.data_types) {
-                    self.build(record, module_name)
+                    self.build(record, module_build_name)
                 } else {
                     let function_name = format!("__access_index_{}", *index);
 
@@ -668,7 +673,7 @@ impl<'a> CodeGenerator<'a> {
                         self.special_functions
                             .use_function_tree(CONSTR_FIELDS_EXPOSER.to_string()),
                         list(data()),
-                        vec![self.build(record, module_name)],
+                        vec![self.build(record, module_build_name)],
                     );
 
                     AirTree::index_access(function_name, tipo.clone(), list_of_fields)
@@ -741,7 +746,7 @@ impl<'a> CodeGenerator<'a> {
             TypedExpr::Tuple { tipo, elems, .. } => AirTree::tuple(
                 elems
                     .iter()
-                    .map(|elem| self.build(elem, module_name))
+                    .map(|elem| self.build(elem, module_build_name))
                     .collect_vec(),
                 tipo.clone(),
             ),
@@ -750,7 +755,7 @@ impl<'a> CodeGenerator<'a> {
                 index, tuple, tipo, ..
             } => {
                 if tuple.tipo().is_2_tuple() {
-                    AirTree::pair_index(*index, tipo.clone(), self.build(tuple, module_name))
+                    AirTree::pair_index(*index, tipo.clone(), self.build(tuple, module_build_name))
                 } else {
                     let function_name = format!("__access_index_{}", *index);
 
@@ -779,7 +784,7 @@ impl<'a> CodeGenerator<'a> {
                     AirTree::index_access(
                         function_name,
                         tipo.clone(),
-                        self.build(tuple, module_name),
+                        self.build(tuple, module_build_name),
                     )
                 }
             }
@@ -798,7 +803,7 @@ impl<'a> CodeGenerator<'a> {
                     .iter()
                     .sorted_by(|arg1, arg2| arg1.index.cmp(&arg2.index))
                 {
-                    let arg_val = self.build(&arg.value, module_name);
+                    let arg_val = self.build(&arg.value, module_build_name);
 
                     if arg.index > highest_index {
                         highest_index = arg.index;
@@ -812,12 +817,14 @@ impl<'a> CodeGenerator<'a> {
                     index_types,
                     highest_index,
                     tipo.clone(),
-                    self.build(spread, module_name),
+                    self.build(spread, module_build_name),
                     update_args,
                 )
             }
 
-            TypedExpr::UnOp { value, op, .. } => AirTree::unop(*op, self.build(value, module_name)),
+            TypedExpr::UnOp { value, op, .. } => {
+                AirTree::unop(*op, self.build(value, module_build_name))
+            }
             TypedExpr::CurvePoint { point, .. } => AirTree::curve(*point.as_ref()),
         }
     }
