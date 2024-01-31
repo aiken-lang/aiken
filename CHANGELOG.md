@@ -29,22 +29,6 @@
   compact & verbose. @MicroProofs @KtorZ
 - **aiken**: New `--filter-traces` option for the `check` and `build` commands
   to enable restricting traces with more granularity between user-defined
-                                                                                                                                            ],
-                                                                                                                                                        tail: None,
-                                                                                                                                                                },
-                                                                                                                                                                        Var {
-                                                                                                                                                                                    location: 489..501,
-                                                                                                                                                                                                name: "other_inputs",
-                                                                                                                                                                                                        },
-                                                                                                                                                                                                            ],
-                                                                                                                                                                                                            }
-                                                                                                                                                                                                            Module NAME IS tests
-                                                                                                                                                                                                            Pattern IS Var {
-                                                                                                                                                                                                                location: 416..427,
-                                                                                                                                                                                                                    name: "own_out_ref",
-                                                                                                                                                                                                                    }
-                                                                                                                                                                                                                    Module NAME IS tests
-                                                                                                                                                                                                                    Pattern IS
 - **aiken-lang**: Most builtin errors are now caught and instead catched trace
   errors are thrown. The exception is BLS primitives.
 
