@@ -7,9 +7,11 @@
 - **aiken**: New aliases for `check` (aiken c) and `build` (aiken b) commands. @Kuly14
 
 ### Fixed
-- **aiken-lang**: Fixed an issue with expects on lists that used discards. This fixes the validator issues being seen for previously succeeding validators on 1.0.21-alpha.
-- **aiken-lang**: Out of Span issue is now solved. This also fixes incorrectly selected traces from the wrong module, which in some cases lead to the out of span issue.
 
+- **aiken-lang**: Fixed an issue with expects on lists that used discards. This fixes
+  the validator issues being seen for previously succeeding validators on 1.0.21-alpha. @MicroProofs
+- **aiken-lang**: Out of Span issue is now solved. This also fixes incorrectly selected
+  traces from the wrong module, which in some cases lead to the out of span issue. @MicroProofs
 
 ## v1.0.23-alpha - 2024-01-24
 
