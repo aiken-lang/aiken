@@ -1,6 +1,6 @@
 {
   "preamble": {
-    "title": "aiken-lang/acceptance_test_077",
+    "title": "aiken-lang/acceptance_test_089",
     "version": "0.0.0",
     "plutusVersion": "v2",
     "compiler": {
@@ -10,20 +10,14 @@
   },
   "validators": [
     {
-      "title": "spend.gift_card",
+      "title": "test2.simple_oneshot",
       "redeemer": {
-        "title": "rdmr",
+        "title": "_r",
         "schema": {
-          "$ref": "#/definitions/spend~1Action"
+          "$ref": "#/definitions/Void"
         }
       },
       "parameters": [
-        {
-          "title": "token_name",
-          "schema": {
-            "$ref": "#/definitions/ByteArray"
-          }
-        },
         {
           "title": "utxo_ref",
           "schema": {
@@ -31,8 +25,8 @@
           }
         }
       ],
-      "compiledCode": "5901c801000032323232323232323223222232533300932323232533300d3370e9000180600089919191919191919191919299980d980f0010991919299980d99b874800000454ccc06cc8cc004004030894ccc08000452809919299980f99baf3024301d00201a14a2266008008002604800460440022a66603666e1c009200213371e00602e29405858c064050dd6980d8011bae301900116301c00132323253330193370e90010008a5eb7bdb1804dd5980f180b801180b800991980080080111299980e0008a6103d87a8000132323232533301d3371e01e004266e95200033021374c00297ae01330060060033756603c0066eb8c070008c080008c078004c8cc004004008894ccc06c00452f5bded8c0264646464a66603866e3d221000021003133020337606ea4008dd3000998030030019bab301d003375c6036004603e004603a0026eacc068004c068004c064004c060004c05c008dd6180a80098068029bae3013001300b0011630110013011002300f001300700214984d958c94ccc024cdc3a40000022a666018600e0062930b0a99980499b874800800454ccc030c01c00c52616163007002375c0024600a6ea80048c00cdd5000ab9a5573aaae7955cfaba05742ae89",
-      "hash": "81cfb7871a825a552f63d121cbb33333a24919cd5c256496843e722a"
+      "compiledCode": "58d40100003232323232323232322225333006323232323232533300c3370e900018058018991919299980799b8748000c0380044c8c94ccc044cdc3a40000022944528180780099801002119baf3004300e00100d163300100323375e6006601a00201844646600200200644a6660280022980103d87a8000132325333013300500213374a90001980b80125eb804cc010010004c060008c0580048c04800458dd61808000980400198070009807001180600098020008a4c26cac4600a6ea80048c00cdd5000ab9a5573aaae7955cfaba05742ae89",
+      "hash": "dd850cc95e173d7dbb3357a4a021afc350f405a3cc2e85ace58bfe8d"
     }
   ],
   "definitions": {
@@ -41,6 +35,17 @@
     },
     "Int": {
       "dataType": "integer"
+    },
+    "Void": {
+      "title": "Unit",
+      "description": "The nullary constructor.",
+      "anyOf": [
+        {
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        }
+      ]
     },
     "aiken/transaction/OutputReference": {
       "title": "OutputReference",
@@ -77,23 +82,6 @@
               "$ref": "#/definitions/ByteArray"
             }
           ]
-        }
-      ]
-    },
-    "spend/Action": {
-      "title": "Action",
-      "anyOf": [
-        {
-          "title": "Mint",
-          "dataType": "constructor",
-          "index": 0,
-          "fields": []
-        },
-        {
-          "title": "Burn",
-          "dataType": "constructor",
-          "index": 1,
-          "fields": []
         }
       ]
     }
