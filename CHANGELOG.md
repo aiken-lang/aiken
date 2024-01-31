@@ -1,10 +1,15 @@
 # Changelog
 
-## unreleased
+## v1.0.24-alpha - 2024-01-31
 
 ### Added
 
 - **aiken**: New aliases for `check` (aiken c) and `build` (aiken b) commands. @Kuly14
+
+### Fixed
+- **aiken-lang**: Fixed an issue with expects on lists that used discards. This fixes the validator issues being seen for previously succeeding validators on 1.0.21-alpha.
+- **aiken-lang**: Out of Span issue is now solved. This also fixes incorrectly selected traces from the wrong module, which in some cases lead to the out of span issue.
+
 
 ## v1.0.23-alpha - 2024-01-24
 
@@ -24,7 +29,22 @@
   compact & verbose. @MicroProofs @KtorZ
 - **aiken**: New `--filter-traces` option for the `check` and `build` commands
   to enable restricting traces with more granularity between user-defined
-  traces, compiler-generated traces or both. @MicroProofs @KtorZ.
+                                                                                                                                            ],
+                                                                                                                                                        tail: None,
+                                                                                                                                                                },
+                                                                                                                                                                        Var {
+                                                                                                                                                                                    location: 489..501,
+                                                                                                                                                                                                name: "other_inputs",
+                                                                                                                                                                                                        },
+                                                                                                                                                                                                            ],
+                                                                                                                                                                                                            }
+                                                                                                                                                                                                            Module NAME IS tests
+                                                                                                                                                                                                            Pattern IS Var {
+                                                                                                                                                                                                                location: 416..427,
+                                                                                                                                                                                                                    name: "own_out_ref",
+                                                                                                                                                                                                                    }
+                                                                                                                                                                                                                    Module NAME IS tests
+                                                                                                                                                                                                                    Pattern IS
 - **aiken-lang**: Most builtin errors are now caught and instead catched trace
   errors are thrown. The exception is BLS primitives.
 
