@@ -1530,8 +1530,8 @@ pub fn list_access_to_uplc(
     error_term: Term<Name>,
 ) -> Term<Name> {
     let names_len = names_types_ids.len();
-    // Should never be expect level none on a list
-    assert!(!(matches!(expect_level, ExpectLevel::None) && is_list_accessor));
+    // Should never be expect level none on a list without a tail
+    assert!(!(matches!(expect_level, ExpectLevel::None) && is_list_accessor && !tail_present));
 
     let mut no_tailing_discards = names_types_ids
         .iter()
