@@ -243,6 +243,71 @@ impl<'a> CodeGenerator<'a> {
         context: &[TypedExpr],
     ) -> AirTree {
         match body {
+            TypedExpr::Assignment {
+                location,
+                tipo,
+                value,
+                pattern,
+                kind,
+            } if !context.is_empty() => {
+                let replaced_type = convert_opaque_type(tipo, &self.data_types);
+
+                let air_value = self.build(value, module_build_name, context);
+
+                let msg_func = match self.tracing {
+                    TraceLevel::Silent => None,
+                    TraceLevel::Verbose | TraceLevel::Compact => {
+                        if kind.is_expect() {
+                            let msg = match self.tracing {
+                                TraceLevel::Silent => unreachable!("excluded from pattern guards"),
+                                TraceLevel::Compact => get_line_columns_by_span(
+                                    module_build_name,
+                                    location,
+                                    &self.module_src,
+                                )
+                                .to_string(),
+                                TraceLevel::Verbose => get_src_code_by_span(
+                                    module_build_name,
+                                    location,
+                                    &self.module_src,
+                                ),
+                            };
+
+                            let msg_func_name = msg.split_whitespace().join("");
+
+                            self.special_functions.insert_new_function(
+                                msg_func_name.clone(),
+                                Term::string(msg),
+                                string(),
+                            );
+
+                            Some(self.special_functions.use_function_msg(msg_func_name))
+                        } else {
+                            None
+                        }
+                    }
+                };
+
+                let (then, context) = context
+                    .split_first()
+                    .expect("found an assignment without a next expression?");
+
+                let then = self.build(then, module_build_name, context);
+
+                self.assignment(
+                    pattern,
+                    air_value,
+                    then,
+                    &replaced_type,
+                    AssignmentProperties {
+                        value_type: value.tipo(),
+                        kind: *kind,
+                        remove_unused: kind.is_let(),
+                        full_check: !tipo.is_data() && value.tipo().is_data() && kind.is_expect(),
+                        msg_func,
+                    },
+                )
+            }
             TypedExpr::UInt { value, .. } => AirTree::int(value),
             TypedExpr::String { value, .. } => AirTree::string(value),
             TypedExpr::ByteArray { bytes, .. } => AirTree::byte_array(bytes.clone()),
@@ -455,71 +520,8 @@ impl<'a> CodeGenerator<'a> {
                 left.tipo(),
             ),
 
-            TypedExpr::Assignment {
-                tipo,
-                value,
-                pattern,
-                kind,
-                location,
-                ..
-            } => {
-                let replaced_type = convert_opaque_type(tipo, &self.data_types);
-
-                let air_value = self.build(value, module_build_name, context);
-
-                let msg_func = match self.tracing {
-                    TraceLevel::Silent => None,
-                    TraceLevel::Verbose | TraceLevel::Compact => {
-                        if kind.is_expect() {
-                            let msg = match self.tracing {
-                                TraceLevel::Silent => unreachable!("excluded from pattern guards"),
-                                TraceLevel::Compact => get_line_columns_by_span(
-                                    module_build_name,
-                                    location,
-                                    &self.module_src,
-                                )
-                                .to_string(),
-                                TraceLevel::Verbose => get_src_code_by_span(
-                                    module_build_name,
-                                    location,
-                                    &self.module_src,
-                                ),
-                            };
-
-                            let msg_func_name = msg.split_whitespace().join("");
-
-                            self.special_functions.insert_new_function(
-                                msg_func_name.clone(),
-                                Term::string(msg),
-                                string(),
-                            );
-
-                            Some(self.special_functions.use_function_msg(msg_func_name))
-                        } else {
-                            None
-                        }
-                    }
-                };
-
-                let (then, context) = context
-                    .split_first()
-                    .expect("found an assignment without a next expression?");
-
-                let then = self.build(then, module_build_name, context);
-
-                self.assignment(
-                    pattern,
-                    air_value,
-                    then,
-                    &replaced_type,
-                    AssignmentProperties {
-                        value_type: value.tipo(),
-                        kind: *kind,
-                        remove_unused: kind.is_let(),
-                        full_check: !tipo.is_data() && value.tipo().is_data() && kind.is_expect(),
-                        msg_func,
-                    },
-                )
+            TypedExpr::Assignment { .. } => {
+                panic!("Reached assignment with no dangling expressions")
             }
 
             TypedExpr::Trace {
@@ -2186,48 +2188,48 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut elems = vec![];
 
-                let elems_then =
-                    elements
-                        .iter()
-                        .enumerate()
-                        .rev()
-                        .fold(then, |then, (index, elem)| {
-                            // TODO: Turn 'Pattern' into another type instead of using strings and
-                            // expecting a special magic string '_'.
-                            let elem_name = match elem {
-                                Pattern::Var { name, .. } => name.to_string(),
-                                Pattern::Assign { name, .. } => name.to_string(),
-                                Pattern::Discard { .. } => "_".to_string(),
-                                _ => format!(
-                                    "elem_{}_span_{}_{}",
-                                    index,
-                                    elem.location().start,
-                                    elem.location().end
-                                ),
-                            };
+                let elems_then = elements
+                    .iter()
+                    .enumerate()
+                    .rfold(then, |then, (index, elem)| {
+                        // TODO: Turn 'Pattern' into another type instead of using strings and
+                        // expecting a special magic string '_'.
+                        let elem_name = match elem {
+                            Pattern::Var { name, .. } => name.to_string(),
+                            Pattern::Assign { name, .. } => name.to_string(),
+                            Pattern::Discard { .. } => "_".to_string(),
+                            _ => format!(
+                                "elem_{}_span_{}_{}",
+                                index,
+                                elem.location().start,
+                                elem.location().end
+                            ),
+                        };
 
-                            let mut elem_props = ClauseProperties::init_inner(
+                        let mut elem_props = ClauseProperties::init_inner(
+                            list_elem_type,
+                            elem_name.clone(),
+                            elem_name.clone(),
+                            props.final_clause,
+                        );
+
+                        let then = if elem_name != "_" {
+                            self.nested_clause_condition(
+                                elem,
                                 list_elem_type,
-                                elem_name.clone(),
-                                elem_name.clone(),
-                                props.final_clause,
-                            );
+                                &mut elem_props,
+                                then,
+                            )
+                        } else {
+                            then
+                        };
 
-                            *complex_clause = *complex_clause || elem_props.complex_clause;
+                        elems.push(elem_name);
 
-                            elems.push(elem_name.clone());
+                        *complex_clause = *complex_clause || elem_props.complex_clause;
 
-                            if elem_name != "_" {
-                                self.nested_clause_condition(
-                                    elem,
-                                    list_elem_type,
-                                    &mut elem_props,
-                                    then,
-                                )
-                            } else {
-                                then
-                            }
-                        });
+                        then
+                    });
 
                 let mut list_tail = None;
 
@@ -2252,21 +2254,23 @@ impl<'a> CodeGenerator<'a> {
                         props.final_clause,
                     );
 
-                    *complex_clause = *complex_clause || elem_props.complex_clause;
-
                     if &elem_name != "_" && !defined_tails.is_empty() {
                         list_tail = Some((tail.unwrap().to_string(), elem_name.to_string()));
                     }
 
-                    if props.final_clause && defined_tails.is_empty() {
-                        elems.push(elem_name.clone());
-                    }
-
-                    if elem_name != "_" {
+                    let then = if elem_name != "_" {
                         self.nested_clause_condition(elem, subject_tipo, &mut elem_props, then)
                     } else {
                         then
+                    };
+
+                    if props.final_clause && defined_tails.is_empty() {
+                        elems.push(elem_name);
                     }
+
+                    *complex_clause = *complex_clause || elem_props.complex_clause;
+
+                    then
                 });
 
                 let defined_heads = elems.iter().rev().cloned().collect_vec();
