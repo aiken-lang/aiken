@@ -2491,7 +2491,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut previous_defined_names = vec![];
                 let mut names_to_define = vec![];
-                name_index_assigns.iter().for_each(|(name, index, _)| {
+                name_index_assigns.iter().for_each(|(name, index)| {
                     if let Some((index, prev_name)) = defined_indices
                         .iter()
                         .find(|(defined_index, _nm)| defined_index == index)
@@ -2505,20 +2505,16 @@ impl<'a> CodeGenerator<'a> {
                     }
                 });
 
-                let tuple_name_assigns = previous_defined_names
-                    .into_iter()
-                    .map(|(index, prev_name, name)| {
+                let tuple_name_assigns = previous_defined_names.into_iter().rev().fold(
+                    next_then,
+                    |inner_then, (index, prev_name, name)| {
                         AirTree::let_assignment(
                             name,
                             AirTree::local_var(prev_name, items_type[index].clone()),
+                            inner_then,
                         )
-                    })
-                    .collect_vec();
-
-                let mut tuple_item_assigns = name_index_assigns
-                    .into_iter()
-                    .map(|(_, _, item)| item)
-                    .collect_vec();
+                    },
+                );
 
                 match props {
                     ClauseProperties {
@@ -2533,10 +2529,7 @@ impl<'a> CodeGenerator<'a> {
                     _ => unreachable!(),
                 }
 
-                let mut sequence = tuple_name_assigns;
-                sequence.append(&mut tuple_item_assigns);
-
-                if props.final_clause && !names_to_define.is_empty() {
+                let tuple_name_assigns = if props.final_clause && !names_to_define.is_empty() {
                     names_to_define.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
 
                     let names =
@@ -2550,18 +2543,19 @@ impl<'a> CodeGenerator<'a> {
                                 names
                             });
 
-                    sequence.insert(
-                        0,
-                        AirTree::tuple_access(
-                            names,
-                            subject_tipo.clone(),
-                            AirTree::local_var(&props.original_subject_name, subject_tipo.clone()),
-                            None,
-                            false,
-                        ),
-                    );
-                }
-                (AirTree::void(), AirTree::UnhoistedSequence(sequence))
+                    AirTree::tuple_access(
+                        names,
+                        subject_tipo.clone(),
+                        AirTree::local_var(&props.original_subject_name, subject_tipo.clone()),
+                        None,
+                        false,
+                    )
+                    .hoist_over(tuple_name_assigns)
+                } else {
+                    tuple_name_assigns
+                };
+
+                (AirTree::void(), tuple_name_assigns)
             }
         }
     }
@@ -2745,81 +2739,77 @@ impl<'a> CodeGenerator<'a> {
         src_code: &str,
         lines: &LineNumbers,
     ) -> AirTree {
-        let checked_args = arguments
-            .iter()
-            .enumerate()
-            .map(|(index, arg)| {
-                let arg_name = arg
-                    .arg_name
-                    .get_variable_name()
-                    .map(|arg| arg.to_string())
-                    .unwrap_or_else(|| format!("__arg_{}", index));
-                let arg_span = arg.location;
+        let mut arg_names = vec![];
 
-                if !(has_context && index == arguments.len() - 1) {
-                    let param = AirTree::local_var(&arg_name, data());
+        let checked_args =
+            arguments
+                .iter()
+                .enumerate()
+                .rev()
+                .fold(body, |inner_then, (index, arg)| {
+                    let arg_name = arg.arg_name.get_variable_name().unwrap_or("_").to_string();
+                    let arg_span = arg.location;
 
-                    let actual_type = convert_opaque_type(&arg.tipo, &self.data_types);
+                    arg_names.push(arg_name.clone());
 
-                    let msg_func = match self.tracing {
-                        TraceLevel::Silent => None,
-                        TraceLevel::Compact | TraceLevel::Verbose => {
-                            let msg = match self.tracing {
-                                TraceLevel::Silent => unreachable!("excluded from pattern guards"),
-                                TraceLevel::Compact => lines
-                                    .line_and_column_number(arg_span.start)
-                                    .expect("Out of bounds span")
-                                    .to_string(),
-                                TraceLevel::Verbose => src_code
-                                    .get(arg_span.start..arg_span.end)
-                                    .expect("Out of bounds span")
-                                    .to_string(),
-                            };
+                    if !(has_context && index == arguments.len() - 1) && &arg_name != "_" {
+                        let param = AirTree::local_var(&arg_name, data());
 
-                            let msg_func_name = msg.split_whitespace().join("");
+                        let actual_type = convert_opaque_type(&arg.tipo, &self.data_types);
 
-                            self.special_functions.insert_new_function(
-                                msg_func_name.to_string(),
-                                Term::string(msg),
-                                string(),
-                            );
+                        let msg_func = match self.tracing {
+                            TraceLevel::Silent => None,
+                            TraceLevel::Compact | TraceLevel::Verbose => {
+                                let msg = match self.tracing {
+                                    TraceLevel::Silent => {
+                                        unreachable!("excluded from pattern guards")
+                                    }
+                                    TraceLevel::Compact => lines
+                                        .line_and_column_number(arg_span.start)
+                                        .expect("Out of bounds span")
+                                        .to_string(),
+                                    TraceLevel::Verbose => src_code
+                                        .get(arg_span.start..arg_span.end)
+                                        .expect("Out of bounds span")
+                                        .to_string(),
+                                };
 
-                            Some(self.special_functions.use_function_msg(msg_func_name))
-                        }
-                    };
+                                let msg_func_name = msg.split_whitespace().join("");
 
-                    let assign = self.assignment(
-                        &Pattern::Var {
-                            location: Span::empty(),
-                            name: arg_name.to_string(),
-                        },
-                        param,
-                        &actual_type,
-                        AssignmentProperties {
-                            value_type: data(),
-                            kind: AssignmentKind::Expect,
-                            remove_unused: false,
-                            full_check: true,
-                            msg_func,
-                        },
-                    );
+                                self.special_functions.insert_new_function(
+                                    msg_func_name.to_string(),
+                                    Term::string(msg),
+                                    string(),
+                                );
 
-                    (arg_name, assign)
-                } else {
-                    (arg_name, AirTree::no_op())
-                }
-            })
-            .collect_vec();
+                                Some(self.special_functions.use_function_msg(msg_func_name))
+                            }
+                        };
 
-        let arg_names = checked_args
-            .iter()
-            .map(|(name, _)| name.to_string())
-            .collect_vec();
+                        self.assignment(
+                            &Pattern::Var {
+                                location: Span::empty(),
+                                name: arg_name.to_string(),
+                            },
+                            param,
+                            inner_then,
+                            &actual_type,
+                            AssignmentProperties {
+                                value_type: data(),
+                                kind: AssignmentKind::Expect,
+                                remove_unused: false,
+                                full_check: true,
+                                msg_func,
+                            },
+                        )
+                    } else {
+                        inner_then
+                    }
+                });
 
-        let arg_assigns =
-            AirTree::UnhoistedSequence(checked_args.into_iter().map(|(_, arg)| arg).collect_vec());
+        arg_names.reverse();
 
-        AirTree::anon_func(arg_names, arg_assigns.hoist_over(body))
+        AirTree::anon_func(arg_names, checked_args)
     }
 
     fn hoist_functions_to_validator(
