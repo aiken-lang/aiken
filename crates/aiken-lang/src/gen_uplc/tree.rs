@@ -1418,7 +1418,8 @@ impl AirTree {
                 | AirExpression::ListClause { then, .. }
                 | AirExpression::WrapClause { then, .. }
                 | AirExpression::TupleClause { then, .. }
-                | AirExpression::Finally { then, .. } => then.return_type(),
+                | AirExpression::Finally { then, .. }
+                | AirExpression::Let { then, .. } => then.return_type(),
             },
             _ => unreachable!(),
         }
