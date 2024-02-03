@@ -242,593 +242,600 @@ impl<'a> CodeGenerator<'a> {
         module_build_name: &String,
         context: &[TypedExpr],
     ) -> AirTree {
-        match body {
-            TypedExpr::Assignment {
+        if !context.is_empty() {
+            let TypedExpr::Assignment {
                 location,
                 tipo,
                 value,
                 pattern,
                 kind,
-            } if !context.is_empty() => {
-                let replaced_type = convert_opaque_type(tipo, &self.data_types);
+            } = body
+            else {
+                panic!("Dangling expressions without an assignment")
+            };
 
-                let air_value = self.build(value, module_build_name, context);
+            let replaced_type = convert_opaque_type(tipo, &self.data_types);
 
-                let msg_func = match self.tracing {
-                    TraceLevel::Silent => None,
-                    TraceLevel::Verbose | TraceLevel::Compact => {
-                        if kind.is_expect() {
-                            let msg = match self.tracing {
-                                TraceLevel::Silent => unreachable!("excluded from pattern guards"),
-                                TraceLevel::Compact => get_line_columns_by_span(
-                                    module_build_name,
-                                    location,
-                                    &self.module_src,
-                                )
-                                .to_string(),
-                                TraceLevel::Verbose => get_src_code_by_span(
-                                    module_build_name,
-                                    location,
-                                    &self.module_src,
-                                ),
-                            };
+            let air_value = self.build(value, module_build_name, &[]);
 
-                            let msg_func_name = msg.split_whitespace().join("");
+            let msg_func = match self.tracing {
+                TraceLevel::Silent => None,
+                TraceLevel::Verbose | TraceLevel::Compact => {
+                    if kind.is_expect() {
+                        let msg = match self.tracing {
+                            TraceLevel::Silent => unreachable!("excluded from pattern guards"),
+                            TraceLevel::Compact => get_line_columns_by_span(
+                                module_build_name,
+                                location,
+                                &self.module_src,
+                            )
+                            .to_string(),
+                            TraceLevel::Verbose => {
+                                get_src_code_by_span(module_build_name, location, &self.module_src)
+                            }
+                        };
 
-                            self.special_functions.insert_new_function(
-                                msg_func_name.clone(),
-                                Term::string(msg),
-                                string(),
-                            );
+                        let msg_func_name = msg.split_whitespace().join("");
 
-                            Some(self.special_functions.use_function_msg(msg_func_name))
+                        self.special_functions.insert_new_function(
+                            msg_func_name.clone(),
+                            Term::string(msg),
+                            string(),
+                        );
+
+                        Some(self.special_functions.use_function_msg(msg_func_name))
+                    } else {
+                        None
+                    }
+                }
+            };
+
+            let (then, context) = context.split_first().unwrap();
+
+            let then = self.build(then, module_build_name, context);
+
+            self.assignment(
+                pattern,
+                air_value,
+                then,
+                &replaced_type,
+                AssignmentProperties {
+                    value_type: value.tipo(),
+                    kind: *kind,
+                    remove_unused: kind.is_let(),
+                    full_check: !tipo.is_data() && value.tipo().is_data() && kind.is_expect(),
+                    msg_func,
+                },
+            )
+        } else {
+            match body {
+                TypedExpr::Assignment { .. } => {
+                    panic!("Reached assignment with no dangling expressions")
+                }
+                TypedExpr::UInt { value, .. } => AirTree::int(value),
+                TypedExpr::String { value, .. } => AirTree::string(value),
+                TypedExpr::ByteArray { bytes, .. } => AirTree::byte_array(bytes.clone()),
+                TypedExpr::Sequence { expressions, .. }
+                | TypedExpr::Pipeline { expressions, .. } => {
+                    let (expr, dangling_expressions) = expressions
+                        .split_first()
+                        .expect("Sequence or Pipeline should have at least one expression");
+                    self.build(expr, module_build_name, dangling_expressions)
+                }
+
+                TypedExpr::Var {
+                    constructor, name, ..
+                } => match &constructor.variant {
+                    ValueConstructorVariant::ModuleConstant { literal, .. } => {
+                        constants_ir(literal)
+                    }
+                    _ => AirTree::var(constructor.clone(), name, ""),
+                },
+
+                TypedExpr::Fn { args, body, .. } => AirTree::anon_func(
+                    args.iter()
+                        .map(|arg| arg.arg_name.get_variable_name().unwrap_or("_").to_string())
+                        .collect_vec(),
+                    self.build(body, module_build_name, &[]),
+                ),
+
+                TypedExpr::List {
+                    tipo,
+                    elements,
+                    tail,
+                    ..
+                } => AirTree::list(
+                    elements
+                        .iter()
+                        .map(|elem| self.build(elem, module_build_name, &[]))
+                        .collect_vec(),
+                    tipo.clone(),
+                    tail.as_ref()
+                        .map(|tail| self.build(tail, module_build_name, &[])),
+                ),
+
+                TypedExpr::Call {
+                    tipo, fun, args, ..
+                } => match fun.as_ref() {
+                    TypedExpr::Var {
+                        constructor:
+                            ValueConstructor {
+                                variant:
+                                    ValueConstructorVariant::Record {
+                                        name: constr_name, ..
+                                    },
+                                tipo: constr_tipo,
+                                ..
+                            },
+                        ..
+                    }
+                    | TypedExpr::ModuleSelect {
+                        constructor:
+                            ModuleValueConstructor::Record {
+                                name: constr_name,
+                                tipo: constr_tipo,
+                                ..
+                            },
+                        ..
+                    } => {
+                        let data_type = lookup_data_type_by_tipo(&self.data_types, tipo)
+                            .expect("Creating a record with no record definition.");
+
+                        let (constr_index, _) = data_type
+                            .constructors
+                            .iter()
+                            .enumerate()
+                            .find(|(_, dt)| &dt.name == constr_name)
+                            .unwrap();
+
+                        let constr_args = args
+                            .iter()
+                            .zip(constr_tipo.arg_types().unwrap())
+                            .map(|(arg, tipo)| {
+                                if tipo.is_data() {
+                                    AirTree::cast_to_data(
+                                        self.build(&arg.value, module_build_name, &[]),
+                                        arg.value.tipo(),
+                                    )
+                                } else {
+                                    self.build(&arg.value, module_build_name, &[])
+                                }
+                            })
+                            .collect_vec();
+
+                        AirTree::create_constr(constr_index, constr_tipo.clone(), constr_args)
+                    }
+
+                    TypedExpr::Var {
+                        constructor:
+                            ValueConstructor {
+                                variant: ValueConstructorVariant::ModuleFn { builtin, .. },
+                                ..
+                            },
+                        ..
+                    } => {
+                        let fun_arg_types = fun
+                            .tipo()
+                            .arg_types()
+                            .expect("Expected a function type with arguments");
+
+                        assert!(args.len() == fun_arg_types.len());
+
+                        let func_args = args
+                            .iter()
+                            .zip(fun_arg_types)
+                            .map(|(arg, arg_tipo)| {
+                                let mut arg_val = self.build(&arg.value, module_build_name, &[]);
+                                if arg_tipo.is_data() && !arg.value.tipo().is_data() {
+                                    arg_val = AirTree::cast_to_data(arg_val, arg.value.tipo())
+                                }
+                                arg_val
+                            })
+                            .collect_vec();
+
+                        if let Some(func) = builtin {
+                            AirTree::builtin(*func, tipo.clone(), func_args)
                         } else {
-                            None
+                            AirTree::call(
+                                self.build(fun.as_ref(), module_build_name, &[]),
+                                tipo.clone(),
+                                func_args,
+                            )
                         }
                     }
-                };
 
-                let (then, context) = context
-                    .split_first()
-                    .expect("found an assignment without a next expression?");
+                    TypedExpr::ModuleSelect {
+                        module_name,
+                        constructor: ModuleValueConstructor::Fn { name, .. },
+                        ..
+                    } => {
+                        let type_info = self.module_types.get(module_name).unwrap();
+                        let value = type_info.values.get(name).unwrap();
 
-                let then = self.build(then, module_build_name, context);
+                        let ValueConstructorVariant::ModuleFn { builtin, .. } = &value.variant
+                        else {
+                            unreachable!("Missing module function definition")
+                        };
 
-                self.assignment(
-                    pattern,
-                    air_value,
-                    then,
-                    &replaced_type,
-                    AssignmentProperties {
-                        value_type: value.tipo(),
-                        kind: *kind,
-                        remove_unused: kind.is_let(),
-                        full_check: !tipo.is_data() && value.tipo().is_data() && kind.is_expect(),
-                        msg_func,
-                    },
-                )
-            }
-            TypedExpr::UInt { value, .. } => AirTree::int(value),
-            TypedExpr::String { value, .. } => AirTree::string(value),
-            TypedExpr::ByteArray { bytes, .. } => AirTree::byte_array(bytes.clone()),
-            TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
-                let (expr, dangling_expressions) = expressions
-                    .split_first()
-                    .expect("Sequence or Pipeline should have at least one expression");
-                self.build(expr, module_build_name, dangling_expressions)
-            }
+                        let fun_arg_types = fun
+                            .tipo()
+                            .arg_types()
+                            .expect("Expected a function type with arguments");
 
-            TypedExpr::Var {
-                constructor, name, ..
-            } => match &constructor.variant {
-                ValueConstructorVariant::ModuleConstant { literal, .. } => constants_ir(literal),
-                _ => AirTree::var(constructor.clone(), name, ""),
-            },
+                        assert!(args.len() == fun_arg_types.len());
 
-            TypedExpr::Fn { args, body, .. } => AirTree::anon_func(
-                args.iter()
-                    .map(|arg| arg.arg_name.get_variable_name().unwrap_or("_").to_string())
-                    .collect_vec(),
-                self.build(body, module_build_name, context),
-            ),
+                        let func_args = args
+                            .iter()
+                            .zip(fun_arg_types)
+                            .map(|(arg, arg_tipo)| {
+                                let mut arg_val = self.build(&arg.value, module_build_name, &[]);
 
-            TypedExpr::List {
-                tipo,
-                elements,
-                tail,
-                ..
-            } => AirTree::list(
-                elements
-                    .iter()
-                    .map(|elem| self.build(elem, module_build_name, context))
-                    .collect_vec(),
-                tipo.clone(),
-                tail.as_ref()
-                    .map(|tail| self.build(tail, module_build_name, context)),
-            ),
+                                if arg_tipo.is_data() && !arg.value.tipo().is_data() {
+                                    arg_val = AirTree::cast_to_data(arg_val, arg.value.tipo())
+                                }
+                                arg_val
+                            })
+                            .collect_vec();
 
-            TypedExpr::Call {
-                tipo, fun, args, ..
-            } => match fun.as_ref() {
-                TypedExpr::Var {
-                    constructor:
-                        ValueConstructor {
-                            variant:
-                                ValueConstructorVariant::Record {
-                                    name: constr_name, ..
-                                },
-                            tipo: constr_tipo,
-                            ..
-                        },
-                    ..
-                }
-                | TypedExpr::ModuleSelect {
-                    constructor:
-                        ModuleValueConstructor::Record {
-                            name: constr_name,
-                            tipo: constr_tipo,
-                            ..
-                        },
-                    ..
-                } => {
-                    let data_type = lookup_data_type_by_tipo(&self.data_types, tipo)
-                        .expect("Creating a record with no record definition.");
+                        if let Some(func) = builtin {
+                            AirTree::builtin(*func, tipo.clone(), func_args)
+                        } else {
+                            AirTree::call(
+                                self.build(fun.as_ref(), module_build_name, &[]),
+                                tipo.clone(),
+                                func_args,
+                            )
+                        }
+                    }
+                    _ => {
+                        let fun_arg_types = fun
+                            .tipo()
+                            .arg_types()
+                            .expect("Expected a function type with arguments");
 
-                    let (constr_index, _) = data_type
-                        .constructors
-                        .iter()
-                        .enumerate()
-                        .find(|(_, dt)| &dt.name == constr_name)
-                        .unwrap();
+                        assert!(args.len() == fun_arg_types.len());
 
-                    let constr_args = args
-                        .iter()
-                        .zip(constr_tipo.arg_types().unwrap())
-                        .map(|(arg, tipo)| {
-                            if tipo.is_data() {
-                                AirTree::cast_to_data(
-                                    self.build(&arg.value, module_build_name, context),
-                                    arg.value.tipo(),
-                                )
-                            } else {
-                                self.build(&arg.value, module_build_name, context)
-                            }
-                        })
-                        .collect_vec();
+                        let func_args = args
+                            .iter()
+                            .zip(fun_arg_types)
+                            .map(|(arg, arg_tipo)| {
+                                let mut arg_val = self.build(&arg.value, module_build_name, &[]);
+                                if arg_tipo.is_data() && !arg.value.tipo().is_data() {
+                                    arg_val = AirTree::cast_to_data(arg_val, arg.value.tipo())
+                                }
+                                arg_val
+                            })
+                            .collect_vec();
 
-                    AirTree::create_constr(constr_index, constr_tipo.clone(), constr_args)
-                }
-
-                TypedExpr::Var {
-                    constructor:
-                        ValueConstructor {
-                            variant: ValueConstructorVariant::ModuleFn { builtin, .. },
-                            ..
-                        },
-                    ..
-                } => {
-                    let fun_arg_types = fun
-                        .tipo()
-                        .arg_types()
-                        .expect("Expected a function type with arguments");
-
-                    assert!(args.len() == fun_arg_types.len());
-
-                    let func_args = args
-                        .iter()
-                        .zip(fun_arg_types)
-                        .map(|(arg, arg_tipo)| {
-                            let mut arg_val = self.build(&arg.value, module_build_name, context);
-                            if arg_tipo.is_data() && !arg.value.tipo().is_data() {
-                                arg_val = AirTree::cast_to_data(arg_val, arg.value.tipo())
-                            }
-                            arg_val
-                        })
-                        .collect_vec();
-
-                    if let Some(func) = builtin {
-                        AirTree::builtin(*func, tipo.clone(), func_args)
-                    } else {
                         AirTree::call(
-                            self.build(fun.as_ref(), module_build_name, context),
+                            self.build(fun.as_ref(), module_build_name, &[]),
                             tipo.clone(),
                             func_args,
                         )
+                    }
+                },
+                TypedExpr::BinOp {
+                    name,
+                    left,
+                    right,
+                    tipo,
+                    ..
+                } => AirTree::binop(
+                    *name,
+                    tipo.clone(),
+                    self.build(left, module_build_name, &[]),
+                    self.build(right, module_build_name, &[]),
+                    left.tipo(),
+                ),
+
+                TypedExpr::Trace {
+                    tipo, then, text, ..
+                } => AirTree::trace(
+                    self.build(text, module_build_name, &[]),
+                    tipo.clone(),
+                    self.build(then, module_build_name, &[]),
+                ),
+
+                TypedExpr::When {
+                    tipo,
+                    subject,
+                    clauses,
+                    ..
+                } => {
+                    let mut clauses = clauses.clone();
+
+                    if clauses.is_empty() {
+                        unreachable!("We should have one clause at least")
+                    // TODO: This whole branch can _probably_ be removed, if handle_each_clause
+                    // works fine with an empty clauses list. This is orthogonal to the
+                    // current refactoring so not changing it now.
+                    } else if clauses.len() == 1 {
+                        let last_clause = clauses.pop().unwrap();
+
+                        let clause_then = self.build(&last_clause.then, module_build_name, &[]);
+
+                        let subject_type = subject.tipo();
+
+                        let subject_val = self.build(subject, module_build_name, &[]);
+
+                        self.assignment(
+                            &last_clause.pattern,
+                            subject_val,
+                            clause_then,
+                            &subject_type,
+                            AssignmentProperties {
+                                value_type: subject.tipo(),
+                                kind: AssignmentKind::Let,
+                                remove_unused: false,
+                                full_check: false,
+                                msg_func: None,
+                            },
+                        )
+                    } else {
+                        clauses = if subject.tipo().is_list() {
+                            rearrange_list_clauses(clauses, &self.data_types)
+                        } else {
+                            clauses
+                        };
+
+                        let last_clause = clauses.pop().unwrap();
+
+                        let constr_var = format!(
+                            "__when_var_span_{}_{}",
+                            subject.location().start,
+                            subject.location().end
+                        );
+
+                        let subject_name = format!(
+                            "__subject_var_span_{}_{}",
+                            subject.location().start,
+                            subject.location().end
+                        );
+
+                        let clauses = self.handle_each_clause(
+                            &clauses,
+                            last_clause,
+                            &subject.tipo(),
+                            &mut ClauseProperties::init(
+                                &subject.tipo(),
+                                constr_var.clone(),
+                                subject_name.clone(),
+                            ),
+                            module_build_name,
+                        );
+
+                        let when_assign = AirTree::when(
+                            subject_name,
+                            tipo.clone(),
+                            subject.tipo(),
+                            AirTree::local_var(&constr_var, subject.tipo()),
+                            clauses,
+                        );
+
+                        AirTree::let_assignment(
+                            constr_var,
+                            self.build(subject, module_build_name, &[]),
+                            when_assign,
+                        )
+                    }
+                }
+
+                TypedExpr::If {
+                    branches,
+                    final_else,
+                    tipo,
+                    ..
+                } => AirTree::if_branches(
+                    branches
+                        .iter()
+                        .map(|branch| {
+                            (
+                                self.build(&branch.condition, module_build_name, &[]),
+                                self.build(&branch.body, module_build_name, &[]),
+                            )
+                        })
+                        .collect_vec(),
+                    tipo.clone(),
+                    self.build(final_else, module_build_name, &[]),
+                ),
+
+                TypedExpr::RecordAccess {
+                    tipo,
+                    index,
+                    record,
+                    ..
+                } => {
+                    if check_replaceable_opaque_type(&record.tipo(), &self.data_types) {
+                        self.build(record, module_build_name, &[])
+                    } else {
+                        let function_name = format!("__access_index_{}", *index);
+
+                        if self.code_gen_functions.get(&function_name).is_none() {
+                            let mut body = AirTree::local_var("__fields", list(data()));
+
+                            for _ in 0..*index {
+                                body = AirTree::builtin(
+                                    DefaultFunction::TailList,
+                                    list(data()),
+                                    vec![body],
+                                )
+                            }
+
+                            body = AirTree::builtin(DefaultFunction::HeadList, data(), vec![body]);
+
+                            self.code_gen_functions.insert(
+                                function_name.clone(),
+                                CodeGenFunction::Function {
+                                    body,
+                                    params: vec!["__fields".to_string()],
+                                },
+                            );
+                        }
+
+                        let list_of_fields = AirTree::call(
+                            self.special_functions
+                                .use_function_tree(CONSTR_FIELDS_EXPOSER.to_string()),
+                            list(data()),
+                            vec![self.build(record, module_build_name, &[])],
+                        );
+
+                        AirTree::index_access(function_name, tipo.clone(), list_of_fields)
                     }
                 }
 
                 TypedExpr::ModuleSelect {
-                    module_name,
-                    constructor: ModuleValueConstructor::Fn { name, .. },
-                    ..
-                } => {
-                    let type_info = self.module_types.get(module_name).unwrap();
-                    let value = type_info.values.get(name).unwrap();
-
-                    let ValueConstructorVariant::ModuleFn { builtin, .. } = &value.variant else {
-                        unreachable!("Missing module function definition")
-                    };
-
-                    let fun_arg_types = fun
-                        .tipo()
-                        .arg_types()
-                        .expect("Expected a function type with arguments");
-
-                    assert!(args.len() == fun_arg_types.len());
-
-                    let func_args = args
-                        .iter()
-                        .zip(fun_arg_types)
-                        .map(|(arg, arg_tipo)| {
-                            let mut arg_val = self.build(&arg.value, module_build_name, context);
-
-                            if arg_tipo.is_data() && !arg.value.tipo().is_data() {
-                                arg_val = AirTree::cast_to_data(arg_val, arg.value.tipo())
-                            }
-                            arg_val
-                        })
-                        .collect_vec();
-
-                    if let Some(func) = builtin {
-                        AirTree::builtin(*func, tipo.clone(), func_args)
-                    } else {
-                        AirTree::call(
-                            self.build(fun.as_ref(), module_build_name, context),
-                            tipo.clone(),
-                            func_args,
-                        )
-                    }
-                }
-                _ => {
-                    let fun_arg_types = fun
-                        .tipo()
-                        .arg_types()
-                        .expect("Expected a function type with arguments");
-
-                    assert!(args.len() == fun_arg_types.len());
-
-                    let func_args = args
-                        .iter()
-                        .zip(fun_arg_types)
-                        .map(|(arg, arg_tipo)| {
-                            let mut arg_val = self.build(&arg.value, module_build_name, context);
-                            if arg_tipo.is_data() && !arg.value.tipo().is_data() {
-                                arg_val = AirTree::cast_to_data(arg_val, arg.value.tipo())
-                            }
-                            arg_val
-                        })
-                        .collect_vec();
-
-                    AirTree::call(
-                        self.build(fun.as_ref(), module_build_name, context),
-                        tipo.clone(),
-                        func_args,
-                    )
-                }
-            },
-            TypedExpr::BinOp {
-                name,
-                left,
-                right,
-                tipo,
-                ..
-            } => AirTree::binop(
-                *name,
-                tipo.clone(),
-                self.build(left, module_build_name, context),
-                self.build(right, module_build_name, context),
-                left.tipo(),
-            ),
-
-            TypedExpr::Assignment { .. } => {
-                panic!("Reached assignment with no dangling expressions")
-            }
-
-            TypedExpr::Trace {
-                tipo, then, text, ..
-            } => AirTree::trace(
-                self.build(text, module_build_name, context),
-                tipo.clone(),
-                self.build(then, module_build_name, context),
-            ),
-
-            TypedExpr::When {
-                tipo,
-                subject,
-                clauses,
-                ..
-            } => {
-                let mut clauses = clauses.clone();
-
-                if clauses.is_empty() {
-                    unreachable!("We should have one clause at least")
-                // TODO: This whole branch can _probably_ be removed, if handle_each_clause
-                // works fine with an empty clauses list. This is orthogonal to the
-                // current refactoring so not changing it now.
-                } else if clauses.len() == 1 {
-                    let last_clause = clauses.pop().unwrap();
-
-                    let clause_then = self.build(&last_clause.then, module_build_name, context);
-
-                    let subject_type = subject.tipo();
-
-                    let subject_val = self.build(subject, module_build_name, context);
-
-                    self.assignment(
-                        &last_clause.pattern,
-                        subject_val,
-                        clause_then,
-                        &subject_type,
-                        AssignmentProperties {
-                            value_type: subject.tipo(),
-                            kind: AssignmentKind::Let,
-                            remove_unused: false,
-                            full_check: false,
-                            msg_func: None,
-                        },
-                    )
-                } else {
-                    clauses = if subject.tipo().is_list() {
-                        rearrange_list_clauses(clauses, &self.data_types)
-                    } else {
-                        clauses
-                    };
-
-                    let last_clause = clauses.pop().unwrap();
-
-                    let constr_var = format!(
-                        "__when_var_span_{}_{}",
-                        subject.location().start,
-                        subject.location().end
-                    );
-
-                    let subject_name = format!(
-                        "__subject_var_span_{}_{}",
-                        subject.location().start,
-                        subject.location().end
-                    );
-
-                    let clauses = self.handle_each_clause(
-                        &clauses,
-                        last_clause,
-                        &subject.tipo(),
-                        &mut ClauseProperties::init(
-                            &subject.tipo(),
-                            constr_var.clone(),
-                            subject_name.clone(),
-                        ),
-                        module_build_name,
-                        context,
-                    );
-
-                    let when_assign = AirTree::when(
-                        subject_name,
-                        tipo.clone(),
-                        subject.tipo(),
-                        AirTree::local_var(&constr_var, subject.tipo()),
-                        clauses,
-                    );
-
-                    AirTree::let_assignment(
-                        constr_var,
-                        self.build(subject, module_build_name, context),
-                        when_assign,
-                    )
-                }
-            }
-
-            TypedExpr::If {
-                branches,
-                final_else,
-                tipo,
-                ..
-            } => AirTree::if_branches(
-                branches
-                    .iter()
-                    .map(|branch| {
-                        (
-                            self.build(&branch.condition, module_build_name, context),
-                            self.build(&branch.body, module_build_name, context),
-                        )
-                    })
-                    .collect_vec(),
-                tipo.clone(),
-                self.build(final_else, module_build_name, context),
-            ),
-
-            TypedExpr::RecordAccess {
-                tipo,
-                index,
-                record,
-                ..
-            } => {
-                if check_replaceable_opaque_type(&record.tipo(), &self.data_types) {
-                    self.build(record, module_build_name, context)
-                } else {
-                    let function_name = format!("__access_index_{}", *index);
-
-                    if self.code_gen_functions.get(&function_name).is_none() {
-                        let mut body = AirTree::local_var("__fields", list(data()));
-
-                        for _ in 0..*index {
-                            body = AirTree::builtin(
-                                DefaultFunction::TailList,
-                                list(data()),
-                                vec![body],
-                            )
-                        }
-
-                        body = AirTree::builtin(DefaultFunction::HeadList, data(), vec![body]);
-
-                        self.code_gen_functions.insert(
-                            function_name.clone(),
-                            CodeGenFunction::Function {
-                                body,
-                                params: vec!["__fields".to_string()],
-                            },
-                        );
-                    }
-
-                    let list_of_fields = AirTree::call(
-                        self.special_functions
-                            .use_function_tree(CONSTR_FIELDS_EXPOSER.to_string()),
-                        list(data()),
-                        vec![self.build(record, module_build_name, context)],
-                    );
-
-                    AirTree::index_access(function_name, tipo.clone(), list_of_fields)
-                }
-            }
-
-            TypedExpr::ModuleSelect {
-                tipo,
-                module_name,
-                constructor,
-                ..
-            } => match constructor {
-                ModuleValueConstructor::Record {
-                    name,
-                    arity,
                     tipo,
-                    field_map,
+                    module_name,
+                    constructor,
                     ..
-                } => {
-                    let data_type = lookup_data_type_by_tipo(&self.data_types, tipo);
+                } => match constructor {
+                    ModuleValueConstructor::Record {
+                        name,
+                        arity,
+                        tipo,
+                        field_map,
+                        ..
+                    } => {
+                        let data_type = lookup_data_type_by_tipo(&self.data_types, tipo);
 
-                    let val_constructor = ValueConstructor::public(
-                        tipo.clone(),
-                        ValueConstructorVariant::Record {
-                            name: name.clone(),
-                            arity: *arity,
-                            field_map: field_map.clone(),
-                            location: Span::empty(),
-                            module: module_name.clone(),
-                            constructors_count: data_type
-                                .expect("Created a module type without a definition?")
-                                .constructors
-                                .len() as u16,
-                        },
-                    );
-
-                    AirTree::var(val_constructor, name, "")
-                }
-                ModuleValueConstructor::Fn { name, module, .. } => {
-                    let func = self.functions.get(&FunctionAccessKey {
-                        module_name: module_name.clone(),
-                        function_name: name.clone(),
-                    });
-
-                    let type_info = self.module_types.get(module_name).unwrap();
-
-                    let value = type_info.values.get(name).unwrap();
-
-                    if let Some(_func) = func {
-                        AirTree::var(
-                            ValueConstructor::public(tipo.clone(), value.variant.clone()),
-                            format!("{module}_{name}"),
-                            "",
-                        )
-                    } else {
-                        let ValueConstructorVariant::ModuleFn {
-                            builtin: Some(builtin),
-                            ..
-                        } = &value.variant
-                        else {
-                            unreachable!("Didn't find the function definition.")
-                        };
-
-                        AirTree::builtin(*builtin, tipo.clone(), vec![])
-                    }
-                }
-                ModuleValueConstructor::Constant { literal, .. } => builder::constants_ir(literal),
-            },
-
-            TypedExpr::Tuple { tipo, elems, .. } => AirTree::tuple(
-                elems
-                    .iter()
-                    .map(|elem| self.build(elem, module_build_name, context))
-                    .collect_vec(),
-                tipo.clone(),
-            ),
-
-            TypedExpr::TupleIndex {
-                index, tuple, tipo, ..
-            } => {
-                if tuple.tipo().is_2_tuple() {
-                    AirTree::pair_index(
-                        *index,
-                        tipo.clone(),
-                        self.build(tuple, module_build_name, context),
-                    )
-                } else {
-                    let function_name = format!("__access_index_{}", *index);
-
-                    if self.code_gen_functions.get(&function_name).is_none() {
-                        let mut body = AirTree::local_var("__fields", list(data()));
-
-                        for _ in 0..*index {
-                            body = AirTree::builtin(
-                                DefaultFunction::TailList,
-                                list(data()),
-                                vec![body],
-                            )
-                        }
-
-                        body = AirTree::builtin(DefaultFunction::HeadList, data(), vec![body]);
-
-                        self.code_gen_functions.insert(
-                            function_name.clone(),
-                            CodeGenFunction::Function {
-                                body,
-                                params: vec!["__fields".to_string()],
+                        let val_constructor = ValueConstructor::public(
+                            tipo.clone(),
+                            ValueConstructorVariant::Record {
+                                name: name.clone(),
+                                arity: *arity,
+                                field_map: field_map.clone(),
+                                location: Span::empty(),
+                                module: module_name.clone(),
+                                constructors_count: data_type
+                                    .expect("Created a module type without a definition?")
+                                    .constructors
+                                    .len()
+                                    as u16,
                             },
                         );
+
+                        AirTree::var(val_constructor, name, "")
+                    }
+                    ModuleValueConstructor::Fn { name, module, .. } => {
+                        let func = self.functions.get(&FunctionAccessKey {
+                            module_name: module_name.clone(),
+                            function_name: name.clone(),
+                        });
+
+                        let type_info = self.module_types.get(module_name).unwrap();
+
+                        let value = type_info.values.get(name).unwrap();
+
+                        if let Some(_func) = func {
+                            AirTree::var(
+                                ValueConstructor::public(tipo.clone(), value.variant.clone()),
+                                format!("{module}_{name}"),
+                                "",
+                            )
+                        } else {
+                            let ValueConstructorVariant::ModuleFn {
+                                builtin: Some(builtin),
+                                ..
+                            } = &value.variant
+                            else {
+                                unreachable!("Didn't find the function definition.")
+                            };
+
+                            AirTree::builtin(*builtin, tipo.clone(), vec![])
+                        }
+                    }
+                    ModuleValueConstructor::Constant { literal, .. } => {
+                        builder::constants_ir(literal)
+                    }
+                },
+
+                TypedExpr::Tuple { tipo, elems, .. } => AirTree::tuple(
+                    elems
+                        .iter()
+                        .map(|elem| self.build(elem, module_build_name, &[]))
+                        .collect_vec(),
+                    tipo.clone(),
+                ),
+
+                TypedExpr::TupleIndex {
+                    index, tuple, tipo, ..
+                } => {
+                    if tuple.tipo().is_2_tuple() {
+                        AirTree::pair_index(
+                            *index,
+                            tipo.clone(),
+                            self.build(tuple, module_build_name, &[]),
+                        )
+                    } else {
+                        let function_name = format!("__access_index_{}", *index);
+
+                        if self.code_gen_functions.get(&function_name).is_none() {
+                            let mut body = AirTree::local_var("__fields", list(data()));
+
+                            for _ in 0..*index {
+                                body = AirTree::builtin(
+                                    DefaultFunction::TailList,
+                                    list(data()),
+                                    vec![body],
+                                )
+                            }
+
+                            body = AirTree::builtin(DefaultFunction::HeadList, data(), vec![body]);
+
+                            self.code_gen_functions.insert(
+                                function_name.clone(),
+                                CodeGenFunction::Function {
+                                    body,
+                                    params: vec!["__fields".to_string()],
+                                },
+                            );
+                        }
+
+                        AirTree::index_access(
+                            function_name,
+                            tipo.clone(),
+                            self.build(tuple, module_build_name, &[]),
+                        )
+                    }
+                }
+
+                TypedExpr::ErrorTerm { tipo, .. } => AirTree::error(tipo.clone(), false),
+
+                TypedExpr::RecordUpdate {
+                    tipo, spread, args, ..
+                } => {
+                    let mut index_types = vec![];
+                    let mut update_args = vec![];
+
+                    let mut highest_index = 0;
+
+                    for arg in args
+                        .iter()
+                        .sorted_by(|arg1, arg2| arg1.index.cmp(&arg2.index))
+                    {
+                        let arg_val = self.build(&arg.value, module_build_name, &[]);
+
+                        if arg.index > highest_index {
+                            highest_index = arg.index;
+                        }
+
+                        index_types.push((arg.index, arg.value.tipo()));
+                        update_args.push(arg_val);
                     }
 
-                    AirTree::index_access(
-                        function_name,
+                    AirTree::record_update(
+                        index_types,
+                        highest_index,
                         tipo.clone(),
-                        self.build(tuple, module_build_name, context),
+                        self.build(spread, module_build_name, &[]),
+                        update_args,
                     )
                 }
-            }
-
-            TypedExpr::ErrorTerm { tipo, .. } => AirTree::error(tipo.clone(), false),
-
-            TypedExpr::RecordUpdate {
-                tipo, spread, args, ..
-            } => {
-                let mut index_types = vec![];
-                let mut update_args = vec![];
-
-                let mut highest_index = 0;
-
-                for arg in args
-                    .iter()
-                    .sorted_by(|arg1, arg2| arg1.index.cmp(&arg2.index))
-                {
-                    let arg_val = self.build(&arg.value, module_build_name, context);
-
-                    if arg.index > highest_index {
-                        highest_index = arg.index;
-                    }
-
-                    index_types.push((arg.index, arg.value.tipo()));
-                    update_args.push(arg_val);
+                TypedExpr::UnOp { value, op, .. } => {
+                    AirTree::unop(*op, self.build(value, module_build_name, &[]))
                 }
-
-                AirTree::record_update(
-                    index_types,
-                    highest_index,
-                    tipo.clone(),
-                    self.build(spread, module_build_name, context),
-                    update_args,
-                )
+                TypedExpr::CurvePoint { point, .. } => AirTree::curve(*point.as_ref()),
             }
-            TypedExpr::UnOp { value, op, .. } => {
-                AirTree::unop(*op, self.build(value, module_build_name, context))
-            }
-            TypedExpr::CurvePoint { point, .. } => AirTree::curve(*point.as_ref()),
         }
     }
 
@@ -1780,7 +1787,6 @@ impl<'a> CodeGenerator<'a> {
         subject_tipo: &Rc<Type>,
         props: &mut ClauseProperties,
         module_name: &String,
-        context: &[TypedExpr],
     ) -> AirTree {
         assert!(
             !subject_tipo.is_void(),
@@ -1789,7 +1795,7 @@ impl<'a> CodeGenerator<'a> {
         props.complex_clause = false;
 
         if let Some((clause, rest_clauses)) = clauses.split_first() {
-            let mut clause_then = self.build(&clause.then, module_name, context);
+            let mut clause_then = self.build(&clause.then, module_name, &[]);
 
             // handles clause guard if it exists
             if let Some(guard) = &clause.guard {
@@ -1835,7 +1841,6 @@ impl<'a> CodeGenerator<'a> {
                                 subject_tipo,
                                 &mut next_clause_props,
                                 module_name,
-                                context,
                             ),
                         )
                     } else if let Some(data_type) = data_type {
@@ -1851,7 +1856,6 @@ impl<'a> CodeGenerator<'a> {
                                     subject_tipo,
                                     &mut next_clause_props,
                                     module_name,
-                                    context,
                                 ),
                                 complex_clause,
                             )
@@ -1864,7 +1868,6 @@ impl<'a> CodeGenerator<'a> {
                                     subject_tipo,
                                     &mut next_clause_props,
                                     module_name,
-                                    context,
                                 ),
                             )
                         }
@@ -1883,7 +1886,6 @@ impl<'a> CodeGenerator<'a> {
                                 subject_tipo,
                                 &mut next_clause_props,
                                 module_name,
-                                context,
                             ),
                             complex_clause,
                         )
@@ -1930,7 +1932,6 @@ impl<'a> CodeGenerator<'a> {
                                 subject_tipo,
                                 &mut next_clause_props,
                                 module_name,
-                                context,
                             ),
                         );
                     };
@@ -2032,7 +2033,6 @@ impl<'a> CodeGenerator<'a> {
                                 subject_tipo,
                                 &mut next_clause_props,
                                 module_name,
-                                context,
                             ),
                             next_tail_name,
                             complex_clause,
@@ -2046,7 +2046,6 @@ impl<'a> CodeGenerator<'a> {
                                 subject_tipo,
                                 &mut next_clause_props,
                                 module_name,
-                                context,
                             ),
                         )
                     }
@@ -2095,7 +2094,6 @@ impl<'a> CodeGenerator<'a> {
                                 subject_tipo,
                                 &mut next_clause_props,
                                 module_name,
-                                context,
                             ),
                         )
                     } else {
@@ -2111,7 +2109,6 @@ impl<'a> CodeGenerator<'a> {
                                 subject_tipo,
                                 &mut next_clause_props,
                                 module_name,
-                                context,
                             ),
                             props.complex_clause,
                         )
@@ -2124,7 +2121,7 @@ impl<'a> CodeGenerator<'a> {
 
             assert!(final_clause.guard.is_none());
 
-            let clause_then = self.build(&final_clause.then, module_name, context);
+            let clause_then = self.build(&final_clause.then, module_name, &[]);
 
             let (condition, assignments) =
                 self.clause_pattern(&final_clause.pattern, subject_tipo, props, clause_then);
