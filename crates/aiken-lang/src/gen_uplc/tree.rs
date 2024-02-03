@@ -1520,20 +1520,19 @@ impl AirTree {
         let mut index_count = IndexCounter::new();
         tree_path.push(current_depth, depth_index);
 
+        // Assignments get traversed here
         match self {
             AirTree::UnhoistedSequence(..) => unreachable!("No unhoisted sequence at this point"),
-            AirTree::Expression(expr) => match expr {
-                AirExpression::Let { value, .. } => {
-                    value.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                _ => (),
-            },
+            AirTree::Expression(AirExpression::Let { value, .. }) => {
+                value.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+
             AirTree::Statement { statement, .. } => match statement {
                 AirStatement::DefineFunc { func_body, .. } => {
                     func_body.do_traverse_tree_with(
@@ -1636,12 +1635,14 @@ impl AirTree {
                     );
                 }
             },
+            _ => {}
         }
 
         if !apply_with_func_last {
             with(self, tree_path);
         }
 
+        // Expressions or an assignment that hoist over a expression are traversed here
         match self {
             AirTree::Statement {
                 hoisted_over: Some(hoisted_over),
