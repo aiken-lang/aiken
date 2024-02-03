@@ -2506,7 +2506,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 });
 
-                let tuple_name_assigns = previous_defined_names.into_iter().rfold(
+                let tuple_name_assigns = previous_defined_names.into_iter().rev().fold(
                     next_then,
                     |inner_then, (index, prev_name, name)| {
                         AirTree::let_assignment(
@@ -2743,69 +2743,71 @@ impl<'a> CodeGenerator<'a> {
     ) -> AirTree {
         let mut arg_names = vec![];
 
-        let checked_args = arguments
-            .iter()
-            .enumerate()
-            .rfold(body, |inner_then, (index, arg)| {
-                let arg_name = arg.arg_name.get_variable_name().unwrap_or("_").to_string();
-                let arg_span = arg.location;
+        let checked_args =
+            arguments
+                .iter()
+                .enumerate()
+                .rev()
+                .fold(body, |inner_then, (index, arg)| {
+                    let arg_name = arg.arg_name.get_variable_name().unwrap_or("_").to_string();
+                    let arg_span = arg.location;
 
-                arg_names.push(arg_name.clone());
+                    arg_names.push(arg_name.clone());
 
-                if !(has_context && index == arguments.len() - 1) && &arg_name != "_" {
-                    let param = AirTree::local_var(&arg_name, data());
+                    if !(has_context && index == arguments.len() - 1) && &arg_name != "_" {
+                        let param = AirTree::local_var(&arg_name, data());
 
-                    let actual_type = convert_opaque_type(&arg.tipo, &self.data_types);
+                        let actual_type = convert_opaque_type(&arg.tipo, &self.data_types);
 
-                    let msg_func = match self.tracing {
-                        TraceLevel::Silent => None,
-                        TraceLevel::Compact | TraceLevel::Verbose => {
-                            let msg = match self.tracing {
-                                TraceLevel::Silent => {
-                                    unreachable!("excluded from pattern guards")
-                                }
-                                TraceLevel::Compact => lines
-                                    .line_and_column_number(arg_span.start)
-                                    .expect("Out of bounds span")
-                                    .to_string(),
-                                TraceLevel::Verbose => src_code
-                                    .get(arg_span.start..arg_span.end)
-                                    .expect("Out of bounds span")
-                                    .to_string(),
-                            };
+                        let msg_func = match self.tracing {
+                            TraceLevel::Silent => None,
+                            TraceLevel::Compact | TraceLevel::Verbose => {
+                                let msg = match self.tracing {
+                                    TraceLevel::Silent => {
+                                        unreachable!("excluded from pattern guards")
+                                    }
+                                    TraceLevel::Compact => lines
+                                        .line_and_column_number(arg_span.start)
+                                        .expect("Out of bounds span")
+                                        .to_string(),
+                                    TraceLevel::Verbose => src_code
+                                        .get(arg_span.start..arg_span.end)
+                                        .expect("Out of bounds span")
+                                        .to_string(),
+                                };
 
-                            let msg_func_name = msg.split_whitespace().join("");
+                                let msg_func_name = msg.split_whitespace().join("");
 
-                            self.special_functions.insert_new_function(
-                                msg_func_name.to_string(),
-                                Term::string(msg),
-                                string(),
-                            );
+                                self.special_functions.insert_new_function(
+                                    msg_func_name.to_string(),
+                                    Term::string(msg),
+                                    string(),
+                                );
 
-                            Some(self.special_functions.use_function_msg(msg_func_name))
-                        }
-                    };
+                                Some(self.special_functions.use_function_msg(msg_func_name))
+                            }
+                        };
 
-                    self.assignment(
-                        &Pattern::Var {
-                            location: Span::empty(),
-                            name: arg_name.to_string(),
-                        },
-                        param,
-                        inner_then,
-                        &actual_type,
-                        AssignmentProperties {
-                            value_type: data(),
-                            kind: AssignmentKind::Expect,
-                            remove_unused: false,
-                            full_check: true,
-                            msg_func,
-                        },
-                    )
-                } else {
-                    inner_then
-                }
-            });
+                        self.assignment(
+                            &Pattern::Var {
+                                location: Span::empty(),
+                                name: arg_name.to_string(),
+                            },
+                            param,
+                            inner_then,
+                            &actual_type,
+                            AssignmentProperties {
+                                value_type: data(),
+                                kind: AssignmentKind::Expect,
+                                remove_unused: false,
+                                full_check: true,
+                                msg_func,
+                            },
+                        )
+                    } else {
+                        inner_then
+                    }
+                });
 
         arg_names.reverse();
 
