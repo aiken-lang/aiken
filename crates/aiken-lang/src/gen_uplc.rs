@@ -131,9 +131,8 @@ impl<'a> CodeGenerator<'a> {
             ..
         }: &TypedValidator,
         module_name: &String,
-        context: &[TypedExpr],
     ) -> Program<Name> {
-        let mut air_tree_fun = self.build(&fun.body, module_name, context);
+        let mut air_tree_fun = self.build(&fun.body, module_name, &[]);
 
         air_tree_fun = wrap_validator_condition(air_tree_fun, self.tracing);
 
@@ -144,7 +143,7 @@ impl<'a> CodeGenerator<'a> {
 
         validator_args_tree = AirTree::no_op().hoist_over(validator_args_tree);
 
-        let full_tree = self.hoist_functions_to_validator(validator_args_tree, context);
+        let full_tree = self.hoist_functions_to_validator(validator_args_tree);
 
         // optimizations on air tree
 
@@ -155,7 +154,7 @@ impl<'a> CodeGenerator<'a> {
         if let Some(other) = other_fun {
             self.reset(false);
 
-            let mut air_tree_fun_other = self.build(&other.body, module_name, context);
+            let mut air_tree_fun_other = self.build(&other.body, module_name, &[]);
 
             air_tree_fun_other = wrap_validator_condition(air_tree_fun_other, self.tracing);
 
@@ -169,8 +168,7 @@ impl<'a> CodeGenerator<'a> {
 
             validator_args_tree_other = AirTree::no_op().hoist_over(validator_args_tree_other);
 
-            let full_tree_other =
-                self.hoist_functions_to_validator(validator_args_tree_other, context);
+            let full_tree_other = self.hoist_functions_to_validator(validator_args_tree_other);
 
             // optimizations on air tree
 
@@ -205,7 +203,7 @@ impl<'a> CodeGenerator<'a> {
 
         air_tree = AirTree::no_op().hoist_over(air_tree);
 
-        let full_tree = self.hoist_functions_to_validator(air_tree, &[]);
+        let full_tree = self.hoist_functions_to_validator(air_tree);
 
         // optimizations on air tree
         let full_vec = full_tree.to_vec();
@@ -605,12 +603,12 @@ impl<'a> CodeGenerator<'a> {
                         subject_name,
                         tipo.clone(),
                         subject.tipo(),
-                        AirTree::local_var(constr_var, subject.tipo()),
+                        AirTree::local_var(&constr_var, subject.tipo()),
                         clauses,
                     );
 
                     AirTree::let_assignment(
-                        &constr_var,
+                        constr_var,
                         self.build(subject, module_build_name, context),
                         when_assign,
                     )
@@ -876,11 +874,11 @@ impl<'a> CodeGenerator<'a> {
                     BinOp::Eq,
                     bool(),
                     AirTree::int(expected_int),
-                    AirTree::local_var(name, int()),
+                    AirTree::local_var(&name, int()),
                     int(),
                 );
 
-                let expr = AirTree::let_assignment(&name, value, expect);
+                let expr = AirTree::let_assignment(name, value, expect);
 
                 AirTree::assert_bool(true, expr, props.msg_func.clone())
             }
@@ -987,7 +985,7 @@ impl<'a> CodeGenerator<'a> {
 
                         let val = AirTree::local_var(&tail_name, tipo.clone());
 
-                        elems.push(tail_name);
+                        elems.push(tail_name.clone());
 
                         if tail_name != "_" {
                             self.assignment(
@@ -1034,7 +1032,7 @@ impl<'a> CodeGenerator<'a> {
 
                         let val = AirTree::local_var(&elem_name, list_elem_type.clone());
 
-                        elems.push(elem_name);
+                        elems.push(elem_name.clone());
 
                         if elem_name != "_" {
                             self.assignment(
@@ -1147,10 +1145,13 @@ impl<'a> CodeGenerator<'a> {
                                     )
                                 });
 
-                                let val =
-                                    AirTree::local_var(field_name.to_string(), arg_type.clone());
+                                let val = AirTree::local_var(&field_name, arg_type.clone());
 
-                                fields.push((field_index, field_name, arg_type.clone()));
+                                fields.push((
+                                    field_index,
+                                    field_name.to_string(),
+                                    arg_type.clone(),
+                                ));
 
                                 if field_name != "_" {
                                     self.assignment(
@@ -1186,13 +1187,13 @@ impl<'a> CodeGenerator<'a> {
                         pattern.location().end
                     );
 
-                    let local_value = AirTree::local_var(constructor_name, tipo.clone());
+                    let local_value = AirTree::local_var(&constructor_name, tipo.clone());
 
                     let then = if check_replaceable_opaque_type(tipo, &self.data_types) {
                         AirTree::let_assignment(&indices[0].1, local_value, then)
                     } else {
                         let (is_expect, msg) = if props.full_check {
-                            (true, props.msg_func)
+                            (true, props.msg_func.clone())
                         } else {
                             (false, None)
                         };
@@ -1222,7 +1223,7 @@ impl<'a> CodeGenerator<'a> {
                             let assert_constr = AirTree::assert_constr_index(
                                 index,
                                 AirTree::local_var(&constructor_name, tipo.clone()),
-                                props.msg_func.clone(),
+                                props.msg_func,
                             );
 
                             assert_constr.hoist_over(then)
@@ -1280,9 +1281,9 @@ impl<'a> CodeGenerator<'a> {
                             )
                         });
 
-                        let val = AirTree::local_var(tuple_name.to_string(), arg_type.clone());
+                        let val = AirTree::local_var(&tuple_name, arg_type.clone());
 
-                        fields.push(tuple_name);
+                        fields.push(tuple_name.clone());
 
                         if "_" != tuple_name {
                             self.assignment(
@@ -1410,7 +1411,7 @@ impl<'a> CodeGenerator<'a> {
                     "",
                 ),
                 void(),
-                vec![AirTree::local_var(map_name, tipo.clone()), unwrap_function],
+                vec![AirTree::local_var(&map_name, tipo.clone()), unwrap_function],
             );
 
             AirTree::let_assignment(&map_name, value, func_call)
@@ -1477,7 +1478,10 @@ impl<'a> CodeGenerator<'a> {
                         "",
                     ),
                     void(),
-                    vec![AirTree::local_var(list_name, tipo.clone()), unwrap_function],
+                    vec![
+                        AirTree::local_var(&list_name, tipo.clone()),
+                        unwrap_function,
+                    ],
                 );
 
                 AirTree::let_assignment(&list_name, value, func_call)
@@ -1495,7 +1499,7 @@ impl<'a> CodeGenerator<'a> {
             let tuple_access = AirTree::tuple_access(
                 vec![fst_name.clone(), snd_name.clone()],
                 tipo.clone(),
-                AirTree::local_var(pair_name, tipo.clone()),
+                AirTree::local_var(&pair_name, tipo.clone()),
                 msg_func.clone(),
                 msg_func.is_some(),
             );
@@ -1557,7 +1561,7 @@ impl<'a> CodeGenerator<'a> {
             let tuple_access = AirTree::tuple_access(
                 tuple_index_names,
                 tipo.clone(),
-                AirTree::local_var(tuple_name, tipo.clone()),
+                AirTree::local_var(&tuple_name, tipo.clone()),
                 msg_func,
                 true,
             );
@@ -1629,7 +1633,7 @@ impl<'a> CodeGenerator<'a> {
 
                                 let arg_tipo = find_and_replace_generics(&arg.tipo, &mono_types);
 
-                                constr_args.push((index, arg_name, arg_tipo));
+                                constr_args.push((index, arg_name.clone(), arg_tipo.clone()));
 
                                 AirTree::let_assignment(
                                     "_",
@@ -1797,7 +1801,7 @@ impl<'a> CodeGenerator<'a> {
                 clause_then = AirTree::let_assignment(
                     &clause_guard_name,
                     builder::handle_clause_guard(guard),
-                    AirTree::clause_guard(clause_guard_name, AirTree::bool(true), bool())
+                    AirTree::clause_guard(&clause_guard_name, AirTree::bool(true), bool())
                         .hoist_over(clause_then),
                 );
             }
@@ -2211,7 +2215,7 @@ impl<'a> CodeGenerator<'a> {
 
                             *complex_clause = *complex_clause || elem_props.complex_clause;
 
-                            elems.push(elem_name);
+                            elems.push(elem_name.clone());
 
                             if elem_name != "_" {
                                 self.nested_clause_condition(
@@ -2255,7 +2259,7 @@ impl<'a> CodeGenerator<'a> {
                     }
 
                     if props.final_clause && defined_tails.is_empty() {
-                        elems.push(elem_name);
+                        elems.push(elem_name.clone());
                     }
 
                     if elem_name != "_" {
@@ -2265,7 +2269,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 });
 
-                let mut defined_heads = elems.iter().rev().cloned().collect_vec();
+                let defined_heads = elems.iter().rev().cloned().collect_vec();
 
                 let list_assign = if props.final_clause && defined_tails.is_empty() {
                     AirTree::list_access(
@@ -2391,7 +2395,7 @@ impl<'a> CodeGenerator<'a> {
                             props.complex_clause =
                                 props.complex_clause || field_props.complex_clause;
 
-                            fields.push((field_index, field_name, *arg_type));
+                            fields.push((field_index, field_name, arg_type.clone()));
 
                             statement
                         },
@@ -2812,11 +2816,7 @@ impl<'a> CodeGenerator<'a> {
         AirTree::anon_func(arg_names, checked_args)
     }
 
-    fn hoist_functions_to_validator(
-        &mut self,
-        mut air_tree: AirTree,
-        context: &[TypedExpr],
-    ) -> AirTree {
+    fn hoist_functions_to_validator(&mut self, mut air_tree: AirTree) -> AirTree {
         let mut functions_to_hoist = IndexMap::new();
         let mut used_functions = vec![];
         let mut defined_functions = vec![];
@@ -2838,7 +2838,6 @@ impl<'a> CodeGenerator<'a> {
             &mut TreePath::new(),
             0,
             0,
-            context,
         );
 
         validator_hoistable = used_functions.clone();
@@ -2868,7 +2867,6 @@ impl<'a> CodeGenerator<'a> {
                         &defined_functions,
                         &mut hoist_deps,
                         tree_path,
-                        context,
                     );
 
                     let function_variants = functions_to_hoist
@@ -3478,7 +3476,6 @@ impl<'a> CodeGenerator<'a> {
         defined_functions: &[(FunctionAccessKey, String)],
         current_function_deps: &mut Vec<(FunctionAccessKey, String)>,
         mut function_tree_path: TreePath,
-        context: &[TypedExpr],
     ) {
         let Some((depth, index)) = function_tree_path.pop() else {
             return;
@@ -3493,7 +3490,6 @@ impl<'a> CodeGenerator<'a> {
             &mut function_tree_path,
             depth + 1,
             0,
-            context,
         );
 
         for (generic_function_key, variant_name) in current_function_deps.iter() {
@@ -3520,7 +3516,6 @@ impl<'a> CodeGenerator<'a> {
         path: &mut TreePath,
         current_depth: usize,
         depth_index: usize,
-        context: &[TypedExpr],
     ) {
         air_tree.traverse_tree_with_path(
             path,
@@ -3666,7 +3661,7 @@ impl<'a> CodeGenerator<'a> {
                             let mut function_air_tree_body = self.build(
                                 &function_def.body,
                                 &generic_function_key.module_name,
-                                context,
+                                &[],
                             );
 
                             function_air_tree_body.traverse_tree_with(
@@ -3696,11 +3691,8 @@ impl<'a> CodeGenerator<'a> {
                             .map(|arg| arg.arg_name.get_variable_name().unwrap_or("_").to_string())
                             .collect_vec();
 
-                        let mut function_air_tree_body = self.build(
-                            &function_def.body,
-                            &generic_function_key.module_name,
-                            context,
-                        );
+                        let mut function_air_tree_body =
+                            self.build(&function_def.body, &generic_function_key.module_name, &[]);
 
                         function_air_tree_body.traverse_tree_with(
                             &mut |air_tree, _| {
