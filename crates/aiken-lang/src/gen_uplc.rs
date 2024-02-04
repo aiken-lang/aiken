@@ -2690,6 +2690,7 @@ impl<'a> CodeGenerator<'a> {
                             AirTree::bool(constr_name == "True"),
                             bool(),
                         )
+                        .hoist_over(then)
                     } else {
                         let (cond, assign) =
                             self.clause_pattern(pattern, subject_tipo, props, then);
