@@ -956,7 +956,7 @@ impl<'a> CodeGenerator<'a> {
                 } else if !props.remove_unused {
                     AirTree::let_assignment(name, value, then)
                 } else {
-                    AirTree::no_op()
+                    AirTree::no_op().hoist_over(then)
                 }
             }
             Pattern::List { elements, tail, .. } => {
