@@ -5805,9 +5805,9 @@ fn opaque_value_in_datum() {
             .lambda("ctx")
             .lambda("red")
             .lambda("dat")
+            .constr_fields_exposer()
             .lambda("expect[(_,amount)]=val.inner.inner")
             .apply(Term::string("expect [(_, amount)] = val.inner.inner"))
-            .constr_fields_exposer()
             .lambda("dat:Dat")
             .apply(Term::string("dat: Dat"))
             .constr_index_exposer(),

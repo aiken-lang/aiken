@@ -994,9 +994,7 @@ impl<'a> CodeGenerator<'a> {
 
                         let val = AirTree::local_var(&tail_name, tipo.clone());
 
-                        elems.push(tail_name.clone());
-
-                        if tail_name != "_" {
+                        let then = if tail_name != "_" {
                             self.assignment(
                                 tail,
                                 val,
@@ -1012,15 +1010,18 @@ impl<'a> CodeGenerator<'a> {
                             )
                         } else {
                             then
-                        }
+                        };
+
+                        elems.push(tail_name);
+
+                        then
                     }
                 };
 
                 let then = elements
                     .iter()
                     .enumerate()
-                    .rev()
-                    .fold(then, |then, (index, elem)| {
+                    .rfold(then, |then, (index, elem)| {
                         let elem_name = match elem {
                             Pattern::Var { name, .. } => name.to_string(),
                             Pattern::Assign { name, .. } => name.to_string(),
@@ -1041,9 +1042,7 @@ impl<'a> CodeGenerator<'a> {
 
                         let val = AirTree::local_var(&elem_name, list_elem_type.clone());
 
-                        elems.push(elem_name.clone());
-
-                        if elem_name != "_" {
+                        let then = if elem_name != "_" {
                             self.assignment(
                                 elem,
                                 val,
@@ -1059,16 +1058,20 @@ impl<'a> CodeGenerator<'a> {
                             )
                         } else {
                             then
-                        }
+                        };
+
+                        elems.push(elem_name);
+
+                        then
                     });
 
-                let names = elems.iter().rev().cloned().collect();
+                elems.reverse();
 
                 let list_access = if elements.is_empty() {
                     AirTree::list_empty(value, props.msg_func)
                 } else {
                     AirTree::list_access(
-                        names,
+                        elems,
                         tipo.clone(),
                         tail.is_some(),
                         value,
@@ -1115,77 +1118,69 @@ impl<'a> CodeGenerator<'a> {
 
                     let mut fields = vec![];
 
-                    let then =
-                        arguments
-                            .iter()
-                            .enumerate()
-                            .rev()
-                            .fold(then, |then, (index, arg)| {
-                                let label = arg.label.clone().unwrap_or_default();
+                    let then = arguments
+                        .iter()
+                        .enumerate()
+                        .rfold(then, |then, (index, arg)| {
+                            let label = arg.label.clone().unwrap_or_default();
 
-                                let field_index = if let Some(field_map) = &field_map {
-                                    *field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&index)
-                                } else {
-                                    index
-                                };
+                            let field_index = if let Some(field_map) = &field_map {
+                                *field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&index)
+                            } else {
+                                index
+                            };
 
-                                let field_name = match &arg.value {
-                                    Pattern::Var { name, .. } => name.to_string(),
-                                    Pattern::Assign { name, .. } => name.to_string(),
-                                    Pattern::Discard { name, .. } => {
-                                        if props.full_check {
-                                            format!("__discard_{}_{}", name, index)
-                                        } else {
-                                            "_".to_string()
-                                        }
+                            let field_name = match &arg.value {
+                                Pattern::Var { name, .. } => name.to_string(),
+                                Pattern::Assign { name, .. } => name.to_string(),
+                                Pattern::Discard { name, .. } => {
+                                    if props.full_check {
+                                        format!("__discard_{}_{}", name, index)
+                                    } else {
+                                        "_".to_string()
                                     }
-                                    _ => format!(
-                                        "field_{}_span_{}_{}",
-                                        field_index,
-                                        arg.value.location().start,
-                                        arg.value.location().end
-                                    ),
-                                };
-
-                                let arg_type = type_map.get(&field_index).unwrap_or_else(|| {
-                                    unreachable!(
-                                        "Missing type for field {} of constr {}",
-                                        field_index, name
-                                    )
-                                });
-
-                                let val = AirTree::local_var(&field_name, arg_type.clone());
-
-                                fields.push((
-                                    field_index,
-                                    field_name.to_string(),
-                                    arg_type.clone(),
-                                ));
-
-                                if field_name != "_" {
-                                    self.assignment(
-                                        &arg.value,
-                                        val,
-                                        then,
-                                        arg_type,
-                                        AssignmentProperties {
-                                            value_type: arg_type.clone(),
-                                            kind: props.kind,
-                                            remove_unused: true,
-                                            full_check: props.full_check,
-                                            msg_func: props.msg_func.clone(),
-                                        },
-                                    )
-                                } else {
-                                    then
                                 }
+                                _ => format!(
+                                    "field_{}_span_{}_{}",
+                                    field_index,
+                                    arg.value.location().start,
+                                    arg.value.location().end
+                                ),
+                            };
+
+                            let arg_type = type_map.get(&field_index).unwrap_or_else(|| {
+                                unreachable!(
+                                    "Missing type for field {} of constr {}",
+                                    field_index, name
+                                )
                             });
 
-                    let indices = fields
-                        .iter()
-                        .rev()
-                        .map(|(index, name, tipo)| (*index, name.to_string(), tipo.clone()))
-                        .collect_vec();
+                            let val = AirTree::local_var(&field_name, arg_type.clone());
+
+                            let then = if field_name != "_" {
+                                self.assignment(
+                                    &arg.value,
+                                    val,
+                                    then,
+                                    arg_type,
+                                    AssignmentProperties {
+                                        value_type: arg_type.clone(),
+                                        kind: props.kind,
+                                        remove_unused: true,
+                                        full_check: props.full_check,
+                                        msg_func: props.msg_func.clone(),
+                                    },
+                                )
+                            } else {
+                                then
+                            };
+
+                            fields.push((field_index, field_name, arg_type.clone()));
+
+                            then
+                        });
+
+                    fields.reverse();
 
                     // This `value` is either value param that was passed in or
                     // local var
@@ -1199,15 +1194,14 @@ impl<'a> CodeGenerator<'a> {
                     let local_value = AirTree::local_var(&constructor_name, tipo.clone());
 
                     let then = if check_replaceable_opaque_type(tipo, &self.data_types) {
-                        AirTree::let_assignment(&indices[0].1, local_value, then)
+                        AirTree::let_assignment(&fields[0].1, local_value, then)
                     } else {
                         let (is_expect, msg) = if props.full_check {
                             (true, props.msg_func.clone())
                         } else {
                             (false, None)
                         };
-                        AirTree::fields_expose(indices, local_value, msg, is_expect)
-                            .hoist_over(then)
+                        AirTree::fields_expose(fields, local_value, msg, is_expect).hoist_over(then)
                     };
 
                     // TODO: See if we can combine these two if-conditions;
@@ -1260,58 +1254,58 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut fields = vec![];
 
-                let then = elems
-                    .iter()
-                    .enumerate()
-                    .rev()
-                    .fold(then, |then, (index, arg)| {
-                        let tuple_name = match &arg {
-                            Pattern::Var { name, .. } => name.to_string(),
-                            Pattern::Assign { name, .. } => name.to_string(),
-                            Pattern::Discard { name, .. } => {
-                                if props.full_check {
-                                    format!("__discard_{}_{}", name, index)
-                                } else {
-                                    "_".to_string()
-                                }
+                let then = elems.iter().enumerate().rfold(then, |then, (index, arg)| {
+                    let tuple_name = match &arg {
+                        Pattern::Var { name, .. } => name.to_string(),
+                        Pattern::Assign { name, .. } => name.to_string(),
+                        Pattern::Discard { name, .. } => {
+                            if props.full_check {
+                                format!("__discard_{}_{}", name, index)
+                            } else {
+                                "_".to_string()
                             }
-                            _ => format!(
-                                "tuple_{}_span_{}_{}",
-                                index,
-                                arg.location().start,
-                                arg.location().end
-                            ),
-                        };
-
-                        let arg_type = type_map.get(&index).unwrap_or_else(|| {
-                            unreachable!(
-                                "Missing type for tuple index {} of tuple_span_{}_{}",
-                                index, location.start, location.end
-                            )
-                        });
-
-                        let val = AirTree::local_var(&tuple_name, arg_type.clone());
-
-                        fields.push(tuple_name.clone());
-
-                        if "_" != tuple_name {
-                            self.assignment(
-                                arg,
-                                val,
-                                then,
-                                arg_type,
-                                AssignmentProperties {
-                                    value_type: arg_type.clone(),
-                                    kind: props.kind,
-                                    remove_unused: true,
-                                    full_check: props.full_check,
-                                    msg_func: props.msg_func.clone(),
-                                },
-                            )
-                        } else {
-                            then
                         }
+                        _ => format!(
+                            "tuple_{}_span_{}_{}",
+                            index,
+                            arg.location().start,
+                            arg.location().end
+                        ),
+                    };
+
+                    let arg_type = type_map.get(&index).unwrap_or_else(|| {
+                        unreachable!(
+                            "Missing type for tuple index {} of tuple_span_{}_{}",
+                            index, location.start, location.end
+                        )
                     });
+
+                    let val = AirTree::local_var(&tuple_name, arg_type.clone());
+
+                    let then = if "_" != tuple_name {
+                        self.assignment(
+                            arg,
+                            val,
+                            then,
+                            arg_type,
+                            AssignmentProperties {
+                                value_type: arg_type.clone(),
+                                kind: props.kind,
+                                remove_unused: true,
+                                full_check: props.full_check,
+                                msg_func: props.msg_func.clone(),
+                            },
+                        )
+                    } else {
+                        then
+                    };
+
+                    fields.push(tuple_name);
+
+                    then
+                });
+
+                fields.reverse();
 
                 let (is_expect, msg) = if props.full_check {
                     (true, props.msg_func)
@@ -1543,7 +1537,7 @@ impl<'a> CodeGenerator<'a> {
 
             let mut tuple_expect_items = vec![];
 
-            let then = tuple_inner_types.iter().enumerate().rev().fold(
+            let then = tuple_inner_types.iter().enumerate().rfold(
                 AirTree::void(),
                 |then, (index, arg)| {
                     let tuple_index_name = format!(
@@ -1565,19 +1559,19 @@ impl<'a> CodeGenerator<'a> {
                 },
             );
 
-            let tuple_index_names = tuple_expect_items.iter().rev().cloned().collect_vec();
+            tuple_expect_items.reverse();
 
             let tuple_access = AirTree::tuple_access(
-                tuple_index_names,
+                tuple_expect_items,
                 tipo.clone(),
                 AirTree::local_var(&tuple_name, tipo.clone()),
                 msg_func,
                 true,
             );
 
-            let tupl_access = tuple_access.hoist_over(then);
+            let tuple_access = tuple_access.hoist_over(then);
 
-            AirTree::let_assignment(&tuple_name, value, tupl_access)
+            AirTree::let_assignment(&tuple_name, value, tuple_access)
 
         // Constructor
         } else {
@@ -1634,7 +1628,7 @@ impl<'a> CodeGenerator<'a> {
                     |acc, (index, constr)| {
                         let mut constr_args = vec![];
 
-                        let constr_then = constr.arguments.iter().enumerate().rev().fold(
+                        let constr_then = constr.arguments.iter().enumerate().rfold(
                             AirTree::void(),
                             |then, (index, arg)| {
                                 let arg_name =
@@ -1647,8 +1641,8 @@ impl<'a> CodeGenerator<'a> {
                                 AirTree::let_assignment(
                                     "_",
                                     self.expect_type_assign(
-                                        &arg_tipo,
-                                        AirTree::local_var(&arg_name, arg_tipo.clone()),
+                                        &arg_tipo.clone(),
+                                        AirTree::local_var(arg_name, arg_tipo),
                                         defined_data_types,
                                         location,
                                         msg_term.clone(),
@@ -1657,14 +1651,7 @@ impl<'a> CodeGenerator<'a> {
                                 )
                             },
                         );
-
-                        let indices = constr_args
-                            .iter()
-                            .rev()
-                            .map(|(index, arg_name, arg_tipo)| {
-                                (*index, arg_name.clone(), (*arg_tipo).clone())
-                            })
-                            .collect_vec();
+                        constr_args.reverse();
 
                         let assign = if constr_args.is_empty() {
                             AirTree::fields_empty(
@@ -1679,7 +1666,7 @@ impl<'a> CodeGenerator<'a> {
                             )
                         } else {
                             AirTree::fields_expose(
-                                indices,
+                                constr_args,
                                 AirTree::local_var(
                                     format!(
                                         "__constr_var_span_{}_{}",
@@ -2185,52 +2172,9 @@ impl<'a> CodeGenerator<'a> {
 
                 let mut elems = vec![];
 
-                let elems_then = elements
-                    .iter()
-                    .enumerate()
-                    .rfold(then, |then, (index, elem)| {
-                        // TODO: Turn 'Pattern' into another type instead of using strings and
-                        // expecting a special magic string '_'.
-                        let elem_name = match elem {
-                            Pattern::Var { name, .. } => name.to_string(),
-                            Pattern::Assign { name, .. } => name.to_string(),
-                            Pattern::Discard { .. } => "_".to_string(),
-                            _ => format!(
-                                "elem_{}_span_{}_{}",
-                                index,
-                                elem.location().start,
-                                elem.location().end
-                            ),
-                        };
-
-                        let mut elem_props = ClauseProperties::init_inner(
-                            list_elem_type,
-                            elem_name.clone(),
-                            elem_name.clone(),
-                            props.final_clause,
-                        );
-
-                        let then = if elem_name != "_" {
-                            self.nested_clause_condition(
-                                elem,
-                                list_elem_type,
-                                &mut elem_props,
-                                then,
-                            )
-                        } else {
-                            then
-                        };
-
-                        elems.push(elem_name);
-
-                        *complex_clause = *complex_clause || elem_props.complex_clause;
-
-                        then
-                    });
-
                 let mut list_tail = None;
 
-                let tail_then = tail.iter().rev().fold(elems_then, |then, elem| {
+                let elems_then = tail.iter().rfold(then, |inner_then, elem| {
                     assert!(!elements.is_empty());
                     let tail = defined_tails.get(elements.len() - 1);
                     let elem_name = match elem.as_ref() {
@@ -2255,10 +2199,15 @@ impl<'a> CodeGenerator<'a> {
                         list_tail = Some((tail.unwrap().to_string(), elem_name.to_string()));
                     }
 
-                    let then = if elem_name != "_" {
-                        self.nested_clause_condition(elem, subject_tipo, &mut elem_props, then)
+                    let inner_then = if elem_name != "_" {
+                        self.nested_clause_condition(
+                            elem,
+                            subject_tipo,
+                            &mut elem_props,
+                            inner_then,
+                        )
                     } else {
-                        then
+                        inner_then
                     };
 
                     if props.final_clause && defined_tails.is_empty() {
@@ -2267,14 +2216,61 @@ impl<'a> CodeGenerator<'a> {
 
                     *complex_clause = *complex_clause || elem_props.complex_clause;
 
-                    then
+                    inner_then
                 });
 
-                let defined_heads = elems.iter().rev().cloned().collect_vec();
+                let elems_then =
+                    elements
+                        .iter()
+                        .enumerate()
+                        .rfold(elems_then, |elems_then, (index, elem)| {
+                            // TODO: Turn 'Pattern' into another type instead of using strings and
+                            // expecting a special magic string '_'.
+                            let elem_name = match elem {
+                                Pattern::Var { name, .. } => name.to_string(),
+                                Pattern::Assign { name, .. } => name.to_string(),
+                                Pattern::Discard { .. } => "_".to_string(),
+                                _ => format!(
+                                    "elem_{}_span_{}_{}",
+                                    index,
+                                    elem.location().start,
+                                    elem.location().end
+                                ),
+                            };
+
+                            let mut elem_props = ClauseProperties::init_inner(
+                                list_elem_type,
+                                elem_name.clone(),
+                                elem_name.clone(),
+                                props.final_clause,
+                            );
+
+                            let elems_then = if elem_name != "_" {
+                                self.nested_clause_condition(
+                                    elem,
+                                    list_elem_type,
+                                    &mut elem_props,
+                                    elems_then,
+                                )
+                            } else {
+                                elems_then
+                            };
+
+                            elems.push(elem_name);
+
+                            *complex_clause = *complex_clause || elem_props.complex_clause;
+
+                            elems_then
+                        });
+
+                elems.reverse();
+
+                // This case is really only possible with something like
+                // when_tuple_empty_lists
 
                 let list_assign = if props.final_clause && defined_tails.is_empty() {
                     AirTree::list_access(
-                        defined_heads,
+                        elems,
                         subject_tipo.clone(),
                         tail.is_some(),
                         AirTree::local_var(&props.original_subject_name, subject_tipo.clone()),
@@ -2285,10 +2281,10 @@ impl<'a> CodeGenerator<'a> {
                         ExpectLevel::None,
                     )
                 } else {
-                    assert!(defined_tails.len() >= defined_heads.len());
+                    assert!(defined_tails.len() >= elems.len());
 
                     AirTree::list_expose(
-                        defined_heads
+                        elems
                             .into_iter()
                             .zip(defined_tails)
                             .filter(|(head, _)| head != "_")
@@ -2299,7 +2295,7 @@ impl<'a> CodeGenerator<'a> {
                     )
                 };
 
-                (AirTree::void(), list_assign.hoist_over(tail_then))
+                (AirTree::void(), list_assign.hoist_over(elems_then))
             }
             Pattern::Constructor {
                 name,
@@ -2309,7 +2305,7 @@ impl<'a> CodeGenerator<'a> {
                 ..
             } => {
                 if subject_tipo.is_bool() {
-                    (AirTree::bool(name == "True"), AirTree::no_op())
+                    (AirTree::bool(name == "True"), then)
                 } else {
                     assert!(
                         matches!(function_tipo.as_ref().clone(), Type::Fn { .. })
@@ -2345,62 +2341,63 @@ impl<'a> CodeGenerator<'a> {
 
                     let mut fields = vec![];
 
-                    let next_then = arguments.iter().enumerate().rev().fold(
-                        then,
-                        |inner_then, (index, arg)| {
-                            let label = arg.label.clone().unwrap_or_default();
+                    let next_then =
+                        arguments
+                            .iter()
+                            .enumerate()
+                            .rfold(then, |inner_then, (index, arg)| {
+                                let label = arg.label.clone().unwrap_or_default();
 
-                            let field_index = if let Some(field_map) = &field_map {
-                                *field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&index)
-                            } else {
-                                index
-                            };
+                                let field_index = if let Some(field_map) = &field_map {
+                                    *field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&index)
+                                } else {
+                                    index
+                                };
 
-                            let field_name = match &arg.value {
-                                Pattern::Var { name, .. } => name.to_string(),
-                                Pattern::Assign { name, .. } => name.to_string(),
-                                Pattern::Discard { .. } => "_".to_string(),
-                                _ => format!(
-                                    "field_{}_span_{}_{}",
-                                    field_index,
-                                    arg.value.location().start,
-                                    arg.value.location().end
-                                ),
-                            };
+                                let field_name = match &arg.value {
+                                    Pattern::Var { name, .. } => name.to_string(),
+                                    Pattern::Assign { name, .. } => name.to_string(),
+                                    Pattern::Discard { .. } => "_".to_string(),
+                                    _ => format!(
+                                        "field_{}_span_{}_{}",
+                                        field_index,
+                                        arg.value.location().start,
+                                        arg.value.location().end
+                                    ),
+                                };
 
-                            let arg_type = type_map.get(&field_index).unwrap_or_else(|| {
-                                unreachable!(
-                                    "Missing type for field {} of constr {}",
-                                    field_index, name
-                                )
-                            });
+                                let arg_type = type_map.get(&field_index).unwrap_or_else(|| {
+                                    unreachable!(
+                                        "Missing type for field {} of constr {}",
+                                        field_index, name
+                                    )
+                                });
 
-                            let mut field_props = ClauseProperties::init_inner(
-                                arg_type,
-                                field_name.clone(),
-                                field_name.clone(),
-                                props.final_clause,
-                            );
-
-                            let statement = if field_name != "_" {
-                                self.nested_clause_condition(
-                                    &arg.value,
+                                let mut field_props = ClauseProperties::init_inner(
                                     arg_type,
-                                    &mut field_props,
-                                    inner_then,
-                                )
-                            } else {
-                                inner_then
-                            };
+                                    field_name.clone(),
+                                    field_name.clone(),
+                                    props.final_clause,
+                                );
 
-                            props.complex_clause =
-                                props.complex_clause || field_props.complex_clause;
+                                let statement = if field_name != "_" {
+                                    self.nested_clause_condition(
+                                        &arg.value,
+                                        arg_type,
+                                        &mut field_props,
+                                        inner_then,
+                                    )
+                                } else {
+                                    inner_then
+                                };
 
-                            fields.push((field_index, field_name, arg_type.clone()));
+                                props.complex_clause =
+                                    props.complex_clause || field_props.complex_clause;
 
-                            statement
-                        },
-                    );
+                                fields.push((field_index, field_name, arg_type.clone()));
+
+                                statement
+                            });
 
                     fields.reverse();
 
@@ -2441,8 +2438,7 @@ impl<'a> CodeGenerator<'a> {
                     elems
                         .iter()
                         .enumerate()
-                        .rev()
-                        .fold(then, |inner_then, (index, element)| {
+                        .rfold(then, |inner_then, (index, element)| {
                             let elem_name = match element {
                                 Pattern::Var { name, .. } => name.to_string(),
                                 Pattern::Assign { name, .. } => name.to_string(),
@@ -2510,7 +2506,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 });
 
-                let tuple_name_assigns = previous_defined_names.into_iter().rev().fold(
+                let tuple_name_assigns = previous_defined_names.into_iter().rfold(
                     next_then,
                     |inner_then, (index, prev_name, name)| {
                         AirTree::let_assignment(
@@ -2746,71 +2742,69 @@ impl<'a> CodeGenerator<'a> {
     ) -> AirTree {
         let mut arg_names = vec![];
 
-        let checked_args =
-            arguments
-                .iter()
-                .enumerate()
-                .rev()
-                .fold(body, |inner_then, (index, arg)| {
-                    let arg_name = arg.arg_name.get_variable_name().unwrap_or("_").to_string();
-                    let arg_span = arg.location;
+        let checked_args = arguments
+            .iter()
+            .enumerate()
+            .rfold(body, |inner_then, (index, arg)| {
+                let arg_name = arg.arg_name.get_variable_name().unwrap_or("_").to_string();
+                let arg_span = arg.location;
 
-                    arg_names.push(arg_name.clone());
+                arg_names.push(arg_name.clone());
 
-                    if !(has_context && index == arguments.len() - 1) && &arg_name != "_" {
-                        let param = AirTree::local_var(&arg_name, data());
+                if !(has_context && index == arguments.len() - 1) && &arg_name != "_" {
+                    let param = AirTree::local_var(&arg_name, data());
 
-                        let actual_type = convert_opaque_type(&arg.tipo, &self.data_types);
+                    let actual_type = convert_opaque_type(&arg.tipo, &self.data_types);
 
-                        let msg_func = match self.tracing {
-                            TraceLevel::Silent => None,
-                            TraceLevel::Compact | TraceLevel::Verbose => {
-                                let msg = match self.tracing {
-                                    TraceLevel::Silent => {
-                                        unreachable!("excluded from pattern guards")
-                                    }
-                                    TraceLevel::Compact => lines
-                                        .line_and_column_number(arg_span.start)
-                                        .expect("Out of bounds span")
-                                        .to_string(),
-                                    TraceLevel::Verbose => src_code
-                                        .get(arg_span.start..arg_span.end)
-                                        .expect("Out of bounds span")
-                                        .to_string(),
-                                };
+                    let msg_func = match self.tracing {
+                        TraceLevel::Silent => None,
+                        TraceLevel::Compact | TraceLevel::Verbose => {
+                            let msg = match self.tracing {
+                                TraceLevel::Silent => {
+                                    unreachable!("excluded from pattern guards")
+                                }
+                                TraceLevel::Compact => lines
+                                    .line_and_column_number(arg_span.start)
+                                    .expect("Out of bounds span")
+                                    .to_string(),
+                                TraceLevel::Verbose => src_code
+                                    .get(arg_span.start..arg_span.end)
+                                    .expect("Out of bounds span")
+                                    .to_string(),
+                            };
 
-                                let msg_func_name = msg.split_whitespace().join("");
+                            let msg_func_name = msg.split_whitespace().join("");
 
-                                self.special_functions.insert_new_function(
-                                    msg_func_name.to_string(),
-                                    Term::string(msg),
-                                    string(),
-                                );
+                            self.special_functions.insert_new_function(
+                                msg_func_name.to_string(),
+                                Term::string(msg),
+                                string(),
+                            );
 
-                                Some(self.special_functions.use_function_msg(msg_func_name))
-                            }
-                        };
+                            Some(self.special_functions.use_function_msg(msg_func_name))
+                        }
+                    };
 
-                        self.assignment(
-                            &Pattern::Var {
-                                location: Span::empty(),
-                                name: arg_name.to_string(),
-                            },
-                            param,
-                            inner_then,
-                            &actual_type,
-                            AssignmentProperties {
-                                value_type: data(),
-                                kind: AssignmentKind::Expect,
-                                remove_unused: false,
-                                full_check: true,
-                                msg_func,
-                            },
-                        )
-                    } else {
-                        inner_then
-                    }
-                });
+                    self.assignment(
+                        &Pattern::Var {
+                            location: Span::empty(),
+                            name: arg_name.to_string(),
+                        },
+                        param,
+                        inner_then,
+                        &actual_type,
+                        AssignmentProperties {
+                            value_type: data(),
+                            kind: AssignmentKind::Expect,
+                            remove_unused: false,
+                            full_check: true,
+                            msg_func,
+                        },
+                    )
+                } else {
+                    inner_then
+                }
+            });
 
         arg_names.reverse();
 
