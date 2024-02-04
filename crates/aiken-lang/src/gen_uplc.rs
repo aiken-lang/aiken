@@ -50,7 +50,7 @@ use self::{
         AssignmentProperties, ClauseProperties, CodeGenSpecialFuncs, CycleFunctionNames,
         DataTypeKey, FunctionAccessKey, HoistableFunction, Variant,
     },
-    tree::{AirExpression, AirMsg, AirTree, TreePath},
+    tree::{AirMsg, AirTree, TreePath},
 };
 
 #[derive(Clone)]
@@ -141,7 +141,7 @@ impl<'a> CodeGenerator<'a> {
         let mut validator_args_tree =
             self.check_validator_args(&fun.arguments, true, air_tree_fun, &src_code, &lines);
 
-        validator_args_tree = AirTree::no_op().hoist_over(validator_args_tree);
+        validator_args_tree = AirTree::no_op(validator_args_tree);
 
         let full_tree = self.hoist_functions_to_validator(validator_args_tree);
 
@@ -166,7 +166,7 @@ impl<'a> CodeGenerator<'a> {
                 &lines,
             );
 
-            validator_args_tree_other = AirTree::no_op().hoist_over(validator_args_tree_other);
+            validator_args_tree_other = AirTree::no_op(validator_args_tree_other);
 
             let full_tree_other = self.hoist_functions_to_validator(validator_args_tree_other);
 
@@ -201,7 +201,7 @@ impl<'a> CodeGenerator<'a> {
     pub fn generate_test(&mut self, test_body: &TypedExpr, module_name: &String) -> Program<Name> {
         let mut air_tree = self.build(test_body, module_name, &[]);
 
-        air_tree = AirTree::no_op().hoist_over(air_tree);
+        air_tree = AirTree::no_op(air_tree);
 
         let full_tree = self.hoist_functions_to_validator(air_tree);
 
@@ -849,9 +849,7 @@ impl<'a> CodeGenerator<'a> {
     ) -> AirTree {
         assert!(
             match &value {
-                AirTree::Expression(AirExpression::Var { name, .. })
-                    if props.kind == AssignmentKind::Let =>
-                {
+                AirTree::Var { name, .. } if props.kind == AssignmentKind::Let => {
                     name != "_"
                 }
                 _ => true,
@@ -889,7 +887,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let expr = AirTree::let_assignment(name, value, expect);
 
-                AirTree::assert_bool(true, expr, props.msg_func.clone()).hoist_over(then)
+                AirTree::assert_bool(true, expr, props.msg_func.clone(), then)
             }
 
             Pattern::Var { name, .. } => {
@@ -956,7 +954,7 @@ impl<'a> CodeGenerator<'a> {
                 } else if !props.remove_unused {
                     AirTree::let_assignment(name, value, then)
                 } else {
-                    AirTree::no_op().hoist_over(then)
+                    AirTree::no_op(then)
                 }
             }
             Pattern::List { elements, tail, .. } => {
@@ -1067,8 +1065,8 @@ impl<'a> CodeGenerator<'a> {
 
                 elems.reverse();
 
-                let list_access = if elements.is_empty() {
-                    AirTree::list_empty(value, props.msg_func)
+                if elements.is_empty() {
+                    AirTree::list_empty(value, props.msg_func, then)
                 } else {
                     AirTree::list_access(
                         elems,
@@ -1081,10 +1079,9 @@ impl<'a> CodeGenerator<'a> {
                         } else {
                             ExpectLevel::Items
                         },
+                        then,
                     )
-                };
-
-                list_access.hoist_over(then)
+                }
             }
             Pattern::Constructor {
                 arguments,
@@ -1095,7 +1092,7 @@ impl<'a> CodeGenerator<'a> {
                 if tipo.is_bool() {
                     assert!(props.kind.is_expect());
 
-                    AirTree::assert_bool(name == "True", value, props.msg_func).hoist_over(then)
+                    AirTree::assert_bool(name == "True", value, props.msg_func, then)
                 } else if tipo.is_void() {
                     AirTree::let_assignment("_", value, then)
                 } else {
@@ -1201,7 +1198,7 @@ impl<'a> CodeGenerator<'a> {
                         } else {
                             (false, None)
                         };
-                        AirTree::fields_expose(fields, local_value, msg, is_expect).hoist_over(then)
+                        AirTree::fields_expose(fields, local_value, msg, is_expect, then)
                     };
 
                     // TODO: See if we can combine these two if-conditions;
@@ -1223,13 +1220,12 @@ impl<'a> CodeGenerator<'a> {
                                     panic!("Found constructor type {} with 0 constructors", name)
                                 });
 
-                            let assert_constr = AirTree::assert_constr_index(
+                            AirTree::assert_constr_index(
                                 index,
                                 AirTree::local_var(&constructor_name, tipo.clone()),
                                 props.msg_func,
-                            );
-
-                            assert_constr.hoist_over(then)
+                                then,
+                            )
                         } else {
                             then
                         }
@@ -1314,10 +1310,8 @@ impl<'a> CodeGenerator<'a> {
                 };
 
                 // This `value` is either value param that was passed in or local var
-                let tuple_access =
-                    AirTree::tuple_access(fields, tipo.clone(), value, msg, is_expect);
 
-                tuple_access.hoist_over(then)
+                AirTree::tuple_access(fields, tipo.clone(), value, msg, is_expect, then)
             }
         }
     }
@@ -1349,17 +1343,9 @@ impl<'a> CodeGenerator<'a> {
             let fst_name = format!("__pair_fst_span_{}_{}", location.start, location.end);
             let snd_name = format!("__pair_snd_span_{}_{}", location.start, location.end);
 
-            let tuple_access = AirTree::tuple_access(
-                vec![fst_name.clone(), snd_name.clone()],
-                inner_list_type.clone(),
-                AirTree::local_var(&pair_name, inner_list_type.clone()),
-                msg_func.clone(),
-                msg_func.is_some(),
-            );
-
             let expect_fst = self.expect_type_assign(
                 &inner_pair_types[0],
-                AirTree::local_var(fst_name, inner_pair_types[0].clone()),
+                AirTree::local_var(fst_name.clone(), inner_pair_types[0].clone()),
                 defined_data_types,
                 location,
                 msg_func.clone(),
@@ -1367,14 +1353,20 @@ impl<'a> CodeGenerator<'a> {
 
             let expect_snd = self.expect_type_assign(
                 &inner_pair_types[1],
-                AirTree::local_var(snd_name, inner_pair_types[1].clone()),
+                AirTree::local_var(snd_name.clone(), inner_pair_types[1].clone()),
                 defined_data_types,
                 location,
                 msg_func.clone(),
             );
 
-            let anon_func_body =
-                tuple_access.hoist_over(AirTree::let_assignment("_", expect_fst, expect_snd));
+            let anon_func_body = AirTree::tuple_access(
+                vec![fst_name, snd_name],
+                inner_list_type.clone(),
+                AirTree::local_var(&pair_name, inner_list_type.clone()),
+                msg_func.clone(),
+                msg_func.is_some(),
+                AirTree::let_assignment("_", expect_fst, expect_snd),
+            );
 
             let unwrap_function = AirTree::anon_func(vec![pair_name], anon_func_body);
 
@@ -1499,17 +1491,9 @@ impl<'a> CodeGenerator<'a> {
             let fst_name = format!("__pair_fst_span_{}_{}", location.start, location.end);
             let snd_name = format!("__pair_snd_span_{}_{}", location.start, location.end);
 
-            let tuple_access = AirTree::tuple_access(
-                vec![fst_name.clone(), snd_name.clone()],
-                tipo.clone(),
-                AirTree::local_var(&pair_name, tipo.clone()),
-                msg_func.clone(),
-                msg_func.is_some(),
-            );
-
             let expect_fst = self.expect_type_assign(
                 &tuple_inner_types[0],
-                AirTree::local_var(fst_name, tuple_inner_types[0].clone()),
+                AirTree::local_var(fst_name.clone(), tuple_inner_types[0].clone()),
                 defined_data_types,
                 location,
                 msg_func.clone(),
@@ -1517,17 +1501,22 @@ impl<'a> CodeGenerator<'a> {
 
             let expect_snd = self.expect_type_assign(
                 &tuple_inner_types[1],
-                AirTree::local_var(snd_name, tuple_inner_types[1].clone()),
+                AirTree::local_var(snd_name.clone(), tuple_inner_types[1].clone()),
                 defined_data_types,
                 location,
-                msg_func,
+                msg_func.clone(),
             );
 
-            AirTree::let_assignment(
-                &pair_name,
-                value,
-                tuple_access.hoist_over(AirTree::let_assignment("_", expect_fst, expect_snd)),
-            )
+            let tuple_access = AirTree::tuple_access(
+                vec![fst_name, snd_name],
+                tipo.clone(),
+                AirTree::local_var(&pair_name, tipo.clone()),
+                msg_func.clone(),
+                msg_func.is_some(),
+                AirTree::let_assignment("_", expect_fst, expect_snd),
+            );
+
+            AirTree::let_assignment(&pair_name, value, tuple_access)
         } else if tipo.is_tuple() {
             let tuple_inner_types = tipo.get_inner_types();
 
@@ -1567,9 +1556,8 @@ impl<'a> CodeGenerator<'a> {
                 AirTree::local_var(&tuple_name, tipo.clone()),
                 msg_func,
                 true,
+                then,
             );
-
-            let tuple_access = tuple_access.hoist_over(then);
 
             AirTree::let_assignment(&tuple_name, value, tuple_access)
 
@@ -1653,7 +1641,7 @@ impl<'a> CodeGenerator<'a> {
                         );
                         constr_args.reverse();
 
-                        let assign = if constr_args.is_empty() {
+                        let then = if constr_args.is_empty() {
                             AirTree::fields_empty(
                                 AirTree::local_var(
                                     format!(
@@ -1663,6 +1651,7 @@ impl<'a> CodeGenerator<'a> {
                                     tipo.clone(),
                                 ),
                                 msg_term.clone(),
+                                constr_then,
                             )
                         } else {
                             AirTree::fields_expose(
@@ -1676,10 +1665,9 @@ impl<'a> CodeGenerator<'a> {
                                 ),
                                 msg_term.clone(),
                                 true,
+                                constr_then,
                             )
                         };
-
-                        let then = assign.hoist_over(constr_then);
 
                         AirTree::clause(
                             format!("__subject_span_{}_{}", location.start, location.end),
@@ -1796,8 +1784,12 @@ impl<'a> CodeGenerator<'a> {
                 clause_then = AirTree::let_assignment(
                     &clause_guard_name,
                     builder::handle_clause_guard(guard),
-                    AirTree::clause_guard(&clause_guard_name, AirTree::bool(true), bool())
-                        .hoist_over(clause_then),
+                    AirTree::clause_guard(
+                        &clause_guard_name,
+                        AirTree::bool(true),
+                        bool(),
+                        clause_then,
+                    ),
                 );
             }
 
@@ -2279,6 +2271,7 @@ impl<'a> CodeGenerator<'a> {
                         // Since check_last_item is false this will never get added to the final uplc anyway
                         None,
                         ExpectLevel::None,
+                        elems_then,
                     )
                 } else {
                     assert!(defined_tails.len() >= elems.len());
@@ -2292,10 +2285,11 @@ impl<'a> CodeGenerator<'a> {
                             .collect_vec(),
                         list_tail,
                         subject_tipo.clone(),
+                        elems_then,
                     )
                 };
 
-                (AirTree::void(), list_assign.hoist_over(elems_then))
+                (AirTree::void(), list_assign)
             }
             Pattern::Constructor {
                 name,
@@ -2422,8 +2416,8 @@ impl<'a> CodeGenerator<'a> {
                                 ),
                                 None,
                                 false,
+                                next_then,
                             )
-                            .hoist_over(next_then)
                         };
 
                     (AirTree::int(constr_index), field_assign)
@@ -2530,7 +2524,7 @@ impl<'a> CodeGenerator<'a> {
                     _ => unreachable!(),
                 }
 
-                let tuple_name_assigns = if props.final_clause && !names_to_define.is_empty() {
+                if props.final_clause && !names_to_define.is_empty() {
                     names_to_define.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
 
                     let names =
@@ -2544,19 +2538,20 @@ impl<'a> CodeGenerator<'a> {
                                 names
                             });
 
-                    AirTree::tuple_access(
-                        names,
-                        subject_tipo.clone(),
-                        AirTree::local_var(&props.original_subject_name, subject_tipo.clone()),
-                        None,
-                        false,
+                    (
+                        AirTree::void(),
+                        AirTree::tuple_access(
+                            names,
+                            subject_tipo.clone(),
+                            AirTree::local_var(&props.original_subject_name, subject_tipo.clone()),
+                            None,
+                            false,
+                            tuple_name_assigns,
+                        ),
                     )
-                    .hoist_over(tuple_name_assigns)
                 } else {
-                    tuple_name_assigns
-                };
-
-                (AirTree::void(), tuple_name_assigns)
+                    (AirTree::void(), tuple_name_assigns)
+                }
             }
         }
     }
@@ -2580,8 +2575,12 @@ impl<'a> CodeGenerator<'a> {
             match pattern {
                 Pattern::Int { value, .. } => {
                     props.complex_clause = true;
-                    AirTree::clause_guard(&props.original_subject_name, AirTree::int(value), int())
-                        .hoist_over(then)
+                    AirTree::clause_guard(
+                        &props.original_subject_name,
+                        AirTree::int(value),
+                        int(),
+                        then,
+                    )
                 }
                 Pattern::Var { name, .. } => AirTree::let_assignment(
                     name,
@@ -2609,11 +2608,9 @@ impl<'a> CodeGenerator<'a> {
                             subject_tipo.clone(),
                             false,
                             None,
+                            then,
                         )
-                        .hoist_over(then)
                     } else {
-                        let mut clause_assigns = vec![];
-
                         let ClauseProperties {
                             specific_clause:
                                 SpecificClause::ListClause {
@@ -2630,54 +2627,66 @@ impl<'a> CodeGenerator<'a> {
                         defined_tails.push(props.original_subject_name.clone());
 
                         for (index, _) in elements.iter().enumerate() {
-                            let prev_tail_name = if index == 0 {
-                                props.original_subject_name.clone()
-                            } else {
-                                format!("{}_{}", tail_name_base, index - 1)
-                            };
-
                             let tail_name = format!("{tail_name_base}_{index}");
 
                             if elements.len() - 1 == index {
-                                if tail.is_some() {
-                                    clause_assigns.push(AirTree::list_clause_guard(
-                                        prev_tail_name,
-                                        subject_tipo.clone(),
-                                        true,
-                                        None,
-                                    ));
-                                } else {
-                                    clause_assigns.push(AirTree::list_clause_guard(
-                                        prev_tail_name,
-                                        subject_tipo.clone(),
-                                        true,
-                                        Some(tail_name.to_string()),
-                                    ));
-
-                                    clause_assigns.push(AirTree::list_clause_guard(
-                                        tail_name.to_string(),
-                                        subject_tipo.clone(),
-                                        false,
-                                        None,
-                                    ));
+                                if tail.is_none() {
                                     *current_index += 1;
                                     defined_tails.push(tail_name);
                                 }
                             } else {
-                                clause_assigns.push(AirTree::list_clause_guard(
-                                    prev_tail_name,
-                                    subject_tipo.clone(),
-                                    true,
-                                    Some(tail_name.to_string()),
-                                ));
-
                                 *current_index += 1;
                                 defined_tails.push(tail_name);
                             };
                         }
 
                         let (_, assigns) = self.clause_pattern(pattern, subject_tipo, props, then);
-                        AirTree::UnhoistedSequence(clause_assigns).hoist_over(assigns)
+
+                        elements
+                            .iter()
+                            .enumerate()
+                            .rfold(assigns, |then, (index, _)| {
+                                let prev_tail_name = if index == 0 {
+                                    props.original_subject_name.clone()
+                                } else {
+                                    format!("{}_{}", tail_name_base, index - 1)
+                                };
+
+                                let tail_name = format!("{tail_name_base}_{index}");
+                                if elements.len() - 1 == index {
+                                    if tail.is_some() {
+                                        AirTree::list_clause_guard(
+                                            prev_tail_name,
+                                            subject_tipo.clone(),
+                                            true,
+                                            None,
+                                            then,
+                                        )
+                                    } else {
+                                        AirTree::list_clause_guard(
+                                            prev_tail_name,
+                                            subject_tipo.clone(),
+                                            true,
+                                            Some(tail_name.to_string()),
+                                            AirTree::list_clause_guard(
+                                                tail_name.to_string(),
+                                                subject_tipo.clone(),
+                                                false,
+                                                None,
+                                                then,
+                                            ),
+                                        )
+                                    }
+                                } else {
+                                    AirTree::list_clause_guard(
+                                        prev_tail_name,
+                                        subject_tipo.clone(),
+                                        true,
+                                        Some(tail_name.to_string()),
+                                        then,
+                                    )
+                                }
+                            })
                     }
                 }
                 Pattern::Constructor {
@@ -2689,8 +2698,8 @@ impl<'a> CodeGenerator<'a> {
                             &props.original_subject_name,
                             AirTree::bool(constr_name == "True"),
                             bool(),
+                            then,
                         )
-                        .hoist_over(then)
                     } else {
                         let (cond, assign) =
                             self.clause_pattern(pattern, subject_tipo, props, then);
@@ -2706,8 +2715,8 @@ impl<'a> CodeGenerator<'a> {
                                 &props.original_subject_name,
                                 cond,
                                 subject_tipo.clone(),
+                                assign,
                             )
-                            .hoist_over(assign)
                         }
                     }
                 }
@@ -2721,13 +2730,12 @@ impl<'a> CodeGenerator<'a> {
                         _ => unreachable!(),
                     };
 
-                    let tuple_access = AirTree::tuple_clause_guard(
+                    AirTree::tuple_clause_guard(
                         &props.original_subject_name,
                         subject_tipo.clone(),
                         defined_indices,
-                    );
-
-                    tuple_access.hoist_over(assign)
+                        assign,
+                    )
                 }
             }
         }
@@ -3215,7 +3223,9 @@ impl<'a> CodeGenerator<'a> {
                         func_params.clone()
                     };
 
-                    body = AirTree::define_func(
+                    let node_to_edit = air_tree.find_air_tree_node(tree_path);
+
+                    let defined_function = AirTree::define_func(
                         &key.function_name,
                         &key.module_name,
                         variant,
@@ -3223,36 +3233,34 @@ impl<'a> CodeGenerator<'a> {
                         is_recursive,
                         recursive_nonstatics,
                         body,
+                        node_to_edit.clone(),
                     );
 
-                    let function_deps = self.hoist_dependent_functions(
+                    let defined_dependencies = self.hoist_dependent_functions(
                         deps,
                         params_empty,
-                        key,
-                        variant,
+                        (key, variant),
                         hoisted_functions,
                         functions_to_hoist,
+                        defined_function,
                     );
-                    let node_to_edit = air_tree.find_air_tree_node(tree_path);
 
                     // now hoist full function onto validator tree
-                    *node_to_edit = function_deps.hoist_over(body.hoist_over(node_to_edit.clone()));
+                    *node_to_edit = defined_dependencies;
 
                     hoisted_functions.push((key.clone(), variant.clone()));
                 } else {
-                    body = self
-                        .hoist_dependent_functions(
-                            deps,
-                            params_empty,
-                            key,
-                            variant,
-                            hoisted_functions,
-                            functions_to_hoist,
-                        )
-                        .hoist_over(body);
+                    let defined_func = self.hoist_dependent_functions(
+                        deps,
+                        params_empty,
+                        (key, variant),
+                        hoisted_functions,
+                        functions_to_hoist,
+                        body,
+                    );
 
                     self.zero_arg_functions
-                        .insert((key.clone(), variant.clone()), body.to_vec());
+                        .insert((key.clone(), variant.clone()), defined_func.to_vec());
                 }
             }
             HoistableFunction::CyclicFunction {
@@ -3269,27 +3277,28 @@ impl<'a> CodeGenerator<'a> {
                     modify_cyclic_calls(body, key, &self.cyclic_functions);
                 }
 
-                let cyclic_body = AirTree::define_cyclic_func(
+                let node_to_edit = air_tree.find_air_tree_node(tree_path);
+
+                let cyclic_func = AirTree::define_cyclic_func(
                     &key.function_name,
                     &key.module_name,
                     variant,
                     functions,
+                    node_to_edit.clone(),
                 );
 
-                let function_deps = self.hoist_dependent_functions(
+                let defined_dependencies = self.hoist_dependent_functions(
                     deps,
                     // cyclic functions always have params
                     false,
-                    key,
-                    variant,
+                    (key, variant),
                     hoisted_functions,
                     functions_to_hoist,
+                    cyclic_func,
                 );
-                let node_to_edit = air_tree.find_air_tree_node(tree_path);
 
                 // now hoist full function onto validator tree
-                *node_to_edit =
-                    function_deps.hoist_over(cyclic_body.hoist_over(node_to_edit.clone()));
+                *node_to_edit = defined_dependencies;
 
                 hoisted_functions.push((key.clone(), variant.clone()));
             }
@@ -3306,20 +3315,19 @@ impl<'a> CodeGenerator<'a> {
         &mut self,
         deps: (&TreePath, Vec<(FunctionAccessKey, String)>),
         params_empty: bool,
-        key: &FunctionAccessKey,
-        variant: &String,
+        func_key_variant: (&FunctionAccessKey, &Variant),
         hoisted_functions: &mut Vec<(FunctionAccessKey, String)>,
         functions_to_hoist: &IndexMap<
             FunctionAccessKey,
             IndexMap<String, (TreePath, HoistableFunction)>,
         >,
+        air_tree: AirTree,
     ) -> AirTree {
+        let (key, variant) = func_key_variant;
         let (func_path, func_deps) = deps;
 
         let mut deps_vec = func_deps;
         let mut sorted_dep_vec = vec![];
-
-        let mut dep_insertions = vec![];
 
         while let Some(dep) = deps_vec.pop() {
             let function_variants = functions_to_hoist
@@ -3369,98 +3377,100 @@ impl<'a> CodeGenerator<'a> {
         }
 
         sorted_dep_vec.dedup();
-        sorted_dep_vec.reverse();
 
-        // This part handles hoisting dependencies
-        while let Some((dep_key, dep_variant)) = sorted_dep_vec.pop() {
-            if (!params_empty
-            // if the dependency is the same as the function we're hoisting
-            // or we hoisted it, then skip it
-                && hoisted_functions.iter().any(|(generic, variant)| {
-                        generic == &dep_key && variant == &dep_variant
-                    }))
-                || (&dep_key == key && &dep_variant == variant)
-            {
-                continue;
-            }
-
-            let dependency = functions_to_hoist
-                .get(&dep_key)
-                .unwrap_or_else(|| panic!("Missing Function Definition"));
-
-            let (dep_path, dep_function) = dependency
-                .get(&dep_variant)
-                .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
-
-            // In the case of zero args, we need to hoist the dependency function to the top of the zero arg function
-            if &dep_path.common_ancestor(func_path) == func_path || params_empty {
-                match dep_function.clone() {
-                    HoistableFunction::Function {
-                        body: mut dep_air_tree,
-                        deps: dependency_deps,
-                        params: dependent_params,
-                    } => {
-                        if dependent_params.is_empty() {
-                            // continue for zero arg functions. They are treated like global hoists.
-                            continue;
-                        }
-
-                        let is_dependent_recursive = dependency_deps
-                            .iter()
-                            .any(|(key, variant)| &dep_key == key && &dep_variant == variant);
-
-                        let recursive_nonstatics = if is_dependent_recursive {
-                            modify_self_calls(
-                                &mut dep_air_tree,
-                                &dep_key,
-                                &dep_variant,
-                                &dependent_params,
-                            )
-                        } else {
-                            dependent_params.clone()
-                        };
-
-                        dep_insertions.push(AirTree::define_func(
-                            &dep_key.function_name,
-                            &dep_key.module_name,
-                            &dep_variant,
-                            dependent_params,
-                            is_dependent_recursive,
-                            recursive_nonstatics,
-                            dep_air_tree,
-                        ));
-
-                        if !params_empty {
-                            hoisted_functions.push((dep_key.clone(), dep_variant.clone()));
-                        }
-                    }
-                    HoistableFunction::CyclicFunction { functions, .. } => {
-                        let mut functions = functions.clone();
-
-                        for (_, body) in functions.iter_mut() {
-                            modify_cyclic_calls(body, &dep_key, &self.cyclic_functions);
-                        }
-
-                        dep_insertions.push(AirTree::define_cyclic_func(
-                            &dep_key.function_name,
-                            &dep_key.module_name,
-                            &dep_variant,
-                            functions,
-                        ));
-
-                        if !params_empty {
-                            hoisted_functions.push((dep_key.clone(), dep_variant.clone()));
-                        }
-                    }
-                    HoistableFunction::Link(_) => unreachable!(),
-                    HoistableFunction::CyclicLink(_) => unreachable!(),
+        sorted_dep_vec
+            .into_iter()
+            .fold(air_tree, |then, (dep_key, dep_variant)| {
+                if (!params_empty
+                    // if the dependency is the same as the function we're hoisting
+                    // or we hoisted it, then skip it
+                        && hoisted_functions.iter().any(|(generic, variant)| {
+                                generic == &dep_key && variant == &dep_variant
+                            }))
+                    || (&dep_key == key && &dep_variant == variant)
+                {
+                    return then;
                 }
-            }
-        }
 
-        dep_insertions.reverse();
+                let dependency = functions_to_hoist
+                    .get(&dep_key)
+                    .unwrap_or_else(|| panic!("Missing Function Definition"));
 
-        AirTree::UnhoistedSequence(dep_insertions)
+                let (dep_path, dep_function) = dependency
+                    .get(&dep_variant)
+                    .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
+
+                // In the case of zero args, we need to hoist the dependency function to the top of the zero arg function
+                // The dependency we are hoisting should have an equal path to the function we hoisted
+                // if we are going to hoist it
+                if &dep_path.common_ancestor(func_path) == func_path || params_empty {
+                    match dep_function.clone() {
+                        HoistableFunction::Function {
+                            body: mut dep_air_tree,
+                            deps: dependency_deps,
+                            params: dependent_params,
+                        } => {
+                            if dependent_params.is_empty() {
+                                // continue for zero arg functions. They are treated like global hoists.
+                                return then;
+                            }
+
+                            let is_dependent_recursive = dependency_deps
+                                .iter()
+                                .any(|(key, variant)| &dep_key == key && &dep_variant == variant);
+
+                            let recursive_nonstatics = if is_dependent_recursive {
+                                modify_self_calls(
+                                    &mut dep_air_tree,
+                                    &dep_key,
+                                    &dep_variant,
+                                    &dependent_params,
+                                )
+                            } else {
+                                dependent_params.clone()
+                            };
+
+                            if !params_empty {
+                                hoisted_functions.push((dep_key.clone(), dep_variant.clone()));
+                            }
+
+                            AirTree::define_func(
+                                &dep_key.function_name,
+                                &dep_key.module_name,
+                                &dep_variant,
+                                dependent_params,
+                                is_dependent_recursive,
+                                recursive_nonstatics,
+                                dep_air_tree,
+                                then,
+                            )
+                        }
+                        HoistableFunction::CyclicFunction { functions, .. } => {
+                            let mut functions = functions.clone();
+
+                            for (_, body) in functions.iter_mut() {
+                                modify_cyclic_calls(body, &dep_key, &self.cyclic_functions);
+                            }
+
+                            if !params_empty {
+                                hoisted_functions.push((dep_key.clone(), dep_variant.clone()));
+                            }
+
+                            AirTree::define_cyclic_func(
+                                &dep_key.function_name,
+                                &dep_key.module_name,
+                                &dep_variant,
+                                functions,
+                                then,
+                            )
+                        }
+                        HoistableFunction::Link(_) => unreachable!(),
+                        HoistableFunction::CyclicLink(_) => unreachable!(),
+                    }
+                } else {
+                    then
+                }
+            })
     }
 
     fn define_dependent_functions(
@@ -3520,11 +3530,11 @@ impl<'a> CodeGenerator<'a> {
             current_depth,
             depth_index,
             &mut |air_tree, tree_path| {
-                if let AirTree::Expression(AirExpression::Var {
+                if let AirTree::Var {
                     constructor,
                     variant_name,
                     ..
-                }) = air_tree
+                } = air_tree
                 {
                     let ValueConstructorVariant::ModuleFn {
                         name: func_name,
