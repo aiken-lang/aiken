@@ -107,16 +107,12 @@ impl AirMsg {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AirTree {
-    Statement {
-        statement: AirStatement,
-        hoisted_over: Option<Box<AirTree>>,
+    // Statements
+    Let {
+        name: String,
+        value: Box<AirTree>,
+        then: Box<AirTree>,
     },
-    Expression(AirExpression),
-    UnhoistedSequence(Vec<AirTree>),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum AirStatement {
     DefineFunc {
         func_name: String,
         module_name: String,
@@ -125,6 +121,7 @@ pub enum AirStatement {
         recursive_nonstatic_params: Vec<String>,
         variant_name: String,
         func_body: Box<AirTree>,
+        then: Box<AirTree>,
     },
     DefineCyclicFuncs {
         func_name: String,
@@ -132,34 +129,40 @@ pub enum AirStatement {
         variant_name: String,
         // params and body
         contained_functions: Vec<(Vec<String>, AirTree)>,
+        then: Box<AirTree>,
     },
     // Assertions
     AssertConstr {
         constr_index: usize,
         constr: Box<AirTree>,
         msg: Option<AirMsg>,
+        then: Box<AirTree>,
     },
     AssertBool {
         is_true: bool,
         value: Box<AirTree>,
         msg: Option<AirMsg>,
+        then: Box<AirTree>,
     },
     // Clause Guards
     ClauseGuard {
         subject_name: String,
         subject_tipo: Rc<Type>,
         pattern: Box<AirTree>,
+        then: Box<AirTree>,
     },
     ListClauseGuard {
         subject_tipo: Rc<Type>,
         tail_name: String,
         next_tail_name: Option<String>,
         inverse: bool,
+        then: Box<AirTree>,
     },
     TupleGuard {
         subject_tipo: Rc<Type>,
         indices: IndexSet<(usize, String)>,
         subject_name: String,
+        then: Box<AirTree>,
     },
     // Field Access
     FieldsExpose {
@@ -167,6 +170,7 @@ pub enum AirStatement {
         record: Box<AirTree>,
         is_expect: bool,
         msg: Option<AirMsg>,
+        then: Box<AirTree>,
     },
     // List Access
     ListAccessor {
@@ -176,11 +180,13 @@ pub enum AirStatement {
         list: Box<AirTree>,
         expect_level: ExpectLevel,
         msg: Option<AirMsg>,
+        then: Box<AirTree>,
     },
     ListExpose {
         tipo: Rc<Type>,
         tail_head_names: Vec<(String, String)>,
         tail: Option<(String, String)>,
+        then: Box<AirTree>,
     },
     // Tuple Access
     TupleAccessor {
@@ -189,28 +195,25 @@ pub enum AirStatement {
         tuple: Box<AirTree>,
         is_expect: bool,
         msg: Option<AirMsg>,
+        then: Box<AirTree>,
     },
     // Misc.
     FieldsEmpty {
         constr: Box<AirTree>,
         msg: Option<AirMsg>,
+        then: Box<AirTree>,
     },
     ListEmpty {
         list: Box<AirTree>,
         msg: Option<AirMsg>,
-    },
-    NoOp,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum AirExpression {
-    // Assignment
-    Let {
-        name: String,
-        value: Box<AirTree>,
         then: Box<AirTree>,
     },
+    NoOp {
+        then: Box<AirTree>,
+    },
+    // End Statements
 
+    // Expressions
     // Primitives
     Int {
         value: String,
@@ -353,64 +356,65 @@ pub enum AirExpression {
         msg: Box<AirTree>,
         then: Box<AirTree>,
     },
+    // End Expressions
 }
 
 impl AirTree {
     pub fn int(value: impl ToString) -> AirTree {
-        AirTree::Expression(AirExpression::Int {
+        AirTree::Int {
             value: value.to_string(),
-        })
+        }
     }
     pub fn string(value: impl ToString) -> AirTree {
-        AirTree::Expression(AirExpression::String {
+        AirTree::String {
             value: value.to_string(),
-        })
+        }
     }
     pub fn byte_array(bytes: Vec<u8>) -> AirTree {
-        AirTree::Expression(AirExpression::ByteArray { bytes })
+        AirTree::ByteArray { bytes }
     }
     pub fn curve(point: Curve) -> AirTree {
-        AirTree::Expression(AirExpression::CurvePoint { point })
+        AirTree::CurvePoint { point }
     }
     pub fn bool(value: bool) -> AirTree {
-        AirTree::Expression(AirExpression::Bool { value })
+        AirTree::Bool { value }
     }
     pub fn list(mut items: Vec<AirTree>, tipo: Rc<Type>, tail: Option<AirTree>) -> AirTree {
         if let Some(tail) = tail {
             items.push(tail);
 
-            AirTree::Expression(AirExpression::List {
+            AirTree::List {
                 tipo,
                 tail: true,
                 items,
-            })
+            }
         } else {
-            AirTree::Expression(AirExpression::List {
+            AirTree::List {
                 tipo,
                 tail: false,
                 items,
-            })
+            }
         }
     }
     pub fn tuple(items: Vec<AirTree>, tipo: Rc<Type>) -> AirTree {
-        AirTree::Expression(AirExpression::Tuple { tipo, items })
+        AirTree::Tuple { tipo, items }
     }
     pub fn void() -> AirTree {
-        AirTree::Expression(AirExpression::Void)
+        AirTree::Void
     }
     pub fn var(
         constructor: ValueConstructor,
         name: impl ToString,
         variant_name: impl ToString,
     ) -> AirTree {
-        AirTree::Expression(AirExpression::Var {
+        AirTree::Var {
             constructor,
             name: name.to_string(),
             variant_name: variant_name.to_string(),
-        })
+        }
     }
     pub fn local_var(name: impl ToString, tipo: Rc<Type>) -> AirTree {
-        AirTree::Expression(AirExpression::Var {
+        AirTree::Var {
             constructor: ValueConstructor::public(
                 tipo,
                 ValueConstructorVariant::LocalVariable {
@@ -419,14 +423,14 @@ impl AirTree {
             ),
             name: name.to_string(),
             variant_name: "".to_string(),
-        })
+        }
     }
     pub fn call(func: AirTree, tipo: Rc<Type>, args: Vec<AirTree>) -> AirTree {
-        AirTree::Expression(AirExpression::Call {
+        AirTree::Call {
             tipo,
             func: func.into(),
             args,
-        })
+        }
     }
     pub fn define_func(
         func_name: impl ToString,
@@ -436,18 +440,17 @@ impl AirTree {
         recursive: bool,
         recursive_nonstatic_params: Vec<String>,
         func_body: AirTree,
+        then: AirTree,
     ) -> AirTree {
-        AirTree::Statement {
-            statement: AirStatement::DefineFunc {
-                func_name: func_name.to_string(),
-                module_name: module_name.to_string(),
-                params,
-                recursive,
-                recursive_nonstatic_params,
-                variant_name: variant_name.to_string(),
-                func_body: func_body.into(),
-            },
-            hoisted_over: None,
+        AirTree::DefineFunc {
+            func_name: func_name.to_string(),
+            module_name: module_name.to_string(),
+            params,
+            recursive,
+            recursive_nonstatic_params,
+            variant_name: variant_name.to_string(),
+            func_body: func_body.into(),
+            then: then.into(),
         }
     }
     pub fn define_cyclic_func(
@@ -455,25 +458,24 @@ impl AirTree {
         module_name: impl ToString,
         variant_name: impl ToString,
         contained_functions: Vec<(Vec<String>, AirTree)>,
+        then: AirTree,
     ) -> AirTree {
-        AirTree::Statement {
-            statement: AirStatement::DefineCyclicFuncs {
-                func_name: func_name.to_string(),
-                module_name: module_name.to_string(),
-                variant_name: variant_name.to_string(),
-                contained_functions,
-            },
-            hoisted_over: None,
+        AirTree::DefineCyclicFuncs {
+            func_name: func_name.to_string(),
+            module_name: module_name.to_string(),
+            variant_name: variant_name.to_string(),
+            contained_functions,
+            then: then.into(),
         }
     }
     pub fn anon_func(params: Vec<String>, func_body: AirTree) -> AirTree {
-        AirTree::Expression(AirExpression::Fn {
+        AirTree::Fn {
             params,
             func_body: func_body.into(),
-        })
+        }
     }
     pub fn builtin(func: DefaultFunction, tipo: Rc<Type>, args: Vec<AirTree>) -> AirTree {
-        AirTree::Expression(AirExpression::Builtin { func, tipo, args })
+        AirTree::Builtin { func, tipo, args }
     }
     pub fn binop(
         op: BinOp,
@@ -482,62 +484,64 @@ impl AirTree {
         right: AirTree,
         argument_tipo: Rc<Type>,
     ) -> AirTree {
-        AirTree::Expression(AirExpression::BinOp {
+        AirTree::BinOp {
             name: op,
             tipo,
             left: left.into(),
             right: right.into(),
             argument_tipo,
-        })
+        }
     }
     pub fn unop(op: UnOp, arg: AirTree) -> AirTree {
-        AirTree::Expression(AirExpression::UnOp {
+        AirTree::UnOp {
             op,
             arg: arg.into(),
-        })
+        }
     }
     pub fn let_assignment(name: impl ToString, value: AirTree, then: AirTree) -> AirTree {
-        AirTree::Expression(AirExpression::Let {
+        AirTree::Let {
             name: name.to_string(),
             value: value.into(),
             then: then.into(),
-        })
+        }
     }
     pub fn cast_from_data(value: AirTree, tipo: Rc<Type>, msg: Option<AirMsg>) -> AirTree {
-        AirTree::Expression(AirExpression::CastFromData {
+        AirTree::CastFromData {
             tipo,
             value: value.into(),
             msg,
-        })
+        }
     }
     pub fn cast_to_data(value: AirTree, tipo: Rc<Type>) -> AirTree {
-        AirTree::Expression(AirExpression::CastToData {
+        AirTree::CastToData {
             tipo,
             value: value.into(),
-        })
+        }
     }
     pub fn assert_constr_index(
         constr_index: usize,
         constr: AirTree,
         msg: Option<AirMsg>,
+        then: AirTree,
     ) -> AirTree {
-        AirTree::Statement {
-            statement: AirStatement::AssertConstr {
-                constr_index,
-                constr: constr.into(),
-                msg,
-            },
-            hoisted_over: None,
+        AirTree::AssertConstr {
+            constr_index,
+            constr: constr.into(),
+            msg,
+            then: then.into(),
         }
     }
-    pub fn assert_bool(is_true: bool, value: AirTree, msg: Option<AirMsg>) -> AirTree {
-        AirTree::Statement {
-            statement: AirStatement::AssertBool {
-                is_true,
-                value: value.into(),
-                msg,
-            },
-            hoisted_over: None,
+    pub fn assert_bool(
+        is_true: bool,
+        value: AirTree,
+        msg: Option<AirMsg>,
+        then: AirTree,
+    ) -> AirTree {
+        AirTree::AssertBool {
+            is_true,
+            value: value.into(),
+            msg,
+            then: then.into(),
         }
     }
     pub fn when(
@@ -547,13 +551,13 @@ impl AirTree {
         subject: AirTree,
         clauses: AirTree,
     ) -> AirTree {
-        AirTree::Expression(AirExpression::When {
+        AirTree::When {
             tipo,
             subject_name: subject_name.to_string(),
             subject: subject.into(),
             subject_tipo,
             clauses: clauses.into(),
-        })
+        }
     }
     pub fn clause(
         subject_name: impl ToString,
@@ -563,14 +567,14 @@ impl AirTree {
         otherwise: AirTree,
         complex_clause: bool,
     ) -> AirTree {
-        AirTree::Expression(AirExpression::Clause {
+        AirTree::Clause {
             subject_tipo,
             subject_name: subject_name.to_string(),
             complex_clause,
             pattern: pattern.into(),
             then: then.into(),
             otherwise: otherwise.into(),
-        })
+        }
     }
     pub fn list_clause(
         tail_name: impl ToString,
@@ -580,14 +584,14 @@ impl AirTree {
         next_tail_name: Option<(String, String)>,
         complex_clause: bool,
     ) -> AirTree {
-        AirTree::Expression(AirExpression::ListClause {
+        AirTree::ListClause {
             subject_tipo,
             tail_name: tail_name.to_string(),
             next_tail_name,
             complex_clause,
             then: then.into(),
             otherwise: otherwise.into(),
-        })
+        }
     }
     pub fn tuple_clause(
         subject_name: impl ToString,
@@ -598,7 +602,7 @@ impl AirTree {
         otherwise: AirTree,
         complex_clause: bool,
     ) -> AirTree {
-        AirTree::Expression(AirExpression::TupleClause {
+        AirTree::TupleClause {
             subject_tipo,
             indices,
             predefined_indices,
@@ -606,26 +610,25 @@ impl AirTree {
             complex_clause,
             then: then.into(),
             otherwise: otherwise.into(),
-        })
+        }
     }
     pub fn wrap_clause(then: AirTree, otherwise: AirTree) -> AirTree {
-        AirTree::Expression(AirExpression::WrapClause {
+        AirTree::WrapClause {
             then: then.into(),
             otherwise: otherwise.into(),
-        })
+        }
     }
     pub fn clause_guard(
         subject_name: impl ToString,
         pattern: AirTree,
         subject_tipo: Rc<Type>,
+        then: AirTree,
     ) -> AirTree {
-        AirTree::Statement {
-            statement: AirStatement::ClauseGuard {
-                subject_name: subject_name.to_string(),
-                subject_tipo,
-                pattern: pattern.into(),
-            },
-            hoisted_over: None,
+        AirTree::ClauseGuard {
+            subject_name: subject_name.to_string(),
+            subject_tipo,
+            pattern: pattern.into(),
+            then: then.into(),
         }
     }
     pub fn list_clause_guard(
@@ -633,36 +636,34 @@ impl AirTree {
         subject_tipo: Rc<Type>,
         inverse: bool,
         next_tail_name: Option<String>,
+        then: AirTree,
     ) -> AirTree {
-        AirTree::Statement {
-            statement: AirStatement::ListClauseGuard {
-                subject_tipo,
-                tail_name: tail_name.to_string(),
-                next_tail_name,
-                inverse,
-            },
-            hoisted_over: None,
+        AirTree::ListClauseGuard {
+            subject_tipo,
+            tail_name: tail_name.to_string(),
+            next_tail_name,
+            inverse,
+            then: then.into(),
         }
     }
     pub fn tuple_clause_guard(
         subject_name: impl ToString,
         subject_tipo: Rc<Type>,
         indices: IndexSet<(usize, String)>,
+        then: AirTree,
     ) -> AirTree {
-        AirTree::Statement {
-            statement: AirStatement::TupleGuard {
-                indices,
-                subject_name: subject_name.to_string(),
-                subject_tipo,
-            },
-            hoisted_over: None,
+        AirTree::TupleGuard {
+            indices,
+            subject_name: subject_name.to_string(),
+            subject_tipo,
+            then: then.into(),
         }
     }
     pub fn finally(pattern: AirTree, then: AirTree) -> AirTree {
-        AirTree::Expression(AirExpression::Finally {
+        AirTree::Finally {
             pattern: pattern.into(),
             then: then.into(),
-        })
+        }
     }
     pub fn if_branches(
         mut branches: Vec<(AirTree, AirTree)>,
@@ -672,26 +673,26 @@ impl AirTree {
         assert!(!branches.is_empty());
         let last_if = branches.pop().unwrap();
 
-        let mut final_if = AirTree::Expression(AirExpression::If {
+        let mut final_if = AirTree::If {
             tipo: tipo.clone(),
-            pattern: last_if.0.into(),
-            then: last_if.1.into(),
+            pattern: Box::new(last_if.0),
+            then: Box::new(last_if.1),
             otherwise: otherwise.into(),
-        });
+        };
 
         while let Some(branch) = branches.pop() {
-            final_if = AirTree::Expression(AirExpression::If {
+            final_if = AirTree::If {
                 tipo: tipo.clone(),
-                pattern: branch.0.into(),
-                then: branch.1.into(),
+                pattern: Box::new(branch.0),
+                then: Box::new(branch.1),
                 otherwise: final_if.into(),
-            });
+            };
         }
 
         final_if
     }
     pub fn create_constr(tag: usize, tipo: Rc<Type>, args: Vec<AirTree>) -> AirTree {
-        AirTree::Expression(AirExpression::Constr { tag, tipo, args })
+        AirTree::Constr { tag, tipo, args }
     }
 
     pub fn record_update(
@@ -701,13 +702,13 @@ impl AirTree {
         record: AirTree,
         args: Vec<AirTree>,
     ) -> AirTree {
-        AirTree::Expression(AirExpression::RecordUpdate {
+        AirTree::RecordUpdate {
             highest_index,
             indices,
             tipo,
             record: record.into(),
             args,
-        })
+        }
     }
     pub fn index_access(function_name: String, tipo: Rc<Type>, list_of_fields: AirTree) -> AirTree {
         AirTree::cast_from_data(
@@ -738,21 +739,19 @@ impl AirTree {
             None,
         )
     }
-
     pub fn fields_expose(
         indices: Vec<(usize, String, Rc<Type>)>,
         record: AirTree,
         msg: Option<AirMsg>,
         is_expect: bool,
+        then: AirTree,
     ) -> AirTree {
-        AirTree::Statement {
-            statement: AirStatement::FieldsExpose {
-                indices,
-                record: record.into(),
-                msg,
-                is_expect,
-            },
-            hoisted_over: None,
+        AirTree::FieldsExpose {
+            indices,
+            record: record.into(),
+            msg,
+            is_expect,
+            then: then.into(),
         }
     }
 
@@ -763,31 +762,29 @@ impl AirTree {
         list: AirTree,
         msg: Option<AirMsg>,
         expect_level: ExpectLevel,
+        then: AirTree,
     ) -> AirTree {
-        AirTree::Statement {
-            statement: AirStatement::ListAccessor {
-                tipo,
-                names,
-                tail,
-                list: list.into(),
-                expect_level,
-                msg,
-            },
-            hoisted_over: None,
+        AirTree::ListAccessor {
+            tipo,
+            names,
+            tail,
+            list: list.into(),
+            expect_level,
+            msg,
+            then: then.into(),
         }
     }
     pub fn list_expose(
         tail_head_names: Vec<(String, String)>,
         tail: Option<(String, String)>,
         tipo: Rc<Type>,
+        then: AirTree,
     ) -> AirTree {
-        AirTree::Statement {
-            statement: AirStatement::ListExpose {
-                tipo,
-                tail_head_names,
-                tail,
-            },
-            hoisted_over: None,
+        AirTree::ListExpose {
+            tipo,
+            tail_head_names,
+            tail,
+            then: then.into(),
         }
     }
     pub fn tuple_access(
@@ -796,16 +793,15 @@ impl AirTree {
         tuple: AirTree,
         msg: Option<AirMsg>,
         is_expect: bool,
+        then: AirTree,
     ) -> AirTree {
-        AirTree::Statement {
-            statement: AirStatement::TupleAccessor {
-                names,
-                tipo,
-                tuple: tuple.into(),
-                msg,
-                is_expect,
-            },
-            hoisted_over: None,
+        AirTree::TupleAccessor {
+            names,
+            tipo,
+            tuple: tuple.into(),
+            msg,
+            is_expect,
+            then: then.into(),
         }
     }
     pub fn pair_index(index: usize, tipo: Rc<Type>, tuple: AirTree) -> AirTree {
@@ -824,60 +820,53 @@ impl AirTree {
         )
     }
     pub fn error(tipo: Rc<Type>, validator: bool) -> AirTree {
-        AirTree::Expression(AirExpression::ErrorTerm { tipo, validator })
+        AirTree::ErrorTerm { tipo, validator }
     }
     pub fn trace(msg: AirTree, tipo: Rc<Type>, then: AirTree) -> AirTree {
-        AirTree::Expression(AirExpression::Trace {
+        AirTree::Trace {
             tipo,
             msg: msg.into(),
             then: then.into(),
-        })
-    }
-    pub fn no_op() -> AirTree {
-        AirTree::Statement {
-            statement: AirStatement::NoOp,
-            hoisted_over: None,
         }
     }
-    pub fn fields_empty(constr: AirTree, msg: Option<AirMsg>) -> AirTree {
-        AirTree::Statement {
-            statement: AirStatement::FieldsEmpty {
-                constr: constr.into(),
-                msg,
-            },
-            hoisted_over: None,
+    pub fn no_op(then: AirTree) -> AirTree {
+        AirTree::NoOp { then: then.into() }
+    }
+    pub fn fields_empty(constr: AirTree, msg: Option<AirMsg>, then: AirTree) -> AirTree {
+        AirTree::FieldsEmpty {
+            constr: constr.into(),
+            msg,
+            then: then.into(),
         }
     }
-    pub fn list_empty(list: AirTree, msg: Option<AirMsg>) -> AirTree {
-        AirTree::Statement {
-            statement: AirStatement::ListEmpty {
-                list: list.into(),
-                msg,
-            },
-            hoisted_over: None,
+    pub fn list_empty(list: AirTree, msg: Option<AirMsg>, then: AirTree) -> AirTree {
+        AirTree::ListEmpty {
+            list: list.into(),
+            msg,
+            then: then.into(),
         }
     }
 
-    pub fn hoist_over(mut self, next_exp: AirTree) -> AirTree {
-        match &mut self {
-            AirTree::Statement { hoisted_over, .. } => {
-                assert!(hoisted_over.is_none());
-                *hoisted_over = Some(next_exp.into());
-                self
-            }
+    // pub fn hoist_over(mut self, next_exp: AirTree) -> AirTree {
+    //     match &mut self {
+    //         AirTree::Statement { hoisted_over, .. } => {
+    //             assert!(hoisted_over.is_none());
+    //             *hoisted_over = Some(next_exp.into());
+    //             self
+    //         }
 
-            AirTree::Expression(_) => {
-                unreachable!("Trying to hoist an expression onto an expression.")
-            }
-            AirTree::UnhoistedSequence(seq) => {
-                let mut final_exp = next_exp;
-                while let Some(assign) = seq.pop() {
-                    final_exp = assign.hoist_over(final_exp);
-                }
-                final_exp
-            }
-        }
-    }
+    //         AirTree::Expression(_) => {
+    //             unreachable!("Trying to hoist an expression onto an expression.")
+    //         }
+    //         AirTree::UnhoistedSequence(seq) => {
+    //             let mut final_exp = next_exp;
+    //             while let Some(assign) = seq.pop() {
+    //                 final_exp = assign.hoist_over(final_exp);
+    //             }
+    //             final_exp
+    //         }
+    //     }
+    // }
 
     pub fn expect_on_list() -> AirTree {
         let list_var = AirTree::local_var("__list_to_check", list(data()));
@@ -937,555 +926,564 @@ impl AirTree {
 
     fn create_air_vec(&self, air_vec: &mut Vec<Air>) {
         match self {
-            AirTree::Statement {
-                statement,
-                hoisted_over: Some(exp),
-            } => {
-                match statement {
-                    AirStatement::DefineFunc {
-                        func_name,
-                        module_name,
-                        params,
-                        recursive,
-                        recursive_nonstatic_params,
-                        variant_name,
-                        func_body,
-                    } => {
-                        air_vec.push(Air::DefineFunc {
-                            func_name: func_name.clone(),
-                            module_name: module_name.clone(),
-                            params: params.clone(),
-                            recursive: *recursive,
-                            recursive_nonstatic_params: recursive_nonstatic_params.clone(),
-                            variant_name: variant_name.clone(),
-                        });
-                        func_body.create_air_vec(air_vec);
-                    }
-                    AirStatement::DefineCyclicFuncs {
-                        func_name,
-                        module_name,
-                        variant_name,
-                        contained_functions,
-                    } => {
-                        air_vec.push(Air::DefineCyclicFuncs {
-                            func_name: func_name.clone(),
-                            module_name: module_name.clone(),
-                            variant_name: variant_name.clone(),
-                            contained_functions: contained_functions
-                                .iter()
-                                .map(|(params, _)| params.clone())
-                                .collect_vec(),
-                        });
-
-                        for (_, func_body) in contained_functions {
-                            func_body.create_air_vec(air_vec);
-                        }
-                    }
-                    AirStatement::AssertConstr {
-                        constr,
-                        constr_index,
-                        msg,
-                    } => {
-                        air_vec.push(Air::AssertConstr {
-                            constr_index: *constr_index,
-                        });
-                        // msg is first so we can pop it off first in uplc_gen
-                        // if traces are on
-
-                        if let Some(msg) = msg {
-                            msg.to_air_tree().create_air_vec(air_vec);
-                        }
-
-                        constr.create_air_vec(air_vec);
-                    }
-                    AirStatement::AssertBool {
-                        is_true,
-                        value,
-                        msg,
-                    } => {
-                        air_vec.push(Air::AssertBool { is_true: *is_true });
-
-                        if let Some(msg) = msg {
-                            msg.to_air_tree().create_air_vec(air_vec);
-                        }
-
-                        value.create_air_vec(air_vec);
-                    }
-                    AirStatement::ClauseGuard {
-                        subject_name,
-                        subject_tipo,
-                        pattern,
-                    } => {
-                        air_vec.push(Air::ClauseGuard {
-                            subject_name: subject_name.clone(),
-                            subject_tipo: subject_tipo.clone(),
-                        });
-
-                        pattern.create_air_vec(air_vec);
-                    }
-                    AirStatement::ListClauseGuard {
-                        subject_tipo,
-                        tail_name,
-                        next_tail_name,
-                        inverse,
-                    } => {
-                        air_vec.push(Air::ListClauseGuard {
-                            subject_tipo: subject_tipo.clone(),
-                            tail_name: tail_name.clone(),
-                            next_tail_name: next_tail_name.clone(),
-                            inverse: *inverse,
-                        });
-                    }
-                    AirStatement::TupleGuard {
-                        subject_tipo,
-                        indices,
-                        subject_name,
-                    } => {
-                        air_vec.push(Air::TupleGuard {
-                            subject_tipo: subject_tipo.clone(),
-                            indices: indices.clone(),
-                            subject_name: subject_name.clone(),
-                        });
-                    }
-                    AirStatement::FieldsExpose {
-                        indices,
-                        record,
-                        msg,
-                        is_expect,
-                    } => {
-                        air_vec.push(Air::FieldsExpose {
-                            indices: indices.clone(),
-                            is_expect: *is_expect,
-                        });
-
-                        if let Some(msg) = msg {
-                            msg.to_air_tree().create_air_vec(air_vec);
-                        }
-
-                        record.create_air_vec(air_vec);
-                    }
-                    AirStatement::ListAccessor {
-                        tipo,
-                        names,
-                        tail,
-                        list,
-                        msg,
-                        expect_level,
-                    } => {
-                        air_vec.push(Air::ListAccessor {
-                            tipo: tipo.clone(),
-                            names: names.clone(),
-                            tail: *tail,
-                            expect_level: *expect_level,
-                        });
-
-                        if let Some(msg) = msg {
-                            msg.to_air_tree().create_air_vec(air_vec);
-                        }
-
-                        list.create_air_vec(air_vec);
-                    }
-                    AirStatement::ListExpose {
-                        tipo,
-                        tail_head_names,
-                        tail,
-                    } => {
-                        air_vec.push(Air::ListExpose {
-                            tipo: tipo.clone(),
-                            tail_head_names: tail_head_names.clone(),
-                            tail: tail.clone(),
-                        });
-                    }
-                    AirStatement::TupleAccessor {
-                        names,
-                        tipo,
-                        tuple,
-                        msg,
-                        is_expect,
-                    } => {
-                        air_vec.push(Air::TupleAccessor {
-                            names: names.clone(),
-                            tipo: tipo.clone(),
-                            is_expect: *is_expect,
-                        });
-
-                        if let Some(msg) = msg {
-                            msg.to_air_tree().create_air_vec(air_vec);
-                        }
-
-                        tuple.create_air_vec(air_vec);
-                    }
-                    AirStatement::NoOp => {
-                        air_vec.push(Air::NoOp);
-                    }
-                    AirStatement::FieldsEmpty { constr, msg } => {
-                        air_vec.push(Air::FieldsEmpty);
-
-                        if let Some(msg) = msg {
-                            msg.to_air_tree().create_air_vec(air_vec);
-                        }
-
-                        constr.create_air_vec(air_vec);
-                    }
-                    AirStatement::ListEmpty { list, msg } => {
-                        air_vec.push(Air::ListEmpty);
-
-                        if let Some(msg) = msg {
-                            msg.to_air_tree().create_air_vec(air_vec);
-                        }
-
-                        list.create_air_vec(air_vec);
-                    }
-                };
-                exp.create_air_vec(air_vec);
+            AirTree::Let { name, value, then } => {
+                air_vec.push(Air::Let { name: name.clone() });
+                value.create_air_vec(air_vec);
+                then.create_air_vec(air_vec);
             }
-            AirTree::Expression(exp) => match exp {
-                AirExpression::Let { value, then, name } => {
-                    air_vec.push(Air::Let { name: name.clone() });
-                    value.create_air_vec(air_vec);
-                    then.create_air_vec(air_vec);
-                }
-                AirExpression::Int { value } => air_vec.push(Air::Int {
-                    value: value.clone(),
-                }),
-                AirExpression::String { value } => air_vec.push(Air::String {
-                    value: value.clone(),
-                }),
-                AirExpression::ByteArray { bytes } => air_vec.push(Air::ByteArray {
-                    bytes: bytes.clone(),
-                }),
-                AirExpression::CurvePoint { point } => {
-                    air_vec.push(Air::CurvePoint { point: *point })
-                }
-                AirExpression::Bool { value } => air_vec.push(Air::Bool { value: *value }),
-                AirExpression::List { tipo, tail, items } => {
-                    air_vec.push(Air::List {
-                        count: items.len(),
-                        tipo: tipo.clone(),
-                        tail: *tail,
-                    });
-                    for item in items {
-                        item.create_air_vec(air_vec);
-                    }
-                }
-                AirExpression::Tuple { tipo, items } => {
-                    air_vec.push(Air::Tuple {
-                        tipo: tipo.clone(),
-                        count: items.len(),
-                    });
-                    for item in items {
-                        item.create_air_vec(air_vec);
-                    }
-                }
-                AirExpression::Void => air_vec.push(Air::Void),
-                AirExpression::Var {
-                    constructor,
-                    name,
-                    variant_name,
-                } => air_vec.push(Air::Var {
-                    constructor: constructor.clone(),
-                    name: name.clone(),
+            AirTree::DefineFunc {
+                func_name,
+                module_name,
+                params,
+                recursive,
+                recursive_nonstatic_params,
+                variant_name,
+                func_body,
+                then,
+            } => {
+                air_vec.push(Air::DefineFunc {
+                    func_name: func_name.clone(),
+                    module_name: module_name.clone(),
+                    params: params.clone(),
+                    recursive: *recursive,
+                    recursive_nonstatic_params: recursive_nonstatic_params.clone(),
                     variant_name: variant_name.clone(),
-                }),
-                AirExpression::Call { tipo, func, args } => {
-                    air_vec.push(Air::Call {
-                        count: args.len(),
-                        tipo: tipo.clone(),
-                    });
-                    func.create_air_vec(air_vec);
-                    for arg in args {
-                        arg.create_air_vec(air_vec);
-                    }
-                }
-                AirExpression::Fn { params, func_body } => {
-                    air_vec.push(Air::Fn {
-                        params: params.clone(),
-                    });
+                });
+                func_body.create_air_vec(air_vec);
+                then.create_air_vec(air_vec);
+            }
+            AirTree::DefineCyclicFuncs {
+                func_name,
+                module_name,
+                variant_name,
+                contained_functions,
+                then,
+            } => {
+                air_vec.push(Air::DefineCyclicFuncs {
+                    func_name: func_name.clone(),
+                    module_name: module_name.clone(),
+                    variant_name: variant_name.clone(),
+                    contained_functions: contained_functions
+                        .iter()
+                        .map(|(params, _)| params.clone())
+                        .collect_vec(),
+                });
+
+                for (_, func_body) in contained_functions {
                     func_body.create_air_vec(air_vec);
                 }
-                AirExpression::Builtin { func, tipo, args } => {
-                    air_vec.push(Air::Builtin {
-                        count: args.len(),
-                        func: *func,
-                        tipo: tipo.clone(),
-                    });
+                then.create_air_vec(air_vec);
+            }
+            AirTree::AssertConstr {
+                constr,
+                constr_index,
+                msg,
+                then,
+            } => {
+                air_vec.push(Air::AssertConstr {
+                    constr_index: *constr_index,
+                });
+                // msg is first so we can pop it off first in uplc_gen
+                // if traces are on
 
-                    for arg in args {
-                        arg.create_air_vec(air_vec);
-                    }
+                if let Some(msg) = msg {
+                    msg.to_air_tree().create_air_vec(air_vec);
                 }
-                AirExpression::BinOp {
-                    name,
-                    tipo,
-                    left,
-                    right,
-                    argument_tipo,
-                } => {
-                    air_vec.push(Air::BinOp {
-                        name: *name,
-                        tipo: tipo.clone(),
-                        argument_tipo: argument_tipo.clone(),
-                    });
-                    left.create_air_vec(air_vec);
-                    right.create_air_vec(air_vec);
+
+                constr.create_air_vec(air_vec);
+                then.create_air_vec(air_vec);
+            }
+            AirTree::AssertBool {
+                is_true,
+                value,
+                msg,
+                then,
+            } => {
+                air_vec.push(Air::AssertBool { is_true: *is_true });
+
+                if let Some(msg) = msg {
+                    msg.to_air_tree().create_air_vec(air_vec);
                 }
-                AirExpression::UnOp { op, arg } => {
-                    air_vec.push(Air::UnOp { op: *op });
+
+                value.create_air_vec(air_vec);
+                then.create_air_vec(air_vec);
+            }
+            AirTree::ClauseGuard {
+                subject_name,
+                subject_tipo,
+                pattern,
+                then,
+            } => {
+                air_vec.push(Air::ClauseGuard {
+                    subject_name: subject_name.clone(),
+                    subject_tipo: subject_tipo.clone(),
+                });
+
+                pattern.create_air_vec(air_vec);
+                then.create_air_vec(air_vec);
+            }
+            AirTree::ListClauseGuard {
+                subject_tipo,
+                tail_name,
+                next_tail_name,
+                inverse,
+                then,
+            } => {
+                air_vec.push(Air::ListClauseGuard {
+                    subject_tipo: subject_tipo.clone(),
+                    tail_name: tail_name.clone(),
+                    next_tail_name: next_tail_name.clone(),
+                    inverse: *inverse,
+                });
+                then.create_air_vec(air_vec);
+            }
+            AirTree::TupleGuard {
+                subject_tipo,
+                indices,
+                subject_name,
+                then,
+            } => {
+                air_vec.push(Air::TupleGuard {
+                    subject_tipo: subject_tipo.clone(),
+                    indices: indices.clone(),
+                    subject_name: subject_name.clone(),
+                });
+                then.create_air_vec(air_vec);
+            }
+            AirTree::FieldsExpose {
+                indices,
+                record,
+                msg,
+                is_expect,
+                then,
+            } => {
+                air_vec.push(Air::FieldsExpose {
+                    indices: indices.clone(),
+                    is_expect: *is_expect,
+                });
+
+                if let Some(msg) = msg {
+                    msg.to_air_tree().create_air_vec(air_vec);
+                }
+
+                record.create_air_vec(air_vec);
+                then.create_air_vec(air_vec);
+            }
+            AirTree::ListAccessor {
+                tipo,
+                names,
+                tail,
+                list,
+                msg,
+                expect_level,
+                then,
+            } => {
+                air_vec.push(Air::ListAccessor {
+                    tipo: tipo.clone(),
+                    names: names.clone(),
+                    tail: *tail,
+                    expect_level: *expect_level,
+                });
+
+                if let Some(msg) = msg {
+                    msg.to_air_tree().create_air_vec(air_vec);
+                }
+
+                list.create_air_vec(air_vec);
+                then.create_air_vec(air_vec);
+            }
+            AirTree::ListExpose {
+                tipo,
+                tail_head_names,
+                tail,
+                then,
+            } => {
+                air_vec.push(Air::ListExpose {
+                    tipo: tipo.clone(),
+                    tail_head_names: tail_head_names.clone(),
+                    tail: tail.clone(),
+                });
+                then.create_air_vec(air_vec);
+            }
+            AirTree::TupleAccessor {
+                names,
+                tipo,
+                tuple,
+                msg,
+                is_expect,
+                then,
+            } => {
+                air_vec.push(Air::TupleAccessor {
+                    names: names.clone(),
+                    tipo: tipo.clone(),
+                    is_expect: *is_expect,
+                });
+
+                if let Some(msg) = msg {
+                    msg.to_air_tree().create_air_vec(air_vec);
+                }
+
+                tuple.create_air_vec(air_vec);
+                then.create_air_vec(air_vec);
+            }
+            AirTree::FieldsEmpty { constr, msg, then } => {
+                air_vec.push(Air::FieldsEmpty);
+
+                if let Some(msg) = msg {
+                    msg.to_air_tree().create_air_vec(air_vec);
+                }
+
+                constr.create_air_vec(air_vec);
+                then.create_air_vec(air_vec);
+            }
+            AirTree::ListEmpty { list, msg, then } => {
+                air_vec.push(Air::ListEmpty);
+
+                if let Some(msg) = msg {
+                    msg.to_air_tree().create_air_vec(air_vec);
+                }
+
+                list.create_air_vec(air_vec);
+                then.create_air_vec(air_vec);
+            }
+            AirTree::NoOp { then } => {
+                air_vec.push(Air::NoOp);
+                then.create_air_vec(air_vec);
+            }
+            AirTree::Int { value } => air_vec.push(Air::Int {
+                value: value.clone(),
+            }),
+
+            AirTree::String { value } => air_vec.push(Air::String {
+                value: value.clone(),
+            }),
+            AirTree::ByteArray { bytes } => air_vec.push(Air::ByteArray {
+                bytes: bytes.clone(),
+            }),
+            AirTree::CurvePoint { point } => air_vec.push(Air::CurvePoint {
+                point: point.clone(),
+            }),
+            AirTree::Bool { value } => air_vec.push(Air::Bool { value: *value }),
+            AirTree::List { tipo, tail, items } => {
+                air_vec.push(Air::List {
+                    count: items.len(),
+                    tipo: tipo.clone(),
+                    tail: *tail,
+                });
+                for item in items {
+                    item.create_air_vec(air_vec);
+                }
+            }
+            AirTree::Tuple { tipo, items } => {
+                air_vec.push(Air::Tuple {
+                    tipo: tipo.clone(),
+                    count: items.len(),
+                });
+                for item in items {
+                    item.create_air_vec(air_vec);
+                }
+            }
+            AirTree::Void => air_vec.push(Air::Void),
+            AirTree::Var {
+                constructor,
+                name,
+                variant_name,
+            } => air_vec.push(Air::Var {
+                constructor: constructor.clone(),
+                name: name.clone(),
+                variant_name: variant_name.clone(),
+            }),
+            AirTree::Call { tipo, func, args } => {
+                air_vec.push(Air::Call {
+                    count: args.len(),
+                    tipo: tipo.clone(),
+                });
+                func.create_air_vec(air_vec);
+                for arg in args {
                     arg.create_air_vec(air_vec);
                 }
-                AirExpression::CastFromData { tipo, value, msg } => {
-                    air_vec.push(Air::CastFromData {
-                        tipo: tipo.clone(),
-                        is_expect: msg.is_some(),
-                    });
-
-                    if let Some(msg) = msg {
-                        msg.to_air_tree().create_air_vec(air_vec);
-                    }
-
-                    value.create_air_vec(air_vec);
-                }
-                AirExpression::CastToData { tipo, value } => {
-                    air_vec.push(Air::CastToData { tipo: tipo.clone() });
-                    value.create_air_vec(air_vec);
-                }
-                AirExpression::When {
-                    tipo,
-                    subject_name,
-                    subject,
-                    subject_tipo,
-                    clauses,
-                } => {
-                    air_vec.push(Air::When {
-                        tipo: tipo.clone(),
-                        subject_name: subject_name.clone(),
-                        subject_tipo: subject_tipo.clone(),
-                    });
-                    subject.create_air_vec(air_vec);
-                    clauses.create_air_vec(air_vec);
-                }
-                AirExpression::Clause {
-                    subject_tipo,
-                    subject_name,
-                    complex_clause,
-                    pattern,
-                    then,
-                    otherwise,
-                } => {
-                    air_vec.push(Air::Clause {
-                        subject_tipo: subject_tipo.clone(),
-                        subject_name: subject_name.clone(),
-                        complex_clause: *complex_clause,
-                    });
-                    pattern.create_air_vec(air_vec);
-                    then.create_air_vec(air_vec);
-                    otherwise.create_air_vec(air_vec);
-                }
-                AirExpression::ListClause {
-                    subject_tipo,
-                    tail_name,
-                    next_tail_name,
-                    complex_clause,
-                    then,
-                    otherwise,
-                } => {
-                    air_vec.push(Air::ListClause {
-                        subject_tipo: subject_tipo.clone(),
-                        tail_name: tail_name.clone(),
-                        next_tail_name: next_tail_name.clone(),
-                        complex_clause: *complex_clause,
-                    });
-                    then.create_air_vec(air_vec);
-                    otherwise.create_air_vec(air_vec);
-                }
-                AirExpression::WrapClause { then, otherwise } => {
-                    air_vec.push(Air::WrapClause);
-                    then.create_air_vec(air_vec);
-                    otherwise.create_air_vec(air_vec);
-                }
-                AirExpression::TupleClause {
-                    subject_tipo,
-                    indices,
-                    predefined_indices,
-                    subject_name,
-                    complex_clause,
-                    then,
-                    otherwise,
-                } => {
-                    air_vec.push(Air::TupleClause {
-                        subject_tipo: subject_tipo.clone(),
-                        indices: indices.clone(),
-                        predefined_indices: predefined_indices.clone(),
-                        subject_name: subject_name.clone(),
-                        complex_clause: *complex_clause,
-                    });
-                    then.create_air_vec(air_vec);
-                    otherwise.create_air_vec(air_vec);
-                }
-                AirExpression::Finally { pattern, then } => {
-                    air_vec.push(Air::Finally);
-                    pattern.create_air_vec(air_vec);
-                    then.create_air_vec(air_vec);
-                }
-                AirExpression::If {
-                    tipo,
-                    pattern,
-                    then,
-                    otherwise,
-                } => {
-                    air_vec.push(Air::If { tipo: tipo.clone() });
-                    pattern.create_air_vec(air_vec);
-                    then.create_air_vec(air_vec);
-                    otherwise.create_air_vec(air_vec);
-                }
-                AirExpression::Constr { tag, tipo, args } => {
-                    air_vec.push(Air::Constr {
-                        tag: *tag,
-                        tipo: tipo.clone(),
-                        count: args.len(),
-                    });
-                    for arg in args {
-                        arg.create_air_vec(air_vec);
-                    }
-                }
-                AirExpression::RecordUpdate {
-                    highest_index,
-                    indices,
-                    tipo,
-                    record,
-                    args,
-                } => {
-                    air_vec.push(Air::RecordUpdate {
-                        highest_index: *highest_index,
-                        indices: indices.clone(),
-                        tipo: tipo.clone(),
-                    });
-                    record.create_air_vec(air_vec);
-                    for arg in args {
-                        arg.create_air_vec(air_vec);
-                    }
-                }
-                AirExpression::ErrorTerm { tipo, validator } => air_vec.push(Air::ErrorTerm {
-                    tipo: tipo.clone(),
-                    validator: *validator,
-                }),
-                AirExpression::Trace { tipo, msg, then } => {
-                    air_vec.push(Air::Trace { tipo: tipo.clone() });
-                    msg.create_air_vec(air_vec);
-                    then.create_air_vec(air_vec);
-                }
-            },
-            AirTree::UnhoistedSequence(_) => {
-                unreachable!("FIRST RESOLVE ALL UNHOISTED SEQUENCES")
             }
-            _ => unreachable!("FOUND UNHOISTED STATEMENT"),
+            AirTree::Fn { params, func_body } => {
+                air_vec.push(Air::Fn {
+                    params: params.clone(),
+                });
+                func_body.create_air_vec(air_vec);
+            }
+            AirTree::Builtin { func, tipo, args } => {
+                air_vec.push(Air::Builtin {
+                    count: args.len(),
+                    func: func.clone(),
+                    tipo: tipo.clone(),
+                });
+
+                for arg in args {
+                    arg.create_air_vec(air_vec);
+                }
+            }
+            AirTree::BinOp {
+                name,
+                tipo,
+                left,
+                right,
+                argument_tipo,
+            } => {
+                air_vec.push(Air::BinOp {
+                    name: *name,
+                    tipo: tipo.clone(),
+                    argument_tipo: argument_tipo.clone(),
+                });
+                left.create_air_vec(air_vec);
+                right.create_air_vec(air_vec);
+            }
+            AirTree::UnOp { op, arg } => {
+                air_vec.push(Air::UnOp { op: *op });
+                arg.create_air_vec(air_vec);
+            }
+            AirTree::CastFromData { tipo, value, msg } => {
+                air_vec.push(Air::CastFromData {
+                    tipo: tipo.clone(),
+                    is_expect: msg.is_some(),
+                });
+
+                if let Some(msg) = msg {
+                    msg.to_air_tree().create_air_vec(air_vec);
+                }
+
+                value.create_air_vec(air_vec);
+            }
+            AirTree::CastToData { tipo, value } => {
+                air_vec.push(Air::CastToData { tipo: tipo.clone() });
+                value.create_air_vec(air_vec);
+            }
+            AirTree::When {
+                tipo,
+                subject_name,
+                subject,
+                subject_tipo,
+                clauses,
+            } => {
+                air_vec.push(Air::When {
+                    tipo: tipo.clone(),
+                    subject_name: subject_name.clone(),
+                    subject_tipo: subject_tipo.clone(),
+                });
+                subject.create_air_vec(air_vec);
+                clauses.create_air_vec(air_vec);
+            }
+            AirTree::Clause {
+                subject_tipo,
+                subject_name,
+                complex_clause,
+                pattern,
+                then,
+                otherwise,
+            } => {
+                air_vec.push(Air::Clause {
+                    subject_tipo: subject_tipo.clone(),
+                    subject_name: subject_name.clone(),
+                    complex_clause: *complex_clause,
+                });
+                pattern.create_air_vec(air_vec);
+                then.create_air_vec(air_vec);
+                otherwise.create_air_vec(air_vec);
+            }
+            AirTree::ListClause {
+                subject_tipo,
+                tail_name,
+                next_tail_name,
+                complex_clause,
+                then,
+                otherwise,
+            } => {
+                air_vec.push(Air::ListClause {
+                    subject_tipo: subject_tipo.clone(),
+                    tail_name: tail_name.clone(),
+                    next_tail_name: next_tail_name.clone(),
+                    complex_clause: *complex_clause,
+                });
+                then.create_air_vec(air_vec);
+                otherwise.create_air_vec(air_vec);
+            }
+            AirTree::WrapClause { then, otherwise } => {
+                air_vec.push(Air::WrapClause);
+                then.create_air_vec(air_vec);
+                otherwise.create_air_vec(air_vec);
+            }
+            AirTree::TupleClause {
+                subject_tipo,
+                indices,
+                predefined_indices,
+                subject_name,
+                complex_clause,
+                then,
+                otherwise,
+            } => {
+                air_vec.push(Air::TupleClause {
+                    subject_tipo: subject_tipo.clone(),
+                    indices: indices.clone(),
+                    predefined_indices: predefined_indices.clone(),
+                    subject_name: subject_name.clone(),
+                    complex_clause: *complex_clause,
+                });
+                then.create_air_vec(air_vec);
+                otherwise.create_air_vec(air_vec);
+            }
+            AirTree::Finally { pattern, then } => {
+                air_vec.push(Air::Finally);
+                pattern.create_air_vec(air_vec);
+                then.create_air_vec(air_vec);
+            }
+            AirTree::If {
+                tipo,
+                pattern,
+                then,
+                otherwise,
+            } => {
+                air_vec.push(Air::If { tipo: tipo.clone() });
+                pattern.create_air_vec(air_vec);
+                then.create_air_vec(air_vec);
+                otherwise.create_air_vec(air_vec);
+            }
+            AirTree::Constr { tag, tipo, args } => {
+                air_vec.push(Air::Constr {
+                    tag: *tag,
+                    tipo: tipo.clone(),
+                    count: args.len(),
+                });
+                for arg in args {
+                    arg.create_air_vec(air_vec);
+                }
+            }
+            AirTree::RecordUpdate {
+                highest_index,
+                indices,
+                tipo,
+                record,
+                args,
+            } => {
+                air_vec.push(Air::RecordUpdate {
+                    highest_index: *highest_index,
+                    indices: indices.clone(),
+                    tipo: tipo.clone(),
+                });
+                record.create_air_vec(air_vec);
+                for arg in args {
+                    arg.create_air_vec(air_vec);
+                }
+            }
+            AirTree::ErrorTerm { tipo, validator } => air_vec.push(Air::ErrorTerm {
+                tipo: tipo.clone(),
+                validator: *validator,
+            }),
+            AirTree::Trace { tipo, msg, then } => {
+                air_vec.push(Air::Trace { tipo: tipo.clone() });
+                msg.create_air_vec(air_vec);
+                then.create_air_vec(air_vec);
+            }
         }
     }
 
     pub fn return_type(&self) -> Rc<Type> {
         match self {
-            AirTree::Statement {
-                hoisted_over: Some(hoisted_over),
-                ..
-            } => hoisted_over.return_type(),
-            AirTree::Expression(e) => match e {
-                AirExpression::Int { .. } => int(),
-                AirExpression::String { .. } => string(),
-                AirExpression::ByteArray { .. } => byte_array(),
-                AirExpression::Bool { .. } => bool(),
-                AirExpression::CurvePoint { point } => point.tipo(),
-                AirExpression::List { tipo, .. }
-                | AirExpression::Tuple { tipo, .. }
-                | AirExpression::Call { tipo, .. }
-                | AirExpression::Builtin { tipo, .. }
-                | AirExpression::BinOp { tipo, .. }
-                | AirExpression::CastFromData { tipo, .. }
-                | AirExpression::When { tipo, .. }
-                | AirExpression::If { tipo, .. }
-                | AirExpression::Constr { tipo, .. }
-                | AirExpression::RecordUpdate { tipo, .. }
-                | AirExpression::ErrorTerm { tipo, .. }
-                | AirExpression::Trace { tipo, .. } => tipo.clone(),
-                AirExpression::Void => void(),
-                AirExpression::Var { constructor, .. } => constructor.tipo.clone(),
-                AirExpression::Fn { func_body, .. } => func_body.return_type(),
-                AirExpression::UnOp { op, .. } => match op {
-                    UnOp::Not => bool(),
-                    UnOp::Negate => int(),
-                },
-                AirExpression::CastToData { .. } => data(),
-                AirExpression::Clause { then, .. }
-                | AirExpression::ListClause { then, .. }
-                | AirExpression::WrapClause { then, .. }
-                | AirExpression::TupleClause { then, .. }
-                | AirExpression::Finally { then, .. }
-                | AirExpression::Let { then, .. } => then.return_type(),
+            AirTree::Int { .. } => int(),
+            AirTree::String { .. } => string(),
+            AirTree::ByteArray { .. } => byte_array(),
+            AirTree::Bool { .. } => bool(),
+            AirTree::CurvePoint { point } => point.tipo(),
+            AirTree::List { tipo, .. }
+            | AirTree::Tuple { tipo, .. }
+            | AirTree::Call { tipo, .. }
+            | AirTree::Builtin { tipo, .. }
+            | AirTree::BinOp { tipo, .. }
+            | AirTree::CastFromData { tipo, .. }
+            | AirTree::When { tipo, .. }
+            | AirTree::If { tipo, .. }
+            | AirTree::Constr { tipo, .. }
+            | AirTree::RecordUpdate { tipo, .. }
+            | AirTree::ErrorTerm { tipo, .. }
+            | AirTree::Trace { tipo, .. } => tipo.clone(),
+            AirTree::Void => void(),
+            AirTree::Var { constructor, .. } => constructor.tipo.clone(),
+            AirTree::Fn { func_body, .. } => func_body.return_type(),
+            AirTree::UnOp { op, .. } => match op {
+                UnOp::Not => bool(),
+                UnOp::Negate => int(),
             },
-            _ => unreachable!(),
+            AirTree::CastToData { .. } => data(),
+            AirTree::Clause { then, .. }
+            | AirTree::ListClause { then, .. }
+            | AirTree::WrapClause { then, .. }
+            | AirTree::TupleClause { then, .. }
+            | AirTree::Finally { then, .. }
+            | AirTree::Let { then, .. }
+            | AirTree::DefineFunc { then, .. }
+            | AirTree::DefineCyclicFuncs { then, .. }
+            | AirTree::AssertConstr { then, .. }
+            | AirTree::AssertBool { then, .. }
+            | AirTree::ClauseGuard { then, .. }
+            | AirTree::ListClauseGuard { then, .. }
+            | AirTree::TupleGuard { then, .. }
+            | AirTree::FieldsExpose { then, .. }
+            | AirTree::ListAccessor { then, .. }
+            | AirTree::ListExpose { then, .. }
+            | AirTree::TupleAccessor { then, .. }
+            | AirTree::FieldsEmpty { then, .. }
+            | AirTree::ListEmpty { then, .. }
+            | AirTree::NoOp { then } => then.return_type(),
         }
     }
 
     pub fn mut_held_types(&mut self) -> Vec<&mut Rc<Type>> {
         match self {
-            AirTree::Statement {
-                statement,
-                hoisted_over: Some(_),
-            } => match statement {
-                AirStatement::ClauseGuard { subject_tipo, .. }
-                | AirStatement::ListClauseGuard { subject_tipo, .. }
-                | AirStatement::TupleGuard { subject_tipo, .. } => vec![subject_tipo],
-                AirStatement::ListAccessor { tipo, .. }
-                | AirStatement::ListExpose { tipo, .. }
-                | AirStatement::TupleAccessor { tipo, .. } => vec![tipo],
-                AirStatement::FieldsExpose { indices, .. } => {
-                    let mut types = vec![];
-                    for (_, _, tipo) in indices {
-                        types.push(tipo);
-                    }
-                    types
+            AirTree::ClauseGuard { subject_tipo, .. }
+            | AirTree::ListClauseGuard { subject_tipo, .. }
+            | AirTree::TupleGuard { subject_tipo, .. } => vec![subject_tipo],
+            AirTree::ListAccessor { tipo, .. }
+            | AirTree::ListExpose { tipo, .. }
+            | AirTree::TupleAccessor { tipo, .. } => vec![tipo],
+            AirTree::FieldsExpose { indices, .. } => {
+                let mut types = vec![];
+                for (_, _, tipo) in indices {
+                    types.push(tipo);
                 }
-                _ => vec![],
-            },
-            AirTree::Expression(e) => match e {
-                AirExpression::List { tipo, .. }
-                | AirExpression::Tuple { tipo, .. }
-                | AirExpression::Call { tipo, .. }
-                | AirExpression::Builtin { tipo, .. }
-                | AirExpression::CastFromData { tipo, .. }
-                | AirExpression::CastToData { tipo, .. }
-                | AirExpression::If { tipo, .. }
-                | AirExpression::Constr { tipo, .. }
-                | AirExpression::ErrorTerm { tipo, .. }
-                | AirExpression::Trace { tipo, .. } => vec![tipo],
-                AirExpression::Var { constructor, .. } => {
-                    vec![constructor.tipo.borrow_mut()]
+                types
+            }
+            AirTree::List { tipo, .. }
+            | AirTree::Tuple { tipo, .. }
+            | AirTree::Call { tipo, .. }
+            | AirTree::Builtin { tipo, .. }
+            | AirTree::CastFromData { tipo, .. }
+            | AirTree::CastToData { tipo, .. }
+            | AirTree::If { tipo, .. }
+            | AirTree::Constr { tipo, .. }
+            | AirTree::ErrorTerm { tipo, .. }
+            | AirTree::Trace { tipo, .. } => vec![tipo],
+            AirTree::Var { constructor, .. } => {
+                vec![constructor.tipo.borrow_mut()]
+            }
+            AirTree::BinOp {
+                tipo,
+                argument_tipo,
+                ..
+            } => {
+                vec![tipo, argument_tipo]
+            }
+            AirTree::When {
+                tipo, subject_tipo, ..
+            } => vec![tipo, subject_tipo],
+            AirTree::Clause { subject_tipo, .. }
+            | AirTree::ListClause { subject_tipo, .. }
+            | AirTree::TupleClause { subject_tipo, .. } => vec![subject_tipo],
+            AirTree::RecordUpdate { tipo, indices, .. } => {
+                let mut types = vec![tipo];
+                for (_, tipo) in indices {
+                    types.push(tipo);
                 }
-                AirExpression::BinOp {
-                    tipo,
-                    argument_tipo,
-                    ..
-                } => {
-                    vec![tipo, argument_tipo]
-                }
-                AirExpression::When {
-                    tipo, subject_tipo, ..
-                } => vec![tipo, subject_tipo],
-                AirExpression::Clause { subject_tipo, .. }
-                | AirExpression::ListClause { subject_tipo, .. }
-                | AirExpression::TupleClause { subject_tipo, .. } => vec![subject_tipo],
-
-                AirExpression::RecordUpdate { tipo, indices, .. } => {
-                    let mut types = vec![tipo];
-                    for (_, tipo) in indices {
-                        types.push(tipo);
-                    }
-                    types
-                }
-                _ => {
-                    vec![]
-                }
-            },
-            _ => unreachable!("FOUND UNHOISTED STATEMENT"),
+                types
+            }
+            _ => {
+                vec![]
+            }
         }
     }
 
@@ -1519,11 +1517,11 @@ impl AirTree {
     ) {
         let mut index_count = IndexCounter::new();
         tree_path.push(current_depth, depth_index);
+        let mut tuple_then_index = None;
 
-        // Assignments get traversed here
+        // Assignments/Statements get traversed here
         match self {
-            AirTree::UnhoistedSequence(..) => unreachable!("No unhoisted sequence at this point"),
-            AirTree::Expression(AirExpression::Let { value, .. }) => {
+            AirTree::Let { value, .. } => {
                 value.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
@@ -1533,108 +1531,106 @@ impl AirTree {
                 );
             }
 
-            AirTree::Statement { statement, .. } => match statement {
-                AirStatement::DefineFunc { func_body, .. } => {
-                    func_body.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirStatement::DefineCyclicFuncs {
-                    contained_functions,
-                    ..
-                } => {
-                    for (_, func_body) in contained_functions {
-                        func_body.do_traverse_tree_with(
-                            tree_path,
-                            current_depth + 1,
-                            index_count.next_number(),
-                            with,
-                            apply_with_func_last,
-                        );
-                    }
-                }
+            AirTree::AssertConstr { constr, .. } => {
+                constr.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::AssertBool { value, .. } => {
+                value.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::ClauseGuard { pattern, .. } => {
+                pattern.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
 
-                AirStatement::AssertConstr { constr, .. } => {
-                    constr.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirStatement::AssertBool { value, .. } => {
-                    value.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirStatement::ClauseGuard { pattern, .. } => {
-                    pattern.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirStatement::ListClauseGuard { .. } => {}
-                AirStatement::TupleGuard { .. } => {}
-                AirStatement::FieldsExpose { record, .. } => {
-                    record.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirStatement::ListAccessor { list, .. } => {
-                    list.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirStatement::ListExpose { .. } => {}
-                AirStatement::TupleAccessor { tuple, .. } => {
-                    tuple.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirStatement::NoOp => {}
-                AirStatement::FieldsEmpty { constr, .. } => {
-                    constr.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirStatement::ListEmpty { list, .. } => {
-                    list.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-            },
+            AirTree::FieldsExpose { record, .. } => {
+                record.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::ListAccessor { list, .. } => {
+                list.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::TupleAccessor { tuple, .. } => {
+                tuple.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::FieldsEmpty { constr, .. } => {
+                constr.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::ListEmpty { list, .. } => {
+                list.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+
+            AirTree::When { subject, .. } => subject.do_traverse_tree_with(
+                tree_path,
+                current_depth + 1,
+                index_count.next_number(),
+                with,
+                apply_with_func_last,
+            ),
+
+            AirTree::TupleClause {
+                subject_tipo,
+                indices,
+                predefined_indices,
+                subject_name,
+                complex_clause,
+                then,
+                otherwise,
+            } => {
+                tuple_then_index = Some(index_count.next_number());
+                otherwise.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
             _ => {}
         }
 
@@ -1644,11 +1640,20 @@ impl AirTree {
 
         // Expressions or an assignment that hoist over a expression are traversed here
         match self {
-            AirTree::Statement {
-                hoisted_over: Some(hoisted_over),
-                ..
-            } => {
-                hoisted_over.do_traverse_tree_with(
+            AirTree::Let { then, .. }
+            | AirTree::AssertConstr { then, .. }
+            | AirTree::AssertBool { then, .. }
+            | AirTree::ClauseGuard { then, .. }
+            | AirTree::FieldsExpose { then, .. }
+            | AirTree::ListAccessor { then, .. }
+            | AirTree::TupleAccessor { then, .. }
+            | AirTree::FieldsEmpty { then, .. }
+            | AirTree::ListEmpty { then, .. }
+            | AirTree::ListExpose { then, .. }
+            | AirTree::ListClauseGuard { then, .. }
+            | AirTree::TupleGuard { then, .. }
+            | AirTree::NoOp { then } => {
+                then.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
                     index_count.next_number(),
@@ -1656,59 +1661,33 @@ impl AirTree {
                     apply_with_func_last,
                 );
             }
-            AirTree::Expression(e) => match e {
-                AirExpression::Let { then, .. } => {
-                    then.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirExpression::List { items, .. } => {
-                    for item in items {
-                        item.do_traverse_tree_with(
-                            tree_path,
-                            current_depth + 1,
-                            index_count.next_number(),
-                            with,
-                            apply_with_func_last,
-                        );
-                    }
-                }
-                AirExpression::Tuple { items, .. } => {
-                    for item in items {
-                        item.do_traverse_tree_with(
-                            tree_path,
-                            current_depth + 1,
-                            index_count.next_number(),
-                            with,
-                            apply_with_func_last,
-                        );
-                    }
-                }
-                AirExpression::Call { func, args, .. } => {
-                    func.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
+            AirTree::When { clauses, .. } => {
+                clauses.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::TupleClause {
+                then, otherwise, ..
+            } => {
+                let Some(index) = tuple_then_index else {
+                    unreachable!()
+                };
 
-                    for arg in args {
-                        arg.do_traverse_tree_with(
-                            tree_path,
-                            current_depth + 1,
-                            index_count.next_number(),
-                            with,
-                            apply_with_func_last,
-                        );
-                    }
-                }
-                AirExpression::Fn { func_body, .. } => {
-                    func_body.do_traverse_tree_with(
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index,
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::List { items, .. } => {
+                for item in items {
+                    item.do_traverse_tree_with(
                         tree_path,
                         current_depth + 1,
                         index_count.next_number(),
@@ -1716,35 +1695,28 @@ impl AirTree {
                         apply_with_func_last,
                     );
                 }
-                AirExpression::Builtin { args, .. } => {
-                    for arg in args {
-                        arg.do_traverse_tree_with(
-                            tree_path,
-                            current_depth + 1,
-                            index_count.next_number(),
-                            with,
-                            apply_with_func_last,
-                        );
-                    }
-                }
-                AirExpression::BinOp { left, right, .. } => {
-                    left.do_traverse_tree_with(
+            }
+            AirTree::Tuple { items, .. } => {
+                for item in items {
+                    item.do_traverse_tree_with(
                         tree_path,
                         current_depth + 1,
                         index_count.next_number(),
                         with,
                         apply_with_func_last,
                     );
+                }
+            }
+            AirTree::Call { func, args, .. } => {
+                func.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
 
-                    right.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirExpression::UnOp { arg, .. } => {
+                for arg in args {
                     arg.do_traverse_tree_with(
                         tree_path,
                         current_depth + 1,
@@ -1753,8 +1725,19 @@ impl AirTree {
                         apply_with_func_last,
                     );
                 }
-                AirExpression::CastFromData { value, .. } => {
-                    value.do_traverse_tree_with(
+            }
+            AirTree::Fn { func_body, .. } => {
+                func_body.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::Builtin { args, .. } => {
+                for arg in args {
+                    arg.do_traverse_tree_with(
                         tree_path,
                         current_depth + 1,
                         index_count.next_number(),
@@ -1762,205 +1745,169 @@ impl AirTree {
                         apply_with_func_last,
                     );
                 }
-                AirExpression::CastToData { value, .. } => {
-                    value.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirExpression::When {
-                    subject, clauses, ..
-                } => {
-                    subject.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
+            }
+            AirTree::BinOp { left, right, .. } => {
+                left.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
 
-                    clauses.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirExpression::Clause {
-                    pattern,
-                    then,
-                    otherwise,
-                    ..
-                } => {
-                    pattern.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
+                right.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::UnOp { arg, .. } => {
+                arg.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::CastFromData { value, .. } => {
+                value.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::CastToData { value, .. } => {
+                value.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
 
-                    then.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
+            AirTree::Clause {
+                pattern,
+                then,
+                otherwise,
+                ..
+            } => {
+                pattern.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
 
-                    otherwise.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirExpression::ListClause {
-                    then, otherwise, ..
-                } => {
-                    then.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
 
-                    otherwise.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirExpression::WrapClause { then, otherwise } => {
-                    then.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
+                otherwise.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::ListClause {
+                then, otherwise, ..
+            } => {
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
 
-                    otherwise.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirExpression::TupleClause {
-                    then, otherwise, ..
-                } => {
-                    then.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
+                otherwise.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::WrapClause { then, otherwise } => {
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
 
-                    otherwise.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirExpression::Finally { pattern, then } => {
-                    pattern.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
+                otherwise.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
 
-                    then.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirExpression::If {
-                    pattern,
-                    then,
-                    otherwise,
-                    ..
-                } => {
-                    pattern.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
+            AirTree::Finally { pattern, then } => {
+                pattern.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
 
-                    then.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::If {
+                pattern,
+                then,
+                otherwise,
+                ..
+            } => {
+                pattern.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
 
-                    otherwise.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                }
-                AirExpression::Constr { args, .. } => {
-                    for arg in args {
-                        arg.do_traverse_tree_with(
-                            tree_path,
-                            current_depth + 1,
-                            index_count.next_number(),
-                            with,
-                            apply_with_func_last,
-                        );
-                    }
-                }
-                AirExpression::RecordUpdate { record, args, .. } => {
-                    record.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
-                    for arg in args {
-                        arg.do_traverse_tree_with(
-                            tree_path,
-                            current_depth + 1,
-                            index_count.next_number(),
-                            with,
-                            apply_with_func_last,
-                        );
-                    }
-                }
-                AirExpression::Trace { msg, then, .. } => {
-                    msg.do_traverse_tree_with(
-                        tree_path,
-                        current_depth + 1,
-                        index_count.next_number(),
-                        with,
-                        apply_with_func_last,
-                    );
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
 
-                    then.do_traverse_tree_with(
+                otherwise.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::Constr { args, .. } => {
+                for arg in args {
+                    arg.do_traverse_tree_with(
                         tree_path,
                         current_depth + 1,
                         index_count.next_number(),
@@ -1968,9 +1915,90 @@ impl AirTree {
                         apply_with_func_last,
                     );
                 }
-                _ => {}
-            },
-            a => unreachable!("GOT THIS {:#?}", a),
+            }
+            AirTree::RecordUpdate { record, args, .. } => {
+                record.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+                for arg in args {
+                    arg.do_traverse_tree_with(
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next_number(),
+                        with,
+                        apply_with_func_last,
+                    );
+                }
+            }
+            AirTree::Trace { msg, then, .. } => {
+                msg.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::DefineFunc {
+                func_body, then, ..
+            } => {
+                func_body.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                )
+            }
+            AirTree::DefineCyclicFuncs {
+                contained_functions,
+                then,
+                ..
+            } => {
+                for (_, func_body) in contained_functions {
+                    func_body.do_traverse_tree_with(
+                        tree_path,
+                        current_depth + 1,
+                        index_count.next_number(),
+                        with,
+                        apply_with_func_last,
+                    );
+                }
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::Int { .. }
+            | AirTree::String { .. }
+            | AirTree::ByteArray { .. }
+            | AirTree::CurvePoint { .. }
+            | AirTree::Bool { .. }
+            | AirTree::Void
+            | AirTree::Var { .. }
+            | AirTree::ErrorTerm { .. } => {}
         }
 
         if apply_with_func_last {
@@ -1980,6 +2008,7 @@ impl AirTree {
         tree_path.pop();
     }
 
+    /// Used in function hoisting to find the exact node to hoist over
     pub fn find_air_tree_node<'a>(&'a mut self, tree_path: &TreePath) -> &'a mut AirTree {
         let mut path_iter = tree_path.path.iter();
         path_iter.next();
@@ -1991,296 +2020,284 @@ impl AirTree {
         tree_path_iter: &mut Iter<(usize, usize)>,
     ) -> &'a mut AirTree {
         // For finding the air node we skip over the define func ops since those are added later on.
-        if let AirTree::Statement {
-            statement: AirStatement::DefineFunc { .. } | AirStatement::DefineCyclicFuncs { .. },
-            hoisted_over: Some(hoisted_over),
-        } = self
-        {
-            hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
+        if let AirTree::DefineFunc { then, .. } | AirTree::DefineCyclicFuncs { then, .. } = self {
+            then.as_mut().do_find_air_tree_node(tree_path_iter)
         } else if let Some((_depth, index)) = tree_path_iter.next() {
             let mut children_nodes = vec![];
             match self {
-                AirTree::Statement {
-                    statement,
-                    hoisted_over: Some(hoisted_over),
-                } => match statement {
-                    AirStatement::AssertConstr { constr, .. } => {
-                        if *index == 0 {
-                            constr.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                AirTree::Let { value, then, .. } => {
+                    if *index == 0 {
+                        value.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirStatement::AssertBool { value, .. } => {
-                        if *index == 0 {
-                            value.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::AssertConstr { constr, then, .. } => {
+                    if *index == 0 {
+                        constr.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirStatement::ClauseGuard { pattern, .. } => {
-                        if *index == 0 {
-                            pattern.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::AssertBool { value, then, .. } => {
+                    if *index == 0 {
+                        value.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirStatement::ListClauseGuard { .. } => {
-                        if *index == 0 {
-                            hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::ClauseGuard { pattern, then, .. } => {
+                    if *index == 0 {
+                        pattern.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirStatement::TupleGuard { .. } => {
-                        if *index == 0 {
-                            hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::ListClauseGuard { then, .. } => {
+                    if *index == 0 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirStatement::FieldsExpose { record, .. } => {
-                        if *index == 0 {
-                            record.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::TupleGuard { then, .. } => {
+                    if *index == 0 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirStatement::ListAccessor { list, .. } => {
-                        if *index == 0 {
-                            list.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::FieldsExpose { record, then, .. } => {
+                    if *index == 0 {
+                        record.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirStatement::ListExpose { .. } => {
-                        if *index == 0 {
-                            hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::ListAccessor { list, then, .. } => {
+                    if *index == 0 {
+                        list.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirStatement::TupleAccessor { tuple, .. } => {
-                        if *index == 0 {
-                            tuple.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::ListExpose { then, .. } => {
+                    if *index == 0 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirStatement::NoOp => {
-                        if *index == 0 {
-                            hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::TupleAccessor { tuple, then, .. } => {
+                    if *index == 0 {
+                        tuple.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirStatement::DefineFunc { .. } => unreachable!(),
-                    AirStatement::DefineCyclicFuncs { .. } => unreachable!(),
-                    AirStatement::FieldsEmpty { constr, .. } => {
-                        if *index == 0 {
-                            constr.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::NoOp { then } => {
+                    if *index == 0 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirStatement::ListEmpty { list, .. } => {
-                        if *index == 0 {
-                            list.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            hoisted_over.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::DefineFunc { .. } => unreachable!(),
+                AirTree::DefineCyclicFuncs { .. } => unreachable!(),
+                AirTree::FieldsEmpty { constr, then, .. } => {
+                    if *index == 0 {
+                        constr.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                },
-                AirTree::Expression(e) => match e {
-                    AirExpression::Let { value, then, .. } => {
-                        if *index == 0 {
-                            value.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            then.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::ListEmpty { list, then, .. } => {
+                    if *index == 0 {
+                        list.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirExpression::List { items, .. }
-                    | AirExpression::Tuple { items, .. }
-                    | AirExpression::Builtin { args: items, .. } => {
-                        let item = items.get_mut(*index).unwrap_or_else(|| {
-                            panic!("Tree Path index outside tree children nodes")
-                        });
-                        item.do_find_air_tree_node(tree_path_iter)
-                    }
-                    AirExpression::Call { func, args, .. } => {
-                        children_nodes.push(func.as_mut());
-                        children_nodes.extend(args.iter_mut());
+                }
+                AirTree::List { items, .. }
+                | AirTree::Tuple { items, .. }
+                | AirTree::Builtin { args: items, .. } => {
+                    let item = items
+                        .get_mut(*index)
+                        .expect("Tree Path index outside tree children nodes");
+                    item.do_find_air_tree_node(tree_path_iter)
+                }
+                AirTree::Call { func, args, .. } => {
+                    children_nodes.push(func.as_mut());
+                    children_nodes.extend(args.iter_mut());
 
-                        let item = children_nodes.swap_remove(*index);
+                    let item = children_nodes.swap_remove(*index);
 
-                        item.do_find_air_tree_node(tree_path_iter)
+                    item.do_find_air_tree_node(tree_path_iter)
+                }
+                AirTree::Fn { func_body, .. } => {
+                    if *index == 0 {
+                        func_body.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirExpression::Fn { func_body, .. } => {
-                        if *index == 0 {
-                            func_body.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::BinOp { left, right, .. } => {
+                    if *index == 0 {
+                        left.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        right.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirExpression::BinOp { left, right, .. } => {
-                        if *index == 0 {
-                            left.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            right.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::UnOp { arg, .. } => {
+                    if *index == 0 {
+                        arg.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirExpression::UnOp { arg, .. } => {
-                        if *index == 0 {
-                            arg.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::CastFromData { value, .. } => {
+                    if *index == 0 {
+                        value.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirExpression::CastFromData { value, .. } => {
-                        if *index == 0 {
-                            value.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::CastToData { value, .. } => {
+                    if *index == 0 {
+                        value.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirExpression::CastToData { value, .. } => {
-                        if *index == 0 {
-                            value.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::When {
+                    subject, clauses, ..
+                } => {
+                    if *index == 0 {
+                        subject.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        clauses.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirExpression::When {
-                        subject, clauses, ..
-                    } => {
-                        if *index == 0 {
-                            subject.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            clauses.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::Clause {
+                    pattern,
+                    then,
+                    otherwise,
+                    ..
+                } => {
+                    if *index == 0 {
+                        pattern.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 2 {
+                        otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirExpression::Clause {
-                        pattern,
-                        then,
-                        otherwise,
-                        ..
-                    } => {
-                        if *index == 0 {
-                            pattern.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            then.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 2 {
-                            otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::ListClause {
+                    then, otherwise, ..
+                } => {
+                    if *index == 0 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirExpression::ListClause {
-                        then, otherwise, ..
-                    } => {
-                        if *index == 0 {
-                            then.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::WrapClause { then, otherwise } => {
+                    if *index == 0 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirExpression::WrapClause { then, otherwise } => {
-                        if *index == 0 {
-                            then.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::TupleClause {
+                    then, otherwise, ..
+                } => {
+                    if *index == 0 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirExpression::TupleClause {
-                        then, otherwise, ..
-                    } => {
-                        if *index == 0 {
-                            then.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::Finally { pattern, then } => {
+                    if *index == 0 {
+                        pattern.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirExpression::Finally { pattern, then } => {
-                        if *index == 0 {
-                            pattern.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            then.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
+                }
+                AirTree::If {
+                    pattern,
+                    then,
+                    otherwise,
+                    ..
+                } => {
+                    if *index == 0 {
+                        pattern.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 2 {
+                        otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirExpression::If {
-                        pattern,
-                        then,
-                        otherwise,
-                        ..
-                    } => {
-                        if *index == 0 {
-                            pattern.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            then.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 2 {
-                            otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
-                    }
-                    AirExpression::Constr { args, .. } => {
-                        let item = args.get_mut(*index).unwrap_or_else(|| {
-                            panic!("Tree Path index outside tree children nodes")
-                        });
-                        item.do_find_air_tree_node(tree_path_iter)
-                    }
-                    AirExpression::RecordUpdate { record, args, .. } => {
-                        children_nodes.push(record.as_mut());
-                        children_nodes.extend(args.iter_mut());
+                }
+                AirTree::Constr { args, .. } => {
+                    let item = args
+                        .get_mut(*index)
+                        .expect("Tree Path index outside tree children nodes");
+                    item.do_find_air_tree_node(tree_path_iter)
+                }
+                AirTree::RecordUpdate { record, args, .. } => {
+                    children_nodes.push(record.as_mut());
+                    children_nodes.extend(args.iter_mut());
 
-                        let item = children_nodes.swap_remove(*index);
+                    let item = children_nodes.swap_remove(*index);
 
-                        item.do_find_air_tree_node(tree_path_iter)
+                    item.do_find_air_tree_node(tree_path_iter)
+                }
+                AirTree::Trace { msg, then, .. } => {
+                    if *index == 0 {
+                        msg.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
                     }
-                    AirExpression::Trace { msg, then, .. } => {
-                        if *index == 0 {
-                            msg.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else if *index == 1 {
-                            then.as_mut().do_find_air_tree_node(tree_path_iter)
-                        } else {
-                            panic!("Tree Path index outside tree children nodes")
-                        }
-                    }
-                    _ => unreachable!(
-                        "A tree node with no children was encountered with a longer tree path."
-                    ),
-                },
-                _ => unreachable!(),
+                }
+                _ => {
+                    panic!("A tree node with no children was encountered with a longer tree path.")
+                }
             }
         } else {
             self

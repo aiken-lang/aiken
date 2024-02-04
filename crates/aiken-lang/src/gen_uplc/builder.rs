@@ -31,7 +31,7 @@ use crate::{
 
 use super::{
     air::{Air, ExpectLevel},
-    tree::{AirExpression, AirMsg, AirStatement, AirTree, TreePath},
+    tree::{AirMsg, AirTree, TreePath},
 };
 
 pub type Variant = String;
@@ -638,13 +638,13 @@ pub fn erase_opaque_type_operations(
     air_tree: &mut AirTree,
     data_types: &IndexMap<DataTypeKey, &TypedDataType>,
 ) {
-    if let AirTree::Expression(AirExpression::Constr { tipo, args, .. }) = air_tree {
+    if let AirTree::Constr { tipo, args, .. } = air_tree {
         if check_replaceable_opaque_type(tipo, data_types) {
             let arg = args.pop().unwrap();
-            if let AirTree::Expression(AirExpression::CastToData { value, .. }) = arg {
-                *air_tree = *value;
-            } else {
-                *air_tree = arg;
+
+            match arg {
+                AirTree::CastToData { value, .. } => *air_tree = *value,
+                _ => *air_tree = arg,
             }
         }
     }
@@ -659,26 +659,15 @@ pub fn erase_opaque_type_operations(
 /// Determine whether this air_tree node introduces any shadowing over `potential_matches`
 pub fn find_introduced_variables(air_tree: &AirTree) -> Vec<String> {
     match air_tree {
-        AirTree::Expression(AirExpression::Let { name, .. }) => vec![name.clone()],
-        AirTree::Statement {
-            statement: AirStatement::TupleGuard { indices, .. },
-            ..
+        AirTree::Let { name, .. } => vec![name.clone()],
+        AirTree::TupleGuard { indices, .. } | AirTree::TupleClause { indices, .. } => {
+            indices.iter().map(|(_, name)| name.clone()).collect()
         }
-        | AirTree::Expression(AirExpression::TupleClause { indices, .. }) => {
-            indices.iter().map(|(_, name)| name).cloned().collect()
-        }
-        AirTree::Expression(AirExpression::Fn { params, .. }) => params.to_vec(),
-        AirTree::Statement {
-            statement: AirStatement::ListAccessor { names, .. },
-            ..
-        } => names.clone(),
-        AirTree::Statement {
-            statement:
-                AirStatement::ListExpose {
-                    tail,
-                    tail_head_names,
-                    ..
-                },
+        AirTree::Fn { params, .. } => params.to_vec(),
+        AirTree::ListAccessor { names, .. } => names.clone(),
+        AirTree::ListExpose {
+            tail,
+            tail_head_names,
             ..
         } => {
             let mut ret = vec![];
@@ -691,14 +680,11 @@ pub fn find_introduced_variables(air_tree: &AirTree) -> Vec<String> {
             }
             ret
         }
-        AirTree::Statement {
-            statement: AirStatement::TupleAccessor { names, .. },
-            ..
-        } => names.clone(),
-        AirTree::Statement {
-            statement: AirStatement::FieldsExpose { indices, .. },
-            ..
-        } => indices.iter().map(|(_, name, _)| name).cloned().collect(),
+        AirTree::TupleAccessor { names, .. } => names.clone(),
+        AirTree::FieldsExpose { indices, .. } => {
+            indices.iter().map(|(_, name, _)| name.clone()).collect()
+        }
+        AirTree::When { subject_name, .. } => vec![subject_name.clone()],
         _ => vec![],
     }
 }
@@ -709,8 +695,8 @@ pub fn is_recursive_function_call<'a>(
     func_key: &FunctionAccessKey,
     variant: &String,
 ) -> (bool, Option<&'a Vec<AirTree>>) {
-    if let AirTree::Expression(AirExpression::Call { func, args, .. }) = air_tree {
-        if let AirTree::Expression(AirExpression::Var {
+    if let AirTree::Call { func, args, .. } = air_tree {
+        if let AirTree::Var {
             constructor:
                 ValueConstructor {
                     variant: ValueConstructorVariant::ModuleFn { name, module, .. },
@@ -718,7 +704,7 @@ pub fn is_recursive_function_call<'a>(
                 },
             variant_name,
             ..
-        }) = func.as_ref()
+        } = func.as_ref()
         {
             if name == &func_key.function_name
                 && module == &func_key.module_name
@@ -759,7 +745,7 @@ pub fn identify_recursive_static_params(
                 // - a variable with the same name, but that was shadowed in an ancestor scope
                 // - any other type of expression
                 let param_is_different = match arg {
-                    AirTree::Expression(AirExpression::Var { name, .. }) => {
+                    AirTree::Var { name, .. } => {
                         // "shadowed in an ancestor scope" means "the definition scope is a prefix of our scope"
                         name != param
                             || if let Some(p) = shadowed_parameters.get(param) {
@@ -817,8 +803,8 @@ pub fn modify_self_calls(
     // Modify any self calls to remove recursive static parameters and append `self` as a parameter for the recursion
     body.traverse_tree_with(
         &mut |air_tree: &mut AirTree, _| {
-            if let AirTree::Expression(AirExpression::Call { func, args, .. }) = air_tree {
-                if let AirTree::Expression(AirExpression::Var {
+            if let AirTree::Call { func, args, .. } = air_tree {
+                if let AirTree::Var {
                     constructor:
                         ValueConstructor {
                             variant: ValueConstructorVariant::ModuleFn { name, module, .. },
@@ -826,7 +812,7 @@ pub fn modify_self_calls(
                         },
                     variant_name,
                     ..
-                }) = func.as_ref()
+                } = func.as_ref()
                 {
                     if name == &func_key.function_name
                         && module == &func_key.module_name
@@ -865,7 +851,7 @@ pub fn modify_cyclic_calls(
 ) {
     body.traverse_tree_with(
         &mut |air_tree: &mut AirTree, _| {
-            if let AirTree::Expression(AirExpression::Var {
+            if let AirTree::Var {
                 constructor:
                     ValueConstructor {
                         variant: ValueConstructorVariant::ModuleFn { name, module, .. },
@@ -874,7 +860,7 @@ pub fn modify_cyclic_calls(
                     },
                 variant_name,
                 ..
-            }) = air_tree
+            } = air_tree
             {
                 let tipo = tipo.clone();
                 let var_key = FunctionAccessKey {
