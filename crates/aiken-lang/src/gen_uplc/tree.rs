@@ -432,6 +432,8 @@ impl AirTree {
             args,
         }
     }
+
+    #[allow(clippy::too_many_arguments)]
     pub fn define_func(
         func_name: impl ToString,
         module_name: impl ToString,
@@ -1160,9 +1162,7 @@ impl AirTree {
             AirTree::ByteArray { bytes } => air_vec.push(Air::ByteArray {
                 bytes: bytes.clone(),
             }),
-            AirTree::CurvePoint { point } => air_vec.push(Air::CurvePoint {
-                point: point.clone(),
-            }),
+            AirTree::CurvePoint { point } => air_vec.push(Air::CurvePoint { point: *point }),
             AirTree::Bool { value } => air_vec.push(Air::Bool { value: *value }),
             AirTree::List { tipo, tail, items } => {
                 air_vec.push(Air::List {
@@ -1212,7 +1212,7 @@ impl AirTree {
             AirTree::Builtin { func, tipo, args } => {
                 air_vec.push(Air::Builtin {
                     count: args.len(),
-                    func: func.clone(),
+                    func: *func,
                     tipo: tipo.clone(),
                 });
 
@@ -1613,15 +1613,7 @@ impl AirTree {
                 apply_with_func_last,
             ),
 
-            AirTree::TupleClause {
-                subject_tipo,
-                indices,
-                predefined_indices,
-                subject_name,
-                complex_clause,
-                then,
-                otherwise,
-            } => {
+            AirTree::TupleClause { otherwise, .. } => {
                 tuple_then_index = Some(index_count.next_number());
                 otherwise.do_traverse_tree_with(
                     tree_path,
@@ -1670,9 +1662,7 @@ impl AirTree {
                     apply_with_func_last,
                 );
             }
-            AirTree::TupleClause {
-                then, otherwise, ..
-            } => {
+            AirTree::TupleClause { then, .. } => {
                 let Some(index) = tuple_then_index else {
                     unreachable!()
                 };
