@@ -889,7 +889,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let expr = AirTree::let_assignment(name, value, expect);
 
-                AirTree::assert_bool(true, expr, props.msg_func.clone())
+                AirTree::assert_bool(true, expr, props.msg_func.clone()).hoist_over(then)
             }
 
             Pattern::Var { name, .. } => {
@@ -1095,7 +1095,7 @@ impl<'a> CodeGenerator<'a> {
                 if tipo.is_bool() {
                     assert!(props.kind.is_expect());
 
-                    AirTree::assert_bool(name == "True", value, props.msg_func)
+                    AirTree::assert_bool(name == "True", value, props.msg_func).hoist_over(then)
                 } else if tipo.is_void() {
                     AirTree::let_assignment("_", value, then)
                 } else {
