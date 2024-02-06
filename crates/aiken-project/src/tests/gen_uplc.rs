@@ -3592,7 +3592,9 @@ fn generic_validator_type_test() {
                                                                     )
                                                                     .delayed_if_then_else(
                                                                         Term::unit(),
-                                                                        Term::Error,
+                                                                        Term::Error.delayed_trace(
+                                                                            Term::var("param_msg"),
+                                                                        ),
                                                                     ),
                                                                 Term::Error.delayed_trace(
                                                                     Term::var("param_msg"),
@@ -3656,7 +3658,9 @@ fn generic_validator_type_test() {
                                                             )
                                                             .delayed_if_then_else(
                                                                 Term::unit(),
-                                                                Term::Error,
+                                                                Term::Error.delayed_trace(
+                                                                    Term::var("param_msg"),
+                                                                ),
                                                             ),
                                                         Term::Error
                                                             .delayed_trace(Term::var("param_msg")),
