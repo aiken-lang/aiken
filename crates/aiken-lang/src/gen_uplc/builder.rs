@@ -1270,7 +1270,7 @@ pub fn convert_data_to_type_debug(
                 Term::equals_integer()
                     .apply(Term::integer(0.into()))
                     .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("__val"))))
-                    .delayed_if_then_else(Term::unit(), Term::Error),
+                    .delayed_if_then_else(Term::unit(), error_term.clone()),
                 error_term.clone(),
                 error_term.clone(),
                 error_term.clone(),
