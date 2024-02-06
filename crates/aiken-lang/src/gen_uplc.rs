@@ -2777,10 +2777,14 @@ impl<'a> CodeGenerator<'a> {
             .iter()
             .enumerate()
             .map(|(index, arg)| {
-                let arg_name = arg.arg_name.get_variable_name().unwrap_or("_").to_string();
+                let arg_name = arg
+                    .arg_name
+                    .get_variable_name()
+                    .map(|arg| arg.to_string())
+                    .unwrap_or_else(|| format!("__arg_{}", index));
                 let arg_span = arg.location;
 
-                if !(has_context && index == arguments.len() - 1) && &arg_name != "_" {
+                if !(has_context && index == arguments.len() - 1) {
                     let param = AirTree::local_var(&arg_name, data());
 
                     let actual_type = convert_opaque_type(&arg.tipo, &self.data_types);
