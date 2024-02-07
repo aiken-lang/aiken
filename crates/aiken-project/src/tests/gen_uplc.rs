@@ -3194,6 +3194,7 @@ fn when_tuple_deconstruction() {
                     .apply(Term::Error.force())
                     .delayed_trace(Term::string("Validator returned false")),
             )
+            .lambda("ctx")
             .lambda("_")
             .apply(
                 Term::var("expect_RedSpend")
@@ -3260,6 +3261,7 @@ fn when_tuple_deconstruction() {
             )
             .lambda("red")
             .apply(Term::var("red"))
+            .lambda("red")
             .lambda("_")
             .apply(
                 Term::var("expect_Datum")
@@ -3364,8 +3366,6 @@ fn when_tuple_deconstruction() {
             )
             .lambda("dat")
             .apply(Term::var("dat"))
-            .lambda("ctx")
-            .lambda("red")
             .lambda("dat")
             .lambda(CONSTR_FIELDS_EXPOSER)
             .apply(
@@ -3525,6 +3525,7 @@ fn generic_validator_type_test() {
                     .apply(Term::Error.force())
                     .delayed_trace(Term::string("Validator returned false")),
             )
+            .lambda("_ctx")
             .lambda("_")
             .apply(
                 Term::var("__expect_A")
@@ -3695,7 +3696,6 @@ fn generic_validator_type_test() {
             )
             .lambda("r")
             .apply(Term::var("r"))
-            .lambda("_ctx")
             .lambda("r")
             .lambda("r:A<B>")
             .apply(Term::string("r: A<B>"))
@@ -5721,6 +5721,8 @@ fn opaque_value_in_datum() {
                     .apply(Term::Error.force())
                     .delayed_trace(Term::string("Validator returned false")),
             )
+            .lambda("ctx")
+            .lambda("red")
             .lambda("_")
             .apply(
                 Term::var("expect_Dat")
@@ -5802,8 +5804,6 @@ fn opaque_value_in_datum() {
                     .apply(Term::var("dat"))
                     .apply(Term::var("dat:Dat")),
             )
-            .lambda("ctx")
-            .lambda("red")
             .lambda("dat")
             .constr_fields_exposer()
             .lambda("expect[(_,amount)]=val.inner.inner")
