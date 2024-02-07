@@ -5,14 +5,15 @@ use super::{
     schema::{Annotated, Schema},
 };
 use crate::module::{CheckedModule, CheckedModules};
-use std::rc::Rc;
-
 use aiken_lang::{
-    ast::{TypedArg, TypedFunction, TypedValidator},
+    ast::{Annotation, TypedArg, TypedFunction, TypedValidator},
     gen_uplc::CodeGenerator,
+    tipo::Type,
 };
 use miette::NamedSource;
 use serde;
+use std::borrow::Borrow;
+use std::rc::Rc;
 use uplc::{
     ast::{Constant, DeBruijn, Program, Term},
     PlutusData,
@@ -96,19 +97,23 @@ impl Validator {
         let parameters = params
             .iter()
             .map(|param| {
-                Annotated::from_type(modules.into(), &param.tipo, &mut definitions)
-                    .map(|schema| Parameter {
-                        title: Some(param.arg_name.get_label()),
-                        schema,
-                    })
-                    .map_err(|error| Error::Schema {
-                        error,
-                        location: param.location,
-                        source_code: NamedSource::new(
-                            module.input_path.display().to_string(),
-                            module.code.clone(),
-                        ),
-                    })
+                Annotated::from_type(
+                    modules.into(),
+                    tipo_or_annotation(module, param),
+                    &mut definitions,
+                )
+                .map(|schema| Parameter {
+                    title: Some(param.arg_name.get_label()),
+                    schema,
+                })
+                .map_err(|error| Error::Schema {
+                    error,
+                    location: param.location,
+                    source_code: NamedSource::new(
+                        module.input_path.display().to_string(),
+                        module.code.clone(),
+                    ),
+                })
             })
             .collect::<Result<_, _>>()?;
 
@@ -118,45 +123,75 @@ impl Validator {
             parameters,
             datum: datum
                 .map(|datum| {
-                    Annotated::from_type(modules.into(), &datum.tipo, &mut definitions).map_err(
-                        |error| Error::Schema {
-                            error,
-                            location: datum.location,
-                            source_code: NamedSource::new(
-                                module.input_path.display().to_string(),
-                                module.code.clone(),
-                            ),
-                        },
+                    Annotated::from_type(
+                        modules.into(),
+                        tipo_or_annotation(module, datum),
+                        &mut definitions,
                     )
+                    .map_err(|error| Error::Schema {
+                        error,
+                        location: datum.location,
+                        source_code: NamedSource::new(
+                            module.input_path.display().to_string(),
+                            module.code.clone(),
+                        ),
+                    })
                 })
                 .transpose()?
                 .map(|schema| Parameter {
                     title: datum.map(|datum| datum.arg_name.get_label()),
                     schema,
                 }),
-            redeemer: Annotated::from_type(modules.into(), &redeemer.tipo, &mut definitions)
-                .map_err(|error| Error::Schema {
-                    error,
-                    location: redeemer.location,
-                    source_code: NamedSource::new(
-                        module.input_path.display().to_string(),
-                        module.code.clone(),
+            redeemer: Annotated::from_type(
+                modules.into(),
+                tipo_or_annotation(module, redeemer),
+                &mut definitions,
+            )
+            .map_err(|error| Error::Schema {
+                error,
+                location: redeemer.location,
+                source_code: NamedSource::new(
+                    module.input_path.display().to_string(),
+                    module.code.clone(),
+                ),
+            })
+            .map(|schema| Parameter {
+                title: Some(redeemer.arg_name.get_label()),
+                schema: match datum {
+                    Some(..) if is_multi_validator => Annotated::as_wrapped_redeemer(
+                        &mut definitions,
+                        schema,
+                        redeemer.tipo.clone(),
                     ),
-                })
-                .map(|schema| Parameter {
-                    title: Some(redeemer.arg_name.get_label()),
-                    schema: match datum {
-                        Some(..) if is_multi_validator => Annotated::as_wrapped_redeemer(
-                            &mut definitions,
-                            schema,
-                            redeemer.tipo.clone(),
-                        ),
-                        _ => schema,
-                    },
-                })?,
+                    _ => schema,
+                },
+            })?,
             program: program.clone(),
             definitions,
         })
+    }
+}
+
+fn tipo_or_annotation<'a>(module: &'a CheckedModule, arg: &'a TypedArg) -> &'a Type {
+    match *arg.tipo.borrow() {
+        Type::App {
+            module: ref module_name,
+            name: ref type_name,
+            ..
+        } if module_name.is_empty() && &type_name[..] == "Data" => match arg.annotation {
+            Some(Annotation::Constructor { ref arguments, .. }) if !arguments.is_empty() => module
+                .ast
+                .type_info
+                .annotations
+                .get(
+                    arguments
+                        .first()
+                        .expect("guard ensures at least one element"),
+                )
+                .unwrap_or(&arg.tipo),
+            _ => &arg.tipo,
+        },
+        _ => &arg.tipo,
     }
 }
 
@@ -538,6 +573,23 @@ mod tests {
               fn recursive_generic_types(datum: Foo, redeemer: LinkedList<Int>, ctx: Void) {
                 True
               }
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn annotated_data() {
+        assert_validator!(
+            r#"
+            pub type Foo {
+                foo: Int
+            }
+
+            validator {
+                fn annotated_data(datum: Data<Foo>, redeemer: Data, ctx: Void) {
+                    True
+                }
             }
             "#
         );

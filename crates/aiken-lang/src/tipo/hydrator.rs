@@ -123,7 +123,7 @@ impl Hydrator {
         environment: &mut Environment,
         unbounds: &mut Vec<&'a Span>,
     ) -> Result<Rc<Type>, Error> {
-        match annotation {
+        let return_type = match annotation {
             Annotation::Constructor {
                 location,
                 module,
@@ -153,8 +153,16 @@ impl Hydrator {
                     environment.increment_usage(name);
                 }
 
-                // Ensure that the correct number of arguments have been given to the constructor
-                if args.len() != parameters.len() {
+                // Ensure that the correct number of arguments have been given to the constructor.
+                //
+                // NOTE:
+                // We do consider a special case for 'Data', where we allow them to optionally
+                // carry a phantom type. That type has no effect whatsoever on the semantic (since
+                // anything can be cast to `Data` anyway) but it does provide some nice context for
+                // blueprint schema generation.
+                if args.len() != parameters.len() && !return_type.is_data()
+                    || args.len() > 1 && return_type.is_data()
+                {
                     return Err(Error::IncorrectTypeArity {
                         location: *location,
                         name: name.to_string(),
@@ -240,6 +248,8 @@ impl Hydrator {
 
                 Ok(tuple(typed_elems))
             }
-        }
+        }?;
+
+        Ok(environment.annotate(return_type, annotation))
     }
 }

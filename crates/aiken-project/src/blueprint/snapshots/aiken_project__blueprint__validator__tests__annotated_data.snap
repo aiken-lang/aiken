@@ -1,0 +1,46 @@
+---
+source: crates/aiken-project/src/blueprint/validator.rs
+description: "Code:\n\npub type Foo {\n    foo: Int\n}\n\nvalidator {\n    fn annotated_data(datum: Data<Foo>, redeemer: Data, ctx: Void) {\n        True\n    }\n}\n"
+---
+{
+  "title": "test_module.annotated_data",
+  "datum": {
+    "title": "datum",
+    "schema": {
+      "$ref": "#/definitions/test_module~1Foo"
+    }
+  },
+  "redeemer": {
+    "title": "redeemer",
+    "schema": {
+      "$ref": "#/definitions/Data"
+    }
+  },
+  "compiledCode": "5833010000323222253330044a22930a99802a491856616c696461746f722072657475726e65642066616c736500136565734ae701",
+  "hash": "52a21f2b4f282074cb6c5aefef20d18c25f3657ca348c73875810c37",
+  "definitions": {
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "test_module/Foo": {
+      "title": "Foo",
+      "anyOf": [
+        {
+          "title": "Foo",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "foo",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

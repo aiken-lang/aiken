@@ -684,7 +684,7 @@ impl UnqualifiedImport {
 }
 
 // TypeAst
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Annotation {
     Constructor {
         location: Span,
@@ -1411,7 +1411,7 @@ impl Display for TraceLevel {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Span {
     pub start: usize,
     pub end: usize,

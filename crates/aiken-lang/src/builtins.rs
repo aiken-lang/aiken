@@ -38,6 +38,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         types_constructors: HashMap::new(),
         values: HashMap::new(),
         accessors: HashMap::new(),
+        annotations: HashMap::new(),
     };
 
     // Int
@@ -423,6 +424,7 @@ pub fn plutus(id_gen: &IdGenerator) -> TypeInfo {
         types_constructors: HashMap::new(),
         values: HashMap::new(),
         accessors: HashMap::new(),
+        annotations: HashMap::new(),
     };
 
     for builtin in DefaultFunction::iter() {
