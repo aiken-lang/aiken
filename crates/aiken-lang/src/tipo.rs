@@ -1,6 +1,6 @@
 use self::{environment::Environment, pretty::Printer};
 use crate::{
-    ast::{Constant, DefinitionLocation, ModuleKind, Span},
+    ast::{Annotation, Constant, DefinitionLocation, ModuleKind, Span},
     builtins::{G1_ELEMENT, G2_ELEMENT, MILLER_LOOP_RESULT},
     tipo::fields::FieldMap,
 };
@@ -755,6 +755,7 @@ pub struct TypeInfo {
     pub types_constructors: HashMap<String, Vec<String>>,
     pub values: HashMap<String, ValueConstructor>,
     pub accessors: HashMap<String, AccessorsMap>,
+    pub annotations: HashMap<Annotation, Rc<Type>>,
 }
 
 #[derive(Debug, Clone)]

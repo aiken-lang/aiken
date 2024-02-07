@@ -126,6 +126,7 @@ impl UntypedModule {
             module_types_constructors: types_constructors,
             module_values: values,
             accessors,
+            annotations,
             ..
         } = environment;
 
@@ -141,6 +142,7 @@ impl UntypedModule {
                 types_constructors,
                 values,
                 accessors,
+                annotations,
                 kind,
                 package: package.to_string(),
             },

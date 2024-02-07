@@ -72,6 +72,9 @@ pub struct Environment<'a> {
 
     pub unused_modules: HashMap<String, Span>,
 
+    /// A mapping from known annotations to their resolved type.
+    pub annotations: HashMap<Annotation, Rc<Type>>,
+
     /// Warnings
     pub warnings: &'a mut Vec<Warning>,
 }
@@ -86,6 +89,12 @@ impl<'a> Environment<'a> {
         self.handle_unused(unused);
 
         self.scope = data.local_values;
+    }
+
+    pub fn annotate(&mut self, return_type: Rc<Type>, annotation: &Annotation) -> Rc<Type> {
+        self.annotations
+            .insert(annotation.clone(), return_type.clone());
+        return_type
     }
 
     /// Converts entities with a usage count of 0 to warnings
@@ -657,6 +666,7 @@ impl<'a> Environment<'a> {
             imported_types: HashSet::new(),
             current_module,
             current_kind,
+            annotations: HashMap::new(),
             warnings,
             entity_usages: vec![HashMap::new()],
         }
