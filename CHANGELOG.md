@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.0.25-alpha - 
+
+### Added
+
+- **aiken-lang**: Data now has a generic argument that can be used to specify the blueprint type. @KtorZ 
+
+### Fixed
+
+
+### Changed
+
+- **aiken-lang**: Discards will now also type check the validator arguments instead of completely ignoring them. @Microproofs
+
 ## v1.0.24-alpha - 2024-01-31
 
 ### Added
