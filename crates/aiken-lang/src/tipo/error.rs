@@ -378,17 +378,30 @@ From there, you can define 'increment', a function that takes a single argument 
     )]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#generics"))]
     #[diagnostic(code("arity::generic"))]
-    #[diagnostic(help(r#"Data-types that are generic in one or more types must be written with all their generic types in type annotations. Generic types must be indicated between chevrons '{chevron_left}' and '{chevron_right}'.
+    #[diagnostic(help(
+        "{}",
+        if *expected == 0 {
+            format!(
+                r#"Data-types without generic parameters should be written without chevrons.
+Perhaps, try the following:
 
+╰─▶  {suggestion}"#,
+                suggestion = suggest_generic(name, *expected)
+            )
+        } else {
+            format!(
+                r#"Data-types that are generic in one or more types must be written with all their generic types in type annotations. Generic types must be indicated between chevrons '{chevron_left}' and '{chevron_right}'.
 Perhaps, try the following:
 
 ╰─▶  {suggestion}"#
-        , chevron_left = "<".if_supports_color(Stdout, |s| s.yellow())
-        , chevron_right = ">".if_supports_color(Stdout, |s| s.yellow())
-        , suggestion = suggest_generic(name, *expected)
+                , chevron_left = "<".if_supports_color(Stdout, |s| s.yellow())
+                , chevron_right = ">".if_supports_color(Stdout, |s| s.yellow())
+                , suggestion = suggest_generic(name, *expected)
+            )
+        }
     ))]
     IncorrectTypeArity {
-        #[label]
+        #[label("incorrect generic arity")]
         location: Span,
         name: String,
         expected: usize,
@@ -1098,6 +1111,10 @@ fn suggest_pattern(
 }
 
 fn suggest_generic(name: &String, expected: usize) -> String {
+    if expected == 0 {
+        return name.to_doc().to_pretty_string(70);
+    }
+
     let mut args = vec![];
     for i in 0..expected {
         args.push(Annotation::Var {
