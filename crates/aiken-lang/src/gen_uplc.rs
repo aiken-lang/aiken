@@ -2751,75 +2751,78 @@ impl<'a> CodeGenerator<'a> {
     ) -> AirTree {
         let mut arg_names = vec![];
 
-        let checked_args =
-            arguments
-                .iter()
-                .enumerate()
-                .rev()
-                .fold(body, |inner_then, (index, arg)| {
+        arguments
+            .iter()
+            .rev()
+            .with_position()
+            .fold(body, |inner_then, arg_position| match arg_position {
+                itertools::Position::First(arg) if has_context => {
+                    let arg_name = arg.arg_name.get_variable_name().unwrap_or("_").to_string();
+
+                    AirTree::anon_func(vec![arg_name], inner_then)
+                }
+                itertools::Position::First(arg)
+                | itertools::Position::Middle(arg)
+                | itertools::Position::Last(arg) => {
                     let arg_name = arg.arg_name.get_variable_name().unwrap_or("_").to_string();
                     let arg_span = arg.location;
 
                     arg_names.push(arg_name.clone());
 
-                    if !(has_context && index == arguments.len() - 1) && &arg_name != "_" {
-                        let param = AirTree::local_var(&arg_name, data());
+                    let param = AirTree::local_var(&arg_name, data());
 
-                        let actual_type = convert_opaque_type(&arg.tipo, &self.data_types);
+                    let actual_type = convert_opaque_type(&arg.tipo, &self.data_types);
 
-                        let msg_func = match self.tracing {
-                            TraceLevel::Silent => None,
-                            TraceLevel::Compact | TraceLevel::Verbose => {
-                                let msg = match self.tracing {
-                                    TraceLevel::Silent => {
-                                        unreachable!("excluded from pattern guards")
-                                    }
-                                    TraceLevel::Compact => lines
-                                        .line_and_column_number(arg_span.start)
-                                        .expect("Out of bounds span")
-                                        .to_string(),
-                                    TraceLevel::Verbose => src_code
-                                        .get(arg_span.start..arg_span.end)
-                                        .expect("Out of bounds span")
-                                        .to_string(),
-                                };
+                    let msg_func = match self.tracing {
+                        TraceLevel::Silent => None,
+                        TraceLevel::Compact | TraceLevel::Verbose => {
+                            let msg = match self.tracing {
+                                TraceLevel::Silent => {
+                                    unreachable!("excluded from pattern guards")
+                                }
+                                TraceLevel::Compact => lines
+                                    .line_and_column_number(arg_span.start)
+                                    .expect("Out of bounds span")
+                                    .to_string(),
+                                TraceLevel::Verbose => src_code
+                                    .get(arg_span.start..arg_span.end)
+                                    .expect("Out of bounds span")
+                                    .to_string(),
+                            };
 
-                                let msg_func_name = msg.split_whitespace().join("");
+                            let msg_func_name = msg.split_whitespace().join("");
 
-                                self.special_functions.insert_new_function(
-                                    msg_func_name.to_string(),
-                                    Term::string(msg),
-                                    string(),
-                                );
+                            self.special_functions.insert_new_function(
+                                msg_func_name.to_string(),
+                                Term::string(msg),
+                                string(),
+                            );
 
-                                Some(self.special_functions.use_function_msg(msg_func_name))
-                            }
-                        };
+                            Some(self.special_functions.use_function_msg(msg_func_name))
+                        }
+                    };
 
-                        self.assignment(
-                            &Pattern::Var {
-                                location: Span::empty(),
-                                name: arg_name.to_string(),
-                            },
-                            param,
-                            inner_then,
-                            &actual_type,
-                            AssignmentProperties {
-                                value_type: data(),
-                                kind: AssignmentKind::Expect,
-                                remove_unused: false,
-                                full_check: true,
-                                msg_func,
-                            },
-                        )
-                    } else {
-                        inner_then
-                    }
-                });
+                    let inner_then = self.assignment(
+                        &Pattern::Var {
+                            location: Span::empty(),
+                            name: arg_name.to_string(),
+                        },
+                        param,
+                        inner_then,
+                        &actual_type,
+                        AssignmentProperties {
+                            value_type: data(),
+                            kind: AssignmentKind::Expect,
+                            remove_unused: false,
+                            full_check: true,
+                            msg_func,
+                        },
+                    );
 
-        arg_names.reverse();
-
-        AirTree::anon_func(arg_names, checked_args)
+                    AirTree::anon_func(vec![arg_name], inner_then)
+                }
+                itertools::Position::Only(_) => unreachable!(),
+            })
     }
 
     fn hoist_functions_to_validator(&mut self, mut air_tree: AirTree) -> AirTree {
