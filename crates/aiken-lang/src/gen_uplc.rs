@@ -1800,6 +1800,11 @@ impl<'a> CodeGenerator<'a> {
                     let (clause_cond, clause_assign) =
                         self.clause_pattern(&clause.pattern, subject_tipo, props, clause_then);
 
+                    if props.complex_clause {
+                        println!("COMPLEX CLAUSE");
+                        println!("{:#?}", clause.pattern);
+                    }
+
                     let complex_clause = props.complex_clause;
 
                     let mut next_clause_props = ClauseProperties::init(
@@ -1812,6 +1817,7 @@ impl<'a> CodeGenerator<'a> {
                         &clause.pattern,
                         Pattern::Var { .. } | Pattern::Discard { .. }
                     ) {
+                        println!("WRAP CLAUSE 5");
                         AirTree::wrap_clause(
                             clause_assign,
                             self.handle_each_clause(
@@ -1887,6 +1893,7 @@ impl<'a> CodeGenerator<'a> {
                     ));
 
                     let Pattern::List { elements, tail, .. } = clause_pattern else {
+                        println!("GOT HERE WRAP CLAUSE");
                         let mut next_clause_props = ClauseProperties {
                             clause_var_name: props.clause_var_name.clone(),
                             complex_clause: false,
@@ -1902,6 +1909,11 @@ impl<'a> CodeGenerator<'a> {
 
                         let (_, clause_assign) =
                             self.clause_pattern(&clause.pattern, subject_tipo, props, clause_then);
+
+                        if props.complex_clause {
+                            println!("COMPLEX CLAUSE");
+                            println!("{:#?}", clause.pattern);
+                        }
 
                         return AirTree::wrap_clause(
                             clause_assign,
@@ -1997,6 +2009,11 @@ impl<'a> CodeGenerator<'a> {
                     let (_, clause_assign) =
                         self.clause_pattern(&clause.pattern, subject_tipo, props, clause_then);
 
+                    if props.complex_clause {
+                        println!("COMPLEX CLAUSE");
+                        println!("{:#?}", clause.pattern);
+                    }
+
                     let complex_clause = props.complex_clause;
 
                     if current_checked_index < elements_len.try_into().unwrap()
@@ -2017,6 +2034,7 @@ impl<'a> CodeGenerator<'a> {
                             complex_clause,
                         )
                     } else {
+                        println!("WRAP CLAUSE 2");
                         AirTree::wrap_clause(
                             clause_assign,
                             self.handle_each_clause(
@@ -2036,6 +2054,11 @@ impl<'a> CodeGenerator<'a> {
 
                     let (_, pattern_assigns) =
                         self.clause_pattern(&clause.pattern, subject_tipo, props, clause_then);
+
+                    if props.complex_clause {
+                        println!("COMPLEX CLAUSE");
+                        println!("{:#?}", clause.pattern);
+                    }
 
                     let ClauseProperties {
                         specific_clause:
@@ -2065,6 +2088,7 @@ impl<'a> CodeGenerator<'a> {
                     };
 
                     if new_defined_indices.is_empty() {
+                        println!("WRAP CLAUSE");
                         AirTree::wrap_clause(
                             pattern_assigns,
                             self.handle_each_clause(
@@ -2104,6 +2128,11 @@ impl<'a> CodeGenerator<'a> {
 
             let (condition, assignments) =
                 self.clause_pattern(&final_clause.pattern, subject_tipo, props, clause_then);
+
+            if props.complex_clause {
+                println!("COMPLEX CLAUSE");
+                println!("{:#?}", final_clause.pattern);
+            }
 
             AirTree::finally(condition, assignments)
         }
@@ -2594,6 +2623,7 @@ impl<'a> CodeGenerator<'a> {
                 ),
                 Pattern::Discard { .. } => then,
                 Pattern::List { elements, tail, .. } => {
+                    println!("GOT HERE NESTED");
                     props.complex_clause = true;
                     let tail_name_base = "__tail".to_string();
 
@@ -2692,6 +2722,7 @@ impl<'a> CodeGenerator<'a> {
                 Pattern::Constructor {
                     name: constr_name, ..
                 } => {
+                    println!("GOT HERE NESTED");
                     if subject_tipo.is_bool() {
                         props.complex_clause = true;
                         AirTree::clause_guard(
@@ -2721,6 +2752,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
                 Pattern::Tuple { .. } => {
+                    println!("GOT HERE NESTED");
                     let (_, assign) = self.clause_pattern(pattern, subject_tipo, props, then);
 
                     let defined_indices = match &props.specific_clause {
