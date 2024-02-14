@@ -1962,8 +1962,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     ) -> Result<TypedExpr, Error> {
         // if there is only one clause we want to present a warning
         // that suggests that a `let` binding should be used instead.
-        if clauses.len() == 1 {
-            self.environment.warnings.push(Warning::SingleWhenClause {
+        let mut sample = None;
+
+        if clauses.len() == 1 && clauses[0].patterns.len() == 1 {
+            sample = Some(Warning::SingleWhenClause {
                 location: clauses[0].patterns[0].location(),
                 sample: UntypedExpr::Assignment {
                     location: Span::empty(),
@@ -1995,6 +1997,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         }
 
         self.check_when_exhaustiveness(&typed_clauses, location)?;
+
+        if let Some(sample) = sample {
+            self.environment.warnings.push(sample);
+        }
 
         Ok(TypedExpr::When {
             location,
