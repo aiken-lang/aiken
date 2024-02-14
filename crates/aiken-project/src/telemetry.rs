@@ -334,7 +334,7 @@ fn fmt_test(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize, styled: bool) 
     }
 }
 
-fn fmt_test_summary(tests: &Vec<&EvalInfo>, styled: bool) -> String {
+fn fmt_test_summary(tests: &[&EvalInfo], styled: bool) -> String {
     let (n_passed, n_failed) = tests
         .iter()
         .fold((0, 0), |(n_passed, n_failed), test_info| {

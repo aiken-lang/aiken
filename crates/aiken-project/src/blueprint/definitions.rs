@@ -168,7 +168,7 @@ impl Reference {
         }
     }
 
-    fn from_types(args: &Vec<Rc<Type>>, type_parameters: &HashMap<u64, Rc<Type>>) -> Self {
+    fn from_types(args: &[Rc<Type>], type_parameters: &HashMap<u64, Rc<Type>>) -> Self {
         if args.is_empty() {
             Reference::new("")
         } else {

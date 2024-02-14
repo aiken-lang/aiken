@@ -1094,7 +1094,7 @@ fn suggest_neighbor<'a>(
 fn suggest_pattern(
     expected: usize,
     name: &str,
-    given: &Vec<CallArg<UntypedPattern>>,
+    given: &[CallArg<UntypedPattern>],
     module: &Option<String>,
     is_record: bool,
 ) -> Option<String> {
