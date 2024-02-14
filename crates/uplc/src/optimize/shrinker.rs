@@ -1,7 +1,12 @@
-use std::{cmp::Ordering, iter::Peekable, rc::Rc, vec};
+use std::{
+    cmp::Ordering,
+    iter::{self, Peekable},
+    rc::Rc,
+    vec,
+};
 
 use indexmap::IndexMap;
-use itertools::Itertools;
+use itertools::{EitherOrBoth, Itertools};
 
 use pallas::ledger::primitives::babbage::{BigInt, PlutusData};
 
@@ -83,53 +88,56 @@ impl Default for IdGen {
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum BuiltinArgs {
-    TwoArgs((usize, Term<Name>), (usize, Term<Name>)),
-    ThreeArgs(
-        (usize, Term<Name>),
-        (usize, Term<Name>),
-        (usize, Term<Name>),
-    ),
-    TwoArgsAnyOrder((usize, Term<Name>), (usize, Term<Name>)),
+    TwoArgs {
+        fst: (usize, Term<Name>),
+        snd: Option<(usize, Term<Name>)>,
+    },
+    ThreeArgs {
+        fst: (usize, Term<Name>),
+        snd: Option<(usize, Term<Name>)>,
+        thd: Option<(usize, Term<Name>)>,
+    },
+    TwoArgsAnyOrder {
+        fst: (usize, Term<Name>),
+        snd: Option<(usize, Term<Name>)>,
+    },
 }
 
 impl BuiltinArgs {
     fn args_from_arg_stack(stack: Vec<(usize, Term<Name>)>, is_order_agnostic: bool) -> Self {
-        let mut ordered_arg_stack = stack.into_iter().rev().sorted_by(|(_, arg1), (_, arg2)| {
-            // sort by constant first if the builtin is order agnostic
-            if is_order_agnostic {
-                if matches!(arg1, Term::Constant(_)) && matches!(arg2, Term::Constant(_)) {
-                    std::cmp::Ordering::Equal
+        let mut ordered_arg_stack = if is_order_agnostic {
+            stack.into_iter().rev().sorted_by(|(_, arg1), (_, arg2)| {
+                // sort by constant first if the builtin is order agnostic
+                if matches!(arg1, Term::Constant(_)) == matches!(arg2, Term::Constant(_)) {
+                    Ordering::Equal
                 } else if matches!(arg1, Term::Constant(_)) {
-                    std::cmp::Ordering::Less
-                } else if matches!(arg2, Term::Constant(_)) {
-                    std::cmp::Ordering::Greater
+                    Ordering::Less
                 } else {
-                    std::cmp::Ordering::Equal
+                    Ordering::Greater
                 }
-            } else {
-                std::cmp::Ordering::Equal
-            }
-        });
+            })
+        } else {
+            stack.into_iter()
+        };
 
         if ordered_arg_stack.len() == 2 && is_order_agnostic {
             // This is the special case where the order of args is irrelevant to the builtin
             // An example is addInteger or multiplyInteger
-            BuiltinArgs::TwoArgsAnyOrder(
-                ordered_arg_stack.next().unwrap(),
-                ordered_arg_stack.next().unwrap(),
-            )
+            BuiltinArgs::TwoArgsAnyOrder {
+                fst: ordered_arg_stack.next().unwrap(),
+                snd: ordered_arg_stack.next(),
+            }
         } else if ordered_arg_stack.len() == 2 {
-            BuiltinArgs::TwoArgs(
-                ordered_arg_stack.next().unwrap(),
-                ordered_arg_stack.next().unwrap(),
-            )
+            BuiltinArgs::TwoArgs {
+                fst: ordered_arg_stack.next().unwrap(),
+                snd: ordered_arg_stack.next(),
+            }
         } else {
-            // println!("ARG STACK FOR FUNC {:#?}, {:#?}", ordered_arg_stack, func);
-            BuiltinArgs::ThreeArgs(
-                ordered_arg_stack.next().unwrap(),
-                ordered_arg_stack.next().unwrap(),
-                ordered_arg_stack.next().unwrap(),
-            )
+            BuiltinArgs::ThreeArgs {
+                fst: ordered_arg_stack.next().unwrap(),
+                snd: ordered_arg_stack.next(),
+                thd: ordered_arg_stack.next(),
+            }
         }
     }
 
