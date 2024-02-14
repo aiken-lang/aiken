@@ -1,6 +1,9 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/aiken-lang/branding/main/assets/logo-light.png?sanitize=true#gh-dark-mode-only" alt="Aiken" height="150" />
-  <img src="https://raw.githubusercontent.com/aiken-lang/branding/main/assets/logo-dark.png?sanitize=true#gh-light-mode-only" alt="Aiken" height="150" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/aiken-lang/branding/main/assets/logo-light.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/aiken-lang/branding/main/assets/logo-dark.png">
+    <img alt="Aiken" src="https://raw.githubusercontent.com/aiken-lang/branding/main/assets/logo-dark.png" height="150">
+  </picture>
   <hr />
     <h2 align="center" style="border-bottom: none">A modern smart contract platform for Cardano</h2>
 
