@@ -2568,10 +2568,6 @@ impl<'a> CodeGenerator<'a> {
             let (_, assign) = self.clause_pattern(pattern, subject_tipo, props, then);
             assign
         } else {
-            assert!(
-                !subject_tipo.is_void(),
-                "WHY ARE YOU PATTERN MATCHING ON A NESTED VOID???"
-            );
             match pattern {
                 Pattern::Int { value, .. } => {
                     props.complex_clause = true;
@@ -2698,6 +2694,13 @@ impl<'a> CodeGenerator<'a> {
                             &props.original_subject_name,
                             AirTree::bool(constr_name == "True"),
                             bool(),
+                            then,
+                        )
+                    } else if subject_tipo.is_void() {
+                        AirTree::clause_guard(
+                            &props.original_subject_name,
+                            AirTree::void(),
+                            void(),
                             then,
                         )
                     } else {
@@ -4791,6 +4794,8 @@ impl<'a> CodeGenerator<'a> {
                             .force();
                     }
                     Some(term)
+                } else if tipo.is_void() {
+                    Some(then.lambda("_").apply(Term::var(subject_name)))
                 } else {
                     let condition = if tipo.is_int() {
                         Term::equals_integer()
