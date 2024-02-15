@@ -6,7 +6,7 @@ use std::{
 };
 
 use indexmap::IndexMap;
-use itertools::{EitherOrBoth, Itertools};
+use itertools::Itertools;
 
 use pallas::ledger::primitives::babbage::{BigInt, PlutusData};
 
@@ -15,13 +15,13 @@ use crate::{
     builtins::DefaultFunction,
 };
 
-#[derive(Eq, Hash, PartialEq, Clone, Debug)]
+#[derive(Eq, Hash, PartialEq, Clone, Debug, PartialOrd)]
 pub enum ScopePath {
     FUNC,
     ARG,
 }
 
-#[derive(Eq, Hash, PartialEq, Clone, Debug)]
+#[derive(Eq, Hash, PartialEq, Clone, Debug, Default, PartialOrd)]
 pub struct Scope {
     scope: Vec<ScopePath>,
 }
@@ -55,16 +55,19 @@ impl Scope {
         }
     }
 
+    pub fn is_common_ancestor(&self, other: &Scope) -> bool {
+        self == &self.common_ancestor(other)
+    }
+
     pub fn len(&self) -> usize {
         self.scope.len()
     }
-}
 
-impl Default for Scope {
-    fn default() -> Self {
-        Self::new()
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
+
 pub struct IdGen {
     id: usize,
 }
@@ -83,524 +86,6 @@ impl IdGen {
 impl Default for IdGen {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub enum BuiltinArgs {
-    TwoArgs {
-        fst: (usize, Term<Name>),
-        snd: Option<(usize, Term<Name>)>,
-    },
-    ThreeArgs {
-        fst: (usize, Term<Name>),
-        snd: Option<(usize, Term<Name>)>,
-        thd: Option<(usize, Term<Name>)>,
-    },
-    TwoArgsAnyOrder {
-        fst: (usize, Term<Name>),
-        snd: Option<(usize, Term<Name>)>,
-    },
-}
-
-impl BuiltinArgs {
-    fn args_from_arg_stack(stack: Vec<(usize, Term<Name>)>, is_order_agnostic: bool) -> Self {
-        let mut ordered_arg_stack = if is_order_agnostic {
-            stack.into_iter().rev().sorted_by(|(_, arg1), (_, arg2)| {
-                // sort by constant first if the builtin is order agnostic
-                if matches!(arg1, Term::Constant(_)) == matches!(arg2, Term::Constant(_)) {
-                    Ordering::Equal
-                } else if matches!(arg1, Term::Constant(_)) {
-                    Ordering::Less
-                } else {
-                    Ordering::Greater
-                }
-            })
-        } else {
-            stack.into_iter()
-        };
-
-        if ordered_arg_stack.len() == 2 && is_order_agnostic {
-            // This is the special case where the order of args is irrelevant to the builtin
-            // An example is addInteger or multiplyInteger
-            BuiltinArgs::TwoArgsAnyOrder {
-                fst: ordered_arg_stack.next().unwrap(),
-                snd: ordered_arg_stack.next(),
-            }
-        } else if ordered_arg_stack.len() == 2 {
-            BuiltinArgs::TwoArgs {
-                fst: ordered_arg_stack.next().unwrap(),
-                snd: ordered_arg_stack.next(),
-            }
-        } else {
-            BuiltinArgs::ThreeArgs {
-                fst: ordered_arg_stack.next().unwrap(),
-                snd: ordered_arg_stack.next(),
-                thd: ordered_arg_stack.next(),
-            }
-        }
-    }
-
-    fn args_to_curried_tree(self, scope: &Scope) -> CurriedTree {
-        match self {
-            BuiltinArgs::TwoArgs(arg1, arg2) | BuiltinArgs::TwoArgsAnyOrder(arg1, arg2) => {
-                CurriedTree::Branch {
-                    id: arg1.0,
-                    node: arg1.1,
-                    multiple_occurrences: false,
-                    children: vec![CurriedTree::Leaf {
-                        id: arg2.0,
-                        node: arg2.1,
-                        multiple_occurrences: false,
-                        scope: scope.clone(),
-                    }],
-                    scope: scope.clone(),
-                }
-            }
-
-            BuiltinArgs::ThreeArgs(arg1, arg2, arg3) => CurriedTree::Branch {
-                id: arg1.0,
-                node: arg1.1,
-                multiple_occurrences: false,
-                children: vec![CurriedTree::Branch {
-                    id: arg1.0,
-                    node: arg2.1,
-                    multiple_occurrences: false,
-                    children: vec![CurriedTree::Leaf {
-                        id: arg3.0,
-                        node: arg3.1,
-                        multiple_occurrences: false,
-                        scope: scope.clone(),
-                    }],
-                    scope: scope.clone(),
-                }],
-                scope: scope.clone(),
-            },
-        }
-    }
-
-    fn to_id_vec(&self) -> Vec<usize> {
-        match self {
-            BuiltinArgs::TwoArgs(arg1, arg2) | BuiltinArgs::TwoArgsAnyOrder(arg1, arg2) => {
-                vec![arg1.0, arg2.0]
-            }
-
-            BuiltinArgs::ThreeArgs(arg1, arg2, arg3) => vec![arg1.0, arg2.0, arg3.0],
-        }
-    }
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub enum CurriedTree {
-    Branch {
-        node: Term<Name>,
-        multiple_occurrences: bool,
-        children: Vec<CurriedTree>,
-        scope: Scope,
-        id: usize,
-    },
-    Leaf {
-        node: Term<Name>,
-        multiple_occurrences: bool,
-        scope: Scope,
-        id: usize,
-    },
-}
-
-impl CurriedTree {
-    pub fn node(&self) -> &Term<Name> {
-        match self {
-            CurriedTree::Branch { node, .. } | CurriedTree::Leaf { node, .. } => node,
-        }
-    }
-
-    pub fn id(&self) -> usize {
-        match self {
-            CurriedTree::Branch { id, .. } | CurriedTree::Leaf { id, .. } => *id,
-        }
-    }
-
-    pub fn scope(&self) -> &Scope {
-        match self {
-            CurriedTree::Branch { scope, .. } | CurriedTree::Leaf { scope, .. } => scope,
-        }
-    }
-
-    pub fn node_mut(&mut self) -> &mut Term<Name> {
-        match self {
-            CurriedTree::Branch { node, .. } => node,
-            CurriedTree::Leaf { node, .. } => node,
-        }
-    }
-
-    pub fn multiple_occurrences(&self) -> bool {
-        match self {
-            CurriedTree::Branch {
-                multiple_occurrences,
-                ..
-            } => *multiple_occurrences,
-            CurriedTree::Leaf {
-                multiple_occurrences,
-                ..
-            } => *multiple_occurrences,
-        }
-    }
-
-    pub fn find_leaf_id_path(&self, path: &BuiltinArgs) -> Vec<usize> {
-        match (self, path) {
-            (
-                CurriedTree::Branch { children, .. },
-                BuiltinArgs::TwoArgs(_, (_, arg2)) | BuiltinArgs::TwoArgsAnyOrder(_, (_, arg2)),
-            ) => {
-                if let Some(CurriedTree::Leaf { id: leaf_id, .. }) =
-                    children.iter().find(|child| child.node() == arg2)
-                {
-                    vec![*leaf_id]
-                } else {
-                    vec![]
-                }
-            }
-
-            (
-                CurriedTree::Branch { children, .. },
-                BuiltinArgs::ThreeArgs(_, (_, arg2), (_, arg3)),
-            ) => {
-                if let Some(CurriedTree::Branch {
-                    children: child_children,
-                    id: mid_id,
-                    ..
-                }) = children.iter().find(|child| child.node() == arg2)
-                {
-                    if let Some(CurriedTree::Leaf { id: leaf_id, .. }) =
-                        child_children.iter().find(|child| child.node() == arg3)
-                    {
-                        vec![*mid_id, *leaf_id]
-                    } else {
-                        vec![*mid_id]
-                    }
-                } else {
-                    vec![]
-                }
-            }
-            // Since all args are always added to the tree. The minimum depth of a tree is 2 and max is 3
-            // Therefore we can't have a leaf at the root level of the match
-            _ => unreachable!(),
-        }
-    }
-
-    pub fn merge_node_by_path(self, path: BuiltinArgs, scope: &Scope) -> CurriedTree {
-        match (self, path) {
-            (
-                CurriedTree::Branch {
-                    node,
-                    mut children,
-                    scope: branch_scope,
-                    id,
-                    ..
-                },
-                BuiltinArgs::TwoArgs(_, (new_leaf_id, arg2))
-                | BuiltinArgs::TwoArgsAnyOrder(_, (new_leaf_id, arg2)),
-            ) => {
-                if let Some(CurriedTree::Leaf {
-                    multiple_occurrences,
-                    scope: leaf_scope,
-                    ..
-                }) = children.iter_mut().find(|child| child.node() == &arg2)
-                {
-                    // So here we mutate the found child of the branch to update the leaf
-                    // Note this is a 2 arg builtin so the depth is 2
-                    *multiple_occurrences = true;
-                    *leaf_scope = leaf_scope.common_ancestor(scope);
-                    CurriedTree::Branch {
-                        id,
-                        node,
-                        multiple_occurrences: true,
-                        children,
-                        scope: branch_scope.common_ancestor(scope),
-                    }
-                } else {
-                    children.push(CurriedTree::Leaf {
-                        id: new_leaf_id,
-                        node: arg2,
-                        multiple_occurrences: false,
-                        scope: scope.clone(),
-                    });
-                    CurriedTree::Branch {
-                        id,
-                        node,
-                        multiple_occurrences: true,
-                        children,
-                        scope: branch_scope.common_ancestor(scope),
-                    }
-                }
-            }
-            (
-                CurriedTree::Branch {
-                    node,
-                    mut children,
-                    scope: branch_scope,
-                    id: top_id,
-                    ..
-                },
-                BuiltinArgs::ThreeArgs(_, (new_branch_id, arg2), (new_leaf_id, arg3)),
-            ) => {
-                if let Some(CurriedTree::Branch {
-                    multiple_occurrences: child_multiple_occurrences,
-                    children: child_children,
-                    scope: child_scope,
-                    ..
-                }) = children.iter_mut().find(|child| child.node() == &arg2)
-                {
-                    if let Some(CurriedTree::Leaf {
-                        multiple_occurrences: leaf_multiple_occurrences,
-                        scope: leaf_scope,
-                        ..
-                    }) = child_children
-                        .iter_mut()
-                        .find(|child| child.node() == &arg3)
-                    {
-                        // So here we mutate the found child of the branch to update the leaf
-                        // Note this is a 3 arg builtin so the depth is 3
-                        *leaf_multiple_occurrences = true;
-                        *leaf_scope = leaf_scope.common_ancestor(scope);
-                        *child_multiple_occurrences = true;
-                        *child_scope = child_scope.common_ancestor(scope);
-                        CurriedTree::Branch {
-                            id: top_id,
-                            node,
-                            multiple_occurrences: true,
-                            children,
-                            scope: branch_scope.common_ancestor(scope),
-                        }
-                    } else {
-                        child_children.push(CurriedTree::Leaf {
-                            id: new_leaf_id,
-                            node: arg3,
-                            multiple_occurrences: false,
-                            scope: scope.clone(),
-                        });
-                        *child_multiple_occurrences = true;
-                        *child_scope = child_scope.common_ancestor(scope);
-                        CurriedTree::Branch {
-                            id: top_id,
-                            node,
-                            multiple_occurrences: true,
-                            children,
-                            scope: branch_scope.common_ancestor(scope),
-                        }
-                    }
-                } else {
-                    children.push(
-                        BuiltinArgs::TwoArgs((new_branch_id, arg2), (new_leaf_id, arg3))
-                            .args_to_curried_tree(scope),
-                    );
-                    CurriedTree::Branch {
-                        id: top_id,
-                        node,
-                        multiple_occurrences: true,
-                        children,
-                        scope: branch_scope.common_ancestor(scope),
-                    }
-                }
-            }
-            // Since all args are always added to the tree. The minimum depth of a tree is 2 and max is 3
-            // Therefore we can't have a leaf at the root level of the match
-            _ => unreachable!(),
-        }
-    }
-
-    pub fn prune_single_occurrences(mut self) -> Self {
-        match &mut self {
-            CurriedTree::Branch { children, .. } => {
-                *children = children
-                    .clone()
-                    .into_iter()
-                    .filter(|child| child.multiple_occurrences())
-                    .map(|child| {
-                        if matches!(child, CurriedTree::Branch { .. }) {
-                            child.prune_single_occurrences()
-                        } else {
-                            child
-                        }
-                    })
-                    .collect_vec();
-            }
-            _ => unreachable!(),
-        }
-        self
-    }
-
-    fn to_scope_map(
-        &self,
-        mut acc: Vec<(Scope, Vec<Term<Name>>)>,
-        current_term: &Term<Name>,
-    ) -> Vec<(Scope, Vec<Term<Name>>)> {
-        if let CurriedTree::Branch { node, children, .. } = self {
-            acc = children.iter().fold(acc, |acc, child| {
-                child.to_scope_map(acc, &current_term.clone().apply(node.clone()))
-            });
-        }
-
-        let insert_index = acc.iter().enumerate().find_map(|(index, (item_scope, _))| {
-            if item_scope.len() > self.scope().len() {
-                Some((Ordering::Less, index))
-            } else if item_scope == self.scope() {
-                // If scopes are exactly equal we keep them in the same scope grouping
-                Some((Ordering::Equal, index))
-            } else {
-                None
-            }
-        });
-
-        let term = current_term.clone().apply(self.node().clone());
-
-        if let Some(insert_index) = insert_index {
-            match insert_index.0 {
-                Ordering::Less => {
-                    acc.insert(insert_index.1, (self.scope().clone(), vec![term]));
-                    acc
-                }
-                Ordering::Equal => {
-                    let item = acc.get_mut(insert_index.1).unwrap();
-                    item.1.push(term);
-                    acc
-                }
-                Ordering::Greater => unreachable!(),
-            }
-        } else {
-            acc.push((self.scope().clone(), vec![term]));
-            acc
-        }
-    }
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub struct CurriedBuiltin {
-    pub func: DefaultFunction,
-    /// For use with subtract integer where we can flip the order of the arguments
-    /// if the second argument is a constant
-    pub children: Vec<CurriedTree>,
-}
-
-impl CurriedBuiltin {
-    pub fn merge_node_by_path(self, path: BuiltinArgs, scope: &Scope) -> CurriedBuiltin {
-        let mut children = self.children.clone();
-
-        match &path {
-            // First we just peak at the first arg to see if it was curried before
-            BuiltinArgs::TwoArgs(arg1, _) | BuiltinArgs::ThreeArgs(arg1, _, _) => {
-                if let Some(child) = children.iter_mut().find(|child| child.node() == &arg1.1) {
-                    // mutate child here so we don't have to recreate the whole tree
-                    // We pass in the scope so we can get the common ancestor if the arg was curried before
-                    *child = child.clone().merge_node_by_path(path, scope);
-                    CurriedBuiltin {
-                        func: self.func,
-                        children,
-                    }
-                } else {
-                    // We found a new arg so we add it to the list of children
-                    children.push(path.args_to_curried_tree(scope));
-                    CurriedBuiltin {
-                        func: self.func,
-                        children,
-                    }
-                }
-            }
-            BuiltinArgs::TwoArgsAnyOrder(arg1, arg2) => {
-                // This is the special case where we search by both args before adding a new child
-                if let Some(child) = children.iter_mut().find(|child| child.node() == &arg1.1) {
-                    *child = child.clone().merge_node_by_path(path, scope);
-                    CurriedBuiltin {
-                        func: self.func,
-                        children,
-                    }
-                } else if let Some(child) =
-                    children.iter_mut().find(|child| child.node() == &arg2.1)
-                {
-                    // If we found a curried argument using arg2 then we flip the order of the args
-                    // before merging into the tree
-                    *child = child.clone().merge_node_by_path(
-                        BuiltinArgs::TwoArgsAnyOrder(arg2.clone(), arg1.clone()),
-                        scope,
-                    );
-
-                    CurriedBuiltin {
-                        func: self.func,
-                        children,
-                    }
-                } else {
-                    // We found a new arg so we add it to the list of children
-                    children.push(path.args_to_curried_tree(scope));
-                    CurriedBuiltin {
-                        func: self.func,
-                        children,
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn prune_single_occurrences(mut self) -> Self {
-        self.children = self
-            .children
-            .into_iter()
-            .filter(|child| child.multiple_occurrences())
-            .map(|child| child.prune_single_occurrences())
-            .collect_vec();
-        self
-    }
-
-    pub fn find_leaf_id_path(&self, path: &BuiltinArgs) -> Option<Vec<usize>> {
-        let children = &self.children;
-        let mut id_vec = vec![];
-
-        match path {
-            // First we just peak at the first arg to see if it was curried before
-            BuiltinArgs::TwoArgs(arg1, _) | BuiltinArgs::ThreeArgs(arg1, _, _) => {
-                if let Some(child) = children.iter().find(|child| child.node() == &arg1.1) {
-                    // mutate child here so we don't have to recreate the whole tree
-                    // We pass in the scope so we can get the common ancestor if the arg was curried before
-                    id_vec.push(child.id());
-
-                    id_vec.extend(child.find_leaf_id_path(path));
-                    Some(id_vec)
-                } else {
-                    None
-                }
-            }
-            BuiltinArgs::TwoArgsAnyOrder(arg1, arg2) => {
-                // This is the special case where we search by both args before adding a new child
-                if let Some(child) = children.iter().find(|child| child.node() == &arg1.1) {
-                    id_vec.push(child.id());
-
-                    id_vec.extend(child.find_leaf_id_path(path));
-                    Some(id_vec)
-                } else if let Some(child) = children.iter().find(|child| child.node() == &arg2.1) {
-                    // If we found a curried argument using arg2 then we flip the order of the args
-                    // before merging into the tree
-
-                    id_vec.push(child.id());
-
-                    id_vec.extend(child.find_leaf_id_path(&BuiltinArgs::TwoArgsAnyOrder(
-                        arg2.clone(),
-                        arg1.clone(),
-                    )));
-
-                    Some(id_vec)
-                } else {
-                    None
-                }
-            }
-        }
-    }
-
-    fn to_scope_map(&self) -> Vec<(Scope, Vec<Term<Name>>)> {
-        let scope_map = vec![];
-        let current_term = Term::Builtin(self.func);
-
-        self.children.iter().fold(scope_map, |acc, child| {
-            child.to_scope_map(acc, &current_term)
-        })
     }
 }
 
@@ -645,6 +130,471 @@ impl DefaultFunction {
                 | DefaultFunction::Bls12_381_G2_Add
                 | DefaultFunction::ConstrData
         )
+    }
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub enum BuiltinArgs {
+    TwoArgs {
+        fst: (usize, Term<Name>),
+        snd: Option<(usize, Term<Name>)>,
+    },
+    ThreeArgs {
+        fst: (usize, Term<Name>),
+        snd: Option<(usize, Term<Name>)>,
+        thd: Option<(usize, Term<Name>)>,
+    },
+    TwoArgsAnyOrder {
+        fst: (usize, Term<Name>),
+        snd: Option<(usize, Term<Name>)>,
+    },
+}
+
+impl BuiltinArgs {
+    fn args_from_arg_stack(stack: Vec<(usize, Term<Name>)>, is_order_agnostic: bool) -> Self {
+        let mut ordered_arg_stack = stack.into_iter().rev().sorted_by(|(_, arg1), (_, arg2)| {
+            // sort by constant first if the builtin is order agnostic
+            if matches!(arg1, Term::Constant(_)) == matches!(arg2, Term::Constant(_))
+                && is_order_agnostic
+            {
+                Ordering::Equal
+            } else if matches!(arg1, Term::Constant(_)) {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
+
+        if ordered_arg_stack.len() == 2 && is_order_agnostic {
+            // This is the special case where the order of args is irrelevant to the builtin
+            // An example is addInteger or multiplyInteger
+            BuiltinArgs::TwoArgsAnyOrder {
+                fst: ordered_arg_stack.next().unwrap(),
+                snd: ordered_arg_stack.next(),
+            }
+        } else if ordered_arg_stack.len() == 2 {
+            BuiltinArgs::TwoArgs {
+                fst: ordered_arg_stack.next().unwrap(),
+                snd: ordered_arg_stack.next(),
+            }
+        } else {
+            BuiltinArgs::ThreeArgs {
+                fst: ordered_arg_stack.next().unwrap(),
+                snd: ordered_arg_stack.next(),
+                thd: ordered_arg_stack.next(),
+            }
+        }
+    }
+
+    fn args_to_curried_args(self, builtin: DefaultFunction) -> CurriedBuiltin {
+        let args = match self {
+            BuiltinArgs::TwoArgs { fst, snd } | BuiltinArgs::TwoArgsAnyOrder { fst, snd } => {
+                CurriedArgs::TwoArgs {
+                    fst_args: vec![CurriedNode {
+                        id: fst.0,
+                        term: fst.1,
+                    }],
+                    snd_args: snd
+                        .into_iter()
+                        .map(|item| CurriedNode {
+                            id: item.0,
+                            term: item.1,
+                        })
+                        .collect_vec(),
+                }
+            }
+            BuiltinArgs::ThreeArgs { fst, snd, thd } => CurriedArgs::ThreeArgs {
+                fst_args: vec![CurriedNode {
+                    id: fst.0,
+                    term: fst.1,
+                }],
+                snd_args: snd
+                    .into_iter()
+                    .map(|item| CurriedNode {
+                        id: item.0,
+                        term: item.1,
+                    })
+                    .collect_vec(),
+                thd_args: thd
+                    .into_iter()
+                    .map(|item| CurriedNode {
+                        id: item.0,
+                        term: item.1,
+                    })
+                    .collect_vec(),
+            },
+        };
+
+        CurriedBuiltin {
+            func: builtin,
+            args,
+        }
+    }
+
+    pub fn get_id_args(self) -> Vec<UplcNode> {
+        match self {
+            BuiltinArgs::TwoArgs { fst, snd } | BuiltinArgs::TwoArgsAnyOrder { fst, snd } => {
+                iter::once(fst)
+                    .chain(snd)
+                    .map(|item| UplcNode {
+                        applied_id: item.0,
+                        curried_id: item.0,
+                        term: item.1,
+                    })
+                    .collect_vec()
+            }
+            BuiltinArgs::ThreeArgs { fst, snd, thd } => iter::once(fst)
+                .chain(snd)
+                .chain(thd)
+                .map(|item| UplcNode {
+                    applied_id: item.0,
+                    curried_id: item.0,
+                    term: item.1,
+                })
+                .collect_vec(),
+        }
+    }
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct CurriedNode {
+    id: usize,
+    term: Term<Name>,
+}
+
+pub struct UplcNode {
+    applied_id: usize,
+    curried_id: usize,
+    term: Term<Name>,
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub enum CurriedArgs {
+    TwoArgs {
+        fst_args: Vec<CurriedNode>,
+        snd_args: Vec<CurriedNode>,
+    },
+    ThreeArgs {
+        fst_args: Vec<CurriedNode>,
+        snd_args: Vec<CurriedNode>,
+        thd_args: Vec<CurriedNode>,
+    },
+}
+
+impl CurriedArgs {
+    pub fn merge_node_by_path(self, path: BuiltinArgs) -> Self {
+        match (self, path) {
+            (
+                CurriedArgs::TwoArgs {
+                    mut fst_args,
+                    mut snd_args,
+                },
+                BuiltinArgs::TwoArgs { fst, snd },
+            ) => {
+                let fst_args = match fst_args.iter_mut().find(|item| item.term == fst.1) {
+                    None => {
+                        fst_args.push(CurriedNode {
+                            id: fst.0,
+                            term: fst.1,
+                        });
+                        fst_args
+                    }
+                    _ => fst_args,
+                };
+
+                let snd_args = match snd_args.iter_mut().find(|item| match &snd {
+                    Some(snd) => item.term == snd.1,
+                    None => false,
+                }) {
+                    None => snd_args
+                        .into_iter()
+                        .chain(snd.into_iter().map(|item| CurriedNode {
+                            id: item.0,
+                            term: item.1,
+                        }))
+                        .collect_vec(),
+                    _ => snd_args,
+                };
+
+                CurriedArgs::TwoArgs { fst_args, snd_args }
+            }
+            (
+                CurriedArgs::TwoArgs {
+                    mut fst_args,
+                    mut snd_args,
+                },
+                BuiltinArgs::TwoArgsAnyOrder { fst, snd },
+            ) => {
+                let mut switched = false;
+                let fst_args = if fst_args.iter_mut().any(|item| item.term == fst.1) {
+                    fst_args
+                } else if fst_args.iter_mut().any(|item| match &snd {
+                    Some(snd) => item.term == snd.1,
+                    None => false,
+                }) {
+                    switched = true;
+                    fst_args
+                } else {
+                    fst_args.push(CurriedNode {
+                        id: fst.0,
+                        term: fst.1.clone(),
+                    });
+
+                    fst_args
+                };
+
+                // If switched then put the first arg in the second arg slot
+                let snd_args = if switched {
+                    if snd_args.iter_mut().any(|item| item.term == fst.1) {
+                        snd_args
+                    } else {
+                        snd_args.push(CurriedNode {
+                            id: fst.0,
+                            term: fst.1,
+                        });
+                        snd_args
+                    }
+                } else if snd_args.iter_mut().any(|item| match &snd {
+                    Some(snd) => item.term == snd.1,
+                    None => false,
+                }) {
+                    snd_args
+                } else {
+                    snd_args
+                        .into_iter()
+                        .chain(snd.into_iter().map(|item| CurriedNode {
+                            id: item.0,
+                            term: item.1,
+                        }))
+                        .collect_vec()
+                };
+
+                CurriedArgs::TwoArgs { fst_args, snd_args }
+            }
+            (
+                CurriedArgs::ThreeArgs {
+                    mut fst_args,
+                    mut snd_args,
+                    mut thd_args,
+                },
+                BuiltinArgs::ThreeArgs { fst, snd, thd },
+            ) => {
+                let fst_args = match fst_args.iter_mut().find(|item| item.term == fst.1) {
+                    None => {
+                        fst_args.push(CurriedNode {
+                            id: fst.0,
+                            term: fst.1,
+                        });
+                        fst_args
+                    }
+                    _ => fst_args,
+                };
+
+                let snd_args = match snd_args.iter_mut().find(|item| match &snd {
+                    Some(snd) => item.term == snd.1,
+                    None => false,
+                }) {
+                    None => snd_args
+                        .into_iter()
+                        .chain(snd.into_iter().map(|item| CurriedNode {
+                            id: item.0,
+                            term: item.1,
+                        }))
+                        .collect_vec(),
+
+                    _ => snd_args,
+                };
+
+                let thd_args = match thd_args.iter_mut().find(|item| match &thd {
+                    Some(thd) => item.term == thd.1,
+                    None => false,
+                }) {
+                    None => thd_args
+                        .into_iter()
+                        .chain(thd.into_iter().map(|item| CurriedNode {
+                            id: item.0,
+                            term: item.1,
+                        }))
+                        .collect_vec(),
+
+                    _ => thd_args,
+                };
+
+                CurriedArgs::ThreeArgs {
+                    fst_args,
+                    snd_args,
+                    thd_args,
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn get_id_args(&self, path: &BuiltinArgs) -> Option<Vec<UplcNode>> {
+        match (self, path) {
+            (CurriedArgs::TwoArgs { fst_args, snd_args }, BuiltinArgs::TwoArgs { fst, snd }) => {
+                let Some(arg) = fst_args.iter().find(|item| fst.1 == item.term) else {
+                    return None;
+                };
+
+                let Some(arg2) = snd_args.iter().find(|item| match snd {
+                    Some(snd) => item.term == snd.1,
+                    None => false,
+                }) else {
+                    return Some(vec![UplcNode {
+                        applied_id: fst.0,
+                        curried_id: arg.id,
+                        term: arg.term.clone(),
+                    }]);
+                };
+
+                Some(vec![
+                    UplcNode {
+                        applied_id: fst.0,
+                        curried_id: arg.id,
+                        term: arg.term.clone(),
+                    },
+                    UplcNode {
+                        applied_id: snd.as_ref().unwrap().0,
+                        curried_id: arg2.id,
+                        term: arg2.term.clone(),
+                    },
+                ])
+            }
+            (
+                CurriedArgs::TwoArgs { fst_args, snd_args },
+                BuiltinArgs::TwoArgsAnyOrder { fst, snd },
+            ) => {
+                let mut id_vec = vec![];
+
+                if let Some(arg) = fst_args.iter().find(|item| item.term == fst.1) {
+                    id_vec.push(UplcNode {
+                        applied_id: fst.0,
+                        curried_id: arg.id,
+                        term: arg.term.clone(),
+                    });
+
+                    let Some(arg2) = snd_args.iter().find(|item| match snd {
+                        Some(snd) => snd.1 == item.term,
+                        None => false,
+                    }) else {
+                        return Some(id_vec);
+                    };
+
+                    id_vec.push(UplcNode {
+                        applied_id: snd.as_ref().unwrap().0,
+                        curried_id: arg2.id,
+                        term: arg2.term.clone(),
+                    });
+
+                    Some(id_vec)
+                } else if let Some(arg) = fst_args.iter().find(|item| match &snd {
+                    Some(snd) => item.term == snd.1,
+                    None => false,
+                }) {
+                    id_vec.push(UplcNode {
+                        applied_id: snd.as_ref().unwrap().0,
+                        curried_id: arg.id,
+                        term: arg.term.clone(),
+                    });
+
+                    let Some(arg2) = snd_args.iter().find(|item| item.term == fst.1) else {
+                        return Some(id_vec);
+                    };
+
+                    id_vec.push(UplcNode {
+                        applied_id: fst.0,
+                        curried_id: arg2.id,
+                        term: arg2.term.clone(),
+                    });
+
+                    Some(id_vec)
+                } else {
+                    None
+                }
+            }
+
+            (
+                CurriedArgs::ThreeArgs {
+                    fst_args,
+                    snd_args,
+                    thd_args,
+                },
+                BuiltinArgs::ThreeArgs { fst, snd, thd },
+            ) => {
+                let Some(arg) = fst_args.iter().find(|item| fst.1 == item.term) else {
+                    return None;
+                };
+
+                let Some(arg2) = snd_args.iter().find(|item| match snd {
+                    Some(snd) => item.term == snd.1,
+                    None => false,
+                }) else {
+                    return Some(vec![UplcNode {
+                        applied_id: fst.0,
+                        curried_id: arg.id,
+                        term: arg.term.clone(),
+                    }]);
+                };
+
+                let Some(arg3) = thd_args.iter().find(|item| match thd {
+                    Some(thd) => item.term == thd.1,
+                    None => false,
+                }) else {
+                    return Some(vec![
+                        UplcNode {
+                            applied_id: fst.0,
+                            curried_id: arg.id,
+                            term: arg.term.clone(),
+                        },
+                        UplcNode {
+                            applied_id: snd.as_ref().unwrap().0,
+                            curried_id: arg2.id,
+                            term: arg2.term.clone(),
+                        },
+                    ]);
+                };
+
+                Some(vec![
+                    UplcNode {
+                        applied_id: fst.0,
+                        curried_id: arg.id,
+                        term: arg.term.clone(),
+                    },
+                    UplcNode {
+                        applied_id: snd.as_ref().unwrap().0,
+                        curried_id: arg2.id,
+                        term: arg2.term.clone(),
+                    },
+                    UplcNode {
+                        applied_id: thd.as_ref().unwrap().0,
+                        curried_id: arg3.id,
+                        term: arg3.term.clone(),
+                    },
+                ])
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+#[derive(PartialEq, Clone, Debug)]
+pub struct CurriedBuiltin {
+    pub func: DefaultFunction,
+    /// For use with subtract integer where we can flip the order of the arguments
+    /// if the second argument is a constant
+    pub args: CurriedArgs,
+}
+
+impl CurriedBuiltin {
+    pub fn merge_node_by_path(self, path: BuiltinArgs) -> Self {
+        CurriedBuiltin {
+            func: self.func,
+            args: self.args.merge_node_by_path(path),
+        }
+    }
+
+    pub fn get_id_args(&self, path: &BuiltinArgs) -> Option<Vec<UplcNode>> {
+        self.args.get_id_args(path)
     }
 }
 
@@ -1153,11 +1103,21 @@ impl Program<Name> {
     // WIP
     pub fn builtin_curry_reducer(self) -> Self {
         let mut curried_terms = vec![];
-        let mut curry_applied_ids: Vec<usize> = vec![];
+        let mut id_mapped_curry_terms: IndexMap<Vec<usize>, (Scope, Term<Name>, bool)> =
+            IndexMap::new();
+        let mut curry_applied_ids = vec![];
+        let mut other_thing: IndexMap<Scope, Vec<(String, Term<Name>)>> = IndexMap::new();
 
         let a = self.traverse_uplc_with(&mut |_id, term, arg_stack, scope| match term {
             Term::Builtin(func) => {
                 if func.can_curry_builtin() && arg_stack.len() == func.arity() {
+                    let is_order_agnostic = func.is_order_agnostic_builtin();
+
+                    // In the case of order agnostic builtins we want to sort the args by constant first
+                    // This gives us the opportunity to curry constants that often pop up in the code
+                    let builtin_args =
+                        BuiltinArgs::args_from_arg_stack(arg_stack, is_order_agnostic);
+
                     let mut scope = scope.clone();
 
                     // Get upper scope of the function plus args
@@ -1167,15 +1127,8 @@ impl Program<Name> {
                         scope = scope.pop();
                     }
 
-                    let is_order_agnostic = func.is_order_agnostic_builtin();
-
-                    // In the case of order agnostic builtins we want to sort the args by constant first
-                    // This gives us the opportunity to curry constants that often pop up in the code
-                    let builtin_args =
-                        BuiltinArgs::args_from_arg_stack(arg_stack, is_order_agnostic);
-
                     // First we see if we have already curried this builtin before
-                    if let Some(curried_builtin) = curried_terms
+                    let mut id_vec = if let Some(curried_builtin) = curried_terms
                         .iter_mut()
                         .find(|curried_term: &&mut CurriedBuiltin| curried_term.func == *func)
                     {
@@ -1183,13 +1136,50 @@ impl Program<Name> {
                         // So now we merge the new args into the existing curried builtin
                         *curried_builtin = (*curried_builtin)
                             .clone()
-                            .merge_node_by_path(builtin_args, &scope);
+                            .merge_node_by_path(builtin_args.clone());
+
+                        let Some(id_vec) = curried_builtin.get_id_args(&builtin_args) else {
+                            unreachable!();
+                        };
+
+                        id_vec
                     } else {
                         // Brand new buitlin so we add it to the list
-                        curried_terms.push(CurriedBuiltin {
-                            func: *func,
-                            children: vec![builtin_args.args_to_curried_tree(&scope)],
-                        });
+                        curried_terms.push(builtin_args.clone().args_to_curried_args(*func));
+
+                        builtin_args.get_id_args()
+                    };
+
+                    while let Some(node) = id_vec.pop() {
+                        let mut id_only_vec =
+                            id_vec.iter().map(|item| item.curried_id).collect_vec();
+
+                        id_only_vec.push(node.curried_id);
+
+                        if let Some((map_scope, _, multi_occurrences)) =
+                            id_mapped_curry_terms.get_mut(&id_only_vec)
+                        {
+                            *map_scope = map_scope.common_ancestor(&scope);
+                            *multi_occurrences = true;
+                        } else if id_vec.is_empty() {
+                            id_mapped_curry_terms.insert(
+                                id_only_vec,
+                                (scope.clone(), Term::Builtin(*func).apply(node.term), false),
+                            );
+                        } else {
+                            let var_name = id_vec
+                                .iter()
+                                .map(|item| item.curried_id.to_string())
+                                .collect::<Vec<String>>()
+                                .join("_");
+
+                            id_mapped_curry_terms.insert(
+                                id_only_vec,
+                                (scope.clone(), Term::var(var_name).apply(node.term), false),
+                            );
+                        }
+
+                        curry_applied_ids.push(node.applied_id);
                     }
                 }
             }
@@ -1199,60 +1189,31 @@ impl Program<Name> {
             _ => {}
         });
 
-        curried_terms = curried_terms
-            .into_iter()
-            .map(|func| func.prune_single_occurrences())
-            .filter(|func| !func.children.is_empty())
-            .collect_vec();
-
         println!("CURRIED ARGS");
         for (index, curried_term) in curried_terms.iter().enumerate() {
             println!("index is {:#?}, term is {:#?}", index, curried_term);
         }
 
-        // TODO: add function to generate names for curried_terms for generating vars to insert
-        let b = a.traverse_uplc_with(&mut |id, term, arg_stack, _scope| match term {
-            Term::Builtin(func) => {
-                if func.can_curry_builtin() {
-                    let Some(curried_builtin) =
-                        curried_terms.iter().find(|curry| curry.func == *func)
-                    else {
-                        return;
-                    };
+        id_mapped_curry_terms
+            .into_iter()
+            .filter(|(_, (_, _, multi_occurrence))| *multi_occurrence)
+            .for_each(|(key, val)| {
+                let name = key.into_iter().map(|item| item.to_string()).join("_");
 
-                    let builtin_args = BuiltinArgs::args_from_arg_stack(
-                        arg_stack,
-                        func.is_order_agnostic_builtin(),
-                    );
-
-                    let Some(id_vec) = curried_builtin.find_leaf_id_path(&builtin_args) else {
-                        return;
-                    };
-
-                    let id_str = id_vec
-                        .iter()
-                        .map(|id| id.to_string())
-                        .collect::<Vec<String>>()
-                        .join("_");
-
-                    let name = format!("{}_{}", func.aiken_name(), id_str);
-
-                    curry_applied_ids.extend(builtin_args.to_id_vec().iter().take(id_vec.len()));
-
-                    *term = Term::var(name);
+                match other_thing.get_mut(&val.0) {
+                    Some(list) => list.push((name, val.1)),
+                    None => {
+                        other_thing.insert(val.0, vec![(name, val.1)]);
+                    }
                 }
-            }
-            Term::Apply { function, .. } => {
-                let id = id.unwrap();
+            });
 
-                if curry_applied_ids.contains(&id) {
-                    *term = (**function).clone();
-                }
-            }
-            Term::Constr { .. } => todo!(),
-            Term::Case { .. } => todo!(),
-            _ => {}
-        });
+        // other_thing
+        //     .into_iter()
+        //     .sorted_by(|item1, item2| item1.0.partial_cmp(&item2.0).expect("HOWWW?"))
+        //     .for_each(|(scope, nodes_to_insert)| {
+        //         // b.get_s
+        //     });
 
         todo!()
     }
