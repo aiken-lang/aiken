@@ -181,6 +181,8 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_MillerLoop => 2,
             DefaultFunction::Bls12_381_MulMlResult => 2,
             DefaultFunction::Bls12_381_FinalVerify => 2,
+            DefaultFunction::IntegerToByteString => 3,
+            DefaultFunction::ByteStringToInteger => 2,
         }
     }
 
@@ -259,6 +261,8 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_MillerLoop => 0,
             DefaultFunction::Bls12_381_MulMlResult => 0,
             DefaultFunction::Bls12_381_FinalVerify => 0,
+            DefaultFunction::IntegerToByteString => 0,
+            DefaultFunction::ByteStringToInteger => 0,
         }
     }
 
