@@ -102,6 +102,10 @@ pub enum DefaultFunction {
     Bls12_381_MillerLoop = 68,
     Bls12_381_MulMlResult = 69,
     Bls12_381_FinalVerify = 70,
+
+    // Bitwise
+    IntegerToByteString = 73,
+    ByteStringToInteger = 74,
 }
 
 impl TryFrom<u8> for DefaultFunction {
@@ -265,6 +269,14 @@ impl TryFrom<u8> for DefaultFunction {
                 Ok(DefaultFunction::Bls12_381_FinalVerify)
             }
 
+            // Bitwise
+            v if v == DefaultFunction::IntegerToByteString as u8 => {
+                Ok(DefaultFunction::IntegerToByteString)
+            }
+            v if v == DefaultFunction::ByteStringToInteger as u8 => {
+                Ok(DefaultFunction::ByteStringToInteger)
+            }
+
             _ => Err(de::Error::Message(format!(
                 "Default Function not found - {v}"
             ))),
@@ -352,6 +364,11 @@ impl FromStr for DefaultFunction {
             "bls12_381_millerLoop" => Ok(Bls12_381_MillerLoop),
             "bls12_381_mulMlResult" => Ok(Bls12_381_MulMlResult),
             "bls12_381_finalVerify" => Ok(Bls12_381_FinalVerify),
+
+            // Bitwise
+            "integerToByteString" => Ok(IntegerToByteString),
+            "byteStringToInteger" => Ok(ByteStringToInteger),
+
             rest => Err(format!("Default Function not found - {rest}")),
         }
     }
@@ -435,6 +452,8 @@ impl Display for DefaultFunction {
             Bls12_381_MillerLoop => write!(f, "bls12_381_millerLoop"),
             Bls12_381_MulMlResult => write!(f, "bls12_381_mulMlResult"),
             Bls12_381_FinalVerify => write!(f, "bls12_381_finalVerify"),
+            IntegerToByteString => write!(f, "integerToByteString"),
+            ByteStringToInteger => write!(f, "byteStringToInteger"),
         }
     }
 }
