@@ -153,16 +153,18 @@ pub enum BuiltinArgs {
 
 impl BuiltinArgs {
     fn args_from_arg_stack(stack: Vec<(usize, Term<Name>)>, is_order_agnostic: bool) -> Self {
-        let mut ordered_arg_stack = stack.into_iter().rev().sorted_by(|(_, arg1), (_, arg2)| {
+        let mut ordered_arg_stack = stack.into_iter().sorted_by(|(_, arg1), (_, arg2)| {
             // sort by constant first if the builtin is order agnostic
-            if matches!(arg1, Term::Constant(_)) == matches!(arg2, Term::Constant(_))
-                && is_order_agnostic
-            {
-                Ordering::Equal
-            } else if matches!(arg1, Term::Constant(_)) {
-                Ordering::Less
+            if is_order_agnostic {
+                if matches!(arg1, Term::Constant(_)) == matches!(arg2, Term::Constant(_)) {
+                    Ordering::Equal
+                } else if matches!(arg1, Term::Constant(_)) {
+                    Ordering::Less
+                } else {
+                    Ordering::Greater
+                }
             } else {
-                Ordering::Greater
+                Ordering::Equal
             }
         });
 
@@ -1071,7 +1073,6 @@ impl Program<Name> {
         })
     }
 
-    // WIP
     pub fn builtin_curry_reducer(self) -> Self {
         let mut curried_terms = vec![];
         let mut id_mapped_curry_terms: IndexMap<CurriedName, (Scope, Term<Name>, bool)> =
@@ -1079,6 +1080,7 @@ impl Program<Name> {
         let mut curry_applied_ids = vec![];
         let mut scope_mapped_to_term: IndexMap<Scope, Vec<(CurriedName, Term<Name>)>> =
             IndexMap::new();
+        let mut final_ids: IndexMap<Vec<usize>, ()> = IndexMap::new();
 
         let a = self.traverse_uplc_with(&mut |_id, term, arg_stack, scope| match term {
             Term::Builtin(func) => {
@@ -1087,6 +1089,7 @@ impl Program<Name> {
 
                     // In the case of order agnostic builtins we want to sort the args by constant first
                     // This gives us the opportunity to curry constants that often pop up in the code
+
                     let builtin_args =
                         BuiltinArgs::args_from_arg_stack(arg_stack, is_order_agnostic);
 
@@ -1167,25 +1170,24 @@ impl Program<Name> {
             _ => {}
         });
 
-        println!("CURRIED ARGS");
-        for (index, curried_term) in curried_terms.iter().enumerate() {
-            println!("index is {:#?}, term is {:#?}", index, curried_term);
-        }
-
         id_mapped_curry_terms
             .into_iter()
             .filter(|(_, (_, _, multi_occurrence))| *multi_occurrence)
-            .for_each(|(key, val)| match scope_mapped_to_term.get_mut(&val.0) {
-                Some(list) => {
-                    let insert_position = list
-                        .iter()
-                        .position(|(list_key, _)| key.len() <= list_key.len())
-                        .unwrap_or(list.len());
+            .for_each(|(key, val)| {
+                final_ids.insert(key.id_vec.clone(), ());
 
-                    list.insert(insert_position, (key, val.1));
-                }
-                None => {
-                    scope_mapped_to_term.insert(val.0, vec![(key, val.1)]);
+                match scope_mapped_to_term.get_mut(&val.0) {
+                    Some(list) => {
+                        let insert_position = list
+                            .iter()
+                            .position(|(list_key, _)| key.len() <= list_key.len())
+                            .unwrap_or(list.len());
+
+                        list.insert(insert_position, (key, val.1));
+                    }
+                    None => {
+                        scope_mapped_to_term.insert(val.0, vec![(key, val.1)]);
+                    }
                 }
             });
 
@@ -1203,9 +1205,22 @@ impl Program<Name> {
                         func.is_order_agnostic_builtin(),
                     );
 
-                    let Some(id_vec) = curried_builtin.get_id_args(&builtin_args) else {
+                    let Some(mut id_vec) = curried_builtin.get_id_args(&builtin_args) else {
                         return;
                     };
+
+                    while !id_vec.is_empty() {
+                        let id_lookup = id_vec.iter().map(|item| item.curried_id).collect_vec();
+
+                        if final_ids.contains_key(&id_lookup) {
+                            break;
+                        }
+                        id_vec.pop();
+                    }
+
+                    if id_vec.is_empty() {
+                        return;
+                    }
 
                     let id_str = id_vec
                         .iter()
@@ -1868,6 +1883,52 @@ mod tests {
         let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
 
         let actual = program.inline_reducer();
+
+        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn curry_reducer_test_1() {
+        let mut program: Program<Name> = Program {
+            version: (1, 0, 0),
+            term: Term::add_integer()
+                .apply(Term::var("x"))
+                .apply(Term::integer(1.into()))
+                .lambda("x")
+                .apply(
+                    Term::add_integer()
+                        .apply(Term::integer(1.into()))
+                        .apply(Term::var("y")),
+                )
+                .lambda("y")
+                .apply(Term::integer(5.into())),
+        };
+
+        let mut interner = Interner::new();
+
+        interner.program(&mut program);
+
+        let mut expected = Program {
+            version: (1, 0, 0),
+            term: Term::var("add_one_curried")
+                .apply(Term::var("x"))
+                .lambda("x")
+                .apply(Term::var("add_one_curried").apply(Term::var("y")))
+                .lambda("add_one_curried")
+                .apply(Term::add_integer().apply(Term::integer(1.into())))
+                .lambda("y")
+                .apply(Term::integer(5.into())),
+        };
+
+        let mut interner = Interner::new();
+
+        interner.program(&mut expected);
+
+        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
+
+        let actual = program.builtin_curry_reducer();
 
         let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
 

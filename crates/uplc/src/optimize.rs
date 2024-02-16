@@ -24,6 +24,7 @@ pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
         .inline_reducer()
         .force_delay_reducer()
         .cast_data_reducer()
+        .builtin_curry_reducer()
         .lambda_reducer()
         .inline_reducer()
         .lambda_reducer()
