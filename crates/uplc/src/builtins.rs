@@ -536,6 +536,8 @@ impl DefaultFunction {
             Bls12_381_MillerLoop => "bls12_381_miller_loop",
             Bls12_381_MulMlResult => "bls12_381_mul_miller_loop_result",
             Bls12_381_FinalVerify => "bls12_381_final_verify",
+            IntegerToByteString => "integer_to_bytearray",
+            ByteStringToInteger => "bytearray_to_integer",
         }
         .to_string()
     }
