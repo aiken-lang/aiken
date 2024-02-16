@@ -283,6 +283,9 @@ pub struct BuiltinCosts {
     bls12_381_miller_loop: CostingFun<TwoArguments>,
     bls12_381_mul_ml_result: CostingFun<TwoArguments>,
     bls12_381_final_verify: CostingFun<TwoArguments>,
+    // bitwise
+    integer_to_byte_string: CostingFun<ThreeArguments>,
+    byte_string_to_integer: CostingFun<TwoArguments>,
 }
 
 impl BuiltinCosts {
@@ -747,6 +750,14 @@ impl BuiltinCosts {
                 cpu: TwoArguments::ConstantCost(30000000000),
                 mem: TwoArguments::ConstantCost(30000000000),
             },
+            integer_to_byte_string: CostingFun {
+                cpu: ThreeArguments::ConstantCost(30000000000),
+                mem: ThreeArguments::ConstantCost(30000000000),
+            },
+            byte_string_to_integer: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
         }
     }
 }
@@ -1206,6 +1217,28 @@ impl Default for BuiltinCosts {
             bls12_381_final_verify: CostingFun {
                 cpu: TwoArguments::ConstantCost(388_656_972),
                 mem: TwoArguments::ConstantCost(1),
+            },
+            integer_to_byte_string: CostingFun {
+                cpu: ThreeArguments::QuadraticInZ(QuadraticFunction {
+                    coeff_0: 1292075,
+                    coeff_1: 24469,
+                    coeff_2: 74,
+                }),
+                mem: ThreeArguments::LiteralInYorLinearInZ(LinearSize {
+                    intercept: 0,
+                    slope: 1,
+                }),
+            },
+            byte_string_to_integer: CostingFun {
+                cpu: TwoArguments::QuadraticInY(QuadraticFunction {
+                    coeff_0: 936157,
+                    coeff_1: 49601,
+                    coeff_2: 237,
+                }),
+                mem: TwoArguments::LinearInY(LinearSize {
+                    intercept: 0,
+                    slope: 1,
+                }),
             },
         }
     }
@@ -1775,6 +1808,28 @@ impl BuiltinCosts {
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
                 cpu: self
                     .bls12_381_final_verify
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::IntegerToByteString => ExBudget {
+                mem: self.integer_to_byte_string.mem.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+                cpu: self.integer_to_byte_string.cpu.cost(
+                    args[0].to_ex_mem(),
+                    args[1].to_ex_mem(),
+                    args[2].to_ex_mem(),
+                ),
+            },
+            DefaultFunction::ByteStringToInteger => ExBudget {
+                mem: self
+                    .byte_string_to_integer
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .byte_string_to_integer
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
@@ -3262,6 +3317,48 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                         .unwrap_or(&30000000000),
                 ),
             },
+            integer_to_byte_string: CostingFun {
+                cpu: ThreeArguments::QuadraticInZ(QuadraticFunction {
+                    coeff_0: *cost_map
+                        .get("integerToByteString-cpu-arguments-c0")
+                        .unwrap_or(&30000000000),
+                    coeff_1: *cost_map
+                        .get("integerToByteString-cpu-arguments-c1")
+                        .unwrap_or(&30000000000),
+                    coeff_2: *cost_map
+                        .get("integerToByteString-cpu-arguments-c2")
+                        .unwrap_or(&30000000000),
+                }),
+                mem: ThreeArguments::LiteralInYorLinearInZ(LinearSize {
+                    intercept: *cost_map
+                        .get("integerToByteString-cpu-arguments-intercept")
+                        .unwrap_or(&30000000000),
+                    slope: *cost_map
+                        .get("integerToByteString-cpu-arguments-slope")
+                        .unwrap_or(&30000000000),
+                }),
+            },
+            byte_string_to_integer: CostingFun {
+                cpu: TwoArguments::QuadraticInY(QuadraticFunction {
+                    coeff_0: *cost_map
+                        .get("byteStringToInteger-cpu-arguments-c0")
+                        .unwrap_or(&30000000000),
+                    coeff_1: *cost_map
+                        .get("byteStringToInteger-cpu-arguments-c1")
+                        .unwrap_or(&30000000000),
+                    coeff_2: *cost_map
+                        .get("byteStringToInteger-cpu-arguments-c2")
+                        .unwrap_or(&30000000000),
+                }),
+                mem: TwoArguments::LinearInY(LinearSize {
+                    intercept: *cost_map
+                        .get("byteStringToInteger-cpu-arguments-intercept")
+                        .unwrap_or(&30000000000),
+                    slope: *cost_map
+                        .get("byteStringToInteger-cpu-arguments-slope")
+                        .unwrap_or(&30000000000),
+                }),
+            },
         },
     }
 }
@@ -3286,6 +3383,7 @@ impl OneArgument {
         }
     }
 }
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum TwoArguments {
     ConstantCost(i64),
@@ -3299,7 +3397,9 @@ pub enum TwoArguments {
     LinearOnDiagonal(ConstantOrLinear),
     ConstAboveDiagonal(ConstantOrTwoArguments),
     ConstBelowDiagonal(ConstantOrTwoArguments),
+    QuadraticInY(QuadraticFunction),
 }
+
 impl TwoArguments {
     pub fn cost(&self, x: i64, y: i64) -> i64 {
         match self {
@@ -3334,6 +3434,7 @@ impl TwoArguments {
                     p.cost(x, y)
                 }
             }
+            TwoArguments::QuadraticInY(q) => q.coeff_0 + (q.coeff_1 * y) + (q.coeff_2 * y * y),
         }
     }
 }
@@ -3345,6 +3446,8 @@ pub enum ThreeArguments {
     LinearInX(LinearSize),
     LinearInY(LinearSize),
     LinearInZ(LinearSize),
+    QuadraticInZ(QuadraticFunction),
+    LiteralInYorLinearInZ(LinearSize),
 }
 
 impl ThreeArguments {
@@ -3355,6 +3458,14 @@ impl ThreeArguments {
             ThreeArguments::LinearInX(l) => x * l.slope + l.intercept,
             ThreeArguments::LinearInY(l) => y * l.slope + l.intercept,
             ThreeArguments::LinearInZ(l) => z * l.slope + l.intercept,
+            ThreeArguments::QuadraticInZ(q) => q.coeff_0 + (q.coeff_1 * z) + (q.coeff_2 * z * z),
+            ThreeArguments::LiteralInYorLinearInZ(l) => {
+                if y == 0 {
+                    l.slope * z + l.intercept
+                } else {
+                    y
+                }
+            }
         }
     }
 }
@@ -3420,6 +3531,13 @@ pub struct ConstantOrLinear {
 pub struct ConstantOrTwoArguments {
     pub constant: i64,
     pub model: Box<TwoArguments>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct QuadraticFunction {
+    coeff_0: i64,
+    coeff_1: i64,
+    coeff_2: i64,
 }
 
 #[repr(u8)]
