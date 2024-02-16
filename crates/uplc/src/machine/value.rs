@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, mem::size_of, ops::Deref, rc::Rc};
 
 use num_bigint::BigInt;
-use num_traits::{Signed, ToPrimitive};
+use num_traits::{Signed, ToPrimitive, Zero};
 use pallas::ledger::primitives::babbage::{self, PlutusData};
 
 use crate::{
@@ -386,8 +386,13 @@ impl TryFrom<&Value> for Constant {
     }
 }
 
-fn integer_log2(i: BigInt) -> i64 {
+pub fn integer_log2(i: BigInt) -> i64 {
+    if i.is_zero() {
+        return 0;
+    }
+
     let (_, bytes) = i.to_bytes_be();
+
     match bytes.first() {
         None => unreachable!("empty number?"),
         Some(u) => (8 - u.leading_zeros() - 1) as i64 + 8 * (bytes.len() - 1) as i64,
@@ -524,6 +529,7 @@ mod tests {
     #[test]
     fn integer_log2_oracle() {
         // Values come from the Haskell implementation
+        assert_eq!(integer_log2(0.into()), 0);
         assert_eq!(integer_log2(1.into()), 0);
         assert_eq!(integer_log2(42.into()), 5);
         assert_eq!(

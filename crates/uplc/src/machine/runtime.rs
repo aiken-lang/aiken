@@ -2,12 +2,14 @@ use std::{mem::size_of, ops::Deref, rc::Rc};
 
 use num_bigint::BigInt;
 use num_integer::Integer;
+use num_traits::{Signed, ToBytes, Zero};
 use once_cell::sync::Lazy;
 use pallas::ledger::primitives::babbage::{Language, PlutusData};
 
 use crate::{
     ast::{Constant, Data, Type},
     builtins::DefaultFunction,
+    machine::value::integer_log2,
     plutus_data_to_bytes,
 };
 
@@ -31,6 +33,8 @@ static SCALAR_PERIOD: Lazy<BigInt> = Lazy::new(|| {
 const BLST_P1_COMPRESSED_SIZE: usize = 48;
 
 const BLST_P2_COMPRESSED_SIZE: usize = 96;
+
+const INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH: i64 = 8192;
 
 //#[derive(std::cmp::PartialEq)]
 //pub enum EvalMode {
@@ -1297,6 +1301,80 @@ impl DefaultFunction {
                 let constant = Constant::Bool(verified);
 
                 Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::IntegerToByteString => {
+                let endianness = args[0].unwrap_bool()?;
+                let size = args[1].unwrap_integer()?;
+                let input = args[2].unwrap_integer()?;
+
+                if size.is_negative() {
+                    return Err(Error::IntegerToByteStringNegativeSize(size.clone()));
+                }
+
+                if size > &INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH.into() {
+                    return Err(Error::IntegerToByteStringSizeTooBig(
+                        size.clone(),
+                        INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH,
+                    ));
+                }
+
+                if size.is_zero()
+                    && integer_log2(input.clone())
+                        >= 8 * INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH
+                {
+                    let required = integer_log2(input.clone()) / 8 + 1;
+
+                    return Err(Error::IntegerToByteStringSizeTooBig(
+                        required.into(),
+                        INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH,
+                    ));
+                }
+
+                if input.is_negative() {
+                    return Err(Error::IntegerToByteStringNegativeInput(input.clone()));
+                }
+
+                let size_unwrapped: usize = size.try_into().unwrap();
+
+                if input.is_zero() {
+                    let constant = Constant::ByteString(vec![0; size_unwrapped]);
+
+                    return Ok(Value::Con(constant.into()));
+                }
+
+                let mut bytes = if *endianness {
+                    input.to_be_bytes()
+                } else {
+                    input.to_le_bytes()
+                };
+
+                if !size.is_zero() && bytes.len() > size_unwrapped {
+                    return Err(Error::IntegerToByteStringSizeTooSmall(
+                        size.clone(),
+                        bytes.len(),
+                    ));
+                }
+
+                if size_unwrapped > 0 {
+                    let padding_size = size_unwrapped - bytes.len();
+
+                    let mut padding = vec![0; padding_size];
+
+                    if *endianness {
+                        padding.append(&mut bytes);
+
+                        bytes = padding;
+                    } else {
+                        bytes.append(&mut padding);
+                    }
+                };
+
+                let constant = Constant::ByteString(bytes);
+
+                Ok(Value::Con(constant.into()))
+            }
+            DefaultFunction::ByteStringToInteger => {
+                todo!("do it not live")
             }
         }
     }
