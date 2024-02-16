@@ -773,6 +773,16 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
 
             (tipo, 2)
         }
+        DefaultFunction::IntegerToByteString => {
+            let tipo = function(vec![bool(), int(), int()], byte_array());
+
+            (tipo, 3)
+        }
+        DefaultFunction::ByteStringToInteger => {
+            let tipo = function(vec![bool(), byte_array()], int());
+
+            (tipo, 2)
+        }
     };
 
     ValueConstructor::public(
