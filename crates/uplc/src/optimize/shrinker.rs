@@ -6,7 +6,7 @@ use itertools::Itertools;
 use pallas::ledger::primitives::babbage::{BigInt, PlutusData};
 
 use crate::{
-    ast::{Constant, Data, Name, NamedDeBruijn, Program, Term, Type},
+    ast::{Constant, Data, Name, NamedDeBruijn, Program, Term, Type, Unique},
     builtins::DefaultFunction,
     parser::interner::Interner,
 };
@@ -83,18 +83,6 @@ impl Default for IdGen {
     fn default() -> Self {
         Self::new()
     }
-}
-
-fn id_vec_function_to_var(func_name: &str, id_vec: &[usize]) -> String {
-    format!(
-        "__{}_{}_curried",
-        func_name,
-        id_vec
-            .iter()
-            .map(|item| item.to_string())
-            .collect::<Vec<String>>()
-            .join("_")
-    )
 }
 
 #[derive(PartialEq, PartialOrd, Default, Debug, Clone)]
@@ -810,7 +798,7 @@ impl Program<Name> {
         })
     }
 
-    pub fn builtin_force_reducer(self) -> Self {
+    pub fn builtin_force_reducer(self) -> (Self, Unique) {
         let mut builtin_map = IndexMap::new();
 
         let program = self.traverse_uplc_with(&mut |_id, term, _arg_stack, _scope| {
@@ -868,7 +856,10 @@ impl Program<Name> {
 
         let program = Program::<NamedDeBruijn>::try_from(program).unwrap();
 
-        Program::<Name>::try_from(program).unwrap()
+        (
+            Program::<Name>::try_from(program).unwrap(),
+            interner.current_unique(),
+        )
     }
 
     pub fn inline_reducer(self) -> Self {
@@ -1156,7 +1147,7 @@ impl Program<Name> {
         })
     }
 
-    pub fn builtin_curry_reducer(self) -> Self {
+    pub fn builtin_curry_reducer(self, current: &mut Unique) -> Self {
         let mut curried_terms = vec![];
         let mut id_mapped_curry_terms: IndexMap<CurriedName, (Scope, Term<Name>, bool)> =
             IndexMap::new();
@@ -1164,6 +1155,7 @@ impl Program<Name> {
         let mut scope_mapped_to_term: IndexMap<Scope, Vec<(CurriedName, Term<Name>)>> =
             IndexMap::new();
         let mut final_ids: IndexMap<Vec<usize>, ()> = IndexMap::new();
+        let mut unique_map: IndexMap<String, Unique> = IndexMap::new();
 
         let step_a = self.traverse_uplc_with(&mut |_id, term, arg_stack, scope| match term {
             Term::Builtin(func) => {
@@ -1209,6 +1201,8 @@ impl Program<Name> {
 
                         id_only_vec.push(node.curried_id);
 
+                        let id_var_name = id_vec_function_to_var(&func.aiken_name(), &id_only_vec);
+
                         let curry_name = CurriedName {
                             func_name: func.aiken_name(),
                             id_vec: id_only_vec,
@@ -1220,19 +1214,33 @@ impl Program<Name> {
                             *map_scope = map_scope.common_ancestor(scope);
                             *multi_occurrences = true;
                         } else if id_vec.is_empty() {
+                            unique_map.insert(id_var_name, *current);
+
+                            current.increment();
+
                             id_mapped_curry_terms.insert(
                                 curry_name,
                                 (scope.clone(), Term::Builtin(*func).apply(node.term), false),
                             );
                         } else {
+                            unique_map.insert(id_var_name, *current);
+
+                            current.increment();
+
                             let var_name = id_vec_function_to_var(
                                 &func.aiken_name(),
                                 &id_vec.iter().map(|item| item.curried_id).collect_vec(),
                             );
 
+                            let unique = *unique_map.get(&var_name).unwrap_or(current);
+
                             id_mapped_curry_terms.insert(
                                 curry_name,
-                                (scope.clone(), Term::var(var_name).apply(node.term), false),
+                                (
+                                    scope.clone(),
+                                    Term::var_unique(var_name, unique).apply(node.term),
+                                    false,
+                                ),
                             );
                         }
                     }
@@ -1264,7 +1272,7 @@ impl Program<Name> {
                 }
             });
 
-        let mut step_b = step_a.traverse_uplc_with(&mut |id, term, arg_stack, scope| match term {
+        step_a.traverse_uplc_with(&mut |id, term, arg_stack, scope| match term {
             Term::Builtin(func) => {
                 if func.can_curry_builtin() && arg_stack.len() == func.arity() {
                     let Some(curried_builtin) =
@@ -1304,7 +1312,9 @@ impl Program<Name> {
                         curry_applied_ids.push(item.applied_id);
                     });
 
-                    *term = Term::var(name);
+                    let unique = *unique_map.get(&name).unwrap();
+
+                    *term = Term::var_unique(name, unique);
                 }
             }
             Term::Apply { function, .. } => {
@@ -1318,8 +1328,19 @@ impl Program<Name> {
                     for (key, val) in insert_list.into_iter().rev() {
                         let name = id_vec_function_to_var(&key.func_name, &key.id_vec);
 
-                        if var_occurrences(term, Name::text(&name).into()).found {
-                            *term = term.clone().lambda(name).apply(val);
+                        let unique = *unique_map.get(&name).unwrap();
+
+                        if var_occurrences(
+                            term,
+                            Name {
+                                text: name.clone(),
+                                unique,
+                            }
+                            .into(),
+                        )
+                        .found
+                        {
+                            *term = term.clone().lambda_unique(name, unique).apply(val);
                         }
                     }
                 }
@@ -1331,22 +1352,37 @@ impl Program<Name> {
                     for (key, val) in insert_list.into_iter().rev() {
                         let name = id_vec_function_to_var(&key.func_name, &key.id_vec);
 
-                        if var_occurrences(term, Name::text(&name).into()).found {
-                            *term = term.clone().lambda(name).apply(val);
+                        let unique = *unique_map.get(&name).unwrap();
+
+                        if var_occurrences(
+                            term,
+                            Name {
+                                text: name.clone(),
+                                unique,
+                            }
+                            .into(),
+                        )
+                        .found
+                        {
+                            *term = term.clone().lambda_unique(name, unique).apply(val);
                         }
                     }
                 }
             }
-        });
-
-        let mut interner = Interner::new();
-
-        interner.program(&mut step_b);
-
-        let step_b = Program::<NamedDeBruijn>::try_from(step_b).unwrap();
-
-        Program::<Name>::try_from(step_b).unwrap()
+        })
     }
+}
+
+fn id_vec_function_to_var(func_name: &str, id_vec: &[usize]) -> String {
+    format!(
+        "__{}_{}_curried",
+        func_name,
+        id_vec
+            .iter()
+            .map(|item| item.to_string())
+            .collect::<Vec<String>>()
+            .join("_")
+    )
 }
 
 fn var_occurrences(term: &Term<Name>, search_for: Rc<Name>) -> VarLookup {
@@ -1740,7 +1776,7 @@ mod tests {
 
         let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
 
-        let mut actual = program.builtin_force_reducer();
+        let (mut actual, _) = program.builtin_force_reducer();
 
         let mut interner = Interner::new();
 
@@ -1799,7 +1835,7 @@ mod tests {
 
         let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
 
-        let mut actual = program.builtin_force_reducer();
+        let (mut actual, _) = program.builtin_force_reducer();
 
         let mut interner = Interner::new();
 
@@ -1965,9 +2001,13 @@ mod tests {
 
         interner.program(&mut expected);
 
+        let mut unique = interner.current_unique();
+
+        unique.large_offset();
+
         let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
 
-        let actual = program.builtin_curry_reducer();
+        let actual = program.builtin_curry_reducer(&mut unique);
 
         let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
 

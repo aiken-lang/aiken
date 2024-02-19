@@ -420,6 +420,10 @@ impl Unique {
     pub fn increment(&mut self) {
         self.0 += 1;
     }
+
+    pub fn large_offset(&mut self) {
+        self.0 += 5_000_000;
+    }
 }
 
 impl From<isize> for Unique {
