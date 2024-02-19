@@ -76,4 +76,8 @@ impl Interner {
             unique
         }
     }
+
+    pub fn current_unique(&self) -> Unique {
+        self.current
+    }
 }

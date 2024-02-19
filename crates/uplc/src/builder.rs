@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Constant, Name, Term, Type},
+    ast::{Constant, Name, Term, Type, Unique},
     builtins::DefaultFunction,
 };
 use pallas::ledger::primitives::alonzo::PlutusData;
@@ -464,8 +464,29 @@ impl Term<Name> {
         }
     }
 
+    pub fn lambda_unique(self, parameter_name: impl ToString, unique: Unique) -> Self {
+        Term::Lambda {
+            parameter_name: Name {
+                text: parameter_name.to_string(),
+                unique,
+            }
+            .into(),
+            body: self.into(),
+        }
+    }
+
     pub fn var(name: impl ToString) -> Self {
         Term::Var(Name::text(name).into())
+    }
+
+    pub fn var_unique(name: impl ToString, unique: Unique) -> Self {
+        Term::Var(
+            Name {
+                text: name.to_string(),
+                unique,
+            }
+            .into(),
+        )
     }
 
     // Misc.
