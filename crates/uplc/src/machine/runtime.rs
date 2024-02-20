@@ -2,7 +2,7 @@ use std::{mem::size_of, ops::Deref, rc::Rc};
 
 use num_bigint::BigInt;
 use num_integer::Integer;
-use num_traits::{Signed, ToBytes, Zero};
+use num_traits::{Signed, Zero};
 use once_cell::sync::Lazy;
 use pallas::ledger::primitives::babbage::{Language, PlutusData};
 
