@@ -1342,10 +1342,10 @@ impl DefaultFunction {
                     return Ok(Value::Con(constant.into()));
                 }
 
-                let mut bytes = if *endianness {
-                    input.to_be_bytes()
+                let (_, mut bytes) = if *endianness {
+                    input.to_bytes_be()
                 } else {
-                    input.to_le_bytes()
+                    input.to_bytes_le()
                 };
 
                 if !size.is_zero() && bytes.len() > size_unwrapped {
@@ -1374,7 +1374,18 @@ impl DefaultFunction {
                 Ok(Value::Con(constant.into()))
             }
             DefaultFunction::ByteStringToInteger => {
-                todo!("do it not live")
+                let endianness = args[0].unwrap_bool()?;
+                let bytes = args[1].unwrap_byte_string()?;
+
+                let number = if *endianness {
+                    BigInt::from_bytes_be(num_bigint::Sign::Plus, bytes)
+                } else {
+                    BigInt::from_bytes_le(num_bigint::Sign::Plus, bytes)
+                };
+
+                let constant = Constant::Integer(number);
+
+                Ok(Value::Con(constant.into()))
             }
         }
     }
