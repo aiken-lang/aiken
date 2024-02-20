@@ -163,8 +163,10 @@ impl Machine {
             Term::Constr { tag, mut fields } => {
                 self.step_and_maybe_spend(StepKind::Constr)?;
 
+                fields.reverse();
+
                 if !fields.is_empty() {
-                    let popped_field = fields.remove(0);
+                    let popped_field = fields.pop().unwrap();
 
                     Ok(MachineState::Compute(
                         Context::FrameConstr(env.clone(), tag, fields, vec![], context.into()),
@@ -213,10 +215,10 @@ impl Machine {
             Context::FrameAwaitArg(fun, ctx) => self.apply_evaluate(*ctx, fun, value),
             Context::FrameAwaitFunValue(arg, ctx) => self.apply_evaluate(*ctx, value, arg),
             Context::FrameConstr(env, tag, mut fields, mut resolved_fields, ctx) => {
-                resolved_fields.insert(0, value);
+                resolved_fields.push(value);
 
                 if !fields.is_empty() {
-                    let popped_field = fields.remove(0);
+                    let popped_field = fields.pop().unwrap();
 
                     Ok(MachineState::Compute(
                         Context::FrameConstr(env.clone(), tag, fields, resolved_fields, ctx),
@@ -376,7 +378,7 @@ fn transfer_arg_stack(mut args: Vec<Value>, ctx: Context) -> Context {
     if args.is_empty() {
         ctx
     } else {
-        let popped_field = args.remove(0);
+        let popped_field = args.pop().unwrap();
 
         transfer_arg_stack(args, Context::FrameAwaitFunValue(popped_field, ctx.into()))
     }
