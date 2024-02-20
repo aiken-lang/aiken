@@ -59,7 +59,7 @@ fn evaluation() {
             let actual = actual_evaluation_result(path);
             let expected = expected_to_program(&expected_file);
 
-            assert_eq!(actual, expected, "{}", path.display());
+            pretty_assertions::assert_eq!(expected, actual, "{}", path.display());
         }
     }
 }
