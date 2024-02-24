@@ -946,6 +946,17 @@ The best thing to do from here is to remove it."#))]
         #[label("{} arguments", if *count < 2 { "not enough" } else { "too many" })]
         location: Span,
     },
+
+    #[error("I caught a test with too many arguments.\n")]
+    #[diagnostic(code("illegal::test_arity"))]
+    #[diagnostic(help(
+        "Tests are allowed to have 0 or 1 argument, but no more. Here I've found a test definition with {count} arguments. If you need to provide multiple values to a test, use a Record or a Tuple.",
+    ))]
+    IncorrectTestArity {
+        count: usize,
+        #[label("too many arguments")]
+        location: Span,
+    },
 }
 
 impl ExtraData for Error {
@@ -997,6 +1008,7 @@ impl ExtraData for Error {
             | Error::UnnecessarySpreadOperator { .. }
             | Error::UpdateMultiConstructorType { .. }
             | Error::ValidatorImported { .. }
+            | Error::IncorrectTestArity { .. }
             | Error::ValidatorMustReturnBool { .. } => None,
 
             Error::UnknownType { name, .. }

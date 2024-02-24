@@ -158,12 +158,15 @@ fn str_to_keyword(word: &str) -> Option<Token> {
     }
 }
 
-pub type TypedFunction = Function<Rc<Type>, TypedExpr>;
-pub type UntypedFunction = Function<(), UntypedExpr>;
+pub type TypedFunction = Function<Rc<Type>, TypedExpr, TypedArg>;
+pub type UntypedFunction = Function<(), UntypedExpr, UntypedArg>;
+
+pub type TypedTest = Function<Rc<Type>, TypedExpr, TypedArgVia>;
+pub type UntypedTest = Function<(), UntypedExpr, UntypedArgVia>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Function<T, Expr> {
-    pub arguments: Vec<Arg<T>>,
+pub struct Function<T, Expr, Arg> {
+    pub arguments: Vec<Arg>,
     pub body: Expr,
     pub doc: Option<String>,
     pub location: Span,
@@ -178,7 +181,7 @@ pub struct Function<T, Expr> {
 pub type TypedTypeAlias = TypeAlias<Rc<Type>>;
 pub type UntypedTypeAlias = TypeAlias<()>;
 
-impl TypedFunction {
+impl TypedTest {
     pub fn test_hint(&self) -> Option<(BinOp, Box<TypedExpr>, Box<TypedExpr>)> {
         do_test_hint(&self.body)
     }
@@ -358,18 +361,24 @@ pub type UntypedValidator = Validator<(), UntypedExpr>;
 pub struct Validator<T, Expr> {
     pub doc: Option<String>,
     pub end_position: usize,
-    pub fun: Function<T, Expr>,
-    pub other_fun: Option<Function<T, Expr>>,
+    pub fun: Function<T, Expr, Arg<T>>,
+    pub other_fun: Option<Function<T, Expr, Arg<T>>>,
     pub location: Span,
     pub params: Vec<Arg<T>>,
 }
 
-pub type TypedDefinition = Definition<Rc<Type>, TypedExpr, String>;
-pub type UntypedDefinition = Definition<(), UntypedExpr, ()>;
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionIdentifier {
+    pub module: Option<String>,
+    pub name: String,
+}
+
+pub type TypedDefinition = Definition<Rc<Type>, TypedExpr, String, ()>;
+pub type UntypedDefinition = Definition<(), UntypedExpr, (), DefinitionIdentifier>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Definition<T, Expr, PackageName> {
-    Fn(Function<T, Expr>),
+pub enum Definition<T, Expr, PackageName, Ann> {
+    Fn(Function<T, Expr, Arg<T>>),
 
     TypeAlias(TypeAlias<T>),
 
@@ -379,12 +388,12 @@ pub enum Definition<T, Expr, PackageName> {
 
     ModuleConstant(ModuleConstant<T>),
 
-    Test(Function<T, Expr>),
+    Test(Function<T, Expr, ArgVia<T, Ann>>),
 
     Validator(Validator<T, Expr>),
 }
 
-impl<A, B, C> Definition<A, B, C> {
+impl<A, B, C, D> Definition<A, B, C, D> {
     pub fn location(&self) -> Span {
         match self {
             Definition::Fn(Function { location, .. })
@@ -631,6 +640,40 @@ impl<A> Arg<A> {
 
     pub fn put_doc(&mut self, new_doc: String) {
         self.doc = Some(new_doc);
+    }
+}
+
+pub type TypedArgVia = ArgVia<Rc<Type>, ()>;
+pub type UntypedArgVia = ArgVia<(), DefinitionIdentifier>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArgVia<T, Ann> {
+    pub arg_name: ArgName,
+    pub location: Span,
+    pub via: Ann,
+    pub tipo: T,
+}
+
+impl<T, Ann> From<ArgVia<T, Ann>> for Arg<T> {
+    fn from(arg: ArgVia<T, Ann>) -> Arg<T> {
+        Arg {
+            arg_name: arg.arg_name,
+            location: arg.location,
+            tipo: arg.tipo,
+            annotation: None,
+            doc: None,
+        }
+    }
+}
+
+impl From<TypedArg> for TypedArgVia {
+    fn from(arg: TypedArg) -> TypedArgVia {
+        ArgVia {
+            arg_name: arg.arg_name,
+            tipo: arg.tipo,
+            location: arg.location,
+            via: (),
+        }
     }
 }
 

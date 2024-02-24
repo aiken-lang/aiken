@@ -1,0 +1,38 @@
+---
+source: crates/aiken-lang/src/parser/definition/test.rs
+description: "Code:\n\ntest foo(x via fuzz.any_int) {\n    True\n}\n"
+---
+Test(
+    Function {
+        arguments: [
+            ArgVia {
+                arg_name: Named {
+                    name: "x",
+                    label: "x",
+                    location: 9..10,
+                    is_validator_param: false,
+                },
+                location: 9..27,
+                via: DefinitionIdentifier {
+                    module: Some(
+                        "fuzz",
+                    ),
+                    name: "any_int",
+                },
+                tipo: (),
+            },
+        ],
+        body: Var {
+            location: 35..39,
+            name: "True",
+        },
+        doc: None,
+        location: 0..28,
+        name: "foo",
+        public: false,
+        return_annotation: None,
+        return_type: (),
+        end_position: 40,
+        can_error: false,
+    },
+)

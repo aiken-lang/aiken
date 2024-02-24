@@ -1,6 +1,6 @@
 use pretty_assertions::assert_eq;
 
-use aiken_lang::ast::{Definition, Function, TraceLevel, Tracing, TypedFunction, TypedValidator};
+use aiken_lang::ast::{Definition, Function, TraceLevel, Tracing, TypedTest, TypedValidator};
 use uplc::{
     ast::{Constant, Data, DeBruijn, Name, Program, Term, Type},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
@@ -13,7 +13,7 @@ use crate::module::CheckedModules;
 use super::TestProject;
 
 enum TestType {
-    Func(TypedFunction),
+    Func(TypedTest),
     Validator(TypedValidator),
 }
 

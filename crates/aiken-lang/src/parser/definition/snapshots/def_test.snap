@@ -1,0 +1,21 @@
+---
+source: crates/aiken-lang/src/parser/definition/test.rs
+description: "Code:\n\ntest foo() {\n    True\n}\n"
+---
+Test(
+    Function {
+        arguments: [],
+        body: Var {
+            location: 17..21,
+            name: "True",
+        },
+        doc: None,
+        location: 0..10,
+        name: "foo",
+        public: false,
+        return_annotation: None,
+        return_type: (),
+        end_position: 22,
+        can_error: false,
+    },
+)
