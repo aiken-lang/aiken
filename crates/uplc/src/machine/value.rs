@@ -410,10 +410,14 @@ pub fn from_pallas_bigint(n: &babbage::BigInt) -> BigInt {
 }
 
 pub fn to_pallas_bigint(n: &BigInt) -> babbage::BigInt {
-    if let Some(i) = n.to_i64() {
-        let pallas_int: pallas::codec::utils::Int = i.into();
-        babbage::BigInt::Int(pallas_int)
-    } else if n.is_positive() {
+    if let Some(i) = n.to_i128() {
+        if let Ok(i) = i.try_into() {
+            let pallas_int: pallas::codec::utils::Int = i;
+            return babbage::BigInt::Int(pallas_int);
+        }
+    }
+
+    if n.is_positive() {
         let (_, bytes) = n.to_bytes_be();
         babbage::BigInt::BigUInt(bytes.into())
     } else {

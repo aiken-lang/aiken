@@ -1,13 +1,14 @@
 # Changelog
 
-## v1.0.25-alpha - 
+## v1.0.25-alpha - UNRELEASED
 
 ### Added
 
-- **aiken-lang**: Data now has a generic argument that can be used to specify the blueprint type. @KtorZ 
+- **aiken-lang**: Data now has a generic argument that can be used to specify the blueprint type. @KtorZ
 
 ### Fixed
 
+- **uplc**: `serialise_data` builtin wrongly encoding some larger ints as tagged CBOR bigints, instead of plain integers over 9 bytes. @KtorZ
 
 ### Changed
 
