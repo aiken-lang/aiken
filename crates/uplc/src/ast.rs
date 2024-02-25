@@ -281,9 +281,9 @@ impl Data {
         hex::encode(bytes)
     }
     pub fn integer(i: BigInt) -> PlutusData {
-        match i.to_i64() {
-            Some(i) => PlutusData::BigInt(alonzo::BigInt::Int(i.into())),
-            None => {
+        match i.to_i128().map(|n| n.try_into()) {
+            Some(Ok(i)) => PlutusData::BigInt(alonzo::BigInt::Int(i)),
+            _ => {
                 let (sign, bytes) = i.to_bytes_be();
                 match sign {
                     num_bigint::Sign::Minus => {
