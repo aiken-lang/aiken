@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        Annotation, Arg, ArgName, DataType, Definition, Function, Layer, ModuleConstant,
+        Annotation, Arg, ArgName, ArgVia, DataType, Definition, Function, Layer, ModuleConstant,
         ModuleKind, RecordConstructor, RecordConstructorArg, Tracing, TypeAlias, TypedArg,
         TypedDefinition, TypedFunction, TypedModule, UntypedArg, UntypedDefinition, UntypedModule,
         Use, Validator,
@@ -383,7 +383,7 @@ fn infer_definition(
                 }
             }
 
-            let annotation = match f.arguments.first() {
+            let (typed_via, annotation) = match f.arguments.first() {
                 Some(arg) => {
                     if f.arguments.len() > 1 {
                         return Err(Error::IncorrectTestArity {
@@ -392,12 +392,17 @@ fn infer_definition(
                         });
                     }
 
-                    let ValueConstructor { tipo, .. } = ExprTyper::new(environment, lines, tracing)
-                        .infer_value_constructor(&arg.via.module, &arg.via.name, &arg.location)?;
+                    let typed_via =
+                        ExprTyper::new(environment, lines, tracing).infer(arg.via.clone())?;
 
-                    Ok(Some(annotate_fuzzer(&tipo, &arg.location)?))
+                    let tipo = typed_via.tipo();
+
+                    Ok((
+                        Some(typed_via),
+                        Some(annotate_fuzzer(&tipo, &arg.location)?),
+                    ))
                 }
-                None => Ok(None),
+                None => Ok((None, None)),
             }?;
 
             let typed_f = infer_function(
@@ -439,13 +444,25 @@ fn infer_definition(
                 location: typed_f.location,
                 name: typed_f.name,
                 public: typed_f.public,
-                arguments: match annotation {
-                    Some(_) => vec![typed_f
-                        .arguments
-                        .first()
-                        .expect("has exactly one argument")
-                        .to_owned()
-                        .into()],
+                arguments: match typed_via {
+                    Some(via) => {
+                        let Arg {
+                            arg_name,
+                            location,
+                            tipo,
+                            ..
+                        } = typed_f
+                            .arguments
+                            .first()
+                            .expect("has exactly one argument")
+                            .to_owned();
+                        vec![ArgVia {
+                            arg_name,
+                            location,
+                            tipo,
+                            via,
+                        }]
+                    }
                     None => vec![],
                 },
                 return_annotation: typed_f.return_annotation,

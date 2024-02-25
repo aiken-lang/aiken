@@ -1,4 +1,3 @@
-name = "thing/thing"
+name = "aiken-lang/acceptance_test_093"
 version = "0.0.0"
-license = "Apache-2.0"
-description = "Aiken contracts for project 'thing/thing'"
+description = ""

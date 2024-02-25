@@ -1,10 +1,12 @@
-pub fn wow(a: Void) -> Int {
-  when Some(a) is {
-    Some(Void) -> 42
-    None -> 0
-  }
+type PRNG {
+  seed: Int,
+  size: Int,
 }
 
-test wow_1() {
-  wow(Void) == 42
+fn any_int(prng: PRNG) {
+  (prng, prng.seed)
+}
+
+test prop_test_foo(n via any_int) {
+  n > 0
 }

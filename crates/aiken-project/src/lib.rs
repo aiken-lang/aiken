@@ -22,10 +22,13 @@ use crate::blueprint::{
     Blueprint,
 };
 use aiken_lang::{
-    ast::{Definition, Function, ModuleKind, Tracing, TypedDataType, TypedFunction, Validator},
+    ast::{
+        Definition, Function, ModuleKind, Span, Tracing, TypedDataType, TypedFunction, Validator,
+    },
     builtins,
-    gen_uplc::builder::{DataTypeKey, FunctionAccessKey},
-    tipo::TypeInfo,
+    expr::TypedExpr,
+    gen_uplc::builder::{cast_validator_args, DataTypeKey, FunctionAccessKey},
+    tipo::{Type, TypeInfo},
     IdGenerator,
 };
 use indexmap::IndexMap;
@@ -38,16 +41,17 @@ use pallas::ledger::{
     traverse::ComputeHash,
 };
 
-use script::{EvalHint, EvalInfo, Script};
+use script::{EvalHint, EvalInfo, PropertyTest, Test};
 use std::{
     collections::HashMap,
     fs::{self, File},
     io::BufReader,
     path::{Path, PathBuf},
+    rc::Rc,
 };
 use telemetry::EventListener;
 use uplc::{
-    ast::{DeBruijn, Name, Program, Term},
+    ast::{DeBruijn, Name, NamedDeBruijn, Program, Term},
     machine::cost_model::ExBudget,
     PlutusData,
 };
@@ -319,7 +323,7 @@ where
                     self.event_listener.handle_event(Event::RunningTests);
                 }
 
-                let results = self.eval_scripts(tests);
+                let results = self.run_tests(tests.iter().collect());
 
                 let errors: Vec<Error> = results
                     .iter()
@@ -328,14 +332,13 @@ where
                             None
                         } else {
                             Some(Error::TestFailure {
-                                name: e.script.name.clone(),
-                                path: e.script.input_path.clone(),
+                                name: e.test.name().to_string(),
+                                path: e.test.input_path().to_path_buf(),
                                 evaluation_hint: e
-                                    .script
-                                    .evaluation_hint
-                                    .as_ref()
+                                    .test
+                                    .evaluation_hint()
                                     .map(|hint| hint.to_string()),
-                                src: e.script.program.to_pretty(),
+                                src: e.test.program().to_pretty(),
                                 verbose,
                             })
                         }
@@ -684,7 +687,7 @@ where
         match_tests: Option<Vec<String>>,
         exact_match: bool,
         tracing: Tracing,
-    ) -> Result<Vec<Script>, Error> {
+    ) -> Result<Vec<Test>, Error> {
         let mut scripts = Vec::new();
         let mut testable_validators = Vec::new();
 
@@ -802,6 +805,7 @@ where
                 name,
                 body,
                 can_error,
+                arguments,
                 ..
             } = func_def;
 
@@ -815,13 +819,13 @@ where
             let evaluation_hint = func_def.test_hint().map(|(bin_op, left_src, right_src)| {
                 let left = generator
                     .clone()
-                    .generate_test(&left_src, &module_name)
+                    .generate_raw(&left_src, &module_name)
                     .try_into()
                     .unwrap();
 
                 let right = generator
                     .clone()
-                    .generate_test(&right_src, &module_name)
+                    .generate_raw(&right_src, &module_name)
                     .try_into()
                     .unwrap();
 
@@ -833,44 +837,91 @@ where
                 }
             });
 
-            let program = generator.generate_test(body, &module_name);
+            if arguments.is_empty() {
+                let program = generator.generate_raw(body, &module_name);
 
-            let script = Script::new(
-                input_path,
-                module_name,
-                name.to_string(),
-                *can_error,
-                program.try_into().unwrap(),
-                evaluation_hint,
-            );
+                let test = Test::unit_test(
+                    input_path,
+                    module_name,
+                    name.to_string(),
+                    *can_error,
+                    program.try_into().unwrap(),
+                    evaluation_hint,
+                );
 
-            programs.push(script);
+                programs.push(test);
+            } else {
+                let parameter = arguments.first().unwrap().to_owned();
+
+                let via = parameter.via.clone();
+
+                let body = TypedExpr::Fn {
+                    location: Span::empty(),
+                    tipo: Rc::new(Type::Fn {
+                        args: vec![parameter.tipo.clone()],
+                        ret: body.tipo(),
+                    }),
+                    is_capture: false,
+                    args: vec![parameter.clone().into()],
+                    body: Box::new(body.clone()),
+                    return_annotation: None,
+                };
+
+                let program = generator.clone().generate_raw(&body, &module_name);
+
+                let term = cast_validator_args(program.term, &[parameter.into()]);
+
+                let fuzzer: Program<NamedDeBruijn> = generator
+                    .clone()
+                    .generate_raw(&via, &module_name)
+                    .try_into()
+                    .expect("TODO: provide a better error when one is trying to instantiate something that isn't a fuzzer as one");
+
+                let prop = Test::property_test(
+                    input_path,
+                    module_name,
+                    name.to_string(),
+                    *can_error,
+                    Program { term, ..program }.try_into().unwrap(),
+                    fuzzer,
+                );
+
+                programs.push(prop);
+            }
         }
 
         Ok(programs)
     }
 
-    fn eval_scripts(&self, scripts: Vec<Script>) -> Vec<EvalInfo> {
-        use rayon::prelude::*;
+    fn run_tests<'a>(&'a self, tests: Vec<&'a Test>) -> Vec<EvalInfo<'a>> {
+        // FIXME: Find a way to re-introduce parallel testing despite the references (which aren't
+        // sizeable).
+        // We do now hold references to tests because the property tests results are all pointing
+        // to the same test, so we end up copying the same test over and over.
+        //
+        // So we might want to rework the evaluation result to avoid that and keep parallel testing
+        // possible.
+        // use rayon::prelude::*;
 
-        // TODO: in the future we probably just want to be able to
-        // tell the machine to not explode on budget consumption.
-        let initial_budget = ExBudget {
-            mem: i64::MAX,
-            cpu: i64::MAX,
-        };
+        tests
+            .iter()
+            .flat_map(|test| match test {
+                Test::UnitTest(unit_test) => {
+                    let mut result = unit_test.run();
+                    vec![test.report(&mut result)]
+                }
+                Test::PropertyTest(ref property_test) => {
+                    let mut seed = PropertyTest::new_seed(42);
 
-        scripts
-            .into_par_iter()
-            .map(|script| {
-                let mut eval_result = script.program.clone().eval(initial_budget);
+                    let mut results = vec![];
+                    for _ in 0..100 {
+                        let (new_seed, sample) = property_test.sample(seed);
+                        seed = new_seed;
+                        let mut result = property_test.run(&sample);
+                        results.push(test.report(&mut result));
+                    }
 
-                EvalInfo {
-                    success: !eval_result.failed(script.can_error),
-                    script,
-                    spent_budget: eval_result.cost(),
-                    logs: eval_result.logs(),
-                    output: eval_result.result().ok(),
+                    results
                 }
             })
             .collect()

@@ -198,7 +198,7 @@ impl<'a> CodeGenerator<'a> {
         self.finalize(term)
     }
 
-    pub fn generate_test(&mut self, test_body: &TypedExpr, module_name: &String) -> Program<Name> {
+    pub fn generate_raw(&mut self, test_body: &TypedExpr, module_name: &String) -> Program<Name> {
         let mut air_tree = self.build(test_body, module_name, &[]);
 
         air_tree = AirTree::no_op(air_tree);

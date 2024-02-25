@@ -183,7 +183,11 @@ pub type UntypedTypeAlias = TypeAlias<()>;
 
 impl TypedTest {
     pub fn test_hint(&self) -> Option<(BinOp, Box<TypedExpr>, Box<TypedExpr>)> {
-        do_test_hint(&self.body)
+        if self.arguments.is_empty() {
+            do_test_hint(&self.body)
+        } else {
+            None
+        }
     }
 }
 
@@ -367,17 +371,11 @@ pub struct Validator<T, Expr> {
     pub params: Vec<Arg<T>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct DefinitionIdentifier {
-    pub module: Option<String>,
-    pub name: String,
-}
-
-pub type TypedDefinition = Definition<Rc<Type>, TypedExpr, String, ()>;
-pub type UntypedDefinition = Definition<(), UntypedExpr, (), DefinitionIdentifier>;
+pub type TypedDefinition = Definition<Rc<Type>, TypedExpr, String>;
+pub type UntypedDefinition = Definition<(), UntypedExpr, ()>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Definition<T, Expr, PackageName, Ann> {
+pub enum Definition<T, Expr, PackageName> {
     Fn(Function<T, Expr, Arg<T>>),
 
     TypeAlias(TypeAlias<T>),
@@ -388,12 +386,12 @@ pub enum Definition<T, Expr, PackageName, Ann> {
 
     ModuleConstant(ModuleConstant<T>),
 
-    Test(Function<T, Expr, ArgVia<T, Ann>>),
+    Test(Function<T, Expr, ArgVia<T, Expr>>),
 
     Validator(Validator<T, Expr>),
 }
 
-impl<A, B, C, D> Definition<A, B, C, D> {
+impl<A, B, C> Definition<A, B, C> {
     pub fn location(&self) -> Span {
         match self {
             Definition::Fn(Function { location, .. })
@@ -643,14 +641,14 @@ impl<A> Arg<A> {
     }
 }
 
-pub type TypedArgVia = ArgVia<Rc<Type>, ()>;
-pub type UntypedArgVia = ArgVia<(), DefinitionIdentifier>;
+pub type TypedArgVia = ArgVia<Rc<Type>, TypedExpr>;
+pub type UntypedArgVia = ArgVia<(), UntypedExpr>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ArgVia<T, Ann> {
+pub struct ArgVia<T, Expr> {
     pub arg_name: ArgName,
     pub location: Span,
-    pub via: Ann,
+    pub via: Expr,
     pub tipo: T,
 }
 
@@ -662,17 +660,6 @@ impl<T, Ann> From<ArgVia<T, Ann>> for Arg<T> {
             tipo: arg.tipo,
             annotation: None,
             doc: None,
-        }
-    }
-}
-
-impl From<TypedArg> for TypedArgVia {
-    fn from(arg: TypedArg) -> TypedArgVia {
-        ArgVia {
-            arg_name: arg.arg_name,
-            tipo: arg.tipo,
-            location: arg.location,
-            via: (),
         }
     }
 }

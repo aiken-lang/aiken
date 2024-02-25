@@ -11,7 +11,7 @@ pub trait EventListener {
     fn handle_event(&self, _event: Event) {}
 }
 
-pub enum Event {
+pub enum Event<'a> {
     StartingCompilation {
         name: String,
         version: String,
@@ -36,11 +36,11 @@ pub enum Event {
         path: PathBuf,
     },
     EvaluatingFunction {
-        results: Vec<EvalInfo>,
+        results: Vec<EvalInfo<'a>>,
     },
     RunningTests,
     FinishedTests {
-        tests: Vec<EvalInfo>,
+        tests: Vec<EvalInfo<'a>>,
     },
     WaitingForBuildDirLock,
     ResolvingPackages {
@@ -272,7 +272,7 @@ impl EventListener for Terminal {
 fn fmt_test(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize, styled: bool) -> String {
     let EvalInfo {
         success,
-        script,
+        test,
         spent_budget,
         logs,
         ..
@@ -303,7 +303,7 @@ fn fmt_test(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize, styled: bool) 
         cpu_unit = pretty::style_if(styled, cpu_pad, |s| s
             .if_supports_color(Stderr, |s| s.cyan())
             .to_string()),
-        module = pretty::style_if(styled, script.name.clone(), |s| s
+        module = pretty::style_if(styled, test.name().to_string(), |s| s
             .if_supports_color(Stderr, |s| s.bright_blue())
             .to_string()),
     );
@@ -363,7 +363,7 @@ fn fmt_test_summary(tests: &[&EvalInfo], styled: bool) -> String {
 fn fmt_eval(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize, stream: Stream) -> String {
     let EvalInfo {
         output,
-        script,
+        test,
         spent_budget,
         ..
     } = eval_info;
@@ -372,8 +372,8 @@ fn fmt_eval(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize, stream: Stream
 
     format!(
         "    {}::{} [mem: {}, cpu: {}]\n    │\n    ╰─▶ {}",
-        script.module.if_supports_color(stream, |s| s.blue()),
-        script.name.if_supports_color(stream, |s| s.bright_blue()),
+        test.module().if_supports_color(stream, |s| s.blue()),
+        test.name().if_supports_color(stream, |s| s.bright_blue()),
         pretty::pad_left(mem.to_string(), max_mem, " "),
         pretty::pad_left(cpu.to_string(), max_cpu, " "),
         output
@@ -383,10 +383,12 @@ fn fmt_eval(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize, stream: Stream
     )
 }
 
-fn group_by_module(infos: &Vec<EvalInfo>) -> BTreeMap<String, Vec<&EvalInfo>> {
+fn group_by_module<'a>(infos: &'a Vec<EvalInfo<'a>>) -> BTreeMap<String, Vec<&'a EvalInfo<'a>>> {
     let mut modules = BTreeMap::new();
     for eval_info in infos {
-        let xs: &mut Vec<&EvalInfo> = modules.entry(eval_info.script.module.clone()).or_default();
+        let xs: &mut Vec<&EvalInfo> = modules
+            .entry(eval_info.test.module().to_string())
+            .or_default();
         xs.push(eval_info);
     }
     modules

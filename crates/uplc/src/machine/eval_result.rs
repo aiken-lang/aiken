@@ -2,6 +2,7 @@ use crate::ast::{Constant, NamedDeBruijn, Term};
 
 use super::{cost_model::ExBudget, Error};
 
+#[derive(Debug)]
 pub struct EvalResult {
     result: Result<Term<NamedDeBruijn>, Error>,
     remaining_budget: ExBudget,
@@ -43,7 +44,7 @@ impl EvalResult {
         }
     }
 
-    pub fn result(self) -> Result<Term<NamedDeBruijn>, Error> {
-        self.result
+    pub fn result(&self) -> Result<Term<NamedDeBruijn>, Error> {
+        self.result.clone()
     }
 }

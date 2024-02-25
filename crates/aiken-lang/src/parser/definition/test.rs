@@ -3,7 +3,12 @@ use chumsky::prelude::*;
 use crate::{
     ast,
     expr::UntypedExpr,
-    parser::{error::ParseError, expr, token::Token},
+    parser::{
+        chain::{call::parser as call, field_access, tuple_index::parser as tuple_index, Chain},
+        error::ParseError,
+        expr::{self, var},
+        token::Token,
+    },
 };
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
@@ -63,17 +68,30 @@ pub fn via() -> impl Parser<Token, ast::UntypedArgVia, Error = ParseError> {
         }),
     ))
     .then_ignore(just(Token::Via))
-    .then(
-        select! { Token::Name { name } => name }
-            .then_ignore(just(Token::Dot))
-            .or_not(),
-    )
-    .then(select! { Token::Name { name } => name })
-    .map_with_span(|((arg_name, module), name), location| ast::ArgVia {
+    .then(fuzzer())
+    .map_with_span(|(arg_name, via), location| ast::ArgVia {
         arg_name,
-        via: ast::DefinitionIdentifier { module, name },
+        via,
         tipo: (),
         location,
+    })
+}
+
+pub fn fuzzer<'a>() -> impl Parser<Token, UntypedExpr, Error = ParseError> + 'a {
+    recursive(|expression| {
+        let chain = choice((
+            tuple_index(),
+            field_access::parser(),
+            call(expression.clone()),
+        ));
+
+        var()
+            .then(chain.repeated())
+            .foldl(|expr, chain| match chain {
+                Chain::Call(args, span) => expr.call(args, span),
+                Chain::FieldAccess(label, span) => expr.field_access(label, span),
+                Chain::TupleIndex(index, span) => expr.tuple_index(index, span),
+            })
     })
 }
 

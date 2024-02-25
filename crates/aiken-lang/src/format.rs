@@ -1,12 +1,12 @@
 use crate::{
     ast::{
         Annotation, Arg, ArgName, ArgVia, AssignmentKind, BinOp, ByteArrayFormatPreference,
-        CallArg, ClauseGuard, Constant, CurveType, DataType, Definition, DefinitionIdentifier,
-        Function, IfBranch, LogicalOpChainKind, ModuleConstant, Pattern, RecordConstructor,
-        RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg, UnOp,
-        UnqualifiedImport, UntypedArg, UntypedArgVia, UntypedClause, UntypedClauseGuard,
-        UntypedDefinition, UntypedFunction, UntypedModule, UntypedPattern, UntypedRecordUpdateArg,
-        Use, Validator, CAPTURE_VARIABLE,
+        CallArg, ClauseGuard, Constant, CurveType, DataType, Definition, Function, IfBranch,
+        LogicalOpChainKind, ModuleConstant, Pattern, RecordConstructor, RecordConstructorArg,
+        RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg, UnOp, UnqualifiedImport,
+        UntypedArg, UntypedArgVia, UntypedClause, UntypedClauseGuard, UntypedDefinition,
+        UntypedFunction, UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use, Validator,
+        CAPTURE_VARIABLE,
     },
     docvec,
     expr::{FnStyle, UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
@@ -471,19 +471,17 @@ impl<'comments> Formatter<'comments> {
         commented(doc, comments)
     }
 
-    fn fn_arg_via<'a, A>(&mut self, arg: &'a ArgVia<A, DefinitionIdentifier>) -> Document<'a> {
+    fn fn_arg_via<'a, A>(&mut self, arg: &'a ArgVia<A, UntypedExpr>) -> Document<'a> {
         let comments = self.pop_comments(arg.location.start);
 
         let doc_comments = self.doc_comments(arg.location.start);
 
-        let doc = arg.arg_name.to_doc().append(" via ");
-
-        let doc = match arg.via.module {
-            Some(ref module) => doc.append(module.to_doc()).append("."),
-            None => doc,
-        }
-        .append(arg.via.name.to_doc())
-        .group();
+        let doc = arg
+            .arg_name
+            .to_doc()
+            .append(" via ")
+            .append(self.expr(&arg.via, false))
+            .group();
 
         let doc = doc_comments.append(doc.group()).group();
 
