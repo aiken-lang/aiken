@@ -339,10 +339,24 @@ fn infer_definition(
                     Type::Fn { ret, .. } => {
                         let ann = tipo_to_annotation(ret, location)?;
                         match ann {
-                            Annotation::Tuple { elems, .. } if elems.len() == 2 => {
-                                Ok(elems.get(1).expect("Tuple has two elements").to_owned())
+                            Annotation::Constructor {
+                                module,
+                                name,
+                                arguments,
+                                ..
+                            } if module.as_ref().unwrap_or(&String::new()).is_empty()
+                                && name == "Option" =>
+                            {
+                                match &arguments[..] {
+                                    [Annotation::Tuple { elems, .. }] if elems.len() == 2 => {
+                                        Ok(elems.get(1).expect("Tuple has two elements").to_owned())
+                                    }
+                                    _ => {
+                                        todo!("expected a single generic argument unifying as 2-tuple")
+                                    }
+                                }
                             }
-                            _ => todo!("Fuzzer returns something else than a 2-tuple? "),
+                            _ => todo!("expected an Option<a>"),
                         }
                     }
                     Type::Var { .. } | Type::App { .. } | Type::Tuple { .. } => {

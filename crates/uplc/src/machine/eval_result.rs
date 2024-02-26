@@ -40,7 +40,7 @@ impl EvalResult {
         } else {
             self.result.is_err()
                 || matches!(self.result, Ok(Term::Error))
-                || matches!(self.result, Ok(Term::Constant(ref con)) if matches!(con.as_ref(), Constant::Bool(false)))
+                || !matches!(self.result, Ok(Term::Constant(ref con)) if matches!(con.as_ref(), Constant::Bool(true)))
         }
     }
 

@@ -21,13 +21,19 @@ use crate::blueprint::{
     schema::{Annotated, Schema},
     Blueprint,
 };
+use crate::{
+    config::Config,
+    error::{Error, Warning},
+    module::{CheckedModule, CheckedModules, ParsedModule, ParsedModules},
+    telemetry::Event,
+};
 use aiken_lang::{
     ast::{
         Definition, Function, ModuleKind, Span, Tracing, TypedDataType, TypedFunction, Validator,
     },
     builtins,
     expr::TypedExpr,
-    gen_uplc::builder::{cast_validator_args, DataTypeKey, FunctionAccessKey},
+    gen_uplc::builder::{DataTypeKey, FunctionAccessKey},
     tipo::{Type, TypeInfo},
     IdGenerator,
 };
@@ -40,8 +46,7 @@ use pallas::ledger::{
     primitives::babbage::{self as cardano, PolicyId},
     traverse::ComputeHash,
 };
-
-use script::{EvalHint, EvalInfo, PropertyTest, Test};
+use script::{Assertion, Test, TestResult};
 use std::{
     collections::HashMap,
     fs::{self, File},
@@ -54,13 +59,6 @@ use uplc::{
     ast::{DeBruijn, Name, NamedDeBruijn, Program, Term},
     machine::cost_model::ExBudget,
     PlutusData,
-};
-
-use crate::{
-    config::Config,
-    error::{Error, Warning},
-    module::{CheckedModule, CheckedModules, ParsedModule, ParsedModules},
-    telemetry::Event,
 };
 
 #[derive(Debug)]
@@ -323,24 +321,15 @@ where
                     self.event_listener.handle_event(Event::RunningTests);
                 }
 
-                let results = self.run_tests(tests.iter().collect());
+                let results = self.run_tests(tests);
 
                 let errors: Vec<Error> = results
                     .iter()
                     .filter_map(|e| {
-                        if e.success {
+                        if e.is_success() {
                             None
                         } else {
-                            Some(Error::TestFailure {
-                                name: e.test.name().to_string(),
-                                path: e.test.input_path().to_path_buf(),
-                                evaluation_hint: e
-                                    .test
-                                    .evaluation_hint()
-                                    .map(|hint| hint.to_string()),
-                                src: e.test.program().to_pretty(),
-                                verbose,
-                            })
+                            Some(e.into_error(verbose))
                         }
                     })
                     .collect();
@@ -816,7 +805,7 @@ where
                 })
             }
 
-            let evaluation_hint = func_def.test_hint().map(|(bin_op, left_src, right_src)| {
+            let assertion = func_def.test_hint().map(|(bin_op, left_src, right_src)| {
                 let left = generator
                     .clone()
                     .generate_raw(&left_src, &module_name)
@@ -829,7 +818,7 @@ where
                     .try_into()
                     .unwrap();
 
-                EvalHint {
+                Assertion {
                     bin_op,
                     left,
                     right,
@@ -846,7 +835,7 @@ where
                     name.to_string(),
                     *can_error,
                     program.try_into().unwrap(),
-                    evaluation_hint,
+                    assertion,
                 );
 
                 programs.push(test);
@@ -862,14 +851,16 @@ where
                         ret: body.tipo(),
                     }),
                     is_capture: false,
-                    args: vec![parameter.clone().into()],
+                    args: vec![parameter.into()],
                     body: Box::new(body.clone()),
                     return_annotation: None,
                 };
 
-                let program = generator.clone().generate_raw(&body, &module_name);
-
-                let term = cast_validator_args(program.term, &[parameter.into()]);
+                let program = generator
+                    .clone()
+                    .generate_raw(&body, &module_name)
+                    .try_into()
+                    .unwrap();
 
                 let fuzzer: Program<NamedDeBruijn> = generator
                     .clone()
@@ -882,7 +873,7 @@ where
                     module_name,
                     name.to_string(),
                     *can_error,
-                    Program { term, ..program }.try_into().unwrap(),
+                    program,
                     fuzzer,
                 );
 
@@ -893,36 +884,16 @@ where
         Ok(programs)
     }
 
-    fn run_tests<'a>(&'a self, tests: Vec<&'a Test>) -> Vec<EvalInfo<'a>> {
-        // FIXME: Find a way to re-introduce parallel testing despite the references (which aren't
-        // sizeable).
-        // We do now hold references to tests because the property tests results are all pointing
-        // to the same test, so we end up copying the same test over and over.
-        //
-        // So we might want to rework the evaluation result to avoid that and keep parallel testing
-        // possible.
-        // use rayon::prelude::*;
+    fn run_tests(&self, tests: Vec<Test>) -> Vec<TestResult> {
+        use rayon::prelude::*;
 
         tests
-            .iter()
-            .flat_map(|test| match test {
-                Test::UnitTest(unit_test) => {
-                    let mut result = unit_test.run();
-                    vec![test.report(&mut result)]
-                }
-                Test::PropertyTest(ref property_test) => {
-                    let mut seed = PropertyTest::new_seed(42);
-
-                    let mut results = vec![];
-                    for _ in 0..100 {
-                        let (new_seed, sample) = property_test.sample(seed);
-                        seed = new_seed;
-                        let mut result = property_test.run(&sample);
-                        results.push(test.report(&mut result));
-                    }
-
-                    results
-                }
+            .into_par_iter()
+            .map(|test| match test {
+                Test::UnitTest(unit_test) => unit_test.run(),
+                // TODO: Get the seed from the command-line, defaulting to a random one when not
+                // provided.
+                Test::PropertyTest(property_test) => property_test.run(42),
             })
             .collect()
     }

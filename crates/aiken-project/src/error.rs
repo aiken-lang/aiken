@@ -93,7 +93,7 @@ pub enum Error {
         path: PathBuf,
         verbose: bool,
         src: String,
-        evaluation_hint: Option<String>,
+        assertion: Option<String>,
     },
 
     #[error(
@@ -323,7 +323,7 @@ impl Diagnostic for Error {
             Error::MissingManifest { .. } => Some(Box::new("Try running `aiken new <REPOSITORY/PROJECT>` to initialise a project with an example manifest.")),
             Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
-            Error::TestFailure { evaluation_hint, .. }  => match evaluation_hint {
+            Error::TestFailure { assertion, .. }  => match assertion {
                 None => None,
                 Some(hint) => Some(Box::new(hint.to_string()))
             },

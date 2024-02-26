@@ -7,8 +7,8 @@ pub fn ansi_len(s: &str) -> usize {
         .count()
 }
 
-pub fn len_longest_line(s: &str) -> usize {
-    s.lines().fold(0, |max, l| {
+pub fn len_longest_line(zero: usize, s: &str) -> usize {
+    s.lines().fold(zero, |max, l| {
         let n = ansi_len(l);
         if n > max {
             n
@@ -23,7 +23,7 @@ pub fn boxed(title: &str, content: &str) -> String {
 }
 
 pub fn boxed_with(title: &str, content: &str, border_style: fn(&str) -> String) -> String {
-    let n = len_longest_line(content);
+    let n = len_longest_line(ansi_len(title) + 1, content);
 
     let content = content
         .lines()
@@ -62,7 +62,7 @@ pub fn open_box(
     border_style: fn(&str) -> String,
 ) -> String {
     let i = ansi_len(content.lines().collect::<Vec<_>>().first().unwrap());
-    let j = len_longest_line(content);
+    let j = len_longest_line(ansi_len(title) + 1, content);
     let k = ansi_len(footer);
 
     let content = content
@@ -79,7 +79,11 @@ pub fn open_box(
 
     let bottom = format!(
         "{} {}",
-        pad_right(border_style("┕"), j - k + 1, &border_style("━")),
+        pad_right(
+            border_style("┕"),
+            if j < k { 0 } else { j + 1 - k },
+            &border_style("━")
+        ),
         footer
     );
 
