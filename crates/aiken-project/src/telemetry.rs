@@ -304,23 +304,23 @@ fn fmt_test(result: &TestResult, max_mem: usize, max_cpu: usize, styled: bool) -
     );
 
     // CounterExample
-    //    if let TestResult::PropertyTestResult(PropertyTestResult {
-    //        counterexample: Some(counterexample),
-    //        ..
-    //    }) = result
-    //    {
-    //        test = format!(
-    //            "{test}\n{}",
-    //            pretty::boxed_with(
-    //                &pretty::style_if(styled, "counterexample".to_string(), |s| s
-    //                    .if_supports_color(Stderr, |s| s.red())
-    //                    .if_supports_color(Stderr, |s| s.bold())
-    //                    .to_string()),
-    //                &counterexample.to_pretty(),
-    //                |s| s.red().to_string()
-    //            )
-    //        )
-    //    }
+    if let TestResult::PropertyTestResult(PropertyTestResult {
+        counterexample: Some(counterexample),
+        ..
+    }) = result
+    {
+        test = format!(
+            "{test}\n{}",
+            pretty::boxed_with(
+                &pretty::style_if(styled, "counterexample".to_string(), |s| s
+                    .if_supports_color(Stderr, |s| s.red())
+                    .if_supports_color(Stderr, |s| s.bold())
+                    .to_string()),
+                &counterexample.to_pretty(),
+                |s| s.red().to_string()
+            )
+        )
+    }
 
     // Traces
     if !result.logs().is_empty() {

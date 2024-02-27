@@ -1181,7 +1181,7 @@ pub fn find_list_clause_or_default_first(clauses: &[TypedClause]) -> &TypedClaus
         .unwrap_or(&clauses[0])
 }
 
-pub fn convert_data_to_type(term: Term<Name>, field_type: &Rc<Type>) -> Term<Name> {
+pub fn convert_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
     if field_type.is_int() {
         Term::un_i_data().apply(term)
     } else if field_type.is_bytearray() {
@@ -1222,7 +1222,7 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
 
 pub fn convert_data_to_type_debug(
     term: Term<Name>,
-    field_type: &Rc<Type>,
+    field_type: &Type,
     error_term: Term<Name>,
 ) -> Term<Name> {
     if field_type.is_int() {

@@ -844,10 +844,12 @@ where
 
                 let via = parameter.via.clone();
 
+                let type_info = parameter.tipo.clone();
+
                 let body = TypedExpr::Fn {
                     location: Span::empty(),
                     tipo: Rc::new(Type::Fn {
-                        args: vec![parameter.tipo.clone()],
+                        args: vec![type_info.clone()],
                         ret: body.tipo(),
                     }),
                     is_capture: false,
@@ -874,7 +876,7 @@ where
                     name.to_string(),
                     *can_error,
                     program,
-                    fuzzer,
+                    (fuzzer, type_info),
                 );
 
                 programs.push(prop);

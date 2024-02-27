@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Deref, rc::Rc};
 
 use crate::{
     ast::{
@@ -11,10 +11,9 @@ use crate::{
     builtins::function,
     expr::{TypedExpr, UntypedExpr},
     line_numbers::LineNumbers,
-    tipo::{Span, Type},
+    tipo::{Span, Type, TypeVar},
     IdGenerator,
 };
-use std::rc::Rc;
 
 use super::{
     environment::{generalise, EntityKind, Environment},
@@ -391,8 +390,16 @@ fn infer_definition(
                             location: *location,
                         })
                     }
-                    Type::Fn { .. } | Type::Var { .. } => {
-                        todo!("Fuzzer contains functions and/or non-concrete data-types?");
+                    Type::Var { tipo } => match tipo.borrow().deref() {
+                        TypeVar::Link { tipo } => tipo_to_annotation(tipo, location),
+                        _ => todo!(
+                            "Fuzzer contains functions and/or non-concrete data-types? {tipo:#?}"
+                        ),
+                    },
+                    Type::Fn { .. } => {
+                        todo!(
+                            "Fuzzer contains functions and/or non-concrete data-types? {tipo:#?}"
+                        );
                     }
                 }
             }

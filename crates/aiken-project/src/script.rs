@@ -1,5 +1,6 @@
 use crate::{pretty, ExBudget};
-use aiken_lang::ast::BinOp;
+use aiken_lang::gen_uplc::builder::convert_data_to_type;
+use aiken_lang::{ast::BinOp, tipo::Type};
 use pallas::codec::utils::Int;
 use pallas::ledger::primitives::alonzo::{BigInt, Constr, PlutusData};
 use std::{
@@ -10,7 +11,7 @@ use std::{
 };
 use uplc::{
     ast::{Constant, Data, NamedDeBruijn, Program, Term},
-    machine::{eval_result::EvalResult, value::from_pallas_bigint},
+    machine::eval_result::EvalResult,
 };
 
 // ----------------------------------------------------------------------------
@@ -66,7 +67,7 @@ impl Test {
         name: String,
         can_error: bool,
         program: Program<NamedDeBruijn>,
-        fuzzer: Program<NamedDeBruijn>,
+        fuzzer: (Program<NamedDeBruijn>, Rc<Type>),
     ) -> Test {
         Test::PropertyTest(PropertyTest {
             input_path,
@@ -123,7 +124,7 @@ pub struct PropertyTest {
     pub name: String,
     pub can_error: bool,
     pub program: Program<NamedDeBruijn>,
-    pub fuzzer: Program<NamedDeBruijn>,
+    pub fuzzer: (Program<NamedDeBruijn>, Rc<Type>),
 }
 
 unsafe impl Send for PropertyTest {}
@@ -170,7 +171,7 @@ impl PropertyTest {
 
     fn run_once(&self, seed: u32) -> (u32, Option<Term<NamedDeBruijn>>) {
         let (next_prng, value) = Prng::from_seed(seed)
-            .sample(&self.fuzzer)
+            .sample(&self.fuzzer.0, &self.fuzzer.1)
             .expect("running seeded Prng cannot fail.");
 
         let result = self.program.apply_term(&value).eval(ExBudget::max());
@@ -186,7 +187,7 @@ impl PropertyTest {
                     choices: next_prng.choices(),
                     can_error: self.can_error,
                     program: &self.program,
-                    fuzzer: &self.fuzzer,
+                    fuzzer: (&self.fuzzer.0, &self.fuzzer.1),
                 };
 
                 if !counterexample.choices.is_empty() {
@@ -280,14 +281,18 @@ impl Prng {
     }
 
     /// Generate a pseudo-random value from a fuzzer using the given PRNG.
-    pub fn sample(&self, fuzzer: &Program<NamedDeBruijn>) -> Option<(Prng, Term<NamedDeBruijn>)> {
+    pub fn sample(
+        &self,
+        fuzzer: &Program<NamedDeBruijn>,
+        return_type: &Type,
+    ) -> Option<(Prng, Term<NamedDeBruijn>)> {
         let result = fuzzer
             .apply_data(self.uplc())
             .eval(ExBudget::max())
             .result()
             .expect("Fuzzer crashed?");
 
-        Prng::from_result(result)
+        Prng::from_result(result, return_type)
     }
 
     /// Obtain a Prng back from a fuzzer execution. As a reminder, fuzzers have the following
@@ -300,7 +305,10 @@ impl Prng {
     /// made during shrinking aren't breaking underlying invariants (if only, because we run out of
     /// values to replay). In such case, the replayed sequence is simply invalid and the fuzzer
     /// aborted altogether with 'None'.
-    pub fn from_result(result: Term<NamedDeBruijn>) -> Option<(Self, Term<NamedDeBruijn>)> {
+    pub fn from_result(
+        result: Term<NamedDeBruijn>,
+        type_info: &Type,
+    ) -> Option<(Self, Term<NamedDeBruijn>)> {
         /// Interpret the given 'PlutusData' as one of two Prng constructors.
         fn as_prng(cst: &PlutusData) -> Prng {
             if let PlutusData::Constr(Constr { tag, fields, .. }) = cst {
@@ -315,10 +323,12 @@ impl Prng {
                 }
 
                 if *tag == 121 + Prng::REPLAYED {
-                    return Prng::Replayed {
-                        choices: fields.iter().map(as_u32).collect(),
-                        uplc: cst.clone(),
-                    };
+                    if let [PlutusData::Array(choices)] = &fields[..] {
+                        return Prng::Replayed {
+                            choices: choices.iter().map(as_u32).collect(),
+                            uplc: cst.clone(),
+                        };
+                    }
                 }
             }
 
@@ -333,25 +343,17 @@ impl Prng {
             panic!("Malformed choice's value: {field:#?}")
         }
 
-        /// Convert wrapped integer & bytearrays as raw constant terms. Because fuzzer
-        /// return a pair, those values end up being wrapped in 'Data', but test
-        /// functions will expect them in their raw constant form.
-        ///
-        /// Anything else is Data, so we're good.
-        fn as_value(data: &PlutusData) -> Term<NamedDeBruijn> {
-            Term::Constant(Rc::new(match data {
-                PlutusData::BigInt(n) => Constant::Integer(from_pallas_bigint(n)),
-                PlutusData::BoundedBytes(bytes) => Constant::ByteString(bytes.clone().into()),
-                _ => Constant::Data(data.clone()),
-            }))
-        }
-
         if let Term::Constant(rc) = &result {
             if let Constant::Data(PlutusData::Constr(Constr { tag, fields, .. })) = &rc.borrow() {
                 if *tag == 121 + Prng::OK {
                     if let [PlutusData::Array(elems)] = &fields[..] {
                         if let [new_seed, value] = &elems[..] {
-                            return Some((as_prng(new_seed), as_value(value)));
+                            return Some((
+                                as_prng(new_seed),
+                                convert_data_to_type(Term::data(value.clone()), type_info)
+                                    .try_into()
+                                    .expect("safe conversion from Name -> NamedDeBruijn"),
+                            ));
                         }
                     }
                 }
@@ -388,7 +390,7 @@ pub struct Counterexample<'a> {
     pub result: EvalResult,
     pub can_error: bool,
     pub program: &'a Program<NamedDeBruijn>,
-    pub fuzzer: &'a Program<NamedDeBruijn>,
+    pub fuzzer: (&'a Program<NamedDeBruijn>, &'a Type),
 }
 
 impl<'a> Counterexample<'a> {
@@ -402,7 +404,7 @@ impl<'a> Counterexample<'a> {
         // test cases many times. Given that tests are fully deterministic, we can
         // memoize the already seen choices to avoid re-running the generators and
         // the test (which can be quite expensive).
-        match Prng::from_choices(choices).sample(self.fuzzer) {
+        match Prng::from_choices(choices).sample(self.fuzzer.0, self.fuzzer.1) {
             // Shrinked choices led to an impossible generation.
             None => false,
 
@@ -455,32 +457,45 @@ impl<'a> Counterexample<'a> {
         loop {
             prev = self.choices.clone();
 
-            // Delete choices by chunks of size 8, 4, 2, 1.
-            let mut k: isize = 8;
+            // First try deleting each choice we made in chunks. We try longer chunks because this
+            // allows us to delete whole composite elements: e.g. deleting an element from a
+            // generated list requires us to delete both the choice of whether to include it and
+            // also the element itself, which may involve more than one choice.
+            let mut k = 8;
             while k > 0 {
-                let mut i: isize = (self.choices.len() as isize) - k - 1;
-                while i >= 0 {
-                    if i >= self.choices.len() as isize {
-                        i -= 1;
-                        continue;
+                if k > self.choices.len() {
+                    break;
+                }
+
+                for (i, j) in (0..=self.choices.len() - k).map(|i| (i, i + k)).rev() {
+                    let mut choices = [
+                        &self.choices[..i],
+                        if j < self.choices.len() {
+                            &self.choices[j..]
+                        } else {
+                            &[]
+                        },
+                    ]
+                    .concat();
+
+                    if self.consider(&choices) {
+                        break;
                     }
-                    let mut choices = self.choices[0..(i + k) as usize].to_vec();
-                    if !self.consider(&choices) {
-                        // Perform an extra reduction step that decrease the size of choices near
-                        // the end, to cope with dependencies between choices, e.g. drawing a
-                        // number as a list length, and then drawing that many elements.
-                        //
-                        // This isn't perfect, but allows to make progresses in many cases.
-                        if i > 0 && *choices.get((i - 1) as usize).unwrap_or(&0) > 0 {
-                            choices[(i - 1) as usize] -= 1;
-                            if self.consider(&choices) {
-                                i += 1;
-                            }
-                        }
-                        i -= 1;
+
+                    // Perform an extra reduction step that decrease the size of choices near
+                    // the end, to cope with dependencies between choices, e.g. drawing a
+                    // number as a list length, and then drawing that many elements.
+                    //
+                    // This isn't perfect, but allows to make progresses in many cases.
+                    if i > 0 && choices[i - 1] > 0 {
+                        choices[i - 1] -= 1;
+                        if self.consider(&choices) {
+                            break;
+                        };
                     }
                 }
-                k /= 2;
+
+                k /= 2
             }
 
             // Now we try replacing region of choices with zeroes. Note that unlike the above we
@@ -489,11 +504,9 @@ impl<'a> Counterexample<'a> {
             let mut k: isize = 8;
             while k > 1 {
                 let mut i: isize = self.choices.len() as isize - k;
-
                 while i >= 0 {
                     i -= if self.zeroes(i, k) { k } else { 1 }
                 }
-
                 k /= 2
             }
 
