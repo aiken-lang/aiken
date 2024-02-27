@@ -1,5 +1,6 @@
 use crate::pretty;
 use crate::script::{PropertyTestResult, TestResult, UnitTestResult};
+use aiken_lang::{expr::UntypedExpr, format::Formatter};
 use owo_colors::{OwoColorize, Stream::Stderr};
 use std::{collections::BTreeMap, fmt::Display, path::PathBuf};
 use uplc::machine::cost_model::ExBudget;
@@ -34,7 +35,7 @@ pub enum Event {
     },
     RunningTests,
     FinishedTests {
-        tests: Vec<TestResult>,
+        tests: Vec<TestResult<UntypedExpr>>,
     },
     WaitingForBuildDirLock,
     ResolvingPackages {
@@ -249,7 +250,12 @@ impl EventListener for Terminal {
     }
 }
 
-fn fmt_test(result: &TestResult, max_mem: usize, max_cpu: usize, styled: bool) -> String {
+fn fmt_test(
+    result: &TestResult<UntypedExpr>,
+    max_mem: usize,
+    max_cpu: usize,
+    styled: bool,
+) -> String {
     // Status
     let mut test = if result.is_success() {
         pretty::style_if(styled, "PASS".to_string(), |s| {
@@ -316,7 +322,9 @@ fn fmt_test(result: &TestResult, max_mem: usize, max_cpu: usize, styled: bool) -
                     .if_supports_color(Stderr, |s| s.red())
                     .if_supports_color(Stderr, |s| s.bold())
                     .to_string()),
-                &counterexample.to_pretty(),
+                &Formatter::new()
+                    .expr(counterexample, false)
+                    .to_pretty_string(70),
                 |s| s.red().to_string()
             )
         )
@@ -351,7 +359,7 @@ fn fmt_test(result: &TestResult, max_mem: usize, max_cpu: usize, styled: bool) -
     test
 }
 
-fn fmt_test_summary(tests: &[&TestResult], styled: bool) -> String {
+fn fmt_test_summary<T>(tests: &[&TestResult<T>], styled: bool) -> String {
     let (n_passed, n_failed) = tests.iter().fold((0, 0), |(n_passed, n_failed), result| {
         if result.is_success() {
             (n_passed + 1, n_failed)
@@ -375,16 +383,16 @@ fn fmt_test_summary(tests: &[&TestResult], styled: bool) -> String {
     )
 }
 
-fn group_by_module(results: &Vec<TestResult>) -> BTreeMap<String, Vec<&TestResult>> {
+fn group_by_module<T>(results: &Vec<TestResult<T>>) -> BTreeMap<String, Vec<&TestResult<T>>> {
     let mut modules = BTreeMap::new();
     for r in results {
-        let xs: &mut Vec<&TestResult> = modules.entry(r.module().to_string()).or_default();
+        let xs: &mut Vec<&TestResult<_>> = modules.entry(r.module().to_string()).or_default();
         xs.push(r);
     }
     modules
 }
 
-fn find_max_execution_units(xs: &[TestResult]) -> (usize, usize) {
+fn find_max_execution_units<T>(xs: &[TestResult<T>]) -> (usize, usize) {
     let (max_mem, max_cpu) = xs
         .iter()
         .fold((0, 0), |(max_mem, max_cpu), test| match test {

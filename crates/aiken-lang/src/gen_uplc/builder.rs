@@ -15,8 +15,8 @@ use uplc::{
 
 use crate::{
     ast::{
-        AssignmentKind, DataType, Pattern, Span, TraceLevel, TypedArg, TypedClause,
-        TypedClauseGuard, TypedDataType, TypedPattern,
+        AssignmentKind, DataType, DataTypeKey, FunctionAccessKey, Pattern, Span, TraceLevel,
+        TypedArg, TypedClause, TypedClauseGuard, TypedDataType, TypedPattern,
     },
     builtins::{bool, data, function, int, list, string, void},
     expr::TypedExpr,
@@ -66,18 +66,6 @@ pub enum HoistableFunction {
     },
     Link((FunctionAccessKey, Variant)),
     CyclicLink(FunctionAccessKey),
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct DataTypeKey {
-    pub module_name: String,
-    pub defined_type: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub struct FunctionAccessKey {
-    pub module_name: String,
-    pub function_name: String,
 }
 
 #[derive(Clone, Debug)]

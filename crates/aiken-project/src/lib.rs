@@ -29,11 +29,11 @@ use crate::{
 };
 use aiken_lang::{
     ast::{
-        Definition, Function, ModuleKind, Span, Tracing, TypedDataType, TypedFunction, Validator,
+        DataTypeKey, Definition, Function, FunctionAccessKey, ModuleKind, Span, Tracing,
+        TypedDataType, TypedFunction, Validator,
     },
     builtins,
-    expr::TypedExpr,
-    gen_uplc::builder::{DataTypeKey, FunctionAccessKey},
+    expr::{TypedExpr, UntypedExpr},
     tipo::{Type, TypeInfo},
     IdGenerator,
 };
@@ -321,9 +321,9 @@ where
                     self.event_listener.handle_event(Event::RunningTests);
                 }
 
-                let results = self.run_tests(tests);
+                let tests = self.run_tests(tests);
 
-                let errors: Vec<Error> = results
+                let errors: Vec<Error> = tests
                     .iter()
                     .filter_map(|e| {
                         if e.is_success() {
@@ -335,7 +335,7 @@ where
                     .collect();
 
                 self.event_listener
-                    .handle_event(Event::FinishedTests { tests: results });
+                    .handle_event(Event::FinishedTests { tests });
 
                 if !errors.is_empty() {
                     Err(errors)
@@ -886,7 +886,7 @@ where
         Ok(programs)
     }
 
-    fn run_tests(&self, tests: Vec<Test>) -> Vec<TestResult> {
+    fn run_tests(&self, tests: Vec<Test>) -> Vec<TestResult<UntypedExpr>> {
         use rayon::prelude::*;
 
         tests
@@ -897,6 +897,9 @@ where
                 // provided.
                 Test::PropertyTest(property_test) => property_test.run(42),
             })
+            .collect::<Vec<TestResult<PlutusData>>>()
+            .into_iter()
+            .map(|test| test.reify(&self.module_types))
             .collect()
     }
 

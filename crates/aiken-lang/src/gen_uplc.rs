@@ -19,8 +19,9 @@ use uplc::{
 
 use crate::{
     ast::{
-        AssignmentKind, BinOp, Bls12_381Point, Curve, Pattern, Span, TraceLevel, TypedArg,
-        TypedClause, TypedDataType, TypedFunction, TypedPattern, TypedValidator, UnOp,
+        AssignmentKind, BinOp, Bls12_381Point, Curve, DataTypeKey, FunctionAccessKey, Pattern,
+        Span, TraceLevel, TypedArg, TypedClause, TypedDataType, TypedFunction, TypedPattern,
+        TypedValidator, UnOp,
     },
     builtins::{bool, data, int, list, string, void},
     expr::TypedExpr,
@@ -48,7 +49,7 @@ use self::{
         air_holds_msg, cast_validator_args, constants_ir, convert_type_to_data, extract_constant,
         lookup_data_type_by_tipo, modify_cyclic_calls, modify_self_calls, rearrange_list_clauses,
         AssignmentProperties, ClauseProperties, CodeGenSpecialFuncs, CycleFunctionNames,
-        DataTypeKey, FunctionAccessKey, HoistableFunction, Variant,
+        HoistableFunction, Variant,
     },
     tree::{AirMsg, AirTree, TreePath},
 };

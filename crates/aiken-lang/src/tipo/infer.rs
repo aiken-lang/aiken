@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Deref, rc::Rc};
+use std::{borrow::Borrow, collections::HashMap, ops::Deref, rc::Rc};
 
 use crate::{
     ast::{
@@ -332,78 +332,6 @@ fn infer_definition(
         }
 
         Definition::Test(f) => {
-            fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
-                match tipo {
-                    // TODO: Ensure args & first returned element is a Prelude's PRNG.
-                    Type::Fn { ret, .. } => {
-                        let ann = tipo_to_annotation(ret, location)?;
-                        match ann {
-                            Annotation::Constructor {
-                                module,
-                                name,
-                                arguments,
-                                ..
-                            } if module.as_ref().unwrap_or(&String::new()).is_empty()
-                                && name == "Option" =>
-                            {
-                                match &arguments[..] {
-                                    [Annotation::Tuple { elems, .. }] if elems.len() == 2 => {
-                                        Ok(elems.get(1).expect("Tuple has two elements").to_owned())
-                                    }
-                                    _ => {
-                                        todo!("expected a single generic argument unifying as 2-tuple")
-                                    }
-                                }
-                            }
-                            _ => todo!("expected an Option<a>"),
-                        }
-                    }
-                    Type::Var { .. } | Type::App { .. } | Type::Tuple { .. } => {
-                        todo!("Fuzzer type isn't a function?");
-                    }
-                }
-            }
-
-            fn tipo_to_annotation(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
-                match tipo {
-                    Type::App {
-                        name, module, args, ..
-                    } => {
-                        let arguments = args
-                            .iter()
-                            .map(|arg| tipo_to_annotation(arg, location))
-                            .collect::<Result<Vec<Annotation>, _>>()?;
-                        Ok(Annotation::Constructor {
-                            name: name.to_owned(),
-                            module: Some(module.to_owned()),
-                            arguments,
-                            location: *location,
-                        })
-                    }
-                    Type::Tuple { elems } => {
-                        let elems = elems
-                            .iter()
-                            .map(|arg| tipo_to_annotation(arg, location))
-                            .collect::<Result<Vec<Annotation>, _>>()?;
-                        Ok(Annotation::Tuple {
-                            elems,
-                            location: *location,
-                        })
-                    }
-                    Type::Var { tipo } => match tipo.borrow().deref() {
-                        TypeVar::Link { tipo } => tipo_to_annotation(tipo, location),
-                        _ => todo!(
-                            "Fuzzer contains functions and/or non-concrete data-types? {tipo:#?}"
-                        ),
-                    },
-                    Type::Fn { .. } => {
-                        todo!(
-                            "Fuzzer contains functions and/or non-concrete data-types? {tipo:#?}"
-                        );
-                    }
-                }
-            }
-
             let (typed_via, annotation) = match f.arguments.first() {
                 Some(arg) => {
                     if f.arguments.len() > 1 {
@@ -416,12 +344,9 @@ fn infer_definition(
                     let typed_via =
                         ExprTyper::new(environment, lines, tracing).infer(arg.via.clone())?;
 
-                    let tipo = typed_via.tipo();
+                    let (annotation, inner_type) = infer_fuzzer(&typed_via.tipo(), &arg.location)?;
 
-                    Ok((
-                        Some(typed_via),
-                        Some(annotate_fuzzer(&tipo, &arg.location)?),
-                    ))
+                    Ok((Some((typed_via, inner_type)), Some(annotation)))
                 }
                 None => Ok((None, None)),
             }?;
@@ -466,17 +391,15 @@ fn infer_definition(
                 name: typed_f.name,
                 public: typed_f.public,
                 arguments: match typed_via {
-                    Some(via) => {
+                    Some((via, tipo)) => {
                         let Arg {
-                            arg_name,
-                            location,
-                            tipo,
-                            ..
+                            arg_name, location, ..
                         } = typed_f
                             .arguments
                             .first()
                             .expect("has exactly one argument")
                             .to_owned();
+
                         vec![ArgVia {
                             arg_name,
                             location,
@@ -804,4 +727,68 @@ fn infer_function(
         can_error,
         end_position,
     })
+}
+
+fn infer_fuzzer(tipo: &Type, location: &Span) -> Result<(Annotation, Rc<Type>), Error> {
+    match tipo {
+        // TODO: Ensure args & first returned element is a Prelude's PRNG.
+        Type::Fn { ret, .. } => match &ret.borrow() {
+            Type::App {
+                module, name, args, ..
+            } if module.is_empty() && name == "Option" && args.len() == 1 => {
+                match &args.first().map(|x| x.borrow()) {
+                    Some(Type::Tuple { elems }) if elems.len() == 2 => {
+                        let wrapped = elems.get(1).expect("Tuple has two elements");
+                        Ok((annotation_from_type(wrapped, location)?, wrapped.clone()))
+                    }
+                    _ => {
+                        todo!("expected a single generic argument unifying as 2-tuple")
+                    }
+                }
+            }
+            _ => todo!("expected an Option<a>"),
+        },
+
+        Type::Var { .. } | Type::App { .. } | Type::Tuple { .. } => {
+            todo!("Fuzzer type isn't a function?");
+        }
+    }
+}
+
+fn annotation_from_type(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
+    match tipo {
+        Type::App {
+            name, module, args, ..
+        } => {
+            let arguments = args
+                .iter()
+                .map(|arg| annotation_from_type(arg, location))
+                .collect::<Result<Vec<Annotation>, _>>()?;
+            Ok(Annotation::Constructor {
+                name: name.to_owned(),
+                module: Some(module.to_owned()),
+                arguments,
+                location: *location,
+            })
+        }
+
+        Type::Tuple { elems } => {
+            let elems = elems
+                .iter()
+                .map(|arg| annotation_from_type(arg, location))
+                .collect::<Result<Vec<Annotation>, _>>()?;
+            Ok(Annotation::Tuple {
+                elems,
+                location: *location,
+            })
+        }
+
+        Type::Var { tipo } => match &*tipo.deref().borrow() {
+            TypeVar::Link { tipo } => annotation_from_type(tipo, location),
+            _ => todo!("Fuzzer contains functions and/or non-concrete data-types? {tipo:#?}"),
+        },
+        Type::Fn { .. } => {
+            todo!("Fuzzer contains functions and/or non-concrete data-types? {tipo:#?}");
+        }
+    }
 }

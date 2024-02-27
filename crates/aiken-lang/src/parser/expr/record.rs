@@ -188,6 +188,11 @@ mod tests {
     use crate::assert_expr;
 
     #[test]
+    fn record_enum() {
+        assert_expr!(r#"Winter"#);
+    }
+
+    #[test]
     fn record_create_labeled() {
         assert_expr!(r#"User { name: "Aiken", age, thing: 2 }"#);
     }

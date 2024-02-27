@@ -13,11 +13,13 @@ Test(
                     is_validator_param: false,
                 },
                 location: 9..27,
-                via: DefinitionIdentifier {
-                    module: Some(
-                        "fuzz",
-                    ),
-                    name: "any_int",
+                via: FieldAccess {
+                    location: 15..27,
+                    label: "any_int",
+                    container: Var {
+                        location: 15..19,
+                        name: "fuzz",
+                    },
                 },
                 tipo: (),
             },
@@ -30,7 +32,14 @@ Test(
         location: 0..28,
         name: "foo",
         public: false,
-        return_annotation: None,
+        return_annotation: Some(
+            Constructor {
+                location: 0..41,
+                module: None,
+                name: "Bool",
+                arguments: [],
+            },
+        ),
         return_type: (),
         end_position: 40,
         can_error: false,

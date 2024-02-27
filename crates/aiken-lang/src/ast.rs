@@ -242,6 +242,18 @@ pub struct TypeAlias<T> {
     pub tipo: T,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct DataTypeKey {
+    pub module_name: String,
+    pub defined_type: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct FunctionAccessKey {
+    pub module_name: String,
+    pub function_name: String,
+}
+
 pub type TypedDataType = DataType<Rc<Type>>;
 
 impl TypedDataType {

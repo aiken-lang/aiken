@@ -2,8 +2,10 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use aiken_lang::{
-    ast::{ModuleKind, TraceLevel, Tracing, TypedDataType, TypedFunction},
-    gen_uplc::builder::{DataTypeKey, FunctionAccessKey},
+    ast::{
+        DataTypeKey, FunctionAccessKey, ModuleKind, TraceLevel, Tracing, TypedDataType,
+        TypedFunction,
+    },
     parser,
     tipo::TypeInfo,
     IdGenerator,

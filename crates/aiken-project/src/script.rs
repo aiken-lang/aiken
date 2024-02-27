@@ -1,10 +1,17 @@
 use crate::{pretty, ExBudget};
-use aiken_lang::gen_uplc::builder::convert_data_to_type;
-use aiken_lang::{ast::BinOp, tipo::Type};
-use pallas::codec::utils::Int;
-use pallas::ledger::primitives::alonzo::{BigInt, Constr, PlutusData};
+use aiken_lang::{
+    ast::BinOp,
+    expr::UntypedExpr,
+    gen_uplc::builder::convert_data_to_type,
+    tipo::{Type, TypeInfo},
+};
+use pallas::{
+    codec::utils::Int,
+    ledger::primitives::alonzo::{BigInt, Constr, PlutusData},
+};
 use std::{
     borrow::Borrow,
+    collections::HashMap,
     fmt::{self, Display},
     path::PathBuf,
     rc::Rc,
@@ -14,26 +21,25 @@ use uplc::{
     machine::eval_result::EvalResult,
 };
 
-// ----------------------------------------------------------------------------
-//
-// Test
-//
-// Aiken supports two kinds of tests: unit and property. A unit test is a simply
-// UPLC program which returns must be a lambda that returns a boolean.
-//
-// A property on the other-hand is a template for generating tests, which is also
-// a lambda but that takes an extra argument. The argument is generated from a
-// fuzzer which is meant to yield random values in a pseudo-random (albeit seeded)
-// sequence. On failures, the value that caused a failure is simplified using an
-// approach similar to what's described in MiniThesis<https://github.com/DRMacIver/minithesis>,
-// which is a simplified version of Hypothesis, a property-based testing framework
-// with integrated shrinking.
-//
-// Our approach could perhaps be called "microthesis", as it implements a subset of
-// minithesis. More specifically, we do not currently support pre-conditions, nor
-// targets.
-// ----------------------------------------------------------------------------
-
+/// ----------------------------------------------------------------------------
+///
+/// Test
+///
+/// Aiken supports two kinds of tests: unit and property. A unit test is a simply
+/// UPLC program which returns must be a lambda that returns a boolean.
+///
+/// A property on the other-hand is a template for generating tests, which is also
+/// a lambda but that takes an extra argument. The argument is generated from a
+/// fuzzer which is meant to yield random values in a pseudo-random (albeit seeded)
+/// sequence. On failures, the value that caused a failure is simplified using an
+/// approach similar to what's described in MiniThesis<https://github.com/DRMacIver/minithesis>,
+/// which is a simplified version of Hypothesis, a property-based testing framework
+/// with integrated shrinking.
+///
+/// Our approach could perhaps be called "microthesis", as it implements a subset of
+/// minithesis. More specifically, we do not currently support pre-conditions, nor
+/// targets.
+/// ----------------------------------------------------------------------------
 #[derive(Debug, Clone)]
 pub enum Test {
     UnitTest(UnitTest),
@@ -99,7 +105,7 @@ pub struct UnitTest {
 unsafe impl Send for UnitTest {}
 
 impl UnitTest {
-    pub fn run(self) -> TestResult {
+    pub fn run<T>(self) -> TestResult<T> {
         let mut eval_result = self.program.clone().eval(ExBudget::max());
         TestResult::UnitTestResult(UnitTestResult {
             test: self.to_owned(),
@@ -134,7 +140,7 @@ impl PropertyTest {
 
     /// Run a property test from a given seed. The property is run at most MAX_TEST_RUN times. It
     /// may stops earlier on failure; in which case a 'counterexample' is returned.
-    pub fn run(self, seed: u32) -> TestResult {
+    pub fn run(self, seed: u32) -> TestResult<PlutusData> {
         let n = PropertyTest::MAX_TEST_RUN;
 
         let (counterexample, iterations) = match self.run_n_times(n, seed, None) {
@@ -153,8 +159,8 @@ impl PropertyTest {
         &self,
         remaining: usize,
         seed: u32,
-        counterexample: Option<(usize, Term<NamedDeBruijn>)>,
-    ) -> Option<(usize, Term<NamedDeBruijn>)> {
+        counterexample: Option<(usize, PlutusData)>,
+    ) -> Option<(usize, PlutusData)> {
         // We short-circuit failures in case we have any. The counterexample is already simplified
         // at this point.
         if remaining > 0 && counterexample.is_none() {
@@ -169,12 +175,12 @@ impl PropertyTest {
         }
     }
 
-    fn run_once(&self, seed: u32) -> (u32, Option<Term<NamedDeBruijn>>) {
+    fn run_once(&self, seed: u32) -> (u32, Option<PlutusData>) {
         let (next_prng, value) = Prng::from_seed(seed)
-            .sample(&self.fuzzer.0, &self.fuzzer.1)
+            .sample(&self.fuzzer.0)
             .expect("running seeded Prng cannot fail.");
 
-        let result = self.program.apply_term(&value).eval(ExBudget::max());
+        let result = self.eval(&value);
 
         if let Prng::Seeded {
             seed: next_seed, ..
@@ -182,12 +188,9 @@ impl PropertyTest {
         {
             if result.failed(self.can_error) {
                 let mut counterexample = Counterexample {
-                    result,
                     value,
                     choices: next_prng.choices(),
-                    can_error: self.can_error,
-                    program: &self.program,
-                    fuzzer: (&self.fuzzer.0, &self.fuzzer.1),
+                    property: self,
                 };
 
                 if !counterexample.choices.is_empty() {
@@ -201,6 +204,13 @@ impl PropertyTest {
         } else {
             unreachable!("Prng constructed from a seed necessarily yield a seed.");
         }
+    }
+
+    pub fn eval(&self, value: &PlutusData) -> EvalResult {
+        let term = convert_data_to_type(Term::data(value.clone()), &self.fuzzer.1)
+            .try_into()
+            .expect("safe conversion from Name -> NamedDeBruijn");
+        self.program.apply_term(&term).eval(ExBudget::max())
     }
 }
 
@@ -230,9 +240,9 @@ impl Prng {
     const REPLAYED: u64 = 1;
 
     /// Constructor tag for Option's 'Some'
-    const OK: u64 = 0;
+    const SOME: u64 = 0;
     /// Constructor tag for Option's 'None'
-    const ERR: u64 = 1;
+    const NONE: u64 = 1;
 
     pub fn uplc(&self) -> PlutusData {
         match self {
@@ -281,18 +291,14 @@ impl Prng {
     }
 
     /// Generate a pseudo-random value from a fuzzer using the given PRNG.
-    pub fn sample(
-        &self,
-        fuzzer: &Program<NamedDeBruijn>,
-        return_type: &Type,
-    ) -> Option<(Prng, Term<NamedDeBruijn>)> {
+    pub fn sample(&self, fuzzer: &Program<NamedDeBruijn>) -> Option<(Prng, PlutusData)> {
         let result = fuzzer
             .apply_data(self.uplc())
             .eval(ExBudget::max())
             .result()
             .expect("Fuzzer crashed?");
 
-        Prng::from_result(result, return_type)
+        Prng::from_result(result)
     }
 
     /// Obtain a Prng back from a fuzzer execution. As a reminder, fuzzers have the following
@@ -305,10 +311,7 @@ impl Prng {
     /// made during shrinking aren't breaking underlying invariants (if only, because we run out of
     /// values to replay). In such case, the replayed sequence is simply invalid and the fuzzer
     /// aborted altogether with 'None'.
-    pub fn from_result(
-        result: Term<NamedDeBruijn>,
-        type_info: &Type,
-    ) -> Option<(Self, Term<NamedDeBruijn>)> {
+    pub fn from_result(result: Term<NamedDeBruijn>) -> Option<(Self, PlutusData)> {
         /// Interpret the given 'PlutusData' as one of two Prng constructors.
         fn as_prng(cst: &PlutusData) -> Prng {
             if let PlutusData::Constr(Constr { tag, fields, .. }) = cst {
@@ -345,15 +348,10 @@ impl Prng {
 
         if let Term::Constant(rc) = &result {
             if let Constant::Data(PlutusData::Constr(Constr { tag, fields, .. })) = &rc.borrow() {
-                if *tag == 121 + Prng::OK {
+                if *tag == 121 + Prng::SOME {
                     if let [PlutusData::Array(elems)] = &fields[..] {
                         if let [new_seed, value] = &elems[..] {
-                            return Some((
-                                as_prng(new_seed),
-                                convert_data_to_type(Term::data(value.clone()), type_info)
-                                    .try_into()
-                                    .expect("safe conversion from Name -> NamedDeBruijn"),
-                            ));
+                            return Some((as_prng(new_seed), value.clone()));
                         }
                     }
                 }
@@ -362,7 +360,7 @@ impl Prng {
                 // choices. If we run out of choices, or a choice end up being
                 // invalid as per the expectation, the fuzzer can't go further and
                 // fail.
-                if *tag == 121 + Prng::ERR {
+                if *tag == 121 + Prng::NONE {
                     return None;
                 }
             }
@@ -385,12 +383,9 @@ impl Prng {
 
 #[derive(Debug)]
 pub struct Counterexample<'a> {
-    pub value: Term<NamedDeBruijn>,
+    pub value: PlutusData,
     pub choices: Vec<u32>,
-    pub result: EvalResult,
-    pub can_error: bool,
-    pub program: &'a Program<NamedDeBruijn>,
-    pub fuzzer: (&'a Program<NamedDeBruijn>, &'a Type),
+    pub property: &'a PropertyTest,
 }
 
 impl<'a> Counterexample<'a> {
@@ -404,17 +399,17 @@ impl<'a> Counterexample<'a> {
         // test cases many times. Given that tests are fully deterministic, we can
         // memoize the already seen choices to avoid re-running the generators and
         // the test (which can be quite expensive).
-        match Prng::from_choices(choices).sample(self.fuzzer.0, self.fuzzer.1) {
+        match Prng::from_choices(choices).sample(&self.property.fuzzer.0) {
             // Shrinked choices led to an impossible generation.
             None => false,
 
             // Shrinked choices let to a new valid generated value, now, is it better?
             Some((_, value)) => {
-                let result = self.program.apply_term(&value).eval(ExBudget::max());
+                let result = self.property.eval(&value);
 
                 // If the test no longer fails, it isn't better as we're only
                 // interested in counterexamples.
-                if !result.failed(self.can_error) {
+                if !result.failed(self.property.can_error) {
                     return false;
                 }
 
@@ -546,14 +541,25 @@ impl<'a> Counterexample<'a> {
 // ----------------------------------------------------------------------------
 
 #[derive(Debug)]
-pub enum TestResult {
+pub enum TestResult<T> {
     UnitTestResult(UnitTestResult),
-    PropertyTestResult(PropertyTestResult),
+    PropertyTestResult(PropertyTestResult<T>),
 }
 
-unsafe impl Send for TestResult {}
+unsafe impl<T> Send for TestResult<T> {}
 
-impl TestResult {
+impl TestResult<PlutusData> {
+    pub fn reify(self, data_types: &HashMap<String, TypeInfo>) -> TestResult<UntypedExpr> {
+        match self {
+            TestResult::UnitTestResult(test) => TestResult::UnitTestResult(test),
+            TestResult::PropertyTestResult(test) => {
+                TestResult::PropertyTestResult(test.reify(data_types))
+            }
+        }
+    }
+}
+
+impl<T> TestResult<T> {
     pub fn is_success(&self) -> bool {
         match self {
             TestResult::UnitTestResult(UnitTestResult { success, .. }) => *success,
@@ -633,13 +639,29 @@ pub struct UnitTestResult {
 unsafe impl Send for UnitTestResult {}
 
 #[derive(Debug)]
-pub struct PropertyTestResult {
+pub struct PropertyTestResult<T> {
     pub test: PropertyTest,
-    pub counterexample: Option<Term<NamedDeBruijn>>,
+    pub counterexample: Option<T>,
     pub iterations: usize,
 }
 
-unsafe impl Send for PropertyTestResult {}
+unsafe impl<T> Send for PropertyTestResult<T> {}
+
+impl PropertyTestResult<PlutusData> {
+    pub fn reify(self, data_types: &HashMap<String, TypeInfo>) -> PropertyTestResult<UntypedExpr> {
+        PropertyTestResult {
+            counterexample: match self.counterexample {
+                None => None,
+                Some(counterexample) => Some(
+                    UntypedExpr::reify(data_types, counterexample, &self.test.fuzzer.1)
+                        .expect("Failed to reify counterexample?"),
+                ),
+            },
+            iterations: self.iterations,
+            test: self.test,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Assertion {

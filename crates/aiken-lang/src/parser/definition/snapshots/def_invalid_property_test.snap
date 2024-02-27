@@ -13,8 +13,8 @@ Test(
                     is_validator_param: false,
                 },
                 location: 9..16,
-                via: DefinitionIdentifier {
-                    module: None,
+                via: Var {
+                    location: 15..16,
                     name: "f",
                 },
                 tipo: (),
@@ -27,8 +27,8 @@ Test(
                     is_validator_param: false,
                 },
                 location: 18..25,
-                via: DefinitionIdentifier {
-                    module: None,
+                via: Var {
+                    location: 24..25,
                     name: "g",
                 },
                 tipo: (),
@@ -42,7 +42,14 @@ Test(
         location: 0..26,
         name: "foo",
         public: false,
-        return_annotation: None,
+        return_annotation: Some(
+            Constructor {
+                location: 0..39,
+                module: None,
+                name: "Bool",
+                arguments: [],
+            },
+        ),
         return_type: (),
         end_position: 38,
         can_error: false,

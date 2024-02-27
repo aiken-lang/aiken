@@ -1,13 +1,11 @@
 use crate::error::Error;
 use aiken_lang::{
     ast::{
-        DataType, Definition, Function, Located, ModuleKind, Tracing, TypedDataType, TypedFunction,
-        TypedModule, TypedValidator, UntypedModule, Validator,
+        DataType, DataTypeKey, Definition, Function, FunctionAccessKey, Located, ModuleKind,
+        Tracing, TypedDataType, TypedFunction, TypedModule, TypedValidator, UntypedModule,
+        Validator,
     },
-    gen_uplc::{
-        builder::{DataTypeKey, FunctionAccessKey},
-        CodeGenerator,
-    },
+    gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
     parser::extra::{comments_before, Comment, ModuleExtra},
     tipo::TypeInfo,

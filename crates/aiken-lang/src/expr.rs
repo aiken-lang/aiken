@@ -1,6 +1,9 @@
-use std::rc::Rc;
+use std::{collections::HashMap, rc::Rc};
 
 use vec1::Vec1;
+
+use pallas::ledger::primitives::alonzo::{Constr, PlutusData};
+use uplc::machine::value::from_pallas_bigint;
 
 use crate::{
     ast::{
@@ -11,7 +14,7 @@ use crate::{
     },
     builtins::void,
     parser::token::Base,
-    tipo::{ModuleValueConstructor, PatternConstructor, Type, ValueConstructor},
+    tipo::{ModuleValueConstructor, PatternConstructor, Type, TypeInfo, TypeVar, ValueConstructor},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -573,6 +576,150 @@ pub const DEFAULT_TODO_STR: &str = "aiken::todo";
 pub const DEFAULT_ERROR_STR: &str = "aiken::error";
 
 impl UntypedExpr {
+    // Reify some opaque 'PlutusData' into an 'UntypedExpr', using a Type annotation. We also need
+    // an extra map to lookup record & enum constructor's names as they're completely erased when
+    // in their PlutusData form, and the Type annotation only contains type name.
+    //
+    // The function performs some sanity check to ensure that the type does indeed somewhat
+    // correspond to the data being given.
+    pub fn reify(
+        data_types: &HashMap<String, TypeInfo>,
+        data: PlutusData,
+        tipo: &Type,
+    ) -> Result<Self, String> {
+        if let Type::Var { tipo } = tipo {
+            if let TypeVar::Link { tipo } = &*tipo.borrow() {
+                return UntypedExpr::reify(data_types, data, tipo);
+            }
+        }
+
+        match data {
+            PlutusData::BigInt(ref i) => Ok(UntypedExpr::UInt {
+                location: Span::empty(),
+                base: Base::Decimal {
+                    numeric_underscore: false,
+                },
+                value: from_pallas_bigint(i).to_string(),
+            }),
+            PlutusData::BoundedBytes(bytes) => Ok(UntypedExpr::ByteArray {
+                location: Span::empty(),
+                bytes: bytes.into(),
+                preferred_format: ByteArrayFormatPreference::HexadecimalString,
+            }),
+            PlutusData::Array(args) => {
+                let inner;
+                match tipo {
+                    Type::App {
+                        module, name, args, ..
+                    } if module.is_empty() && name.as_str() == "List" => {
+                        if let [arg] = &args[..] {
+                            inner = arg.clone()
+                        } else {
+                            return Err("invalid List type annotation: the list has multiple type-parameters.".to_string());
+                        };
+                    }
+                    _ => {
+                        return Err(format!(
+                            "invalid type annotation. expected List but got: {tipo:?}"
+                        ))
+                    }
+                }
+
+                Ok(UntypedExpr::List {
+                    location: Span::empty(),
+                    elements: args
+                        .into_iter()
+                        .map(|arg| UntypedExpr::reify(data_types, arg, &inner))
+                        .collect::<Result<Vec<_>, _>>()?,
+                    tail: None,
+                })
+            }
+
+            PlutusData::Constr(Constr {
+                tag,
+                any_constructor,
+                fields,
+            }) => {
+                let ix = if tag == 102 {
+                    any_constructor.unwrap() as usize
+                } else if tag < 128 {
+                    tag as usize - 121
+                } else {
+                    tag as usize - 1280 + 7
+                };
+
+                if let Type::App { module, name, .. } = tipo {
+                    let module = if module.is_empty() { "aiken" } else { module };
+                    if let Some(type_info) = data_types.get(module) {
+                        if let Some(constructors) = type_info.types_constructors.get(name) {
+                            let constructor = &constructors[ix];
+                            return if fields.is_empty() {
+                                Ok(UntypedExpr::Var {
+                                    location: Span::empty(),
+                                    name: constructor.to_string(),
+                                })
+                            } else {
+                                // NOTE: When the type is _private_, we cannot see the
+                                // value constructor and so we default to showing a
+                                // placeholder.
+                                let arguments = match type_info.values.get(constructor) {
+                                    None => Ok(fields
+                                        .iter()
+                                        .map(|_| CallArg {
+                                            label: None,
+                                            location: Span::empty(),
+                                            value: UntypedExpr::Var {
+                                                name: "<hidden>".to_string(),
+                                                location: Span::empty(),
+                                            },
+                                        })
+                                        .collect()),
+                                    Some(value) => {
+                                        let types =
+                                            if let Type::Fn { args, .. } = value.tipo.as_ref() {
+                                                &args[..]
+                                            } else {
+                                                &[]
+                                            };
+
+                                        fields
+                                            .into_iter()
+                                            .zip(types)
+                                            .map(|(field, tipo)| {
+                                                UntypedExpr::reify(data_types, field, tipo).map(
+                                                    |value| CallArg {
+                                                        label: None,
+                                                        location: Span::empty(),
+                                                        value,
+                                                    },
+                                                )
+                                            })
+                                            .collect::<Result<Vec<_>, _>>()
+                                    }
+                                }?;
+
+                                Ok(UntypedExpr::Call {
+                                    location: Span::empty(),
+                                    arguments,
+                                    fun: Box::new(UntypedExpr::Var {
+                                        name: constructor.to_string(),
+                                        location: Span::empty(),
+                                    }),
+                                })
+                            };
+                        }
+                    }
+                }
+
+                Err(format!(
+                    "invalid type annotation {tipo:?} for constructor: {tag:?} with {fields:?}"
+                ))
+            }
+
+            PlutusData::Map(..) => todo!("reify Map"),
+        }
+    }
+
     pub fn todo(reason: Option<Self>, location: Span) -> Self {
         UntypedExpr::Trace {
             location,

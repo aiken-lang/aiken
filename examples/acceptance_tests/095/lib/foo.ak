@@ -2,10 +2,15 @@ use aiken/builtin
 
 const max_int: Int = 255
 
-type PRNG {
+pub type PRNG {
   Seeded { seed: Int, choices: List<Int> }
   Replayed { choices: List<Int> }
 }
+
+type Fuzzer<a> =
+  fn(PRNG) -> Option<(PRNG, a)>
+
+// Primitives
 
 fn any_int(prng: PRNG) -> Option<(PRNG, Int)> {
   when prng is {
@@ -40,10 +45,94 @@ fn any_int(prng: PRNG) -> Option<(PRNG, Int)> {
   }
 }
 
-test prop_foo_1(n via any_int) {
-  n >= 0 && n <= 255
+pub fn constant(a: a) -> Fuzzer<a> {
+  fn(s0) { Some((s0, a)) }
 }
 
-test prop_foo_2(n via any_int) fail {
-  n < 100
+pub fn and_then(fuzz_a: Fuzzer<a>, f: fn(a) -> Fuzzer<b>) -> Fuzzer<b> {
+  fn(s0) {
+    when fuzz_a(s0) is {
+      Some((s1, a)) -> f(a)(s1)
+      None -> None
+    }
+  }
+}
+
+pub fn map(fuzz_a: Fuzzer<a>, f: fn(a) -> b) -> Fuzzer<b> {
+  fn(s0) {
+    when fuzz_a(s0) is {
+      Some((s1, a)) -> Some((s1, f(a)))
+      None -> None
+    }
+  }
+}
+
+pub fn map2(fuzz_a: Fuzzer<a>, fuzz_b: Fuzzer<b>, f: fn(a, b) -> c) -> Fuzzer<c> {
+  fn(s0) {
+    when fuzz_a(s0) is {
+      Some((s1, a)) ->
+        when fuzz_b(s1) is {
+          Some((s2, b)) -> Some((s2, f(a, b)))
+          None -> None
+        }
+      None -> None
+    }
+  }
+}
+
+// Builders
+
+fn any_bool() -> Fuzzer<Bool> {
+  any_int |> map(fn(n) { n <= 127 })
+}
+
+fn any_list(fuzz_a: Fuzzer<a>) -> Fuzzer<List<a>> {
+  any_bool()
+    |> and_then(
+         fn(continue) {
+           if continue {
+             map2(fuzz_a, any_list(fuzz_a), fn(head, tail) { [head, ..tail] })
+           } else {
+             constant([])
+           }
+         },
+       )
+}
+
+fn any_season() -> Fuzzer<Season> {
+  any_int
+    |> map(
+         fn(i) {
+           let n = i % 3
+           if n == 0 {
+             Winter { cold: True }
+           } else if n == 1 {
+             Spring(i)
+           } else if n == 2 {
+             Summer
+           } else {
+             Fall
+           }
+         },
+       )
+}
+
+// Properties
+
+pub type Season {
+  Winter { cold: Bool }
+  Spring(Int)
+  Summer
+  Fall
+}
+
+test prop_list(xs via any_list(any_season())) {
+  xs != [Winter(True)] || xs != [Winter(False)]
+}
+
+fn length(xs: List<a>) -> Int {
+  when xs is {
+    [] -> 0
+    [_, ..tail] -> 1 + length(tail)
+  }
 }
