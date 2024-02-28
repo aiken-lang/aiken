@@ -46,7 +46,7 @@ pub fn exec(
 
         let title = title.as_ref().or(validator.as_ref());
 
-        let address = p.address(title, None)?;
+        let address = p.address(title, None, false)?;
 
         println!("{}", address.payment().to_hex());
 

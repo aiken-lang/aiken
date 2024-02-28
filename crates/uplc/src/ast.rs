@@ -161,7 +161,9 @@ impl<'a> Deserialize<'a> for Program<DeBruijn> {
 impl Program<DeBruijn> {
     pub fn address(&self, network: Network, delegation: ShelleyDelegationPart) -> ShelleyAddress {
         let cbor = self.to_cbor().unwrap();
+
         let validator_hash = babbage::PlutusV2Script(cbor.into()).compute_hash();
+
         ShelleyAddress::new(
             network,
             ShelleyPaymentPart::Script(validator_hash),

@@ -359,6 +359,7 @@ where
         &self,
         title: Option<&String>,
         stake_address: Option<&String>,
+        mainnet: bool,
     ) -> Result<ShelleyAddress, Error> {
         // Parse stake address
         let stake_address = stake_address
@@ -398,9 +399,15 @@ where
             if n > 0 {
                 Err(blueprint::error::Error::ParameterizedValidator { n }.into())
             } else {
+                let network = if mainnet {
+                    Network::Mainnet
+                } else {
+                    Network::Testnet
+                };
+
                 Ok(validator
                     .program
-                    .address(Network::Testnet, delegation_part.to_owned()))
+                    .address(network, delegation_part.to_owned()))
             }
         })
     }
