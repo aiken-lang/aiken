@@ -82,22 +82,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     // Bool
     prelude.types_constructors.insert(
         BOOL.to_string(),
-        vec!["True".to_string(), "False".to_string()],
-    );
-
-    prelude.values.insert(
-        "True".to_string(),
-        ValueConstructor::public(
-            bool(),
-            ValueConstructorVariant::Record {
-                module: "".into(),
-                name: "True".to_string(),
-                field_map: None::<FieldMap>,
-                arity: 0,
-                location: Span::empty(),
-                constructors_count: 2,
-            },
-        ),
+        vec!["False".to_string(), "True".to_string()],
     );
 
     prelude.values.insert(
@@ -107,6 +92,21 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
             ValueConstructorVariant::Record {
                 module: "".into(),
                 name: "False".to_string(),
+                field_map: None::<FieldMap>,
+                arity: 0,
+                location: Span::empty(),
+                constructors_count: 2,
+            },
+        ),
+    );
+
+    prelude.values.insert(
+        "True".to_string(),
+        ValueConstructor::public(
+            bool(),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: "True".to_string(),
                 field_map: None::<FieldMap>,
                 arity: 0,
                 location: Span::empty(),

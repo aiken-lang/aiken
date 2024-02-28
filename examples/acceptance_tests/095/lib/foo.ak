@@ -101,38 +101,66 @@ fn any_list(fuzz_a: Fuzzer<a>) -> Fuzzer<List<a>> {
 
 fn any_season() -> Fuzzer<Season> {
   any_int
-    |> map(
+    |> and_then(
          fn(i) {
            let n = i % 3
            if n == 0 {
-             Winter { cold: True }
+             any_bool() |> map(Winter)
            } else if n == 1 {
-             Spring(i)
+             constant(Spring(i))
            } else if n == 2 {
-             Summer
+             constant(Summer)
            } else {
-             Fall
+             constant(Fall)
            }
          },
        )
-}
-
-// Properties
-
-pub type Season {
-  Winter { cold: Bool }
-  Spring(Int)
-  Summer
-  Fall
-}
-
-test prop_list(xs via any_list(any_season())) {
-  xs != [Winter(True)] || xs != [Winter(False)]
 }
 
 fn length(xs: List<a>) -> Int {
   when xs is {
     [] -> 0
     [_, ..tail] -> 1 + length(tail)
+  }
+}
+
+fn filter(xs: List<a>, f: fn(a) -> Bool) -> List<a> {
+  when xs is {
+    [] ->
+      []
+    [head, ..tail] ->
+      if f(head) {
+        [head, ..filter(tail, f)]
+      } else {
+        filter(tail, f)
+      }
+  }
+}
+
+// Properties
+
+pub type Season {
+  Winter(Bool)
+  Spring(Int)
+  Summer
+  Fall
+}
+
+// test prop_is_never_summer(xs via any_list(any_season())) {
+//   filter(xs, fn(x) { x == Summer }) == []
+// }
+
+test prop_is_always_cold_in_winter(xs via any_list(any_season())) {
+  is_always_cold_in_winter(xs)
+}
+
+test prop_is_always_cold_in_winter_2() {
+  is_always_cold_in_winter([Winter(True)])
+}
+
+fn is_always_cold_in_winter(xs: List<Season>) -> Bool {
+  when xs is {
+    [Winter(cold), ..tail] -> cold && is_always_cold_in_winter(tail)
+    _ -> True
   }
 }
