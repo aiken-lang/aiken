@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -e
+set -o pipefail
 
 AIKEN_DIR=${AIKEN_DIR-"$HOME/.aiken"}
 AIKEN_BIN_DIR="$AIKEN_DIR/bin"
@@ -86,7 +87,9 @@ main() {
 
   # Download the binaries tarball and unpack it into the .aiken bin directory.
   say "downloading aiken"
-  ensure curl -# -L "$BIN_TARBALL_URL" | tar -xzC "$AIKEN_BIN_DIR"
+  curl -f -# -L "$BIN_TARBALL_URL" | tar -xzC "$AIKEN_BIN_DIR" || {
+    err "failed to download aiken: version not found or network error"
+  }
 
   for bin in "${BINS[@]}"; do
     bin_path="$AIKEN_BIN_DIR/$bin"
