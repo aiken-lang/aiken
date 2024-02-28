@@ -259,12 +259,24 @@ You can use '{discard}' and numbers to distinguish between similar names.
         name: String,
     },
 
-    #[error("I found a data type that has a function type in it. This is not allowed.\n")]
+    #[error("I found a type definition that has a function type in it. This is not allowed.\n")]
     #[diagnostic(code("illegal::function_in_type"))]
     #[diagnostic(help("Data-types can't hold functions. If you want to define method-like functions, group the type definition and the methods under a common namespace in a standalone module."))]
     FunctionTypeInData {
         #[label]
         location: Span,
+    },
+
+    #[error("I found a type definition that has an unsupported type in it.\n")]
+    #[diagnostic(code("illegal::type_in_data"))]
+    #[diagnostic(help(
+        r#"Data-types can't contain type {type_info} because it can't be represented as PlutusData."#,
+        type_info = tipo.to_pretty(0).if_supports_color(Stdout, |s| s.red())
+    ))]
+    IllegalTypeInData {
+        #[label]
+        location: Span,
+        tipo: Rc<Type>,
     },
 
     #[error("I found a discarded expression not bound to a variable.\n")]
@@ -951,6 +963,7 @@ impl ExtraData for Error {
             | Error::DuplicateVarInPattern { .. }
             | Error::ExtraVarInAlternativePattern { .. }
             | Error::FunctionTypeInData { .. }
+            | Error::IllegalTypeInData { .. }
             | Error::ImplicitlyDiscardedExpression { .. }
             | Error::IncorrectFieldsArity { .. }
             | Error::IncorrectFunctionCallArity { .. }

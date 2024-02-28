@@ -545,6 +545,13 @@ fn infer_definition(
                             location: *location,
                         });
                     }
+
+                    if tipo.is_bls381_12_g1() || tipo.is_bls381_12_g2() || tipo.is_ml_result() {
+                        return Err(Error::IllegalTypeInData {
+                            location: *location,
+                            tipo: tipo.clone(),
+                        });
+                    }
                 }
             }
 
