@@ -1,7 +1,7 @@
 use aiken_project::{config, pretty};
 use cmd::{
     blueprint::{self, address},
-    build, check, completion, docs, fmt, lsp, new,
+    build, check, completion, docs, export, fmt, lsp, new,
     packages::{self, add},
     tx, uplc, Cmd,
 };
@@ -26,6 +26,7 @@ fn main() -> miette::Result<()> {
         Cmd::Tx(sub_cmd) => tx::exec(sub_cmd),
         Cmd::Uplc(sub_cmd) => uplc::exec(sub_cmd),
         Cmd::Completion(sub_cmd) => completion::exec(sub_cmd),
+        Cmd::Export(args) => export::exec(args),
     }
 }
 
