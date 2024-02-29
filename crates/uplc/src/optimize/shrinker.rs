@@ -6,10 +6,11 @@ use itertools::Itertools;
 use pallas::ledger::primitives::babbage::{BigInt, PlutusData};
 
 use crate::{
-    ast::{Constant, Data, Name, NamedDeBruijn, Program, Term, Type, Unique},
+    ast::{Constant, Data, Name, NamedDeBruijn, Program, Term, Type},
     builtins::DefaultFunction,
-    parser::interner::Interner,
 };
+
+use super::interner::CodeGenInterner;
 
 #[derive(Eq, Hash, PartialEq, Clone, Debug, PartialOrd)]
 pub enum ScopePath {
@@ -310,6 +311,7 @@ pub struct CurriedNode {
     term: Term<Name>,
 }
 
+#[derive(PartialEq, Clone, Debug)]
 pub struct UplcNode {
     applied_id: usize,
     curried_id: usize,
@@ -640,6 +642,22 @@ impl CurriedArgs {
             _ => unreachable!(),
         }
     }
+
+    fn is_flipped(&self, path: &BuiltinArgs) -> bool {
+        match (self, path) {
+            (CurriedArgs::TwoArgs { fst_args, .. }, BuiltinArgs::TwoArgsAnyOrder { fst, snd }) => {
+                if fst_args.iter().any(|item| item.term == fst.1) {
+                    false
+                } else {
+                    fst_args.iter().any(|item| match &snd {
+                        Some(snd) => item.term == snd.1,
+                        None => false,
+                    })
+                }
+            }
+            _ => false,
+        }
+    }
 }
 #[derive(PartialEq, Clone, Debug)]
 pub struct CurriedBuiltin {
@@ -659,6 +677,10 @@ impl CurriedBuiltin {
 
     pub fn get_id_args(&self, path: &BuiltinArgs) -> Option<Vec<UplcNode>> {
         self.args.get_id_args(path)
+    }
+
+    pub fn is_flipped(&self, path: &BuiltinArgs) -> bool {
+        self.args.is_flipped(path)
     }
 }
 
@@ -798,7 +820,7 @@ impl Program<Name> {
         })
     }
 
-    pub fn builtin_force_reducer(self) -> (Self, Unique) {
+    pub fn builtin_force_reducer(self) -> Self {
         let mut builtin_map = IndexMap::new();
 
         let program = self.traverse_uplc_with(&mut |_id, term, _arg_stack, _scope| {
@@ -850,16 +872,13 @@ impl Program<Name> {
             term,
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut program);
 
         let program = Program::<NamedDeBruijn>::try_from(program).unwrap();
 
-        (
-            Program::<Name>::try_from(program).unwrap(),
-            interner.current_unique(),
-        )
+        Program::<Name>::try_from(program).unwrap()
     }
 
     pub fn inline_reducer(self) -> Self {
@@ -1147,15 +1166,17 @@ impl Program<Name> {
         })
     }
 
-    pub fn builtin_curry_reducer(self, current: &mut Unique) -> Self {
+    pub fn builtin_curry_reducer(self) -> Self {
         let mut curried_terms = vec![];
         let mut id_mapped_curry_terms: IndexMap<CurriedName, (Scope, Term<Name>, bool)> =
             IndexMap::new();
         let mut curry_applied_ids = vec![];
         let mut scope_mapped_to_term: IndexMap<Scope, Vec<(CurriedName, Term<Name>)>> =
             IndexMap::new();
+
+        let mut flipped_terms: IndexMap<Scope, bool> = IndexMap::new();
+
         let mut final_ids: IndexMap<Vec<usize>, ()> = IndexMap::new();
-        let mut unique_map: IndexMap<String, Unique> = IndexMap::new();
 
         let step_a = self.traverse_uplc_with(&mut |_id, term, arg_stack, scope| match term {
             Term::Builtin(func) => {
@@ -1168,31 +1189,40 @@ impl Program<Name> {
                     let builtin_args =
                         BuiltinArgs::args_from_arg_stack(arg_stack, is_order_agnostic);
 
-                    // Get upper scope of the function plus args
-                    // So for example if the scope is [.., ARG, ARG, FUNC]
-                    // we want to pop off the last 3 to get the scope right above the function applications
-
                     // First we see if we have already curried this builtin before
-                    let mut id_vec = if let Some(curried_builtin) = curried_terms
-                        .iter_mut()
-                        .find(|curried_term: &&mut CurriedBuiltin| curried_term.func == *func)
-                    {
+                    let mut id_vec = if let Some((index, _)) =
+                        curried_terms.iter_mut().find_position(
+                            |curried_term: &&mut CurriedBuiltin| curried_term.func == *func,
+                        ) {
                         // We found it the builtin was curried before
                         // So now we merge the new args into the existing curried builtin
-                        *curried_builtin = (*curried_builtin)
-                            .clone()
-                            .merge_node_by_path(builtin_args.clone());
+
+                        let curried_builtin = curried_terms.remove(index);
+
+                        let curried_builtin =
+                            curried_builtin.merge_node_by_path(builtin_args.clone());
 
                         let Some(id_vec) = curried_builtin.get_id_args(&builtin_args) else {
                             unreachable!();
                         };
 
+                        flipped_terms
+                            .insert(scope.clone(), curried_builtin.is_flipped(&builtin_args));
+
+                        curried_terms.push(curried_builtin);
+
                         id_vec
                     } else {
                         // Brand new buitlin so we add it to the list
-                        curried_terms.push(builtin_args.clone().args_to_curried_args(*func));
+                        let curried_builtin = builtin_args.clone().args_to_curried_args(*func);
 
-                        builtin_args.get_id_args()
+                        let Some(id_vec) = curried_builtin.get_id_args(&builtin_args) else {
+                            unreachable!();
+                        };
+
+                        curried_terms.push(curried_builtin);
+
+                        id_vec
                     };
 
                     while let Some(node) = id_vec.pop() {
@@ -1200,8 +1230,6 @@ impl Program<Name> {
                             id_vec.iter().map(|item| item.curried_id).collect_vec();
 
                         id_only_vec.push(node.curried_id);
-
-                        let id_var_name = id_vec_function_to_var(&func.aiken_name(), &id_only_vec);
 
                         let curry_name = CurriedName {
                             func_name: func.aiken_name(),
@@ -1214,33 +1242,19 @@ impl Program<Name> {
                             *map_scope = map_scope.common_ancestor(scope);
                             *multi_occurrences = true;
                         } else if id_vec.is_empty() {
-                            unique_map.insert(id_var_name, *current);
-
-                            current.increment();
-
                             id_mapped_curry_terms.insert(
                                 curry_name,
                                 (scope.clone(), Term::Builtin(*func).apply(node.term), false),
                             );
                         } else {
-                            unique_map.insert(id_var_name, *current);
-
-                            current.increment();
-
                             let var_name = id_vec_function_to_var(
                                 &func.aiken_name(),
                                 &id_vec.iter().map(|item| item.curried_id).collect_vec(),
                             );
 
-                            let unique = *unique_map.get(&var_name).unwrap_or(current);
-
                             id_mapped_curry_terms.insert(
                                 curry_name,
-                                (
-                                    scope.clone(),
-                                    Term::var_unique(var_name, unique).apply(node.term),
-                                    false,
-                                ),
+                                (scope.clone(), Term::var(var_name).apply(node.term), false),
                             );
                         }
                     }
@@ -1272,104 +1286,91 @@ impl Program<Name> {
                 }
             });
 
-        step_a.traverse_uplc_with(&mut |id, term, arg_stack, scope| match term {
-            Term::Builtin(func) => {
-                if func.can_curry_builtin() && arg_stack.len() == func.arity() {
-                    let Some(curried_builtin) =
-                        curried_terms.iter().find(|curry| curry.func == *func)
-                    else {
-                        return;
-                    };
+        let mut step_b =
+            step_a.traverse_uplc_with(&mut |id, term, mut arg_stack, scope| match term {
+                Term::Builtin(func) => {
+                    if func.can_curry_builtin() && arg_stack.len() == func.arity() {
+                        let Some(curried_builtin) =
+                            curried_terms.iter().find(|curry| curry.func == *func)
+                        else {
+                            return;
+                        };
 
-                    let builtin_args = BuiltinArgs::args_from_arg_stack(
-                        arg_stack,
-                        func.is_order_agnostic_builtin(),
-                    );
-
-                    let Some(mut id_vec) = curried_builtin.get_id_args(&builtin_args) else {
-                        return;
-                    };
-
-                    while !id_vec.is_empty() {
-                        let id_lookup = id_vec.iter().map(|item| item.curried_id).collect_vec();
-
-                        if final_ids.contains_key(&id_lookup) {
-                            break;
+                        if let Some(true) = flipped_terms.get(scope) {
+                            arg_stack.reverse();
                         }
-                        id_vec.pop();
-                    }
 
-                    if id_vec.is_empty() {
-                        return;
-                    }
+                        let builtin_args = BuiltinArgs::args_from_arg_stack(
+                            arg_stack,
+                            func.is_order_agnostic_builtin(),
+                        );
 
-                    let name = id_vec_function_to_var(
-                        &func.aiken_name(),
-                        &id_vec.iter().map(|item| item.curried_id).collect_vec(),
-                    );
+                        let Some(mut id_vec) = curried_builtin.get_id_args(&builtin_args) else {
+                            return;
+                        };
 
-                    id_vec.iter().for_each(|item| {
-                        curry_applied_ids.push(item.applied_id);
-                    });
+                        while !id_vec.is_empty() {
+                            let id_lookup = id_vec.iter().map(|item| item.curried_id).collect_vec();
 
-                    let unique = *unique_map.get(&name).unwrap();
-
-                    *term = Term::var_unique(name, unique);
-                }
-            }
-            Term::Apply { function, .. } => {
-                let id = id.unwrap();
-
-                if curry_applied_ids.contains(&id) {
-                    *term = function.as_ref().clone();
-                }
-
-                if let Some(insert_list) = scope_mapped_to_term.remove(scope) {
-                    for (key, val) in insert_list.into_iter().rev() {
-                        let name = id_vec_function_to_var(&key.func_name, &key.id_vec);
-
-                        let unique = *unique_map.get(&name).unwrap();
-
-                        if var_occurrences(
-                            term,
-                            Name {
-                                text: name.clone(),
-                                unique,
+                            if final_ids.contains_key(&id_lookup) {
+                                break;
                             }
-                            .into(),
-                        )
-                        .found
-                        {
-                            *term = term.clone().lambda_unique(name, unique).apply(val);
+                            id_vec.pop();
                         }
+
+                        if id_vec.is_empty() {
+                            return;
+                        }
+
+                        let name = id_vec_function_to_var(
+                            &func.aiken_name(),
+                            &id_vec.iter().map(|item| item.curried_id).collect_vec(),
+                        );
+
+                        id_vec.iter().for_each(|item| {
+                            curry_applied_ids.push(item.applied_id);
+                        });
+
+                        *term = Term::var(name);
                     }
                 }
-            }
-            Term::Constr { .. } => todo!(),
-            Term::Case { .. } => todo!(),
-            _ => {
-                if let Some(insert_list) = scope_mapped_to_term.remove(scope) {
-                    for (key, val) in insert_list.into_iter().rev() {
-                        let name = id_vec_function_to_var(&key.func_name, &key.id_vec);
+                Term::Apply { function, .. } => {
+                    let id = id.unwrap();
 
-                        let unique = *unique_map.get(&name).unwrap();
+                    if curry_applied_ids.contains(&id) {
+                        *term = function.as_ref().clone();
+                    }
 
-                        if var_occurrences(
-                            term,
-                            Name {
-                                text: name.clone(),
-                                unique,
+                    if let Some(insert_list) = scope_mapped_to_term.remove(scope) {
+                        for (key, val) in insert_list.into_iter().rev() {
+                            let name = id_vec_function_to_var(&key.func_name, &key.id_vec);
+
+                            if var_occurrences(term, Name::text(&name).into()).found {
+                                *term = term.clone().lambda(name).apply(val);
                             }
-                            .into(),
-                        )
-                        .found
-                        {
-                            *term = term.clone().lambda_unique(name, unique).apply(val);
                         }
                     }
                 }
-            }
-        })
+                Term::Constr { .. } => todo!(),
+                Term::Case { .. } => todo!(),
+                _ => {
+                    if let Some(insert_list) = scope_mapped_to_term.remove(scope) {
+                        for (key, val) in insert_list.into_iter().rev() {
+                            let name = id_vec_function_to_var(&key.func_name, &key.id_vec);
+
+                            if var_occurrences(term, Name::text(&name).into()).found {
+                                *term = term.clone().lambda(name).apply(val);
+                            }
+                        }
+                    }
+                }
+            });
+
+        let mut interner = CodeGenInterner::new();
+
+        interner.program(&mut step_b);
+
+        step_b
     }
 }
 
@@ -1776,7 +1777,7 @@ mod tests {
 
         let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
 
-        let (mut actual, _) = program.builtin_force_reducer();
+        let mut actual = program.builtin_force_reducer();
 
         let mut interner = Interner::new();
 
@@ -1835,7 +1836,7 @@ mod tests {
 
         let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
 
-        let (mut actual, _) = program.builtin_force_reducer();
+        let mut actual = program.builtin_force_reducer();
 
         let mut interner = Interner::new();
 
@@ -2001,13 +2002,9 @@ mod tests {
 
         interner.program(&mut expected);
 
-        let mut unique = interner.current_unique();
-
-        unique.large_offset();
-
         let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
 
-        let actual = program.builtin_curry_reducer(&mut unique);
+        let actual = program.builtin_curry_reducer();
 
         let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
 
