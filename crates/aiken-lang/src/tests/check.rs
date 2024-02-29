@@ -51,6 +51,33 @@ fn check_validator(
 }
 
 #[test]
+fn bls12_381_elements_in_data_type() {
+    let source_code = r#"
+        type Datum {
+          D0(G1Element)
+          D1(G2Element)
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn bls12_381_ml_result_in_data_type() {
+    let source_code = r#"
+        type Datum {
+          thing: MillerLoopResult
+        }
+    "#;
+
+    let res = check(parse(source_code));
+
+    dbg!(&res);
+
+    assert!(matches!(res, Err((_, Error::IllegalTypeInData { .. }))))
+}
+
+#[test]
 fn validator_illegal_return_type() {
     let source_code = r#"
       validator {

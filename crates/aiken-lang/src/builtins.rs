@@ -153,7 +153,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         MILLER_LOOP_RESULT.to_string(),
         TypeConstructor {
             parameters: vec![],
-            tipo: int(),
+            tipo: miller_loop_result(),
             location: Span::empty(),
             module: "".to_string(),
             public: true,
