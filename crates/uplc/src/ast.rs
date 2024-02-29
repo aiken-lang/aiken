@@ -271,7 +271,7 @@ pub enum Constant {
     Bls12_381MlResult(Box<blst::blst_fp12>),
 }
 
-pub struct Data {}
+pub struct Data;
 
 // TODO: See about moving these builders upstream to Pallas?
 impl Data {

@@ -1494,9 +1494,9 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
             ),
         )
     } else if field_type.is_bls381_12_g1() {
-        Term::bls12_381_g1_compress().apply(Term::b_data().apply(term))
+        Term::b_data().apply(Term::bls12_381_g1_compress().apply(term))
     } else if field_type.is_bls381_12_g2() {
-        Term::bls12_381_g2_compress().apply(Term::b_data().apply(term))
+        Term::b_data().apply(Term::bls12_381_g2_compress().apply(term))
     } else if field_type.is_ml_result() {
         panic!("ML Result not supported")
     } else {

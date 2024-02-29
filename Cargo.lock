@@ -123,6 +123,7 @@ version = "1.0.24-alpha"
 dependencies = [
  "aiken-lang",
  "askama",
+ "blst",
  "built",
  "dirs",
  "fslock",
