@@ -28,6 +28,8 @@ pub const STRING: &str = "String";
 pub const OPTION: &str = "Option";
 pub const ORDERING: &str = "Ordering";
 pub const REDEEMER_WRAPPER: &str = "RedeemerWrapper";
+pub const PRNG: &str = "PRNG";
+pub const FUZZER: &str = "FUZZER";
 
 /// Build a prelude that can be injected
 /// into a compiler pipeline
@@ -408,6 +410,72 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
                 name: "None".to_string(),
                 field_map: None::<FieldMap>,
                 arity: 0,
+                location: Span::empty(),
+                constructors_count: 2,
+            },
+        ),
+    );
+
+    // PRNG
+    //
+    // pub type PRNG {
+    //   Seeded { seed: Int, choices: List<Int> }
+    //   Replayed { choices: List<Int> }
+    // }
+
+    prelude.types.insert(
+        PRNG.to_string(),
+        TypeConstructor {
+            location: Span::empty(),
+            parameters: vec![],
+            tipo: prng(),
+            module: "".to_string(),
+            public: true,
+        },
+    );
+
+    prelude.types_constructors.insert(
+        PRNG.to_string(),
+        vec!["Seeded".to_string(), "Replayed".to_string()],
+    );
+
+    let mut seeded_fields = HashMap::new();
+    seeded_fields.insert("seed".to_string(), (0, Span::empty()));
+    seeded_fields.insert("choices".to_string(), (1, Span::empty()));
+    prelude.values.insert(
+        "Seeded".to_string(),
+        ValueConstructor::public(
+            function(vec![int(), list(int())], prng()),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: "Seeded".to_string(),
+                field_map: Some(FieldMap {
+                    arity: 2,
+                    fields: seeded_fields,
+                    is_function: false,
+                }),
+                arity: 2,
+                location: Span::empty(),
+                constructors_count: 2,
+            },
+        ),
+    );
+
+    let mut replayed_fields = HashMap::new();
+    replayed_fields.insert("choices".to_string(), (0, Span::empty()));
+    prelude.values.insert(
+        "Replayed".to_string(),
+        ValueConstructor::public(
+            function(vec![list(int())], prng()),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: "Replayed".to_string(),
+                field_map: Some(FieldMap {
+                    arity: 1,
+                    fields: replayed_fields,
+                    is_function: false,
+                }),
+                arity: 1,
                 location: Span::empty(),
                 constructors_count: 2,
             },
@@ -1145,6 +1213,16 @@ pub fn prelude_data_types(id_gen: &IdGenerator) -> IndexMap<DataTypeKey, TypedDa
         option_data_type,
     );
 
+    // PRNG
+    let prng_data_type = TypedDataType::prng();
+    data_types.insert(
+        DataTypeKey {
+            module_name: "".to_string(),
+            defined_type: "PRNG".to_string(),
+        },
+        prng_data_type,
+    );
+
     data_types
 }
 
@@ -1211,6 +1289,15 @@ pub fn bool() -> Rc<Type> {
         args: vec![],
         public: true,
         name: BOOL.to_string(),
+        module: "".to_string(),
+    })
+}
+
+pub fn prng() -> Rc<Type> {
+    Rc::new(Type::App {
+        args: vec![],
+        public: true,
+        name: PRNG.to_string(),
         module: "".to_string(),
     })
 }

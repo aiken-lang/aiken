@@ -2,11 +2,6 @@ use aiken/builtin
 
 const max_int: Int = 255
 
-pub type PRNG {
-  Seeded { seed: Int, choices: List<Int> }
-  Replayed { choices: List<Int> }
-}
-
 pub type Fuzzer<a> =
   fn(PRNG) -> Option<(PRNG, a)>
 
@@ -112,11 +107,11 @@ pub fn map4(
 
 // Builders
 
-fn any_bool() -> Fuzzer<Bool> {
+pub fn any_bool() -> Fuzzer<Bool> {
   any_int() |> map(fn(n) { n <= 127 })
 }
 
-fn any_list(fuzz_a: Fuzzer<a>) -> Fuzzer<List<a>> {
+pub fn any_list(fuzz_a: Fuzzer<a>) -> Fuzzer<List<a>> {
   any_bool()
     |> and_then(
          fn(continue) {

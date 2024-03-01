@@ -258,6 +258,34 @@ pub struct FunctionAccessKey {
 pub type TypedDataType = DataType<Rc<Type>>;
 
 impl TypedDataType {
+    pub fn prng() -> Self {
+        DataType {
+            constructors: vec![
+                RecordConstructor {
+                    location: Span::empty(),
+                    name: "Seeded".to_string(),
+                    arguments: vec![],
+                    doc: None,
+                    sugar: false,
+                },
+                RecordConstructor {
+                    location: Span::empty(),
+                    name: "Replayed".to_string(),
+                    arguments: vec![],
+                    doc: None,
+                    sugar: false,
+                },
+            ],
+            doc: None,
+            location: Span::empty(),
+            name: "PRNG".to_string(),
+            opaque: false,
+            parameters: vec![],
+            public: true,
+            typed_parameters: vec![],
+        }
+    }
+
     pub fn ordering() -> Self {
         DataType {
             constructors: vec![

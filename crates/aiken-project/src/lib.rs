@@ -847,6 +847,8 @@ where
 
                 let type_info = convert_opaque_type(&parameter.tipo, generator.data_types());
 
+                // TODO: Possibly refactor 'generate_raw' to accept arguments and do this wrapping
+                // itself.
                 let body = TypedExpr::Fn {
                     location: Span::empty(),
                     tipo: Rc::new(Type::Fn {
