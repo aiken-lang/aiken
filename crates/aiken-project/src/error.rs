@@ -120,6 +120,9 @@ pub enum Error {
 
     #[error("I found multiple suitable validators and I need you to tell me which one to pick.")]
     MoreThanOneValidatorFound { known_validators: Vec<String> },
+
+    #[error("I couldn't find any exportable function named '{name}' in module '{module}'.")]
+    ExportNotFound { module: String, name: String },
 }
 
 impl Error {
@@ -177,27 +180,28 @@ impl From<Error> for Vec<Error> {
 impl ExtraData for Error {
     fn extra_data(&self) -> Option<String> {
         match self {
-            Error::DuplicateModule { .. } => None,
-            Error::FileIo { .. } => None,
-            Error::Format { .. } => None,
-            Error::StandardIo { .. } => None,
-            Error::Blueprint { .. } => None,
-            Error::MissingManifest { .. } => None,
-            Error::TomlLoading { .. } => None,
-            Error::ImportCycle { .. } => None,
-            Error::Parse { .. } => None,
+            Error::DuplicateModule { .. }
+            | Error::FileIo { .. }
+            | Error::Format { .. }
+            | Error::StandardIo { .. }
+            | Error::Blueprint { .. }
+            | Error::MissingManifest { .. }
+            | Error::TomlLoading { .. }
+            | Error::ImportCycle { .. }
+            | Error::Parse { .. }
+            | Error::TestFailure { .. }
+            | Error::Http { .. }
+            | Error::ZipExtract { .. }
+            | Error::JoinError { .. }
+            | Error::UnknownPackageVersion { .. }
+            | Error::UnableToResolvePackage { .. }
+            | Error::Json { .. }
+            | Error::MalformedStakeAddress { .. }
+            | Error::NoValidatorNotFound { .. }
+            | Error::MoreThanOneValidatorFound { .. }
+            | Error::Module { .. }
+            | Error::ExportNotFound { .. } => None,
             Error::Type { error, .. } => error.extra_data(),
-            Error::TestFailure { .. } => None,
-            Error::Http { .. } => None,
-            Error::ZipExtract { .. } => None,
-            Error::JoinError { .. } => None,
-            Error::UnknownPackageVersion { .. } => None,
-            Error::UnableToResolvePackage { .. } => None,
-            Error::Json { .. } => None,
-            Error::MalformedStakeAddress { .. } => None,
-            Error::NoValidatorNotFound { .. } => None,
-            Error::MoreThanOneValidatorFound { .. } => None,
-            Error::Module { .. } => None,
         }
     }
 }
@@ -210,53 +214,55 @@ pub trait GetSource {
 impl GetSource for Error {
     fn path(&self) -> Option<PathBuf> {
         match self {
-            Error::DuplicateModule { second, .. } => Some(second.to_path_buf()),
-            Error::FileIo { .. } => None,
-            Error::Format { .. } => None,
-            Error::StandardIo(_) => None,
-            Error::Blueprint(_) => None,
-            Error::MissingManifest { path } => Some(path.to_path_buf()),
-            Error::TomlLoading { path, .. } => Some(path.to_path_buf()),
-            Error::ImportCycle { .. } => None,
-            Error::Parse { path, .. } => Some(path.to_path_buf()),
-            Error::Type { path, .. } => Some(path.to_path_buf()),
-            Error::TestFailure { path, .. } => Some(path.to_path_buf()),
-            Error::Http(_) => None,
-            Error::ZipExtract(_) => None,
-            Error::JoinError(_) => None,
-            Error::UnknownPackageVersion { .. } => None,
-            Error::UnableToResolvePackage { .. } => None,
-            Error::Json { .. } => None,
-            Error::MalformedStakeAddress { .. } => None,
-            Error::NoValidatorNotFound { .. } => None,
-            Error::MoreThanOneValidatorFound { .. } => None,
-            Error::Module { .. } => None,
+            Error::FileIo { .. }
+            | Error::Format { .. }
+            | Error::StandardIo(_)
+            | Error::Blueprint(_)
+            | Error::ImportCycle { .. }
+            | Error::Http(_)
+            | Error::ZipExtract(_)
+            | Error::JoinError(_)
+            | Error::UnknownPackageVersion { .. }
+            | Error::UnableToResolvePackage { .. }
+            | Error::Json { .. }
+            | Error::MalformedStakeAddress { .. }
+            | Error::NoValidatorNotFound { .. }
+            | Error::MoreThanOneValidatorFound { .. }
+            | Error::ExportNotFound { .. }
+            | Error::Module { .. } => None,
+            Error::DuplicateModule { second: path, .. }
+            | Error::MissingManifest { path }
+            | Error::TomlLoading { path, .. }
+            | Error::Parse { path, .. }
+            | Error::Type { path, .. }
+            | Error::TestFailure { path, .. } => Some(path.to_path_buf()),
         }
     }
 
     fn src(&self) -> Option<String> {
         match self {
-            Error::DuplicateModule { .. } => None,
-            Error::FileIo { .. } => None,
-            Error::Format { .. } => None,
-            Error::StandardIo(_) => None,
-            Error::Blueprint(_) => None,
-            Error::MissingManifest { .. } => None,
-            Error::TomlLoading { src, .. } => Some(src.to_string()),
-            Error::ImportCycle { .. } => None,
-            Error::Parse { src, .. } => Some(src.to_string()),
-            Error::Type { src, .. } => Some(src.to_string()),
-            Error::TestFailure { .. } => None,
-            Error::Http(_) => None,
-            Error::ZipExtract(_) => None,
-            Error::JoinError(_) => None,
-            Error::UnknownPackageVersion { .. } => None,
-            Error::UnableToResolvePackage { .. } => None,
-            Error::Json { .. } => None,
-            Error::MalformedStakeAddress { .. } => None,
-            Error::NoValidatorNotFound { .. } => None,
-            Error::MoreThanOneValidatorFound { .. } => None,
-            Error::Module { .. } => None,
+            Error::DuplicateModule { .. }
+            | Error::FileIo { .. }
+            | Error::Format { .. }
+            | Error::StandardIo(_)
+            | Error::Blueprint(_)
+            | Error::MissingManifest { .. }
+            | Error::ImportCycle { .. }
+            | Error::TestFailure { .. }
+            | Error::Http(_)
+            | Error::ZipExtract(_)
+            | Error::JoinError(_)
+            | Error::UnknownPackageVersion { .. }
+            | Error::UnableToResolvePackage { .. }
+            | Error::Json { .. }
+            | Error::MalformedStakeAddress { .. }
+            | Error::NoValidatorNotFound { .. }
+            | Error::MoreThanOneValidatorFound { .. }
+            | Error::ExportNotFound { .. }
+            | Error::Module { .. } => None,
+            Error::TomlLoading { src, .. } | Error::Parse { src, .. } | Error::Type { src, .. } => {
+                Some(src.to_string())
+            }
         }
     }
 }
@@ -305,6 +311,7 @@ impl Diagnostic for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
+            Error::ExportNotFound { .. } => None,
             Error::Module(e) => e.code().map(boxed),
         }
     }
@@ -334,6 +341,7 @@ impl Diagnostic for Error {
             Error::Http(_) => None,
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
+            Error::ExportNotFound { .. } => None,
             Error::UnknownPackageVersion { .. } => Some(Box::new(
                 "Perhaps, double-check the package repository and version?",
             )),
@@ -379,6 +387,7 @@ impl Diagnostic for Error {
             Error::DuplicateModule { .. } => None,
             Error::FileIo { .. } => None,
             Error::ImportCycle { .. } => None,
+            Error::ExportNotFound { .. } => None,
             Error::Blueprint(e) => e.labels(),
             Error::Parse { error, .. } => error.labels(),
             Error::MissingManifest { .. } => None,
@@ -413,6 +422,7 @@ impl Diagnostic for Error {
             Error::DuplicateModule { .. } => None,
             Error::FileIo { .. } => None,
             Error::ImportCycle { .. } => None,
+            Error::ExportNotFound { .. } => None,
             Error::Blueprint(e) => e.source_code(),
             Error::Parse { named, .. } => Some(named),
             Error::Type { named, .. } => Some(named),
@@ -439,6 +449,7 @@ impl Diagnostic for Error {
             Error::DuplicateModule { .. } => None,
             Error::FileIo { .. } => None,
             Error::ImportCycle { .. } => None,
+            Error::ExportNotFound { .. } => None,
             Error::Blueprint(e) => e.url(),
             Error::Parse { .. } => None,
             Error::Type { error, .. } => error.url(),
@@ -464,6 +475,7 @@ impl Diagnostic for Error {
         match self {
             Error::DuplicateModule { .. } => None,
             Error::FileIo { .. } => None,
+            Error::ExportNotFound { .. } => None,
             Error::Blueprint(e) => e.related(),
             Error::ImportCycle { .. } => None,
             Error::Parse { .. } => None,
