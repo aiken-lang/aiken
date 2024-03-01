@@ -1,5 +1,5 @@
 use aiken/dict.{Dict}
-use aiken/fuzz.{Fuzzer}
+use aiken/fuzz
 use aiken/int
 
 pub type Season {

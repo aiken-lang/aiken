@@ -29,7 +29,7 @@ pub const OPTION: &str = "Option";
 pub const ORDERING: &str = "Ordering";
 pub const REDEEMER_WRAPPER: &str = "RedeemerWrapper";
 pub const PRNG: &str = "PRNG";
-pub const FUZZER: &str = "FUZZER";
+pub const FUZZER: &str = "Fuzzer";
 
 /// Build a prelude that can be injected
 /// into a compiler pipeline
@@ -480,6 +480,23 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
                 constructors_count: 2,
             },
         ),
+    );
+
+    // Fuzzer
+    //
+    // pub type Fuzzer<a> =
+    //   fn(PRNG) -> Option<(PRNG, a)>
+
+    let fuzzer_value = generic_var(id_gen.next());
+    prelude.types.insert(
+        FUZZER.to_string(),
+        TypeConstructor {
+            location: Span::empty(),
+            parameters: vec![fuzzer_value.clone()],
+            tipo: fuzzer(fuzzer_value),
+            module: "".to_string(),
+            public: true,
+        },
     );
 
     prelude
@@ -1299,6 +1316,13 @@ pub fn prng() -> Rc<Type> {
         public: true,
         name: PRNG.to_string(),
         module: "".to_string(),
+    })
+}
+
+pub fn fuzzer(a: Rc<Type>) -> Rc<Type> {
+    Rc::new(Type::Fn {
+        args: vec![prng()],
+        ret: option(tuple(vec![prng(), a])),
     })
 }
 

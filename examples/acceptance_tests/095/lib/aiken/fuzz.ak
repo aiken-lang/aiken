@@ -2,9 +2,6 @@ use aiken/builtin
 
 const max_int: Int = 255
 
-pub type Fuzzer<a> =
-  fn(PRNG) -> Option<(PRNG, a)>
-
 // Primitives
 
 pub fn any_int() -> Fuzzer<Int> {
