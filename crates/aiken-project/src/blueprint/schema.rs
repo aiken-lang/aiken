@@ -384,6 +384,7 @@ impl Annotated<Schema> {
                 }
             },
             Type::Fn { .. } => unreachable!(),
+            Type::Pair { .. } => unreachable!(),
         }
     }
 }

@@ -754,7 +754,7 @@ impl<'a> CodeGenerator<'a> {
                 TypedExpr::TupleIndex {
                     index, tuple, tipo, ..
                 } => {
-                    if tuple.tipo().is_2_tuple() {
+                    if tuple.tipo().is_pair() {
                         AirTree::pair_index(
                             *index,
                             tipo.clone(),
@@ -1478,7 +1478,7 @@ impl<'a> CodeGenerator<'a> {
 
                 AirTree::let_assignment(&list_name, value, func_call)
             }
-        } else if tipo.is_2_tuple() {
+        } else if tipo.is_pair() {
             let tuple_inner_types = tipo.get_inner_types();
 
             assert!(tuple_inner_types.len() == 2);
@@ -3825,7 +3825,7 @@ impl<'a> CodeGenerator<'a> {
                         }
 
                         DefaultFunction::HeadList
-                            if !constructor.tipo.return_type().unwrap().is_2_tuple() =>
+                            if !constructor.tipo.return_type().unwrap().is_pair() =>
                         {
                             builder::undata_builtin(
                                 builtin,
@@ -4232,7 +4232,7 @@ impl<'a> CodeGenerator<'a> {
                         builder::undata_builtin(&func, count, tipo, arg_vec)
                     }
 
-                    DefaultFunction::HeadList if !tipo.is_2_tuple() => {
+                    DefaultFunction::HeadList if !tipo.is_pair() => {
                         builder::undata_builtin(&func, count, tipo, arg_vec)
                     }
 
@@ -4293,15 +4293,14 @@ impl<'a> CodeGenerator<'a> {
                                 );
 
                                 return Some(term);
-                            } else if tipo.is_map() {
+                            }
+                            if tipo.is_map() {
                                 let term = builtin
                                     .apply(Term::map_data().apply(left))
                                     .apply(Term::map_data().apply(right));
-
                                 return Some(term);
-                            } else if tipo.is_tuple()
-                                && matches!(tipo.get_uplc_type(), UplcType::Pair(_, _))
-                            {
+                            }
+                            if tipo.is_pair() {
                                 let term = builtin
                                     .apply(Term::map_data().apply(
                                         Term::mk_cons().apply(left).apply(Term::empty_map()),
@@ -4309,15 +4308,16 @@ impl<'a> CodeGenerator<'a> {
                                     .apply(Term::map_data().apply(
                                         Term::mk_cons().apply(right).apply(Term::empty_map()),
                                     ));
-
                                 return Some(term);
-                            } else if tipo.is_list() || tipo.is_tuple() {
+                            }
+                            if tipo.is_list() || tipo.is_tuple() {
                                 let term = builtin
                                     .apply(Term::list_data().apply(left))
                                     .apply(Term::list_data().apply(right));
 
                                 return Some(term);
-                            } else if tipo.is_void() {
+                            }
+                            if tipo.is_void() {
                                 let term = left.choose_unit(right.choose_unit(Term::bool(true)));
 
                                 return Some(term);
@@ -4335,16 +4335,16 @@ impl<'a> CodeGenerator<'a> {
                                 );
 
                                 return Some(term);
-                            } else if tipo.is_map() {
+                            }
+                            if tipo.is_map() {
                                 let term = builtin
                                     .apply(Term::map_data().apply(left))
                                     .apply(Term::map_data().apply(right))
                                     .if_then_else(Term::bool(false), Term::bool(true));
 
                                 return Some(term);
-                            } else if tipo.is_tuple()
-                                && matches!(tipo.get_uplc_type(), UplcType::Pair(_, _))
-                            {
+                            }
+                            if tipo.is_pair() {
                                 let term = builtin
                                     .apply(Term::map_data().apply(
                                         Term::mk_cons().apply(left).apply(Term::empty_map()),
@@ -4353,16 +4353,16 @@ impl<'a> CodeGenerator<'a> {
                                         Term::mk_cons().apply(right).apply(Term::empty_map()),
                                     ))
                                     .if_then_else(Term::bool(false), Term::bool(true));
-
                                 return Some(term);
-                            } else if tipo.is_list() || tipo.is_tuple() {
+                            }
+                            if tipo.is_list() || tipo.is_tuple() {
                                 let term = builtin
                                     .apply(Term::list_data().apply(left))
                                     .apply(Term::list_data().apply(right))
                                     .if_then_else(Term::bool(false), Term::bool(true));
-
                                 return Some(term);
-                            } else if tipo.is_void() {
+                            }
+                            if tipo.is_void() {
                                 return Some(Term::bool(false));
                             }
 
@@ -4625,9 +4625,14 @@ impl<'a> CodeGenerator<'a> {
                     || tipo.is_string()
                     || tipo.is_list()
                     || tipo.is_tuple()
+                    || tipo.is_pair()
                     || tipo.is_bool()
+                    || tipo.is_bls381_12_g1()
+                    || tipo.is_bls381_12_g2()
                 {
                     subject
+                } else if tipo.is_ml_result() {
+                    unreachable!()
                 } else {
                     Term::var(
                         self.special_functions
@@ -4692,7 +4697,7 @@ impl<'a> CodeGenerator<'a> {
                         Term::equals_string()
                             .apply(clause)
                             .apply(Term::var(subject_name))
-                    } else if tipo.is_list() || tipo.is_tuple() {
+                    } else if tipo.is_list() || tipo.is_tuple() || tipo.is_pair() {
                         unreachable!("{:#?}", tipo)
                     } else {
                         Term::equals_integer()
@@ -4770,7 +4775,7 @@ impl<'a> CodeGenerator<'a> {
                         .apply(next_clause.delay());
                 }
 
-                if tipo.is_2_tuple() {
+                if tipo.is_pair() {
                     for (index, name) in indices.iter() {
                         if name == "_" {
                             continue;
@@ -5239,7 +5244,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
                 let list_id = self.id_gen.next();
 
-                if tipo.is_2_tuple() {
+                if tipo.is_pair() {
                     assert!(names.len() == 2);
 
                     if names[1] != "_" {

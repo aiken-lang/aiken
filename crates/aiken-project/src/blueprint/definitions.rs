@@ -145,6 +145,13 @@ impl Reference {
                     elems = Self::from_types(elems, type_parameters)
                 ),
             },
+            Type::Pair { fst, snd } => Self {
+                inner: format!(
+                    "Pair{fst}{snd}",
+                    fst = Self::from_type(fst, type_parameters),
+                    snd = Self::from_type(snd, type_parameters)
+                ),
+            },
 
             // NOTE:
             //
