@@ -86,6 +86,8 @@ impl Default for IdGen {
     }
 }
 
+pub const NO_INLINE: &str = "__no_inline__";
+
 #[derive(PartialEq, PartialOrd, Default, Debug, Clone)]
 pub struct VarLookup {
     found: bool,
