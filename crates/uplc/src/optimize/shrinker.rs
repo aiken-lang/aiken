@@ -1197,7 +1197,7 @@ impl Program<Name> {
                         // We found it the builtin was curried before
                         // So now we merge the new args into the existing curried builtin
 
-                        let curried_builtin = curried_terms.remove(index);
+                        let curried_builtin = curried_terms.swap_remove(index);
 
                         let curried_builtin =
                             curried_builtin.merge_node_by_path(builtin_args.clone());
