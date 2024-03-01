@@ -1794,6 +1794,12 @@ fn unify_unbound_type(tipo: Rc<Type>, own_id: u64, location: Span) -> Result<(),
 
             Ok(())
         }
+        Type::Pair { fst, snd } => {
+            unify_unbound_type(fst.clone(), own_id, location)?;
+            unify_unbound_type(snd.clone(), own_id, location)?;
+
+            Ok(())
+        }
 
         Type::Var { .. } => unreachable!(),
     }

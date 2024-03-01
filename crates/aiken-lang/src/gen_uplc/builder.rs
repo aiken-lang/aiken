@@ -112,7 +112,7 @@ impl ClauseProperties {
                     checked_index: -1,
                 },
             }
-        } else if t.is_tuple() {
+        } else if t.is_tuple() || t.is_pair() {
             ClauseProperties {
                 clause_var_name: constr_var,
                 complex_clause: false,
@@ -154,7 +154,7 @@ impl ClauseProperties {
                     checked_index: -1,
                 },
             }
-        } else if t.is_tuple() {
+        } else if t.is_tuple() || t.is_pair() {
             ClauseProperties {
                 clause_var_name: constr_var,
                 complex_clause: false,
@@ -356,7 +356,7 @@ pub fn get_generic_variant_name(t: &Rc<Type>) -> String {
         "_ml_result".to_string()
     } else if t.is_map() {
         "_map".to_string()
-    } else if t.is_2_tuple() {
+    } else if t.is_pair() {
         "_pair".to_string()
     } else if t.is_list() {
         "_list".to_string()
@@ -941,7 +941,7 @@ pub fn known_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
         Term::unmap_data().apply(term)
     } else if field_type.is_string() {
         Term::Builtin(DefaultFunction::DecodeUtf8).apply(Term::un_b_data().apply(term))
-    } else if field_type.is_tuple() && matches!(field_type.get_uplc_type(), UplcType::Pair(_, _)) {
+    } else if field_type.is_pair() {
         Term::mk_pair_data()
             .apply(Term::head_list().apply(Term::var("__list_data")))
             .apply(Term::head_list().apply(Term::tail_list().apply(Term::var("__list_data"))))
@@ -1098,7 +1098,7 @@ pub fn unknown_data_to_type_debug(
             )
             .lambda("__val")
             .apply(term)
-    } else if field_type.is_tuple() && matches!(field_type.get_uplc_type(), UplcType::Pair(_, _)) {
+    } else if field_type.is_pair() {
         Term::var("__val")
             .delayed_choose_data(
                 error_term.clone(),
@@ -1313,7 +1313,7 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
         Term::map_data().apply(term)
     } else if field_type.is_string() {
         Term::b_data().apply(Term::Builtin(DefaultFunction::EncodeUtf8).apply(term))
-    } else if field_type.is_tuple() && matches!(field_type.get_uplc_type(), UplcType::Pair(_, _)) {
+    } else if field_type.is_pair() {
         Term::list_data()
             .apply(
                 Term::mk_cons()

@@ -1334,6 +1334,10 @@ pub fn tuple(elems: Vec<Rc<Type>>) -> Rc<Type> {
     Rc::new(Type::Tuple { elems, alias: None })
 }
 
+pub fn pair(fst: Rc<Type>, snd: Rc<Type>) -> Rc<Type> {
+    Rc::new(Type::Pair { fst, snd })
+}
+
 pub fn bool() -> Rc<Type> {
     Rc::new(Type::App {
         args: vec![],
