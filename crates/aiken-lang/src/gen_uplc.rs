@@ -4419,7 +4419,7 @@ impl<'a> CodeGenerator<'a> {
                 }
 
                 if !recursive {
-                    term = term.lambda(func_name).apply(func_body);
+                    term = term.lambda(func_name).apply(func_body.lambda(NO_INLINE));
 
                     Some(term)
                 } else {
@@ -4431,7 +4431,7 @@ impl<'a> CodeGenerator<'a> {
                             .lambda(func_name.clone())
                             .apply(Term::var(func_name.clone()).apply(Term::var(func_name.clone())))
                             .lambda(func_name)
-                            .apply(func_body);
+                            .apply(func_body.lambda(NO_INLINE));
                     } else {
                         // If we have parameters that remain static in each recursive call,
                         // we can construct an *outer* function to take those in
@@ -4452,7 +4452,9 @@ impl<'a> CodeGenerator<'a> {
                         }
 
                         // And finally, fold that definition into the rest of our program
-                        term = term.lambda(&func_name).apply(outer_func_body);
+                        term = term
+                            .lambda(&func_name)
+                            .apply(outer_func_body.lambda(NO_INLINE));
                     }
 
                     Some(term)
@@ -4500,7 +4502,12 @@ impl<'a> CodeGenerator<'a> {
                     .lambda(&func_name)
                     .apply(Term::var(&func_name).apply(Term::var(&func_name)))
                     .lambda(&func_name)
-                    .apply(cyclic_body.lambda("__chooser").lambda(func_name));
+                    .apply(
+                        cyclic_body
+                            .lambda("__chooser")
+                            .lambda(func_name)
+                            .lambda(NO_INLINE),
+                    );
 
                 Some(term)
             }
