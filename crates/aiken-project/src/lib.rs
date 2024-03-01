@@ -464,6 +464,47 @@ where
         })
     }
 
+    pub fn export(&self, module: &str, name: &str) -> Result<String, Error> {
+        let mut generator = self.checked_modules.new_generator(
+            &self.functions,
+            &self.data_types,
+            &self.module_types,
+            Tracing::silent(),
+        );
+
+        self.checked_modules
+            .get(module)
+            .and_then(|checked_module| {
+                checked_module.ast.definitions().find_map(|def| match def {
+                    Definition::Fn(func) if func.name == name => {
+                        let typed_anon = TypedExpr::Fn {
+                            location: Span::empty(),
+                            tipo: function(
+                                func.arguments.iter().map(|arg| arg.tipo.clone()).collect(),
+                                func.return_type.clone(),
+                            ),
+                            is_capture: false,
+                            args: func.arguments.clone(),
+                            body: func.body.clone().into(),
+                            return_annotation: None,
+                        };
+
+                        Some(typed_anon)
+                    }
+                    _ => None,
+                })
+            })
+            .map(|body| {
+                let program = generator.generate_test(&body, &name.to_string());
+
+                program.to_pretty()
+            })
+            .ok_or_else(|| Error::ExportNotFound {
+                module: module.to_string(),
+                name: name.to_string(),
+            })
+    }
+
     pub fn construct_parameter_incrementally<F>(
         &self,
         title: Option<&String>,
