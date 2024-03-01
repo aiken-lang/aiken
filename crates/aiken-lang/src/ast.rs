@@ -154,6 +154,7 @@ fn str_to_keyword(word: &str) -> Option<Token> {
         "and" => Some(Token::And),
         "or" => Some(Token::Or),
         "validator" => Some(Token::Validator),
+        "via" => Some(Token::Via),
         _ => None,
     }
 }
