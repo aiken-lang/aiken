@@ -73,7 +73,7 @@ impl Test {
         name: String,
         can_error: bool,
         program: Program<NamedDeBruijn>,
-        fuzzer: (Program<NamedDeBruijn>, Rc<Type>),
+        fuzzer: Fuzzer<NamedDeBruijn>,
     ) -> Test {
         Test::PropertyTest(PropertyTest {
             input_path,
@@ -130,10 +130,16 @@ pub struct PropertyTest {
     pub name: String,
     pub can_error: bool,
     pub program: Program<NamedDeBruijn>,
-    pub fuzzer: (Program<NamedDeBruijn>, Rc<Type>),
+    pub fuzzer: Fuzzer<NamedDeBruijn>,
 }
 
 unsafe impl Send for PropertyTest {}
+
+#[derive(Debug, Clone)]
+pub struct Fuzzer<T> {
+    pub program: Program<T>,
+    pub type_info: Rc<Type>,
+}
 
 impl PropertyTest {
     const MAX_TEST_RUN: usize = 100;
@@ -177,7 +183,7 @@ impl PropertyTest {
 
     fn run_once(&self, seed: u32) -> (u32, Option<PlutusData>) {
         let (next_prng, value) = Prng::from_seed(seed)
-            .sample(&self.fuzzer.0)
+            .sample(&self.fuzzer.program)
             .expect("running seeded Prng cannot fail.");
 
         let result = self.eval(&value);
@@ -207,7 +213,7 @@ impl PropertyTest {
     }
 
     pub fn eval(&self, value: &PlutusData) -> EvalResult {
-        let term = convert_data_to_type(Term::data(value.clone()), &self.fuzzer.1)
+        let term = convert_data_to_type(Term::data(value.clone()), &self.fuzzer.type_info)
             .try_into()
             .expect("safe conversion from Name -> NamedDeBruijn");
         self.program.apply_term(&term).eval(ExBudget::max())
@@ -399,7 +405,7 @@ impl<'a> Counterexample<'a> {
         // test cases many times. Given that tests are fully deterministic, we can
         // memoize the already seen choices to avoid re-running the generators and
         // the test (which can be quite expensive).
-        match Prng::from_choices(choices).sample(&self.property.fuzzer.0) {
+        match Prng::from_choices(choices).sample(&self.property.fuzzer.program) {
             // Shrinked choices led to an impossible generation.
             None => false,
 
@@ -653,7 +659,7 @@ impl PropertyTestResult<PlutusData> {
             counterexample: match self.counterexample {
                 None => None,
                 Some(counterexample) => Some(
-                    UntypedExpr::reify(data_types, counterexample, &self.test.fuzzer.1)
+                    UntypedExpr::reify(data_types, counterexample, &self.test.fuzzer.type_info)
                         .expect("Failed to reify counterexample?"),
                 ),
             },

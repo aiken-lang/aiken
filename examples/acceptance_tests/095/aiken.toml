@@ -1,3 +1,8 @@
 name = "aiken-lang/acceptance_test_095"
 version = "0.0.0"
 description = ""
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "main"
+source = "github"

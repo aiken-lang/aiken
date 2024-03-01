@@ -75,6 +75,10 @@ pub struct CodeGenerator<'a> {
 }
 
 impl<'a> CodeGenerator<'a> {
+    pub fn data_types(&self) -> &IndexMap<DataTypeKey, &'a TypedDataType> {
+        &self.data_types
+    }
+
     pub fn new(
         functions: IndexMap<FunctionAccessKey, &'a TypedFunction>,
         data_types: IndexMap<DataTypeKey, &'a TypedDataType>,

@@ -34,6 +34,7 @@ use aiken_lang::{
     },
     builtins,
     expr::{TypedExpr, UntypedExpr},
+    gen_uplc::builder::convert_opaque_type,
     tipo::{Type, TypeInfo},
     IdGenerator,
 };
@@ -46,7 +47,7 @@ use pallas::ledger::{
     primitives::babbage::{self as cardano, PolicyId},
     traverse::ComputeHash,
 };
-use script::{Assertion, Test, TestResult};
+use script::{Assertion, Fuzzer, Test, TestResult};
 use std::{
     collections::HashMap,
     fs::{self, File},
@@ -844,7 +845,7 @@ where
 
                 let via = parameter.via.clone();
 
-                let type_info = parameter.tipo.clone();
+                let type_info = convert_opaque_type(&parameter.tipo, generator.data_types());
 
                 let body = TypedExpr::Fn {
                     location: Span::empty(),
@@ -876,7 +877,10 @@ where
                     name.to_string(),
                     *can_error,
                     program,
-                    (fuzzer, type_info),
+                    Fuzzer {
+                        program: fuzzer,
+                        type_info,
+                    },
                 );
 
                 programs.push(prop);

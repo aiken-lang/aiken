@@ -1,4 +1,5 @@
 use std::{collections::HashMap, rc::Rc};
+use uplc::KeyValuePairs;
 
 use vec1::Vec1;
 
@@ -607,32 +608,38 @@ impl UntypedExpr {
                 preferred_format: ByteArrayFormatPreference::HexadecimalString,
             }),
             PlutusData::Array(args) => {
-                let inner;
                 match tipo {
                     Type::App {
-                        module, name, args, ..
+                        module,
+                        name,
+                        args: type_args,
+                        ..
                     } if module.is_empty() && name.as_str() == "List" => {
-                        if let [arg] = &args[..] {
-                            inner = arg.clone()
+                        if let [inner] = &type_args[..] {
+                            Ok(UntypedExpr::List {
+                                location: Span::empty(),
+                                elements: args
+                                    .into_iter()
+                                    .map(|arg| UntypedExpr::reify(data_types, arg, inner))
+                                    .collect::<Result<Vec<_>, _>>()?,
+                                tail: None,
+                            })
                         } else {
-                            return Err("invalid List type annotation: the list has multiple type-parameters.".to_string());
-                        };
+                            Err("invalid List type annotation: the list has multiple type-parameters.".to_string())
+                        }
                     }
-                    _ => {
-                        return Err(format!(
-                            "invalid type annotation. expected List but got: {tipo:?}"
-                        ))
-                    }
+                    Type::Tuple { elems } => Ok(UntypedExpr::Tuple {
+                        location: Span::empty(),
+                        elems: args
+                            .into_iter()
+                            .zip(elems)
+                            .map(|(arg, arg_type)| UntypedExpr::reify(data_types, arg, arg_type))
+                            .collect::<Result<Vec<_>, _>>()?,
+                    }),
+                    _ => Err(format!(
+                        "invalid type annotation. expected List but got: {tipo:?}"
+                    )),
                 }
-
-                Ok(UntypedExpr::List {
-                    location: Span::empty(),
-                    elements: args
-                        .into_iter()
-                        .map(|arg| UntypedExpr::reify(data_types, arg, &inner))
-                        .collect::<Result<Vec<_>, _>>()?,
-                    tail: None,
-                })
             }
 
             PlutusData::Constr(Constr {
@@ -716,7 +723,22 @@ impl UntypedExpr {
                 ))
             }
 
-            PlutusData::Map(..) => todo!("reify Map"),
+            PlutusData::Map(indef_or_def) => {
+                let kvs = match indef_or_def {
+                    KeyValuePairs::Def(kvs) => kvs,
+                    KeyValuePairs::Indef(kvs) => kvs,
+                };
+
+                UntypedExpr::reify(
+                    data_types,
+                    PlutusData::Array(
+                        kvs.into_iter()
+                            .map(|(k, v)| PlutusData::Array(vec![k, v]))
+                            .collect(),
+                    ),
+                    tipo,
+                )
+            }
         }
     }
 
