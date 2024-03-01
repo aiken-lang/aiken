@@ -5,6 +5,15 @@ pub struct Options {
     pub tracing: Tracing,
 }
 
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            code_gen_mode: CodeGenMode::NoOp,
+            tracing: Tracing::silent(),
+        }
+    }
+}
+
 pub enum CodeGenMode {
     Test {
         match_tests: Option<Vec<String>>,
