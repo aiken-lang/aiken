@@ -16,8 +16,8 @@ description: "Code:\n\npub type Foo {\n    foo: Int\n}\n\nvalidator {\n    fn an
       "$ref": "#/definitions/Data"
     }
   },
-  "compiledCode": "58310100003222253330044a22930a99ab9c49011856616c696461746f722072657475726e65642066616c7365001365657341",
-  "hash": "089cd4ae25b73d144116d7736d915ffb18302b482f91e0c89020adbe",
+  "compiledCode": "5833010000323222253330044a22930a99802a491856616c696461746f722072657475726e65642066616c736500136565734ae701",
+  "hash": "52a21f2b4f282074cb6c5aefef20d18c25f3657ca348c73875810c37",
   "definitions": {
     "Data": {
       "title": "Data",

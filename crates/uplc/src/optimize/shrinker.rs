@@ -929,40 +929,88 @@ impl Program<Name> {
                     body,
                 } => {
                     // pops stack here no matter what
-                    if let Some((
-                        arg_id,
-                        Term::Lambda {
-                            parameter_name: identity_name,
-                            body: identity_body,
-                        },
-                    )) = arg_stack.pop()
-                    {
-                        if let Term::Var(identity_var) = identity_body.as_ref() {
-                            if identity_var.as_ref() == identity_name.as_ref() {
-                                // Replace all applied usages of identity with the arg
-                                let temp_term =
-                                    replace_identity_usage(body.as_ref(), parameter_name.clone());
-                                // Have to check if the body still has any occurrences of the parameter
-                                // After attempting replacement
-                                if var_occurrences(
-                                    body.as_ref(),
-                                    parameter_name.clone(),
-                                    vec![],
-                                    vec![],
-                                )
-                                .found
-                                {
-                                    let body = Rc::make_mut(body);
-                                    *body = temp_term;
-                                } else {
-                                    identity_applied_ids.push(arg_id);
-                                    *term = temp_term;
+
+                    match arg_stack.pop() {
+                        Some((
+                            arg_id,
+                            Term::Lambda {
+                                parameter_name: inline_name,
+                                body: identity_body,
+                            },
+                        )) if inline_name.text == NO_INLINE => {
+                            if let Term::Lambda {
+                                parameter_name: identity_name,
+                                body: identity_body,
+                            } = identity_body.as_ref()
+                            {
+                                if let Term::Var(identity_var) = identity_body.as_ref() {
+                                    if identity_var.text == identity_name.text
+                                        && identity_var.unique == identity_name.unique
+                                    {
+                                        // Replace all applied usages of identity with the arg
+                                        let temp_term = replace_identity_usage(
+                                            body.as_ref(),
+                                            parameter_name.clone(),
+                                        );
+                                        // Have to check if the body still has any occurrences of the parameter
+                                        // After attempting replacement
+                                        if var_occurrences(
+                                            body.as_ref(),
+                                            parameter_name.clone(),
+                                            vec![],
+                                            vec![],
+                                        )
+                                        .found
+                                        {
+                                            let body = Rc::make_mut(body);
+                                            *body = temp_term;
+                                        } else {
+                                            identity_applied_ids.push(arg_id);
+                                            *term = temp_term;
+                                        }
+                                    }
                                 }
                             }
                         }
+
+                        Some((
+                            arg_id,
+                            Term::Lambda {
+                                parameter_name: identity_name,
+                                body: identity_body,
+                            },
+                        )) => {
+                            if let Term::Var(identity_var) = identity_body.as_ref() {
+                                if identity_var.text == identity_name.text
+                                    && identity_var.unique == identity_name.unique
+                                {
+                                    // Replace all applied usages of identity with the arg
+                                    let temp_term = replace_identity_usage(
+                                        body.as_ref(),
+                                        parameter_name.clone(),
+                                    );
+                                    // Have to check if the body still has any occurrences of the parameter
+                                    // After attempting replacement
+                                    if var_occurrences(
+                                        body.as_ref(),
+                                        parameter_name.clone(),
+                                        vec![],
+                                        vec![],
+                                    )
+                                    .found
+                                    {
+                                        let body = Rc::make_mut(body);
+                                        *body = temp_term;
+                                    } else {
+                                        identity_applied_ids.push(arg_id);
+                                        *term = temp_term;
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
-
                 Term::Constr { .. } => todo!(),
                 Term::Case { .. } => todo!(),
                 _ => {}
@@ -1994,7 +2042,7 @@ mod tests {
 
         let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
 
-        let actual = program.inline_reducer();
+        let actual = program.identity_reducer().inline_reducer();
 
         let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
 
@@ -2046,7 +2094,7 @@ mod tests {
 
         let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
 
-        let actual = program.inline_reducer();
+        let actual = program.identity_reducer().inline_reducer();
 
         let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
 

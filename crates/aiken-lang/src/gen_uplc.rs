@@ -46,7 +46,7 @@ use uplc::{
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
     builtins::DefaultFunction,
     machine::cost_model::ExBudget,
-    optimize::aiken_optimize_and_intern,
+    optimize::{aiken_optimize_and_intern, shrinker::NO_INLINE},
     parser::interner::Interner,
 };
 
