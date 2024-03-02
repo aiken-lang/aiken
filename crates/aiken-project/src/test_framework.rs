@@ -549,11 +549,20 @@ impl<'a> Counterexample<'a> {
             // also the element itself, which may involve more than one choice.
             let mut k = 8;
             while k > 0 {
-                if k > self.choices.len() {
-                    break;
-                }
+                let (mut i, mut underflow) = if self.choices.len() < k {
+                    (0, true)
+                } else {
+                    (self.choices.len() - k, false)
+                };
 
-                for (i, j) in (0..=self.choices.len() - k).map(|i| (i, i + k)).rev() {
+                while !underflow {
+                    if i >= self.choices.len() {
+                        (i, underflow) = i.overflowing_sub(1);
+                        continue;
+                    }
+
+                    let j = i + k;
+
                     let mut choices = [
                         &self.choices[..i],
                         if j < self.choices.len() {
@@ -564,20 +573,20 @@ impl<'a> Counterexample<'a> {
                     ]
                     .concat();
 
-                    if self.consider(&choices) {
-                        break;
-                    }
+                    if !self.consider(&choices) {
+                        // Perform an extra reduction step that decrease the size of choices near
+                        // the end, to cope with dependencies between choices, e.g. drawing a
+                        // number as a list length, and then drawing that many elements.
+                        //
+                        // This isn't perfect, but allows to make progresses in many cases.
+                        if i > 0 && choices[i - 1] > 0 {
+                            choices[i - 1] -= 1;
+                            if self.consider(&choices) {
+                                i += 1;
+                            };
+                        }
 
-                    // Perform an extra reduction step that decrease the size of choices near
-                    // the end, to cope with dependencies between choices, e.g. drawing a
-                    // number as a list length, and then drawing that many elements.
-                    //
-                    // This isn't perfect, but allows to make progresses in many cases.
-                    if i > 0 && choices[i - 1] > 0 {
-                        choices[i - 1] -= 1;
-                        if self.consider(&choices) {
-                            break;
-                        };
+                        (i, underflow) = i.overflowing_sub(1);
                     }
                 }
 
@@ -591,9 +600,23 @@ impl<'a> Counterexample<'a> {
             while k > 1 {
                 let mut i: isize = self.choices.len() as isize - k;
                 while i >= 0 {
-                    i -= if self.zeroes(i, k) { k } else { 1 }
+                    let ivs = (i..i + k).map(|j| (j as usize, 0)).collect::<Vec<_>>();
+                    i -= if self.replace(ivs) { k } else { 1 }
                 }
                 k /= 2
+            }
+
+            // Replace choices with smaller value, by doing a binary search. This will replace n
+            // with 0 or n - 1, if possible, but will also more efficiently replace it with, a
+            // smaller number than doing multiple subtractions would.
+            let (mut i, mut underflow) = if self.choices.is_empty() {
+                (0, true)
+            } else {
+                (self.choices.len() - 1, false)
+            };
+            while !underflow {
+                self.binary_search_replace(0, self.choices[i], |v| vec![(i, v)]);
+                (i, underflow) = i.overflowing_sub(1);
             }
 
             // TODO: Remaining shrinking strategies...
@@ -610,15 +633,42 @@ impl<'a> Counterexample<'a> {
         }
     }
 
-    // Replace a block between indices 'i' and 'k' by zeroes.
-    fn zeroes(&mut self, i: isize, k: isize) -> bool {
+    /// Try to replace a value with a smaller value by doing a binary search between
+    /// two extremes. This converges relatively fast in order to shrink down values.
+    /// fast.
+    fn binary_search_replace<F>(&mut self, lo: u32, hi: u32, f: F) -> u32
+    where
+        F: Fn(u32) -> Vec<(usize, u32)>,
+    {
+        if self.replace(f(lo)) {
+            return lo;
+        }
+
+        let mut lo = lo;
+        let mut hi = hi;
+
+        while lo + 1 < hi {
+            let mid = lo + (hi - lo) / 2;
+            if self.replace(f(mid)) {
+                hi = mid;
+            } else {
+                lo = mid;
+            }
+        }
+
+        hi
+    }
+
+    // Replace values in the choices vector, based on the index-value list provided
+    // and consider the resulting choices.
+    fn replace(&mut self, ivs: Vec<(usize, u32)>) -> bool {
         let mut choices = self.choices.clone();
 
-        for j in i..(i + k) {
-            if j >= self.choices.len() as isize {
+        for (i, v) in ivs {
+            if i >= choices.len() {
                 return false;
             }
-            choices[j as usize] = 0;
+            choices[i] = v;
         }
 
         self.consider(&choices)
@@ -980,6 +1030,26 @@ mod test {
         }
     }
 
+    impl PropertyTest {
+        fn expect_failure(&self, seed: u32) -> Counterexample {
+            let (next_prng, value) = Prng::from_seed(seed)
+                .sample(&self.fuzzer.program)
+                .expect("running seeded Prng cannot fail.");
+
+            let result = self.eval(&value);
+
+            if result.failed(self.can_error) {
+                return Counterexample {
+                    value,
+                    choices: next_prng.choices(),
+                    property: self,
+                };
+            }
+
+            unreachable!("Prng constructed from a seed necessarily yield a seed.");
+        }
+    }
+
     #[test]
     fn test_prop_basic() {
         let prop = property(indoc! { r#"
@@ -991,13 +1061,18 @@ mod test {
         assert!(prop.run(42).is_success());
     }
 
-    //    fn counterexample<'a>(choices: &'a [u32], property: &'a PropertyTest) -> Counterexample<'a> {
-    //        let value = todo!();
-    //
-    //        Counterexample {
-    //            value,
-    //            choices: choices.to_vec(),
-    //            property,
-    //        }
-    //    }
+    #[test]
+    fn test_prop_always_odd() {
+        let prop = property(indoc! { r#"
+            test foo(n: Int via int()) {
+                n % 2 == 0
+            }
+        "#});
+
+        let mut counterexample = prop.expect_failure(12);
+
+        counterexample.simplify();
+
+        assert_eq!(counterexample.choices, vec![1]);
+    }
 }
