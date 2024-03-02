@@ -8,6 +8,7 @@ pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
         .builtin_force_reducer()
         .lambda_reducer()
         .inline_reducer()
+        .identity_reducer()
         .lambda_reducer()
         .inline_reducer()
         .force_delay_reducer()
@@ -16,7 +17,9 @@ pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
         .builtin_curry_reducer()
         .lambda_reducer()
         .inline_reducer()
+        .identity_reducer()
         .builtin_curry_reducer()
         .lambda_reducer()
         .inline_reducer()
+        .remove_no_inlines()
 }
