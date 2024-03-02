@@ -344,9 +344,16 @@ fn infer_definition(
                     let typed_via =
                         ExprTyper::new(environment, lines, tracing).infer(arg.via.clone())?;
 
-                    let (annotation, inner_type) = infer_fuzzer(&typed_via.tipo(), &arg.location)?;
+                    let (inferred_annotation, inner_type) =
+                        infer_fuzzer(&typed_via.tipo(), &arg.location)?;
 
-                    Ok((Some((typed_via, inner_type)), Some(annotation)))
+                    if let Some(ref provided_annotation) = arg.annotation {
+                        if !provided_annotation.is_logically_equal(&inferred_annotation) {
+                            todo!("Inferred annotation doesn't match actual annotation.")
+                        }
+                    }
+
+                    Ok((Some((typed_via, inner_type)), Some(inferred_annotation)))
                 }
                 None => Ok((None, None)),
             }?;
@@ -401,6 +408,7 @@ fn infer_definition(
                             .to_owned();
 
                         vec![ArgVia {
+                            annotation,
                             arg_name,
                             location,
                             tipo,

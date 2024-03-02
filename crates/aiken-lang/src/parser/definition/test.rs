@@ -4,6 +4,7 @@ use crate::{
     ast,
     expr::UntypedExpr,
     parser::{
+        annotation,
         chain::{call::parser as call, field_access, tuple_index::parser as tuple_index, Chain},
         error::ParseError,
         expr::{self, var},
@@ -67,11 +68,13 @@ pub fn via() -> impl Parser<Token, ast::UntypedArgVia, Error = ParseError> {
             }
         }),
     ))
+    .then(just(Token::Colon).ignore_then(annotation()).or_not())
     .then_ignore(just(Token::Via))
     .then(fuzzer())
-    .map_with_span(|(arg_name, via), location| ast::ArgVia {
+    .map_with_span(|((arg_name, annotation), via), location| ast::ArgVia {
         arg_name,
         via,
+        annotation,
         tipo: (),
         location,
     })
@@ -139,6 +142,17 @@ mod tests {
         assert_definition!(
             r#"
             test foo(x via f, y via g) {
+                True
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn def_property_test_annotated_fuzzer() {
+        assert_definition!(
+            r#"
+            test foo(x: Int via foo()) {
                 True
             }
             "#

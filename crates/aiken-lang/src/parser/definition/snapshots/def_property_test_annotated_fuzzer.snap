@@ -1,6 +1,6 @@
 ---
 source: crates/aiken-lang/src/parser/definition/test.rs
-description: "Code:\n\ntest foo(x via fuzz.any_int) {\n    True\n}\n"
+description: "Code:\n\ntest foo(x: Int via foo()) {\n    True\n}\n"
 ---
 Test(
     Function {
@@ -12,37 +12,44 @@ Test(
                     location: 9..10,
                     is_validator_param: false,
                 },
-                location: 9..10,
-                via: FieldAccess {
-                    location: 15..27,
-                    label: "any_int",
-                    container: Var {
-                        location: 15..19,
-                        name: "fuzz",
+                location: 9..15,
+                via: Call {
+                    arguments: [],
+                    fun: Var {
+                        location: 20..23,
+                        name: "foo",
                     },
+                    location: 20..25,
                 },
                 tipo: (),
-                annotation: None,
+                annotation: Some(
+                    Constructor {
+                        location: 12..15,
+                        module: None,
+                        name: "Int",
+                        arguments: [],
+                    },
+                ),
             },
         ],
         body: Var {
-            location: 35..39,
+            location: 33..37,
             name: "True",
         },
         doc: None,
-        location: 0..28,
+        location: 0..26,
         name: "foo",
         public: false,
         return_annotation: Some(
             Constructor {
-                location: 0..41,
+                location: 0..39,
                 module: None,
                 name: "Bool",
                 arguments: [],
             },
         ),
         return_type: (),
-        end_position: 40,
+        end_position: 38,
         can_error: false,
     },
 )

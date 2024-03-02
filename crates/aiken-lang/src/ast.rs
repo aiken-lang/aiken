@@ -691,6 +691,7 @@ pub struct ArgVia<T, Expr> {
     pub location: Span,
     pub via: Expr,
     pub tipo: T,
+    pub annotation: Option<Annotation>,
 }
 
 impl<T, Ann> From<ArgVia<T, Ann>> for Arg<T> {

@@ -12,12 +12,13 @@ Test(
                     location: 9..10,
                     is_validator_param: false,
                 },
-                location: 9..16,
+                location: 9..10,
                 via: Var {
                     location: 15..16,
                     name: "f",
                 },
                 tipo: (),
+                annotation: None,
             },
             ArgVia {
                 arg_name: Named {
@@ -26,12 +27,13 @@ Test(
                     location: 18..19,
                     is_validator_param: false,
                 },
-                location: 18..25,
+                location: 18..19,
                 via: Var {
                     location: 24..25,
                     name: "g",
                 },
                 tipo: (),
+                annotation: None,
             },
         ],
         body: Var {
