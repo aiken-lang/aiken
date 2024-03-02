@@ -3933,7 +3933,8 @@ impl<'a> CodeGenerator<'a> {
 
                             interner.program(&mut program);
 
-                            let eval_program: Program<NamedDeBruijn> = program.try_into().unwrap();
+                            let eval_program: Program<NamedDeBruijn> =
+                                program.remove_no_inlines().try_into().unwrap();
 
                             let evaluated_term: Term<NamedDeBruijn> =
                                 eval_program.eval(ExBudget::default()).result().unwrap();
@@ -4132,9 +4133,9 @@ impl<'a> CodeGenerator<'a> {
                 }
 
                 if params.is_empty() {
-                    Some(term.delay())
+                    Some(term.lambda(NO_INLINE).delay())
                 } else {
-                    Some(term)
+                    Some(term.lambda(NO_INLINE))
                 }
             }
             Air::Call { count, .. } => {
@@ -4187,7 +4188,8 @@ impl<'a> CodeGenerator<'a> {
 
                             interner.program(&mut program);
 
-                            let eval_program: Program<NamedDeBruijn> = program.try_into().unwrap();
+                            let eval_program: Program<NamedDeBruijn> =
+                                program.remove_no_inlines().try_into().unwrap();
 
                             let evaluated_term: Term<NamedDeBruijn> =
                                 eval_program.eval(ExBudget::max()).result().unwrap();
@@ -4535,7 +4537,8 @@ impl<'a> CodeGenerator<'a> {
 
                     interner.program(&mut program);
 
-                    let eval_program: Program<NamedDeBruijn> = program.try_into().unwrap();
+                    let eval_program: Program<NamedDeBruijn> =
+                        program.remove_no_inlines().try_into().unwrap();
 
                     let evaluated_term: Term<NamedDeBruijn> =
                         eval_program.eval(ExBudget::default()).result().unwrap();
@@ -4559,7 +4562,8 @@ impl<'a> CodeGenerator<'a> {
 
                     interner.program(&mut program);
 
-                    let eval_program: Program<NamedDeBruijn> = program.try_into().unwrap();
+                    let eval_program: Program<NamedDeBruijn> =
+                        program.remove_no_inlines().try_into().unwrap();
 
                     let evaluated_term: Term<NamedDeBruijn> =
                         eval_program.eval(ExBudget::default()).result().unwrap();
@@ -4964,7 +4968,8 @@ impl<'a> CodeGenerator<'a> {
 
                     interner.program(&mut program);
 
-                    let eval_program: Program<NamedDeBruijn> = program.try_into().unwrap();
+                    let eval_program: Program<NamedDeBruijn> =
+                        program.remove_no_inlines().try_into().unwrap();
 
                     let evaluated_term: Term<NamedDeBruijn> =
                         eval_program.eval(ExBudget::default()).result().unwrap();
