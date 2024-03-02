@@ -371,10 +371,13 @@ impl CheckedModules {
 
         let mut module_src = IndexMap::new();
 
+        println!("Looking for modules definitions");
+
         for module in self.values() {
             for def in module.ast.definitions() {
                 match def {
                     Definition::Fn(func) => {
+                        println!("Found function: {}", func.name);
                         functions.insert(
                             FunctionAccessKey {
                                 module_name: module.name.clone(),

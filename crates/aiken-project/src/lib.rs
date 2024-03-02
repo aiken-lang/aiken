@@ -12,16 +12,17 @@ pub mod paths;
 pub mod pretty;
 pub mod telemetry;
 pub mod test_framework;
-#[cfg(test)]
-mod tests;
 pub mod watch;
 
-use crate::blueprint::{
-    definitions::Definitions,
-    schema::{Annotated, Schema},
-    Blueprint,
-};
+#[cfg(test)]
+mod tests;
+
 use crate::{
+    blueprint::{
+        definitions::Definitions,
+        schema::{Annotated, Schema},
+        Blueprint,
+    },
     config::Config,
     error::{Error, Warning},
     module::{CheckedModule, CheckedModules, ParsedModule, ParsedModules},
@@ -29,13 +30,12 @@ use crate::{
 };
 use aiken_lang::{
     ast::{
-        DataTypeKey, Definition, Function, FunctionAccessKey, ModuleKind, Span, Tracing,
-        TypedDataType, TypedFunction, Validator,
+        DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Tracing, TypedDataType,
+        TypedFunction, Validator,
     },
     builtins,
-    expr::{TypedExpr, UntypedExpr},
-    gen_uplc::builder::convert_opaque_type,
-    tipo::{Type, TypeInfo},
+    expr::UntypedExpr,
+    tipo::TypeInfo,
     IdGenerator,
 };
 use indexmap::IndexMap;
@@ -52,13 +52,11 @@ use std::{
     fs::{self, File},
     io::BufReader,
     path::{Path, PathBuf},
-    rc::Rc,
 };
 use telemetry::EventListener;
-use test_framework::{Assertion, Fuzzer, Test, TestResult};
+use test_framework::{Test, TestResult};
 use uplc::{
-    ast::{DeBruijn, Name, NamedDeBruijn, Program, Term},
-    machine::cost_model::ExBudget,
+    ast::{DeBruijn, Name, Program, Term},
     PlutusData,
 };
 
@@ -773,7 +771,7 @@ where
             }
         }
 
-        let mut programs = Vec::new();
+        let mut tests = Vec::new();
 
         let mut generator = self.checked_modules.new_generator(
             &self.functions,
@@ -790,106 +788,23 @@ where
             );
         }
 
-        for (input_path, module_name, func_def) in scripts {
-            let Function {
-                name,
-                body,
-                can_error,
-                arguments,
-                ..
-            } = func_def;
-
+        for (input_path, module_name, test) in scripts.into_iter() {
             if verbose {
                 self.event_listener.handle_event(Event::GeneratingUPLCFor {
-                    name: name.clone(),
+                    name: test.name.clone(),
                     path: input_path.clone(),
                 })
             }
 
-            let assertion = func_def.test_hint().map(|(bin_op, left_src, right_src)| {
-                let left = generator
-                    .clone()
-                    .generate_raw(&left_src, &module_name)
-                    .try_into()
-                    .unwrap();
-
-                let right = generator
-                    .clone()
-                    .generate_raw(&right_src, &module_name)
-                    .try_into()
-                    .unwrap();
-
-                Assertion {
-                    bin_op,
-                    left,
-                    right,
-                    can_error: *can_error,
-                }
-            });
-
-            if arguments.is_empty() {
-                let program = generator.generate_raw(body, &module_name);
-
-                let test = Test::unit_test(
-                    input_path,
-                    module_name,
-                    name.to_string(),
-                    *can_error,
-                    program.try_into().unwrap(),
-                    assertion,
-                );
-
-                programs.push(test);
-            } else {
-                let parameter = arguments.first().unwrap().to_owned();
-
-                let via = parameter.via.clone();
-
-                let type_info = convert_opaque_type(&parameter.tipo, generator.data_types());
-
-                // TODO: Possibly refactor 'generate_raw' to accept arguments and do this wrapping
-                // itself.
-                let body = TypedExpr::Fn {
-                    location: Span::empty(),
-                    tipo: Rc::new(Type::Fn {
-                        args: vec![type_info.clone()],
-                        ret: body.tipo(),
-                    }),
-                    is_capture: false,
-                    args: vec![parameter.into()],
-                    body: Box::new(body.clone()),
-                    return_annotation: None,
-                };
-
-                let program = generator
-                    .clone()
-                    .generate_raw(&body, &module_name)
-                    .try_into()
-                    .unwrap();
-
-                let fuzzer: Program<NamedDeBruijn> = generator
-                    .clone()
-                    .generate_raw(&via, &module_name)
-                    .try_into()
-                    .expect("TODO: provide a better error when one is trying to instantiate something that isn't a fuzzer as one");
-
-                let prop = Test::property_test(
-                    input_path,
-                    module_name,
-                    name.to_string(),
-                    *can_error,
-                    program,
-                    Fuzzer {
-                        program: fuzzer,
-                        type_info,
-                    },
-                );
-
-                programs.push(prop);
-            }
+            tests.push(Test::from_function_definition(
+                &mut generator,
+                test.to_owned(),
+                module_name,
+                input_path,
+            ));
         }
 
-        Ok(programs)
+        Ok(tests)
     }
 
     fn run_tests(&self, tests: Vec<Test>) -> Vec<TestResult<UntypedExpr>> {

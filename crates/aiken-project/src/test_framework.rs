@@ -1,8 +1,11 @@
-use crate::{pretty, ExBudget};
+use crate::pretty;
 use aiken_lang::{
-    ast::BinOp,
-    expr::UntypedExpr,
-    gen_uplc::builder::convert_data_to_type,
+    ast::{BinOp, Span, TypedTest},
+    expr::{TypedExpr, UntypedExpr},
+    gen_uplc::{
+        builder::{convert_data_to_type, convert_opaque_type},
+        CodeGenerator,
+    },
     tipo::{Type, TypeInfo},
 };
 use pallas::{
@@ -18,7 +21,7 @@ use std::{
 };
 use uplc::{
     ast::{Constant, Data, NamedDeBruijn, Program, Term},
-    machine::eval_result::EvalResult,
+    machine::{cost_model::ExBudget, eval_result::EvalResult},
 };
 
 /// ----------------------------------------------------------------------------
@@ -83,6 +86,91 @@ impl Test {
             can_error,
             fuzzer,
         })
+    }
+
+    pub fn from_function_definition(
+        generator: &mut CodeGenerator<'_>,
+        test: TypedTest,
+        module_name: String,
+        input_path: PathBuf,
+    ) -> Test {
+        if test.arguments.is_empty() {
+            let program = generator.generate_raw(&test.body, &module_name);
+
+            let assertion = test.test_hint().map(|(bin_op, left_src, right_src)| {
+                let left = generator
+                    .clone()
+                    .generate_raw(&left_src, &module_name)
+                    .try_into()
+                    .unwrap();
+
+                let right = generator
+                    .clone()
+                    .generate_raw(&right_src, &module_name)
+                    .try_into()
+                    .unwrap();
+
+                Assertion {
+                    bin_op,
+                    left,
+                    right,
+                    can_error: test.can_error,
+                }
+            });
+
+            Self::unit_test(
+                input_path,
+                module_name,
+                test.name,
+                test.can_error,
+                program.try_into().unwrap(),
+                assertion,
+            )
+        } else {
+            let parameter = test.arguments.first().unwrap().to_owned();
+
+            let via = parameter.via.clone();
+
+            let type_info = convert_opaque_type(&parameter.tipo, generator.data_types());
+
+            // TODO: Possibly refactor 'generate_raw' to accept arguments and do this wrapping
+            // itself.
+            let body = TypedExpr::Fn {
+                location: Span::empty(),
+                tipo: Rc::new(Type::Fn {
+                    args: vec![type_info.clone()],
+                    ret: test.body.tipo(),
+                }),
+                is_capture: false,
+                args: vec![parameter.into()],
+                body: Box::new(test.body),
+                return_annotation: None,
+            };
+
+            let program = generator
+                .clone()
+                .generate_raw(&body, &module_name)
+                .try_into()
+                .unwrap();
+
+            let fuzzer: Program<NamedDeBruijn> = generator
+                .clone()
+                .generate_raw(&via, &module_name)
+                .try_into()
+                .unwrap();
+
+            Self::property_test(
+                input_path,
+                module_name,
+                test.name,
+                test.can_error,
+                program,
+                Fuzzer {
+                    program: fuzzer,
+                    type_info,
+                },
+            )
+        }
     }
 }
 
@@ -736,4 +824,180 @@ impl Display for Assertion {
 
         f.write_str(&msg)
     }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::module::{CheckedModule, CheckedModules};
+    use aiken_lang::{
+        ast::{Definition, ModuleKind, TraceLevel, Tracing},
+        builtins, parser,
+        parser::extra::ModuleExtra,
+        IdGenerator,
+    };
+    use indoc::indoc;
+
+    const TEST_KIND: ModuleKind = ModuleKind::Lib;
+
+    impl Test {
+        pub fn from_source(src: &str) -> Self {
+            let id_gen = IdGenerator::new();
+
+            let module_name = "";
+
+            let mut module_types = HashMap::new();
+            module_types.insert("aiken".to_string(), builtins::prelude(&id_gen));
+            module_types.insert("aiken/builtin".to_string(), builtins::plutus(&id_gen));
+
+            let mut warnings = vec![];
+            let (ast, _) = parser::module(src, TEST_KIND).expect("Failed to parse module");
+            let ast = ast
+                .infer(
+                    &id_gen,
+                    TEST_KIND,
+                    module_name,
+                    &module_types,
+                    Tracing::All(TraceLevel::Verbose),
+                    &mut warnings,
+                )
+                .expect("Failed to type-check module.");
+
+            module_types.insert(module_name.to_string(), ast.type_info.clone());
+
+            let test = ast
+                .definitions()
+                .filter_map(|def| match def {
+                    Definition::Test(test) => Some(test.clone()),
+                    _ => None,
+                })
+                .last()
+                .expect("No test found in declared src?");
+
+            let mut modules = CheckedModules::default();
+            modules.insert(
+                module_name.to_string(),
+                CheckedModule {
+                    kind: TEST_KIND,
+                    extra: ModuleExtra::default(),
+                    name: module_name.to_string(),
+                    code: src.to_string(),
+                    ast,
+                    package: String::new(),
+                    input_path: PathBuf::new(),
+                },
+            );
+
+            let functions = builtins::prelude_functions(&id_gen);
+
+            let data_types = builtins::prelude_data_types(&id_gen);
+
+            let mut generator = modules.new_generator(
+                &functions,
+                &data_types,
+                &module_types,
+                Tracing::All(TraceLevel::Verbose),
+            );
+
+            Self::from_function_definition(
+                &mut generator,
+                test.to_owned(),
+                module_name.to_string(),
+                PathBuf::new(),
+            )
+        }
+    }
+
+    fn property(src: &str) -> PropertyTest {
+        let prelude = indoc! { r#"
+            use aiken/builtin
+
+            const max_int: Int = 255
+
+            pub fn int() -> Fuzzer<Int> {
+              fn(prng: PRNG) -> Option<(PRNG, Int)> {
+                when prng is {
+                  Seeded { seed, choices } -> {
+                    let digest =
+                      seed
+                        |> builtin.integer_to_bytearray(True, 32, _)
+                        |> builtin.blake2b_256()
+
+                    let choice =
+                      digest
+                        |> builtin.index_bytearray(0)
+
+                    let new_seed =
+                      digest
+                        |> builtin.slice_bytearray(1, 4, _)
+                        |> builtin.bytearray_to_integer(True, _)
+
+                    Some((Seeded { seed: new_seed, choices: [choice, ..choices] }, choice))
+                  }
+
+                  Replayed { choices } ->
+                    when choices is {
+                      [] -> None
+                      [head, ..tail] ->
+                        if head >= 0 && head <= max_int {
+                          Some((Replayed { choices: tail }, head))
+                        } else {
+                          None
+                        }
+                    }
+                }
+              }
+            }
+
+            pub fn constant(a: a) -> Fuzzer<a> {
+              fn(s0) { Some((s0, a)) }
+            }
+
+            pub fn and_then(fuzz_a: Fuzzer<a>, f: fn(a) -> Fuzzer<b>) -> Fuzzer<b> {
+              fn(s0) {
+                when fuzz_a(s0) is {
+                  Some((s1, a)) -> f(a)(s1)
+                  None -> None
+                }
+              }
+            }
+
+            pub fn map(fuzz_a: Fuzzer<a>, f: fn(a) -> b) -> Fuzzer<b> {
+              fn(s0) {
+                when fuzz_a(s0) is {
+                  Some((s1, a)) -> Some((s1, f(a)))
+                  None -> None
+                }
+              }
+            }
+        "#};
+
+        let src = format!("{prelude}\n{src}");
+
+        match Test::from_source(&src) {
+            Test::PropertyTest(test) => test,
+            Test::UnitTest(..) => panic!("Expected to yield a PropertyTest but found a UnitTest"),
+        }
+    }
+
+    #[test]
+    fn test_prop_basic() {
+        let prop = property(indoc! { r#"
+            test foo(n: Int via int()) {
+                n >= 0
+            }
+        "#});
+
+        assert!(prop.run(42).is_success());
+    }
+
+    //    fn counterexample<'a>(choices: &'a [u32], property: &'a PropertyTest) -> Counterexample<'a> {
+    //        let value = todo!();
+    //
+    //        Counterexample {
+    //            value,
+    //            choices: choices.to_vec(),
+    //            property,
+    //        }
+    //    }
 }

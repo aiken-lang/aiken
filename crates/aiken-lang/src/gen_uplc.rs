@@ -2,21 +2,16 @@ pub mod air;
 pub mod builder;
 pub mod tree;
 
-use petgraph::{algo, Graph};
-use std::collections::HashMap;
-use std::rc::Rc;
-
-use indexmap::{IndexMap, IndexSet};
-use itertools::Itertools;
-use uplc::{
-    ast::{Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType},
-    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
-    builtins::DefaultFunction,
-    machine::cost_model::ExBudget,
-    optimize::aiken_optimize_and_intern,
-    parser::interner::Interner,
+use self::{
+    air::Air,
+    builder::{
+        air_holds_msg, cast_validator_args, constants_ir, convert_type_to_data, extract_constant,
+        lookup_data_type_by_tipo, modify_cyclic_calls, modify_self_calls, rearrange_list_clauses,
+        AssignmentProperties, ClauseProperties, CodeGenSpecialFuncs, CycleFunctionNames,
+        HoistableFunction, Variant,
+    },
+    tree::{AirMsg, AirTree, TreePath},
 };
-
 use crate::{
     ast::{
         AssignmentKind, BinOp, Bls12_381Point, Curve, DataTypeKey, FunctionAccessKey, Pattern,
@@ -42,22 +37,23 @@ use crate::{
     },
     IdGenerator,
 };
-
-use self::{
-    air::Air,
-    builder::{
-        air_holds_msg, cast_validator_args, constants_ir, convert_type_to_data, extract_constant,
-        lookup_data_type_by_tipo, modify_cyclic_calls, modify_self_calls, rearrange_list_clauses,
-        AssignmentProperties, ClauseProperties, CodeGenSpecialFuncs, CycleFunctionNames,
-        HoistableFunction, Variant,
-    },
-    tree::{AirMsg, AirTree, TreePath},
+use indexmap::{IndexMap, IndexSet};
+use itertools::Itertools;
+use petgraph::{algo, Graph};
+use std::{collections::HashMap, rc::Rc};
+use uplc::{
+    ast::{Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType},
+    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
+    builtins::DefaultFunction,
+    machine::cost_model::ExBudget,
+    optimize::aiken_optimize_and_intern,
+    parser::interner::Interner,
 };
 
 #[derive(Clone)]
 pub struct CodeGenerator<'a> {
     /// immutable index maps
-    functions: IndexMap<FunctionAccessKey, &'a TypedFunction>,
+    pub functions: IndexMap<FunctionAccessKey, &'a TypedFunction>,
     data_types: IndexMap<DataTypeKey, &'a TypedDataType>,
     module_types: IndexMap<&'a String, &'a TypeInfo>,
     module_src: IndexMap<String, (String, LineNumbers)>,
@@ -203,7 +199,7 @@ impl<'a> CodeGenerator<'a> {
         self.finalize(term)
     }
 
-    pub fn generate_raw(&mut self, test_body: &TypedExpr, module_name: &String) -> Program<Name> {
+    pub fn generate_raw(&mut self, test_body: &TypedExpr, module_name: &str) -> Program<Name> {
         let mut air_tree = self.build(test_body, module_name, &[]);
 
         air_tree = AirTree::no_op(air_tree);
@@ -244,7 +240,7 @@ impl<'a> CodeGenerator<'a> {
     fn build(
         &mut self,
         body: &TypedExpr,
-        module_build_name: &String,
+        module_build_name: &str,
         context: &[TypedExpr],
     ) -> AirTree {
         if !context.is_empty() {
@@ -1766,7 +1762,7 @@ impl<'a> CodeGenerator<'a> {
         final_clause: TypedClause,
         subject_tipo: &Rc<Type>,
         props: &mut ClauseProperties,
-        module_name: &String,
+        module_name: &str,
     ) -> AirTree {
         assert!(
             !subject_tipo.is_void(),
@@ -3570,7 +3566,13 @@ impl<'a> CodeGenerator<'a> {
                         let code_gen_func = self
                             .code_gen_functions
                             .get(&generic_function_key.function_name)
-                            .unwrap_or_else(|| panic!("Missing Code Gen Function Definition"));
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "Missing function definition for {}. Known definitions: {:?}",
+                                    generic_function_key.function_name,
+                                    self.code_gen_functions.keys(),
+                                )
+                            });
 
                         if !dependency_functions
                             .iter()
@@ -3837,7 +3839,9 @@ impl<'a> CodeGenerator<'a> {
                         }
 
                         DefaultFunction::MkCons | DefaultFunction::MkPairData => {
-                            unimplemented!("MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z).\n")
+                            unimplemented!(
+                                "MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z).\n"
+                            )
                         }
                         _ => {
                             let mut term: Term<Name> = (*builtin).into();
@@ -4230,7 +4234,9 @@ impl<'a> CodeGenerator<'a> {
                     }
 
                     DefaultFunction::MkCons | DefaultFunction::MkPairData => {
-                        unimplemented!("MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z).\n")
+                        unimplemented!(
+                            "MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z).\n"
+                        )
                     }
                     _ => {
                         let mut term: Term<Name> = func.into();

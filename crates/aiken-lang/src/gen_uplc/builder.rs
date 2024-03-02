@@ -1,7 +1,21 @@
-use std::{collections::HashMap, ops::Deref, rc::Rc};
-
+use super::{
+    air::{Air, ExpectLevel},
+    tree::{AirMsg, AirTree, TreePath},
+};
+use crate::{
+    ast::{
+        AssignmentKind, BinOp, ClauseGuard, Constant, DataType, DataTypeKey, FunctionAccessKey,
+        Pattern, Span, TraceLevel, TypedArg, TypedClause, TypedClauseGuard, TypedDataType,
+        TypedPattern, UnOp,
+    },
+    builtins::{bool, data, function, int, list, string, void},
+    expr::TypedExpr,
+    line_numbers::{LineColumn, LineNumbers},
+    tipo::{PatternConstructor, Type, TypeVar, ValueConstructor, ValueConstructorVariant},
+};
 use indexmap::{IndexMap, IndexSet};
 use itertools::{Itertools, Position};
+use std::{collections::HashMap, ops::Deref, rc::Rc};
 use uplc::{
     ast::{Constant as UplcConstant, Name, Term, Type as UplcType},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
@@ -11,27 +25,6 @@ use uplc::{
         value::to_pallas_bigint,
     },
     Constr, KeyValuePairs, PlutusData,
-};
-
-use crate::{
-    ast::{
-        AssignmentKind, DataType, DataTypeKey, FunctionAccessKey, Pattern, Span, TraceLevel,
-        TypedArg, TypedClause, TypedClauseGuard, TypedDataType, TypedPattern,
-    },
-    builtins::{bool, data, function, int, list, string, void},
-    expr::TypedExpr,
-    line_numbers::{LineColumn, LineNumbers},
-    tipo::{PatternConstructor, TypeVar, ValueConstructor, ValueConstructorVariant},
-};
-
-use crate::{
-    ast::{BinOp, ClauseGuard, Constant, UnOp},
-    tipo::Type,
-};
-
-use super::{
-    air::{Air, ExpectLevel},
-    tree::{AirMsg, AirTree, TreePath},
 };
 
 pub type Variant = String;
@@ -1943,7 +1936,7 @@ pub fn extract_constant(term: &Term<Name>) -> Option<Rc<UplcConstant>> {
 }
 
 pub fn get_src_code_by_span(
-    module_name: &String,
+    module_name: &str,
     span: &Span,
     module_src: &IndexMap<String, (String, LineNumbers)>,
 ) -> String {
@@ -1957,7 +1950,7 @@ pub fn get_src_code_by_span(
 }
 
 pub fn get_line_columns_by_span(
-    module_name: &String,
+    module_name: &str,
     span: &Span,
     module_src: &IndexMap<String, (String, LineNumbers)>,
 ) -> LineColumn {
