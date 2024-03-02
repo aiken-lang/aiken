@@ -1203,6 +1203,113 @@ fn pipe_with_wrong_type_and_full_args() {
 }
 
 #[test]
+fn fuzzer_ok_basic() {
+    let source_code = r#"
+        fn int() -> Fuzzer<Int> { todo }
+
+        test prop(n via int()) { todo }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn fuzzer_ok_explicit() {
+    let source_code = r#"
+        fn int(prng: PRNG) -> Option<(PRNG, Int)> { todo }
+
+        test prop(n via int) { todo }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn fuzzer_ok_list() {
+    let source_code = r#"
+        fn int() -> Fuzzer<Int> { todo }
+        fn list(a: Fuzzer<a>) -> Fuzzer<List<a>> { todo }
+
+        test prop(xs via list(int())) { todo }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn fuzzer_err_unbound() {
+    let source_code = r#"
+        fn any() -> Fuzzer<a> { todo }
+        fn list(a: Fuzzer<a>) -> Fuzzer<List<a>> { todo }
+
+        test prop(xs via list(any())) { todo }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::GenericLeftAtBoundary { .. }))
+    ))
+}
+
+#[test]
+fn fuzzer_err_unify_1() {
+    let source_code = r#"
+        test prop(xs via Void) { todo }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::CouldNotUnify {
+                situation: None,
+                ..
+            }
+        ))
+    ))
+}
+
+#[test]
+fn fuzzer_err_unify_2() {
+    let source_code = r#"
+        fn any() -> Fuzzer<a> { todo }
+        test prop(xs via any) { todo }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::CouldNotUnify {
+                situation: None,
+                ..
+            }
+        ))
+    ))
+}
+
+#[test]
+fn fuzzer_err_unify_3() {
+    let source_code = r#"
+        fn list(a: Fuzzer<a>) -> Fuzzer<List<a>> { todo }
+        fn int() -> Fuzzer<Int> { todo }
+
+        test prop(xs: Int via list(int())) { todo }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::CouldNotUnify {
+                situation: Some(UnifyErrorSituation::FuzzerAnnotationMismatch),
+                ..
+            }
+        ))
+    ))
+}
+
+#[test]
 fn utf8_hex_literal_warning() {
     let source_code = r#"
         pub const policy_id = "f43a62fdc3965df486de8a0d32fe800963589c41b38946602a0dc535"

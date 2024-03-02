@@ -69,9 +69,10 @@ pub fn via() -> impl Parser<Token, ast::UntypedArgVia, Error = ParseError> {
         }),
     ))
     .then(just(Token::Colon).ignore_then(annotation()).or_not())
+    .map_with_span(|(arg_name, annotation), location| (arg_name, annotation, location))
     .then_ignore(just(Token::Via))
     .then(fuzzer())
-    .map_with_span(|((arg_name, annotation), via), location| ast::ArgVia {
+    .map(|((arg_name, annotation, location), via)| ast::ArgVia {
         arg_name,
         via,
         annotation,

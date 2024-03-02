@@ -270,7 +270,7 @@ You can use '{discard}' and numbers to distinguish between similar names.
     #[error("I found a type definition that has an unsupported type in it.\n")]
     #[diagnostic(code("illegal::type_in_data"))]
     #[diagnostic(help(
-        r#"Data-types can't contain type {type_info} because it can't be represented as PlutusData."#,
+        r#"Data-types can't contain type {type_info} because it isn't serializable into a Plutus Data. Yet, this is a strong requirement for types found in compound structures such as List or Tuples."#,
         type_info = tipo.to_pretty(0).if_supports_color(Stdout, |s| s.red())
     ))]
     IllegalTypeInData {
@@ -957,6 +957,15 @@ The best thing to do from here is to remove it."#))]
         #[label("too many arguments")]
         location: Span,
     },
+
+    #[error("I choked on a generic type left in an outward-facing interface.\n")]
+    #[diagnostic(code("illegal::generic_in_abi"))]
+    #[diagnostic(help(
+        "Functions of the outer-most parts of a project, such as a validator or a property-based test, must be fully instantiated. That means they can no longer carry unbound generic variables. The type must be fully-known at this point since many structural validation must occur to ensure a safe boundary between the on-chain and off-chain worlds."))]
+    GenericLeftAtBoundary {
+        #[label("unbound generic at boundary")]
+        location: Span,
+    },
 }
 
 impl ExtraData for Error {
@@ -1009,6 +1018,7 @@ impl ExtraData for Error {
             | Error::UpdateMultiConstructorType { .. }
             | Error::ValidatorImported { .. }
             | Error::IncorrectTestArity { .. }
+            | Error::GenericLeftAtBoundary { .. }
             | Error::ValidatorMustReturnBool { .. } => None,
 
             Error::UnknownType { name, .. }
@@ -1206,14 +1216,14 @@ fn suggest_unify(
 
             (
                 format!(
-                    "{} - {}",
+                    "{}.{{{}}}",
+                    expected_module.if_supports_color(Stdout, |s| s.bright_blue()),
                     expected_str.if_supports_color(Stdout, |s| s.green()),
-                    expected_module.if_supports_color(Stdout, |s| s.bright_blue())
                 ),
                 format!(
-                    "{} - {}",
+                    "{}.{{{}}}",
+                    given_module.if_supports_color(Stdout, |s| s.bright_blue()),
                     given_str.if_supports_color(Stdout, |s| s.red()),
-                    given_module.if_supports_color(Stdout, |s| s.bright_blue())
                 ),
             )
         }
@@ -1285,6 +1295,21 @@ fn suggest_unify(
                    {}
             "#,
             op.to_doc().to_pretty_string(70).if_supports_color(Stdout, |s| s.yellow()),
+            expected,
+            given
+        },
+        Some(UnifyErrorSituation::FuzzerAnnotationMismatch) => formatdoc! {
+            r#"While comparing the return annotation of a Fuzzer with its actual return type, I realized that both don't match.
+
+               I am inferring the Fuzzer should return:
+
+                   {}
+
+               but I found a conflicting annotation saying it returns:
+
+                   {}
+
+               Either, fix (or remove) the annotation or adjust the Fuzzer to return the expected type."#,
             expected,
             given
         },
@@ -1677,6 +1702,8 @@ pub enum UnifyErrorSituation {
 
     /// The operands of a binary operator were incorrect.
     Operator(BinOp),
+
+    FuzzerAnnotationMismatch,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
