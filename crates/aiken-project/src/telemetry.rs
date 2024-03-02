@@ -1,5 +1,5 @@
 use crate::pretty;
-use crate::script::{PropertyTestResult, TestResult, UnitTestResult};
+use crate::test_framework::{PropertyTestResult, TestResult, UnitTestResult};
 use aiken_lang::{expr::UntypedExpr, format::Formatter};
 use owo_colors::{OwoColorize, Stream::Stderr};
 use std::{collections::BTreeMap, fmt::Display, path::PathBuf};

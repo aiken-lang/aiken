@@ -310,7 +310,7 @@ impl Prng {
     /// Obtain a Prng back from a fuzzer execution. As a reminder, fuzzers have the following
     /// signature:
     ///
-    ///     type Fuzzer<a> = fn(Prng) -> Option<(Prng, a)>
+    ///   type Fuzzer<a> = fn(Prng) -> Option<(Prng, a)>
     ///
     /// In nominal scenarios (i.e. when the fuzzer is made from a seed and evolve pseudo-randomly),
     /// it cannot yield 'None'. When replayed however, we can't easily guarantee that the changes
@@ -341,7 +341,7 @@ impl Prng {
                 }
             }
 
-            panic!("Malformed Prng: {cst:#?}")
+            unreachable!("Malformed Prng: {cst:#?}")
         }
 
         fn as_u32(field: &PlutusData) -> u32 {
@@ -349,7 +349,7 @@ impl Prng {
                 return u32::try_from(*i).expect("Choice doesn't fit in u32?");
             }
 
-            panic!("Malformed choice's value: {field:#?}")
+            unreachable!("Malformed choice's value: {field:#?}")
         }
 
         if let Term::Constant(rc) = &result {
@@ -372,9 +372,6 @@ impl Prng {
             }
         }
 
-        // In principle, this cannot happen provided that the 'result' was produced from a
-        // type-checked fuzzer. The type-checker enforces that fuzzers are of the right shape
-        // describe above.
         unreachable!("Fuzzer yielded a malformed result? {result:#?}")
     }
 }

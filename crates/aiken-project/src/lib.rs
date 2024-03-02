@@ -10,8 +10,8 @@ pub mod options;
 pub mod package_name;
 pub mod paths;
 pub mod pretty;
-pub mod script;
 pub mod telemetry;
+pub mod test_framework;
 #[cfg(test)]
 mod tests;
 pub mod watch;
@@ -47,7 +47,6 @@ use pallas::ledger::{
     primitives::babbage::{self as cardano, PolicyId},
     traverse::ComputeHash,
 };
-use script::{Assertion, Fuzzer, Test, TestResult};
 use std::{
     collections::HashMap,
     fs::{self, File},
@@ -56,6 +55,7 @@ use std::{
     rc::Rc,
 };
 use telemetry::EventListener;
+use test_framework::{Assertion, Fuzzer, Test, TestResult};
 use uplc::{
     ast::{DeBruijn, Name, NamedDeBruijn, Program, Term},
     machine::cost_model::ExBudget,
