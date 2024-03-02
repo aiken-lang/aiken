@@ -1000,13 +1000,6 @@ impl Program<Name> {
                     let body = Rc::make_mut(body);
                     let var_lookup = var_occurrences(body, parameter_name.clone(), vec![], vec![]);
 
-                    assert!(
-                        var_lookup.delays >= 0,
-                        "HOW {} AND {:#?}",
-                        parameter_name.text,
-                        var_lookup
-                    );
-
                     let substitute_condition = (var_lookup.delays == 0 && !var_lookup.no_inline)
                         || matches!(
                             &arg_term,
