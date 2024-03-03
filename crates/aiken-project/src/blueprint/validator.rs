@@ -12,8 +12,7 @@ use aiken_lang::{
 };
 use miette::NamedSource;
 use serde;
-use std::borrow::Borrow;
-use std::rc::Rc;
+use std::{borrow::Borrow, rc::Rc};
 use uplc::{
     ast::{Constant, DeBruijn, Program, Term},
     PlutusData,
@@ -250,17 +249,6 @@ impl Validator {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
-    use aiken_lang::{
-        self,
-        ast::{TraceLevel, Tracing},
-        builtins,
-    };
-    use uplc::ast as uplc_ast;
-
-    use crate::tests::TestProject;
-
     use super::{
         super::{
             definitions::{Definitions, Reference},
@@ -269,6 +257,14 @@ mod tests {
         },
         *,
     };
+    use crate::tests::TestProject;
+    use aiken_lang::{
+        self,
+        ast::{TraceLevel, Tracing},
+        builtins,
+    };
+    use std::collections::HashMap;
+    use uplc::ast as uplc_ast;
 
     macro_rules! assert_validator {
         ($code:expr) => {
@@ -296,15 +292,23 @@ mod tests {
             let validator = validators
                 .get(0)
                 .unwrap()
-                .as_ref()
-                .expect("Failed to create validator blueprint");
+                .as_ref();
 
-            insta::with_settings!({
-                description => concat!("Code:\n\n", indoc::indoc! { $code }),
-                omit_expression => true
-            }, {
-                insta::assert_json_snapshot!(validator);
-            });
+            match validator {
+                Err(e) => insta::with_settings!({
+                    description => concat!("Code:\n\n", indoc::indoc! { $code }),
+                    omit_expression => true
+                }, {
+                    insta::assert_debug_snapshot!(e);
+                }),
+
+                Ok(validator) => insta::with_settings!({
+                    description => concat!("Code:\n\n", indoc::indoc! { $code }),
+                    omit_expression => true
+                }, {
+                    insta::assert_json_snapshot!(validator);
+                }),
+            };
         };
     }
 
@@ -507,6 +511,24 @@ mod tests {
 
             validator {
               fn opaque_singleton_variants(redeemer: Dict<UUID, Int>, ctx: Void) {
+                True
+              }
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn opaque_singleton_multi_variants() {
+        assert_validator!(
+            r#"
+            pub opaque type Rational {
+              numerator: Int,
+              denominator: Int,
+            }
+
+            validator {
+              fn opaque_singleton_multi_variants(redeemer: Rational, ctx: Void) {
                 True
               }
             }

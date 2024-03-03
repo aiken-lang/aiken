@@ -1,5 +1,7 @@
-use crate::blueprint::definitions::{Definitions, Reference};
-use crate::CheckedModule;
+use crate::{
+    blueprint::definitions::{Definitions, Reference},
+    CheckedModule,
+};
 use aiken_lang::{
     ast::{Definition, TypedDataType, TypedDefinition},
     builtins::wrapped_redeemer,
@@ -12,8 +14,7 @@ use serde::{
     ser::{Serialize, SerializeStruct, Serializer},
 };
 use serde_json as json;
-use std::rc::Rc;
-use std::{collections::HashMap, fmt, ops::Deref};
+use std::{collections::HashMap, fmt, ops::Deref, rc::Rc};
 
 // NOTE: Can be anything BUT 0
 pub const REDEEMER_DISCRIMINANT: usize = 1;
@@ -385,21 +386,6 @@ impl Annotated<Schema> {
             Type::Fn { .. } => unreachable!(),
         }
     }
-
-    fn into_data(self, type_info: &Type) -> Result<Annotated<Data>, Error> {
-        match self {
-            Annotated {
-                title,
-                description,
-                annotated: Schema::Data(data),
-            } => Ok(Annotated {
-                title,
-                description,
-                annotated: data,
-            }),
-            _ => Err(Error::new(ErrorContext::ExpectedData, type_info)),
-        }
-    }
 }
 
 impl Data {
@@ -409,27 +395,23 @@ impl Data {
         type_parameters: &mut HashMap<u64, Rc<Type>>,
         definitions: &mut Definitions<Annotated<Schema>>,
     ) -> Result<Self, Error> {
+        if data_type.opaque {
+            // NOTE: No breadcrumbs here which is *okay*, as the caller will backtrack
+            // and add the necessary type information.
+            return Err(Error {
+                context: ErrorContext::IllegalOpaqueType,
+                breadcrumbs: vec![],
+            });
+        }
+
         let mut variants = vec![];
 
-        let len_constructors = data_type.constructors.len();
         for (index, constructor) in data_type.constructors.iter().enumerate() {
             let mut fields = vec![];
 
-            let len_arguments = data_type.constructors.len();
             for field in constructor.arguments.iter() {
                 let reference =
                     Annotated::do_from_type(&field.tipo, modules, type_parameters, definitions)?;
-
-                // NOTE: Opaque data-types with a single variant and a single field are transparent, they
-                // are erased completely at compilation time.
-                if data_type.opaque && len_constructors == 1 && len_arguments == 1 {
-                    let schema = definitions
-                        .lookup(&reference)
-                        .expect("Schema definition registered just above")
-                        .clone();
-                    definitions.remove(&reference);
-                    return Ok(schema.into_data(&field.tipo)?.annotated);
-                }
 
                 fields.push(Annotated {
                     title: field.label.clone(),
@@ -479,7 +461,7 @@ fn find_data_type(name: &str, definitions: &[TypedDefinition]) -> Option<TypedDa
     for def in definitions {
         match def {
             Definition::DataType(data_type) if name == data_type.name => {
-                return Some(data_type.clone())
+                return Some(data_type.clone());
             }
             Definition::Fn { .. }
             | Definition::Validator { .. }
@@ -928,7 +910,9 @@ pub struct Error {
 
 #[derive(Debug, PartialEq, Clone, thiserror::Error)]
 pub enum ErrorContext {
-    #[error("I failed at my own job and couldn't figure out how to generate a specification for a type.")]
+    #[error(
+        "I failed at my own job and couldn't figure out how to generate a specification for a type."
+    )]
     UnsupportedType,
 
     #[error("I discovered a type hole where I would expect a concrete type.")]
@@ -942,6 +926,9 @@ pub enum ErrorContext {
 
     #[error("I figured you tried to export a function in your contract's binary interface.")]
     UnexpectedFunction,
+
+    #[error("I caught an opaque type trying to escape")]
+    IllegalOpaqueType,
 }
 
 impl Error {
@@ -963,6 +950,26 @@ impl Error {
 
     pub fn help(&self) -> String {
         match self.context {
+            ErrorContext::IllegalOpaqueType => format!(
+                r#"Opaque types cannot figure anywhere in an outward-facing type like a validator's redeemer or datum. This is because an {opaque} type hides its implementation details, and likely enforce invariants that cannot be expressed only structurally. In particular, the {opaque} type {signature} cannot be safely constructed from any Plutus Data.
+
+Hence, {opaque} types are forbidden from interface points with the off-chain world. Instead, use an intermediate representation and construct the {opaque} type at runtime using constructors and methods provided for that type (e.g. {Dict}.{from_list}, {Rational}.{new}, ...)."#,
+                opaque = "opaque".if_supports_color(Stdout, |s| s.purple()),
+                signature = Error::fmt_breadcrumbs(&[self
+                    .breadcrumbs
+                    .last()
+                    .expect("always at least one breadcrumb")
+                    .to_owned()]),
+                Dict = "Dict"
+                    .if_supports_color(Stdout, |s| s.bright_blue())
+                    .if_supports_color(Stdout, |s| s.bold()),
+                from_list = "from_list".if_supports_color(Stdout, |s| s.blue()),
+                Rational = "Rational"
+                    .if_supports_color(Stdout, |s| s.bright_blue())
+                    .if_supports_color(Stdout, |s| s.bold()),
+                new = "new".if_supports_color(Stdout, |s| s.blue()),
+            ),
+
             ErrorContext::UnsupportedType => format!(
                 r#"I do not know how to generate a portable Plutus specification for the following type:
 
