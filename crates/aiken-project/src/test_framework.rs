@@ -317,11 +317,11 @@ impl PropertyTest {
 pub enum Prng {
     Seeded {
         seed: u32,
-        choices: Vec<u8>,
+        choices: Vec<u64>,
         uplc: PlutusData,
     },
     Replayed {
-        choices: Vec<u8>,
+        choices: Vec<u64>,
         uplc: PlutusData,
     },
 }
@@ -344,7 +344,7 @@ impl Prng {
         }
     }
 
-    pub fn choices(&self) -> Vec<u8> {
+    pub fn choices(&self) -> Vec<u64> {
         match self {
             Prng::Seeded { choices, .. } => {
                 let mut choices = choices.to_vec();
@@ -371,7 +371,7 @@ impl Prng {
     }
 
     /// Construct a Pseudo-random number generator from a pre-defined list of choices.
-    pub fn from_choices(choices: &[u8]) -> Prng {
+    pub fn from_choices(choices: &[u64]) -> Prng {
         Prng::Replayed {
             choices: choices.to_vec(),
             uplc: Data::constr(
@@ -412,7 +412,7 @@ impl Prng {
                     if let [seed, PlutusData::Array(choices)] = &fields[..] {
                         return Prng::Seeded {
                             seed: as_u32(seed),
-                            choices: choices.iter().map(as_u8).collect(),
+                            choices: choices.iter().map(as_u64).collect(),
                             uplc: cst.clone(),
                         };
                     }
@@ -421,7 +421,7 @@ impl Prng {
                 if *tag == 121 + Prng::REPLAYED {
                     if let [PlutusData::Array(choices)] = &fields[..] {
                         return Prng::Replayed {
-                            choices: choices.iter().map(as_u8).collect(),
+                            choices: choices.iter().map(as_u64).collect(),
                             uplc: cst.clone(),
                         };
                     }
@@ -433,14 +433,16 @@ impl Prng {
 
         fn as_u32(field: &PlutusData) -> u32 {
             if let PlutusData::BigInt(BigInt::Int(Int(i))) = field {
-                return u32::try_from(*i).expect("Choice doesn't fit in u32?");
+                return u32::try_from(*i)
+                    .unwrap_or_else(|_| panic!("choice doesn't fit in u32: {i:?}"));
             }
             unreachable!("Malformed choice's value: {field:#?}")
         }
 
-        fn as_u8(field: &PlutusData) -> u8 {
+        fn as_u64(field: &PlutusData) -> u64 {
             if let PlutusData::BigInt(BigInt::Int(Int(i))) = field {
-                return u8::try_from(*i).expect("Choice doesn't fit in u8?");
+                return u64::try_from(*i)
+                    .unwrap_or_else(|_| panic!("choice doesn't fit in u64: {i:?}"));
             }
             unreachable!("Malformed choice's value: {field:#?}")
         }
@@ -478,12 +480,12 @@ impl Prng {
 #[derive(Debug)]
 pub struct Counterexample<'a> {
     pub value: PlutusData,
-    pub choices: Vec<u8>,
+    pub choices: Vec<u64>,
     pub property: &'a PropertyTest,
 }
 
 impl<'a> Counterexample<'a> {
-    fn consider(&mut self, choices: &[u8]) -> bool {
+    fn consider(&mut self, choices: &[u64]) -> bool {
         if choices == self.choices {
             return true;
         }
@@ -639,9 +641,9 @@ impl<'a> Counterexample<'a> {
     /// Try to replace a value with a smaller value by doing a binary search between
     /// two extremes. This converges relatively fast in order to shrink down values.
     /// fast.
-    fn binary_search_replace<F>(&mut self, lo: u8, hi: u8, f: F) -> u8
+    fn binary_search_replace<F>(&mut self, lo: u64, hi: u64, f: F) -> u64
     where
-        F: Fn(u8) -> Vec<(usize, u8)>,
+        F: Fn(u64) -> Vec<(usize, u64)>,
     {
         if self.replace(f(lo)) {
             return lo;
@@ -664,7 +666,7 @@ impl<'a> Counterexample<'a> {
 
     // Replace values in the choices vector, based on the index-value list provided
     // and consider the resulting choices.
-    fn replace(&mut self, ivs: Vec<(usize, u8)>) -> bool {
+    fn replace(&mut self, ivs: Vec<(usize, u64)>) -> bool {
         let mut choices = self.choices.clone();
 
         for (i, v) in ivs {
