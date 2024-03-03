@@ -5,6 +5,10 @@
 ### Added
 
 - **aiken-lang**: Data now has a generic argument that can be used to specify the blueprint type. @KtorZ
+- **aiken-lang**: New types `PRNG` and `Fuzzer` in the prelude. @KtorZ
+- **aiken-lang**: Test definitions now accept an (optional) argument alongside a new keyword `via` to specify fuzzers. @KtorZ
+- **aiken-project**: Property-based testing framework with integrated shrinking. @KtorZ
+- **aiken**: The `check` command now accept an extra arg `--seed` to provide an initial seed for the pseudo-random generator of properties. @KtorZ
 
 ### Fixed
 
