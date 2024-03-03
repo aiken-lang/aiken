@@ -868,7 +868,7 @@ fn is_aiken_path(path: &Path, dir: impl AsRef<Path>) -> bool {
     use regex::Regex;
 
     let re = Regex::new(&format!(
-        "^({module}{slash})*{module}\\.ak$",
+        "^({module}{slash})*{module}(\\.[-_a-z0-9]*)*\\.ak$",
         module = "[a-z][-_a-z0-9]*",
         slash = "(/|\\\\)",
     ))
