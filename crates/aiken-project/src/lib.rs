@@ -32,7 +32,7 @@ use crate::{
 use aiken_lang::{
     ast::{
         DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Tracing, TypedDataType,
-        TypedFunction, Validator,
+        TypedFunction,
     },
     builtins,
     expr::UntypedExpr,
@@ -725,76 +725,40 @@ where
             }
 
             for def in checked_module.ast.definitions() {
-                match def {
-                    Definition::Validator(Validator {
-                        params,
-                        fun,
-                        other_fun,
-                        ..
-                    }) => {
-                        let mut fun = fun.clone();
+                if let Definition::Test(func) = def {
+                    if let Some(match_tests) = &match_tests {
+                        let is_match = match_tests.iter().any(|(module, names)| {
+                            let matched_module =
+                                module.is_empty() || checked_module.name.contains(module);
 
-                        fun.arguments = params.clone().into_iter().chain(fun.arguments).collect();
+                            let matched_name = match names {
+                                None => true,
+                                Some(names) => names.iter().any(|name| {
+                                    if exact_match {
+                                        name == &func.name
+                                    } else {
+                                        func.name.contains(name)
+                                    }
+                                }),
+                            };
 
-                        self.functions.insert(
-                            FunctionAccessKey {
-                                module_name: checked_module.name.clone(),
-                                function_name: fun.name.clone(),
-                            },
-                            fun.to_owned(),
-                        );
+                            matched_module && matched_name
+                        });
 
-                        if let Some(other) = other_fun {
-                            let mut other = other.clone();
-
-                            other.arguments =
-                                params.clone().into_iter().chain(other.arguments).collect();
-
-                            self.functions.insert(
-                                FunctionAccessKey {
-                                    module_name: checked_module.name.clone(),
-                                    function_name: other.name.clone(),
-                                },
-                                other.to_owned(),
-                            );
-                        }
-                    }
-                    Definition::Test(func) => {
-                        if let Some(match_tests) = &match_tests {
-                            let is_match = match_tests.iter().any(|(module, names)| {
-                                let matched_module =
-                                    module.is_empty() || checked_module.name.contains(module);
-
-                                let matched_name = match names {
-                                    None => true,
-                                    Some(names) => names.iter().any(|name| {
-                                        if exact_match {
-                                            name == &func.name
-                                        } else {
-                                            func.name.contains(name)
-                                        }
-                                    }),
-                                };
-
-                                matched_module && matched_name
-                            });
-
-                            if is_match {
-                                scripts.push((
-                                    checked_module.input_path.clone(),
-                                    checked_module.name.clone(),
-                                    func,
-                                ))
-                            }
-                        } else {
+                        if is_match {
                             scripts.push((
                                 checked_module.input_path.clone(),
                                 checked_module.name.clone(),
                                 func,
                             ))
                         }
+                    } else {
+                        scripts.push((
+                            checked_module.input_path.clone(),
+                            checked_module.name.clone(),
+                            func,
+                        ))
                     }
-                    _ => (),
                 }
             }
         }

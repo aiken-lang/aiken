@@ -148,6 +148,16 @@ impl TypedModule {
                     );
                 }
 
+                Definition::Test(test) => {
+                    functions.insert(
+                        FunctionAccessKey {
+                            module_name: self.name.clone(),
+                            function_name: test.name.clone(),
+                        },
+                        test.clone().into(),
+                    );
+                }
+
                 Definition::DataType(dt) => {
                     data_types.insert(
                         DataTypeKey {
@@ -158,11 +168,19 @@ impl TypedModule {
                     );
                 }
 
-                Definition::TypeAlias(_)
-                | Definition::ModuleConstant(_)
-                | Definition::Test(_)
-                | Definition::Validator(_)
-                | Definition::Use(_) => {}
+                Definition::Validator(v) => {
+                    let module_name = self.name.as_str();
+
+                    if let Some((k, v)) = v.into_function_definition(module_name, |f, _| Some(f)) {
+                        functions.insert(k, v);
+                    }
+
+                    if let Some((k, v)) = v.into_function_definition(module_name, |_, f| f) {
+                        functions.insert(k, v);
+                    }
+                }
+
+                Definition::TypeAlias(_) | Definition::ModuleConstant(_) | Definition::Use(_) => {}
             }
         }
     }
@@ -511,6 +529,39 @@ pub struct Validator<T, Expr> {
     pub other_fun: Option<Function<T, Expr, Arg<T>>>,
     pub location: Span,
     pub params: Vec<Arg<T>>,
+}
+
+impl TypedValidator {
+    pub fn into_function_definition<'a, F>(
+        &'a self,
+        module_name: &str,
+        select: F,
+    ) -> Option<(FunctionAccessKey, TypedFunction)>
+    where
+        F: Fn(&'a TypedFunction, Option<&'a TypedFunction>) -> Option<&'a TypedFunction> + 'a,
+    {
+        match select(&self.fun, self.other_fun.as_ref()) {
+            None => None,
+            Some(fun) => {
+                let mut fun = fun.clone();
+
+                fun.arguments = self
+                    .params
+                    .clone()
+                    .into_iter()
+                    .chain(fun.arguments)
+                    .collect();
+
+                Some((
+                    FunctionAccessKey {
+                        module_name: module_name.to_string(),
+                        function_name: fun.name.clone(),
+                    },
+                    fun,
+                ))
+            }
+        }
+    }
 }
 
 pub type TypedDefinition = Definition<Rc<Type>, TypedExpr, String>;
