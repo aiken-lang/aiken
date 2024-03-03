@@ -123,7 +123,9 @@ where
 
         if errs.iter().any(|e| matches!(e, Error::TestFailure { .. })) {
             eprintln!(
-                "                ━━━━━━\n                   ╰─▶ use {} {} to replay",
+                "                {}══╤══\n{}                  ╰─▶ use {} {} to replay",
+                if errs.len() > 1 { "═" } else { "" },
+                if errs.len() > 1 { " " } else { "" },
                 "--seed".if_supports_color(Stderr, |s| s.bold()),
                 format!("{seed}").if_supports_color(Stderr, |s| s.bold())
             );

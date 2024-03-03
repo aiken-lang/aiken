@@ -10,11 +10,7 @@ pub fn ansi_len(s: &str) -> usize {
 pub fn len_longest_line(zero: usize, s: &str) -> usize {
     s.lines().fold(zero, |max, l| {
         let n = ansi_len(l);
-        if n > max {
-            n
-        } else {
-            max
-        }
+        if n > max { n } else { max }
     })
 }
 
@@ -73,19 +69,27 @@ pub fn open_box(
 
     let top = format!(
         "{} {}",
-        border_style("┍━"),
+        border_style(if footer.is_empty() {
+            "┝━"
+        } else {
+            "┍━"
+        }),
         pad_right(format!("{title} "), i - 1, &border_style("━")),
     );
 
-    let bottom = format!(
-        "{} {}",
-        pad_right(
-            border_style("┕"),
-            if j < k { 0 } else { j + 1 - k },
-            &border_style("━")
-        ),
-        footer
-    );
+    let bottom = if footer.is_empty() {
+        border_style("╽")
+    } else {
+        format!(
+            "{} {}",
+            pad_right(
+                border_style("┕"),
+                if j < k { 0 } else { j + 1 - k },
+                &border_style("━")
+            ),
+            footer
+        )
+    };
 
     format!("{top}\n{content}\n{bottom}")
 }
@@ -120,11 +124,7 @@ pub fn pad_right(mut text: String, n: usize, delimiter: &str) -> String {
 }
 
 pub fn style_if(styled: bool, s: String, apply_style: fn(String) -> String) -> String {
-    if styled {
-        apply_style(s)
-    } else {
-        s
-    }
+    if styled { apply_style(s) } else { s }
 }
 
 pub fn multiline(max_len: usize, s: String) -> Vec<String> {

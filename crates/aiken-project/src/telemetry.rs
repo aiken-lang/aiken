@@ -1,5 +1,7 @@
-use crate::pretty;
-use crate::test_framework::{PropertyTestResult, TestResult, UnitTestResult};
+use crate::{
+    pretty,
+    test_framework::{PropertyTestResult, TestResult, UnitTestResult},
+};
 use aiken_lang::{expr::UntypedExpr, format::Formatter};
 use owo_colors::{OwoColorize, Stream::Stderr};
 use std::{collections::BTreeMap, fmt::Display, path::PathBuf};
@@ -169,7 +171,7 @@ impl EventListener for Terminal {
                 );
             }
             Event::FinishedTests { tests } => {
-                let (max_mem, max_cpu) = find_max_execution_units(&tests);
+                let (max_mem, max_cpu, max_iter) = find_max_execution_units(&tests);
 
                 for (module, results) in &group_by_module(&tests) {
                     let title = module
@@ -179,7 +181,7 @@ impl EventListener for Terminal {
 
                     let tests = results
                         .iter()
-                        .map(|r| fmt_test(r, max_mem, max_cpu, true))
+                        .map(|r| fmt_test(r, max_mem, max_cpu, max_iter, true))
                         .collect::<Vec<String>>()
                         .join("\n");
 
@@ -254,6 +256,7 @@ fn fmt_test(
     result: &TestResult<UntypedExpr>,
     max_mem: usize,
     max_cpu: usize,
+    max_iter: usize,
     styled: bool,
 ) -> String {
     // Status
@@ -292,10 +295,10 @@ fn fmt_test(
             test = pretty::pad_right(
                 format!(
                     "{test} [after {} test{}]",
-                    pretty::pad_left(iterations.to_string(), 3, " "),
+                    pretty::pad_left(iterations.to_string(), max_iter, " "),
                     if *iterations > 1 { "s" } else { "" }
                 ),
-                14 + max_mem + max_cpu,
+                18 + max_mem + max_cpu + max_iter,
                 " ",
             );
         }
@@ -317,7 +320,7 @@ fn fmt_test(
     {
         test = format!(
             "{test}\n{}",
-            pretty::boxed_with(
+            pretty::open_box(
                 &pretty::style_if(styled, "counterexample".to_string(), |s| s
                     .if_supports_color(Stderr, |s| s.red())
                     .if_supports_color(Stderr, |s| s.bold())
@@ -325,6 +328,7 @@ fn fmt_test(
                 &Formatter::new()
                     .expr(counterexample, false)
                     .to_pretty_string(70),
+                "",
                 |s| s.red().to_string()
             )
         )
@@ -392,23 +396,29 @@ fn group_by_module<T>(results: &Vec<TestResult<T>>) -> BTreeMap<String, Vec<&Tes
     modules
 }
 
-fn find_max_execution_units<T>(xs: &[TestResult<T>]) -> (usize, usize) {
-    let (max_mem, max_cpu) = xs
-        .iter()
-        .fold((0, 0), |(max_mem, max_cpu), test| match test {
-            TestResult::PropertyTestResult(..) => (max_mem, max_cpu),
-            TestResult::UnitTestResult(UnitTestResult { spent_budget, .. }) => {
-                if spent_budget.mem >= max_mem && spent_budget.cpu >= max_cpu {
-                    (spent_budget.mem, spent_budget.cpu)
-                } else if spent_budget.mem > max_mem {
-                    (spent_budget.mem, max_cpu)
-                } else if spent_budget.cpu > max_cpu {
-                    (max_mem, spent_budget.cpu)
-                } else {
-                    (max_mem, max_cpu)
+fn find_max_execution_units<T>(xs: &[TestResult<T>]) -> (usize, usize, usize) {
+    let (max_mem, max_cpu, max_iter) =
+        xs.iter()
+            .fold((0, 0, 0), |(max_mem, max_cpu, max_iter), test| match test {
+                TestResult::PropertyTestResult(PropertyTestResult { iterations, .. }) => {
+                    (max_mem, max_cpu, std::cmp::max(max_iter, *iterations))
                 }
-            }
-        });
+                TestResult::UnitTestResult(UnitTestResult { spent_budget, .. }) => {
+                    if spent_budget.mem >= max_mem && spent_budget.cpu >= max_cpu {
+                        (spent_budget.mem, spent_budget.cpu, max_iter)
+                    } else if spent_budget.mem > max_mem {
+                        (spent_budget.mem, max_cpu, max_iter)
+                    } else if spent_budget.cpu > max_cpu {
+                        (max_mem, spent_budget.cpu, max_iter)
+                    } else {
+                        (max_mem, max_cpu, max_iter)
+                    }
+                }
+            });
 
-    (max_mem.to_string().len(), max_cpu.to_string().len())
+    (
+        max_mem.to_string().len(),
+        max_cpu.to_string().len(),
+        max_iter.to_string().len(),
+    )
 }

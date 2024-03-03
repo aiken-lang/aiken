@@ -125,6 +125,12 @@ pub enum Error {
 
 impl Error {
     pub fn report(&self) {
+        if let Error::TestFailure { verbose, .. } = self {
+            if !verbose {
+                return;
+            }
+        }
+
         println!("{self:?}")
     }
 
@@ -320,49 +326,54 @@ impl Diagnostic for Error {
             Error::Parse { error, .. } => error.kind.help(),
             Error::Type { error, .. } => error.help(),
             Error::StandardIo(_) => None,
-            Error::MissingManifest { .. } => Some(Box::new("Try running `aiken new <REPOSITORY/PROJECT>` to initialise a project with an example manifest.")),
+            Error::MissingManifest { .. } => Some(Box::new(
+                "Try running `aiken new <REPOSITORY/PROJECT>` to initialise a project with an example manifest.",
+            )),
             Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
-            Error::TestFailure { assertion, .. }  => match assertion {
+            Error::TestFailure { assertion, .. } => match assertion {
                 None => None,
-                Some(hint) => Some(Box::new(hint.to_string()))
+                Some(hint) => Some(Box::new(hint.to_string())),
             },
             Error::Http(_) => None,
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
-            Error::UnknownPackageVersion{..} => Some(Box::new("Perhaps, double-check the package repository and version?")),
-            Error::UnableToResolvePackage{..} => Some(Box::new("The network is unavailable and the package isn't in the local cache either. Try connecting to the Internet so I can look it up?")),
+            Error::UnknownPackageVersion { .. } => Some(Box::new(
+                "Perhaps, double-check the package repository and version?",
+            )),
+            Error::UnableToResolvePackage { .. } => Some(Box::new(
+                "The network is unavailable and the package isn't in the local cache either. Try connecting to the Internet so I can look it up?",
+            )),
             Error::Json(error) => Some(Box::new(format!("{error}"))),
-            Error::MalformedStakeAddress { error } => Some(Box::new(format!("A stake address must be provided either as a base16-encoded string, or as a bech32-encoded string with the 'stake' or 'stake_test' prefix.{hint}", hint = match error {
-                Some(error) => format!("\n\nHere's the error I encountered: {error}"),
-                None => String::new(),
-            }))),
-            Error::NoValidatorNotFound { known_validators } => {
-                Some(Box::new(format!(
-                    "Here's a list of all validators I've found in your project. Please double-check this list against the options that you've provided:\n\n{}",
-                    known_validators
-                        .iter()
-                        .map(|title| format!(
-                            "→ {title}",
-                            title = title.if_supports_color(Stdout, |s| s.purple())
-                        ))
-                        .collect::<Vec<String>>()
-                        .join("\n")
-                )))
-            },
-            Error::MoreThanOneValidatorFound { known_validators } => {
-                Some(Box::new(format!(
-                    "Here's a list of all validators I've found in your project. Select one of them using the appropriate options:\n\n{}",
-                    known_validators
-                        .iter()
-                        .map(|title| format!(
-                            "→ {title}",
-                            title = title.if_supports_color(Stdout, |s| s.purple())
-                        ))
-                        .collect::<Vec<String>>()
-                        .join("\n")
-                )))
-            },
+            Error::MalformedStakeAddress { error } => Some(Box::new(format!(
+                "A stake address must be provided either as a base16-encoded string, or as a bech32-encoded string with the 'stake' or 'stake_test' prefix.{hint}",
+                hint = match error {
+                    Some(error) => format!("\n\nHere's the error I encountered: {error}"),
+                    None => String::new(),
+                }
+            ))),
+            Error::NoValidatorNotFound { known_validators } => Some(Box::new(format!(
+                "Here's a list of all validators I've found in your project. Please double-check this list against the options that you've provided:\n\n{}",
+                known_validators
+                    .iter()
+                    .map(|title| format!(
+                        "→ {title}",
+                        title = title.if_supports_color(Stdout, |s| s.purple())
+                    ))
+                    .collect::<Vec<String>>()
+                    .join("\n")
+            ))),
+            Error::MoreThanOneValidatorFound { known_validators } => Some(Box::new(format!(
+                "Here's a list of all validators I've found in your project. Select one of them using the appropriate options:\n\n{}",
+                known_validators
+                    .iter()
+                    .map(|title| format!(
+                        "→ {title}",
+                        title = title.if_supports_color(Stdout, |s| s.purple())
+                    ))
+                    .collect::<Vec<String>>()
+                    .join("\n")
+            ))),
             Error::Module(e) => e.help(),
         }
     }
