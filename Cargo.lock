@@ -67,6 +67,7 @@ dependencies = [
  "ordinal",
  "owo-colors",
  "pallas",
+ "rand",
  "regex",
  "serde_json",
  "thiserror",

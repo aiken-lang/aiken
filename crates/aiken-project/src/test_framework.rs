@@ -267,8 +267,6 @@ impl PropertyTest {
         } = next_prng
         {
             if result.failed(self.can_error) {
-                println!("{:#?}", result.result());
-
                 let mut counterexample = Counterexample {
                     value,
                     choices: next_prng.choices(),

@@ -226,6 +226,7 @@ where
         match_tests: Option<Vec<String>>,
         verbose: bool,
         exact_match: bool,
+        seed: u32,
         tracing: Tracing,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
@@ -237,6 +238,7 @@ where
                     match_tests,
                     verbose,
                     exact_match,
+                    seed,
                 }
             },
         };
@@ -322,6 +324,7 @@ where
                 match_tests,
                 verbose,
                 exact_match,
+                seed,
             } => {
                 let tests =
                     self.collect_tests(verbose, match_tests, exact_match, options.tracing)?;
@@ -330,7 +333,7 @@ where
                     self.event_listener.handle_event(Event::RunningTests);
                 }
 
-                let tests = self.run_tests(tests);
+                let tests = self.run_tests(tests, seed);
 
                 let errors: Vec<Error> = tests
                     .iter()
@@ -786,7 +789,7 @@ where
         Ok(tests)
     }
 
-    fn run_tests(&self, tests: Vec<Test>) -> Vec<TestResult<UntypedExpr>> {
+    fn run_tests(&self, tests: Vec<Test>, seed: u32) -> Vec<TestResult<UntypedExpr>> {
         use rayon::prelude::*;
 
         let data_types = utils::indexmap::as_ref_values(&self.data_types);
@@ -797,7 +800,7 @@ where
                 Test::UnitTest(unit_test) => unit_test.run(),
                 // TODO: Get the seed from the command-line, defaulting to a random one when not
                 // provided.
-                Test::PropertyTest(property_test) => property_test.run(42),
+                Test::PropertyTest(property_test) => property_test.run(seed),
             })
             .collect::<Vec<TestResult<PlutusData>>>()
             .into_iter()

@@ -1,4 +1,4 @@
-use crate::{telemetry::Terminal, Project};
+use crate::{telemetry::Terminal, Error, Project};
 use miette::{Diagnostic, IntoDiagnostic};
 use notify::{Event, RecursiveMode, Watcher};
 use owo_colors::{OwoColorize, Stream::Stderr};
@@ -75,7 +75,12 @@ pub fn default_filter(evt: &Event) -> bool {
     }
 }
 
-pub fn with_project<A>(directory: Option<&Path>, deny: bool, mut action: A) -> miette::Result<()>
+pub fn with_project<A>(
+    directory: Option<&Path>,
+    seed: u32,
+    deny: bool,
+    mut action: A,
+) -> miette::Result<()>
 where
     A: FnMut(&mut Project<Terminal>) -> Result<(), Vec<crate::error::Error>>,
 {
@@ -116,16 +121,23 @@ where
             }
         );
 
+        if errs.iter().any(|e| matches!(e, Error::TestFailure { .. })) {
+            eprintln!(
+                "                ━━━━━━\n                   ╰─▶ use {} {} to replay",
+                "--seed".if_supports_color(Stderr, |s| s.bold()),
+                format!("{seed}").if_supports_color(Stderr, |s| s.bold())
+            );
+        }
         return Err(ExitFailure::into_report());
-    } else {
-        eprintln!(
-            "{}",
-            Summary {
-                error_count: 0,
-                warning_count
-            }
-        );
     }
+
+    eprintln!(
+        "{}",
+        Summary {
+            error_count: 0,
+            warning_count
+        }
+    );
 
     if warning_count > 0 && deny {
         Err(ExitFailure::into_report())
@@ -148,6 +160,7 @@ where
 pub fn watch_project<F, A>(
     directory: Option<&Path>,
     filter: F,
+    seed: u32,
     debounce: u32,
     mut action: A,
 ) -> miette::Result<()>
@@ -219,7 +232,7 @@ where
                     .if_supports_color(Stderr, |s| s.bold())
                     .if_supports_color(Stderr, |s| s.purple()),
             );
-            with_project(directory, false, &mut action).unwrap_or(())
+            with_project(directory, seed, false, &mut action).unwrap_or(())
         }
     }
 }

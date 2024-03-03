@@ -10,6 +10,7 @@ pub enum CodeGenMode {
         match_tests: Option<Vec<String>>,
         verbose: bool,
         exact_match: bool,
+        seed: u32,
     },
     Build(bool),
     NoOp,
