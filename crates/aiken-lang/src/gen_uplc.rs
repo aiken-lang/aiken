@@ -184,8 +184,13 @@ impl<'a> CodeGenerator<'a> {
         self.finalize(term)
     }
 
-    pub fn generate_raw(&mut self, test_body: &TypedExpr, module_name: &str) -> Program<Name> {
-        let mut air_tree = self.build(test_body, module_name, &[]);
+    pub fn generate_raw(
+        &mut self,
+        body: &TypedExpr,
+        args: &[TypedArg],
+        module_name: &str,
+    ) -> Program<Name> {
+        let mut air_tree = self.build(body, module_name, &[]);
 
         air_tree = AirTree::no_op(air_tree);
 
@@ -194,7 +199,13 @@ impl<'a> CodeGenerator<'a> {
         // optimizations on air tree
         let full_vec = full_tree.to_vec();
 
-        let term = self.uplc_code_gen(full_vec);
+        let mut term = self.uplc_code_gen(full_vec);
+
+        term = if args.is_empty() {
+            term
+        } else {
+            cast_validator_args(term, args)
+        };
 
         self.finalize(term)
     }

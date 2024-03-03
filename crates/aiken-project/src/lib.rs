@@ -59,7 +59,7 @@ use std::{
 use telemetry::EventListener;
 use test_framework::{Test, TestResult};
 use uplc::{
-    ast::{DeBruijn, Name, Program, Term},
+    ast::{Name, Program},
     PlutusData,
 };
 
@@ -445,7 +445,7 @@ where
         &self,
         title: Option<&String>,
         ask: F,
-    ) -> Result<Term<DeBruijn>, Error>
+    ) -> Result<PlutusData, Error>
     where
         F: Fn(
             &Annotated<Schema>,
@@ -462,19 +462,19 @@ where
             |known_validators| Error::MoreThanOneValidatorFound { known_validators };
         let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
 
-        let term = blueprint.with_validator(title, when_too_many, when_missing, |validator| {
+        let data = blueprint.with_validator(title, when_too_many, when_missing, |validator| {
             validator
                 .ask_next_parameter(&blueprint.definitions, &ask)
                 .map_err(|e| e.into())
         })?;
 
-        Ok(term)
+        Ok(data)
     }
 
     pub fn apply_parameter(
         &self,
         title: Option<&String>,
-        param: &Term<DeBruijn>,
+        param: &PlutusData,
     ) -> Result<Blueprint, Error> {
         // Read blueprint
         let blueprint = File::open(self.blueprint_path())

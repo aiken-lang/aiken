@@ -12,9 +12,9 @@ use aiken_lang::{
 };
 use miette::NamedSource;
 use serde;
-use std::{borrow::Borrow, rc::Rc};
+use std::borrow::Borrow;
 use uplc::{
-    ast::{Constant, DeBruijn, Program, Term},
+    ast::{Constant, DeBruijn, Program},
     PlutusData,
 };
 
@@ -198,14 +198,14 @@ impl Validator {
     pub fn apply(
         self,
         definitions: &Definitions<Annotated<Schema>>,
-        arg: &Term<DeBruijn>,
+        arg: &PlutusData,
     ) -> Result<Self, Error> {
         match self.parameters.split_first() {
             None => Err(Error::NoParametersToApply),
             Some((head, tail)) => {
-                head.validate(definitions, arg)?;
+                head.validate(definitions, &Constant::Data(arg.clone()))?;
                 Ok(Self {
-                    program: self.program.apply_term(arg),
+                    program: self.program.apply_data(arg.clone()),
                     parameters: tail.to_vec(),
                     ..self
                 })
@@ -217,7 +217,7 @@ impl Validator {
         &self,
         definitions: &Definitions<Annotated<Schema>>,
         ask: F,
-    ) -> Result<Term<DeBruijn>, Error>
+    ) -> Result<PlutusData, Error>
     where
         F: Fn(&Annotated<Schema>, &Definitions<Annotated<Schema>>) -> Result<PlutusData, Error>,
     {
@@ -241,7 +241,7 @@ impl Validator {
 
                 let data = ask(&schema, definitions)?;
 
-                Ok(Term::Constant(Rc::new(Constant::Data(data.clone()))))
+                Ok(data.clone())
             }
         }
     }
@@ -619,7 +619,7 @@ mod tests {
     fn validate_arguments_integer() {
         let definitions = fixture_definitions();
 
-        let term = Term::data(uplc_ast::Data::integer(42.into()));
+        let term = Constant::Data(uplc_ast::Data::integer(42.into()));
 
         let param = Parameter {
             title: None,
@@ -633,7 +633,7 @@ mod tests {
     fn validate_arguments_bytestring() {
         let definitions = fixture_definitions();
 
-        let term = Term::data(uplc_ast::Data::bytestring(vec![102, 111, 111]));
+        let term = Constant::Data(uplc_ast::Data::bytestring(vec![102, 111, 111]));
 
         let param = Parameter {
             title: None,
@@ -662,7 +662,7 @@ mod tests {
             .into(),
         );
 
-        let term = Term::data(uplc_ast::Data::list(vec![
+        let term = Constant::Data(uplc_ast::Data::list(vec![
             uplc_ast::Data::integer(42.into()),
             uplc_ast::Data::integer(14.into()),
         ]));
@@ -691,7 +691,7 @@ mod tests {
             .into(),
         );
 
-        let term = Term::data(uplc_ast::Data::list(vec![uplc_ast::Data::bytestring(
+        let term = Constant::Data(uplc_ast::Data::list(vec![uplc_ast::Data::bytestring(
             vec![102, 111, 111],
         )]));
 
@@ -723,7 +723,7 @@ mod tests {
             .into(),
         );
 
-        let term = Term::data(uplc_ast::Data::list(vec![
+        let term = Constant::Data(uplc_ast::Data::list(vec![
             uplc_ast::Data::integer(42.into()),
             uplc_ast::Data::bytestring(vec![102, 111, 111]),
         ]));
@@ -754,7 +754,7 @@ mod tests {
             .into(),
         );
 
-        let term = Term::data(uplc_ast::Data::map(vec![(
+        let term = Constant::Data(uplc_ast::Data::map(vec![(
             uplc_ast::Data::bytestring(vec![102, 111, 111]),
             uplc_ast::Data::integer(42.into()),
         )]));
@@ -770,7 +770,7 @@ mod tests {
 
         let definitions = fixture_definitions();
 
-        let term = Term::data(uplc_ast::Data::constr(1, vec![]));
+        let term = Constant::Data(uplc_ast::Data::constr(1, vec![]));
 
         let param: Parameter = schema.into();
 
@@ -807,7 +807,7 @@ mod tests {
             .into(),
         );
 
-        let term = Term::data(uplc_ast::Data::constr(
+        let term = Constant::Data(uplc_ast::Data::constr(
             0,
             vec![uplc_ast::Data::constr(0, vec![])],
         ));
@@ -863,7 +863,7 @@ mod tests {
             .into(),
         );
 
-        let term = Term::data(uplc_ast::Data::constr(
+        let term = Constant::Data(uplc_ast::Data::constr(
             1,
             vec![
                 uplc_ast::Data::integer(14.into()),

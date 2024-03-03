@@ -1,11 +1,8 @@
 use crate::pretty;
 use aiken_lang::{
-    ast::{BinOp, DataTypeKey, Span, TypedDataType, TypedTest},
-    expr::{TypedExpr, UntypedExpr},
-    gen_uplc::{
-        builder::{convert_data_to_type, convert_opaque_type},
-        CodeGenerator,
-    },
+    ast::{Arg, BinOp, DataTypeKey, TypedDataType, TypedTest},
+    expr::UntypedExpr,
+    gen_uplc::{builder::convert_opaque_type, CodeGenerator},
     tipo::Type,
 };
 use indexmap::IndexMap;
@@ -22,7 +19,6 @@ use std::{
 use uplc::{
     ast::{Constant, Data, Name, NamedDeBruijn, Program, Term},
     machine::{cost_model::ExBudget, eval_result::EvalResult},
-    parser::interner::Interner,
 };
 
 /// ----- Test -----------------------------------------------------------------
@@ -94,20 +90,20 @@ impl Test {
         input_path: PathBuf,
     ) -> Test {
         if test.arguments.is_empty() {
-            let program = generator.generate_raw(&test.body, &module_name);
+            let program = generator.generate_raw(&test.body, &[], &module_name);
 
             // TODO: Check whether we really need to clone the _entire_ generator, or whether we
             // can mostly copy the generator and only clone parts that matters.
             let assertion = test.test_hint().map(|(bin_op, left_src, right_src)| {
                 let left = generator
                     .clone()
-                    .generate_raw(&left_src, &module_name)
+                    .generate_raw(&left_src, &[], &module_name)
                     .try_into()
                     .unwrap();
 
                 let right = generator
                     .clone()
-                    .generate_raw(&right_src, &module_name)
+                    .generate_raw(&right_src, &[], &module_name)
                     .try_into()
                     .unwrap();
 
@@ -134,23 +130,21 @@ impl Test {
 
             let type_info = parameter.tipo.clone();
 
-            // TODO: Possibly refactor 'generate_raw' to accept arguments and do this wrapping
-            // itself.
-            let body = TypedExpr::Fn {
-                location: Span::empty(),
-                tipo: Rc::new(Type::Fn {
-                    args: vec![type_info.clone()],
-                    ret: test.body.tipo(),
-                }),
-                is_capture: false,
-                args: vec![parameter.into()],
-                body: Box::new(test.body),
-                return_annotation: None,
-            };
+            let stripped_type_info = convert_opaque_type(&type_info, generator.data_types(), true);
 
-            let program = generator.clone().generate_raw(&body, &module_name);
+            let program = generator.clone().generate_raw(
+                &test.body,
+                &[Arg {
+                    tipo: stripped_type_info.clone(),
+                    ..parameter.clone().into()
+                }],
+                &module_name,
+            );
 
-            let fuzzer = generator.clone().generate_raw(&via, &module_name);
+            // NOTE: We need not to pass any parameter to the fuzzer here because the fuzzer
+            // argument is a Data constructor which needs not any conversion. So we can just safely
+            // apply onto it later.
+            let fuzzer = generator.clone().generate_raw(&via, &[], &module_name);
 
             Self::property_test(
                 input_path,
@@ -160,11 +154,7 @@ impl Test {
                 program,
                 Fuzzer {
                     program: fuzzer,
-                    stripped_type_info: convert_opaque_type(
-                        &type_info,
-                        generator.data_types(),
-                        true,
-                    ),
+                    stripped_type_info,
                     type_info,
                 },
             )
@@ -277,6 +267,8 @@ impl PropertyTest {
         } = next_prng
         {
             if result.failed(self.can_error) {
+                println!("{:#?}", result.result());
+
                 let mut counterexample = Counterexample {
                     value,
                     choices: next_prng.choices(),
@@ -297,12 +289,7 @@ impl PropertyTest {
     }
 
     pub fn eval(&self, value: &PlutusData) -> EvalResult {
-        let term: Term<Name> =
-            convert_data_to_type(Term::data(value.clone()), &self.fuzzer.stripped_type_info);
-
-        let mut program = self.program.apply_term(&term);
-
-        Interner::new().program(&mut program);
+        let program = self.program.apply_data(value.clone());
 
         Program::<NamedDeBruijn>::try_from(program)
             .unwrap()
