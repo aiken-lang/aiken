@@ -347,6 +347,7 @@ pub fn get_arg_type_name(tipo: &Type) -> String {
 pub fn convert_opaque_type(
     t: &Rc<Type>,
     data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+    deep: bool,
 ) -> Rc<Type> {
     if check_replaceable_opaque_type(t, data_types) && matches!(t.as_ref(), Type::App { .. }) {
         let data_type = lookup_data_type_by_tipo(data_types, t).unwrap();
@@ -363,7 +364,11 @@ pub fn convert_opaque_type(
 
         let mono_type = find_and_replace_generics(generic_type, &mono_types);
 
-        convert_opaque_type(&mono_type, data_types)
+        if deep {
+            convert_opaque_type(&mono_type, data_types, deep)
+        } else {
+            mono_type
+        }
     } else {
         match t.as_ref() {
             Type::App {
@@ -374,7 +379,7 @@ pub fn convert_opaque_type(
             } => {
                 let mut new_args = vec![];
                 for arg in args {
-                    let arg = convert_opaque_type(arg, data_types);
+                    let arg = convert_opaque_type(arg, data_types, deep);
                     new_args.push(arg);
                 }
                 Type::App {
@@ -388,11 +393,11 @@ pub fn convert_opaque_type(
             Type::Fn { args, ret } => {
                 let mut new_args = vec![];
                 for arg in args {
-                    let arg = convert_opaque_type(arg, data_types);
+                    let arg = convert_opaque_type(arg, data_types, deep);
                     new_args.push(arg);
                 }
 
-                let ret = convert_opaque_type(ret, data_types);
+                let ret = convert_opaque_type(ret, data_types, deep);
 
                 Type::Fn {
                     args: new_args,
@@ -402,7 +407,7 @@ pub fn convert_opaque_type(
             }
             Type::Var { tipo: var_tipo } => {
                 if let TypeVar::Link { tipo } = &var_tipo.borrow().clone() {
-                    convert_opaque_type(tipo, data_types)
+                    convert_opaque_type(tipo, data_types, deep)
                 } else {
                     t.clone()
                 }
@@ -410,7 +415,7 @@ pub fn convert_opaque_type(
             Type::Tuple { elems } => {
                 let mut new_elems = vec![];
                 for arg in elems {
-                    let arg = convert_opaque_type(arg, data_types);
+                    let arg = convert_opaque_type(arg, data_types, deep);
                     new_elems.push(arg);
                 }
                 Type::Tuple { elems: new_elems }.into()
@@ -420,7 +425,7 @@ pub fn convert_opaque_type(
 }
 
 pub fn check_replaceable_opaque_type(
-    t: &Rc<Type>,
+    t: &Type,
     data_types: &IndexMap<DataTypeKey, &TypedDataType>,
 ) -> bool {
     let data_type = lookup_data_type_by_tipo(data_types, t);
@@ -633,7 +638,7 @@ pub fn erase_opaque_type_operations(
     let mut held_types = air_tree.mut_held_types();
 
     while let Some(tipo) = held_types.pop() {
-        *tipo = convert_opaque_type(tipo, data_types);
+        *tipo = convert_opaque_type(tipo, data_types, true);
     }
 }
 

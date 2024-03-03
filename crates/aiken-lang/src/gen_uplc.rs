@@ -53,7 +53,7 @@ use uplc::{
 #[derive(Clone)]
 pub struct CodeGenerator<'a> {
     /// immutable index maps
-    pub functions: IndexMap<FunctionAccessKey, &'a TypedFunction>,
+    functions: IndexMap<FunctionAccessKey, &'a TypedFunction>,
     data_types: IndexMap<DataTypeKey, &'a TypedDataType>,
     module_types: IndexMap<&'a String, &'a TypeInfo>,
     module_src: IndexMap<String, (String, LineNumbers)>,
@@ -255,7 +255,7 @@ impl<'a> CodeGenerator<'a> {
                 panic!("Dangling expressions without an assignment")
             };
 
-            let replaced_type = convert_opaque_type(tipo, &self.data_types);
+            let replaced_type = convert_opaque_type(tipo, &self.data_types, true);
 
             let air_value = self.build(value, module_build_name, &[]);
 
@@ -895,7 +895,7 @@ impl<'a> CodeGenerator<'a> {
                 if props.full_check {
                     let mut index_map = IndexMap::new();
 
-                    let non_opaque_tipo = convert_opaque_type(tipo, &self.data_types);
+                    let non_opaque_tipo = convert_opaque_type(tipo, &self.data_types, true);
 
                     let val = AirTree::local_var(name, tipo.clone());
 
@@ -933,7 +933,7 @@ impl<'a> CodeGenerator<'a> {
                     let name = &format!("__discard_expect_{}", name);
                     let mut index_map = IndexMap::new();
 
-                    let non_opaque_tipo = convert_opaque_type(tipo, &self.data_types);
+                    let non_opaque_tipo = convert_opaque_type(tipo, &self.data_types, true);
 
                     let val = AirTree::local_var(name, tipo.clone());
 
@@ -1326,7 +1326,7 @@ impl<'a> CodeGenerator<'a> {
         msg_func: Option<AirMsg>,
     ) -> AirTree {
         assert!(tipo.get_generic().is_none());
-        let tipo = &convert_opaque_type(tipo, &self.data_types);
+        let tipo = &convert_opaque_type(tipo, &self.data_types, true);
 
         if tipo.is_primitive() {
             // Since we would return void anyway and ignore then we can just return value here and ignore
@@ -2775,7 +2775,7 @@ impl<'a> CodeGenerator<'a> {
 
                     let param = AirTree::local_var(&arg_name, data());
 
-                    let actual_type = convert_opaque_type(&arg.tipo, &self.data_types);
+                    let actual_type = convert_opaque_type(&arg.tipo, &self.data_types, true);
 
                     let msg_func = match self.tracing {
                         TraceLevel::Silent => None,
@@ -3632,12 +3632,13 @@ impl<'a> CodeGenerator<'a> {
                     let mut function_def_types = function_def
                         .arguments
                         .iter()
-                        .map(|arg| convert_opaque_type(&arg.tipo, &self.data_types))
+                        .map(|arg| convert_opaque_type(&arg.tipo, &self.data_types, true))
                         .collect_vec();
 
                     function_def_types.push(convert_opaque_type(
                         &function_def.return_type,
                         &self.data_types,
+                        true,
                     ));
 
                     let mono_types: IndexMap<u64, Rc<Type>> = if !function_def_types.is_empty() {

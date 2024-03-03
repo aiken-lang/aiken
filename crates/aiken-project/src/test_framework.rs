@@ -1,32 +1,31 @@
 use crate::pretty;
 use aiken_lang::{
-    ast::{BinOp, Span, TypedTest},
+    ast::{BinOp, DataTypeKey, Span, TypedDataType, TypedTest},
     expr::{TypedExpr, UntypedExpr},
     gen_uplc::{
         builder::{convert_data_to_type, convert_opaque_type},
         CodeGenerator,
     },
-    tipo::{Type, TypeInfo},
+    tipo::Type,
 };
+use indexmap::IndexMap;
 use pallas::{
     codec::utils::Int,
     ledger::primitives::alonzo::{BigInt, Constr, PlutusData},
 };
 use std::{
     borrow::Borrow,
-    collections::HashMap,
     fmt::{self, Display},
     path::PathBuf,
     rc::Rc,
 };
 use uplc::{
-    ast::{Constant, Data, NamedDeBruijn, Program, Term},
+    ast::{Constant, Data, Name, NamedDeBruijn, Program, Term},
     machine::{cost_model::ExBudget, eval_result::EvalResult},
+    parser::interner::Interner,
 };
 
-/// ----------------------------------------------------------------------------
-///
-/// Test
+/// ----- Test -----------------------------------------------------------------
 ///
 /// Aiken supports two kinds of tests: unit and property. A unit test is a simply
 /// UPLC program which returns must be a lambda that returns a boolean.
@@ -42,7 +41,7 @@ use uplc::{
 /// Our approach could perhaps be called "microthesis", as it implements a subset of
 /// minithesis. More specifically, we do not currently support pre-conditions, nor
 /// targets.
-/// ----------------------------------------------------------------------------
+///
 #[derive(Debug, Clone)]
 pub enum Test {
     UnitTest(UnitTest),
@@ -75,8 +74,8 @@ impl Test {
         module: String,
         name: String,
         can_error: bool,
-        program: Program<NamedDeBruijn>,
-        fuzzer: Fuzzer<NamedDeBruijn>,
+        program: Program<Name>,
+        fuzzer: Fuzzer<Name>,
     ) -> Test {
         Test::PropertyTest(PropertyTest {
             input_path,
@@ -131,7 +130,7 @@ impl Test {
 
             let via = parameter.via.clone();
 
-            let type_info = convert_opaque_type(&parameter.tipo, generator.data_types());
+            let type_info = parameter.tipo.clone();
 
             // TODO: Possibly refactor 'generate_raw' to accept arguments and do this wrapping
             // itself.
@@ -147,17 +146,9 @@ impl Test {
                 return_annotation: None,
             };
 
-            let program = generator
-                .clone()
-                .generate_raw(&body, &module_name)
-                .try_into()
-                .unwrap();
+            let program = generator.clone().generate_raw(&body, &module_name);
 
-            let fuzzer: Program<NamedDeBruijn> = generator
-                .clone()
-                .generate_raw(&via, &module_name)
-                .try_into()
-                .unwrap();
+            let fuzzer = generator.clone().generate_raw(&via, &module_name);
 
             Self::property_test(
                 input_path,
@@ -167,6 +158,11 @@ impl Test {
                 program,
                 Fuzzer {
                     program: fuzzer,
+                    stripped_type_info: convert_opaque_type(
+                        &type_info,
+                        generator.data_types(),
+                        true,
+                    ),
                     type_info,
                 },
             )
@@ -174,12 +170,8 @@ impl Test {
     }
 }
 
-// ----------------------------------------------------------------------------
-//
-// UnitTest
-//
-// ----------------------------------------------------------------------------
-
+/// ----- UnitTest -----------------------------------------------------------------
+///
 #[derive(Debug, Clone)]
 pub struct UnitTest {
     pub input_path: PathBuf,
@@ -205,20 +197,16 @@ impl UnitTest {
     }
 }
 
-// ----------------------------------------------------------------------------
-//
-// PropertyTest
-//
-// ----------------------------------------------------------------------------
-
+/// ----- PropertyTest -----------------------------------------------------------------
+///
 #[derive(Debug, Clone)]
 pub struct PropertyTest {
     pub input_path: PathBuf,
     pub module: String,
     pub name: String,
     pub can_error: bool,
-    pub program: Program<NamedDeBruijn>,
-    pub fuzzer: Fuzzer<NamedDeBruijn>,
+    pub program: Program<Name>,
+    pub fuzzer: Fuzzer<Name>,
 }
 
 unsafe impl Send for PropertyTest {}
@@ -226,7 +214,13 @@ unsafe impl Send for PropertyTest {}
 #[derive(Debug, Clone)]
 pub struct Fuzzer<T> {
     pub program: Program<T>,
+
     pub type_info: Rc<Type>,
+
+    /// A version of the Fuzzer's type that has gotten rid of
+    /// all erasable opaque type. This is needed in order to
+    /// generate Plutus data with the appropriate shape.
+    pub stripped_type_info: Rc<Type>,
 }
 
 impl PropertyTest {
@@ -239,7 +233,7 @@ impl PropertyTest {
 
         let (counterexample, iterations) = match self.run_n_times(n, seed, None) {
             None => (None, n),
-            Some((remaining, counterexample)) => (Some(counterexample), n - remaining + 1),
+            Some((remaining, counterexample)) => (Some(counterexample.value), n - remaining + 1),
         };
 
         TestResult::PropertyTestResult(PropertyTestResult {
@@ -249,12 +243,12 @@ impl PropertyTest {
         })
     }
 
-    fn run_n_times(
-        &self,
+    fn run_n_times<'a>(
+        &'a self,
         remaining: usize,
         seed: u32,
-        counterexample: Option<(usize, PlutusData)>,
-    ) -> Option<(usize, PlutusData)> {
+        counterexample: Option<(usize, Counterexample<'a>)>,
+    ) -> Option<(usize, Counterexample<'a>)> {
         // We short-circuit failures in case we have any. The counterexample is already simplified
         // at this point.
         if remaining > 0 && counterexample.is_none() {
@@ -269,7 +263,7 @@ impl PropertyTest {
         }
     }
 
-    fn run_once(&self, seed: u32) -> (u32, Option<PlutusData>) {
+    fn run_once(&self, seed: u32) -> (u32, Option<Counterexample<'_>>) {
         let (next_prng, value) = Prng::from_seed(seed)
             .sample(&self.fuzzer.program)
             .expect("running seeded Prng cannot fail.");
@@ -291,7 +285,7 @@ impl PropertyTest {
                     counterexample.simplify();
                 }
 
-                (next_seed, Some(counterexample.value))
+                (next_seed, Some(counterexample))
             } else {
                 (next_seed, None)
             }
@@ -301,19 +295,37 @@ impl PropertyTest {
     }
 
     pub fn eval(&self, value: &PlutusData) -> EvalResult {
-        let term = convert_data_to_type(Term::data(value.clone()), &self.fuzzer.type_info)
-            .try_into()
-            .expect("safe conversion from Name -> NamedDeBruijn");
-        self.program.apply_term(&term).eval(ExBudget::max())
+        let term: Term<Name> =
+            convert_data_to_type(Term::data(value.clone()), &self.fuzzer.stripped_type_info);
+
+        let mut program = self.program.apply_term(&term);
+
+        Interner::new().program(&mut program);
+
+        Program::<NamedDeBruijn>::try_from(program)
+            .unwrap()
+            .eval(ExBudget::max())
     }
 }
 
-// ----------------------------------------------------------------------------
-//
-// Prng
-//
-// ----------------------------------------------------------------------------
-
+/// ----- PRNG -----------------------------------------------------------------
+///
+/// A Pseudo-random generator (PRNG) used to produce random values for fuzzers.
+/// Note that the randomness isn't actually managed by the Rust framework, it
+/// entirely relies on properties of hashing algorithm on-chain (e.g. blake2b).
+///
+/// The PRNG can have two forms:
+///
+/// 1. Seeded: which occurs during the initial run of a property. Each time a
+///    number is drawn from the PRNG, a new seed is created. We retain all the
+///    choices drawn in a _choices_ vector.
+///
+/// 2. Replayed: which is used to replay a Prng sequenced from a list of known
+///    choices. This happens when shrinking an example. Instead of trying to
+///    shrink the value directly, we shrink the PRNG sequence with the hope that
+///    it will generate a smaller value. This implies that generators tend to
+///    generate smaller values when drawing smaller numbers.
+///
 #[derive(Debug)]
 pub enum Prng {
     Seeded {
@@ -385,9 +397,9 @@ impl Prng {
     }
 
     /// Generate a pseudo-random value from a fuzzer using the given PRNG.
-    pub fn sample(&self, fuzzer: &Program<NamedDeBruijn>) -> Option<(Prng, PlutusData)> {
-        let result = fuzzer
-            .apply_data(self.uplc())
+    pub fn sample(&self, fuzzer: &Program<Name>) -> Option<(Prng, PlutusData)> {
+        let result = Program::<NamedDeBruijn>::try_from(fuzzer.apply_data(self.uplc()))
+            .unwrap()
             .eval(ExBudget::max())
             .result()
             .expect("Fuzzer crashed?");
@@ -464,14 +476,12 @@ impl Prng {
     }
 }
 
-// ----------------------------------------------------------------------------
-//
-// Counterexample
-//
-// A counterexample is constructed on test failures.
-//
-// ----------------------------------------------------------------------------
-
+/// ----- Counterexample -----------------------------------------------------------------
+///
+/// A counterexample is constructed from a test failure. It holds a value, and a sequence
+/// of random choices that led to this value. It holds a reference to the underlying
+/// property and fuzzer. In many cases, a counterexample can be simplified (a.k.a "shrinked")
+/// into a smaller counterexample.
 #[derive(Debug)]
 pub struct Counterexample<'a> {
     pub value: PlutusData,
@@ -690,7 +700,10 @@ pub enum TestResult<T> {
 unsafe impl<T> Send for TestResult<T> {}
 
 impl TestResult<PlutusData> {
-    pub fn reify(self, data_types: &HashMap<String, TypeInfo>) -> TestResult<UntypedExpr> {
+    pub fn reify(
+        self,
+        data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+    ) -> TestResult<UntypedExpr> {
         match self {
             TestResult::UnitTestResult(test) => TestResult::UnitTestResult(test),
             TestResult::PropertyTestResult(test) => {
@@ -789,7 +802,10 @@ pub struct PropertyTestResult<T> {
 unsafe impl<T> Send for PropertyTestResult<T> {}
 
 impl PropertyTestResult<PlutusData> {
-    pub fn reify(self, data_types: &HashMap<String, TypeInfo>) -> PropertyTestResult<UntypedExpr> {
+    pub fn reify(
+        self,
+        data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+    ) -> PropertyTestResult<UntypedExpr> {
         PropertyTestResult {
             counterexample: match self.counterexample {
                 None => None,
@@ -882,16 +898,19 @@ mod test {
     use crate::module::{CheckedModule, CheckedModules};
     use aiken_lang::{
         ast::{Definition, ModuleKind, TraceLevel, Tracing},
-        builtins, parser,
+        builtins,
+        format::Formatter,
+        parser,
         parser::extra::ModuleExtra,
         IdGenerator,
     };
     use indoc::indoc;
+    use std::collections::HashMap;
 
     const TEST_KIND: ModuleKind = ModuleKind::Lib;
 
     impl Test {
-        pub fn from_source(src: &str) -> Self {
+        pub fn from_source(src: &str) -> (Self, IndexMap<DataTypeKey, TypedDataType>) {
             let id_gen = IdGenerator::new();
 
             let module_name = "";
@@ -924,6 +943,22 @@ mod test {
                 .last()
                 .expect("No test found in declared src?");
 
+            let functions = builtins::prelude_functions(&id_gen);
+
+            let mut data_types = builtins::prelude_data_types(&id_gen);
+
+            for def in ast.definitions() {
+                if let Definition::DataType(dt) = def {
+                    data_types.insert(
+                        DataTypeKey {
+                            module_name: module_name.to_string(),
+                            defined_type: dt.name.clone(),
+                        },
+                        dt.clone(),
+                    );
+                }
+            }
+
             let mut modules = CheckedModules::default();
             modules.insert(
                 module_name.to_string(),
@@ -938,10 +973,6 @@ mod test {
                 },
             );
 
-            let functions = builtins::prelude_functions(&id_gen);
-
-            let data_types = builtins::prelude_data_types(&id_gen);
-
             let mut generator = modules.new_generator(
                 &functions,
                 &data_types,
@@ -949,16 +980,19 @@ mod test {
                 Tracing::All(TraceLevel::Verbose),
             );
 
-            Self::from_function_definition(
-                &mut generator,
-                test.to_owned(),
-                module_name.to_string(),
-                PathBuf::new(),
+            (
+                Self::from_function_definition(
+                    &mut generator,
+                    test.to_owned(),
+                    module_name.to_string(),
+                    PathBuf::new(),
+                ),
+                data_types,
             )
         }
     }
 
-    fn property(src: &str) -> PropertyTest {
+    fn property(src: &str) -> (PropertyTest, impl Fn(PlutusData) -> String) {
         let prelude = indoc! { r#"
             use aiken/builtin
 
@@ -999,6 +1033,22 @@ mod test {
               }
             }
 
+            fn bool() -> Fuzzer<Bool> {
+              int() |> map(fn(n) { n % 2 == 0 })
+            }
+
+            fn bytearray() -> Fuzzer<ByteArray> {
+              int()
+                |> map(
+                     fn(n) {
+                       n
+                         |> builtin.integer_to_bytearray(True, 32, _)
+                         |> builtin.blake2b_256()
+                         |> builtin.slice_bytearray(8, 4, _)
+                     },
+                   )
+            }
+
             pub fn constant(a: a) -> Fuzzer<a> {
               fn(s0) { Some((s0, a)) }
             }
@@ -1020,39 +1070,58 @@ mod test {
                 }
               }
             }
+
+            pub fn map2(fuzz_a: Fuzzer<a>, fuzz_b: Fuzzer<b>, f: fn(a, b) -> c) -> Fuzzer<c> {
+              fn(s0) {
+                when fuzz_a(s0) is {
+                  Some((s1, a)) ->
+                    when fuzz_b(s1) is {
+                      Some((s2, b)) -> Some((s2, f(a, b)))
+                      None -> None
+                    }
+                  None -> None
+                }
+              }
+            }
         "#};
 
         let src = format!("{prelude}\n{src}");
 
         match Test::from_source(&src) {
-            Test::PropertyTest(test) => test,
-            Test::UnitTest(..) => panic!("Expected to yield a PropertyTest but found a UnitTest"),
+            (Test::PropertyTest(test), data_types) => {
+                let type_info = test.fuzzer.type_info.clone();
+
+                let reify = move |counterexample| {
+                    let mut data_type_refs = IndexMap::new();
+                    for (k, v) in &data_types {
+                        data_type_refs.insert(k.clone(), v);
+                    }
+
+                    let expr = UntypedExpr::reify(&data_type_refs, counterexample, &type_info)
+                        .expect("Failed to reify value.");
+                    Formatter::new().expr(&expr, false).to_pretty_string(70)
+                };
+
+                (test, reify)
+            }
+            (Test::UnitTest(..), _) => {
+                panic!("Expected to yield a PropertyTest but found a UnitTest")
+            }
         }
     }
 
     impl PropertyTest {
         fn expect_failure(&self, seed: u32) -> Counterexample {
-            let (next_prng, value) = Prng::from_seed(seed)
-                .sample(&self.fuzzer.program)
-                .expect("running seeded Prng cannot fail.");
-
-            let result = self.eval(&value);
-
-            if result.failed(self.can_error) {
-                return Counterexample {
-                    value,
-                    choices: next_prng.choices(),
-                    property: self,
-                };
+            match self.run_n_times(PropertyTest::MAX_TEST_RUN, seed, None) {
+                Some((_, counterexample)) => counterexample,
+                _ => panic!("expected property to fail but it didn't."),
             }
-
-            unreachable!("Prng constructed from a seed necessarily yield a seed.");
         }
     }
 
     #[test]
     fn test_prop_basic() {
-        let prop = property(indoc! { r#"
+        let (prop, _) = property(indoc! { r#"
             test foo(n: Int via int()) {
                 n >= 0
             }
@@ -1063,16 +1132,249 @@ mod test {
 
     #[test]
     fn test_prop_always_odd() {
-        let prop = property(indoc! { r#"
+        let (prop, reify) = property(indoc! { r#"
             test foo(n: Int via int()) {
                 n % 2 == 0
             }
         "#});
 
-        let mut counterexample = prop.expect_failure(12);
+        let mut counterexample = prop.expect_failure(42);
 
         counterexample.simplify();
 
         assert_eq!(counterexample.choices, vec![1]);
+        assert_eq!(reify(counterexample.value), "1");
+    }
+
+    #[test]
+    fn test_prop_combine() {
+        let (prop, reify) = property(indoc! { r#"
+            fn pair(fuzz_a: Fuzzer<a>, fuzz_b: Fuzzer<b>) -> Fuzzer<(a, b)> {
+                fuzz_a
+                    |> and_then(fn(a) {
+                        fuzz_b
+                            |> map(fn(b) {
+                                (a, b)
+                            })
+                    })
+            }
+
+
+            test foo(t: (Int, Int) via pair(int(), int())) {
+                t.1st + t.2nd <= 400
+            }
+        "#});
+
+        let mut counterexample = prop.expect_failure(42);
+
+        counterexample.simplify();
+
+        assert_eq!(counterexample.choices, vec![201, 200]);
+        assert_eq!(reify(counterexample.value), "(201, 200)");
+    }
+
+    #[test]
+    fn test_prop_enum_bool() {
+        let (prop, reify) = property(indoc! { r#"
+            test foo(predicate via bool()) {
+                predicate
+            }
+        "#});
+
+        let mut counterexample = prop.expect_failure(42);
+
+        counterexample.simplify();
+
+        assert_eq!(counterexample.choices, vec![1]);
+        assert_eq!(reify(counterexample.value), "False");
+    }
+
+    #[test]
+    fn test_prop_enum_custom() {
+        let (prop, reify) = property(indoc! { r#"
+            type Temperature {
+                Hot
+                Cold
+            }
+
+            fn temperature() -> Fuzzer<Temperature> {
+                bool() |> map(fn(is_cold) {
+                    if is_cold { Cold } else { Hot }
+                })
+            }
+
+            test foo(t via temperature()) {
+                t == Hot
+            }
+        "#});
+
+        let mut counterexample = prop.expect_failure(42);
+
+        counterexample.simplify();
+
+        assert_eq!(counterexample.choices, vec![0]);
+        assert_eq!(reify(counterexample.value), "Cold");
+    }
+
+    #[test]
+    fn test_prop_opaque() {
+        let (prop, reify) = property(indoc! { r#"
+            opaque type Temperature {
+                Hot
+                Cold
+            }
+
+            fn temperature() -> Fuzzer<Temperature> {
+                bool() |> map(fn(is_cold) {
+                    if is_cold { Cold } else { Hot }
+                })
+            }
+
+            test foo(t via temperature()) {
+                t == Hot
+            }
+        "#});
+
+        let mut counterexample = prop.expect_failure(42);
+
+        counterexample.simplify();
+
+        assert_eq!(counterexample.choices, vec![0]);
+        assert_eq!(reify(counterexample.value), "Cold");
+    }
+
+    #[test]
+    fn test_prop_private_enum() {
+        let (prop, reify) = property(indoc! { r#"
+            type Vehicle {
+                Car { wheels: Int }
+                Bike { wheels: Int }
+            }
+
+            fn vehicle() -> Fuzzer<Vehicle> {
+                bool() |> map(fn(is_car) {
+                    if is_car { Car(4) } else { Bike(2) }
+                })
+            }
+
+            test foo(v via vehicle()) {
+                when v is {
+                    Car { wheels } -> wheels
+                    Bike { wheels } -> wheels
+                } == 4
+            }
+        "#});
+
+        let mut counterexample = prop.expect_failure(42);
+
+        counterexample.simplify();
+
+        assert_eq!(counterexample.choices, vec![1]);
+        assert_eq!(reify(counterexample.value), "Bike { wheels: 2 }");
+    }
+
+    #[test]
+    fn test_prop_list() {
+        let (prop, reify) = property(indoc! { r#"
+            fn list(elem: Fuzzer<a>) -> Fuzzer<List<a>> {
+              bool()
+                |> and_then(fn(continue) {
+                    if continue {
+                      map2(elem, list(elem), fn(head, tail) { [head, ..tail] })
+                    } else {
+                      constant([])
+                    }
+                })
+            }
+
+            fn length(es: List<a>) -> Int {
+              when es is {
+                [] -> 0
+                [_, ..tail] -> 1 + length(tail)
+              }
+            }
+
+            test foo(es: List<Int> via list(int())) {
+              length(es) < 3
+            }
+        "#});
+
+        let mut counterexample = prop.expect_failure(42);
+
+        counterexample.simplify();
+
+        assert_eq!(counterexample.choices, vec![0, 0, 0, 0, 0, 0, 1]);
+        assert_eq!(reify(counterexample.value), "[0, 0, 0]");
+    }
+
+    #[test]
+    fn test_prop_opaque_dict() {
+        let (prop, reify) = property(indoc! { r#"
+            pub opaque type Dict<a> {
+              inner: List<(ByteArray, a)>,
+            }
+
+            fn dict(elem: Fuzzer<a>) -> Fuzzer<Dict<a>> {
+              bool()
+                |> and_then(
+                     fn(continue) {
+                       if continue {
+                         let kv = map2(bytearray(), elem, fn(k, v) { (k, v) })
+                         map2(kv, dict(elem), fn(head, tail) { Dict([head, ..tail.inner]) })
+                       } else {
+                         constant(Dict([]))
+                       }
+                     },
+                   )
+            }
+
+            test foo(d via dict(bool())) {
+              d == Dict([])
+            }
+        "#});
+
+        let mut counterexample = prop.expect_failure(42);
+
+        counterexample.simplify();
+
+        assert_eq!(counterexample.choices, vec![0, 0, 0, 1]);
+        assert_eq!(reify(counterexample.value), "Dict([(#\"2cd15ed0\", True)])");
+    }
+
+    #[test]
+    fn test_prop_opaque_nested_dict() {
+        let (prop, reify) = property(indoc! { r#"
+            pub opaque type Dict<a> {
+              inner: List<(ByteArray, a)>,
+            }
+
+            fn dict(elem: Fuzzer<a>) -> Fuzzer<Dict<a>> {
+              bool()
+                |> and_then(
+                     fn(continue) {
+                       if continue {
+                         let kv = map2(bytearray(), elem, fn(k, v) { (k, v) })
+                         map2(kv, dict(elem), fn(head, tail) { Dict([head, ..tail.inner]) })
+                       } else {
+                         constant(Dict([]))
+                       }
+                     },
+                   )
+            }
+
+            test foo(d via dict(dict(int()))) {
+              d == Dict([])
+            }
+        "#});
+
+        let mut counterexample = prop.expect_failure(42);
+
+        counterexample.simplify();
+
+        assert_eq!(counterexample.choices, vec![0, 0, 1, 1]);
+        assert_eq!(
+            reify(counterexample.value),
+            "Dict([(#\"2cd15ed0\", Dict([]))])"
+        );
     }
 }

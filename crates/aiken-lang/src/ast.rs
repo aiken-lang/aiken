@@ -258,6 +258,34 @@ pub struct FunctionAccessKey {
 pub type TypedDataType = DataType<Rc<Type>>;
 
 impl TypedDataType {
+    pub fn bool() -> Self {
+        DataType {
+            constructors: vec![
+                RecordConstructor {
+                    location: Span::empty(),
+                    name: "False".to_string(),
+                    arguments: vec![],
+                    doc: None,
+                    sugar: false,
+                },
+                RecordConstructor {
+                    location: Span::empty(),
+                    name: "True".to_string(),
+                    arguments: vec![],
+                    doc: None,
+                    sugar: false,
+                },
+            ],
+            doc: None,
+            location: Span::empty(),
+            name: "Bool".to_string(),
+            opaque: false,
+            parameters: vec![],
+            public: true,
+            typed_parameters: vec![],
+        }
+    }
+
     pub fn prng() -> Self {
         DataType {
             constructors: vec![

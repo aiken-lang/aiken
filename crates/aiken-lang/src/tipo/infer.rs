@@ -1,5 +1,10 @@
-use std::{borrow::Borrow, collections::HashMap, ops::Deref, rc::Rc};
-
+use super::{
+    environment::{generalise, EntityKind, Environment},
+    error::{Error, UnifyErrorSituation, Warning},
+    expr::ExprTyper,
+    hydrator::Hydrator,
+    TypeInfo, ValueConstructor, ValueConstructorVariant,
+};
 use crate::{
     ast::{
         Annotation, Arg, ArgName, ArgVia, DataType, Definition, Function, Layer, ModuleConstant,
@@ -14,14 +19,7 @@ use crate::{
     tipo::{Span, Type, TypeVar},
     IdGenerator,
 };
-
-use super::{
-    environment::{generalise, EntityKind, Environment},
-    error::{Error, UnifyErrorSituation, Warning},
-    expr::ExprTyper,
-    hydrator::Hydrator,
-    TypeInfo, ValueConstructor, ValueConstructorVariant,
-};
+use std::{borrow::Borrow, collections::HashMap, ops::Deref, rc::Rc};
 
 impl UntypedModule {
     pub fn infer(
@@ -347,6 +345,21 @@ fn infer_definition(
                     let (inferred_annotation, inner_type) =
                         infer_fuzzer(environment, &typed_via.tipo(), &arg.via.location())?;
 
+                    // Replace the pre-registered type for the test function, to allow inferring
+                    // the function body with the right type arguments.
+                    let scope = environment
+                        .scope
+                        .get_mut(&f.name)
+                        .expect("Could not find preregistered type for test");
+                    if let Type::Fn { ref ret, .. } = scope.tipo.as_ref() {
+                        scope.tipo = Rc::new(Type::Fn {
+                            ret: ret.clone(),
+                            args: vec![inner_type.clone()],
+                        })
+                    }
+
+                    // Ensure that the annotation, if any, matches the type inferred from the
+                    // Fuzzer.
                     if let Some(ref provided_annotation) = arg.annotation {
                         let hydrator: &mut Hydrator = hydrators.get_mut(&f.name).unwrap();
 

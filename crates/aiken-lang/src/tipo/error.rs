@@ -1,7 +1,7 @@
 use super::Type;
-use crate::error::ExtraData;
 use crate::{
     ast::{Annotation, BinOp, CallArg, LogicalOpChainKind, Span, UntypedPattern},
+    error::ExtraData,
     expr::{self, UntypedExpr},
     format::Formatter,
     levenshtein,
@@ -261,7 +261,9 @@ You can use '{discard}' and numbers to distinguish between similar names.
 
     #[error("I found a type definition that has a function type in it. This is not allowed.\n")]
     #[diagnostic(code("illegal::function_in_type"))]
-    #[diagnostic(help("Data-types can't hold functions. If you want to define method-like functions, group the type definition and the methods under a common namespace in a standalone module."))]
+    #[diagnostic(help(
+        "Data-types can't hold functions. If you want to define method-like functions, group the type definition and the methods under a common namespace in a standalone module."
+    ))]
     FunctionTypeInData {
         #[label]
         location: Span,
@@ -477,9 +479,13 @@ If you really meant to return that last expression, try to replace it with the f
         "I stumbled upon an invalid (non-local) clause guard '{}'.\n",
         name.if_supports_color(Stdout, |s| s.purple())
     )]
-    #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#checking-equality-and-ordering-in-patterns"))]
+    #[diagnostic(url(
+        "https://aiken-lang.org/language-tour/control-flow#checking-equality-and-ordering-in-patterns"
+    ))]
     #[diagnostic(code("illegal::clause_guard"))]
-    #[diagnostic(help("There are some conditions regarding what can be used in a guard. Values must be either local to the function, or defined as module constants. You can't use functions or records in there."))]
+    #[diagnostic(help(
+        "There are some conditions regarding what can be used in a guard. Values must be either local to the function, or defined as module constants. You can't use functions or records in there."
+    ))]
     NonLocalClauseGuardVariable {
         #[label]
         location: Span,
@@ -492,7 +498,7 @@ If you really meant to return that last expression, try to replace it with the f
     #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#tuples"))]
     #[diagnostic(code("illegal::tuple_index"))]
     #[diagnostic(help(
-        r#"Because you used a tuple-index on an element, I assumed it had to be a tuple or some kind, but instead I found:
+        r#"Because you used a tuple-index on an element, I assumed it had to be a tuple but instead I found something of type:
 
 ╰─▶ {type_info}"#,
         type_info = tipo.to_pretty(0).if_supports_color(Stdout, |s| s.red())
@@ -637,7 +643,9 @@ You can help me by providing a type-annotation for 'x', as such:
     #[error("I almost got caught in an endless loop while inferring a recursive type.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#type-annotations"))]
     #[diagnostic(code("missing::type_annotation"))]
-    #[diagnostic(help("I have several aptitudes, but inferring recursive types isn't one them. It is still possible to define recursive types just fine, but I will need a little help in the form of type annotation to infer their types should they show up."))]
+    #[diagnostic(help(
+        "I have several aptitudes, but inferring recursive types isn't one them. It is still possible to define recursive types just fine, but I will need a little help in the form of type annotation to infer their types should they show up."
+    ))]
     RecursiveType {
         #[label]
         location: Span,
@@ -961,7 +969,8 @@ The best thing to do from here is to remove it."#))]
     #[error("I choked on a generic type left in an outward-facing interface.\n")]
     #[diagnostic(code("illegal::generic_in_abi"))]
     #[diagnostic(help(
-        "Functions of the outer-most parts of a project, such as a validator or a property-based test, must be fully instantiated. That means they can no longer carry unbound generic variables. The type must be fully-known at this point since many structural validation must occur to ensure a safe boundary between the on-chain and off-chain worlds."))]
+        "Functions of the outer-most parts of a project, such as a validator or a property-based test, must be fully instantiated. That means they can no longer carry unbound generic variables. The type must be fully-known at this point since many structural validation must occur to ensure a safe boundary between the on-chain and off-chain worlds."
+    ))]
     GenericLeftAtBoundary {
         #[label("unbound generic at boundary")]
         location: Span,

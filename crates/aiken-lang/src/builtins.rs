@@ -1220,6 +1220,16 @@ pub fn prelude_data_types(id_gen: &IdGenerator) -> IndexMap<DataTypeKey, TypedDa
         ordering_data_type,
     );
 
+    // Bool
+    let bool_data_type = TypedDataType::bool();
+    data_types.insert(
+        DataTypeKey {
+            module_name: "".to_string(),
+            defined_type: "Bool".to_string(),
+        },
+        bool_data_type,
+    );
+
     // Option
     let option_data_type = TypedDataType::option(generic_var(id_gen.next()));
     data_types.insert(

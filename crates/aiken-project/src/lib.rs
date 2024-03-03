@@ -30,7 +30,7 @@ use crate::{
 };
 use aiken_lang::{
     ast::{
-        DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Tracing, TypedDataType,
+        DataTypeKey, Definition, FunctionAccessKey, ModuleKind, TraceLevel, Tracing, TypedDataType,
         TypedFunction, Validator,
     },
     builtins,
@@ -810,6 +810,13 @@ where
     fn run_tests(&self, tests: Vec<Test>) -> Vec<TestResult<UntypedExpr>> {
         use rayon::prelude::*;
 
+        let generator = self.checked_modules.new_generator(
+            &self.functions,
+            &self.data_types,
+            &self.module_types,
+            Tracing::All(TraceLevel::Silent),
+        );
+
         tests
             .into_par_iter()
             .map(|test| match test {
@@ -820,7 +827,7 @@ where
             })
             .collect::<Vec<TestResult<PlutusData>>>()
             .into_iter()
-            .map(|test| test.reify(&self.module_types))
+            .map(|test| test.reify(generator.data_types()))
             .collect()
     }
 

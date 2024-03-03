@@ -1,22 +1,23 @@
-use std::{collections::HashMap, rc::Rc};
-use uplc::KeyValuePairs;
-
-use vec1::Vec1;
-
-use pallas::ledger::primitives::alonzo::{Constr, PlutusData};
-use uplc::machine::value::from_pallas_bigint;
-
 use crate::{
     ast::{
         self, Annotation, Arg, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg, Curve,
-        DefinitionLocation, IfBranch, Located, LogicalOpChainKind, ParsedCallArg, Pattern,
-        RecordUpdateSpread, Span, TraceKind, TypedClause, TypedRecordUpdateArg, UnOp,
-        UntypedClause, UntypedRecordUpdateArg,
+        DataType, DataTypeKey, DefinitionLocation, IfBranch, Located, LogicalOpChainKind,
+        ParsedCallArg, Pattern, RecordConstructorArg, RecordUpdateSpread, Span, TraceKind,
+        TypedClause, TypedDataType, TypedRecordUpdateArg, UnOp, UntypedClause,
+        UntypedRecordUpdateArg,
     },
     builtins::void,
+    gen_uplc::builder::{
+        check_replaceable_opaque_type, convert_opaque_type, lookup_data_type_by_tipo,
+    },
     parser::token::Base,
-    tipo::{ModuleValueConstructor, PatternConstructor, Type, TypeInfo, TypeVar, ValueConstructor},
+    tipo::{ModuleValueConstructor, PatternConstructor, Type, TypeVar, ValueConstructor},
 };
+use indexmap::IndexMap;
+use pallas::ledger::primitives::alonzo::{Constr, PlutusData};
+use std::rc::Rc;
+use uplc::{machine::value::from_pallas_bigint, KeyValuePairs};
+use vec1::Vec1;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypedExpr {
@@ -584,7 +585,7 @@ impl UntypedExpr {
     // The function performs some sanity check to ensure that the type does indeed somewhat
     // correspond to the data being given.
     pub fn reify(
-        data_types: &HashMap<String, TypeInfo>,
+        data_types: &IndexMap<DataTypeKey, &TypedDataType>,
         data: PlutusData,
         tipo: &Type,
     ) -> Result<Self, String> {
@@ -592,6 +593,36 @@ impl UntypedExpr {
             if let TypeVar::Link { tipo } = &*tipo.borrow() {
                 return UntypedExpr::reify(data_types, data, tipo);
             }
+        }
+
+        // NOTE: Opaque types are tricky. We can't tell from a type only if it is
+        // opaque or not. We have to lookup its datatype definition.
+        //
+        // Also, we can't -- in theory -- peak into an opaque type. More so, if it
+        // has a single constructor with a single argument, it is an zero-cost
+        // wrapper. That means the underlying PlutusData has no residue of that
+        // wrapper. So we have to manually reconstruct it before crawling further
+        // down the type tree.
+        if check_replaceable_opaque_type(tipo, data_types) {
+            let DataType { name, .. } = lookup_data_type_by_tipo(data_types, tipo)
+                .expect("Type just disappeared from known types? {tipo:?}");
+
+            let inner_type = convert_opaque_type(&tipo.clone().into(), data_types, false);
+
+            let value = UntypedExpr::reify(data_types, data, &inner_type)?;
+
+            return Ok(UntypedExpr::Call {
+                location: Span::empty(),
+                arguments: vec![CallArg {
+                    label: None,
+                    location: Span::empty(),
+                    value,
+                }],
+                fun: Box::new(UntypedExpr::Var {
+                    name,
+                    location: Span::empty(),
+                }),
+            });
         }
 
         match data {
@@ -655,66 +686,50 @@ impl UntypedExpr {
                     tag as usize - 1280 + 7
                 };
 
-                if let Type::App { module, name, .. } = tipo {
-                    let module = if module.is_empty() { "aiken" } else { module };
-                    if let Some(type_info) = data_types.get(module) {
-                        if let Some(constructors) = type_info.types_constructors.get(name) {
-                            let constructor = &constructors[ix];
-                            return if fields.is_empty() {
-                                Ok(UntypedExpr::Var {
-                                    location: Span::empty(),
-                                    name: constructor.to_string(),
-                                })
-                            } else {
-                                // NOTE: When the type is _private_, we cannot see the
-                                // value constructor and so we default to showing a
-                                // placeholder.
-                                let arguments = match type_info.values.get(constructor) {
-                                    None => Ok(fields
-                                        .iter()
-                                        .map(|_| CallArg {
-                                            label: None,
-                                            location: Span::empty(),
-                                            value: UntypedExpr::Var {
-                                                name: "<hidden>".to_string(),
+                if let Type::App { .. } = tipo {
+                    if let Some(DataType { constructors, .. }) =
+                        lookup_data_type_by_tipo(data_types, tipo)
+                    {
+                        let constructor = &constructors[ix];
+
+                        return if fields.is_empty() {
+                            Ok(UntypedExpr::Var {
+                                location: Span::empty(),
+                                name: constructor.name.to_string(),
+                            })
+                        } else {
+                            let arguments = fields
+                                .into_iter()
+                                .zip(constructor.arguments.iter())
+                                .map(
+                                    |(
+                                        field,
+                                        RecordConstructorArg {
+                                            ref label,
+                                            ref tipo,
+                                            ..
+                                        },
+                                    )| {
+                                        UntypedExpr::reify(data_types, field, tipo).map(|value| {
+                                            CallArg {
+                                                label: label.clone(),
                                                 location: Span::empty(),
-                                            },
+                                                value,
+                                            }
                                         })
-                                        .collect()),
-                                    Some(value) => {
-                                        let types =
-                                            if let Type::Fn { args, .. } = value.tipo.as_ref() {
-                                                &args[..]
-                                            } else {
-                                                &[]
-                                            };
+                                    },
+                                )
+                                .collect::<Result<Vec<_>, _>>()?;
 
-                                        fields
-                                            .into_iter()
-                                            .zip(types)
-                                            .map(|(field, tipo)| {
-                                                UntypedExpr::reify(data_types, field, tipo).map(
-                                                    |value| CallArg {
-                                                        label: None,
-                                                        location: Span::empty(),
-                                                        value,
-                                                    },
-                                                )
-                                            })
-                                            .collect::<Result<Vec<_>, _>>()
-                                    }
-                                }?;
-
-                                Ok(UntypedExpr::Call {
+                            Ok(UntypedExpr::Call {
+                                location: Span::empty(),
+                                arguments,
+                                fun: Box::new(UntypedExpr::Var {
+                                    name: constructor.name.to_string(),
                                     location: Span::empty(),
-                                    arguments,
-                                    fun: Box::new(UntypedExpr::Var {
-                                        name: constructor.to_string(),
-                                        location: Span::empty(),
-                                    }),
-                                })
-                            };
-                        }
+                                }),
+                            })
+                        };
                     }
                 }
 
