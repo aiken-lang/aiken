@@ -797,13 +797,11 @@ mod tests {
         let mut definitions = fixture_definitions();
         definitions.insert(
             &schema,
-            Schema::Data(Data::AnyOf(vec![
-                Constructor {
-                    index: 0,
-                    fields: vec![Declaration::Referenced(Reference::new("Bool")).into()],
-                }
-                .into(),
-            ]))
+            Schema::Data(Data::AnyOf(vec![Constructor {
+                index: 0,
+                fields: vec![Declaration::Referenced(Reference::new("Bool")).into()],
+            }
+            .into()]))
             .into(),
         );
 

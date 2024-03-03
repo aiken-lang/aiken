@@ -348,13 +348,11 @@ fn expect_data_constr(term: &Constant, index: usize) -> Result<Vec<Constant>, Er
 
     Err(mismatch(
         term,
-        Schema::Data(Data::AnyOf(vec![
-            Constructor {
-                index,
-                fields: vec![],
-            }
-            .into(),
-        ])),
+        Schema::Data(Data::AnyOf(vec![Constructor {
+            index,
+            fields: vec![],
+        }
+        .into()])),
     ))
 }
 
