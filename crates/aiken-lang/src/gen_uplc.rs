@@ -15,8 +15,8 @@ use self::{
 use crate::{
     ast::{
         AssignmentKind, BinOp, Bls12_381Point, Curve, DataTypeKey, FunctionAccessKey, Pattern,
-        Span, TraceLevel, TypedArg, TypedClause, TypedDataType, TypedFunction, TypedPattern,
-        TypedValidator, UnOp,
+        Span, TraceLevel, Tracing, TypedArg, TypedClause, TypedDataType, TypedFunction,
+        TypedPattern, TypedValidator, UnOp,
     },
     builtins::{bool, data, int, list, string, void},
     expr::TypedExpr,
@@ -53,10 +53,10 @@ use uplc::{
 #[derive(Clone)]
 pub struct CodeGenerator<'a> {
     /// immutable index maps
-    functions: IndexMap<FunctionAccessKey, &'a TypedFunction>,
-    data_types: IndexMap<DataTypeKey, &'a TypedDataType>,
-    module_types: IndexMap<&'a String, &'a TypeInfo>,
-    module_src: IndexMap<String, (String, LineNumbers)>,
+    functions: IndexMap<&'a FunctionAccessKey, &'a TypedFunction>,
+    data_types: IndexMap<&'a DataTypeKey, &'a TypedDataType>,
+    module_types: IndexMap<&'a str, &'a TypeInfo>,
+    module_src: IndexMap<&'a str, &'a (String, LineNumbers)>,
     /// immutable option
     tracing: TraceLevel,
     /// mutable index maps that are reset
@@ -71,23 +71,23 @@ pub struct CodeGenerator<'a> {
 }
 
 impl<'a> CodeGenerator<'a> {
-    pub fn data_types(&self) -> &IndexMap<DataTypeKey, &'a TypedDataType> {
+    pub fn data_types(&self) -> &IndexMap<&'a DataTypeKey, &'a TypedDataType> {
         &self.data_types
     }
 
     pub fn new(
-        functions: IndexMap<FunctionAccessKey, &'a TypedFunction>,
-        data_types: IndexMap<DataTypeKey, &'a TypedDataType>,
-        module_types: IndexMap<&'a String, &'a TypeInfo>,
-        module_src: IndexMap<String, (String, LineNumbers)>,
-        tracing: TraceLevel,
+        functions: IndexMap<&'a FunctionAccessKey, &'a TypedFunction>,
+        data_types: IndexMap<&'a DataTypeKey, &'a TypedDataType>,
+        module_types: IndexMap<&'a str, &'a TypeInfo>,
+        module_src: IndexMap<&'a str, &'a (String, LineNumbers)>,
+        tracing: Tracing,
     ) -> Self {
         CodeGenerator {
             functions,
             data_types,
             module_types,
             module_src,
-            tracing,
+            tracing: tracing.trace_level(true),
             defined_functions: IndexMap::new(),
             special_functions: CodeGenSpecialFuncs::new(),
             code_gen_functions: IndexMap::new(),
@@ -108,21 +108,6 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    pub fn insert_function(
-        &mut self,
-        module_name: String,
-        function_name: String,
-        value: &'a TypedFunction,
-    ) -> Option<&'a TypedFunction> {
-        self.functions.insert(
-            FunctionAccessKey {
-                module_name,
-                function_name,
-            },
-            value,
-        )
-    }
-
     pub fn generate(
         &mut self,
         TypedValidator {
@@ -131,16 +116,16 @@ impl<'a> CodeGenerator<'a> {
             params,
             ..
         }: &TypedValidator,
-        module_name: &String,
+        module_name: &str,
     ) -> Program<Name> {
         let mut air_tree_fun = self.build(&fun.body, module_name, &[]);
 
         air_tree_fun = wrap_validator_condition(air_tree_fun, self.tracing);
 
-        let (src_code, lines) = self.module_src.get(module_name).unwrap().clone();
+        let (src_code, lines) = self.module_src.get(module_name).unwrap();
 
         let mut validator_args_tree =
-            self.check_validator_args(&fun.arguments, true, air_tree_fun, &src_code, &lines);
+            self.check_validator_args(&fun.arguments, true, air_tree_fun, src_code, lines);
 
         validator_args_tree = AirTree::no_op(validator_args_tree);
 
@@ -163,8 +148,8 @@ impl<'a> CodeGenerator<'a> {
                 &other.arguments,
                 true,
                 air_tree_fun_other,
-                &src_code,
-                &lines,
+                src_code,
+                lines,
             );
 
             validator_args_tree_other = AirTree::no_op(validator_args_tree_other);
@@ -450,7 +435,7 @@ impl<'a> CodeGenerator<'a> {
                         constructor: ModuleValueConstructor::Fn { name, .. },
                         ..
                     } => {
-                        let type_info = self.module_types.get(module_name).unwrap();
+                        let type_info = self.module_types.get(module_name.as_str()).unwrap();
                         let value = type_info.values.get(name).unwrap();
 
                         let ValueConstructorVariant::ModuleFn { builtin, .. } = &value.variant
@@ -723,7 +708,7 @@ impl<'a> CodeGenerator<'a> {
                             function_name: name.clone(),
                         });
 
-                        let type_info = self.module_types.get(module_name).unwrap();
+                        let type_info = self.module_types.get(module_name.as_str()).unwrap();
 
                         let value = type_info.values.get(name).unwrap();
 

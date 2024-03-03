@@ -1,16 +1,13 @@
-use pretty_assertions::assert_eq;
-
+use super::TestProject;
+use crate::module::CheckedModules;
 use aiken_lang::ast::{Definition, Function, TraceLevel, Tracing, TypedTest, TypedValidator};
+use pretty_assertions::assert_eq;
 use uplc::{
     ast::{Constant, Data, DeBruijn, Name, Program, Term, Type},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
     machine::{cost_model::ExBudget, runtime::Compressable},
     optimize,
 };
-
-use crate::module::CheckedModules;
-
-use super::TestProject;
 
 enum TestType {
     Func(TypedTest),
@@ -22,12 +19,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
 
     let modules = CheckedModules::singleton(project.check(project.parse(source_code)));
 
-    let mut generator = modules.new_generator(
-        &project.functions,
-        &project.data_types,
-        &project.module_types,
-        Tracing::All(TraceLevel::Verbose),
-    );
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Verbose));
 
     let Some(checked_module) = modules.values().next() else {
         unreachable!("There's got to be one right?")

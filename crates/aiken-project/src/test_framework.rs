@@ -96,6 +96,8 @@ impl Test {
         if test.arguments.is_empty() {
             let program = generator.generate_raw(&test.body, &module_name);
 
+            // TODO: Check whether we really need to clone the _entire_ generator, or whether we
+            // can mostly copy the generator and only clone parts that matters.
             let assertion = test.test_hint().map(|(bin_op, left_src, right_src)| {
                 let left = generator
                     .clone()
@@ -702,7 +704,7 @@ unsafe impl<T> Send for TestResult<T> {}
 impl TestResult<PlutusData> {
     pub fn reify(
         self,
-        data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+        data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
     ) -> TestResult<UntypedExpr> {
         match self {
             TestResult::UnitTestResult(test) => TestResult::UnitTestResult(test),
@@ -804,7 +806,7 @@ unsafe impl<T> Send for PropertyTestResult<T> {}
 impl PropertyTestResult<PlutusData> {
     pub fn reify(
         self,
-        data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+        data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
     ) -> PropertyTestResult<UntypedExpr> {
         PropertyTestResult {
             counterexample: match self.counterexample {
@@ -895,11 +897,15 @@ impl Display for Assertion {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::module::{CheckedModule, CheckedModules};
+    use crate::{
+        module::{CheckedModule, CheckedModules},
+        utils,
+    };
     use aiken_lang::{
         ast::{Definition, ModuleKind, TraceLevel, Tracing},
         builtins,
         format::Formatter,
+        line_numbers::LineNumbers,
         parser,
         parser::extra::ModuleExtra,
         IdGenerator,
@@ -943,21 +949,15 @@ mod test {
                 .last()
                 .expect("No test found in declared src?");
 
-            let functions = builtins::prelude_functions(&id_gen);
-
+            let mut functions = builtins::prelude_functions(&id_gen);
             let mut data_types = builtins::prelude_data_types(&id_gen);
+            ast.register_definitions(&mut functions, &mut data_types);
 
-            for def in ast.definitions() {
-                if let Definition::DataType(dt) = def {
-                    data_types.insert(
-                        DataTypeKey {
-                            module_name: module_name.to_string(),
-                            defined_type: dt.name.clone(),
-                        },
-                        dt.clone(),
-                    );
-                }
-            }
+            let mut module_sources = HashMap::new();
+            module_sources.insert(
+                module_name.to_string(),
+                (src.to_string(), LineNumbers::new(src)),
+            );
 
             let mut modules = CheckedModules::default();
             modules.insert(
@@ -973,10 +973,11 @@ mod test {
                 },
             );
 
-            let mut generator = modules.new_generator(
-                &functions,
-                &data_types,
-                &module_types,
+            let mut generator = CodeGenerator::new(
+                utils::indexmap::as_ref_values(&functions),
+                utils::indexmap::as_ref_values(&data_types),
+                utils::indexmap::as_str_ref_values(&module_types),
+                utils::indexmap::as_str_ref_values(&module_sources),
                 Tracing::All(TraceLevel::Verbose),
             );
 
@@ -1092,11 +1093,7 @@ mod test {
                 let type_info = test.fuzzer.type_info.clone();
 
                 let reify = move |counterexample| {
-                    let mut data_type_refs = IndexMap::new();
-                    for (k, v) in &data_types {
-                        data_type_refs.insert(k.clone(), v);
-                    }
-
+                    let data_type_refs = utils::indexmap::as_ref_values(&data_types);
                     let expr = UntypedExpr::reify(&data_type_refs, counterexample, &type_info)
                         .expect("Failed to reify value.");
                     Formatter::new().expr(&expr, false).to_pretty_string(70)

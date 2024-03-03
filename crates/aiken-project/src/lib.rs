@@ -12,6 +12,7 @@ pub mod paths;
 pub mod pretty;
 pub mod telemetry;
 pub mod test_framework;
+pub mod utils;
 pub mod watch;
 
 #[cfg(test)]
@@ -30,11 +31,13 @@ use crate::{
 };
 use aiken_lang::{
     ast::{
-        DataTypeKey, Definition, FunctionAccessKey, ModuleKind, TraceLevel, Tracing, TypedDataType,
+        DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Tracing, TypedDataType,
         TypedFunction, Validator,
     },
     builtins,
     expr::UntypedExpr,
+    gen_uplc::CodeGenerator,
+    line_numbers::LineNumbers,
     tipo::TypeInfo,
     IdGenerator,
 };
@@ -88,6 +91,7 @@ where
     event_listener: T,
     functions: IndexMap<FunctionAccessKey, TypedFunction>,
     data_types: IndexMap<DataTypeKey, TypedDataType>,
+    module_sources: HashMap<String, (String, LineNumbers)>,
 }
 
 impl<T> Project<T>
@@ -126,7 +130,18 @@ where
             event_listener,
             functions,
             data_types,
+            module_sources: HashMap::new(),
         }
+    }
+
+    pub fn new_generator(&'_ self, tracing: Tracing) -> CodeGenerator<'_> {
+        CodeGenerator::new(
+            utils::indexmap::as_ref_values(&self.functions),
+            utils::indexmap::as_ref_values(&self.data_types),
+            utils::indexmap::as_str_ref_values(&self.module_types),
+            utils::indexmap::as_str_ref_values(&self.module_sources),
+            tracing,
+        )
     }
 
     pub fn warnings(&mut self) -> Vec<Warning> {
@@ -280,12 +295,7 @@ where
                     m.attach_doc_and_module_comments();
                 });
 
-                let mut generator = self.checked_modules.new_generator(
-                    &self.functions,
-                    &self.data_types,
-                    &self.module_types,
-                    options.tracing,
-                );
+                let mut generator = self.new_generator(options.tracing);
 
                 let blueprint = Blueprint::new(&self.config, &self.checked_modules, &mut generator)
                     .map_err(Error::Blueprint)?;
@@ -647,10 +657,17 @@ where
 
                 self.warnings.extend(type_warnings);
 
-                // Register the types from this module so they can be imported into
-                // other modules.
+                // Register module sources for an easier access later.
+                self.module_sources
+                    .insert(name.clone(), (code.clone(), LineNumbers::new(&code)));
+
+                // Register the types from this module so they can be
+                // imported into other modules.
                 self.module_types
                     .insert(name.clone(), ast.type_info.clone());
+
+                // Register function definitions & data-types for easier access later.
+                ast.register_definitions(&mut self.functions, &mut self.data_types);
 
                 let checked_module = CheckedModule {
                     kind,
@@ -677,7 +694,6 @@ where
         tracing: Tracing,
     ) -> Result<Vec<Test>, Error> {
         let mut scripts = Vec::new();
-        let mut testable_validators = Vec::new();
 
         let match_tests = match_tests.map(|mt| {
             mt.into_iter()
@@ -720,7 +736,13 @@ where
 
                         fun.arguments = params.clone().into_iter().chain(fun.arguments).collect();
 
-                        testable_validators.push((&checked_module.name, fun));
+                        self.functions.insert(
+                            FunctionAccessKey {
+                                module_name: checked_module.name.clone(),
+                                function_name: fun.name.clone(),
+                            },
+                            fun.to_owned(),
+                        );
 
                         if let Some(other) = other_fun {
                             let mut other = other.clone();
@@ -728,7 +750,13 @@ where
                             other.arguments =
                                 params.clone().into_iter().chain(other.arguments).collect();
 
-                            testable_validators.push((&checked_module.name, other));
+                            self.functions.insert(
+                                FunctionAccessKey {
+                                    module_name: checked_module.name.clone(),
+                                    function_name: other.name.clone(),
+                                },
+                                other.to_owned(),
+                            );
                         }
                     }
                     Definition::Test(func) => {
@@ -771,22 +799,9 @@ where
             }
         }
 
+        let mut generator = self.new_generator(tracing);
+
         let mut tests = Vec::new();
-
-        let mut generator = self.checked_modules.new_generator(
-            &self.functions,
-            &self.data_types,
-            &self.module_types,
-            tracing,
-        );
-
-        for (module_name, testable_validator) in &testable_validators {
-            generator.insert_function(
-                module_name.to_string(),
-                testable_validator.name.clone(),
-                testable_validator,
-            );
-        }
 
         for (input_path, module_name, test) in scripts.into_iter() {
             if verbose {
@@ -810,12 +825,7 @@ where
     fn run_tests(&self, tests: Vec<Test>) -> Vec<TestResult<UntypedExpr>> {
         use rayon::prelude::*;
 
-        let generator = self.checked_modules.new_generator(
-            &self.functions,
-            &self.data_types,
-            &self.module_types,
-            Tracing::All(TraceLevel::Silent),
-        );
+        let data_types = utils::indexmap::as_ref_values(&self.data_types);
 
         tests
             .into_par_iter()
@@ -827,7 +837,7 @@ where
             })
             .collect::<Vec<TestResult<PlutusData>>>()
             .into_iter()
-            .map(|test| test.reify(generator.data_types()))
+            .map(|test| test.reify(&data_types))
             .collect()
     }
 

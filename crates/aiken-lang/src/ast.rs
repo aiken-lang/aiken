@@ -5,6 +5,7 @@ use crate::{
     parser::token::{Base, Token},
     tipo::{PatternConstructor, Type, TypeInfo},
 };
+use indexmap::IndexMap;
 use miette::Diagnostic;
 use owo_colors::{OwoColorize, Stream::Stdout};
 use std::{
@@ -127,6 +128,44 @@ impl TypedModule {
 
         Ok(())
     }
+
+    // TODO: Avoid cloning definitions here. This would likely require having a lifetime on
+    // 'Project', so that we can enforce that those references live from the ast to here.
+    pub fn register_definitions(
+        &self,
+        functions: &mut IndexMap<FunctionAccessKey, TypedFunction>,
+        data_types: &mut IndexMap<DataTypeKey, TypedDataType>,
+    ) {
+        for def in self.definitions() {
+            match def {
+                Definition::Fn(func) => {
+                    functions.insert(
+                        FunctionAccessKey {
+                            module_name: self.name.clone(),
+                            function_name: func.name.clone(),
+                        },
+                        func.clone(),
+                    );
+                }
+
+                Definition::DataType(dt) => {
+                    data_types.insert(
+                        DataTypeKey {
+                            module_name: self.name.clone(),
+                            defined_type: dt.name.clone(),
+                        },
+                        dt.clone(),
+                    );
+                }
+
+                Definition::TypeAlias(_)
+                | Definition::ModuleConstant(_)
+                | Definition::Test(_)
+                | Definition::Validator(_)
+                | Definition::Use(_) => {}
+            }
+        }
+    }
 }
 
 fn str_to_keyword(word: &str) -> Option<Token> {
@@ -181,6 +220,40 @@ pub struct Function<T, Expr, Arg> {
 
 pub type TypedTypeAlias = TypeAlias<Rc<Type>>;
 pub type UntypedTypeAlias = TypeAlias<()>;
+
+impl From<UntypedTest> for UntypedFunction {
+    fn from(f: UntypedTest) -> Self {
+        Function {
+            doc: f.doc,
+            location: f.location,
+            name: f.name,
+            public: f.public,
+            arguments: f.arguments.into_iter().map(|arg| arg.into()).collect(),
+            return_annotation: f.return_annotation,
+            return_type: f.return_type,
+            body: f.body,
+            can_error: f.can_error,
+            end_position: f.end_position,
+        }
+    }
+}
+
+impl From<TypedTest> for TypedFunction {
+    fn from(f: TypedTest) -> Self {
+        Function {
+            doc: f.doc,
+            location: f.location,
+            name: f.name,
+            public: f.public,
+            arguments: f.arguments.into_iter().map(|arg| arg.into()).collect(),
+            return_annotation: f.return_annotation,
+            return_type: f.return_type,
+            body: f.body,
+            can_error: f.can_error,
+            end_position: f.end_position,
+        }
+    }
+}
 
 impl TypedTest {
     pub fn test_hint(&self) -> Option<(BinOp, Box<TypedExpr>, Box<TypedExpr>)> {

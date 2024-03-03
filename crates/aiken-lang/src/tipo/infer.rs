@@ -383,25 +383,7 @@ fn infer_definition(
             }?;
 
             let typed_f = infer_function(
-                Function {
-                    doc: f.doc,
-                    location: f.location,
-                    name: f.name,
-                    public: f.public,
-                    arguments: f
-                        .arguments
-                        .into_iter()
-                        .map(|arg| Arg {
-                            annotation: annotation.clone(),
-                            ..arg.into()
-                        })
-                        .collect(),
-                    return_annotation: f.return_annotation,
-                    return_type: f.return_type,
-                    body: f.body,
-                    can_error: f.can_error,
-                    end_position: f.end_position,
-                },
+                f.into(),
                 module_name,
                 hydrators,
                 environment,

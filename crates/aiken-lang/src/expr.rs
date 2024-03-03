@@ -585,7 +585,7 @@ impl UntypedExpr {
     // The function performs some sanity check to ensure that the type does indeed somewhat
     // correspond to the data being given.
     pub fn reify(
-        data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+        data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
         data: PlutusData,
         tipo: &Type,
     ) -> Result<Self, String> {

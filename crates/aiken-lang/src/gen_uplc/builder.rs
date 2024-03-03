@@ -293,7 +293,7 @@ pub fn get_generic_id_and_type(tipo: &Type, param: &Type) -> Vec<(u64, Rc<Type>)
 }
 
 pub fn lookup_data_type_by_tipo(
-    data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
     tipo: &Type,
 ) -> Option<DataType<Rc<Type>>> {
     match tipo {
@@ -346,7 +346,7 @@ pub fn get_arg_type_name(tipo: &Type) -> String {
 
 pub fn convert_opaque_type(
     t: &Rc<Type>,
-    data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
     deep: bool,
 ) -> Rc<Type> {
     if check_replaceable_opaque_type(t, data_types) && matches!(t.as_ref(), Type::App { .. }) {
@@ -426,7 +426,7 @@ pub fn convert_opaque_type(
 
 pub fn check_replaceable_opaque_type(
     t: &Type,
-    data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> bool {
     let data_type = lookup_data_type_by_tipo(data_types, t);
 
@@ -622,7 +622,7 @@ pub fn monomorphize(air_tree: &mut AirTree, mono_types: &IndexMap<u64, Rc<Type>>
 
 pub fn erase_opaque_type_operations(
     air_tree: &mut AirTree,
-    data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) {
     if let AirTree::Constr { tipo, args, .. } = air_tree {
         if check_replaceable_opaque_type(tipo, data_types) {
@@ -903,7 +903,7 @@ pub fn modify_cyclic_calls(
 
 pub fn pattern_has_conditions(
     pattern: &TypedPattern,
-    data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> bool {
     match pattern {
         Pattern::List { .. } | Pattern::Int { .. } => true,
@@ -929,7 +929,7 @@ pub fn pattern_has_conditions(
 // TODO: write some tests
 pub fn rearrange_list_clauses(
     clauses: Vec<TypedClause>,
-    data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> Vec<TypedClause> {
     let mut sorted_clauses = clauses;
 
@@ -1943,7 +1943,7 @@ pub fn extract_constant(term: &Term<Name>) -> Option<Rc<UplcConstant>> {
 pub fn get_src_code_by_span(
     module_name: &str,
     span: &Span,
-    module_src: &IndexMap<String, (String, LineNumbers)>,
+    module_src: &IndexMap<&str, &(String, LineNumbers)>,
 ) -> String {
     let (src, _) = module_src
         .get(module_name)
@@ -1957,7 +1957,7 @@ pub fn get_src_code_by_span(
 pub fn get_line_columns_by_span(
     module_name: &str,
     span: &Span,
-    module_src: &IndexMap<String, (String, LineNumbers)>,
+    module_src: &IndexMap<&str, &(String, LineNumbers)>,
 ) -> LineColumn {
     let (_, lines) = module_src
         .get(module_name)

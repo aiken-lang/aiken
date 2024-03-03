@@ -271,10 +271,8 @@ mod tests {
             let mut project = TestProject::new();
 
             let modules = CheckedModules::singleton(project.check(project.parse(indoc::indoc! { $code })));
-            let mut generator = modules.new_generator(
-                &project.functions,
-                &project.data_types,
-                &project.module_types,
+
+            let mut generator = project.new_generator(
                 Tracing::All(TraceLevel::Verbose),
             );
 
@@ -799,11 +797,13 @@ mod tests {
         let mut definitions = fixture_definitions();
         definitions.insert(
             &schema,
-            Schema::Data(Data::AnyOf(vec![Constructor {
-                index: 0,
-                fields: vec![Declaration::Referenced(Reference::new("Bool")).into()],
-            }
-            .into()]))
+            Schema::Data(Data::AnyOf(vec![
+                Constructor {
+                    index: 0,
+                    fields: vec![Declaration::Referenced(Reference::new("Bool")).into()],
+                }
+                .into(),
+            ]))
             .into(),
         );
 
