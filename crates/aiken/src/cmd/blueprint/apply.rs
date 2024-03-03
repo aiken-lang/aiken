@@ -13,9 +13,8 @@ use num_bigint::BigInt;
 use ordinal::Ordinal;
 use owo_colors::{OwoColorize, Stream::Stderr};
 use pallas::ledger::primitives::alonzo::PlutusData;
-use std::str::FromStr;
-use std::{fs, path::PathBuf, process, rc::Rc};
-use uplc::ast::{Constant, Data as UplcData, DeBruijn, Term};
+use std::{fs, path::PathBuf, process, str::FromStr};
+use uplc::ast::Data as UplcData;
 
 /// Apply a parameter to a parameterized validator.
 #[derive(clap::Args)]
@@ -48,7 +47,7 @@ pub fn exec(
         validator,
     }: Args,
 ) -> miette::Result<()> {
-    with_project(None, false, |p| {
+    with_project(None, u32::default(), false, |p| {
         let title = module.as_ref().map(|m| {
             format!(
                 "{m}{}",
@@ -68,7 +67,7 @@ pub fn exec(
                 .if_supports_color(Stderr, |s| s.bold()),
         );
 
-        let term: Term<DeBruijn> = match &parameter {
+        let data: PlutusData = match &parameter {
             Some(param) => {
                 eprintln!(
                     "{} inputs",
@@ -90,7 +89,7 @@ pub fn exec(
                         process::exit(1)
                     });
 
-                let data = uplc::plutus_data(&bytes)
+                uplc::plutus_data(&bytes)
                     .map_err::<Error, _>(|e| {
                         blueprint::error::Error::MalformedParameter {
                             hint: format!("Invalid Plutus data; malformed CBOR encoding: {e}"),
@@ -101,9 +100,7 @@ pub fn exec(
                         println!();
                         e.report();
                         process::exit(1)
-                    });
-
-                Term::Constant(Rc::new(Constant::Data(data)))
+                    })
             }
 
             None => p.construct_parameter_incrementally(title, ask_schema)?,
@@ -114,16 +111,13 @@ pub fn exec(
             "     Applying"
                 .if_supports_color(Stderr, |s| s.purple())
                 .if_supports_color(Stderr, |s| s.bold()),
-            match TryInto::<PlutusData>::try_into(term.clone()) {
-                Ok(data) => {
-                    let padding = "\n              ";
-                    multiline(48, UplcData::to_hex(data)).join(padding)
-                }
-                Err(_) => term.to_pretty(),
+            {
+                let padding = "\n              ";
+                multiline(48, UplcData::to_hex(data.clone())).join(padding)
             }
         );
 
-        let blueprint = p.apply_parameter(title, &term)?;
+        let blueprint = p.apply_parameter(title, &data)?;
 
         let json = serde_json::to_string_pretty(&blueprint).unwrap();
 
@@ -179,16 +173,21 @@ fn ask_schema(
         }
 
         Schema::Data(Data::List(Items::Many(ref decls))) => {
-            eprintln!("        {}", asking(schema, "Found", &format!("a {}-tuple", decls.len())));
+            eprintln!(
+                "        {}",
+                asking(schema, "Found", &format!("a {}-tuple", decls.len()))
+            );
 
             let mut elems = vec![];
 
             for (ix, decl) in decls.iter().enumerate() {
                 eprintln!(
                     "       {} Tuple's {}{} element",
-                    "Asking".if_supports_color(Stderr, |s| s.purple()).if_supports_color(Stderr, |s| s.bold()),
-                    ix+1,
-                    Ordinal::<usize>(ix+1).suffix()
+                    "Asking"
+                        .if_supports_color(Stderr, |s| s.purple())
+                        .if_supports_color(Stderr, |s| s.bold()),
+                    ix + 1,
+                    Ordinal::<usize>(ix + 1).suffix()
                 );
                 let inner_schema = lookup_declaration(&decl.clone().into(), definitions);
                 elems.push(ask_schema(&inner_schema, definitions)?);
@@ -252,7 +251,9 @@ fn ask_schema(
             Ok(UplcData::constr(ix.try_into().unwrap(), fields))
         }
 
-        _ => unimplemented!("Hey! You've found a case that we haven't implemented yet. Yes, we've been a bit lazy on that one... If that use-case is important to you, please let us know on Discord or on Github."),
+        _ => unimplemented!(
+            "Hey! You've found a case that we haven't implemented yet. Yes, we've been a bit lazy on that one... If that use-case is important to you, please let us know on Discord or on Github."
+        ),
     }
 }
 

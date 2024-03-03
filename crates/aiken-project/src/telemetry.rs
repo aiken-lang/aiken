@@ -1,9 +1,9 @@
-use crate::pretty;
-use crate::script::EvalInfo;
-use owo_colors::{
-    OwoColorize,
-    Stream::{self, Stderr},
+use crate::{
+    pretty,
+    test_framework::{PropertyTestResult, TestResult, UnitTestResult},
 };
+use aiken_lang::{expr::UntypedExpr, format::Formatter};
+use owo_colors::{OwoColorize, Stream::Stderr};
 use std::{collections::BTreeMap, fmt::Display, path::PathBuf};
 use uplc::machine::cost_model::ExBudget;
 
@@ -35,12 +35,9 @@ pub enum Event {
         name: String,
         path: PathBuf,
     },
-    EvaluatingFunction {
-        results: Vec<EvalInfo>,
-    },
     RunningTests,
     FinishedTests {
-        tests: Vec<EvalInfo>,
+        tests: Vec<TestResult<UntypedExpr>>,
     },
     WaitingForBuildDirLock,
     ResolvingPackages {
@@ -164,20 +161,6 @@ impl EventListener for Terminal {
                     name.if_supports_color(Stderr, |s| s.bright_blue()),
                 );
             }
-            Event::EvaluatingFunction { results } => {
-                eprintln!(
-                    "{}\n",
-                    "  Evaluating function ..."
-                        .if_supports_color(Stderr, |s| s.bold())
-                        .if_supports_color(Stderr, |s| s.purple())
-                );
-
-                let (max_mem, max_cpu) = find_max_execution_units(&results);
-
-                for eval_info in &results {
-                    println!("    {}", fmt_eval(eval_info, max_mem, max_cpu, Stderr))
-                }
-            }
             Event::RunningTests => {
                 eprintln!(
                     "{} {}\n",
@@ -188,21 +171,21 @@ impl EventListener for Terminal {
                 );
             }
             Event::FinishedTests { tests } => {
-                let (max_mem, max_cpu) = find_max_execution_units(&tests);
+                let (max_mem, max_cpu, max_iter) = find_max_execution_units(&tests);
 
-                for (module, infos) in &group_by_module(&tests) {
+                for (module, results) in &group_by_module(&tests) {
                     let title = module
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.blue())
                         .to_string();
 
-                    let tests = infos
+                    let tests = results
                         .iter()
-                        .map(|eval_info| fmt_test(eval_info, max_mem, max_cpu, true))
+                        .map(|r| fmt_test(r, max_mem, max_cpu, max_iter, true))
                         .collect::<Vec<String>>()
                         .join("\n");
 
-                    let summary = fmt_test_summary(infos, true);
+                    let summary = fmt_test_summary(results, true);
 
                     eprintln!(
                         "{}\n",
@@ -269,81 +252,125 @@ impl EventListener for Terminal {
     }
 }
 
-fn fmt_test(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize, styled: bool) -> String {
-    let EvalInfo {
-        success,
-        script,
-        spent_budget,
-        logs,
-        ..
-    } = eval_info;
-
-    let ExBudget { mem, cpu } = spent_budget;
-    let mem_pad = pretty::pad_left(mem.to_string(), max_mem, " ");
-    let cpu_pad = pretty::pad_left(cpu.to_string(), max_cpu, " ");
-
-    let test = format!(
-        "{status} [mem: {mem_unit}, cpu: {cpu_unit}] {module}",
-        status = if *success {
-            pretty::style_if(styled, "PASS".to_string(), |s| {
-                s.if_supports_color(Stderr, |s| s.bold())
-                    .if_supports_color(Stderr, |s| s.green())
-                    .to_string()
-            })
-        } else {
-            pretty::style_if(styled, "FAIL".to_string(), |s| {
-                s.if_supports_color(Stderr, |s| s.bold())
-                    .if_supports_color(Stderr, |s| s.red())
-                    .to_string()
-            })
-        },
-        mem_unit = pretty::style_if(styled, mem_pad, |s| s
-            .if_supports_color(Stderr, |s| s.cyan())
-            .to_string()),
-        cpu_unit = pretty::style_if(styled, cpu_pad, |s| s
-            .if_supports_color(Stderr, |s| s.cyan())
-            .to_string()),
-        module = pretty::style_if(styled, script.name.clone(), |s| s
-            .if_supports_color(Stderr, |s| s.bright_blue())
-            .to_string()),
-    );
-
-    let logs = if logs.is_empty() {
-        String::new()
+fn fmt_test(
+    result: &TestResult<UntypedExpr>,
+    max_mem: usize,
+    max_cpu: usize,
+    max_iter: usize,
+    styled: bool,
+) -> String {
+    // Status
+    let mut test = if result.is_success() {
+        pretty::style_if(styled, "PASS".to_string(), |s| {
+            s.if_supports_color(Stderr, |s| s.bold())
+                .if_supports_color(Stderr, |s| s.green())
+                .to_string()
+        })
     } else {
-        logs.iter()
-            .map(|line| {
-                format!(
-                    "{arrow} {styled_line}",
-                    arrow = "↳".if_supports_color(Stderr, |s| s.bright_yellow()),
-                    styled_line = line
-                        .split('\n')
-                        .map(|l| format!("{}", l.if_supports_color(Stderr, |s| s.bright_black())))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
+        pretty::style_if(styled, "FAIL".to_string(), |s| {
+            s.if_supports_color(Stderr, |s| s.bold())
+                .if_supports_color(Stderr, |s| s.red())
+                .to_string()
+        })
     };
 
-    if logs.is_empty() {
-        test
-    } else {
-        [test, logs].join("\n")
+    // Execution units / iteration steps
+    match result {
+        TestResult::UnitTestResult(UnitTestResult { spent_budget, .. }) => {
+            let ExBudget { mem, cpu } = spent_budget;
+            let mem_pad = pretty::pad_left(mem.to_string(), max_mem, " ");
+            let cpu_pad = pretty::pad_left(cpu.to_string(), max_cpu, " ");
+
+            test = format!(
+                "{test} [mem: {mem_unit}, cpu: {cpu_unit}]",
+                mem_unit = pretty::style_if(styled, mem_pad, |s| s
+                    .if_supports_color(Stderr, |s| s.cyan())
+                    .to_string()),
+                cpu_unit = pretty::style_if(styled, cpu_pad, |s| s
+                    .if_supports_color(Stderr, |s| s.cyan())
+                    .to_string()),
+            );
+        }
+        TestResult::PropertyTestResult(PropertyTestResult { iterations, .. }) => {
+            test = pretty::pad_right(
+                format!(
+                    "{test} [after {} test{}]",
+                    pretty::pad_left(iterations.to_string(), max_iter, " "),
+                    if *iterations > 1 { "s" } else { "" }
+                ),
+                18 + max_mem + max_cpu + max_iter,
+                " ",
+            );
+        }
     }
+
+    // Title
+    test = format!(
+        "{test} {title}",
+        title = pretty::style_if(styled, result.title().to_string(), |s| s
+            .if_supports_color(Stderr, |s| s.bright_blue())
+            .to_string())
+    );
+
+    // CounterExample
+    if let TestResult::PropertyTestResult(PropertyTestResult {
+        counterexample: Some(counterexample),
+        ..
+    }) = result
+    {
+        test = format!(
+            "{test}\n{}",
+            pretty::open_box(
+                &pretty::style_if(styled, "counterexample".to_string(), |s| s
+                    .if_supports_color(Stderr, |s| s.red())
+                    .if_supports_color(Stderr, |s| s.bold())
+                    .to_string()),
+                &Formatter::new()
+                    .expr(counterexample, false)
+                    .to_pretty_string(70),
+                "",
+                |s| s.red().to_string()
+            )
+        )
+    }
+
+    // Traces
+    if !result.logs().is_empty() {
+        test = format!(
+            "{test}\n{logs}",
+            logs = result
+                .logs()
+                .iter()
+                .map(|line| {
+                    format!(
+                        "{arrow} {styled_line}",
+                        arrow = "↳".if_supports_color(Stderr, |s| s.bright_yellow()),
+                        styled_line = line
+                            .split('\n')
+                            .map(|l| format!(
+                                "{}",
+                                l.if_supports_color(Stderr, |s| s.bright_black())
+                            ))
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    };
+
+    test
 }
 
-fn fmt_test_summary(tests: &[&EvalInfo], styled: bool) -> String {
-    let (n_passed, n_failed) = tests
-        .iter()
-        .fold((0, 0), |(n_passed, n_failed), test_info| {
-            if test_info.success {
-                (n_passed + 1, n_failed)
-            } else {
-                (n_passed, n_failed + 1)
-            }
-        });
+fn fmt_test_summary<T>(tests: &[&TestResult<T>], styled: bool) -> String {
+    let (n_passed, n_failed) = tests.iter().fold((0, 0), |(n_passed, n_failed), result| {
+        if result.is_success() {
+            (n_passed + 1, n_failed)
+        } else {
+            (n_passed, n_failed + 1)
+        }
+    });
     format!(
         "{} | {} | {}",
         pretty::style_if(styled, format!("{} tests", tests.len()), |s| s
@@ -360,53 +387,38 @@ fn fmt_test_summary(tests: &[&EvalInfo], styled: bool) -> String {
     )
 }
 
-fn fmt_eval(eval_info: &EvalInfo, max_mem: usize, max_cpu: usize, stream: Stream) -> String {
-    let EvalInfo {
-        output,
-        script,
-        spent_budget,
-        ..
-    } = eval_info;
-
-    let ExBudget { mem, cpu } = spent_budget;
-
-    format!(
-        "    {}::{} [mem: {}, cpu: {}]\n    │\n    ╰─▶ {}",
-        script.module.if_supports_color(stream, |s| s.blue()),
-        script.name.if_supports_color(stream, |s| s.bright_blue()),
-        pretty::pad_left(mem.to_string(), max_mem, " "),
-        pretty::pad_left(cpu.to_string(), max_cpu, " "),
-        output
-            .as_ref()
-            .map(|x| format!("{x}"))
-            .unwrap_or_else(|| "Error.".to_string()),
-    )
-}
-
-fn group_by_module(infos: &Vec<EvalInfo>) -> BTreeMap<String, Vec<&EvalInfo>> {
+fn group_by_module<T>(results: &Vec<TestResult<T>>) -> BTreeMap<String, Vec<&TestResult<T>>> {
     let mut modules = BTreeMap::new();
-    for eval_info in infos {
-        let xs: &mut Vec<&EvalInfo> = modules.entry(eval_info.script.module.clone()).or_default();
-        xs.push(eval_info);
+    for r in results {
+        let xs: &mut Vec<&TestResult<_>> = modules.entry(r.module().to_string()).or_default();
+        xs.push(r);
     }
     modules
 }
 
-fn find_max_execution_units(xs: &[EvalInfo]) -> (usize, usize) {
-    let (max_mem, max_cpu) = xs.iter().fold(
-        (0, 0),
-        |(max_mem, max_cpu), EvalInfo { spent_budget, .. }| {
-            if spent_budget.mem >= max_mem && spent_budget.cpu >= max_cpu {
-                (spent_budget.mem, spent_budget.cpu)
-            } else if spent_budget.mem > max_mem {
-                (spent_budget.mem, max_cpu)
-            } else if spent_budget.cpu > max_cpu {
-                (max_mem, spent_budget.cpu)
-            } else {
-                (max_mem, max_cpu)
-            }
-        },
-    );
+fn find_max_execution_units<T>(xs: &[TestResult<T>]) -> (usize, usize, usize) {
+    let (max_mem, max_cpu, max_iter) =
+        xs.iter()
+            .fold((0, 0, 0), |(max_mem, max_cpu, max_iter), test| match test {
+                TestResult::PropertyTestResult(PropertyTestResult { iterations, .. }) => {
+                    (max_mem, max_cpu, std::cmp::max(max_iter, *iterations))
+                }
+                TestResult::UnitTestResult(UnitTestResult { spent_budget, .. }) => {
+                    if spent_budget.mem >= max_mem && spent_budget.cpu >= max_cpu {
+                        (spent_budget.mem, spent_budget.cpu, max_iter)
+                    } else if spent_budget.mem > max_mem {
+                        (spent_budget.mem, max_cpu, max_iter)
+                    } else if spent_budget.cpu > max_cpu {
+                        (max_mem, spent_budget.cpu, max_iter)
+                    } else {
+                        (max_mem, max_cpu, max_iter)
+                    }
+                }
+            });
 
-    (max_mem.to_string().len(), max_cpu.to_string().len())
+    (
+        max_mem.to_string().len(),
+        max_cpu.to_string().len(),
+        max_iter.to_string().len(),
+    )
 }

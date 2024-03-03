@@ -10,7 +10,7 @@ use crate::{
         RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition, TypedPattern,
         UnqualifiedImport, UntypedArg, UntypedDefinition, Use, Validator, PIPE_VARIABLE,
     },
-    builtins::{self, function, generic_var, tuple, unbound_var},
+    builtins::{function, generic_var, tuple, unbound_var},
     tipo::fields::FieldMap,
     IdGenerator,
 };
@@ -1185,23 +1185,22 @@ impl<'a> Environment<'a> {
                 })
             }
 
-            Definition::Test(Function { name, location, .. }) => {
-                assert_unique_value_name(names, name, location)?;
-                hydrators.insert(name.clone(), Hydrator::new());
-                let arg_types = vec![];
-                let return_type = builtins::bool();
-                self.insert_variable(
-                    name.clone(),
-                    ValueConstructorVariant::ModuleFn {
-                        name: name.clone(),
-                        field_map: None,
-                        module: module_name.to_owned(),
-                        arity: 0,
-                        location: *location,
-                        builtin: None,
-                    },
-                    function(arg_types, return_type),
-                );
+            Definition::Test(test) => {
+                let arguments = test
+                    .arguments
+                    .iter()
+                    .map(|arg| arg.clone().into())
+                    .collect::<Vec<_>>();
+
+                self.register_function(
+                    &test.name,
+                    &arguments,
+                    &test.return_annotation,
+                    module_name,
+                    hydrators,
+                    names,
+                    &test.location,
+                )?;
             }
 
             Definition::DataType(DataType {

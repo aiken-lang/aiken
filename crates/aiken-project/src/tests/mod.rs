@@ -1,20 +1,22 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
-
+use crate::{
+    builtins,
+    module::{CheckedModule, ParsedModule},
+    package_name::PackageName,
+    utils,
+};
 use aiken_lang::{
-    ast::{ModuleKind, TraceLevel, Tracing, TypedDataType, TypedFunction},
-    gen_uplc::builder::{DataTypeKey, FunctionAccessKey},
+    ast::{
+        DataTypeKey, FunctionAccessKey, ModuleKind, TraceLevel, Tracing, TypedDataType,
+        TypedFunction,
+    },
+    gen_uplc::CodeGenerator,
+    line_numbers::LineNumbers,
     parser,
     tipo::TypeInfo,
     IdGenerator,
 };
 use indexmap::IndexMap;
-
-use crate::{
-    builtins,
-    module::{CheckedModule, ParsedModule},
-    package_name::PackageName,
-};
+use std::{collections::HashMap, path::PathBuf};
 
 mod gen_uplc;
 
@@ -24,9 +26,10 @@ mod gen_uplc;
 pub struct TestProject {
     pub package: PackageName,
     pub id_gen: IdGenerator,
-    pub module_types: HashMap<String, TypeInfo>,
     pub functions: IndexMap<FunctionAccessKey, TypedFunction>,
     pub data_types: IndexMap<DataTypeKey, TypedDataType>,
+    pub module_types: HashMap<String, TypeInfo>,
+    pub module_sources: HashMap<String, (String, LineNumbers)>,
 }
 
 impl TestProject {
@@ -51,7 +54,18 @@ impl TestProject {
             module_types,
             functions,
             data_types,
+            module_sources: HashMap::new(),
         }
+    }
+
+    pub fn new_generator(&'_ self, tracing: Tracing) -> CodeGenerator<'_> {
+        CodeGenerator::new(
+            utils::indexmap::as_ref_values(&self.functions),
+            utils::indexmap::as_ref_values(&self.data_types),
+            utils::indexmap::as_str_ref_values(&self.module_types),
+            utils::indexmap::as_str_ref_values(&self.module_sources),
+            tracing,
+        )
     }
 
     pub fn parse(&self, source_code: &str) -> ParsedModule {
@@ -86,6 +100,17 @@ impl TestProject {
             )
             .expect("Failed to type-check module");
 
+        // Register function definitions & data-types for easier access later.
+        ast.register_definitions(&mut self.functions, &mut self.data_types);
+
+        // Register module sources for an easier access later.
+        self.module_sources.insert(
+            module.name.clone(),
+            (module.code.clone(), LineNumbers::new(&module.code)),
+        );
+
+        // Register the types from this module so they can be
+        // imported into other modules.
         self.module_types
             .insert(module.name.clone(), ast.type_info.clone());
 

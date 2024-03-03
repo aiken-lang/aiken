@@ -1,11 +1,12 @@
 use crate::{
     ast::{
-        Annotation, Arg, ArgName, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg,
-        ClauseGuard, Constant, CurveType, DataType, Definition, Function, IfBranch,
+        Annotation, Arg, ArgName, ArgVia, AssignmentKind, BinOp, ByteArrayFormatPreference,
+        CallArg, ClauseGuard, Constant, CurveType, DataType, Definition, Function, IfBranch,
         LogicalOpChainKind, ModuleConstant, Pattern, RecordConstructor, RecordConstructorArg,
         RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg, UnOp, UnqualifiedImport,
-        UntypedArg, UntypedClause, UntypedClauseGuard, UntypedDefinition, UntypedFunction,
-        UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use, Validator, CAPTURE_VARIABLE,
+        UntypedArg, UntypedArgVia, UntypedClause, UntypedClauseGuard, UntypedDefinition,
+        UntypedFunction, UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use, Validator,
+        CAPTURE_VARIABLE,
     },
     docvec,
     expr::{FnStyle, UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
@@ -231,16 +232,7 @@ impl<'comments> Formatter<'comments> {
                 return_annotation,
                 end_position,
                 ..
-            }) => self.definition_fn(
-                public,
-                "fn",
-                name,
-                args,
-                return_annotation,
-                body,
-                *end_position,
-                false,
-            ),
+            }) => self.definition_fn(public, name, args, return_annotation, body, *end_position),
 
             Definition::Validator(Validator {
                 end_position,
@@ -257,16 +249,7 @@ impl<'comments> Formatter<'comments> {
                 end_position,
                 can_error,
                 ..
-            }) => self.definition_fn(
-                &false,
-                "test",
-                name,
-                args,
-                &None,
-                body,
-                *end_position,
-                *can_error,
-            ),
+            }) => self.definition_test(name, args, body, *end_position, *can_error),
 
             Definition::TypeAlias(TypeAlias {
                 alias,
@@ -488,25 +471,38 @@ impl<'comments> Formatter<'comments> {
         commented(doc, comments)
     }
 
+    fn fn_arg_via<'a, A>(&mut self, arg: &'a ArgVia<A, UntypedExpr>) -> Document<'a> {
+        let comments = self.pop_comments(arg.location.start);
+
+        let doc_comments = self.doc_comments(arg.location.start);
+
+        let doc = arg
+            .arg_name
+            .to_doc()
+            .append(" via ")
+            .append(self.expr(&arg.via, false))
+            .group();
+
+        let doc = doc_comments.append(doc.group()).group();
+
+        commented(doc, comments)
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn definition_fn<'a>(
         &mut self,
         public: &'a bool,
-        keyword: &'a str,
         name: &'a str,
         args: &'a [UntypedArg],
         return_annotation: &'a Option<Annotation>,
         body: &'a UntypedExpr,
         end_location: usize,
-        can_error: bool,
     ) -> Document<'a> {
         // Fn name and args
         let head = pub_(*public)
-            .append(keyword)
-            .append(" ")
+            .append("fn ")
             .append(name)
-            .append(wrap_args(args.iter().map(|e| (self.fn_arg(e), false))))
-            .append(if can_error { " fail" } else { "" });
+            .append(wrap_args(args.iter().map(|e| (self.fn_arg(e), false))));
 
         // Add return annotation
         let head = match return_annotation {
@@ -514,6 +510,39 @@ impl<'comments> Formatter<'comments> {
             None => head,
         }
         .group();
+
+        // Format body
+        let body = self.expr(body, true);
+
+        // Add any trailing comments
+        let body = match printed_comments(self.pop_comments(end_location), false) {
+            Some(comments) => body.append(line()).append(comments),
+            None => body,
+        };
+
+        // Stick it all together
+        head.append(" {")
+            .append(line().append(body).nest(INDENT).group())
+            .append(line())
+            .append("}")
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn definition_test<'a>(
+        &mut self,
+        name: &'a str,
+        args: &'a [UntypedArgVia],
+        body: &'a UntypedExpr,
+        end_location: usize,
+        can_error: bool,
+    ) -> Document<'a> {
+        // Fn name and args
+        let head = "test "
+            .to_doc()
+            .append(name)
+            .append(wrap_args(args.iter().map(|e| (self.fn_arg_via(e), false))))
+            .append(if can_error { " fail" } else { "" })
+            .group();
 
         // Format body
         let body = self.expr(body, true);
@@ -550,13 +579,11 @@ impl<'comments> Formatter<'comments> {
         let first_fn = self
             .definition_fn(
                 &false,
-                "fn",
                 &fun.name,
                 &fun.arguments,
                 &fun.return_annotation,
                 &fun.body,
                 fun.end_position,
-                false,
             )
             .group();
         let first_fn = commented(fun_doc_comments.append(first_fn).group(), fun_comments);
@@ -570,13 +597,11 @@ impl<'comments> Formatter<'comments> {
                 let other_fn = self
                     .definition_fn(
                         &false,
-                        "fn",
                         &other.name,
                         &other.arguments,
                         &other.return_annotation,
                         &other.body,
                         other.end_position,
-                        false,
                     )
                     .group();
 

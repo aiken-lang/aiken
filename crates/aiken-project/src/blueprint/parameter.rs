@@ -5,7 +5,7 @@ use super::{
 };
 use std::{iter, ops::Deref};
 use uplc::{
-    ast::{Constant, Data as UplcData, DeBruijn, Term},
+    ast::{Constant, Data as UplcData},
     PlutusData,
 };
 
@@ -30,7 +30,7 @@ impl Parameter {
     pub fn validate(
         &self,
         definitions: &Definitions<Annotated<Schema>>,
-        term: &Term<DeBruijn>,
+        constant: &Constant,
     ) -> Result<(), Error> {
         let schema = &definitions
             .lookup(&self.schema)
@@ -42,11 +42,7 @@ impl Parameter {
             })?
             .annotated;
 
-        if let Term::Constant(constant) = term {
-            validate_schema(schema, definitions, constant)
-        } else {
-            Err(Error::NonConstantParameter)
-        }
+        validate_schema(schema, definitions, constant)
     }
 }
 

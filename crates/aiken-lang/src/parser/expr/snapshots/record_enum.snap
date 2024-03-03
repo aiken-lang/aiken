@@ -1,0 +1,8 @@
+---
+source: crates/aiken-lang/src/parser/expr/record.rs
+description: "Code:\n\nWinter"
+---
+Var {
+    location: 0..6,
+    name: "Winter",
+}

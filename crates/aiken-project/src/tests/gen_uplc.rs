@@ -1,6 +1,7 @@
+use super::TestProject;
+use crate::module::CheckedModules;
+use aiken_lang::ast::{Definition, Function, TraceLevel, Tracing, TypedTest, TypedValidator};
 use pretty_assertions::assert_eq;
-
-use aiken_lang::ast::{Definition, Function, TraceLevel, Tracing, TypedFunction, TypedValidator};
 use uplc::{
     ast::{Constant, Data, DeBruijn, Name, Program, Term, Type},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
@@ -8,12 +9,8 @@ use uplc::{
     optimize,
 };
 
-use crate::module::CheckedModules;
-
-use super::TestProject;
-
 enum TestType {
-    Func(TypedFunction),
+    Func(TypedTest),
     Validator(TypedValidator),
 }
 
@@ -22,12 +19,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
 
     let modules = CheckedModules::singleton(project.check(project.parse(source_code)));
 
-    let mut generator = modules.new_generator(
-        &project.functions,
-        &project.data_types,
-        &project.module_types,
-        Tracing::All(TraceLevel::Verbose),
-    );
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Verbose));
 
     let Some(checked_module) = modules.values().next() else {
         unreachable!("There's got to be one right?")
@@ -57,7 +49,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
 
     match &script.2 {
         TestType::Func(Function { body: func, .. }) => {
-            let program = generator.generate_test(func, &script.1);
+            let program = generator.generate_raw(func, &[], &script.1);
 
             let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
 
