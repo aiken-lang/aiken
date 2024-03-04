@@ -1,5 +1,3 @@
-use chumsky::prelude::*;
-
 use crate::{
     ast,
     expr::UntypedExpr,
@@ -7,10 +5,11 @@ use crate::{
         annotation,
         chain::{call::parser as call, field_access, tuple_index::parser as tuple_index, Chain},
         error::ParseError,
-        expr::{self, var},
+        expr::{self, bytearray, int, list, string, tuple, var},
         token::Token,
     },
 };
+use chumsky::prelude::*;
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
     // TODO: can remove Token::Bang after a few releases (curr v1.0.11)
@@ -89,13 +88,20 @@ pub fn fuzzer<'a>() -> impl Parser<Token, UntypedExpr, Error = ParseError> + 'a 
             call(expression.clone()),
         ));
 
-        var()
-            .then(chain.repeated())
-            .foldl(|expr, chain| match chain {
-                Chain::Call(args, span) => expr.call(args, span),
-                Chain::FieldAccess(label, span) => expr.field_access(label, span),
-                Chain::TupleIndex(index, span) => expr.tuple_index(index, span),
-            })
+        choice((
+            string(),
+            int(),
+            bytearray(),
+            tuple(expression.clone()),
+            list(expression.clone()),
+            var(),
+        ))
+        .then(chain.repeated())
+        .foldl(|expr, chain| match chain {
+            Chain::Call(args, span) => expr.call(args, span),
+            Chain::FieldAccess(label, span) => expr.field_access(label, span),
+            Chain::TupleIndex(index, span) => expr.tuple_index(index, span),
+        })
     })
 }
 
