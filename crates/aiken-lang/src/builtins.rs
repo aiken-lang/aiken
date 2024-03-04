@@ -1,7 +1,9 @@
 use crate::{
-    ast::{Arg, ArgName, CallArg, Function, ModuleKind, Span, TypedDataType, TypedFunction, UnOp},
+    ast::{
+        Arg, ArgName, CallArg, DataTypeKey, Function, FunctionAccessKey, ModuleKind, Span,
+        TypedDataType, TypedFunction, UnOp,
+    },
     expr::TypedExpr,
-    gen_uplc::builder::{DataTypeKey, FunctionAccessKey},
     tipo::{
         fields::FieldMap, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
         ValueConstructorVariant,
@@ -26,6 +28,8 @@ pub const STRING: &str = "String";
 pub const OPTION: &str = "Option";
 pub const ORDERING: &str = "Ordering";
 pub const REDEEMER_WRAPPER: &str = "RedeemerWrapper";
+pub const PRNG: &str = "PRNG";
+pub const FUZZER: &str = "Fuzzer";
 
 /// Build a prelude that can be injected
 /// into a compiler pipeline
@@ -80,22 +84,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     // Bool
     prelude.types_constructors.insert(
         BOOL.to_string(),
-        vec!["True".to_string(), "False".to_string()],
-    );
-
-    prelude.values.insert(
-        "True".to_string(),
-        ValueConstructor::public(
-            bool(),
-            ValueConstructorVariant::Record {
-                module: "".into(),
-                name: "True".to_string(),
-                field_map: None::<FieldMap>,
-                arity: 0,
-                location: Span::empty(),
-                constructors_count: 2,
-            },
-        ),
+        vec!["False".to_string(), "True".to_string()],
     );
 
     prelude.values.insert(
@@ -105,6 +94,21 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
             ValueConstructorVariant::Record {
                 module: "".into(),
                 name: "False".to_string(),
+                field_map: None::<FieldMap>,
+                arity: 0,
+                location: Span::empty(),
+                constructors_count: 2,
+            },
+        ),
+    );
+
+    prelude.values.insert(
+        "True".to_string(),
+        ValueConstructor::public(
+            bool(),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: "True".to_string(),
                 field_map: None::<FieldMap>,
                 arity: 0,
                 location: Span::empty(),
@@ -153,7 +157,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         MILLER_LOOP_RESULT.to_string(),
         TypeConstructor {
             parameters: vec![],
-            tipo: int(),
+            tipo: miller_loop_result(),
             location: Span::empty(),
             module: "".to_string(),
             public: true,
@@ -410,6 +414,90 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
                 constructors_count: 2,
             },
         ),
+    );
+
+    // PRNG
+    //
+    // pub type PRNG {
+    //   Seeded { seed: ByteArray, choices: ByteArray }
+    //   Replayed { cursor: Int, choices: ByteArray }
+    // }
+
+    prelude.types.insert(
+        PRNG.to_string(),
+        TypeConstructor {
+            location: Span::empty(),
+            parameters: vec![],
+            tipo: prng(),
+            module: "".to_string(),
+            public: true,
+        },
+    );
+
+    prelude.types_constructors.insert(
+        PRNG.to_string(),
+        vec!["Seeded".to_string(), "Replayed".to_string()],
+    );
+
+    let mut seeded_fields = HashMap::new();
+    seeded_fields.insert("seed".to_string(), (0, Span::empty()));
+    seeded_fields.insert("choices".to_string(), (1, Span::empty()));
+    prelude.values.insert(
+        "Seeded".to_string(),
+        ValueConstructor::public(
+            function(vec![byte_array(), byte_array()], prng()),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: "Seeded".to_string(),
+                field_map: Some(FieldMap {
+                    arity: 2,
+                    fields: seeded_fields,
+                    is_function: false,
+                }),
+                arity: 2,
+                location: Span::empty(),
+                constructors_count: 2,
+            },
+        ),
+    );
+
+    let mut replayed_fields = HashMap::new();
+    replayed_fields.insert("cursor".to_string(), (0, Span::empty()));
+    replayed_fields.insert("choices".to_string(), (1, Span::empty()));
+    prelude.values.insert(
+        "Replayed".to_string(),
+        ValueConstructor::public(
+            function(vec![int(), byte_array()], prng()),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: "Replayed".to_string(),
+                field_map: Some(FieldMap {
+                    arity: 2,
+                    fields: replayed_fields,
+                    is_function: false,
+                }),
+                arity: 2,
+                location: Span::empty(),
+                constructors_count: 2,
+            },
+        ),
+    );
+
+    // Fuzzer
+    //
+    // pub type Fuzzer<a> =
+    //   fn(PRNG) -> Option<(PRNG, a)>
+
+    let fuzzer_value = generic_var(id_gen.next());
+    prelude.types.insert(
+        FUZZER.to_string(),
+        TypeConstructor {
+            location: Span::empty(),
+            parameters: vec![fuzzer_value.clone()],
+            tipo: fuzzer(fuzzer_value),
+            module: "".to_string(),
+            public: true,
+        },
     );
 
     prelude
@@ -1133,6 +1221,16 @@ pub fn prelude_data_types(id_gen: &IdGenerator) -> IndexMap<DataTypeKey, TypedDa
         ordering_data_type,
     );
 
+    // Bool
+    let bool_data_type = TypedDataType::bool();
+    data_types.insert(
+        DataTypeKey {
+            module_name: "".to_string(),
+            defined_type: "Bool".to_string(),
+        },
+        bool_data_type,
+    );
+
     // Option
     let option_data_type = TypedDataType::option(generic_var(id_gen.next()));
     data_types.insert(
@@ -1141,6 +1239,16 @@ pub fn prelude_data_types(id_gen: &IdGenerator) -> IndexMap<DataTypeKey, TypedDa
             defined_type: "Option".to_string(),
         },
         option_data_type,
+    );
+
+    // PRNG
+    let prng_data_type = TypedDataType::prng();
+    data_types.insert(
+        DataTypeKey {
+            module_name: "".to_string(),
+            defined_type: "PRNG".to_string(),
+        },
+        prng_data_type,
     );
 
     data_types
@@ -1210,6 +1318,22 @@ pub fn bool() -> Rc<Type> {
         public: true,
         name: BOOL.to_string(),
         module: "".to_string(),
+    })
+}
+
+pub fn prng() -> Rc<Type> {
+    Rc::new(Type::App {
+        args: vec![],
+        public: true,
+        name: PRNG.to_string(),
+        module: "".to_string(),
+    })
+}
+
+pub fn fuzzer(a: Rc<Type>) -> Rc<Type> {
+    Rc::new(Type::Fn {
+        args: vec![prng()],
+        ret: option(tuple(vec![prng(), a])),
     })
 }
 

@@ -1,7 +1,7 @@
 use super::Type;
-use crate::error::ExtraData;
 use crate::{
     ast::{Annotation, BinOp, CallArg, LogicalOpChainKind, Span, UntypedPattern},
+    error::ExtraData,
     expr::{self, UntypedExpr},
     format::Formatter,
     levenshtein,
@@ -259,12 +259,26 @@ You can use '{discard}' and numbers to distinguish between similar names.
         name: String,
     },
 
-    #[error("I found a data type that has a function type in it. This is not allowed.\n")]
+    #[error("I found a type definition that has a function type in it. This is not allowed.\n")]
     #[diagnostic(code("illegal::function_in_type"))]
-    #[diagnostic(help("Data-types can't hold functions. If you want to define method-like functions, group the type definition and the methods under a common namespace in a standalone module."))]
+    #[diagnostic(help(
+        "Data-types can't hold functions. If you want to define method-like functions, group the type definition and the methods under a common namespace in a standalone module."
+    ))]
     FunctionTypeInData {
         #[label]
         location: Span,
+    },
+
+    #[error("I found a type definition that has an unsupported type in it.\n")]
+    #[diagnostic(code("illegal::type_in_data"))]
+    #[diagnostic(help(
+        r#"Data-types can't contain type {type_info} because it isn't serializable into a Plutus Data. Yet, this is a strong requirement for types found in compound structures such as List or Tuples."#,
+        type_info = tipo.to_pretty(0).if_supports_color(Stdout, |s| s.red())
+    ))]
+    IllegalTypeInData {
+        #[label]
+        location: Span,
+        tipo: Rc<Type>,
     },
 
     #[error("I found a discarded expression not bound to a variable.\n")]
@@ -465,9 +479,13 @@ If you really meant to return that last expression, try to replace it with the f
         "I stumbled upon an invalid (non-local) clause guard '{}'.\n",
         name.if_supports_color(Stdout, |s| s.purple())
     )]
-    #[diagnostic(url("https://aiken-lang.org/language-tour/control-flow#checking-equality-and-ordering-in-patterns"))]
+    #[diagnostic(url(
+        "https://aiken-lang.org/language-tour/control-flow#checking-equality-and-ordering-in-patterns"
+    ))]
     #[diagnostic(code("illegal::clause_guard"))]
-    #[diagnostic(help("There are some conditions regarding what can be used in a guard. Values must be either local to the function, or defined as module constants. You can't use functions or records in there."))]
+    #[diagnostic(help(
+        "There are some conditions regarding what can be used in a guard. Values must be either local to the function, or defined as module constants. You can't use functions or records in there."
+    ))]
     NonLocalClauseGuardVariable {
         #[label]
         location: Span,
@@ -480,7 +498,7 @@ If you really meant to return that last expression, try to replace it with the f
     #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#tuples"))]
     #[diagnostic(code("illegal::tuple_index"))]
     #[diagnostic(help(
-        r#"Because you used a tuple-index on an element, I assumed it had to be a tuple or some kind, but instead I found:
+        r#"Because you used a tuple-index on an element, I assumed it had to be a tuple but instead I found something of type:
 
 ╰─▶ {type_info}"#,
         type_info = tipo.to_pretty(0).if_supports_color(Stdout, |s| s.red())
@@ -625,7 +643,9 @@ You can help me by providing a type-annotation for 'x', as such:
     #[error("I almost got caught in an endless loop while inferring a recursive type.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#type-annotations"))]
     #[diagnostic(code("missing::type_annotation"))]
-    #[diagnostic(help("I have several aptitudes, but inferring recursive types isn't one them. It is still possible to define recursive types just fine, but I will need a little help in the form of type annotation to infer their types should they show up."))]
+    #[diagnostic(help(
+        "I have several aptitudes, but inferring recursive types isn't one them. It is still possible to define recursive types just fine, but I will need a little help in the form of type annotation to infer their types should they show up."
+    ))]
     RecursiveType {
         #[label]
         location: Span,
@@ -934,6 +954,27 @@ The best thing to do from here is to remove it."#))]
         #[label("{} arguments", if *count < 2 { "not enough" } else { "too many" })]
         location: Span,
     },
+
+    #[error("I caught a test with too many arguments.\n")]
+    #[diagnostic(code("illegal::test_arity"))]
+    #[diagnostic(help(
+        "Tests are allowed to have 0 or 1 argument, but no more. Here I've found a test definition with {count} arguments. If you need to provide multiple values to a test, use a Record or a Tuple.",
+    ))]
+    IncorrectTestArity {
+        count: usize,
+        #[label("too many arguments")]
+        location: Span,
+    },
+
+    #[error("I choked on a generic type left in an outward-facing interface.\n")]
+    #[diagnostic(code("illegal::generic_in_abi"))]
+    #[diagnostic(help(
+        "Functions of the outer-most parts of a project, such as a validator or a property-based test, must be fully instantiated. That means they can no longer carry unbound generic variables. The type must be fully-known at this point since many structural validation must occur to ensure a safe boundary between the on-chain and off-chain worlds."
+    ))]
+    GenericLeftAtBoundary {
+        #[label("unbound generic at boundary")]
+        location: Span,
+    },
 }
 
 impl ExtraData for Error {
@@ -951,6 +992,7 @@ impl ExtraData for Error {
             | Error::DuplicateVarInPattern { .. }
             | Error::ExtraVarInAlternativePattern { .. }
             | Error::FunctionTypeInData { .. }
+            | Error::IllegalTypeInData { .. }
             | Error::ImplicitlyDiscardedExpression { .. }
             | Error::IncorrectFieldsArity { .. }
             | Error::IncorrectFunctionCallArity { .. }
@@ -984,6 +1026,8 @@ impl ExtraData for Error {
             | Error::UnnecessarySpreadOperator { .. }
             | Error::UpdateMultiConstructorType { .. }
             | Error::ValidatorImported { .. }
+            | Error::IncorrectTestArity { .. }
+            | Error::GenericLeftAtBoundary { .. }
             | Error::ValidatorMustReturnBool { .. } => None,
 
             Error::UnknownType { name, .. }
@@ -1181,14 +1225,14 @@ fn suggest_unify(
 
             (
                 format!(
-                    "{} - {}",
+                    "{}.{{{}}}",
+                    expected_module.if_supports_color(Stdout, |s| s.bright_blue()),
                     expected_str.if_supports_color(Stdout, |s| s.green()),
-                    expected_module.if_supports_color(Stdout, |s| s.bright_blue())
                 ),
                 format!(
-                    "{} - {}",
+                    "{}.{{{}}}",
+                    given_module.if_supports_color(Stdout, |s| s.bright_blue()),
                     given_str.if_supports_color(Stdout, |s| s.red()),
-                    given_module.if_supports_color(Stdout, |s| s.bright_blue())
                 ),
             )
         }
@@ -1260,6 +1304,21 @@ fn suggest_unify(
                    {}
             "#,
             op.to_doc().to_pretty_string(70).if_supports_color(Stdout, |s| s.yellow()),
+            expected,
+            given
+        },
+        Some(UnifyErrorSituation::FuzzerAnnotationMismatch) => formatdoc! {
+            r#"While comparing the return annotation of a Fuzzer with its actual return type, I realized that both don't match.
+
+               I am inferring the Fuzzer should return:
+
+                   {}
+
+               but I found a conflicting annotation saying it returns:
+
+                   {}
+
+               Either, fix (or remove) the annotation or adjust the Fuzzer to return the expected type."#,
             expected,
             given
         },
@@ -1652,6 +1711,8 @@ pub enum UnifyErrorSituation {
 
     /// The operands of a binary operator were incorrect.
     Operator(BinOp),
+
+    FuzzerAnnotationMismatch,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

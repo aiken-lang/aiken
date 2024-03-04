@@ -1,13 +1,12 @@
 use std::{collections::VecDeque, mem::size_of, ops::Deref, rc::Rc};
 
-use num_bigint::BigInt;
-use num_traits::{Signed, ToPrimitive, Zero};
-use pallas::ledger::primitives::babbage::{self, PlutusData};
-
 use crate::{
     ast::{Constant, NamedDeBruijn, Term, Type},
     builtins::DefaultFunction,
 };
+use num_bigint::BigInt;
+use num_traits::{Signed, ToPrimitive, Zero};
+use pallas::ledger::primitives::babbage::{self, PlutusData};
 
 use super::{runtime::BuiltinRuntime, Error};
 

@@ -57,6 +57,18 @@ pub enum Type {
 }
 
 impl Type {
+    pub fn qualifier(&self) -> Option<(String, String)> {
+        match self {
+            Type::App { module, name, .. } => Some((module.to_string(), name.to_string())),
+            Type::Fn { .. } => None,
+            Type::Var { ref tipo } => match &*tipo.borrow() {
+                TypeVar::Link { ref tipo } => tipo.qualifier(),
+                _ => None,
+            },
+            Type::Tuple { .. } => Some((String::new(), "Tuple".to_string())),
+        }
+    }
+
     pub fn is_result_constructor(&self) -> bool {
         match self {
             Type::Fn { ret, .. } => ret.is_result(),

@@ -1,19 +1,16 @@
+use super::TestProject;
+use crate::module::CheckedModules;
+use aiken_lang::ast::{Definition, Function, TraceLevel, Tracing, TypedTest, TypedValidator};
 use pretty_assertions::assert_eq;
-
-use aiken_lang::ast::{Definition, Function, TraceLevel, Tracing, TypedFunction, TypedValidator};
 use uplc::{
     ast::{Constant, Data, DeBruijn, Name, Program, Term, Type},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
-    machine::cost_model::ExBudget,
+    machine::{cost_model::ExBudget, runtime::Compressable},
     optimize,
 };
 
-use crate::module::CheckedModules;
-
-use super::TestProject;
-
 enum TestType {
-    Func(TypedFunction),
+    Func(TypedTest),
     Validator(TypedValidator),
 }
 
@@ -22,12 +19,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
 
     let modules = CheckedModules::singleton(project.check(project.parse(source_code)));
 
-    let mut generator = modules.new_generator(
-        &project.functions,
-        &project.data_types,
-        &project.module_types,
-        Tracing::All(TraceLevel::Verbose),
-    );
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Verbose));
 
     let Some(checked_module) = modules.values().next() else {
         unreachable!("There's got to be one right?")
@@ -57,7 +49,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
 
     match &script.2 {
         TestType::Func(Function { body: func, .. }) => {
-            let program = generator.generate_test(func, &script.1);
+            let program = generator.generate_raw(func, &[], &script.1);
 
             let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
 
@@ -6205,4 +6197,120 @@ fn tuple_2_match() {
             .constr_fields_exposer(),
         false,
     );
+}
+
+#[test]
+fn bls12_381_elements_to_data_conversion() {
+    let src = r#"
+      pub type Proof {
+        piA: G1Element,
+        piB: G2Element,
+      }
+
+      test thing() {
+        let pk =
+          Proof {
+            piA: #<Bls12_381, G1>"b28cb29bc282be68df977b35eb9d8e98b3a0a3fc7c372990bddc50419ca86693e491755338fed4fb42231a7c081252ce",
+            piB: #<Bls12_381, G2>"b9215e5bc481ba6552384c89c23d45bd650b69462868248bfbb83aee7060579404dba41c781dec7c2bec5fccec06842e0e66ad6d86c7c76c468a32c9c0080eea0219d0953b44b1c4f5605afb1e5a3193264ff730222e94f55207628235f3b423",
+         }
+
+        pk == pk
+      }
+    "#;
+
+    let constant = Term::Constant(
+        Constant::Data(Data::constr(
+            0,
+            vec![
+                Data::bytestring(vec![
+                    0xb2, 0x8c, 0xb2, 0x9b, 0xc2, 0x82, 0xbe, 0x68, 0xdf, 0x97, 0x7b, 0x35, 0xeb,
+                    0x9d, 0x8e, 0x98, 0xb3, 0xa0, 0xa3, 0xfc, 0x7c, 0x37, 0x29, 0x90, 0xbd, 0xdc,
+                    0x50, 0x41, 0x9c, 0xa8, 0x66, 0x93, 0xe4, 0x91, 0x75, 0x53, 0x38, 0xfe, 0xd4,
+                    0xfb, 0x42, 0x23, 0x1a, 0x7c, 0x08, 0x12, 0x52, 0xce,
+                ]),
+                Data::bytestring(vec![
+                    0xb9, 0x21, 0x5e, 0x5b, 0xc4, 0x81, 0xba, 0x65, 0x52, 0x38, 0x4c, 0x89, 0xc2,
+                    0x3d, 0x45, 0xbd, 0x65, 0x0b, 0x69, 0x46, 0x28, 0x68, 0x24, 0x8b, 0xfb, 0xb8,
+                    0x3a, 0xee, 0x70, 0x60, 0x57, 0x94, 0x04, 0xdb, 0xa4, 0x1c, 0x78, 0x1d, 0xec,
+                    0x7c, 0x2b, 0xec, 0x5f, 0xcc, 0xec, 0x06, 0x84, 0x2e, 0x0e, 0x66, 0xad, 0x6d,
+                    0x86, 0xc7, 0xc7, 0x6c, 0x46, 0x8a, 0x32, 0xc9, 0xc0, 0x08, 0x0e, 0xea, 0x02,
+                    0x19, 0xd0, 0x95, 0x3b, 0x44, 0xb1, 0xc4, 0xf5, 0x60, 0x5a, 0xfb, 0x1e, 0x5a,
+                    0x31, 0x93, 0x26, 0x4f, 0xf7, 0x30, 0x22, 0x2e, 0x94, 0xf5, 0x52, 0x07, 0x62,
+                    0x82, 0x35, 0xf3, 0xb4, 0x23,
+                ]),
+            ],
+        ))
+        .into(),
+    );
+
+    assert_uplc(
+        src,
+        Term::equals_data().apply(constant.clone()).apply(constant),
+        false,
+    )
+}
+
+#[test]
+fn bls12_381_elements_from_data_conversion() {
+    let src = r#"
+      pub type Proof {
+        piA: G1Element,
+        piB: G2Element,
+      }
+
+      test thing() {
+        let pk =
+          Proof {
+            piA: #<Bls12_381, G1>"b28cb29bc282be68df977b35eb9d8e98b3a0a3fc7c372990bddc50419ca86693e491755338fed4fb42231a7c081252ce",
+            piB: #<Bls12_381, G2>"b9215e5bc481ba6552384c89c23d45bd650b69462868248bfbb83aee7060579404dba41c781dec7c2bec5fccec06842e0e66ad6d86c7c76c468a32c9c0080eea0219d0953b44b1c4f5605afb1e5a3193264ff730222e94f55207628235f3b423",
+         }
+
+        pk.piA == #<Bls12_381, G1>"b28cb29bc282be68df977b35eb9d8e98b3a0a3fc7c372990bddc50419ca86693e491755338fed4fb42231a7c081252ce"
+      }
+    "#;
+
+    let bytes = vec![
+        0xb2, 0x8c, 0xb2, 0x9b, 0xc2, 0x82, 0xbe, 0x68, 0xdf, 0x97, 0x7b, 0x35, 0xeb, 0x9d, 0x8e,
+        0x98, 0xb3, 0xa0, 0xa3, 0xfc, 0x7c, 0x37, 0x29, 0x90, 0xbd, 0xdc, 0x50, 0x41, 0x9c, 0xa8,
+        0x66, 0x93, 0xe4, 0x91, 0x75, 0x53, 0x38, 0xfe, 0xd4, 0xfb, 0x42, 0x23, 0x1a, 0x7c, 0x08,
+        0x12, 0x52, 0xce,
+    ];
+
+    let g1 = Term::Constant(
+        Constant::Bls12_381G1Element(blst::blst_p1::uncompress(&bytes).unwrap().into()).into(),
+    );
+
+    let constant = Term::Constant(
+        Constant::Data(Data::constr(
+            0,
+            vec![
+                Data::bytestring(bytes),
+                Data::bytestring(vec![
+                    0xb9, 0x21, 0x5e, 0x5b, 0xc4, 0x81, 0xba, 0x65, 0x52, 0x38, 0x4c, 0x89, 0xc2,
+                    0x3d, 0x45, 0xbd, 0x65, 0x0b, 0x69, 0x46, 0x28, 0x68, 0x24, 0x8b, 0xfb, 0xb8,
+                    0x3a, 0xee, 0x70, 0x60, 0x57, 0x94, 0x04, 0xdb, 0xa4, 0x1c, 0x78, 0x1d, 0xec,
+                    0x7c, 0x2b, 0xec, 0x5f, 0xcc, 0xec, 0x06, 0x84, 0x2e, 0x0e, 0x66, 0xad, 0x6d,
+                    0x86, 0xc7, 0xc7, 0x6c, 0x46, 0x8a, 0x32, 0xc9, 0xc0, 0x08, 0x0e, 0xea, 0x02,
+                    0x19, 0xd0, 0x95, 0x3b, 0x44, 0xb1, 0xc4, 0xf5, 0x60, 0x5a, 0xfb, 0x1e, 0x5a,
+                    0x31, 0x93, 0x26, 0x4f, 0xf7, 0x30, 0x22, 0x2e, 0x94, 0xf5, 0x52, 0x07, 0x62,
+                    0x82, 0x35, 0xf3, 0xb4, 0x23,
+                ]),
+            ],
+        ))
+        .into(),
+    );
+
+    assert_uplc(
+        src,
+        Term::bls12_381_g1_equal()
+            .apply(Term::bls12_381_g1_uncompress().apply(
+                Term::un_b_data().apply(
+                    Term::head_list().apply(
+                        Term::snd_pair().apply(Term::unconstr_data().apply(constant.clone())),
+                    ),
+                ),
+            ))
+            .apply(g1),
+        false,
+    )
 }

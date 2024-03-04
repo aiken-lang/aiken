@@ -30,38 +30,40 @@ pub fn exec(
         cbor,
     }: Args,
 ) -> miette::Result<()> {
-    let mut program = if cbor {
+    let mut program: Program<Name> = if cbor {
         let cbor_hex = std::fs::read_to_string(&script).into_diagnostic()?;
 
         let raw_cbor = hex::decode(cbor_hex.trim()).into_diagnostic()?;
 
-        let prog = Program::<FakeNamedDeBruijn>::from_cbor(&raw_cbor, &mut Vec::new())
+        let program = Program::<FakeNamedDeBruijn>::from_cbor(&raw_cbor, &mut Vec::new())
             .into_diagnostic()?;
 
-        prog.into()
+        let program: Program<NamedDeBruijn> = program.into();
+
+        Program::<Name>::try_from(program).into_diagnostic()?
     } else if flat {
         let bytes = std::fs::read(&script).into_diagnostic()?;
 
-        let prog = Program::<FakeNamedDeBruijn>::from_flat(&bytes).into_diagnostic()?;
+        let program = Program::<FakeNamedDeBruijn>::from_flat(&bytes).into_diagnostic()?;
 
-        prog.into()
+        let program: Program<NamedDeBruijn> = program.into();
+
+        Program::<Name>::try_from(program).into_diagnostic()?
     } else {
         let code = std::fs::read_to_string(&script).into_diagnostic()?;
 
-        let prog = parser::program(&code).into_diagnostic()?;
-
-        Program::<NamedDeBruijn>::try_from(prog).into_diagnostic()?
+        parser::program(&code).into_diagnostic()?
     };
 
     for arg in args {
         let term = parser::term(&arg).into_diagnostic()?;
 
-        let term = Term::<NamedDeBruijn>::try_from(term).into_diagnostic()?;
-
-        program = program.apply_term(&term);
+        program = program.apply_term(&term)
     }
 
     let budget = ExBudget::default();
+
+    let program = Program::<NamedDeBruijn>::try_from(program).into_diagnostic()?;
 
     let mut eval_result = program.eval(budget);
 

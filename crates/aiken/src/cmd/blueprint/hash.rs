@@ -29,7 +29,7 @@ pub fn exec(
         rebuild,
     }: Args,
 ) -> miette::Result<()> {
-    with_project(directory.as_deref(), false, |p| {
+    with_project(directory.as_deref(), u32::default(), false, |p| {
         if rebuild {
             p.build(false, Tracing::silent())?;
         }
@@ -46,7 +46,7 @@ pub fn exec(
 
         let title = title.as_ref().or(validator.as_ref());
 
-        let address = p.address(title, None)?;
+        let address = p.address(title, None, false)?;
 
         println!("{}", address.payment().to_hex());
 

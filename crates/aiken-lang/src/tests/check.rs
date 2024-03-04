@@ -51,6 +51,33 @@ fn check_validator(
 }
 
 #[test]
+fn bls12_381_elements_in_data_type() {
+    let source_code = r#"
+        type Datum {
+          D0(G1Element)
+          D1(G2Element)
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn bls12_381_ml_result_in_data_type() {
+    let source_code = r#"
+        type Datum {
+          thing: MillerLoopResult
+        }
+    "#;
+
+    let res = check(parse(source_code));
+
+    dbg!(&res);
+
+    assert!(matches!(res, Err((_, Error::IllegalTypeInData { .. }))))
+}
+
+#[test]
 fn validator_illegal_return_type() {
     let source_code = r#"
       validator {
@@ -1169,6 +1196,113 @@ fn pipe_with_wrong_type_and_full_args() {
             _,
             Error::CouldNotUnify {
                 situation: Some(UnifyErrorSituation::PipeTypeMismatch),
+                ..
+            }
+        ))
+    ))
+}
+
+#[test]
+fn fuzzer_ok_basic() {
+    let source_code = r#"
+        fn int() -> Fuzzer<Int> { todo }
+
+        test prop(n via int()) { todo }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn fuzzer_ok_explicit() {
+    let source_code = r#"
+        fn int(prng: PRNG) -> Option<(PRNG, Int)> { todo }
+
+        test prop(n via int) { todo }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn fuzzer_ok_list() {
+    let source_code = r#"
+        fn int() -> Fuzzer<Int> { todo }
+        fn list(a: Fuzzer<a>) -> Fuzzer<List<a>> { todo }
+
+        test prop(xs via list(int())) { todo }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn fuzzer_err_unbound() {
+    let source_code = r#"
+        fn any() -> Fuzzer<a> { todo }
+        fn list(a: Fuzzer<a>) -> Fuzzer<List<a>> { todo }
+
+        test prop(xs via list(any())) { todo }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::GenericLeftAtBoundary { .. }))
+    ))
+}
+
+#[test]
+fn fuzzer_err_unify_1() {
+    let source_code = r#"
+        test prop(xs via Void) { todo }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::CouldNotUnify {
+                situation: None,
+                ..
+            }
+        ))
+    ))
+}
+
+#[test]
+fn fuzzer_err_unify_2() {
+    let source_code = r#"
+        fn any() -> Fuzzer<a> { todo }
+        test prop(xs via any) { todo }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::CouldNotUnify {
+                situation: None,
+                ..
+            }
+        ))
+    ))
+}
+
+#[test]
+fn fuzzer_err_unify_3() {
+    let source_code = r#"
+        fn list(a: Fuzzer<a>) -> Fuzzer<List<a>> { todo }
+        fn int() -> Fuzzer<Int> { todo }
+
+        test prop(xs: Int via list(int())) { todo }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::CouldNotUnify {
+                situation: Some(UnifyErrorSituation::FuzzerAnnotationMismatch),
                 ..
             }
         ))

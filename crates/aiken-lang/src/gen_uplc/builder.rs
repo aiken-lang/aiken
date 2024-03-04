@@ -1,7 +1,21 @@
-use std::{collections::HashMap, ops::Deref, rc::Rc};
-
+use super::{
+    air::{Air, ExpectLevel},
+    tree::{AirMsg, AirTree, TreePath},
+};
+use crate::{
+    ast::{
+        AssignmentKind, BinOp, ClauseGuard, Constant, DataType, DataTypeKey, FunctionAccessKey,
+        Pattern, Span, TraceLevel, TypedArg, TypedClause, TypedClauseGuard, TypedDataType,
+        TypedPattern, UnOp,
+    },
+    builtins::{bool, data, function, int, list, string, void},
+    expr::TypedExpr,
+    line_numbers::{LineColumn, LineNumbers},
+    tipo::{PatternConstructor, Type, TypeVar, ValueConstructor, ValueConstructorVariant},
+};
 use indexmap::{IndexMap, IndexSet};
 use itertools::{Itertools, Position};
+use std::{collections::HashMap, ops::Deref, rc::Rc};
 use uplc::{
     ast::{Constant as UplcConstant, Name, Term, Type as UplcType},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
@@ -11,27 +25,6 @@ use uplc::{
         value::to_pallas_bigint,
     },
     Constr, KeyValuePairs, PlutusData,
-};
-
-use crate::{
-    ast::{
-        AssignmentKind, DataType, Pattern, Span, TraceLevel, TypedArg, TypedClause,
-        TypedClauseGuard, TypedDataType, TypedPattern,
-    },
-    builtins::{bool, data, function, int, list, string, void},
-    expr::TypedExpr,
-    line_numbers::{LineColumn, LineNumbers},
-    tipo::{PatternConstructor, TypeVar, ValueConstructor, ValueConstructorVariant},
-};
-
-use crate::{
-    ast::{BinOp, ClauseGuard, Constant, UnOp},
-    tipo::Type,
-};
-
-use super::{
-    air::{Air, ExpectLevel},
-    tree::{AirMsg, AirTree, TreePath},
 };
 
 pub type Variant = String;
@@ -66,18 +59,6 @@ pub enum HoistableFunction {
     },
     Link((FunctionAccessKey, Variant)),
     CyclicLink(FunctionAccessKey),
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct DataTypeKey {
-    pub module_name: String,
-    pub defined_type: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub struct FunctionAccessKey {
-    pub module_name: String,
-    pub function_name: String,
 }
 
 #[derive(Clone, Debug)]
@@ -312,7 +293,7 @@ pub fn get_generic_id_and_type(tipo: &Type, param: &Type) -> Vec<(u64, Rc<Type>)
 }
 
 pub fn lookup_data_type_by_tipo(
-    data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
     tipo: &Type,
 ) -> Option<DataType<Rc<Type>>> {
     match tipo {
@@ -365,7 +346,8 @@ pub fn get_arg_type_name(tipo: &Type) -> String {
 
 pub fn convert_opaque_type(
     t: &Rc<Type>,
-    data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+    deep: bool,
 ) -> Rc<Type> {
     if check_replaceable_opaque_type(t, data_types) && matches!(t.as_ref(), Type::App { .. }) {
         let data_type = lookup_data_type_by_tipo(data_types, t).unwrap();
@@ -382,7 +364,11 @@ pub fn convert_opaque_type(
 
         let mono_type = find_and_replace_generics(generic_type, &mono_types);
 
-        convert_opaque_type(&mono_type, data_types)
+        if deep {
+            convert_opaque_type(&mono_type, data_types, deep)
+        } else {
+            mono_type
+        }
     } else {
         match t.as_ref() {
             Type::App {
@@ -393,7 +379,7 @@ pub fn convert_opaque_type(
             } => {
                 let mut new_args = vec![];
                 for arg in args {
-                    let arg = convert_opaque_type(arg, data_types);
+                    let arg = convert_opaque_type(arg, data_types, deep);
                     new_args.push(arg);
                 }
                 Type::App {
@@ -407,11 +393,11 @@ pub fn convert_opaque_type(
             Type::Fn { args, ret } => {
                 let mut new_args = vec![];
                 for arg in args {
-                    let arg = convert_opaque_type(arg, data_types);
+                    let arg = convert_opaque_type(arg, data_types, deep);
                     new_args.push(arg);
                 }
 
-                let ret = convert_opaque_type(ret, data_types);
+                let ret = convert_opaque_type(ret, data_types, deep);
 
                 Type::Fn {
                     args: new_args,
@@ -421,7 +407,7 @@ pub fn convert_opaque_type(
             }
             Type::Var { tipo: var_tipo } => {
                 if let TypeVar::Link { tipo } = &var_tipo.borrow().clone() {
-                    convert_opaque_type(tipo, data_types)
+                    convert_opaque_type(tipo, data_types, deep)
                 } else {
                     t.clone()
                 }
@@ -429,7 +415,7 @@ pub fn convert_opaque_type(
             Type::Tuple { elems } => {
                 let mut new_elems = vec![];
                 for arg in elems {
-                    let arg = convert_opaque_type(arg, data_types);
+                    let arg = convert_opaque_type(arg, data_types, deep);
                     new_elems.push(arg);
                 }
                 Type::Tuple { elems: new_elems }.into()
@@ -439,8 +425,8 @@ pub fn convert_opaque_type(
 }
 
 pub fn check_replaceable_opaque_type(
-    t: &Rc<Type>,
-    data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+    t: &Type,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> bool {
     let data_type = lookup_data_type_by_tipo(data_types, t);
 
@@ -636,7 +622,7 @@ pub fn monomorphize(air_tree: &mut AirTree, mono_types: &IndexMap<u64, Rc<Type>>
 
 pub fn erase_opaque_type_operations(
     air_tree: &mut AirTree,
-    data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) {
     if let AirTree::Constr { tipo, args, .. } = air_tree {
         if check_replaceable_opaque_type(tipo, data_types) {
@@ -652,7 +638,7 @@ pub fn erase_opaque_type_operations(
     let mut held_types = air_tree.mut_held_types();
 
     while let Some(tipo) = held_types.pop() {
-        *tipo = convert_opaque_type(tipo, data_types);
+        *tipo = convert_opaque_type(tipo, data_types, true);
     }
 }
 
@@ -917,7 +903,7 @@ pub fn modify_cyclic_calls(
 
 pub fn pattern_has_conditions(
     pattern: &TypedPattern,
-    data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> bool {
     match pattern {
         Pattern::List { .. } | Pattern::Int { .. } => true,
@@ -943,7 +929,7 @@ pub fn pattern_has_conditions(
 // TODO: write some tests
 pub fn rearrange_list_clauses(
     clauses: Vec<TypedClause>,
-    data_types: &IndexMap<DataTypeKey, &TypedDataType>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> Vec<TypedClause> {
     let mut sorted_clauses = clauses;
 
@@ -1181,7 +1167,7 @@ pub fn find_list_clause_or_default_first(clauses: &[TypedClause]) -> &TypedClaus
         .unwrap_or(&clauses[0])
 }
 
-pub fn convert_data_to_type(term: Term<Name>, field_type: &Rc<Type>) -> Term<Name> {
+pub fn convert_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
     if field_type.is_int() {
         Term::un_i_data().apply(term)
     } else if field_type.is_bytearray() {
@@ -1222,7 +1208,7 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
 
 pub fn convert_data_to_type_debug(
     term: Term<Name>,
-    field_type: &Rc<Type>,
+    field_type: &Type,
     error_term: Term<Name>,
 ) -> Term<Name> {
     if field_type.is_int() {
@@ -1494,9 +1480,9 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
             ),
         )
     } else if field_type.is_bls381_12_g1() {
-        Term::bls12_381_g1_compress().apply(Term::b_data().apply(term))
+        Term::b_data().apply(Term::bls12_381_g1_compress().apply(term))
     } else if field_type.is_bls381_12_g2() {
-        Term::bls12_381_g2_compress().apply(Term::b_data().apply(term))
+        Term::b_data().apply(Term::bls12_381_g2_compress().apply(term))
     } else if field_type.is_ml_result() {
         panic!("ML Result not supported")
     } else {
@@ -1955,9 +1941,9 @@ pub fn extract_constant(term: &Term<Name>) -> Option<Rc<UplcConstant>> {
 }
 
 pub fn get_src_code_by_span(
-    module_name: &String,
+    module_name: &str,
     span: &Span,
-    module_src: &IndexMap<String, (String, LineNumbers)>,
+    module_src: &IndexMap<&str, &(String, LineNumbers)>,
 ) -> String {
     let (src, _) = module_src
         .get(module_name)
@@ -1969,9 +1955,9 @@ pub fn get_src_code_by_span(
 }
 
 pub fn get_line_columns_by_span(
-    module_name: &String,
+    module_name: &str,
     span: &Span,
-    module_src: &IndexMap<String, (String, LineNumbers)>,
+    module_src: &IndexMap<&str, &(String, LineNumbers)>,
 ) -> LineColumn {
     let (_, lines) = module_src
         .get(module_name)

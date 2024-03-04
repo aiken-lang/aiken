@@ -23,6 +23,10 @@ pub struct Args {
     /// Force the project to be rebuilt, otherwise relies on existing artifacts (i.e. plutus.json)
     #[clap(long)]
     rebuild: bool,
+
+    /// Output the address for mainnet (this command defaults to testnet)
+    #[clap(long)]
+    mainnet: bool,
 }
 
 pub fn exec(
@@ -32,9 +36,10 @@ pub fn exec(
         validator,
         delegated_to,
         rebuild,
+        mainnet,
     }: Args,
 ) -> miette::Result<()> {
-    with_project(directory.as_deref(), false, |p| {
+    with_project(directory.as_deref(), u32::default(), false, |p| {
         if rebuild {
             p.build(false, Tracing::silent())?;
         }
@@ -51,7 +56,7 @@ pub fn exec(
 
         let title = title.as_ref().or(validator.as_ref());
 
-        let address = p.address(title, delegated_to.as_ref())?;
+        let address = p.address(title, delegated_to.as_ref(), mainnet)?;
 
         println!("{}", address.to_bech32().unwrap());
 

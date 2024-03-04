@@ -1,7 +1,6 @@
 use aiken_lang::ast::{TraceLevel, Tracing};
 use aiken_project::watch::{self, watch_project, with_project};
-use clap::builder::MapValueParser;
-use clap::builder::{PossibleValuesParser, TypedValueParser};
+use clap::builder::{MapValueParser, PossibleValuesParser, TypedValueParser};
 use std::{path::PathBuf, process};
 
 #[derive(clap::Args)]
@@ -52,17 +51,23 @@ pub fn exec(
     }: Args,
 ) -> miette::Result<()> {
     let result = if watch {
-        watch_project(directory.as_deref(), watch::default_filter, 500, |p| {
-            p.build(
-                uplc,
-                match filter_traces {
-                    Some(filter_traces) => filter_traces(trace_level),
-                    None => Tracing::All(trace_level),
-                },
-            )
-        })
+        watch_project(
+            directory.as_deref(),
+            watch::default_filter,
+            u32::default(),
+            500,
+            |p| {
+                p.build(
+                    uplc,
+                    match filter_traces {
+                        Some(filter_traces) => filter_traces(trace_level),
+                        None => Tracing::All(trace_level),
+                    },
+                )
+            },
+        )
     } else {
-        with_project(directory.as_deref(), deny, |p| {
+        with_project(directory.as_deref(), u32::default(), deny, |p| {
             p.build(
                 uplc,
                 match filter_traces {

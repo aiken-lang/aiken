@@ -13,9 +13,8 @@ use aiken_lang::{
 use miette::NamedSource;
 use serde;
 use std::borrow::Borrow;
-use std::rc::Rc;
 use uplc::{
-    ast::{Constant, DeBruijn, Program, Term},
+    ast::{Constant, DeBruijn, Program},
     PlutusData,
 };
 
@@ -199,14 +198,14 @@ impl Validator {
     pub fn apply(
         self,
         definitions: &Definitions<Annotated<Schema>>,
-        arg: &Term<DeBruijn>,
+        arg: &PlutusData,
     ) -> Result<Self, Error> {
         match self.parameters.split_first() {
             None => Err(Error::NoParametersToApply),
             Some((head, tail)) => {
-                head.validate(definitions, arg)?;
+                head.validate(definitions, &Constant::Data(arg.clone()))?;
                 Ok(Self {
-                    program: self.program.apply_term(arg),
+                    program: self.program.apply_data(arg.clone()),
                     parameters: tail.to_vec(),
                     ..self
                 })
@@ -218,7 +217,7 @@ impl Validator {
         &self,
         definitions: &Definitions<Annotated<Schema>>,
         ask: F,
-    ) -> Result<Term<DeBruijn>, Error>
+    ) -> Result<PlutusData, Error>
     where
         F: Fn(&Annotated<Schema>, &Definitions<Annotated<Schema>>) -> Result<PlutusData, Error>,
     {
@@ -242,7 +241,7 @@ impl Validator {
 
                 let data = ask(&schema, definitions)?;
 
-                Ok(Term::Constant(Rc::new(Constant::Data(data.clone()))))
+                Ok(data.clone())
             }
         }
     }
@@ -250,17 +249,6 @@ impl Validator {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
-    use aiken_lang::{
-        self,
-        ast::{TraceLevel, Tracing},
-        builtins,
-    };
-    use uplc::ast as uplc_ast;
-
-    use crate::tests::TestProject;
-
     use super::{
         super::{
             definitions::{Definitions, Reference},
@@ -269,16 +257,22 @@ mod tests {
         },
         *,
     };
+    use crate::tests::TestProject;
+    use aiken_lang::{
+        self,
+        ast::{TraceLevel, Tracing},
+        builtins,
+    };
+    use std::collections::HashMap;
+    use uplc::ast as uplc_ast;
 
     macro_rules! assert_validator {
         ($code:expr) => {
             let mut project = TestProject::new();
 
             let modules = CheckedModules::singleton(project.check(project.parse(indoc::indoc! { $code })));
-            let mut generator = modules.new_generator(
-                &project.functions,
-                &project.data_types,
-                &project.module_types,
+
+            let mut generator = project.new_generator(
                 Tracing::All(TraceLevel::Verbose),
             );
 
@@ -296,15 +290,23 @@ mod tests {
             let validator = validators
                 .get(0)
                 .unwrap()
-                .as_ref()
-                .expect("Failed to create validator blueprint");
+                .as_ref();
 
-            insta::with_settings!({
-                description => concat!("Code:\n\n", indoc::indoc! { $code }),
-                omit_expression => true
-            }, {
-                insta::assert_json_snapshot!(validator);
-            });
+            match validator {
+                Err(e) => insta::with_settings!({
+                    description => concat!("Code:\n\n", indoc::indoc! { $code }),
+                    omit_expression => true
+                }, {
+                    insta::assert_debug_snapshot!(e);
+                }),
+
+                Ok(validator) => insta::with_settings!({
+                    description => concat!("Code:\n\n", indoc::indoc! { $code }),
+                    omit_expression => true
+                }, {
+                    insta::assert_json_snapshot!(validator);
+                }),
+            };
         };
     }
 
@@ -515,6 +517,24 @@ mod tests {
     }
 
     #[test]
+    fn opaque_singleton_multi_variants() {
+        assert_validator!(
+            r#"
+            pub opaque type Rational {
+              numerator: Int,
+              denominator: Int,
+            }
+
+            validator {
+              fn opaque_singleton_multi_variants(redeemer: Rational, ctx: Void) {
+                True
+              }
+            }
+            "#
+        );
+    }
+
+    #[test]
     fn nested_data() {
         assert_validator!(
             r#"
@@ -599,7 +619,7 @@ mod tests {
     fn validate_arguments_integer() {
         let definitions = fixture_definitions();
 
-        let term = Term::data(uplc_ast::Data::integer(42.into()));
+        let term = Constant::Data(uplc_ast::Data::integer(42.into()));
 
         let param = Parameter {
             title: None,
@@ -613,7 +633,7 @@ mod tests {
     fn validate_arguments_bytestring() {
         let definitions = fixture_definitions();
 
-        let term = Term::data(uplc_ast::Data::bytestring(vec![102, 111, 111]));
+        let term = Constant::Data(uplc_ast::Data::bytestring(vec![102, 111, 111]));
 
         let param = Parameter {
             title: None,
@@ -642,7 +662,7 @@ mod tests {
             .into(),
         );
 
-        let term = Term::data(uplc_ast::Data::list(vec![
+        let term = Constant::Data(uplc_ast::Data::list(vec![
             uplc_ast::Data::integer(42.into()),
             uplc_ast::Data::integer(14.into()),
         ]));
@@ -671,7 +691,7 @@ mod tests {
             .into(),
         );
 
-        let term = Term::data(uplc_ast::Data::list(vec![uplc_ast::Data::bytestring(
+        let term = Constant::Data(uplc_ast::Data::list(vec![uplc_ast::Data::bytestring(
             vec![102, 111, 111],
         )]));
 
@@ -703,7 +723,7 @@ mod tests {
             .into(),
         );
 
-        let term = Term::data(uplc_ast::Data::list(vec![
+        let term = Constant::Data(uplc_ast::Data::list(vec![
             uplc_ast::Data::integer(42.into()),
             uplc_ast::Data::bytestring(vec![102, 111, 111]),
         ]));
@@ -734,7 +754,7 @@ mod tests {
             .into(),
         );
 
-        let term = Term::data(uplc_ast::Data::map(vec![(
+        let term = Constant::Data(uplc_ast::Data::map(vec![(
             uplc_ast::Data::bytestring(vec![102, 111, 111]),
             uplc_ast::Data::integer(42.into()),
         )]));
@@ -750,7 +770,7 @@ mod tests {
 
         let definitions = fixture_definitions();
 
-        let term = Term::data(uplc_ast::Data::constr(1, vec![]));
+        let term = Constant::Data(uplc_ast::Data::constr(1, vec![]));
 
         let param: Parameter = schema.into();
 
@@ -785,7 +805,7 @@ mod tests {
             .into(),
         );
 
-        let term = Term::data(uplc_ast::Data::constr(
+        let term = Constant::Data(uplc_ast::Data::constr(
             0,
             vec![uplc_ast::Data::constr(0, vec![])],
         ));
@@ -841,7 +861,7 @@ mod tests {
             .into(),
         );
 
-        let term = Term::data(uplc_ast::Data::constr(
+        let term = Constant::Data(uplc_ast::Data::constr(
             1,
             vec![
                 uplc_ast::Data::integer(14.into()),

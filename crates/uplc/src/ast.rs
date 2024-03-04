@@ -7,6 +7,7 @@ use crate::{
         eval_result::EvalResult,
         Machine,
     },
+    parser::interner::Interner,
 };
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
@@ -18,7 +19,6 @@ use pallas::ledger::{
     },
     traverse::ComputeHash,
 };
-
 use serde::{
     self,
     de::{self, Deserialize, Deserializer, MapAccess, Visitor},
@@ -58,21 +58,8 @@ where
         }
     }
 
-    /// We use this to apply the validator to Datum,
-    /// then redeemer, then ScriptContext. If datum is
-    /// even necessary (i.e. minting policy).
-    pub fn apply_term(&self, term: &Term<T>) -> Self {
-        let applied_term = Term::Apply {
-            function: Rc::new(self.term.clone()),
-            argument: Rc::new(term.clone()),
-        };
-
-        Program {
-            version: self.version,
-            term: applied_term,
-        }
-    }
-
+    /// A convenient and faster version that `apply_term` since the program doesn't need to be
+    /// re-interned (constant Data do not introduce new bindings).
     pub fn apply_data(&self, plutus_data: PlutusData) -> Self {
         let applied_term = Term::Apply {
             function: Rc::new(self.term.clone()),
@@ -83,6 +70,27 @@ where
             version: self.version,
             term: applied_term,
         }
+    }
+}
+
+impl Program<Name> {
+    /// We use this to apply the validator to Datum,
+    /// then redeemer, then ScriptContext. If datum is
+    /// even necessary (i.e. minting policy).
+    pub fn apply_term(&self, term: &Term<Name>) -> Self {
+        let applied_term = Term::Apply {
+            function: Rc::new(self.term.clone()),
+            argument: Rc::new(term.clone()),
+        };
+
+        let mut program = Program {
+            version: self.version,
+            term: applied_term,
+        };
+
+        Interner::new().program(&mut program);
+
+        program
     }
 }
 
@@ -161,7 +169,9 @@ impl<'a> Deserialize<'a> for Program<DeBruijn> {
 impl Program<DeBruijn> {
     pub fn address(&self, network: Network, delegation: ShelleyDelegationPart) -> ShelleyAddress {
         let cbor = self.to_cbor().unwrap();
+
         let validator_hash = babbage::PlutusV2Script(cbor.into()).compute_hash();
+
         ShelleyAddress::new(
             network,
             ShelleyPaymentPart::Script(validator_hash),
@@ -269,7 +279,7 @@ pub enum Constant {
     Bls12_381MlResult(Box<blst::blst_fp12>),
 }
 
-pub struct Data {}
+pub struct Data;
 
 // TODO: See about moving these builders upstream to Pallas?
 impl Data {

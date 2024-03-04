@@ -6,7 +6,7 @@ use crate::ast::{NamedDeBruijn, Term, Type};
 
 use super::{ExBudget, Value};
 
-#[derive(thiserror::Error, Debug, miette::Diagnostic)]
+#[derive(Debug, Clone, thiserror::Error, miette::Diagnostic)]
 pub enum Error {
     #[error("Over budget mem: {} & cpu: {}", .0.mem, .0.cpu)]
     OutOfExError(ExBudget),

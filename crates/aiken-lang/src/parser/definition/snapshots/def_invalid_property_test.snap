@@ -1,0 +1,59 @@
+---
+source: crates/aiken-lang/src/parser/definition/test.rs
+description: "Code:\n\ntest foo(x via f, y via g) {\n    True\n}\n"
+---
+Test(
+    Function {
+        arguments: [
+            ArgVia {
+                arg_name: Named {
+                    name: "x",
+                    label: "x",
+                    location: 9..10,
+                    is_validator_param: false,
+                },
+                location: 9..10,
+                via: Var {
+                    location: 15..16,
+                    name: "f",
+                },
+                tipo: (),
+                annotation: None,
+            },
+            ArgVia {
+                arg_name: Named {
+                    name: "y",
+                    label: "y",
+                    location: 18..19,
+                    is_validator_param: false,
+                },
+                location: 18..19,
+                via: Var {
+                    location: 24..25,
+                    name: "g",
+                },
+                tipo: (),
+                annotation: None,
+            },
+        ],
+        body: Var {
+            location: 33..37,
+            name: "True",
+        },
+        doc: None,
+        location: 0..26,
+        name: "foo",
+        public: false,
+        return_annotation: Some(
+            Constructor {
+                location: 0..39,
+                module: None,
+                name: "Bool",
+                arguments: [],
+            },
+        ),
+        return_type: (),
+        end_position: 38,
+        can_error: false,
+    },
+)

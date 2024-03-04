@@ -1,6 +1,7 @@
 use super::build::{filter_traces_parser, trace_level_parser};
 use aiken_lang::ast::{TraceLevel, Tracing};
 use aiken_project::watch::{self, watch_project, with_project};
+use rand::prelude::*;
 use std::{path::PathBuf, process};
 
 #[derive(clap::Args)]
@@ -24,6 +25,10 @@ pub struct Args {
     /// When enabled, re-run the command on file changes instead of exiting
     #[clap(long)]
     watch: bool,
+
+    /// An initial seed to initialize the pseudo-random generator for property-tests.
+    #[clap(long)]
+    seed: Option<u32>,
 
     /// Only run tests if they match any of these strings.
     /// You can match a module with `-m aiken/list` or `-m list`.
@@ -66,28 +71,41 @@ pub fn exec(
         watch,
         filter_traces,
         trace_level,
+        seed,
     }: Args,
 ) -> miette::Result<()> {
+    let mut rng = rand::thread_rng();
+
+    let seed = seed.unwrap_or_else(|| rng.gen());
+
     let result = if watch {
-        watch_project(directory.as_deref(), watch::default_filter, 500, |p| {
-            p.check(
-                skip_tests,
-                match_tests.clone(),
-                debug,
-                exact_match,
-                match filter_traces {
-                    Some(filter_traces) => filter_traces(trace_level),
-                    None => Tracing::All(trace_level),
-                },
-            )
-        })
+        watch_project(
+            directory.as_deref(),
+            watch::default_filter,
+            seed,
+            500,
+            |p| {
+                p.check(
+                    skip_tests,
+                    match_tests.clone(),
+                    debug,
+                    exact_match,
+                    seed,
+                    match filter_traces {
+                        Some(filter_traces) => filter_traces(trace_level),
+                        None => Tracing::All(trace_level),
+                    },
+                )
+            },
+        )
     } else {
-        with_project(directory.as_deref(), deny, |p| {
+        with_project(directory.as_deref(), seed, deny, |p| {
             p.check(
                 skip_tests,
                 match_tests.clone(),
                 debug,
                 exact_match,
+                seed,
                 match filter_traces {
                     Some(filter_traces) => filter_traces(trace_level),
                     None => Tracing::All(trace_level),

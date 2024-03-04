@@ -5,6 +5,7 @@ use crate::{
     parser::token::{Base, Token},
     tipo::{PatternConstructor, Type, TypeInfo},
 };
+use indexmap::IndexMap;
 use miette::Diagnostic;
 use owo_colors::{OwoColorize, Stream::Stdout};
 use std::{
@@ -127,6 +128,62 @@ impl TypedModule {
 
         Ok(())
     }
+
+    // TODO: Avoid cloning definitions here. This would likely require having a lifetime on
+    // 'Project', so that we can enforce that those references live from the ast to here.
+    pub fn register_definitions(
+        &self,
+        functions: &mut IndexMap<FunctionAccessKey, TypedFunction>,
+        data_types: &mut IndexMap<DataTypeKey, TypedDataType>,
+    ) {
+        for def in self.definitions() {
+            match def {
+                Definition::Fn(func) => {
+                    functions.insert(
+                        FunctionAccessKey {
+                            module_name: self.name.clone(),
+                            function_name: func.name.clone(),
+                        },
+                        func.clone(),
+                    );
+                }
+
+                Definition::Test(test) => {
+                    functions.insert(
+                        FunctionAccessKey {
+                            module_name: self.name.clone(),
+                            function_name: test.name.clone(),
+                        },
+                        test.clone().into(),
+                    );
+                }
+
+                Definition::DataType(dt) => {
+                    data_types.insert(
+                        DataTypeKey {
+                            module_name: self.name.clone(),
+                            defined_type: dt.name.clone(),
+                        },
+                        dt.clone(),
+                    );
+                }
+
+                Definition::Validator(v) => {
+                    let module_name = self.name.as_str();
+
+                    if let Some((k, v)) = v.into_function_definition(module_name, |f, _| Some(f)) {
+                        functions.insert(k, v);
+                    }
+
+                    if let Some((k, v)) = v.into_function_definition(module_name, |_, f| f) {
+                        functions.insert(k, v);
+                    }
+                }
+
+                Definition::TypeAlias(_) | Definition::ModuleConstant(_) | Definition::Use(_) => {}
+            }
+        }
+    }
 }
 
 fn str_to_keyword(word: &str) -> Option<Token> {
@@ -154,16 +211,20 @@ fn str_to_keyword(word: &str) -> Option<Token> {
         "and" => Some(Token::And),
         "or" => Some(Token::Or),
         "validator" => Some(Token::Validator),
+        "via" => Some(Token::Via),
         _ => None,
     }
 }
 
-pub type TypedFunction = Function<Rc<Type>, TypedExpr>;
-pub type UntypedFunction = Function<(), UntypedExpr>;
+pub type TypedFunction = Function<Rc<Type>, TypedExpr, TypedArg>;
+pub type UntypedFunction = Function<(), UntypedExpr, UntypedArg>;
+
+pub type TypedTest = Function<Rc<Type>, TypedExpr, TypedArgVia>;
+pub type UntypedTest = Function<(), UntypedExpr, UntypedArgVia>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Function<T, Expr> {
-    pub arguments: Vec<Arg<T>>,
+pub struct Function<T, Expr, Arg> {
+    pub arguments: Vec<Arg>,
     pub body: Expr,
     pub doc: Option<String>,
     pub location: Span,
@@ -178,9 +239,47 @@ pub struct Function<T, Expr> {
 pub type TypedTypeAlias = TypeAlias<Rc<Type>>;
 pub type UntypedTypeAlias = TypeAlias<()>;
 
-impl TypedFunction {
+impl From<UntypedTest> for UntypedFunction {
+    fn from(f: UntypedTest) -> Self {
+        Function {
+            doc: f.doc,
+            location: f.location,
+            name: f.name,
+            public: f.public,
+            arguments: f.arguments.into_iter().map(|arg| arg.into()).collect(),
+            return_annotation: f.return_annotation,
+            return_type: f.return_type,
+            body: f.body,
+            can_error: f.can_error,
+            end_position: f.end_position,
+        }
+    }
+}
+
+impl From<TypedTest> for TypedFunction {
+    fn from(f: TypedTest) -> Self {
+        Function {
+            doc: f.doc,
+            location: f.location,
+            name: f.name,
+            public: f.public,
+            arguments: f.arguments.into_iter().map(|arg| arg.into()).collect(),
+            return_annotation: f.return_annotation,
+            return_type: f.return_type,
+            body: f.body,
+            can_error: f.can_error,
+            end_position: f.end_position,
+        }
+    }
+}
+
+impl TypedTest {
     pub fn test_hint(&self) -> Option<(BinOp, Box<TypedExpr>, Box<TypedExpr>)> {
-        do_test_hint(&self.body)
+        if self.arguments.is_empty() {
+            do_test_hint(&self.body)
+        } else {
+            None
+        }
     }
 }
 
@@ -235,9 +334,77 @@ pub struct TypeAlias<T> {
     pub tipo: T,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct DataTypeKey {
+    pub module_name: String,
+    pub defined_type: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct FunctionAccessKey {
+    pub module_name: String,
+    pub function_name: String,
+}
+
 pub type TypedDataType = DataType<Rc<Type>>;
 
 impl TypedDataType {
+    pub fn bool() -> Self {
+        DataType {
+            constructors: vec![
+                RecordConstructor {
+                    location: Span::empty(),
+                    name: "False".to_string(),
+                    arguments: vec![],
+                    doc: None,
+                    sugar: false,
+                },
+                RecordConstructor {
+                    location: Span::empty(),
+                    name: "True".to_string(),
+                    arguments: vec![],
+                    doc: None,
+                    sugar: false,
+                },
+            ],
+            doc: None,
+            location: Span::empty(),
+            name: "Bool".to_string(),
+            opaque: false,
+            parameters: vec![],
+            public: true,
+            typed_parameters: vec![],
+        }
+    }
+
+    pub fn prng() -> Self {
+        DataType {
+            constructors: vec![
+                RecordConstructor {
+                    location: Span::empty(),
+                    name: "Seeded".to_string(),
+                    arguments: vec![],
+                    doc: None,
+                    sugar: false,
+                },
+                RecordConstructor {
+                    location: Span::empty(),
+                    name: "Replayed".to_string(),
+                    arguments: vec![],
+                    doc: None,
+                    sugar: false,
+                },
+            ],
+            doc: None,
+            location: Span::empty(),
+            name: "PRNG".to_string(),
+            opaque: false,
+            parameters: vec![],
+            public: true,
+            typed_parameters: vec![],
+        }
+    }
+
     pub fn ordering() -> Self {
         DataType {
             constructors: vec![
@@ -358,10 +525,43 @@ pub type UntypedValidator = Validator<(), UntypedExpr>;
 pub struct Validator<T, Expr> {
     pub doc: Option<String>,
     pub end_position: usize,
-    pub fun: Function<T, Expr>,
-    pub other_fun: Option<Function<T, Expr>>,
+    pub fun: Function<T, Expr, Arg<T>>,
+    pub other_fun: Option<Function<T, Expr, Arg<T>>>,
     pub location: Span,
     pub params: Vec<Arg<T>>,
+}
+
+impl TypedValidator {
+    pub fn into_function_definition<'a, F>(
+        &'a self,
+        module_name: &str,
+        select: F,
+    ) -> Option<(FunctionAccessKey, TypedFunction)>
+    where
+        F: Fn(&'a TypedFunction, Option<&'a TypedFunction>) -> Option<&'a TypedFunction> + 'a,
+    {
+        match select(&self.fun, self.other_fun.as_ref()) {
+            None => None,
+            Some(fun) => {
+                let mut fun = fun.clone();
+
+                fun.arguments = self
+                    .params
+                    .clone()
+                    .into_iter()
+                    .chain(fun.arguments)
+                    .collect();
+
+                Some((
+                    FunctionAccessKey {
+                        module_name: module_name.to_string(),
+                        function_name: fun.name.clone(),
+                    },
+                    fun,
+                ))
+            }
+        }
+    }
 }
 
 pub type TypedDefinition = Definition<Rc<Type>, TypedExpr, String>;
@@ -369,7 +569,7 @@ pub type UntypedDefinition = Definition<(), UntypedExpr, ()>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Definition<T, Expr, PackageName> {
-    Fn(Function<T, Expr>),
+    Fn(Function<T, Expr, Arg<T>>),
 
     TypeAlias(TypeAlias<T>),
 
@@ -379,7 +579,7 @@ pub enum Definition<T, Expr, PackageName> {
 
     ModuleConstant(ModuleConstant<T>),
 
-    Test(Function<T, Expr>),
+    Test(Function<T, Expr, ArgVia<T, Expr>>),
 
     Validator(Validator<T, Expr>),
 }
@@ -631,6 +831,30 @@ impl<A> Arg<A> {
 
     pub fn put_doc(&mut self, new_doc: String) {
         self.doc = Some(new_doc);
+    }
+}
+
+pub type TypedArgVia = ArgVia<Rc<Type>, TypedExpr>;
+pub type UntypedArgVia = ArgVia<(), UntypedExpr>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArgVia<T, Expr> {
+    pub arg_name: ArgName,
+    pub location: Span,
+    pub via: Expr,
+    pub tipo: T,
+    pub annotation: Option<Annotation>,
+}
+
+impl<T, Ann> From<ArgVia<T, Ann>> for Arg<T> {
+    fn from(arg: ArgVia<T, Ann>) -> Arg<T> {
+        Arg {
+            arg_name: arg.arg_name,
+            location: arg.location,
+            tipo: arg.tipo,
+            annotation: None,
+            doc: None,
+        }
     }
 }
 

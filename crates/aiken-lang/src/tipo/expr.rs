@@ -1860,7 +1860,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         }
     }
 
-    fn infer_value_constructor(
+    pub fn infer_value_constructor(
         &mut self,
         module: &Option<String>,
         name: &str,

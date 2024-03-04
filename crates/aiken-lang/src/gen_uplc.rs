@@ -2,25 +2,21 @@ pub mod air;
 pub mod builder;
 pub mod tree;
 
-use petgraph::{algo, Graph};
-use std::collections::HashMap;
-use std::rc::Rc;
-
-use indexmap::{IndexMap, IndexSet};
-use itertools::Itertools;
-use uplc::{
-    ast::{Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType},
-    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
-    builtins::DefaultFunction,
-    machine::cost_model::ExBudget,
-    optimize::aiken_optimize_and_intern,
-    parser::interner::Interner,
+use self::{
+    air::Air,
+    builder::{
+        air_holds_msg, cast_validator_args, constants_ir, convert_type_to_data, extract_constant,
+        lookup_data_type_by_tipo, modify_cyclic_calls, modify_self_calls, rearrange_list_clauses,
+        AssignmentProperties, ClauseProperties, CodeGenSpecialFuncs, CycleFunctionNames,
+        HoistableFunction, Variant,
+    },
+    tree::{AirMsg, AirTree, TreePath},
 };
-
 use crate::{
     ast::{
-        AssignmentKind, BinOp, Bls12_381Point, Curve, Pattern, Span, TraceLevel, TypedArg,
-        TypedClause, TypedDataType, TypedFunction, TypedPattern, TypedValidator, UnOp,
+        AssignmentKind, BinOp, Bls12_381Point, Curve, DataTypeKey, FunctionAccessKey, Pattern,
+        Span, TraceLevel, Tracing, TypedArg, TypedClause, TypedDataType, TypedFunction,
+        TypedPattern, TypedValidator, UnOp,
     },
     builtins::{bool, data, int, list, string, void},
     expr::TypedExpr,
@@ -41,25 +37,26 @@ use crate::{
     },
     IdGenerator,
 };
-
-use self::{
-    air::Air,
-    builder::{
-        air_holds_msg, cast_validator_args, constants_ir, convert_type_to_data, extract_constant,
-        lookup_data_type_by_tipo, modify_cyclic_calls, modify_self_calls, rearrange_list_clauses,
-        AssignmentProperties, ClauseProperties, CodeGenSpecialFuncs, CycleFunctionNames,
-        DataTypeKey, FunctionAccessKey, HoistableFunction, Variant,
-    },
-    tree::{AirMsg, AirTree, TreePath},
+use indexmap::{IndexMap, IndexSet};
+use itertools::Itertools;
+use petgraph::{algo, Graph};
+use std::{collections::HashMap, rc::Rc};
+use uplc::{
+    ast::{Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType},
+    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
+    builtins::DefaultFunction,
+    machine::cost_model::ExBudget,
+    optimize::aiken_optimize_and_intern,
+    parser::interner::Interner,
 };
 
 #[derive(Clone)]
 pub struct CodeGenerator<'a> {
     /// immutable index maps
-    functions: IndexMap<FunctionAccessKey, &'a TypedFunction>,
-    data_types: IndexMap<DataTypeKey, &'a TypedDataType>,
-    module_types: IndexMap<&'a String, &'a TypeInfo>,
-    module_src: IndexMap<String, (String, LineNumbers)>,
+    functions: IndexMap<&'a FunctionAccessKey, &'a TypedFunction>,
+    data_types: IndexMap<&'a DataTypeKey, &'a TypedDataType>,
+    module_types: IndexMap<&'a str, &'a TypeInfo>,
+    module_src: IndexMap<&'a str, &'a (String, LineNumbers)>,
     /// immutable option
     tracing: TraceLevel,
     /// mutable index maps that are reset
@@ -74,19 +71,23 @@ pub struct CodeGenerator<'a> {
 }
 
 impl<'a> CodeGenerator<'a> {
+    pub fn data_types(&self) -> &IndexMap<&'a DataTypeKey, &'a TypedDataType> {
+        &self.data_types
+    }
+
     pub fn new(
-        functions: IndexMap<FunctionAccessKey, &'a TypedFunction>,
-        data_types: IndexMap<DataTypeKey, &'a TypedDataType>,
-        module_types: IndexMap<&'a String, &'a TypeInfo>,
-        module_src: IndexMap<String, (String, LineNumbers)>,
-        tracing: TraceLevel,
+        functions: IndexMap<&'a FunctionAccessKey, &'a TypedFunction>,
+        data_types: IndexMap<&'a DataTypeKey, &'a TypedDataType>,
+        module_types: IndexMap<&'a str, &'a TypeInfo>,
+        module_src: IndexMap<&'a str, &'a (String, LineNumbers)>,
+        tracing: Tracing,
     ) -> Self {
         CodeGenerator {
             functions,
             data_types,
             module_types,
             module_src,
-            tracing,
+            tracing: tracing.trace_level(true),
             defined_functions: IndexMap::new(),
             special_functions: CodeGenSpecialFuncs::new(),
             code_gen_functions: IndexMap::new(),
@@ -107,21 +108,6 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    pub fn insert_function(
-        &mut self,
-        module_name: String,
-        function_name: String,
-        value: &'a TypedFunction,
-    ) -> Option<&'a TypedFunction> {
-        self.functions.insert(
-            FunctionAccessKey {
-                module_name,
-                function_name,
-            },
-            value,
-        )
-    }
-
     pub fn generate(
         &mut self,
         TypedValidator {
@@ -130,16 +116,16 @@ impl<'a> CodeGenerator<'a> {
             params,
             ..
         }: &TypedValidator,
-        module_name: &String,
+        module_name: &str,
     ) -> Program<Name> {
         let mut air_tree_fun = self.build(&fun.body, module_name, &[]);
 
         air_tree_fun = wrap_validator_condition(air_tree_fun, self.tracing);
 
-        let (src_code, lines) = self.module_src.get(module_name).unwrap().clone();
+        let (src_code, lines) = self.module_src.get(module_name).unwrap();
 
         let mut validator_args_tree =
-            self.check_validator_args(&fun.arguments, true, air_tree_fun, &src_code, &lines);
+            self.check_validator_args(&fun.arguments, true, air_tree_fun, src_code, lines);
 
         validator_args_tree = AirTree::no_op(validator_args_tree);
 
@@ -162,8 +148,8 @@ impl<'a> CodeGenerator<'a> {
                 &other.arguments,
                 true,
                 air_tree_fun_other,
-                &src_code,
-                &lines,
+                src_code,
+                lines,
             );
 
             validator_args_tree_other = AirTree::no_op(validator_args_tree_other);
@@ -198,8 +184,13 @@ impl<'a> CodeGenerator<'a> {
         self.finalize(term)
     }
 
-    pub fn generate_test(&mut self, test_body: &TypedExpr, module_name: &String) -> Program<Name> {
-        let mut air_tree = self.build(test_body, module_name, &[]);
+    pub fn generate_raw(
+        &mut self,
+        body: &TypedExpr,
+        args: &[TypedArg],
+        module_name: &str,
+    ) -> Program<Name> {
+        let mut air_tree = self.build(body, module_name, &[]);
 
         air_tree = AirTree::no_op(air_tree);
 
@@ -208,7 +199,13 @@ impl<'a> CodeGenerator<'a> {
         // optimizations on air tree
         let full_vec = full_tree.to_vec();
 
-        let term = self.uplc_code_gen(full_vec);
+        let mut term = self.uplc_code_gen(full_vec);
+
+        term = if args.is_empty() {
+            term
+        } else {
+            cast_validator_args(term, args)
+        };
 
         self.finalize(term)
     }
@@ -239,7 +236,7 @@ impl<'a> CodeGenerator<'a> {
     fn build(
         &mut self,
         body: &TypedExpr,
-        module_build_name: &String,
+        module_build_name: &str,
         context: &[TypedExpr],
     ) -> AirTree {
         if !context.is_empty() {
@@ -254,7 +251,7 @@ impl<'a> CodeGenerator<'a> {
                 panic!("Dangling expressions without an assignment")
             };
 
-            let replaced_type = convert_opaque_type(tipo, &self.data_types);
+            let replaced_type = convert_opaque_type(tipo, &self.data_types, true);
 
             let air_value = self.build(value, module_build_name, &[]);
 
@@ -449,7 +446,7 @@ impl<'a> CodeGenerator<'a> {
                         constructor: ModuleValueConstructor::Fn { name, .. },
                         ..
                     } => {
-                        let type_info = self.module_types.get(module_name).unwrap();
+                        let type_info = self.module_types.get(module_name.as_str()).unwrap();
                         let value = type_info.values.get(name).unwrap();
 
                         let ValueConstructorVariant::ModuleFn { builtin, .. } = &value.variant
@@ -722,7 +719,7 @@ impl<'a> CodeGenerator<'a> {
                             function_name: name.clone(),
                         });
 
-                        let type_info = self.module_types.get(module_name).unwrap();
+                        let type_info = self.module_types.get(module_name.as_str()).unwrap();
 
                         let value = type_info.values.get(name).unwrap();
 
@@ -894,7 +891,7 @@ impl<'a> CodeGenerator<'a> {
                 if props.full_check {
                     let mut index_map = IndexMap::new();
 
-                    let non_opaque_tipo = convert_opaque_type(tipo, &self.data_types);
+                    let non_opaque_tipo = convert_opaque_type(tipo, &self.data_types, true);
 
                     let val = AirTree::local_var(name, tipo.clone());
 
@@ -932,7 +929,7 @@ impl<'a> CodeGenerator<'a> {
                     let name = &format!("__discard_expect_{}", name);
                     let mut index_map = IndexMap::new();
 
-                    let non_opaque_tipo = convert_opaque_type(tipo, &self.data_types);
+                    let non_opaque_tipo = convert_opaque_type(tipo, &self.data_types, true);
 
                     let val = AirTree::local_var(name, tipo.clone());
 
@@ -1325,7 +1322,7 @@ impl<'a> CodeGenerator<'a> {
         msg_func: Option<AirMsg>,
     ) -> AirTree {
         assert!(tipo.get_generic().is_none());
-        let tipo = &convert_opaque_type(tipo, &self.data_types);
+        let tipo = &convert_opaque_type(tipo, &self.data_types, true);
 
         if tipo.is_primitive() {
             // Since we would return void anyway and ignore then we can just return value here and ignore
@@ -1761,7 +1758,7 @@ impl<'a> CodeGenerator<'a> {
         final_clause: TypedClause,
         subject_tipo: &Rc<Type>,
         props: &mut ClauseProperties,
-        module_name: &String,
+        module_name: &str,
     ) -> AirTree {
         assert!(
             !subject_tipo.is_void(),
@@ -2774,7 +2771,7 @@ impl<'a> CodeGenerator<'a> {
 
                     let param = AirTree::local_var(&arg_name, data());
 
-                    let actual_type = convert_opaque_type(&arg.tipo, &self.data_types);
+                    let actual_type = convert_opaque_type(&arg.tipo, &self.data_types, true);
 
                     let msg_func = match self.tracing {
                         TraceLevel::Silent => None,
@@ -3565,7 +3562,13 @@ impl<'a> CodeGenerator<'a> {
                         let code_gen_func = self
                             .code_gen_functions
                             .get(&generic_function_key.function_name)
-                            .unwrap_or_else(|| panic!("Missing Code Gen Function Definition"));
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "Missing function definition for {}. Known definitions: {:?}",
+                                    generic_function_key.function_name,
+                                    self.code_gen_functions.keys(),
+                                )
+                            });
 
                         if !dependency_functions
                             .iter()
@@ -3625,12 +3628,13 @@ impl<'a> CodeGenerator<'a> {
                     let mut function_def_types = function_def
                         .arguments
                         .iter()
-                        .map(|arg| convert_opaque_type(&arg.tipo, &self.data_types))
+                        .map(|arg| convert_opaque_type(&arg.tipo, &self.data_types, true))
                         .collect_vec();
 
                     function_def_types.push(convert_opaque_type(
                         &function_def.return_type,
                         &self.data_types,
+                        true,
                     ));
 
                     let mono_types: IndexMap<u64, Rc<Type>> = if !function_def_types.is_empty() {
@@ -3832,7 +3836,9 @@ impl<'a> CodeGenerator<'a> {
                         }
 
                         DefaultFunction::MkCons | DefaultFunction::MkPairData => {
-                            unimplemented!("MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z).\n")
+                            unimplemented!(
+                                "MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z).\n"
+                            )
                         }
                         _ => {
                             let mut term: Term<Name> = (*builtin).into();
@@ -4225,7 +4231,9 @@ impl<'a> CodeGenerator<'a> {
                     }
 
                     DefaultFunction::MkCons | DefaultFunction::MkPairData => {
-                        unimplemented!("MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z).\n")
+                        unimplemented!(
+                            "MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z).\n"
+                        )
                     }
                     _ => {
                         let mut term: Term<Name> = func.into();
