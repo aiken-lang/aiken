@@ -258,7 +258,10 @@ impl PropertyTest {
             .sample(&self.fuzzer.program)
             .expect("running seeded Prng cannot fail.");
 
-        if self.eval(&value).failed(self.can_error) {
+        // NOTE: We do NOT pass self.can_error here, because when searching for
+        // failing properties, we do want to _keep running_ until we find a
+        // a failing case. It may not occur on the first run.
+        if self.eval(&value).failed(false) {
             let mut counterexample = Counterexample {
                 value,
                 choices: next_prng.choices(),
