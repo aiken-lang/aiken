@@ -396,10 +396,8 @@ impl Prng {
         fn as_prng(cst: &PlutusData) -> Prng {
             if let PlutusData::Constr(Constr { tag, fields, .. }) = cst {
                 if *tag == 121 + Prng::SEEDED {
-                    if let [
-                        PlutusData::BoundedBytes(bytes),
-                        PlutusData::BoundedBytes(choices),
-                    ] = &fields[..]
+                    if let [PlutusData::BoundedBytes(bytes), PlutusData::BoundedBytes(choices)] =
+                        &fields[..]
                     {
                         return Prng::Seeded {
                             choices: choices.to_vec(),
