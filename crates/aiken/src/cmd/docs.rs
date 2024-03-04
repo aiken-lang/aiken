@@ -29,17 +29,11 @@ pub fn exec(
     }: Args,
 ) -> miette::Result<()> {
     let result = if watch {
-        watch_project(
-            directory.as_deref(),
-            watch::default_filter,
-            u32::default(),
-            500,
-            |p| p.docs(destination.clone()),
-        )
-    } else {
-        with_project(directory.as_deref(), u32::default(), deny, |p| {
+        watch_project(directory.as_deref(), watch::default_filter, 500, |p| {
             p.docs(destination.clone())
         })
+    } else {
+        with_project(directory.as_deref(), deny, |p| p.docs(destination.clone()))
     };
 
     result.map_err(|_| process::exit(1))

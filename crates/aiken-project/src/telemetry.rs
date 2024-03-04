@@ -37,6 +37,7 @@ pub enum Event {
     },
     RunningTests,
     FinishedTests {
+        seed: u32,
         tests: Vec<TestResult<UntypedExpr>>,
     },
     WaitingForBuildDirLock,
@@ -170,7 +171,7 @@ impl EventListener for Terminal {
                     "...".if_supports_color(Stderr, |s| s.bold())
                 );
             }
-            Event::FinishedTests { tests } => {
+            Event::FinishedTests { seed, tests } => {
                 let (max_mem, max_cpu, max_iter) = find_max_execution_units(&tests);
 
                 for (module, results) in &group_by_module(&tests) {
@@ -185,10 +186,22 @@ impl EventListener for Terminal {
                         .collect::<Vec<String>>()
                         .join("\n");
 
-                    let summary = fmt_test_summary(results, true);
+                    let seed_info = if results
+                        .iter()
+                        .any(|t| matches!(t, TestResult::PropertyTestResult { .. }))
+                    {
+                        format!(
+                            "with {opt}={seed} → ",
+                            opt = "--seed".if_supports_color(Stderr, |s| s.bold()),
+                            seed = format!("{seed}").if_supports_color(Stderr, |s| s.bold())
+                        )
+                    } else {
+                        String::new()
+                    };
 
-                    eprintln!(
-                        "{}\n",
+                    let summary = format!("{}{}", seed_info, fmt_test_summary(results, true));
+                    println!(
+                        "{}",
                         pretty::indent(
                             &pretty::open_box(&title, &tests, &summary, |border| border
                                 .if_supports_color(Stderr, |s| s.bright_black())
@@ -319,19 +332,20 @@ fn fmt_test(
     }) = result
     {
         test = format!(
-            "{test}\n{}",
-            pretty::open_box(
-                &pretty::style_if(styled, "counterexample".to_string(), |s| s
-                    .if_supports_color(Stderr, |s| s.red())
-                    .if_supports_color(Stderr, |s| s.bold())
-                    .to_string()),
-                &Formatter::new()
-                    .expr(counterexample, false)
-                    .to_pretty_string(70),
-                "",
-                |s| s.red().to_string()
-            )
-        )
+            "{test}\n{}\n{}\n",
+            "× counterexample"
+                .if_supports_color(Stderr, |s| s.red())
+                .if_supports_color(Stderr, |s| s.bold()),
+            &Formatter::new()
+                .expr(counterexample, false)
+                .to_pretty_string(60)
+                .lines()
+                .map(|line| {
+                    format!("{} {}", "│".if_supports_color(Stderr, |s| s.red()), line)
+                })
+                .collect::<Vec<String>>()
+                .join("\n")
+        );
     }
 
     // Traces

@@ -347,7 +347,7 @@ where
                     .collect();
 
                 self.event_listener
-                    .handle_event(Event::FinishedTests { tests });
+                    .handle_event(Event::FinishedTests { seed, tests });
 
                 if !errors.is_empty() {
                     Err(errors)

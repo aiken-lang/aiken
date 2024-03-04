@@ -39,7 +39,7 @@ pub fn exec(
         mainnet,
     }: Args,
 ) -> miette::Result<()> {
-    with_project(directory.as_deref(), u32::default(), false, |p| {
+    with_project(directory.as_deref(), false, |p| {
         if rebuild {
             p.build(false, Tracing::silent())?;
         }

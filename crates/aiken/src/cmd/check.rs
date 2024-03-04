@@ -79,27 +79,21 @@ pub fn exec(
     let seed = seed.unwrap_or_else(|| rng.gen());
 
     let result = if watch {
-        watch_project(
-            directory.as_deref(),
-            watch::default_filter,
-            seed,
-            500,
-            |p| {
-                p.check(
-                    skip_tests,
-                    match_tests.clone(),
-                    debug,
-                    exact_match,
-                    seed,
-                    match filter_traces {
-                        Some(filter_traces) => filter_traces(trace_level),
-                        None => Tracing::All(trace_level),
-                    },
-                )
-            },
-        )
+        watch_project(directory.as_deref(), watch::default_filter, 500, |p| {
+            p.check(
+                skip_tests,
+                match_tests.clone(),
+                debug,
+                exact_match,
+                seed,
+                match filter_traces {
+                    Some(filter_traces) => filter_traces(trace_level),
+                    None => Tracing::All(trace_level),
+                },
+            )
+        })
     } else {
-        with_project(directory.as_deref(), seed, deny, |p| {
+        with_project(directory.as_deref(), deny, |p| {
             p.check(
                 skip_tests,
                 match_tests.clone(),

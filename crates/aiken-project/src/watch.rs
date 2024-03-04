@@ -75,12 +75,7 @@ pub fn default_filter(evt: &Event) -> bool {
     }
 }
 
-pub fn with_project<A>(
-    directory: Option<&Path>,
-    seed: u32,
-    deny: bool,
-    mut action: A,
-) -> miette::Result<()>
+pub fn with_project<A>(directory: Option<&Path>, deny: bool, mut action: A) -> miette::Result<()>
 where
     A: FnMut(&mut Project<Terminal>) -> Result<(), Vec<crate::error::Error>>,
 {
@@ -113,23 +108,16 @@ where
             err.report()
         }
 
-        eprintln!(
-            "{}",
-            Summary {
-                warning_count,
-                error_count: errs.len(),
-            }
-        );
-
-        if errs.iter().any(|e| matches!(e, Error::TestFailure { .. })) {
+        if !errs.iter().any(|e| matches!(e, Error::TestFailure { .. })) {
             eprintln!(
-                "                {}══╤══\n{}                  ╰─▶ use {} {} to replay",
-                if errs.len() > 1 { "═" } else { "" },
-                if errs.len() > 1 { " " } else { "" },
-                "--seed".if_supports_color(Stderr, |s| s.bold()),
-                format!("{seed}").if_supports_color(Stderr, |s| s.bold())
+                "{}",
+                Summary {
+                    warning_count,
+                    error_count: errs.len(),
+                }
             );
         }
+
         return Err(ExitFailure::into_report());
     }
 
@@ -162,7 +150,6 @@ where
 pub fn watch_project<F, A>(
     directory: Option<&Path>,
     filter: F,
-    seed: u32,
     debounce: u32,
     mut action: A,
 ) -> miette::Result<()>
@@ -228,13 +215,14 @@ where
         // If we have an event that survived the filter, then we can construct the project and invoke the action
         if latest.is_some() {
             print!("{esc}c", esc = 27 as char);
-            println!(
+            eprint!("{esc}c", esc = 27 as char);
+            eprintln!(
                 "{} ...",
                 "     Watching"
                     .if_supports_color(Stderr, |s| s.bold())
                     .if_supports_color(Stderr, |s| s.purple()),
             );
-            with_project(directory, seed, false, &mut action).unwrap_or(())
+            with_project(directory, false, &mut action).unwrap_or(())
         }
     }
 }
