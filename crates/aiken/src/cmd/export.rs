@@ -23,7 +23,7 @@ pub fn exec(
         name,
     }: Args,
 ) -> miette::Result<()> {
-    with_project(directory.as_deref(), false, |p| {
+    with_project(directory.as_deref(), 0, false, |p| {
         p.compile(Options::default())?;
 
         let raw_uplc = p.export(&module, &name)?;
