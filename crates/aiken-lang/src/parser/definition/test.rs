@@ -5,7 +5,7 @@ use crate::{
         annotation,
         chain::{call::parser as call, field_access, tuple_index::parser as tuple_index, Chain},
         error::ParseError,
-        expr::{self, bytearray, int, list, string, tuple, var},
+        expr::{self, bytearray, int as uint, list, string, tuple, var},
         token::Token,
     },
 };
@@ -88,9 +88,25 @@ pub fn fuzzer<'a>() -> impl Parser<Token, UntypedExpr, Error = ParseError> + 'a 
             call(expression.clone()),
         ));
 
+        let int = || {
+            just(Token::Minus)
+                .to(ast::UnOp::Negate)
+                .map_with_span(|op, span| (op, span))
+                .or_not()
+                .then(uint())
+                .map(|(op, value)| match op {
+                    None => value,
+                    Some((op, location)) => UntypedExpr::UnOp {
+                        op,
+                        location,
+                        value: Box::new(value),
+                    },
+                })
+        };
+
         choice((
-            string(),
             int(),
+            string(),
             bytearray(),
             tuple(expression.clone()),
             list(expression.clone()),
