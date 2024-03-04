@@ -1499,8 +1499,8 @@ pub fn list_access_to_uplc(
     error_term: Term<Name>,
 ) -> Term<Name> {
     let names_len = names_types_ids.len();
-    // Should never be expect level none on a list without a tail
-    assert!(!(matches!(expect_level, ExpectLevel::None) && is_list_accessor && !tail_present));
+
+    // assert!(!(matches!(expect_level, ExpectLevel::None) && is_list_accessor && !tail_present));
 
     let mut no_tailing_discards = names_types_ids
         .iter()
@@ -1524,11 +1524,11 @@ pub fn list_access_to_uplc(
     if no_tailing_discards.is_empty() {
         if tail_present || matches!(expect_level, ExpectLevel::None) {
             return term.lambda("_");
-        } else {
-            return Term::var("empty_list")
-                .delayed_choose_list(term, error_term)
-                .lambda("empty_list");
         }
+
+        return Term::var("empty_list")
+            .delayed_choose_list(term, error_term)
+            .lambda("empty_list");
     }
 
     // reverse back to original order
