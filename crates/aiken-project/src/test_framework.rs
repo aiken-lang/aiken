@@ -485,9 +485,13 @@ impl<'a> Counterexample<'a> {
             Some((_, value)) => {
                 let result = self.property.eval(&value);
 
+                let is_failure = result.failed(self.property.can_error);
+
+                let expect_failure = self.property.can_error;
+
                 // If the test no longer fails, it isn't better as we're only
                 // interested in counterexamples.
-                if !result.failed(self.property.can_error) {
+                if (expect_failure && is_failure) || (!expect_failure && !is_failure) {
                     return false;
                 }
 
