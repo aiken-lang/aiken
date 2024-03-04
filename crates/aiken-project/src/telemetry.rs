@@ -331,17 +331,35 @@ fn fmt_test(
         ..
     }) = result
     {
+        let is_expected_failure = result.is_success();
+
         test = format!(
             "{test}\n{}\n{}\n",
-            "× counterexample"
-                .if_supports_color(Stderr, |s| s.red())
-                .if_supports_color(Stderr, |s| s.bold()),
+            if is_expected_failure {
+                "★ counterexample"
+                    .if_supports_color(Stderr, |s| s.green())
+                    .if_supports_color(Stderr, |s| s.bold())
+                    .to_string()
+            } else {
+                "× counterexample"
+                    .if_supports_color(Stderr, |s| s.red())
+                    .if_supports_color(Stderr, |s| s.bold())
+                    .to_string()
+            },
             &Formatter::new()
                 .expr(counterexample, false)
                 .to_pretty_string(60)
                 .lines()
                 .map(|line| {
-                    format!("{} {}", "│".if_supports_color(Stderr, |s| s.red()), line)
+                    format!(
+                        "{} {}",
+                        "│".if_supports_color(Stderr, |s| if is_expected_failure {
+                            s.green().to_string()
+                        } else {
+                            s.red().to_string()
+                        }),
+                        line
+                    )
                 })
                 .collect::<Vec<String>>()
                 .join("\n")
