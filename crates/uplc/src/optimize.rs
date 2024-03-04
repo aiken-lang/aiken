@@ -1,6 +1,6 @@
 use crate::ast::{Name, Program};
 
-mod interner;
+pub mod interner;
 pub mod shrinker;
 
 pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {

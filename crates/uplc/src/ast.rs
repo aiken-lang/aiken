@@ -7,7 +7,7 @@ use crate::{
         eval_result::EvalResult,
         Machine,
     },
-    parser::interner::Interner,
+    optimize::interner::CodeGenInterner,
 };
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
@@ -88,7 +88,7 @@ impl Program<Name> {
             term: applied_term,
         };
 
-        Interner::new().program(&mut program);
+        CodeGenInterner::new().program(&mut program);
 
         program
     }

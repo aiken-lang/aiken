@@ -1649,7 +1649,7 @@ mod tests {
     use crate::{
         ast::{Constant, Data, Name, NamedDeBruijn, Program, Term},
         builtins::DefaultFunction,
-        parser::interner::Interner,
+        optimize::interner::CodeGenInterner,
     };
 
     #[test]
@@ -1667,7 +1667,7 @@ mod tests {
                 ),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut program);
 
@@ -1680,7 +1680,7 @@ mod tests {
             ),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut expected);
 
@@ -1701,7 +1701,7 @@ mod tests {
                 .apply(Term::integer(6.into())),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut program);
 
@@ -1710,7 +1710,7 @@ mod tests {
             term: Term::integer(6.into()),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut expected);
 
@@ -1729,7 +1729,7 @@ mod tests {
             term: Term::var("foo").lambda("foo").apply(Term::add_integer()),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut program);
 
@@ -1738,7 +1738,7 @@ mod tests {
             term: Term::add_integer(),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut expected);
 
@@ -1769,7 +1769,7 @@ mod tests {
                 .apply(Term::bool(false).lambda("x")),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut program);
 
@@ -1789,7 +1789,7 @@ mod tests {
                 .apply(Term::bool(false).lambda("x")),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut expected);
 
@@ -1814,7 +1814,7 @@ mod tests {
                 .lambda("x"),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut program);
 
@@ -1828,7 +1828,7 @@ mod tests {
                 .lambda("x"),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut expected);
 
@@ -1853,7 +1853,7 @@ mod tests {
                 .lambda("x"),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut program);
 
@@ -1865,7 +1865,7 @@ mod tests {
                 .lambda("x"),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut expected);
 
@@ -1907,7 +1907,7 @@ mod tests {
                 .apply(Term::tail_list()),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut expected);
 
@@ -1915,7 +1915,7 @@ mod tests {
 
         let mut actual = program.builtin_force_reducer();
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut actual);
 
@@ -1966,7 +1966,7 @@ mod tests {
                 .apply(Term::Builtin(DefaultFunction::IfThenElse).force()),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut expected);
 
@@ -1974,7 +1974,7 @@ mod tests {
 
         let mut actual = program.builtin_force_reducer();
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut actual);
 
@@ -1993,7 +1993,7 @@ mod tests {
                 .apply(Term::byte_string(vec![]).delay()),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut program);
 
@@ -2002,7 +2002,7 @@ mod tests {
             term: Term::sha2_256().apply(Term::byte_string(vec![]).delay()),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut expected);
 
@@ -2027,7 +2027,7 @@ mod tests {
                 .apply(Term::var("y").lambda("y")),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut program);
 
@@ -2036,7 +2036,7 @@ mod tests {
             term: Term::sha2_256().apply(Term::byte_string(vec![]).delay()),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut expected);
 
@@ -2072,7 +2072,7 @@ mod tests {
                 ),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut program);
 
@@ -2088,7 +2088,7 @@ mod tests {
             ),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut expected);
 
@@ -2118,7 +2118,7 @@ mod tests {
                 .apply(Term::integer(5.into())),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut program);
 
@@ -2134,7 +2134,7 @@ mod tests {
                 .apply(Term::integer(5.into())),
         };
 
-        let mut interner = Interner::new();
+        let mut interner = CodeGenInterner::new();
 
         interner.program(&mut expected);
 

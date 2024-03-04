@@ -46,8 +46,7 @@ use uplc::{
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
     builtins::DefaultFunction,
     machine::cost_model::ExBudget,
-    optimize::{aiken_optimize_and_intern, shrinker::NO_INLINE},
-    parser::interner::Interner,
+    optimize::{aiken_optimize_and_intern, interner::CodeGenInterner, shrinker::NO_INLINE},
 };
 
 #[derive(Clone)]
@@ -3929,7 +3928,7 @@ impl<'a> CodeGenerator<'a> {
                                 term,
                             };
 
-                            let mut interner = Interner::new();
+                            let mut interner = CodeGenInterner::new();
 
                             interner.program(&mut program);
 
@@ -4184,7 +4183,7 @@ impl<'a> CodeGenerator<'a> {
                                 term: self.special_functions.apply_used_functions(term),
                             };
 
-                            let mut interner = Interner::new();
+                            let mut interner = CodeGenInterner::new();
 
                             interner.program(&mut program);
 
@@ -4533,7 +4532,7 @@ impl<'a> CodeGenerator<'a> {
                         term,
                     };
 
-                    let mut interner = Interner::new();
+                    let mut interner = CodeGenInterner::new();
 
                     interner.program(&mut program);
 
@@ -4558,7 +4557,7 @@ impl<'a> CodeGenerator<'a> {
                         term,
                     };
 
-                    let mut interner = Interner::new();
+                    let mut interner = CodeGenInterner::new();
 
                     interner.program(&mut program);
 
@@ -4964,7 +4963,7 @@ impl<'a> CodeGenerator<'a> {
                         term,
                     };
 
-                    let mut interner = Interner::new();
+                    let mut interner = CodeGenInterner::new();
 
                     interner.program(&mut program);
 
