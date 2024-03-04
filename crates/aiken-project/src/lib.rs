@@ -31,11 +31,11 @@ use crate::{
 };
 use aiken_lang::{
     ast::{
-        DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Tracing, TypedDataType,
+        DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Span, Tracing, TypedDataType,
         TypedFunction,
     },
-    builtins,
-    expr::UntypedExpr,
+    builtins::{self, function},
+    expr::{TypedExpr, UntypedExpr},
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
     tipo::{Type, TypeInfo},
@@ -465,12 +465,7 @@ where
     }
 
     pub fn export(&self, module: &str, name: &str) -> Result<String, Error> {
-        let mut generator = self.checked_modules.new_generator(
-            &self.functions,
-            &self.data_types,
-            &self.module_types,
-            Tracing::silent(),
-        );
+        let mut generator = self.new_generator(Tracing::silent());
 
         self.checked_modules
             .get(module)
@@ -495,7 +490,7 @@ where
                 })
             })
             .map(|body| {
-                let program = generator.generate_test(&body, &name.to_string());
+                let program = generator.generate_raw(&body, &[], module);
 
                 program.to_pretty()
             })
