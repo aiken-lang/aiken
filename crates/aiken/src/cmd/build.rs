@@ -76,8 +76,8 @@ pub fn exec(
 }
 
 #[allow(clippy::type_complexity)]
-pub fn filter_traces_parser()
--> MapValueParser<PossibleValuesParser, fn(String) -> fn(TraceLevel) -> Tracing> {
+pub fn filter_traces_parser(
+) -> MapValueParser<PossibleValuesParser, fn(String) -> fn(TraceLevel) -> Tracing> {
     PossibleValuesParser::new(["user-defined", "compiler-generated", "all"]).map(
         |s: String| match s.as_str() {
             "user-defined" => Tracing::UserDefined,
