@@ -5,11 +5,9 @@ use aiken_lang::{
     gen_uplc::{builder::convert_opaque_type, CodeGenerator},
     tipo::Type,
 };
+use cryptoxide::{blake2b::Blake2b, digest::Digest};
 use indexmap::IndexMap;
-use pallas::{
-    codec::utils::Int,
-    ledger::primitives::alonzo::{BigInt, Constr, PlutusData},
-};
+use pallas::ledger::primitives::alonzo::{Constr, PlutusData};
 use std::{
     borrow::Borrow,
     fmt::{self, Display},
@@ -223,7 +221,7 @@ impl PropertyTest {
     pub fn run(self, seed: u32) -> TestResult<PlutusData> {
         let n = PropertyTest::MAX_TEST_RUN;
 
-        let (counterexample, iterations) = match self.run_n_times(n, seed, None) {
+        let (counterexample, iterations) = match self.run_n_times(n, Prng::from_seed(seed), None) {
             None => (None, n),
             Some((remaining, counterexample)) => (Some(counterexample.value), n - remaining + 1),
         };
@@ -238,16 +236,16 @@ impl PropertyTest {
     fn run_n_times<'a>(
         &'a self,
         remaining: usize,
-        seed: u32,
+        prng: Prng,
         counterexample: Option<(usize, Counterexample<'a>)>,
     ) -> Option<(usize, Counterexample<'a>)> {
         // We short-circuit failures in case we have any. The counterexample is already simplified
         // at this point.
         if remaining > 0 && counterexample.is_none() {
-            let (next_seed, counterexample) = self.run_once(seed);
+            let (next_prng, counterexample) = self.run_once(prng);
             self.run_n_times(
                 remaining - 1,
-                next_seed,
+                next_prng,
                 counterexample.map(|c| (remaining, c)),
             )
         } else {
@@ -255,34 +253,25 @@ impl PropertyTest {
         }
     }
 
-    fn run_once(&self, seed: u32) -> (u32, Option<Counterexample<'_>>) {
-        let (next_prng, value) = Prng::from_seed(seed)
+    fn run_once(&self, prng: Prng) -> (Prng, Option<Counterexample<'_>>) {
+        let (next_prng, value) = prng
             .sample(&self.fuzzer.program)
             .expect("running seeded Prng cannot fail.");
 
-        let result = self.eval(&value);
+        if self.eval(&value).failed(self.can_error) {
+            let mut counterexample = Counterexample {
+                value,
+                choices: next_prng.choices(),
+                property: self,
+            };
 
-        if let Prng::Seeded {
-            seed: next_seed, ..
-        } = next_prng
-        {
-            if result.failed(self.can_error) {
-                let mut counterexample = Counterexample {
-                    value,
-                    choices: next_prng.choices(),
-                    property: self,
-                };
-
-                if !counterexample.choices.is_empty() {
-                    counterexample.simplify();
-                }
-
-                (next_seed, Some(counterexample))
-            } else {
-                (next_seed, None)
+            if !counterexample.choices.is_empty() {
+                counterexample.simplify();
             }
+
+            (next_prng, Some(counterexample))
         } else {
-            unreachable!("Prng constructed from a seed necessarily yield a seed.");
+            (next_prng, None)
         }
     }
 
@@ -315,15 +304,8 @@ impl PropertyTest {
 ///
 #[derive(Debug)]
 pub enum Prng {
-    Seeded {
-        seed: u32,
-        choices: Vec<u64>,
-        uplc: PlutusData,
-    },
-    Replayed {
-        choices: Vec<u64>,
-        uplc: PlutusData,
-    },
+    Seeded { choices: Vec<u8>, uplc: PlutusData },
+    Replayed { choices: Vec<u8>, uplc: PlutusData },
 }
 
 impl Prng {
@@ -344,7 +326,7 @@ impl Prng {
         }
     }
 
-    pub fn choices(&self) -> Vec<u64> {
+    pub fn choices(&self) -> Vec<u8> {
         match self {
             Prng::Seeded { choices, .. } => {
                 let mut choices = choices.to_vec();
@@ -357,41 +339,46 @@ impl Prng {
 
     /// Construct a Pseudo-random number generator from a seed.
     pub fn from_seed(seed: u32) -> Prng {
+        let mut digest = [0u8; 32];
+        let mut context = Blake2b::new(32);
+        context.input(&seed.to_be_bytes()[..]);
+        context.result(&mut digest);
+
         Prng::Seeded {
-            seed,
             choices: vec![],
             uplc: Data::constr(
                 Prng::SEEDED,
                 vec![
-                    Data::integer(seed.into()), // Prng's seed
-                    Data::list(vec![]),         // Random choices
+                    Data::bytestring(digest.to_vec()), // Prng's seed
+                    Data::bytestring(vec![]),          // Random choices
                 ],
             ),
         }
     }
 
     /// Construct a Pseudo-random number generator from a pre-defined list of choices.
-    pub fn from_choices(choices: &[u64]) -> Prng {
+    pub fn from_choices(choices: &[u8]) -> Prng {
         Prng::Replayed {
-            choices: choices.to_vec(),
             uplc: Data::constr(
                 Prng::REPLAYED,
-                vec![Data::list(
-                    choices.iter().map(|i| Data::integer((*i).into())).collect(),
-                )],
+                vec![
+                    Data::integer(choices.len().into()),
+                    Data::bytestring(choices.iter().rev().cloned().collect::<Vec<_>>()),
+                ],
             ),
+            choices: choices.to_vec(),
         }
     }
 
     /// Generate a pseudo-random value from a fuzzer using the given PRNG.
     pub fn sample(&self, fuzzer: &Program<Name>) -> Option<(Prng, PlutusData)> {
-        let result = Program::<NamedDeBruijn>::try_from(fuzzer.apply_data(self.uplc()))
-            .unwrap()
-            .eval(ExBudget::max())
-            .result()
-            .expect("Fuzzer crashed?");
-
-        Prng::from_result(result)
+        let program = Program::<NamedDeBruijn>::try_from(fuzzer.apply_data(self.uplc())).unwrap();
+        Prng::from_result(
+            program
+                .eval(ExBudget::max())
+                .result()
+                .expect("Fuzzer crashed?"),
+        )
     }
 
     /// Obtain a Prng back from a fuzzer execution. As a reminder, fuzzers have the following
@@ -409,42 +396,39 @@ impl Prng {
         fn as_prng(cst: &PlutusData) -> Prng {
             if let PlutusData::Constr(Constr { tag, fields, .. }) = cst {
                 if *tag == 121 + Prng::SEEDED {
-                    if let [seed, PlutusData::Array(choices)] = &fields[..] {
+                    if let [
+                        PlutusData::BoundedBytes(bytes),
+                        PlutusData::BoundedBytes(choices),
+                    ] = &fields[..]
+                    {
                         return Prng::Seeded {
-                            seed: as_u32(seed),
-                            choices: choices.iter().map(as_u64).collect(),
-                            uplc: cst.clone(),
+                            choices: choices.to_vec(),
+                            uplc: PlutusData::Constr(Constr {
+                                tag: 121 + Prng::SEEDED,
+                                fields: vec![
+                                    PlutusData::BoundedBytes(bytes.to_owned()),
+                                    // Clear choices between seeded runs, to not
+                                    // accumulate ALL choices ever made.
+                                    PlutusData::BoundedBytes(vec![].into()),
+                                ],
+                                any_constructor: None,
+                            }),
                         };
                     }
                 }
 
                 if *tag == 121 + Prng::REPLAYED {
-                    if let [PlutusData::Array(choices)] = &fields[..] {
+                    if let [PlutusData::BigInt(..), PlutusData::BoundedBytes(choices)] = &fields[..]
+                    {
                         return Prng::Replayed {
-                            choices: choices.iter().map(as_u64).collect(),
+                            choices: choices.to_vec(),
                             uplc: cst.clone(),
                         };
                     }
                 }
             }
 
-            unreachable!("Malformed Prng: {cst:#?}")
-        }
-
-        fn as_u32(field: &PlutusData) -> u32 {
-            if let PlutusData::BigInt(BigInt::Int(Int(i))) = field {
-                return u32::try_from(*i)
-                    .unwrap_or_else(|_| panic!("choice doesn't fit in u32: {i:?}"));
-            }
-            unreachable!("Malformed choice's value: {field:#?}")
-        }
-
-        fn as_u64(field: &PlutusData) -> u64 {
-            if let PlutusData::BigInt(BigInt::Int(Int(i))) = field {
-                return u64::try_from(*i)
-                    .unwrap_or_else(|_| panic!("choice doesn't fit in u64: {i:?}"));
-            }
-            unreachable!("Malformed choice's value: {field:#?}")
+            unreachable!("malformed Prng: {cst:#?}")
         }
 
         if let Term::Constant(rc) = &result {
@@ -480,12 +464,12 @@ impl Prng {
 #[derive(Debug)]
 pub struct Counterexample<'a> {
     pub value: PlutusData,
-    pub choices: Vec<u64>,
+    pub choices: Vec<u8>,
     pub property: &'a PropertyTest,
 }
 
 impl<'a> Counterexample<'a> {
-    fn consider(&mut self, choices: &[u64]) -> bool {
+    fn consider(&mut self, choices: &[u8]) -> bool {
         if choices == self.choices {
             return true;
         }
@@ -641,9 +625,9 @@ impl<'a> Counterexample<'a> {
     /// Try to replace a value with a smaller value by doing a binary search between
     /// two extremes. This converges relatively fast in order to shrink down values.
     /// fast.
-    fn binary_search_replace<F>(&mut self, lo: u64, hi: u64, f: F) -> u64
+    fn binary_search_replace<F>(&mut self, lo: u8, hi: u8, f: F) -> u8
     where
-        F: Fn(u64) -> Vec<(usize, u64)>,
+        F: Fn(u8) -> Vec<(usize, u8)>,
     {
         if self.replace(f(lo)) {
             return lo;
@@ -666,7 +650,7 @@ impl<'a> Counterexample<'a> {
 
     // Replace values in the choices vector, based on the index-value list provided
     // and consider the resulting choices.
-    fn replace(&mut self, ivs: Vec<(usize, u64)>) -> bool {
+    fn replace(&mut self, ivs: Vec<(usize, u8)>) -> bool {
         let mut choices = self.choices.clone();
 
         for (i, v) in ivs {
@@ -996,33 +980,30 @@ mod test {
               fn(prng: PRNG) -> Option<(PRNG, Int)> {
                 when prng is {
                   Seeded { seed, choices } -> {
-                    let digest =
-                      seed
-                        |> builtin.integer_to_bytearray(True, 32, _)
-                        |> builtin.blake2b_256()
+                     let choice =
+                       seed
+                         |> builtin.index_bytearray(0)
 
-                    let choice =
-                      digest
-                        |> builtin.index_bytearray(0)
-
-                    let new_seed =
-                      digest
-                        |> builtin.slice_bytearray(1, 4, _)
-                        |> builtin.bytearray_to_integer(True, _)
-
-                    Some((Seeded { seed: new_seed, choices: [choice, ..choices] }, choice))
+                     Some((
+                       Seeded {
+                         seed: builtin.blake2b_256(seed),
+                         choices: builtin.cons_bytearray(choice, choices)
+                       },
+                       choice
+                     ))
                   }
 
-                  Replayed { choices } ->
-                    when choices is {
-                      [] -> None
-                      [head, ..tail] ->
-                        if head >= 0 && head <= max_int {
-                          Some((Replayed { choices: tail }, head))
-                        } else {
-                          None
-                        }
+                  Replayed { cursor, choices } -> {
+                    if cursor >= 1 {
+                        let cursor = cursor - 1
+                        Some((
+                          Replayed { choices, cursor },
+                          builtin.index_bytearray(choices, cursor)
+                        ))
+                    } else {
+                        None
                     }
+                  }
                 }
               }
             }
@@ -1101,8 +1082,8 @@ mod test {
     }
 
     impl PropertyTest {
-        fn expect_failure(&self, seed: u32) -> Counterexample {
-            match self.run_n_times(PropertyTest::MAX_TEST_RUN, seed, None) {
+        fn expect_failure(&self) -> Counterexample {
+            match self.run_n_times(PropertyTest::MAX_TEST_RUN, Prng::from_seed(42), None) {
                 Some((_, counterexample)) => counterexample,
                 _ => panic!("expected property to fail but it didn't."),
             }
@@ -1128,7 +1109,7 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure(42);
+        let mut counterexample = prop.expect_failure();
 
         counterexample.simplify();
 
@@ -1155,12 +1136,12 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure(42);
+        let mut counterexample = prop.expect_failure();
 
         counterexample.simplify();
 
-        assert_eq!(counterexample.choices, vec![201, 200]);
-        assert_eq!(reify(counterexample.value), "(201, 200)");
+        assert_eq!(counterexample.choices, vec![252, 149]);
+        assert_eq!(reify(counterexample.value), "(252, 149)");
     }
 
     #[test]
@@ -1171,7 +1152,7 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure(42);
+        let mut counterexample = prop.expect_failure();
 
         counterexample.simplify();
 
@@ -1198,7 +1179,7 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure(42);
+        let mut counterexample = prop.expect_failure();
 
         counterexample.simplify();
 
@@ -1225,7 +1206,7 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure(42);
+        let mut counterexample = prop.expect_failure();
 
         counterexample.simplify();
 
@@ -1255,7 +1236,7 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure(42);
+        let mut counterexample = prop.expect_failure();
 
         counterexample.simplify();
 
@@ -1289,7 +1270,7 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure(42);
+        let mut counterexample = prop.expect_failure();
 
         counterexample.simplify();
 
@@ -1323,7 +1304,7 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure(42);
+        let mut counterexample = prop.expect_failure();
 
         counterexample.simplify();
 
@@ -1357,7 +1338,7 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure(42);
+        let mut counterexample = prop.expect_failure();
 
         counterexample.simplify();
 

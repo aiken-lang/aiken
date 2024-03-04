@@ -44,6 +44,7 @@ zip = "0.6.4"
 aiken-lang = { path = "../aiken-lang", version = "1.0.24-alpha" }
 uplc = { path = '../uplc', version = "1.0.24-alpha" }
 num-bigint = "0.4.4"
+cryptoxide = "0.4.4"
 
 [dev-dependencies]
 blst = "0.3.11"

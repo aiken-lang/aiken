@@ -419,8 +419,8 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     // PRNG
     //
     // pub type PRNG {
-    //   Seeded { seed: Int, choices: List<Int> }
-    //   Replayed { choices: List<Int> }
+    //   Seeded { seed: ByteArray, choices: ByteArray }
+    //   Replayed { cursor: Int, choices: ByteArray }
     // }
 
     prelude.types.insert(
@@ -445,7 +445,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     prelude.values.insert(
         "Seeded".to_string(),
         ValueConstructor::public(
-            function(vec![int(), list(int())], prng()),
+            function(vec![byte_array(), byte_array()], prng()),
             ValueConstructorVariant::Record {
                 module: "".into(),
                 name: "Seeded".to_string(),
@@ -462,20 +462,21 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     );
 
     let mut replayed_fields = HashMap::new();
-    replayed_fields.insert("choices".to_string(), (0, Span::empty()));
+    replayed_fields.insert("cursor".to_string(), (0, Span::empty()));
+    replayed_fields.insert("choices".to_string(), (1, Span::empty()));
     prelude.values.insert(
         "Replayed".to_string(),
         ValueConstructor::public(
-            function(vec![list(int())], prng()),
+            function(vec![int(), byte_array()], prng()),
             ValueConstructorVariant::Record {
                 module: "".into(),
                 name: "Replayed".to_string(),
                 field_map: Some(FieldMap {
-                    arity: 1,
+                    arity: 2,
                     fields: replayed_fields,
                     is_function: false,
                 }),
-                arity: 1,
+                arity: 2,
                 location: Span::empty(),
                 constructors_count: 2,
             },

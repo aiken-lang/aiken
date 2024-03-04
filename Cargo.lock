@@ -127,6 +127,7 @@ dependencies = [
  "askama",
  "blst",
  "built",
+ "cryptoxide",
  "dirs",
  "fslock",
  "futures",
