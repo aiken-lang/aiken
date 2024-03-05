@@ -1804,82 +1804,6 @@ mod tests {
     }
 
     #[test]
-    fn wrap_data_reduce_i_data() {
-        let mut program: Program<Name> = Program {
-            version: (1, 0, 0),
-            term: Term::equals_data()
-                .apply(Term::i_data().apply(Term::un_i_data().apply(Term::Constant(
-                    Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))).into(),
-                ))))
-                .apply(Term::i_data().apply(Term::integer(1.into())))
-                .lambda("x"),
-        };
-
-        let mut interner = CodeGenInterner::new();
-
-        interner.program(&mut program);
-
-        let mut expected = Program {
-            version: (1, 0, 0),
-            term: Term::equals_data()
-                .apply(Term::Constant(
-                    Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))).into(),
-                ))
-                .apply(Term::data(Data::integer(1.into())))
-                .lambda("x"),
-        };
-
-        let mut interner = CodeGenInterner::new();
-
-        interner.program(&mut expected);
-
-        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
-
-        let actual = program.cast_data_reducer();
-
-        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
-
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn wrap_data_reduce_un_i_data() {
-        let mut program: Program<Name> = Program {
-            version: (1, 0, 0),
-            term: Term::equals_integer()
-                .apply(Term::un_i_data().apply(Term::i_data().apply(Term::integer(1.into()))))
-                .apply(Term::un_i_data().apply(Term::Constant(
-                    Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))).into(),
-                )))
-                .lambda("x"),
-        };
-
-        let mut interner = CodeGenInterner::new();
-
-        interner.program(&mut program);
-
-        let mut expected = Program {
-            version: (1, 0, 0),
-            term: Term::equals_integer()
-                .apply(Term::integer(1.into()))
-                .apply(Term::integer(5.into()))
-                .lambda("x"),
-        };
-
-        let mut interner = CodeGenInterner::new();
-
-        interner.program(&mut expected);
-
-        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
-
-        let actual = program.cast_data_reducer();
-
-        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
-
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
     fn builtin_force_reduce_list_builtins() {
         let program: Program<Name> = Program {
             version: (1, 0, 0),
@@ -1986,38 +1910,6 @@ mod tests {
     }
 
     #[test]
-    fn inline_reduce_delay_sha() {
-        let mut program: Program<Name> = Program {
-            version: (1, 0, 0),
-            term: Term::sha2_256()
-                .apply(Term::var("x"))
-                .lambda("x")
-                .apply(Term::byte_string(vec![]).delay()),
-        };
-
-        let mut interner = CodeGenInterner::new();
-
-        interner.program(&mut program);
-
-        let mut expected = Program {
-            version: (1, 0, 0),
-            term: Term::sha2_256().apply(Term::byte_string(vec![]).delay()),
-        };
-
-        let mut interner = CodeGenInterner::new();
-
-        interner.program(&mut expected);
-
-        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
-
-        let actual = program.inline_reducer();
-
-        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
-
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
     fn identity_reduce_0_occurrence() {
         let mut program: Program<Name> = Program {
             version: (1, 0, 0),
@@ -2055,7 +1947,7 @@ mod tests {
     }
 
     #[test]
-    fn inline_reduce_identity_param() {
+    fn identity_reduce_param() {
         let mut program: Program<Name> = Program {
             version: (1, 0, 0),
             term: Term::sha2_256()
@@ -2109,6 +2001,114 @@ mod tests {
         let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
 
         let actual = program.identity_reducer();
+
+        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn inline_reduce_delay_sha() {
+        let mut program: Program<Name> = Program {
+            version: (1, 0, 0),
+            term: Term::sha2_256()
+                .apply(Term::var("x"))
+                .lambda("x")
+                .apply(Term::byte_string(vec![]).delay()),
+        };
+
+        let mut interner = CodeGenInterner::new();
+
+        interner.program(&mut program);
+
+        let mut expected = Program {
+            version: (1, 0, 0),
+            term: Term::sha2_256().apply(Term::byte_string(vec![]).delay()),
+        };
+
+        let mut interner = CodeGenInterner::new();
+
+        interner.program(&mut expected);
+
+        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
+
+        let actual = program.inline_reducer();
+
+        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn wrap_data_reduce_i_data() {
+        let mut program: Program<Name> = Program {
+            version: (1, 0, 0),
+            term: Term::equals_data()
+                .apply(Term::i_data().apply(Term::un_i_data().apply(Term::Constant(
+                    Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))).into(),
+                ))))
+                .apply(Term::i_data().apply(Term::integer(1.into())))
+                .lambda("x"),
+        };
+
+        let mut interner = CodeGenInterner::new();
+
+        interner.program(&mut program);
+
+        let mut expected = Program {
+            version: (1, 0, 0),
+            term: Term::equals_data()
+                .apply(Term::Constant(
+                    Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))).into(),
+                ))
+                .apply(Term::data(Data::integer(1.into())))
+                .lambda("x"),
+        };
+
+        let mut interner = CodeGenInterner::new();
+
+        interner.program(&mut expected);
+
+        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
+
+        let actual = program.cast_data_reducer();
+
+        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn wrap_data_reduce_un_i_data() {
+        let mut program: Program<Name> = Program {
+            version: (1, 0, 0),
+            term: Term::equals_integer()
+                .apply(Term::un_i_data().apply(Term::i_data().apply(Term::integer(1.into()))))
+                .apply(Term::un_i_data().apply(Term::Constant(
+                    Constant::Data(PlutusData::BigInt(BigInt::Int(5.into()))).into(),
+                )))
+                .lambda("x"),
+        };
+
+        let mut interner = CodeGenInterner::new();
+
+        interner.program(&mut program);
+
+        let mut expected = Program {
+            version: (1, 0, 0),
+            term: Term::equals_integer()
+                .apply(Term::integer(1.into()))
+                .apply(Term::integer(5.into()))
+                .lambda("x"),
+        };
+
+        let mut interner = CodeGenInterner::new();
+
+        interner.program(&mut expected);
+
+        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
+
+        let actual = program.cast_data_reducer();
 
         let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
 
