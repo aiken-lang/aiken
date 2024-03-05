@@ -1653,6 +1653,8 @@ mod tests {
         optimize::interner::CodeGenInterner,
     };
 
+    use super::NO_INLINE;
+
     fn compare_optimization(
         mut expected: Program<Name>,
         mut program: Program<Name>,
@@ -1890,11 +1892,34 @@ mod tests {
     }
 
     #[test]
-    fn identity_reduce_0_occurrence() {
+    fn identity_reduce_usage() {
         let program: Program<Name> = Program {
             version: (1, 0, 0),
             term: Term::sha2_256()
                 .apply(Term::var("identity").apply(Term::var("x")))
+                .lambda("x")
+                .apply(Term::byte_string(vec![]).delay())
+                .lambda("identity")
+                .apply(Term::var("y").lambda("y")),
+        };
+
+        let expected = Program {
+            version: (1, 0, 0),
+            term: Term::sha2_256()
+                .apply(Term::var("x"))
+                .lambda("x")
+                .apply(Term::byte_string(vec![]).delay()),
+        };
+
+        compare_optimization(expected, program, |p| p.identity_reducer());
+    }
+
+    #[test]
+    fn identity_reduce_0_occurrence() {
+        let program: Program<Name> = Program {
+            version: (1, 0, 0),
+            term: Term::sha2_256()
+                .apply(Term::var("x"))
                 .lambda("x")
                 .apply(Term::byte_string(vec![]).delay())
                 .lambda("identity")
@@ -1960,6 +1985,29 @@ mod tests {
     }
 
     #[test]
+    fn identity_reduce_no_inline() {
+        let program: Program<Name> = Program {
+            version: (1, 0, 0),
+            term: Term::sha2_256()
+                .apply(Term::var("identity").apply(Term::var("x")))
+                .lambda("x")
+                .apply(Term::byte_string(vec![]).delay())
+                .lambda("identity")
+                .apply(Term::var("y").lambda("y").lambda(NO_INLINE)),
+        };
+
+        let expected = Program {
+            version: (1, 0, 0),
+            term: Term::sha2_256()
+                .apply(Term::var("x"))
+                .lambda("x")
+                .apply(Term::byte_string(vec![]).delay()),
+        };
+
+        compare_optimization(expected, program, |p| p.identity_reducer());
+    }
+
+    #[test]
     fn inline_reduce_delay_sha() {
         let program: Program<Name> = Program {
             version: (1, 0, 0),
@@ -1972,6 +2020,23 @@ mod tests {
         let expected = Program {
             version: (1, 0, 0),
             term: Term::sha2_256().apply(Term::byte_string(vec![]).delay()),
+        };
+
+        compare_optimization(expected, program, |p| p.inline_reducer());
+    }
+
+    #[test]
+    fn inline_reduce_0_occurrence() {
+        let program: Program<Name> = Program {
+            version: (1, 0, 0),
+            term: Term::sha2_256()
+                .lambda("x")
+                .apply(Term::byte_string(vec![]).delay()),
+        };
+
+        let expected = Program {
+            version: (1, 0, 0),
+            term: Term::sha2_256(),
         };
 
         compare_optimization(expected, program, |p| p.inline_reducer());
