@@ -955,7 +955,7 @@ impl Program<Name> {
                                         // Have to check if the body still has any occurrences of the parameter
                                         // After attempting replacement
                                         if var_occurrences(
-                                            body.as_ref(),
+                                            &temp_term,
                                             parameter_name.clone(),
                                             vec![],
                                             vec![],
@@ -992,7 +992,7 @@ impl Program<Name> {
                                     // Have to check if the body still has any occurrences of the parameter
                                     // After attempting replacement
                                     if var_occurrences(
-                                        body.as_ref(),
+                                        &temp_term,
                                         parameter_name.clone(),
                                         vec![],
                                         vec![],
@@ -1648,6 +1648,7 @@ mod tests {
 
     use crate::{
         ast::{Constant, Data, Name, NamedDeBruijn, Program, Term},
+        builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
         builtins::DefaultFunction,
         optimize::interner::CodeGenInterner,
     };
@@ -1899,6 +1900,7 @@ mod tests {
                 )
                 .lambda("x")
                 .lambda("y")
+                // Forces are automatically applied by builder
                 .lambda("__cons_list_wrapped")
                 .apply(Term::mk_cons())
                 .lambda("__head_list_wrapped")
@@ -2016,7 +2018,7 @@ mod tests {
     }
 
     #[test]
-    fn inline_reduce_identity() {
+    fn identity_reduce_0_occurrence() {
         let mut program: Program<Name> = Program {
             version: (1, 0, 0),
             term: Term::sha2_256()
@@ -2033,7 +2035,10 @@ mod tests {
 
         let mut expected = Program {
             version: (1, 0, 0),
-            term: Term::sha2_256().apply(Term::byte_string(vec![]).delay()),
+            term: Term::sha2_256()
+                .apply(Term::var("x"))
+                .lambda("x")
+                .apply(Term::byte_string(vec![]).delay()),
         };
 
         let mut interner = CodeGenInterner::new();
@@ -2042,7 +2047,7 @@ mod tests {
 
         let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
 
-        let actual = program.identity_reducer().inline_reducer();
+        let actual = program.identity_reducer();
 
         let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
 
@@ -2078,14 +2083,23 @@ mod tests {
 
         let mut expected = Program {
             version: (1, 0, 0),
-            term: Term::sha2_256().apply(
-                Term::var("with")
-                    .apply(Term::var("x"))
-                    .lambda("with")
-                    .lambda("x")
-                    .apply(Term::byte_string(vec![]).delay())
-                    .apply(Term::var("y").lambda("y")),
-            ),
+            term: Term::sha2_256()
+                .apply(
+                    Term::var("f")
+                        .apply(Term::var("x"))
+                        .apply(Term::var("identity")),
+                )
+                .lambda("x")
+                .apply(Term::byte_string(vec![]).delay())
+                .lambda("identity")
+                .apply(Term::var("y").lambda("y"))
+                .lambda("f")
+                .apply(
+                    Term::var("with")
+                        .apply(Term::var("x"))
+                        .lambda("with")
+                        .lambda("x"),
+                ),
         };
 
         let mut interner = CodeGenInterner::new();
@@ -2094,7 +2108,7 @@ mod tests {
 
         let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
 
-        let actual = program.identity_reducer().inline_reducer();
+        let actual = program.identity_reducer();
 
         let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
 
@@ -2132,6 +2146,381 @@ mod tests {
                 .apply(Term::add_integer().apply(Term::integer(1.into())))
                 .lambda("y")
                 .apply(Term::integer(5.into())),
+        };
+
+        let mut interner = CodeGenInterner::new();
+
+        interner.program(&mut expected);
+
+        let expected: Program<NamedDeBruijn> = expected.try_into().unwrap();
+
+        let actual = program.builtin_curry_reducer();
+
+        let actual: Program<NamedDeBruijn> = actual.try_into().unwrap();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn curry_reducer_test_2() {
+        let mut program: Program<Name> = Program {
+            version: (1, 0, 0),
+            term: Term::var("equivalence")
+                .lambda("equivalence")
+                .apply(
+                    Term::equals_integer()
+                        .apply(Term::integer(0.into()))
+                        .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("tuple_index_0")))
+                        .if_then_else(
+                            Term::equals_integer()
+                                .apply(Term::integer(0.into()))
+                                .apply(
+                                    Term::var(CONSTR_INDEX_EXPOSER)
+                                        .apply(Term::var("tuple_index_1")),
+                                )
+                                .if_then_else(
+                                    Term::equals_integer()
+                                        .apply(
+                                            Term::subtract_integer()
+                                                .apply(Term::var("x2"))
+                                                .apply(Term::var("x1")),
+                                        )
+                                        .apply(Term::integer(0.into()))
+                                        .delayed_if_then_else(
+                                            Term::equals_integer()
+                                                .apply(
+                                                    Term::subtract_integer()
+                                                        .apply(Term::var("y2"))
+                                                        .apply(Term::var("y1")),
+                                                )
+                                                .apply(Term::integer(0.into())),
+                                            Term::bool(false),
+                                        )
+                                        .lambda("x2")
+                                        .apply(Term::un_i_data().apply(
+                                            Term::fst_pair().apply(Term::var("field_0_pair")),
+                                        ))
+                                        .lambda("y2")
+                                        .apply(Term::un_i_data().apply(
+                                            Term::snd_pair().apply(Term::var("field_0_pair")),
+                                        ))
+                                        .lambda("field_0_pair")
+                                        .apply(
+                                            Term::mk_pair_data()
+                                                .apply(
+                                                    Term::head_list()
+                                                        .apply(Term::var("__list_data")),
+                                                )
+                                                .apply(Term::head_list().apply(Term::var("__tail")))
+                                                .lambda("__tail")
+                                                .apply(
+                                                    Term::tail_list()
+                                                        .apply(Term::var("__list_data")),
+                                                )
+                                                .lambda("__list_data")
+                                                .apply(
+                                                    Term::unlist_data().apply(
+                                                        Term::head_list().apply(Term::var(
+                                                            "tuple_index_1_fields",
+                                                        )),
+                                                    ),
+                                                ),
+                                        )
+                                        .lambda("tuple_index_1_fields")
+                                        .apply(
+                                            Term::var(CONSTR_FIELDS_EXPOSER)
+                                                .apply(Term::var("tuple_index_1")),
+                                        )
+                                        .delay(),
+                                    Term::var("clauses_delayed"),
+                                )
+                                .force()
+                                .lambda("x1")
+                                .apply(
+                                    Term::un_i_data()
+                                        .apply(Term::fst_pair().apply(Term::var("field_0_pair"))),
+                                )
+                                .lambda("y1")
+                                .apply(
+                                    Term::un_i_data()
+                                        .apply(Term::snd_pair().apply(Term::var("field_0_pair"))),
+                                )
+                                .lambda("field_0_pair")
+                                .apply(
+                                    Term::mk_pair_data()
+                                        .apply(Term::head_list().apply(Term::var("__list_data")))
+                                        .apply(Term::head_list().apply(Term::var("__tail")))
+                                        .lambda("__tail")
+                                        .apply(Term::tail_list().apply(Term::var("__list_data")))
+                                        .lambda("__list_data")
+                                        .apply(
+                                            Term::unlist_data().apply(
+                                                Term::head_list()
+                                                    .apply(Term::var("tuple_index_0_fields")),
+                                            ),
+                                        ),
+                                )
+                                .lambda("tuple_index_0_fields")
+                                .apply(
+                                    Term::var(CONSTR_FIELDS_EXPOSER)
+                                        .apply(Term::var("tuple_index_0")),
+                                )
+                                .delay(),
+                            Term::var("clauses_delayed"),
+                        )
+                        .force()
+                        .lambda("clauses_delayed")
+                        .apply(
+                            Term::equals_integer()
+                                .apply(Term::integer(1.into()))
+                                .apply(
+                                    Term::var(CONSTR_INDEX_EXPOSER)
+                                        .apply(Term::var("tuple_index_0")),
+                                )
+                                .if_then_else(
+                                    Term::equals_integer()
+                                        .apply(Term::integer(1.into()))
+                                        .apply(
+                                            Term::var(CONSTR_INDEX_EXPOSER)
+                                                .apply(Term::var("tuple_index_1")),
+                                        )
+                                        .if_then_else(
+                                            Term::bool(true).delay(),
+                                            Term::var("clauses_delayed"),
+                                        )
+                                        .force()
+                                        .delay(),
+                                    Term::var("clauses_delayed"),
+                                )
+                                .force()
+                                .lambda("clauses_delayed")
+                                .apply(
+                                    Term::equals_integer()
+                                        .apply(Term::integer(1.into()))
+                                        .apply(
+                                            Term::var(CONSTR_INDEX_EXPOSER)
+                                                .apply(Term::var("tuple_index_0")),
+                                        )
+                                        .if_then_else(
+                                            Term::equals_integer()
+                                                .apply(Term::integer(0.into()))
+                                                .apply(
+                                                    Term::var(CONSTR_INDEX_EXPOSER)
+                                                        .apply(Term::var("tuple_index_1")),
+                                                )
+                                                .if_then_else(
+                                                    Term::bool(false).delay(),
+                                                    Term::var("clauses_delayed"),
+                                                )
+                                                .force()
+                                                .delay(),
+                                            Term::var("clauses_delayed"),
+                                        )
+                                        .force()
+                                        .lambda("clauses_delayed")
+                                        .apply(Term::bool(false).delay())
+                                        .delay(),
+                                )
+                                .delay(),
+                        )
+                        .lambda("tuple_index_0")
+                        .apply(Term::fst_pair().apply(Term::var("input")))
+                        .lambda("tuple_index_1")
+                        .apply(Term::snd_pair().apply(Term::var("input")))
+                        .lambda("input")
+                        .apply(
+                            Term::mk_pair_data()
+                                .apply(Term::var("ec1"))
+                                .apply(Term::var("ec2")),
+                        )
+                        .lambda("ec2")
+                        .lambda("ec1"),
+                )
+                .apply(Term::data(Data::constr(1, vec![])))
+                .apply(Term::data(Data::constr(1, vec![])))
+                .delayed_if_then_else(
+                    Term::bool(true),
+                    Term::bool(true).if_then_else(Term::bool(false), Term::bool(true)),
+                )
+                .constr_index_exposer()
+                .constr_fields_exposer(),
+        };
+
+        let mut interner = CodeGenInterner::new();
+
+        interner.program(&mut program);
+
+        let mut expected = Program {
+            version: (1, 0, 0),
+            term: Term::var("equivalence")
+                .lambda("equivalence")
+                .apply(
+                    Term::var("equals_integer_0_curried")
+                        .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("tuple_index_0")))
+                        .if_then_else(
+                            Term::var("equals_integer_0_tuple_index_1_tag_curried")
+                                .if_then_else(
+                                    Term::var("equals_integer_0_curried")
+                                        .apply(
+                                            Term::subtract_integer()
+                                                .apply(Term::var("x2"))
+                                                .apply(Term::var("x1")),
+                                        )
+                                        .delayed_if_then_else(
+                                            Term::var("equals_integer_0_curried").apply(
+                                                Term::subtract_integer()
+                                                    .apply(Term::var("y2"))
+                                                    .apply(Term::var("y1")),
+                                            ),
+                                            Term::bool(false),
+                                        )
+                                        .lambda("x2")
+                                        .apply(Term::un_i_data().apply(
+                                            Term::fst_pair().apply(Term::var("field_0_pair")),
+                                        ))
+                                        .lambda("y2")
+                                        .apply(Term::un_i_data().apply(
+                                            Term::snd_pair().apply(Term::var("field_0_pair")),
+                                        ))
+                                        .lambda("field_0_pair")
+                                        .apply(
+                                            Term::mk_pair_data()
+                                                .apply(
+                                                    Term::head_list()
+                                                        .apply(Term::var("__list_data")),
+                                                )
+                                                .apply(Term::head_list().apply(Term::var("__tail")))
+                                                .lambda("__tail")
+                                                .apply(
+                                                    Term::tail_list()
+                                                        .apply(Term::var("__list_data")),
+                                                )
+                                                .lambda("__list_data")
+                                                .apply(
+                                                    Term::unlist_data().apply(
+                                                        Term::head_list().apply(Term::var(
+                                                            "tuple_index_1_fields",
+                                                        )),
+                                                    ),
+                                                ),
+                                        )
+                                        .lambda("tuple_index_1_fields")
+                                        .apply(
+                                            Term::var(CONSTR_FIELDS_EXPOSER)
+                                                .apply(Term::var("tuple_index_1")),
+                                        )
+                                        .delay(),
+                                    Term::var("clauses_delayed"),
+                                )
+                                .force()
+                                .lambda("x1")
+                                .apply(
+                                    Term::un_i_data()
+                                        .apply(Term::fst_pair().apply(Term::var("field_0_pair"))),
+                                )
+                                .lambda("y1")
+                                .apply(
+                                    Term::un_i_data()
+                                        .apply(Term::snd_pair().apply(Term::var("field_0_pair"))),
+                                )
+                                .lambda("field_0_pair")
+                                .apply(
+                                    Term::mk_pair_data()
+                                        .apply(Term::head_list().apply(Term::var("__list_data")))
+                                        .apply(Term::head_list().apply(Term::var("__tail")))
+                                        .lambda("__tail")
+                                        .apply(Term::tail_list().apply(Term::var("__list_data")))
+                                        .lambda("__list_data")
+                                        .apply(
+                                            Term::unlist_data().apply(
+                                                Term::head_list()
+                                                    .apply(Term::var("tuple_index_0_fields")),
+                                            ),
+                                        ),
+                                )
+                                .lambda("tuple_index_0_fields")
+                                .apply(
+                                    Term::var(CONSTR_FIELDS_EXPOSER)
+                                        .apply(Term::var("tuple_index_0")),
+                                )
+                                .delay(),
+                            Term::var("clauses_delayed"),
+                        )
+                        .force()
+                        .lambda("clauses_delayed")
+                        .apply(
+                            Term::var("equals_integer_1_tuple_index_0_tag_curried")
+                                .if_then_else(
+                                    Term::var("equals_integer_1_curried")
+                                        .apply(
+                                            Term::var(CONSTR_INDEX_EXPOSER)
+                                                .apply(Term::var("tuple_index_1")),
+                                        )
+                                        .if_then_else(
+                                            Term::bool(true).delay(),
+                                            Term::var("clauses_delayed"),
+                                        )
+                                        .force()
+                                        .delay(),
+                                    Term::var("clauses_delayed"),
+                                )
+                                .force()
+                                .lambda("clauses_delayed")
+                                .apply(
+                                    Term::var("equals_integer_1_tuple_index_0_tag_curried")
+                                        .if_then_else(
+                                            Term::var("equals_integer_0_tuple_index_1_tag_curried")
+                                                .if_then_else(
+                                                    Term::bool(false).delay(),
+                                                    Term::var("clauses_delayed"),
+                                                )
+                                                .force()
+                                                .delay(),
+                                            Term::var("clauses_delayed"),
+                                        )
+                                        .force()
+                                        .lambda("clauses_delayed")
+                                        .apply(Term::bool(false).delay())
+                                        .delay(),
+                                )
+                                .lambda("equals_integer_1_tuple_index_0_tag_curried")
+                                .apply(
+                                    Term::var("equals_integer_1_curried").apply(
+                                        Term::var(CONSTR_INDEX_EXPOSER)
+                                            .apply(Term::var("tuple_index_0")),
+                                    ),
+                                )
+                                .lambda("equals_integer_1_curried")
+                                .apply(Term::equals_integer().apply(Term::integer(1.into())))
+                                .delay(),
+                        )
+                        .lambda("equals_integer_0_tuple_index_1_tag_curried")
+                        .apply(Term::var("equals_integer_0_curried").apply(
+                            Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("tuple_index_1")),
+                        ))
+                        .lambda("equals_integer_0_curried")
+                        .apply(Term::equals_integer().apply(Term::integer(0.into())))
+                        .lambda("tuple_index_0")
+                        .apply(Term::fst_pair().apply(Term::var("input")))
+                        .lambda("tuple_index_1")
+                        .apply(Term::snd_pair().apply(Term::var("input")))
+                        .lambda("input")
+                        .apply(
+                            Term::mk_pair_data()
+                                .apply(Term::var("ec1"))
+                                .apply(Term::var("ec2")),
+                        )
+                        .lambda("ec2")
+                        .lambda("ec1"),
+                )
+                .apply(Term::data(Data::constr(1, vec![])))
+                .apply(Term::data(Data::constr(1, vec![])))
+                .delayed_if_then_else(
+                    Term::bool(true),
+                    Term::bool(true).if_then_else(Term::bool(false), Term::bool(true)),
+                )
+                .constr_index_exposer()
+                .constr_fields_exposer(),
         };
 
         let mut interner = CodeGenInterner::new();
