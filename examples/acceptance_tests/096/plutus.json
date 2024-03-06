@@ -6,7 +6,7 @@
     "plutusVersion": "v2",
     "compiler": {
       "name": "Aiken",
-      "version": "v1.0.24-alpha+ad48409"
+      "version": "v1.0.24-alpha+950eeeb"
     },
     "license": "Apache-2.0"
   },

@@ -1212,7 +1212,8 @@ pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
             .apply(Term::fst_pair().apply(Term::var("__pair__")))
             .delayed_if_then_else(
                 Term::snd_pair()
-                    .apply(Term::var("__pair__").delayed_choose_list(Term::unit(), Term::Error)),
+                    .apply(Term::var("__pair__"))
+                    .delayed_choose_list(Term::unit(), Term::Error),
                 Term::Error,
             )
             .lambda("__pair__")
@@ -1299,11 +1300,9 @@ pub fn unknown_data_to_type_debug(
                     .apply(Term::integer(0.into()))
                     .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("__val"))))
                     .delayed_if_then_else(
-                        Term::snd_pair().apply(
-                            Term::unconstr_data()
-                                .apply(Term::var("__val"))
-                                .delayed_choose_list(Term::unit(), error_term.clone()),
-                        ),
+                        Term::snd_pair()
+                            .apply(Term::unconstr_data().apply(Term::var("__val")))
+                            .delayed_choose_list(Term::unit(), error_term.clone()),
                         error_term.clone(),
                     ),
                 error_term.clone(),
