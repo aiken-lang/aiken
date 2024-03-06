@@ -564,60 +564,91 @@ where
     }
 
     fn parse_sources(&mut self, package_name: PackageName) -> Result<ParsedModules, Vec<Error>> {
-        let mut errors = Vec::new();
-        let mut parsed_modules = HashMap::with_capacity(self.sources.len());
+        use rayon::prelude::*;
 
-        for Source {
-            path,
-            name,
-            code,
-            kind,
-        } in self.sources.drain(0..)
-        {
-            match aiken_lang::parser::module(&code, kind) {
-                Ok((mut ast, extra)) => {
-                    // Store the name
-                    ast.name = name.clone();
-
-                    let module = ParsedModule {
-                        kind,
-                        ast,
-                        code,
-                        name,
+        let (parsed_modules, errors) = self
+            .sources
+            .par_drain(0..)
+            .fold(
+                || (ParsedModules::new(), Vec::new()),
+                |(mut parsed_modules, mut errors), elem| {
+                    let Source {
                         path,
-                        extra,
-                        package: package_name.to_string(),
-                    };
+                        name,
+                        code,
+                        kind,
+                    } = elem;
 
-                    if let Some(first) = self
-                        .defined_modules
-                        .insert(module.name.clone(), module.path.clone())
-                    {
-                        return Err(Error::DuplicateModule {
-                            module: module.name.clone(),
-                            first,
-                            second: module.path,
+                    match aiken_lang::parser::module(&code, kind) {
+                        Ok((mut ast, extra)) => {
+                            // Store the name
+                            ast.name = name.clone();
+
+                            let module = ParsedModule {
+                                kind,
+                                ast,
+                                code,
+                                name,
+                                path,
+                                extra,
+                                package: package_name.to_string(),
+                            };
+
+                            parsed_modules.insert(module.name.clone(), module);
+
+                            (parsed_modules, errors)
                         }
-                        .into());
-                    }
+                        Err(errs) => {
+                            for error in errs {
+                                errors.push((
+                                    path.clone(),
+                                    code.clone(),
+                                    NamedSource::new(path.display().to_string(), code.clone()),
+                                    Box::new(error),
+                                ))
+                            }
 
-                    parsed_modules.insert(module.name.clone(), module);
-                }
-                Err(errs) => {
-                    for error in errs {
-                        errors.push(Error::Parse {
-                            path: path.clone(),
-                            src: code.clone(),
-                            named: NamedSource::new(path.display().to_string(), code.clone()),
-                            error: Box::new(error),
-                        })
+                            (parsed_modules, errors)
+                        }
                     }
-                }
+                },
+            )
+            .reduce(
+                || (ParsedModules::new(), Vec::new()),
+                |(mut parsed_modules, mut errors), (mut parsed, errs)| {
+                    parsed_modules.extend(parsed.drain());
+
+                    errors.extend(errs);
+
+                    (parsed_modules, errors)
+                },
+            );
+
+        let mut errors: Vec<Error> = errors
+            .into_iter()
+            .map(|(path, src, named, error)| Error::Parse {
+                path,
+                src,
+                named,
+                error,
+            })
+            .collect();
+
+        for parsed_module in parsed_modules.values() {
+            if let Some(first) = self
+                .defined_modules
+                .insert(parsed_module.name.clone(), parsed_module.path.clone())
+            {
+                errors.push(Error::DuplicateModule {
+                    module: parsed_module.name.clone(),
+                    first,
+                    second: parsed_module.path.clone(),
+                });
             }
         }
 
         if errors.is_empty() {
-            Ok(parsed_modules.into())
+            Ok(parsed_modules)
         } else {
             Err(errors)
         }
