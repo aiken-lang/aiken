@@ -615,10 +615,10 @@ where
             )
             .reduce(
                 || (ParsedModules::new(), Vec::new()),
-                |(mut parsed_modules, mut errors), (mut parsed, errs)| {
+                |(mut parsed_modules, mut errors), (mut parsed, mut errs)| {
                     parsed_modules.extend(parsed.drain());
 
-                    errors.extend(errs);
+                    errors.append(&mut errs);
 
                     (parsed_modules, errors)
                 },
