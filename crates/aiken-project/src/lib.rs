@@ -193,7 +193,7 @@ where
 
         let parsed_modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(parsed_modules, Tracing::silent(), false)?;
+        self.type_check(parsed_modules, Tracing::silent(), false, false)?;
 
         self.event_listener.handle_event(Event::GeneratingDocFiles {
             output_path: destination.clone(),
@@ -284,7 +284,7 @@ where
 
         let parsed_modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(parsed_modules, options.tracing, true)?;
+        self.type_check(parsed_modules, options.tracing, true, false)?;
 
         match options.code_gen_mode {
             CodeGenMode::Build(uplc_dump) => {
@@ -528,9 +528,20 @@ where
 
             self.read_package_source_files(&lib.join("lib"))?;
 
-            let parsed_modules = self.parse_sources(package.name)?;
+            let mut parsed_modules = self.parse_sources(package.name)?;
 
-            self.type_check(parsed_modules, Tracing::silent(), true)?;
+            use rayon::prelude::*;
+
+            parsed_modules
+                .par_iter_mut()
+                .for_each(|(_module, parsed_module)| {
+                    parsed_module
+                        .ast
+                        .definitions
+                        .retain(|def| !matches!(def, Definition::Test { .. }))
+                });
+
+            self.type_check(parsed_modules, Tracing::silent(), true, true)?;
         }
 
         Ok(())
@@ -617,6 +628,7 @@ where
         mut parsed_modules: ParsedModules,
         tracing: Tracing,
         validate_module_name: bool,
+        is_dependency: bool,
     ) -> Result<(), Error> {
         let processing_sequence = parsed_modules.sequence()?;
 
@@ -658,7 +670,9 @@ where
                     .into_iter()
                     .map(|w| Warning::from_type_warning(w, path.clone(), code.clone()));
 
-                self.warnings.extend(type_warnings);
+                if !is_dependency {
+                    self.warnings.extend(type_warnings);
+                }
 
                 // Register module sources for an easier access later.
                 self.module_sources
