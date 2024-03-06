@@ -10,15 +10,14 @@ pub mod pattern;
 pub mod token;
 mod utils;
 
-pub use annotation::parser as annotation;
-pub use definition::parser as definition;
-pub use expr::parser as expression;
-pub use pattern::parser as pattern;
-
 use crate::{ast, line_numbers::LineNumbers};
+pub use annotation::parser as annotation;
 use chumsky::prelude::*;
+pub use definition::parser as definition;
 use error::ParseError;
+pub use expr::parser as expression;
 use extra::ModuleExtra;
+pub use pattern::parser as pattern;
 
 pub fn module(
     src: &str,

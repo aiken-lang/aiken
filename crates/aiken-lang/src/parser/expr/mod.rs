@@ -20,6 +20,8 @@ mod tuple;
 mod var;
 pub mod when;
 
+use super::{error::ParseError, token::Token};
+use crate::{ast, expr::UntypedExpr};
 pub use and_or_chain::parser as and_or_chain;
 pub use anonymous_function::parser as anonymous_function;
 pub use block::parser as block;
@@ -36,9 +38,6 @@ pub use string::parser as string;
 pub use tuple::parser as tuple;
 pub use var::parser as var;
 pub use when::parser as when;
-
-use super::{error::ParseError, token::Token};
-use crate::{ast, expr::UntypedExpr};
 
 pub fn parser(
     sequence: Recursive<'_, Token, UntypedExpr, ParseError>,
@@ -142,28 +141,62 @@ pub fn pure_expression<'a>(
         .boxed();
 
     // Conjunction
+    //
+    // NOTE: This can be written in a nicer way with `foldl_with` in chumsky =^ 1.0.0.
+    // DO NOT however try to write this as:
+    //
+    //  comparison
+    //    .clone()
+    //    .then(op)
+    //    .repeated
+    //    .then(comparison)
+    //    .foldr(...)
+    //
+    // This has somehow incredibly slow performances in Chumsky. Hence the approach below.
     let op = just(Token::AmperAmper).to(ast::BinOp::And);
     let conjunction = comparison
         .clone()
+        .map(|e| vec![e])
+        .clone()
         .then(op.then(comparison).repeated())
-        .foldl(|a, (op, b)| UntypedExpr::BinOp {
-            location: a.location().union(b.location()),
-            name: op,
-            left: Box::new(a),
-            right: Box::new(b),
+        .foldl(|a, (_op, b)| {
+            let mut tail = vec![b];
+            tail.extend(a);
+            tail
+        })
+        .map(|xs| {
+            xs.into_iter()
+                .reduce(|right, left| UntypedExpr::BinOp {
+                    location: left.location().union(right.location()),
+                    name: ast::BinOp::And,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                })
+                .unwrap()
         })
         .boxed();
 
+    // NOTE: see comment about conjunctions just above.
     // Disjunction
     let op = just(Token::VbarVbar).to(ast::BinOp::Or);
     let disjunction = conjunction
         .clone()
+        .map(|e| vec![e])
         .then(op.then(conjunction).repeated())
-        .foldl(|a, (op, b)| UntypedExpr::BinOp {
-            location: a.location().union(b.location()),
-            name: op,
-            left: Box::new(a),
-            right: Box::new(b),
+        .foldl(|a, (_op, b)| {
+            let mut tail = vec![b];
+            tail.extend(a);
+            tail
+        })
+        .map(|xs| {
+            xs.into_iter()
+                .reduce(|right, left| UntypedExpr::BinOp {
+                    location: left.location().union(right.location()),
+                    name: ast::BinOp::Or,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                })
+                .unwrap()
         })
         .boxed();
 
