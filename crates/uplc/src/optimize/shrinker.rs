@@ -2008,6 +2008,31 @@ mod tests {
     }
 
     #[test]
+    fn identity_reduce_no_inline_2() {
+        let program: Program<Name> = Program {
+            version: (1, 0, 0),
+            term: Term::sha2_256()
+                .apply(Term::var("identity").apply(Term::var("x")))
+                .lambda("x")
+                .apply(Term::byte_string(vec![]).delay())
+                .lambda(NO_INLINE)
+                .lambda("identity")
+                .apply(Term::var("y").lambda("y").lambda(NO_INLINE)),
+        };
+
+        let expected = Program {
+            version: (1, 0, 0),
+            term: Term::sha2_256()
+                .apply(Term::var("x"))
+                .lambda("x")
+                .apply(Term::byte_string(vec![]).delay())
+                .lambda(NO_INLINE),
+        };
+
+        compare_optimization(expected, program, |p| p.identity_reducer());
+    }
+
+    #[test]
     fn inline_reduce_delay_sha() {
         let program: Program<Name> = Program {
             version: (1, 0, 0),
