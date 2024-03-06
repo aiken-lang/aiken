@@ -1167,7 +1167,41 @@ pub fn find_list_clause_or_default_first(clauses: &[TypedClause]) -> &TypedClaus
         .unwrap_or(&clauses[0])
 }
 
-pub fn convert_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
+pub fn known_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
+    if field_type.is_int() {
+        Term::un_i_data().apply(term)
+    } else if field_type.is_bytearray() {
+        Term::un_b_data().apply(term)
+    } else if field_type.is_void() {
+        Term::unit().lambda("_").apply(term)
+    } else if field_type.is_map() {
+        Term::unmap_data().apply(term)
+    } else if field_type.is_string() {
+        Term::Builtin(DefaultFunction::DecodeUtf8).apply(Term::un_b_data().apply(term))
+    } else if field_type.is_tuple() && matches!(field_type.get_uplc_type(), UplcType::Pair(_, _)) {
+        Term::mk_pair_data()
+            .apply(Term::head_list().apply(Term::var("__list_data")))
+            .apply(Term::head_list().apply(Term::tail_list().apply(Term::var("__list_data"))))
+            .lambda("__list_data")
+            .apply(Term::unlist_data().apply(term))
+    } else if field_type.is_list() || field_type.is_tuple() {
+        Term::unlist_data().apply(term)
+    } else if field_type.is_bool() {
+        Term::less_than_integer()
+            .apply(Term::integer(0.into()))
+            .apply(Term::fst_pair().apply(Term::unconstr_data().apply(term)))
+    } else if field_type.is_bls381_12_g1() {
+        Term::bls12_381_g1_uncompress().apply(Term::un_b_data().apply(term))
+    } else if field_type.is_bls381_12_g2() {
+        Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(term))
+    } else if field_type.is_ml_result() {
+        panic!("ML Result not supported")
+    } else {
+        term
+    }
+}
+
+pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
     if field_type.is_int() {
         Term::un_i_data().apply(term)
     } else if field_type.is_bytearray() {
@@ -1231,7 +1265,7 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
     }
 }
 
-pub fn convert_data_to_type_debug(
+pub fn unknown_data_to_type_debug(
     term: Term<Name>,
     field_type: &Type,
     error_term: Term<Name>,
@@ -1605,14 +1639,22 @@ pub fn list_access_to_uplc(
             Term::unit()
         } else if matches!(tipo.get_uplc_type(), UplcType::Pair(_, _)) && is_list_accessor {
             Term::head_list().apply(Term::var(tail_name.to_string()))
-        } else if matches!(expect_level, ExpectLevel::Full) && error_term != Term::Error {
-            convert_data_to_type_debug(
-                Term::head_list().apply(Term::var(tail_name.to_string())),
-                &tipo.to_owned(),
-                error_term.clone(),
-            )
+        } else if matches!(expect_level, ExpectLevel::Full) {
+            // Expect level is full so we have an unknown piece of data to cast
+            if error_term == Term::Error {
+                unknown_data_to_type(
+                    Term::head_list().apply(Term::var(tail_name.to_string())),
+                    &tipo.to_owned(),
+                )
+            } else {
+                unknown_data_to_type_debug(
+                    Term::head_list().apply(Term::var(tail_name.to_string())),
+                    &tipo.to_owned(),
+                    error_term.clone(),
+                )
+            }
         } else {
-            convert_data_to_type(
+            known_data_to_type(
                 Term::head_list().apply(Term::var(tail_name.to_string())),
                 &tipo.to_owned(),
             )
@@ -1735,7 +1777,7 @@ pub fn undata_builtin(
         term = term.apply(Term::var(temp_var));
     }
 
-    term = convert_data_to_type(term, tipo);
+    term = known_data_to_type(term, tipo);
 
     if count == 0 {
         term = term.lambda(temp_var);
@@ -1953,7 +1995,7 @@ pub fn cast_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Nam
         if !matches!(arg.tipo.get_uplc_type(), UplcType::Data) {
             term = term
                 .lambda(arg.arg_name.get_variable_name().unwrap_or("_"))
-                .apply(convert_data_to_type(
+                .apply(known_data_to_type(
                     Term::var(arg.arg_name.get_variable_name().unwrap_or("_")),
                     &arg.tipo,
                 ));

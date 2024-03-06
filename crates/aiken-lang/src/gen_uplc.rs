@@ -26,8 +26,8 @@ use crate::{
             check_replaceable_opaque_type, convert_opaque_type, erase_opaque_type_operations,
             find_and_replace_generics, find_list_clause_or_default_first, get_arg_type_name,
             get_generic_id_and_type, get_generic_variant_name, get_line_columns_by_span,
-            get_src_code_by_span, monomorphize, pattern_has_conditions, wrap_as_multi_validator,
-            wrap_validator_condition, CodeGenFunction, SpecificClause,
+            get_src_code_by_span, known_data_to_type, monomorphize, pattern_has_conditions,
+            wrap_as_multi_validator, wrap_validator_condition, CodeGenFunction, SpecificClause,
         },
     },
     line_numbers::LineNumbers,
@@ -3769,9 +3769,9 @@ impl<'a> CodeGenerator<'a> {
 
         let convert_data_to_type = |term, tipo| {
             if error_term == Term::Error {
-                builder::convert_data_to_type(term, tipo)
+                builder::unknown_data_to_type(term, tipo)
             } else {
-                builder::convert_data_to_type_debug(term, tipo, error_term.clone())
+                builder::unknown_data_to_type_debug(term, tipo, error_term.clone())
             }
         };
 
@@ -4114,7 +4114,7 @@ impl<'a> CodeGenerator<'a> {
                     let head_list = if tipo.is_map() {
                         Term::head_list().apply(Term::var(tail_var))
                     } else {
-                        builder::convert_data_to_type(
+                        builder::known_data_to_type(
                             Term::head_list().apply(Term::var(tail_var)),
                             &tipo.get_inner_types()[0],
                         )
@@ -4772,21 +4772,18 @@ impl<'a> CodeGenerator<'a> {
                             Term::snd_pair()
                         };
 
-                        term = term.lambda(name).apply(builder::convert_data_to_type(
+                        term = term.lambda(name).apply(builder::known_data_to_type(
                             builtin.apply(Term::var(subject_name.clone())),
                             &tuple_types[*index].clone(),
                         ));
                     }
                 } else {
                     for (index, name) in indices.iter() {
-                        term = term
-                            .lambda(name.clone())
-                            .apply(builder::convert_data_to_type(
-                                Term::head_list().apply(
-                                    Term::var(subject_name.clone()).repeat_tail_list(*index),
-                                ),
-                                &tuple_types[*index].clone(),
-                            ));
+                        term = term.lambda(name.clone()).apply(builder::known_data_to_type(
+                            Term::head_list()
+                                .apply(Term::var(subject_name.clone()).repeat_tail_list(*index)),
+                            &tuple_types[*index].clone(),
+                        ));
                     }
                 }
                 Some(term)
@@ -4896,21 +4893,18 @@ impl<'a> CodeGenerator<'a> {
                             Term::snd_pair()
                         };
 
-                        term = term.lambda(name).apply(builder::convert_data_to_type(
+                        term = term.lambda(name).apply(builder::known_data_to_type(
                             builtin.apply(Term::var(subject_name.clone())),
                             &tuple_types[*index].clone(),
                         ));
                     }
                 } else {
                     for (index, name) in indices.iter() {
-                        term = term
-                            .lambda(name.clone())
-                            .apply(builder::convert_data_to_type(
-                                Term::head_list().apply(
-                                    Term::var(subject_name.clone()).repeat_tail_list(*index),
-                                ),
-                                &tuple_types[*index].clone(),
-                            ));
+                        term = term.lambda(name.clone()).apply(builder::known_data_to_type(
+                            Term::head_list()
+                                .apply(Term::var(subject_name.clone()).repeat_tail_list(*index)),
+                            &tuple_types[*index].clone(),
+                        ));
                     }
                 }
                 Some(term)
@@ -5240,17 +5234,31 @@ impl<'a> CodeGenerator<'a> {
                     assert!(names.len() == 2);
 
                     if names[1] != "_" {
-                        term = term.lambda(names[1].clone()).apply(convert_data_to_type(
-                            Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                            &inner_types[1],
-                        ));
+                        term = term.lambda(names[1].clone()).apply(if is_expect {
+                            convert_data_to_type(
+                                Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
+                                &inner_types[1],
+                            )
+                        } else {
+                            known_data_to_type(
+                                Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
+                                &inner_types[1],
+                            )
+                        });
                     }
 
                     if names[0] != "_" {
-                        term = term.lambda(names[0].clone()).apply(convert_data_to_type(
-                            Term::fst_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                            &inner_types[0],
-                        ))
+                        term = term.lambda(names[0].clone()).apply(if is_expect {
+                            convert_data_to_type(
+                                Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
+                                &inner_types[0],
+                            )
+                        } else {
+                            known_data_to_type(
+                                Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
+                                &inner_types[0],
+                            )
+                        })
                     }
 
                     term = term.lambda(format!("__tuple_{list_id}")).apply(value);
