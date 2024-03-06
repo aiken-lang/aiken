@@ -5250,12 +5250,12 @@ impl<'a> CodeGenerator<'a> {
                     if names[0] != "_" {
                         term = term.lambda(names[0].clone()).apply(if is_expect {
                             convert_data_to_type(
-                                Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
+                                Term::fst_pair().apply(Term::var(format!("__tuple_{list_id}"))),
                                 &inner_types[0],
                             )
                         } else {
                             known_data_to_type(
-                                Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
+                                Term::fst_pair().apply(Term::var(format!("__tuple_{list_id}"))),
                                 &inner_types[0],
                             )
                         })
