@@ -1175,26 +1175,51 @@ pub fn convert_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
     } else if field_type.is_void() {
         Term::equals_integer()
             .apply(Term::integer(0.into()))
-            .apply(Term::fst_pair().apply(Term::unconstr_data().apply(term)))
-            .delayed_if_then_else(Term::unit(), Term::Error)
+            .apply(Term::fst_pair().apply(Term::var("__pair__")))
+            .delayed_if_then_else(
+                Term::snd_pair()
+                    .apply(Term::var("__pair__").delayed_choose_list(Term::unit(), Term::Error)),
+                Term::Error,
+            )
+            .lambda("__pair__")
+            .apply(Term::unconstr_data().apply(term))
     } else if field_type.is_map() {
         Term::unmap_data().apply(term)
     } else if field_type.is_string() {
         Term::Builtin(DefaultFunction::DecodeUtf8).apply(Term::un_b_data().apply(term))
     } else if field_type.is_tuple() && matches!(field_type.get_uplc_type(), UplcType::Pair(_, _)) {
-        Term::mk_pair_data()
-            .apply(Term::head_list().apply(Term::var("__list_data")))
-            .apply(Term::head_list().apply(Term::var("__tail")))
-            .lambda("__tail")
+        Term::tail_list()
             .apply(Term::tail_list().apply(Term::var("__list_data")))
+            .delayed_choose_list(
+                Term::mk_pair_data()
+                    .apply(Term::head_list().apply(Term::var("__list_data")))
+                    .apply(
+                        Term::head_list().apply(Term::tail_list().apply(Term::var("__list_data"))),
+                    ),
+                Term::Error,
+            )
             .lambda("__list_data")
             .apply(Term::unlist_data().apply(term))
     } else if field_type.is_list() || field_type.is_tuple() {
         Term::unlist_data().apply(term)
     } else if field_type.is_bool() {
-        Term::equals_integer()
-            .apply(Term::integer(1.into()))
-            .apply(Term::fst_pair().apply(Term::unconstr_data().apply(term)))
+        Term::snd_pair()
+            .apply(Term::var("__pair__"))
+            .delayed_choose_list(
+                Term::equals_integer()
+                    .apply(Term::integer(1.into()))
+                    .apply(Term::fst_pair().apply(Term::var("__pair__")))
+                    .delayed_if_then_else(
+                        Term::bool(true),
+                        Term::equals_integer()
+                            .apply(Term::integer(0.into()))
+                            .apply(Term::fst_pair().apply(Term::var("__pair__")))
+                            .delayed_if_then_else(Term::bool(false), Term::Error),
+                    ),
+                Term::Error,
+            )
+            .lambda("__pair__")
+            .apply(Term::unconstr_data().apply(term))
     } else if field_type.is_bls381_12_g1() {
         Term::bls12_381_g1_uncompress().apply(Term::un_b_data().apply(term))
     } else if field_type.is_bls381_12_g2() {
@@ -1239,7 +1264,14 @@ pub fn convert_data_to_type_debug(
                 Term::equals_integer()
                     .apply(Term::integer(0.into()))
                     .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("__val"))))
-                    .delayed_if_then_else(Term::unit(), error_term.clone()),
+                    .delayed_if_then_else(
+                        Term::snd_pair().apply(
+                            Term::unconstr_data()
+                                .apply(Term::var("__val"))
+                                .delayed_choose_list(Term::unit(), error_term.clone()),
+                        ),
+                        error_term.clone(),
+                    ),
                 error_term.clone(),
                 error_term.clone(),
                 error_term.clone(),
@@ -1275,11 +1307,26 @@ pub fn convert_data_to_type_debug(
             .delayed_choose_data(
                 error_term.clone(),
                 error_term.clone(),
-                Term::mk_pair_data()
-                    .apply(Term::head_list().apply(Term::var("__list_data")))
-                    .apply(Term::head_list().apply(Term::var("__tail")))
-                    .lambda("__tail")
-                    .apply(Term::tail_list().apply(Term::var("__list_data")))
+                Term::var("__list_data")
+                    .delayed_choose_list(
+                        error_term.clone(),
+                        Term::var("__tail")
+                            .delayed_choose_list(
+                                error_term.clone(),
+                                Term::tail_list()
+                                    .apply(Term::var("__tail"))
+                                    .delayed_choose_list(
+                                        Term::mk_pair_data()
+                                            .apply(
+                                                Term::head_list().apply(Term::var("__list_data")),
+                                            )
+                                            .apply(Term::head_list().apply(Term::var("__tail"))),
+                                        error_term.clone(),
+                                    ),
+                            )
+                            .lambda("__tail")
+                            .apply(Term::tail_list().apply(Term::var("__list_data"))),
+                    )
                     .lambda("__list_data")
                     .apply(Term::unlist_data().apply(Term::var("__val"))),
                 error_term.clone(),
@@ -1301,9 +1348,23 @@ pub fn convert_data_to_type_debug(
     } else if field_type.is_bool() {
         Term::var("__val")
             .delayed_choose_data(
-                Term::equals_integer()
-                    .apply(Term::integer(1.into()))
-                    .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("__val")))),
+                Term::snd_pair()
+                    .apply(Term::var("__pair__"))
+                    .delayed_choose_list(
+                        Term::equals_integer()
+                            .apply(Term::integer(1.into()))
+                            .apply(Term::fst_pair().apply(Term::var("__pair__")))
+                            .delayed_if_then_else(
+                                Term::bool(true),
+                                Term::equals_integer()
+                                    .apply(Term::integer(0.into()))
+                                    .apply(Term::fst_pair().apply(Term::var("__pair__")))
+                                    .delayed_if_then_else(Term::bool(false), error_term.clone()),
+                            ),
+                        error_term.clone(),
+                    )
+                    .lambda("__pair__")
+                    .apply(Term::unconstr_data().apply(Term::var("__val"))),
                 error_term.clone(),
                 error_term.clone(),
                 error_term.clone(),
