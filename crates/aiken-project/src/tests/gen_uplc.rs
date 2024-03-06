@@ -3481,14 +3481,12 @@ fn generic_validator_type_test() {
         .apply(Term::integer(0.into()))
         .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("__val"))))
         .delayed_if_then_else(
-            Term::snd_pair().apply(
-                Term::unconstr_data()
-                    .apply(Term::var("__val"))
-                    .delayed_choose_list(
-                        Term::unit(),
-                        Term::Error.delayed_trace(Term::var("param_msg")),
-                    ),
-            ),
+            Term::snd_pair()
+                .apply(Term::unconstr_data().apply(Term::var("__val")))
+                .delayed_choose_list(
+                    Term::unit(),
+                    Term::Error.delayed_trace(Term::var("param_msg")),
+                ),
             Term::Error.delayed_trace(Term::var("param_msg")),
         );
 
