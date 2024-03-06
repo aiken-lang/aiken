@@ -42,6 +42,10 @@ impl ParsedModule {
 pub struct ParsedModules(HashMap<String, ParsedModule>);
 
 impl ParsedModules {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+
     pub fn sequence(&self) -> Result<Vec<String>, Error> {
         let inputs = self
             .0
@@ -100,6 +104,12 @@ impl ParsedModules {
                 Err(Error::ImportCycle { modules })
             }
         }
+    }
+}
+
+impl Default for ParsedModules {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
