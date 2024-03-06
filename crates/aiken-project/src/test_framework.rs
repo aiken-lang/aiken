@@ -794,8 +794,12 @@ impl PropertyTestResult<PlutusData> {
             counterexample: match self.counterexample {
                 None => None,
                 Some(counterexample) => Some(
-                    UntypedExpr::reify(data_types, counterexample, &self.test.fuzzer.type_info)
-                        .expect("Failed to reify counterexample?"),
+                    UntypedExpr::reify_data(
+                        data_types,
+                        counterexample,
+                        &self.test.fuzzer.type_info,
+                    )
+                    .expect("Failed to reify counterexample?"),
                 ),
             },
             iterations: self.iterations,
@@ -1073,7 +1077,7 @@ mod test {
 
                 let reify = move |counterexample| {
                     let data_type_refs = utils::indexmap::as_ref_values(&data_types);
-                    let expr = UntypedExpr::reify(&data_type_refs, counterexample, &type_info)
+                    let expr = UntypedExpr::reify_data(&data_type_refs, counterexample, &type_info)
                         .expect("Failed to reify value.");
                     Formatter::new().expr(&expr, false).to_pretty_string(70)
                 };

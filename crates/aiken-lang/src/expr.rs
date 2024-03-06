@@ -1,9 +1,9 @@
 use crate::{
     ast::{
-        self, Annotation, Arg, AssignmentKind, BinOp, ByteArrayFormatPreference, CallArg, Curve,
-        DataType, DataTypeKey, DefinitionLocation, IfBranch, Located, LogicalOpChainKind,
-        ParsedCallArg, Pattern, RecordConstructorArg, RecordUpdateSpread, Span, TraceKind,
-        TypedClause, TypedDataType, TypedRecordUpdateArg, UnOp, UntypedClause,
+        self, Annotation, Arg, AssignmentKind, BinOp, Bls12_381Point, ByteArrayFormatPreference,
+        CallArg, Curve, DataType, DataTypeKey, DefinitionLocation, IfBranch, Located,
+        LogicalOpChainKind, ParsedCallArg, Pattern, RecordConstructorArg, RecordUpdateSpread, Span,
+        TraceKind, TypedClause, TypedDataType, TypedRecordUpdateArg, UnOp, UntypedClause,
         UntypedRecordUpdateArg,
     },
     builtins::void,
@@ -16,7 +16,7 @@ use crate::{
 use indexmap::IndexMap;
 use pallas::ledger::primitives::alonzo::{Constr, PlutusData};
 use std::rc::Rc;
-use uplc::{machine::value::from_pallas_bigint, KeyValuePairs};
+use uplc::{ast::Data, machine::value::from_pallas_bigint, KeyValuePairs};
 use vec1::Vec1;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -578,20 +578,151 @@ pub const DEFAULT_TODO_STR: &str = "aiken::todo";
 pub const DEFAULT_ERROR_STR: &str = "aiken::error";
 
 impl UntypedExpr {
+    pub fn reify_constant(
+        data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+        cst: uplc::ast::Constant,
+        tipo: &Type,
+    ) -> Result<Self, String> {
+        if let Type::Var { tipo } = tipo {
+            if let TypeVar::Link { tipo } = &*tipo.borrow() {
+                return UntypedExpr::reify_constant(data_types, cst, tipo);
+            }
+        }
+
+        match cst {
+            uplc::ast::Constant::Data(data) => UntypedExpr::reify_data(data_types, data, tipo),
+
+            uplc::ast::Constant::Integer(i) => {
+                UntypedExpr::reify_data(data_types, Data::integer(i), tipo)
+            }
+
+            uplc::ast::Constant::ByteString(bytes) => {
+                UntypedExpr::reify_data(data_types, Data::bytestring(bytes), tipo)
+            }
+
+            uplc::ast::Constant::ProtoList(_, args) => match tipo {
+                Type::App {
+                    module,
+                    name,
+                    args: type_args,
+                    ..
+                } if module.is_empty() && name.as_str() == "List" => {
+                    if let [inner] = &type_args[..] {
+                        Ok(UntypedExpr::List {
+                            location: Span::empty(),
+                            elements: args
+                                .into_iter()
+                                .map(|arg| UntypedExpr::reify_constant(data_types, arg, inner))
+                                .collect::<Result<Vec<_>, _>>()?,
+                            tail: None,
+                        })
+                    } else {
+                        Err(
+                            "invalid List type annotation: the list has multiple type-parameters."
+                                .to_string(),
+                        )
+                    }
+                }
+                Type::Tuple { elems } => Ok(UntypedExpr::Tuple {
+                    location: Span::empty(),
+                    elems: args
+                        .into_iter()
+                        .zip(elems)
+                        .map(|(arg, arg_type)| {
+                            UntypedExpr::reify_constant(data_types, arg, arg_type)
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                }),
+                _ => Err(format!(
+                    "invalid type annotation. expected List but got: {tipo:?}"
+                )),
+            },
+
+            uplc::ast::Constant::ProtoPair(_, _, left, right) => match tipo {
+                Type::Tuple { elems } => Ok(UntypedExpr::Tuple {
+                    location: Span::empty(),
+                    elems: [left.as_ref(), right.as_ref()]
+                        .into_iter()
+                        .zip(elems)
+                        .map(|(arg, arg_type)| {
+                            UntypedExpr::reify_constant(data_types, arg.to_owned(), arg_type)
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                }),
+                _ => Err(format!(
+                    "invalid type annotation. expected Tuple but got: {tipo:?}"
+                )),
+            },
+
+            uplc::ast::Constant::Unit => Ok(UntypedExpr::Var {
+                location: Span::empty(),
+                name: "Void".to_string(),
+            }),
+
+            uplc::ast::Constant::Bool(is_true) => Ok(UntypedExpr::Var {
+                location: Span::empty(),
+                name: if is_true { "True" } else { "False" }.to_string(),
+            }),
+
+            uplc::ast::Constant::String(value) => Ok(UntypedExpr::String {
+                location: Span::empty(),
+                value,
+            }),
+
+            uplc::ast::Constant::Bls12_381G1Element(pt) => Ok(UntypedExpr::CurvePoint {
+                location: Span::empty(),
+                point: Curve::Bls12_381(Bls12_381Point::G1(*pt)).into(),
+                preferred_format: ByteArrayFormatPreference::HexadecimalString,
+            }),
+
+            uplc::ast::Constant::Bls12_381G2Element(pt) => Ok(UntypedExpr::CurvePoint {
+                location: Span::empty(),
+                point: Curve::Bls12_381(Bls12_381Point::G2(*pt)).into(),
+                preferred_format: ByteArrayFormatPreference::HexadecimalString,
+            }),
+
+            uplc::ast::Constant::Bls12_381MlResult(ml) => {
+                let mut bytes = Vec::new();
+
+                bytes.extend((*ml).to_bendian());
+
+                // NOTE: We don't actually have a syntax for representing MillerLoop results, so we
+                // just fake it as a constructor with a bytearray. Note also that the bytearray is
+                // *large*.
+                Ok(UntypedExpr::Call {
+                    location: Span::empty(),
+                    arguments: vec![CallArg {
+                        label: None,
+                        location: Span::empty(),
+                        value: UntypedExpr::ByteArray {
+                            location: Span::empty(),
+                            bytes,
+                            preferred_format: ByteArrayFormatPreference::HexadecimalString,
+                        },
+                    }],
+                    fun: Box::new(UntypedExpr::Var {
+                        name: "MillerLoopResult".to_string(),
+                        location: Span::empty(),
+                    }),
+                })
+            }
+        }
+    }
+
     // Reify some opaque 'PlutusData' into an 'UntypedExpr', using a Type annotation. We also need
     // an extra map to lookup record & enum constructor's names as they're completely erased when
     // in their PlutusData form, and the Type annotation only contains type name.
     //
     // The function performs some sanity check to ensure that the type does indeed somewhat
     // correspond to the data being given.
-    pub fn reify(
+    pub fn reify_data(
         data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
         data: PlutusData,
         tipo: &Type,
     ) -> Result<Self, String> {
         if let Type::Var { tipo } = tipo {
             if let TypeVar::Link { tipo } = &*tipo.borrow() {
-                return UntypedExpr::reify(data_types, data, tipo);
+                return UntypedExpr::reify_data(data_types, data, tipo);
             }
         }
 
@@ -609,7 +740,7 @@ impl UntypedExpr {
 
             let inner_type = convert_opaque_type(&tipo.clone().into(), data_types, false);
 
-            let value = UntypedExpr::reify(data_types, data, &inner_type)?;
+            let value = UntypedExpr::reify_data(data_types, data, &inner_type)?;
 
             return Ok(UntypedExpr::Call {
                 location: Span::empty(),
@@ -633,45 +764,48 @@ impl UntypedExpr {
                 },
                 value: from_pallas_bigint(i).to_string(),
             }),
+
             PlutusData::BoundedBytes(bytes) => Ok(UntypedExpr::ByteArray {
                 location: Span::empty(),
                 bytes: bytes.into(),
                 preferred_format: ByteArrayFormatPreference::HexadecimalString,
             }),
-            PlutusData::Array(args) => {
-                match tipo {
-                    Type::App {
-                        module,
-                        name,
-                        args: type_args,
-                        ..
-                    } if module.is_empty() && name.as_str() == "List" => {
-                        if let [inner] = &type_args[..] {
-                            Ok(UntypedExpr::List {
-                                location: Span::empty(),
-                                elements: args
-                                    .into_iter()
-                                    .map(|arg| UntypedExpr::reify(data_types, arg, inner))
-                                    .collect::<Result<Vec<_>, _>>()?,
-                                tail: None,
-                            })
-                        } else {
-                            Err("invalid List type annotation: the list has multiple type-parameters.".to_string())
-                        }
+
+            PlutusData::Array(args) => match tipo {
+                Type::App {
+                    module,
+                    name,
+                    args: type_args,
+                    ..
+                } if module.is_empty() && name.as_str() == "List" => {
+                    if let [inner] = &type_args[..] {
+                        Ok(UntypedExpr::List {
+                            location: Span::empty(),
+                            elements: args
+                                .into_iter()
+                                .map(|arg| UntypedExpr::reify_data(data_types, arg, inner))
+                                .collect::<Result<Vec<_>, _>>()?,
+                            tail: None,
+                        })
+                    } else {
+                        Err(
+                            "invalid List type annotation: the list has multiple type-parameters."
+                                .to_string(),
+                        )
                     }
-                    Type::Tuple { elems } => Ok(UntypedExpr::Tuple {
-                        location: Span::empty(),
-                        elems: args
-                            .into_iter()
-                            .zip(elems)
-                            .map(|(arg, arg_type)| UntypedExpr::reify(data_types, arg, arg_type))
-                            .collect::<Result<Vec<_>, _>>()?,
-                    }),
-                    _ => Err(format!(
-                        "invalid type annotation. expected List but got: {tipo:?}"
-                    )),
                 }
-            }
+                Type::Tuple { elems } => Ok(UntypedExpr::Tuple {
+                    location: Span::empty(),
+                    elems: args
+                        .into_iter()
+                        .zip(elems)
+                        .map(|(arg, arg_type)| UntypedExpr::reify_data(data_types, arg, arg_type))
+                        .collect::<Result<Vec<_>, _>>()?,
+                }),
+                _ => Err(format!(
+                    "invalid type annotation. expected List but got: {tipo:?}"
+                )),
+            },
 
             PlutusData::Constr(Constr {
                 tag,
@@ -710,13 +844,13 @@ impl UntypedExpr {
                                             ..
                                         },
                                     )| {
-                                        UntypedExpr::reify(data_types, field, tipo).map(|value| {
-                                            CallArg {
+                                        UntypedExpr::reify_data(data_types, field, tipo).map(
+                                            |value| CallArg {
                                                 label: label.clone(),
                                                 location: Span::empty(),
                                                 value,
-                                            }
-                                        })
+                                            },
+                                        )
                                     },
                                 )
                                 .collect::<Result<Vec<_>, _>>()?;
@@ -744,7 +878,7 @@ impl UntypedExpr {
                     KeyValuePairs::Indef(kvs) => kvs,
                 };
 
-                UntypedExpr::reify(
+                UntypedExpr::reify_data(
                     data_types,
                     PlutusData::Array(
                         kvs.into_iter()
