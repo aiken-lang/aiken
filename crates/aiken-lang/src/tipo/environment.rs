@@ -1144,10 +1144,21 @@ impl<'a> Environment<'a> {
                 params,
                 ..
             }) if kind.is_validator() => {
+                let default_annotation = |mut arg: UntypedArg| {
+                    if arg.annotation.is_none() {
+                        arg.annotation = Some(Annotation::data(arg.location));
+
+                        arg
+                    } else {
+                        arg
+                    }
+                };
+
                 let temp_params: Vec<UntypedArg> = params
                     .iter()
                     .cloned()
                     .chain(fun.arguments.clone())
+                    .map(default_annotation)
                     .collect();
 
                 self.register_function(
@@ -1165,6 +1176,7 @@ impl<'a> Environment<'a> {
                         .iter()
                         .cloned()
                         .chain(other.arguments.clone())
+                        .map(default_annotation)
                         .collect();
 
                     self.register_function(

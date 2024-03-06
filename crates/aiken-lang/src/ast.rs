@@ -968,6 +968,15 @@ impl Annotation {
         }
     }
 
+    pub fn data(location: Span) -> Self {
+        Annotation::Constructor {
+            name: "Data".to_string(),
+            module: None,
+            arguments: vec![],
+            location,
+        }
+    }
+
     pub fn is_logically_equal(&self, other: &Annotation) -> bool {
         match self {
             Annotation::Constructor {

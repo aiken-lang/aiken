@@ -1,0 +1,38 @@
+{
+  "preamble": {
+    "title": "aiken-lang/acceptance_test_096",
+    "description": "Aiken contracts for project 'aiken-lang/096'",
+    "version": "0.0.0",
+    "plutusVersion": "v2",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.0.24-alpha+ad48409"
+    },
+    "license": "Apache-2.0"
+  },
+  "validators": [
+    {
+      "title": "foo.is_fourty_two",
+      "datum": {
+        "title": "dat",
+        "schema": {
+          "$ref": "#/definitions/Data"
+        }
+      },
+      "redeemer": {
+        "title": "rdm",
+        "schema": {
+          "$ref": "#/definitions/Data"
+        }
+      },
+      "compiledCode": "583c01000032222533300453330043375e004006266e3d22010b68656c6c6f20776f726c640048810b68656c6c6f20776f726c640014a029309b2b2b9a01",
+      "hash": "d1a4ef5efcf38bdca9dc8eec2684d3c2004390fa6fd1b5bed6faa488"
+    }
+  ],
+  "definitions": {
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    }
+  }
+}
