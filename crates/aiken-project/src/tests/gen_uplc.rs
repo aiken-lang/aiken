@@ -3477,6 +3477,21 @@ fn generic_validator_type_test() {
       }
     "#;
 
+    let void_check = Term::equals_integer()
+        .apply(Term::integer(0.into()))
+        .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("__val"))))
+        .delayed_if_then_else(
+            Term::snd_pair().apply(
+                Term::unconstr_data()
+                    .apply(Term::var("__val"))
+                    .delayed_choose_list(
+                        Term::unit(),
+                        Term::Error.delayed_trace(Term::var("param_msg")),
+                    ),
+            ),
+            Term::Error.delayed_trace(Term::var("param_msg")),
+        );
+
     assert_uplc(
         src,
         Term::equals_integer()
@@ -3490,15 +3505,9 @@ fn generic_validator_type_test() {
                 )
                 .lambda("something")
                 .apply(
-                    Term::equals_integer()
-                        .apply(Term::integer(0.into()))
-                        .apply(
-                            Term::fst_pair().apply(
-                                Term::unconstr_data()
-                                    .apply(Term::head_list().apply(Term::var("B_fields"))),
-                            ),
-                        )
-                        .delayed_if_then_else(Term::unit(), Term::Error),
+                    Term::unit()
+                        .lambda("_")
+                        .apply(Term::head_list().apply(Term::var("B_fields"))),
                 )
                 .lambda("B_fields")
                 .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("field_B")))
@@ -3573,22 +3582,7 @@ fn generic_validator_type_test() {
                                                     .apply(
                                                         Term::var("__val")
                                                             .delayed_choose_data(
-                                                                Term::equals_integer()
-                                                                    .apply(Term::integer(0.into()))
-                                                                    .apply(
-                                                                        Term::fst_pair().apply(
-                                                                            Term::unconstr_data()
-                                                                                .apply(Term::var(
-                                                                                    "__val",
-                                                                                )),
-                                                                        ),
-                                                                    )
-                                                                    .delayed_if_then_else(
-                                                                        Term::unit(),
-                                                                        Term::Error.delayed_trace(
-                                                                            Term::var("param_msg"),
-                                                                        ),
-                                                                    ),
+                                                                void_check.clone(),
                                                                 Term::Error.delayed_trace(
                                                                     Term::var("param_msg"),
                                                                 ),
@@ -3641,20 +3635,7 @@ fn generic_validator_type_test() {
                                             .apply(
                                                 Term::var("__val")
                                                     .delayed_choose_data(
-                                                        Term::equals_integer()
-                                                            .apply(Term::integer(0.into()))
-                                                            .apply(
-                                                                Term::fst_pair().apply(
-                                                                    Term::unconstr_data()
-                                                                        .apply(Term::var("__val")),
-                                                                ),
-                                                            )
-                                                            .delayed_if_then_else(
-                                                                Term::unit(),
-                                                                Term::Error.delayed_trace(
-                                                                    Term::var("param_msg"),
-                                                                ),
-                                                            ),
+                                                        void_check,
                                                         Term::Error
                                                             .delayed_trace(Term::var("param_msg")),
                                                         Term::Error
