@@ -241,6 +241,33 @@ fn exhaustiveness_simple() {
 }
 
 #[test]
+fn validator_args_no_annotation() {
+    let source_code = r#"
+      validator(d) {
+        fn foo(a, b, c) {
+          True
+        }
+      }
+    "#;
+
+    let (_, module) = check_validator(parse(source_code)).unwrap();
+
+    module.definitions().for_each(|def| {
+        let Definition::Validator(validator) = def else {
+            unreachable!()
+        };
+
+        validator.params.iter().for_each(|param| {
+            assert!(param.tipo.is_data());
+        });
+
+        validator.fun.arguments.iter().for_each(|arg| {
+            assert!(arg.tipo.is_data());
+        })
+    })
+}
+
+#[test]
 fn exhaustiveness_missing_empty_list() {
     let source_code = r#"
         fn foo() {
