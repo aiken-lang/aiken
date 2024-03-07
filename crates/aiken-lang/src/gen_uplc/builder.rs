@@ -8,7 +8,7 @@ use crate::{
         Span, TraceLevel, TypedArg, TypedClause, TypedClauseGuard, TypedDataType, TypedPattern,
         UnOp,
     },
-    builtins::{bool, data, function, int, list, string, void},
+    builtins::{bool, data, function, int, list, void},
     expr::TypedExpr,
     line_numbers::{LineColumn, LineNumbers},
     tipo::{
