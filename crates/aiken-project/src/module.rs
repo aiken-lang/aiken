@@ -169,7 +169,7 @@ fn find_cycle(
     false
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CheckedModule {
     pub name: String,
     pub code: String,

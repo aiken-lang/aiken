@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Clone, Debug, PartialEq, Hash, Eq, Copy)]
+#[derive(Clone, Debug, PartialEq, Hash, Eq, Copy, serde::Serialize, serde::Deserialize)]
 pub enum Base {
     Decimal { numeric_underscore: bool },
     Hexadecimal,

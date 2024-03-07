@@ -23,7 +23,7 @@ use uplc::{
 };
 use vec1::Vec1;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum TypedExpr {
     UInt {
         location: Span,
@@ -125,7 +125,7 @@ pub enum TypedExpr {
 
     If {
         location: Span,
-        branches: Vec1<IfBranch<Self>>,
+        branches: Vec<IfBranch<Self>>,
         final_else: Box<Self>,
         tipo: Rc<Type>,
     },
@@ -289,7 +289,7 @@ impl TypedExpr {
             | Self::RecordUpdate { location, .. }
             | Self::CurvePoint { location, .. } => *location,
 
-            Self::If { branches, .. } => branches.first().body.type_defining_location(),
+            Self::If { branches, .. } => branches.first().unwrap().body.type_defining_location(),
 
             Self::Sequence {
                 expressions,

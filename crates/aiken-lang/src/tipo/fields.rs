@@ -5,7 +5,7 @@ use itertools::Itertools;
 use super::error::{Error, UnknownLabels};
 use crate::ast::{CallArg, Span};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FieldMap {
     pub arity: usize,
     pub fields: HashMap<String, (usize, Span)>,

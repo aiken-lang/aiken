@@ -22,7 +22,7 @@ pub const PIPE_VARIABLE: &str = "_pipe";
 pub type TypedModule = Module<TypeInfo, TypedDefinition>;
 pub type UntypedModule = Module<(), UntypedDefinition>;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ModuleKind {
     Lib,
     Validator,
@@ -38,7 +38,7 @@ impl ModuleKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Module<Info, Definitions> {
     pub name: String,
     pub docs: Vec<String>,
@@ -222,7 +222,7 @@ pub type UntypedFunction = Function<(), UntypedExpr, UntypedArg>;
 pub type TypedTest = Function<Rc<Type>, TypedExpr, TypedArgVia>;
 pub type UntypedTest = Function<(), UntypedExpr, UntypedArgVia>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Function<T, Expr, Arg> {
     pub arguments: Vec<Arg>,
     pub body: Expr,
@@ -273,7 +273,57 @@ impl From<TypedTest> for TypedFunction {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+impl TypedTest {
+    pub fn test_hint(&self) -> Option<(BinOp, Box<TypedExpr>, Box<TypedExpr>)> {
+        if self.arguments.is_empty() {
+            do_test_hint(&self.body)
+        } else {
+            None
+        }
+    }
+}
+
+pub fn do_test_hint(body: &TypedExpr) -> Option<(BinOp, Box<TypedExpr>, Box<TypedExpr>)> {
+    match body {
+        TypedExpr::BinOp {
+            name,
+            tipo,
+            left,
+            right,
+            ..
+        } if tipo == &bool() => Some((*name, left.clone(), right.clone())),
+        TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
+            if let Some((binop, left, right)) = do_test_hint(&expressions[expressions.len() - 1]) {
+                let mut new_left_expressions = expressions.clone();
+                new_left_expressions.pop();
+                new_left_expressions.push(*left);
+
+                let mut new_right_expressions = expressions.clone();
+                new_right_expressions.pop();
+                new_right_expressions.push(*right);
+
+                Some((
+                    binop,
+                    TypedExpr::Sequence {
+                        expressions: new_left_expressions,
+                        location: Span::empty(),
+                    }
+                    .into(),
+                    TypedExpr::Sequence {
+                        expressions: new_right_expressions,
+                        location: Span::empty(),
+                    }
+                    .into(),
+                ))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TypeAlias<T> {
     pub alias: String,
     pub annotation: Annotation,
@@ -443,7 +493,7 @@ impl TypedDataType {
 
 pub type UntypedDataType = DataType<()>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DataType<T> {
     pub constructors: Vec<RecordConstructor<T>>,
     pub doc: Option<String>,
@@ -458,7 +508,7 @@ pub struct DataType<T> {
 pub type TypedUse = Use<String>;
 pub type UntypedUse = Use<()>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Use<PackageName> {
     pub as_name: Option<String>,
     pub location: Span,
@@ -470,7 +520,7 @@ pub struct Use<PackageName> {
 pub type TypedModuleConstant = ModuleConstant<Rc<Type>>;
 pub type UntypedModuleConstant = ModuleConstant<()>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ModuleConstant<T> {
     pub doc: Option<String>,
     pub location: Span,
@@ -484,7 +534,7 @@ pub struct ModuleConstant<T> {
 pub type TypedValidator = Validator<Rc<Type>, TypedExpr>;
 pub type UntypedValidator = Validator<(), UntypedExpr>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Validator<T, Expr> {
     pub doc: Option<String>,
     pub end_position: usize,
@@ -530,7 +580,7 @@ impl TypedValidator {
 pub type TypedDefinition = Definition<Rc<Type>, TypedExpr, String>;
 pub type UntypedDefinition = Definition<(), UntypedExpr, ()>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Definition<T, Expr, PackageName> {
     Fn(Function<T, Expr, Arg<T>>),
 
@@ -660,7 +710,7 @@ pub struct DefinitionLocation<'module> {
     pub span: Span,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Constant {
     Int {
         location: Span,
@@ -712,7 +762,7 @@ impl Constant {
 pub type TypedCallArg = CallArg<TypedExpr>;
 pub type ParsedCallArg = CallArg<Option<UntypedExpr>>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CallArg<A> {
     pub label: Option<String>,
     pub location: Span,
@@ -734,7 +784,7 @@ impl TypedCallArg {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RecordConstructor<T> {
     pub location: Span,
     pub name: String,
@@ -749,7 +799,7 @@ impl<A> RecordConstructor<A> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RecordConstructorArg<T> {
     pub label: Option<String>,
     // ast
@@ -768,7 +818,7 @@ impl<T: PartialEq> RecordConstructorArg<T> {
 pub type TypedArg = Arg<Rc<Type>>;
 pub type UntypedArg = Arg<()>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Arg<T> {
     pub arg_name: ArgName,
     pub location: Span,
@@ -800,7 +850,7 @@ impl<A> Arg<A> {
 pub type TypedArgVia = ArgVia<Rc<Type>, TypedExpr>;
 pub type UntypedArgVia = ArgVia<(), UntypedExpr>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ArgVia<T, Expr> {
     pub arg_name: ArgName,
     pub location: Span,
@@ -821,7 +871,7 @@ impl<T, Ann> From<ArgVia<T, Ann>> for Arg<T> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ArgName {
     Discarded {
         name: String,
@@ -852,7 +902,7 @@ impl ArgName {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UnqualifiedImport {
     pub location: Span,
     pub name: String,
@@ -871,7 +921,7 @@ impl UnqualifiedImport {
 }
 
 // TypeAst
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Annotation {
     Constructor {
         location: Span,
@@ -1015,7 +1065,7 @@ impl Annotation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum Layer {
     #[default]
     Value,
@@ -1029,7 +1079,7 @@ impl Layer {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum BinOp {
     // Boolean logic
     And,
@@ -1062,11 +1112,11 @@ impl From<LogicalOpChainKind> for BinOp {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum UnOp {
-    // !
+    /// !
     Not,
-    // -
+    /// -
     Negate,
 }
 
@@ -1093,7 +1143,7 @@ impl BinOp {
 pub type UntypedPattern = Pattern<(), ()>;
 pub type TypedPattern = Pattern<PatternConstructor, Rc<Type>>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Pattern<Constructor, Type> {
     Int {
         location: Span,
@@ -1241,7 +1291,7 @@ impl TypedPattern {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, serde::Serialize, serde::Deserialize)]
 pub enum ByteArrayFormatPreference {
     HexadecimalString,
     ArrayOfBytes(Base),
@@ -1292,7 +1342,7 @@ impl Display for Bls12_381PointType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, serde::Serialize, serde::Deserialize)]
 pub enum Curve {
     Bls12_381(Bls12_381Point),
 }
@@ -1320,6 +1370,112 @@ pub enum Bls12_381Point {
     G2(blst::blst_p2),
 }
 
+impl serde::Serialize for Bls12_381Point {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match *self {
+            Bls12_381Point::G1(ref p1) => {
+                // Assuming `to_bytes` for compression to Vec<u8>
+                let bytes = p1.compress();
+
+                // Serialize as a tuple with a tag for differentiation
+                serializer.serialize_newtype_variant("Bls12_381Point", 0, "G1", &bytes)
+            }
+            Bls12_381Point::G2(ref p2) => {
+                let bytes = p2.compress();
+
+                serializer.serialize_newtype_variant("Bls12_381Point", 1, "G2", &bytes)
+            }
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Bls12_381Point {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        enum Field {
+            G1,
+            G2,
+        }
+
+        impl<'de> serde::Deserialize<'de> for Field {
+            fn deserialize<D>(deserializer: D) -> Result<Field, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct FieldVisitor;
+
+                impl<'de> serde::de::Visitor<'de> for FieldVisitor {
+                    type Value = Field;
+
+                    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                        formatter.write_str("`G1` or `G2`")
+                    }
+
+                    fn visit_str<E>(self, value: &str) -> Result<Field, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        match value {
+                            "G1" => Ok(Field::G1),
+                            "G2" => Ok(Field::G2),
+                            _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
+                        }
+                    }
+                }
+
+                deserializer.deserialize_identifier(FieldVisitor)
+            }
+        }
+
+        struct Bls12_381PointVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for Bls12_381PointVisitor {
+            type Value = Bls12_381Point;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("struct Bls12_381Point")
+            }
+
+            fn visit_seq<V>(self, mut seq: V) -> Result<Bls12_381Point, V::Error>
+            where
+                V: serde::de::SeqAccess<'de>,
+            {
+                let tag = seq
+                    .next_element::<Field>()?
+                    .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
+
+                let bytes = seq
+                    .next_element::<Vec<u8>>()?
+                    .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
+
+                match tag {
+                    Field::G1 => {
+                        let p1 =
+                            blst::blst_p1::uncompress(&bytes).map_err(serde::de::Error::custom)?;
+
+                        Ok(Bls12_381Point::G1(p1))
+                    }
+                    Field::G2 => {
+                        let p2 =
+                            blst::blst_p2::uncompress(&bytes).map_err(serde::de::Error::custom)?;
+
+                        Ok(Bls12_381Point::G2(p2))
+                    }
+                }
+            }
+        }
+
+        const FIELDS: &[&str] = &["G1", "G2"];
+
+        deserializer.deserialize_enum("Bls12_381Point", FIELDS, Bls12_381PointVisitor)
+    }
+}
+
 impl Bls12_381Point {
     pub fn tipo(&self) -> Rc<Type> {
         match self {
@@ -1335,7 +1491,7 @@ impl Default for Bls12_381Point {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, serde::Serialize, serde::Deserialize)]
 pub enum AssignmentKind {
     Let,
     Expect,
@@ -1371,7 +1527,7 @@ pub struct UntypedClause {
     pub then: UntypedExpr,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TypedClause {
     pub location: Span,
     pub pattern: Pattern<PatternConstructor, Rc<Type>>,
@@ -1397,7 +1553,7 @@ impl TypedClause {
 pub type UntypedClauseGuard = ClauseGuard<()>;
 pub type TypedClauseGuard = ClauseGuard<Rc<Type>>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ClauseGuard<Type> {
     Not {
         location: Span,
@@ -1515,14 +1671,14 @@ impl TypedClauseGuard {
 pub type TypedIfBranch = IfBranch<TypedExpr>;
 pub type UntypedIfBranch = IfBranch<UntypedExpr>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct IfBranch<Expr> {
     pub condition: Expr,
     pub body: Expr,
     pub location: Span,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TypedRecordUpdateArg {
     pub label: String,
     pub location: Span,
@@ -1607,7 +1763,7 @@ impl Display for TraceLevel {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Span {
     pub start: usize,
     pub end: usize,

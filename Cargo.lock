@@ -92,6 +92,7 @@ dependencies = [
  "pallas",
  "petgraph",
  "pretty_assertions",
+ "serde",
  "strum",
  "thiserror",
  "uplc",

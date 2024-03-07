@@ -1,6 +1,6 @@
 use std::fmt::{self, Display};
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LineNumbers {
     line_starts: Vec<usize>,
     length: usize,

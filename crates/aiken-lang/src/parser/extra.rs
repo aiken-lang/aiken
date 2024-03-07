@@ -1,7 +1,7 @@
 use crate::ast::Span;
 use std::iter::Peekable;
 
-#[derive(Debug, PartialEq, Eq, Default, Clone)]
+#[derive(Debug, PartialEq, Eq, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ModuleExtra {
     pub module_comments: Vec<Span>,
     pub doc_comments: Vec<Span>,
