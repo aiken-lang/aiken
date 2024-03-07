@@ -305,14 +305,10 @@ fn fmt_test(
             );
         }
         TestResult::PropertyTestResult(PropertyTestResult { iterations, .. }) => {
-            test = pretty::pad_right(
-                format!(
-                    "{test} [after {} test{}]",
-                    pretty::pad_left(iterations.to_string(), max_iter, " "),
-                    if *iterations > 1 { "s" } else { "" }
-                ),
-                18 + max_mem + max_cpu + max_iter,
-                " ",
+            test = format!(
+                "{test} [after {} test{}]",
+                pretty::pad_left(iterations.to_string(), max_iter, " "),
+                if *iterations > 1 { "s" } else { "" }
             );
         }
     }
@@ -325,6 +321,22 @@ fn fmt_test(
             .to_string())
     );
 
+    // Annotations
+    match result {
+        TestResult::UnitTestResult(UnitTestResult {
+            test: unit_test, ..
+        }) if !result.is_success() => {
+            if let Some(ref assertion) = unit_test.assertion {
+                test = format!(
+                    "{test}\n{}{new_line}",
+                    assertion.to_string(Stderr, unit_test.can_error),
+                    new_line = if result.logs().is_empty() { "\n" } else { "" },
+                );
+            }
+        }
+        _ => (),
+    }
+
     // CounterExample
     if let TestResult::PropertyTestResult(PropertyTestResult {
         counterexample: Some(counterexample),
@@ -334,7 +346,7 @@ fn fmt_test(
         let is_expected_failure = result.is_success();
 
         test = format!(
-            "{test}\n{}\n{}\n",
+            "{test}\n{}\n{}{new_line}",
             if is_expected_failure {
                 "★ counterexample"
                     .if_supports_color(Stderr, |s| s.green())
@@ -362,31 +374,20 @@ fn fmt_test(
                     )
                 })
                 .collect::<Vec<String>>()
-                .join("\n")
+                .join("\n"),
+            new_line = if result.logs().is_empty() { "\n" } else { "" },
         );
     }
 
     // Traces
     if !result.logs().is_empty() {
         test = format!(
-            "{test}\n{logs}",
+            "{test}\n{title}\n{logs}\n",
+            title = "· with traces".if_supports_color(Stderr, |s| s.bold()),
             logs = result
                 .logs()
                 .iter()
-                .map(|line| {
-                    format!(
-                        "{arrow} {styled_line}",
-                        arrow = "↳".if_supports_color(Stderr, |s| s.bright_yellow()),
-                        styled_line = line
-                            .split('\n')
-                            .map(|l| format!(
-                                "{}",
-                                l.if_supports_color(Stderr, |s| s.bright_black())
-                            ))
-                            .collect::<Vec<_>>()
-                            .join("\n")
-                    )
-                })
+                .map(|line| { format!("| {line}",) })
                 .collect::<Vec<_>>()
                 .join("\n")
         );

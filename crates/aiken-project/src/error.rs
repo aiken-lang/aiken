@@ -93,7 +93,6 @@ pub enum Error {
         path: PathBuf,
         verbose: bool,
         src: String,
-        assertion: Option<String>,
     },
 
     #[error(
@@ -331,10 +330,7 @@ impl Diagnostic for Error {
             )),
             Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
-            Error::TestFailure { assertion, .. } => match assertion {
-                None => None,
-                Some(hint) => Some(Box::new(hint.to_string())),
-            },
+            Error::TestFailure { .. } => None,
             Error::Http(_) => None,
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,

@@ -1,6 +1,5 @@
-use crate::ast::{Constant, NamedDeBruijn, Term};
-
 use super::{cost_model::ExBudget, Error};
+use crate::ast::{Constant, NamedDeBruijn, Term};
 
 #[derive(Debug)]
 pub struct EvalResult {
@@ -41,6 +40,14 @@ impl EvalResult {
             self.result.is_err()
                 || matches!(self.result, Ok(Term::Error))
                 || !matches!(self.result, Ok(Term::Constant(ref con)) if matches!(con.as_ref(), Constant::Bool(true)))
+        }
+    }
+
+    #[allow(clippy::result_unit_err)]
+    pub fn unwrap_constant(self) -> Result<Constant, ()> {
+        match self.result {
+            Ok(Term::Constant(cst)) => Ok(cst.as_ref().to_owned()),
+            _ => Err(()),
         }
     }
 

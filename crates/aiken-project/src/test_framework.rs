@@ -1,23 +1,21 @@
-use crate::pretty;
 use aiken_lang::{
-    ast::{Arg, BinOp, DataTypeKey, TypedDataType, TypedTest},
-    expr::UntypedExpr,
+    ast::{Arg, BinOp, DataTypeKey, IfBranch, Span, TypedDataType, TypedTest},
+    builtins::bool,
+    expr::{TypedExpr, UntypedExpr},
+    format::Formatter,
     gen_uplc::{builder::convert_opaque_type, CodeGenerator},
     tipo::Type,
 };
 use cryptoxide::{blake2b::Blake2b, digest::Digest};
 use indexmap::IndexMap;
+use owo_colors::{OwoColorize, Stream};
 use pallas::ledger::primitives::alonzo::{Constr, PlutusData};
-use std::{
-    borrow::Borrow,
-    fmt::{self, Display},
-    path::PathBuf,
-    rc::Rc,
-};
+use std::{borrow::Borrow, convert::TryFrom, path::PathBuf, rc::Rc};
 use uplc::{
     ast::{Constant, Data, Name, NamedDeBruijn, Program, Term},
     machine::{cost_model::ExBudget, eval_result::EvalResult},
 };
+use vec1::{vec1, Vec1};
 
 /// ----- Test -----------------------------------------------------------------
 ///
@@ -46,20 +44,50 @@ unsafe impl Send for Test {}
 
 impl Test {
     pub fn unit_test(
+        generator: &mut CodeGenerator<'_>,
+        test: TypedTest,
+        module_name: String,
         input_path: PathBuf,
-        module: String,
-        name: String,
-        can_error: bool,
-        program: Program<NamedDeBruijn>,
-        assertion: Option<Assertion>,
     ) -> Test {
+        let data_types = generator.data_types().clone();
+
+        let program = generator.generate_raw(&test.body, &[], &module_name);
+
+        let assertion = match test.body.try_into() {
+            Err(..) => None,
+            Ok(Assertion { bin_op, head, tail }) => {
+                let as_constant = |generator: &mut CodeGenerator<'_>, side| {
+                    Program::<NamedDeBruijn>::try_from(generator.generate_raw(
+                        &side,
+                        &[],
+                        &module_name,
+                    ))
+                    .expect("failed to convert assertion operaand to NamedDeBruijn")
+                    .eval(ExBudget::max())
+                    .unwrap_constant()
+                    .map(|cst| {
+                        UntypedExpr::reify_constant(&data_types, cst, &side.tipo())
+                            .expect("failed to reify assertion operand?")
+                    })
+                };
+
+                Some(Assertion {
+                    bin_op,
+                    head: as_constant(generator, head.expect("cannot be Err at this point")),
+                    tail: tail
+                        .expect("cannot be Err at this point")
+                        .try_mapped(|e| as_constant(generator, e)),
+                })
+            }
+        };
+
         Test::UnitTest(UnitTest {
             input_path,
-            module,
-            name,
+            module: module_name,
+            name: test.name,
             program,
-            can_error,
             assertion,
+            can_error: test.can_error,
         })
     }
 
@@ -88,39 +116,7 @@ impl Test {
         input_path: PathBuf,
     ) -> Test {
         if test.arguments.is_empty() {
-            let program = generator.generate_raw(&test.body, &[], &module_name);
-
-            // TODO: Check whether we really need to clone the _entire_ generator, or whether we
-            // can mostly copy the generator and only clone parts that matters.
-            let assertion = test.test_hint().map(|(bin_op, left_src, right_src)| {
-                let left = generator
-                    .clone()
-                    .generate_raw(&left_src, &[], &module_name)
-                    .try_into()
-                    .unwrap();
-
-                let right = generator
-                    .clone()
-                    .generate_raw(&right_src, &[], &module_name)
-                    .try_into()
-                    .unwrap();
-
-                Assertion {
-                    bin_op,
-                    left,
-                    right,
-                    can_error: test.can_error,
-                }
-            });
-
-            Self::unit_test(
-                input_path,
-                module_name,
-                test.name,
-                test.can_error,
-                program.try_into().unwrap(),
-                assertion,
-            )
+            Self::unit_test(generator, test, module_name, input_path)
         } else {
             let parameter = test.arguments.first().unwrap().to_owned();
 
@@ -168,18 +164,23 @@ pub struct UnitTest {
     pub module: String,
     pub name: String,
     pub can_error: bool,
-    pub program: Program<NamedDeBruijn>,
-    pub assertion: Option<Assertion>,
+    pub program: Program<Name>,
+    pub assertion: Option<Assertion<UntypedExpr>>,
 }
 
 unsafe impl Send for UnitTest {}
 
 impl UnitTest {
     pub fn run<T>(self) -> TestResult<T> {
-        let mut eval_result = self.program.clone().eval(ExBudget::max());
+        let mut eval_result = Program::<NamedDeBruijn>::try_from(self.program.clone())
+            .unwrap()
+            .eval(ExBudget::max());
+
+        let success = !eval_result.failed(self.can_error);
+
         TestResult::UnitTestResult(UnitTestResult {
+            success,
             test: self.to_owned(),
-            success: !eval_result.failed(self.can_error),
             spent_budget: eval_result.cost(),
             logs: eval_result.logs(),
             output: eval_result.result().ok(),
@@ -399,8 +400,10 @@ impl Prng {
         fn as_prng(cst: &PlutusData) -> Prng {
             if let PlutusData::Constr(Constr { tag, fields, .. }) = cst {
                 if *tag == 121 + Prng::SEEDED {
-                    if let [PlutusData::BoundedBytes(bytes), PlutusData::BoundedBytes(choices)] =
-                        &fields[..]
+                    if let [
+                        PlutusData::BoundedBytes(bytes),
+                        PlutusData::BoundedBytes(choices),
+                    ] = &fields[..]
                     {
                         return Prng::Seeded {
                             choices: choices.to_vec(),
@@ -741,24 +744,21 @@ impl<T> TestResult<T> {
     }
 
     pub fn into_error(&self, verbose: bool) -> crate::Error {
-        let (name, path, assertion, src) = match self {
+        let (name, path, src) = match self {
             TestResult::UnitTestResult(UnitTestResult { test, .. }) => (
                 test.name.to_string(),
                 test.input_path.to_path_buf(),
-                test.assertion.as_ref().map(|hint| hint.to_string()),
                 test.program.to_pretty(),
             ),
             TestResult::PropertyTestResult(PropertyTestResult { test, .. }) => (
                 test.name.to_string(),
                 test.input_path.to_path_buf(),
-                None,
                 test.program.to_pretty(),
             ),
         };
         crate::Error::TestFailure {
             name,
             path,
-            assertion,
             src,
             verbose,
         }
@@ -809,74 +809,233 @@ impl PropertyTestResult<PlutusData> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Assertion {
+pub struct Assertion<T> {
     pub bin_op: BinOp,
-    pub left: Program<NamedDeBruijn>,
-    pub right: Program<NamedDeBruijn>,
-    pub can_error: bool,
+    pub head: Result<T, ()>,
+    pub tail: Result<Vec1<T>, ()>,
 }
 
-impl Display for Assertion {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let unlimited_budget = ExBudget {
-            mem: i64::MAX,
-            cpu: i64::MAX,
+impl TryFrom<TypedExpr> for Assertion<TypedExpr> {
+    type Error = ();
+
+    fn try_from(body: TypedExpr) -> Result<Self, Self::Error> {
+        match body {
+            TypedExpr::BinOp {
+                name,
+                tipo,
+                left,
+                right,
+                ..
+            } if tipo == bool() => {
+                // 'and' and 'or' are left-associative operators.
+                match (*right).clone().try_into() {
+                    Ok(Assertion {
+                        bin_op,
+                        head: Ok(head),
+                        tail: Ok(tail),
+                        ..
+                    }) if bin_op == name => {
+                        let mut both = vec1![head];
+                        both.extend(tail);
+                        Ok(Assertion {
+                            bin_op: name,
+                            head: Ok(*left),
+                            tail: Ok(both),
+                        })
+                    }
+                    _ => Ok(Assertion {
+                        bin_op: name,
+                        head: Ok(*left),
+                        tail: Ok(vec1![*right]),
+                    }),
+                }
+            }
+
+            // NOTE drill through trace-if-false operators for better errors.
+            TypedExpr::If {
+                branches,
+                final_else,
+                ..
+            } => {
+                if let [
+                    IfBranch {
+                        condition, body, ..
+                    },
+                ] = &branches[..]
+                {
+                    let then_is_true = match body {
+                        TypedExpr::Var {
+                            name, constructor, ..
+                        } => name == "True" && constructor.tipo == bool(),
+                        _ => false,
+                    };
+
+                    let else_is_wrapped_false = match *final_else {
+                        TypedExpr::Trace { then, .. } => match *then {
+                            TypedExpr::Var {
+                                name, constructor, ..
+                            } => name == "False" && constructor.tipo == bool(),
+                            _ => false,
+                        },
+                        _ => false,
+                    };
+
+                    if then_is_true && else_is_wrapped_false {
+                        return condition.to_owned().try_into();
+                    }
+                }
+
+                Err(())
+            }
+
+            TypedExpr::Trace { then, .. } => (*then).try_into(),
+
+            TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
+                if let Ok(Assertion {
+                    bin_op,
+                    head: Ok(head),
+                    tail: Ok(tail),
+                }) = expressions.last().unwrap().to_owned().try_into()
+                {
+                    let replace = |expr| {
+                        let mut expressions = expressions.clone();
+                        expressions.pop();
+                        expressions.push(expr);
+                        TypedExpr::Sequence {
+                            expressions,
+                            location: Span::empty(),
+                        }
+                    };
+
+                    Ok(Assertion {
+                        bin_op,
+                        head: Ok(replace(head)),
+                        tail: Ok(tail.mapped(replace)),
+                    })
+                } else {
+                    Err(())
+                }
+            }
+            _ => Err(()),
+        }
+    }
+}
+
+impl Assertion<UntypedExpr> {
+    #[allow(clippy::just_underscores_and_digits)]
+    pub fn to_string(&self, stream: Stream, expect_failure: bool) -> String {
+        let red = |s: &str| {
+            format!("× {s}")
+                .if_supports_color(stream, |s| s.red())
+                .if_supports_color(stream, |s| s.bold())
+                .to_string()
         };
 
-        let left = pretty::boxed(
-            "left",
-            &match self.left.clone().eval(unlimited_budget).result() {
-                Ok(term) => format!("{term}"),
-                Err(err) => format!("{err}"),
-            },
-        );
-        let right = pretty::boxed(
-            "right",
-            &match self.right.clone().eval(unlimited_budget).result() {
-                Ok(term) => format!("{term}"),
-                Err(err) => format!("{err}"),
-            },
-        );
-        let msg = if self.can_error {
-            match self.bin_op {
-                BinOp::And => Some(format!(
-                    "{left}\n\nand\n\n{right}\n\nare both true but shouldn't."
-                )),
-                BinOp::Or => Some(format!(
-                    "neither\n\n{left}\n\nnor\n\n{right}\n\nshould be true."
-                )),
-                BinOp::Eq => Some(format!("{left}\n\nshould not be equal to\n\n{right}")),
-                BinOp::NotEq => Some(format!("{left}\n\nshould be equal to\n\n{right}")),
-                BinOp::LtInt => Some(format!(
-                    "{left}\n\nshould be greater than or equal to\n\n{right}"
-                )),
-                BinOp::LtEqInt => Some(format!("{left}\n\nshould be greater than\n\n{right}")),
-                BinOp::GtEqInt => Some(format!(
-                    "{left}\n\nshould be lower than or equal\n\n{right}"
-                )),
-                BinOp::GtInt => Some(format!("{left}\n\nshould be lower than\n\n{right}")),
-                _ => None,
-            }
-        } else {
-            match self.bin_op {
-                BinOp::And => Some(format!("{left}\n\nand\n\n{right}\n\nshould both be true.")),
-                BinOp::Or => Some(format!("{left}\n\nor\n\n{right}\n\nshould be true.")),
-                BinOp::Eq => Some(format!("{left}\n\nshould be equal to\n\n{right}")),
-                BinOp::NotEq => Some(format!("{left}\n\nshould not be equal to\n\n{right}")),
-                BinOp::LtInt => Some(format!("{left}\n\nshould be lower than\n\n{right}")),
-                BinOp::LtEqInt => Some(format!(
-                    "{left}\n\nshould be lower than or equal to\n\n{right}"
-                )),
-                BinOp::GtEqInt => Some(format!("{left}\n\nshould be greater than\n\n{right}")),
-                BinOp::GtInt => Some(format!(
-                    "{left}\n\nshould be greater than or equal to\n\n{right}"
-                )),
-                _ => None,
-            }
+        if self.head.is_err() {
+            return red("program failed");
         }
-        .ok_or(fmt::Error)?;
 
-        f.write_str(&msg)
+        fn fmt_side(side: &UntypedExpr, stream: Stream) -> String {
+            let __ = "│".if_supports_color(stream, |s| s.red());
+
+            Formatter::new()
+                .expr(side, false)
+                .to_pretty_string(60)
+                .lines()
+                .map(|line| format!("{__} {line}"))
+                .collect::<Vec<String>>()
+                .join("\n")
+        }
+
+        let left = fmt_side(self.head.as_ref().unwrap(), stream);
+
+        let tail = self.tail.as_ref().unwrap();
+
+        let right = fmt_side(tail.first(), stream);
+
+        format!(
+            "{}{}{}",
+            red("expected"),
+            if expect_failure && self.bin_op == BinOp::Or {
+                " neither\n"
+                    .if_supports_color(stream, |s| s.red())
+                    .if_supports_color(stream, |s| s.bold())
+                    .to_string()
+            } else {
+                "\n".to_string()
+            },
+            if expect_failure {
+                match self.bin_op {
+                    BinOp::And => [
+                        left,
+                        red("and"),
+                        [
+                            tail.mapped_ref(|s| fmt_side(s, stream))
+                                .join(format!("\n{}\n", red("and")).as_str()),
+                            if tail.len() > 1 {
+                                red("to not all be true")
+                            } else {
+                                red("to not both be true")
+                            },
+                        ]
+                        .join("\n"),
+                    ],
+                    BinOp::Or => [
+                        left,
+                        red("nor"),
+                        [
+                            tail.mapped_ref(|s| fmt_side(s, stream))
+                                .join(format!("\n{}\n", red("nor")).as_str()),
+                            red("to be true"),
+                        ]
+                        .join("\n"),
+                    ],
+                    BinOp::Eq => [left, red("to not equal"), right],
+                    BinOp::NotEq => [left, red("to not be different"), right],
+                    BinOp::LtInt => [left, red("to not be lower than"), right],
+                    BinOp::LtEqInt => [left, red("to not be lower than or equal to"), right],
+                    BinOp::GtInt => [left, red("to not be greater than"), right],
+                    BinOp::GtEqInt => [left, red("to not be greater than or equal to"), right],
+                    _ => unreachable!("unexpected non-boolean binary operator in assertion?"),
+                }
+                .join("\n")
+            } else {
+                match self.bin_op {
+                    BinOp::And => [
+                        left,
+                        red("and"),
+                        [
+                            tail.mapped_ref(|s| fmt_side(s, stream))
+                                .join(format!("\n{}\n", red("and")).as_str()),
+                            if tail.len() > 1 {
+                                red("to all be true")
+                            } else {
+                                red("to both be true")
+                            },
+                        ]
+                        .join("\n"),
+                    ],
+                    BinOp::Or => [
+                        left,
+                        red("or"),
+                        [
+                            tail.mapped_ref(|s| fmt_side(s, stream))
+                                .join(format!("\n{}\n", red("or")).as_str()),
+                            red("to be true"),
+                        ]
+                        .join("\n"),
+                    ],
+                    BinOp::Eq => [left, red("to equal"), right],
+                    BinOp::NotEq => [left, red("to not equal"), right],
+                    BinOp::LtInt => [left, red("to be lower than"), right],
+                    BinOp::LtEqInt => [left, red("to be lower than or equal to"), right],
+                    BinOp::GtInt => [left, red("to be greater than"), right],
+                    BinOp::GtEqInt => [left, red("to be greater than or equal to"), right],
+                    _ => unreachable!("unexpected non-boolean binary operator in assertion?"),
+                }
+                .join("\n")
+            }
+        )
     }
 }
 

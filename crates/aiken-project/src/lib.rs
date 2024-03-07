@@ -843,8 +843,6 @@ where
             .into_par_iter()
             .map(|test| match test {
                 Test::UnitTest(unit_test) => unit_test.run(),
-                // TODO: Get the seed from the command-line, defaulting to a random one when not
-                // provided.
                 Test::PropertyTest(property_test) => property_test.run(seed),
             })
             .collect::<Vec<TestResult<PlutusData>>>()

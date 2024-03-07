@@ -1,4 +1,4 @@
-use crate::{telemetry::Terminal, Error, Project};
+use crate::{telemetry::Terminal, Project};
 use miette::{Diagnostic, IntoDiagnostic};
 use notify::{Event, RecursiveMode, Watcher};
 use owo_colors::{OwoColorize, Stream::Stderr};
@@ -108,15 +108,13 @@ where
             err.report()
         }
 
-        if !errs.iter().any(|e| matches!(e, Error::TestFailure { .. })) {
-            eprintln!(
-                "{}",
-                Summary {
-                    warning_count,
-                    error_count: errs.len(),
-                }
-            );
-        }
+        eprintln!(
+            "{}",
+            Summary {
+                warning_count,
+                error_count: errs.len(),
+            }
+        );
 
         return Err(ExitFailure::into_report());
     }
