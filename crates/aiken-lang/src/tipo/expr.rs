@@ -1,7 +1,11 @@
-use crate::line_numbers::LineNumbers;
-use std::{cmp::Ordering, collections::HashMap, rc::Rc};
-use vec1::Vec1;
-
+use super::{
+    environment::{assert_no_labeled_arguments, collapse_links, EntityKind, Environment},
+    error::{Error, Warning},
+    hydrator::Hydrator,
+    pattern::PatternTyper,
+    pipe::PipeTyper,
+    RecordAccessor, Type, ValueConstructor, ValueConstructorVariant,
+};
 use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, Bls12_381Point, ByteArrayFormatPreference,
@@ -13,17 +17,11 @@ use crate::{
     builtins::{bool, byte_array, function, g1_element, g2_element, int, list, string, tuple},
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
+    line_numbers::LineNumbers,
     tipo::fields::FieldMap,
 };
-
-use super::{
-    environment::{assert_no_labeled_arguments, collapse_links, EntityKind, Environment},
-    error::{Error, Warning},
-    hydrator::Hydrator,
-    pattern::PatternTyper,
-    pipe::PipeTyper,
-    RecordAccessor, Type, ValueConstructor, ValueConstructorVariant,
-};
+use std::{cmp::Ordering, collections::HashMap, rc::Rc};
+use vec1::Vec1;
 
 #[derive(Debug)]
 pub(crate) struct ExprTyper<'a, 'b> {
@@ -593,7 +591,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             _ => {
                 return Err(Error::RecordUpdateInvalidConstructor {
                     location: constructor.location(),
-                })
+                });
             }
         };
 
@@ -1135,7 +1133,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     }
 
                     ValueConstructorVariant::ModuleConstant { literal, .. } => {
-                        return Ok(ClauseGuard::Constant(literal.clone()))
+                        return Ok(ClauseGuard::Constant(literal.clone()));
                     }
                 };
 

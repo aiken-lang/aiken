@@ -3,8 +3,8 @@ use aiken_lang::{
     builtins::bool,
     expr::{TypedExpr, UntypedExpr},
     format::Formatter,
-    gen_uplc::{builder::convert_opaque_type, CodeGenerator},
-    tipo::Type,
+    gen_uplc::CodeGenerator,
+    tipo::{convert_opaque_type, Type},
 };
 use cryptoxide::{blake2b::Blake2b, digest::Digest};
 use indexmap::IndexMap;

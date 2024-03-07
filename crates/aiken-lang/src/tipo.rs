@@ -1,9 +1,14 @@
 use self::{environment::Environment, pretty::Printer};
 use crate::{
-    ast::{Annotation, Constant, DefinitionLocation, ModuleKind, Span},
+    ast::{
+        Annotation, Constant, DataType, DataTypeKey, DefinitionLocation, ModuleKind, Span,
+        TypedDataType,
+    },
     builtins::{G1_ELEMENT, G2_ELEMENT, MILLER_LOOP_RESULT},
     tipo::fields::FieldMap,
 };
+use indexmap::IndexMap;
+use itertools::Itertools;
 use std::{cell::RefCell, collections::HashMap, ops::Deref, rc::Rc};
 use uplc::{ast::Type as UplcType, builtins::DefaultFunction};
 
@@ -437,6 +442,240 @@ impl Type {
     }
 }
 
+pub fn lookup_data_type_by_tipo(
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+    tipo: &Type,
+) -> Option<DataType<Rc<Type>>> {
+    match tipo {
+        Type::Fn { ret, .. } => match ret.as_ref() {
+            Type::App { module, name, .. } => {
+                let data_type_key = DataTypeKey {
+                    module_name: module.clone(),
+                    defined_type: name.clone(),
+                };
+                data_types.get(&data_type_key).map(|item| (*item).clone())
+            }
+            _ => None,
+        },
+        Type::App { module, name, .. } => {
+            let data_type_key = DataTypeKey {
+                module_name: module.clone(),
+                defined_type: name.clone(),
+            };
+
+            data_types.get(&data_type_key).map(|item| (*item).clone())
+        }
+        Type::Var { tipo } => {
+            if let TypeVar::Link { tipo } = &*tipo.borrow() {
+                lookup_data_type_by_tipo(data_types, tipo)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+pub fn get_generic_id_and_type(tipo: &Type, param: &Type) -> Vec<(u64, Rc<Type>)> {
+    let mut generics_ids = vec![];
+
+    if let Some(id) = tipo.get_generic() {
+        generics_ids.push((id, param.clone().into()));
+        return generics_ids;
+    }
+
+    for (tipo, param_type) in tipo
+        .get_inner_types()
+        .iter()
+        .zip(param.get_inner_types().iter())
+    {
+        generics_ids.append(&mut get_generic_id_and_type(tipo, param_type));
+    }
+    generics_ids
+}
+
+pub fn get_arg_type_name(tipo: &Type) -> String {
+    match tipo {
+        Type::App { name, args, .. } => {
+            let inner_args = args.iter().map(|arg| get_arg_type_name(arg)).collect_vec();
+            format!("{}_{}", name, inner_args.join("_"))
+        }
+        Type::Var { tipo } => match tipo.borrow().clone() {
+            TypeVar::Link { tipo } => get_arg_type_name(tipo.as_ref()),
+            _ => unreachable!(),
+        },
+        Type::Tuple { elems } => {
+            let inner_args = elems.iter().map(|arg| get_arg_type_name(arg)).collect_vec();
+            inner_args.join("_")
+        }
+        _ => unreachable!(),
+    }
+}
+
+pub fn convert_opaque_type(
+    t: &Rc<Type>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+    deep: bool,
+) -> Rc<Type> {
+    if check_replaceable_opaque_type(t, data_types) && matches!(t.as_ref(), Type::App { .. }) {
+        let data_type = lookup_data_type_by_tipo(data_types, t).unwrap();
+
+        let new_type_fields = data_type.typed_parameters;
+
+        let mut mono_type_vec = vec![];
+
+        for (tipo, param) in new_type_fields.iter().zip(t.arg_types().unwrap()) {
+            mono_type_vec.append(&mut get_generic_id_and_type(tipo, &param));
+        }
+        let mono_types = mono_type_vec.into_iter().collect();
+
+        let generic_type = &data_type.constructors[0].arguments[0].tipo;
+
+        let mono_type = find_and_replace_generics(generic_type, &mono_types);
+
+        if deep {
+            convert_opaque_type(&mono_type, data_types, deep)
+        } else {
+            mono_type
+        }
+    } else {
+        match t.as_ref() {
+            Type::App {
+                public,
+                module,
+                name,
+                args,
+            } => {
+                let mut new_args = vec![];
+                for arg in args {
+                    let arg = convert_opaque_type(arg, data_types, deep);
+                    new_args.push(arg);
+                }
+                Type::App {
+                    public: *public,
+                    module: module.clone(),
+                    name: name.clone(),
+                    args: new_args,
+                }
+                .into()
+            }
+            Type::Fn { args, ret } => {
+                let mut new_args = vec![];
+                for arg in args {
+                    let arg = convert_opaque_type(arg, data_types, deep);
+                    new_args.push(arg);
+                }
+
+                let ret = convert_opaque_type(ret, data_types, deep);
+
+                Type::Fn {
+                    args: new_args,
+                    ret,
+                }
+                .into()
+            }
+            Type::Var { tipo: var_tipo } => {
+                if let TypeVar::Link { tipo } = &var_tipo.borrow().clone() {
+                    convert_opaque_type(tipo, data_types, deep)
+                } else {
+                    t.clone()
+                }
+            }
+            Type::Tuple { elems } => {
+                let mut new_elems = vec![];
+                for arg in elems {
+                    let arg = convert_opaque_type(arg, data_types, deep);
+                    new_elems.push(arg);
+                }
+                Type::Tuple { elems: new_elems }.into()
+            }
+        }
+    }
+}
+
+pub fn check_replaceable_opaque_type(
+    t: &Type,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+) -> bool {
+    let data_type = lookup_data_type_by_tipo(data_types, t);
+
+    if let Some(data_type) = data_type {
+        if let [constructor] = &data_type.constructors[..] {
+            return constructor.arguments.len() == 1 && data_type.opaque;
+        }
+    }
+
+    false
+}
+
+pub fn find_and_replace_generics(
+    tipo: &Rc<Type>,
+    mono_types: &IndexMap<u64, Rc<Type>>,
+) -> Rc<Type> {
+    if let Some(id) = tipo.get_generic() {
+        // If a generic does not have a type we know of
+        // like a None in option then just use same type
+        mono_types.get(&id).unwrap_or(tipo).clone()
+    } else if tipo.is_generic() {
+        match &**tipo {
+            Type::App {
+                args,
+                public,
+                module,
+                name,
+            } => {
+                let mut new_args = vec![];
+                for arg in args {
+                    let arg = find_and_replace_generics(arg, mono_types);
+                    new_args.push(arg);
+                }
+                let t = Type::App {
+                    args: new_args,
+                    public: *public,
+                    module: module.clone(),
+                    name: name.clone(),
+                };
+                t.into()
+            }
+            Type::Fn { args, ret } => {
+                let mut new_args = vec![];
+                for arg in args {
+                    let arg = find_and_replace_generics(arg, mono_types);
+                    new_args.push(arg);
+                }
+
+                let ret = find_and_replace_generics(ret, mono_types);
+
+                let t = Type::Fn {
+                    args: new_args,
+                    ret,
+                };
+
+                t.into()
+            }
+            Type::Tuple { elems } => {
+                let mut new_elems = vec![];
+                for elem in elems {
+                    let elem = find_and_replace_generics(elem, mono_types);
+                    new_elems.push(elem);
+                }
+                let t = Type::Tuple { elems: new_elems };
+                t.into()
+            }
+            Type::Var { tipo: var_tipo } => {
+                let var_type = var_tipo.as_ref().borrow().clone();
+
+                match var_type {
+                    TypeVar::Link { tipo } => find_and_replace_generics(&tipo, mono_types),
+                    TypeVar::Generic { .. } | TypeVar::Unbound { .. } => unreachable!(),
+                }
+            }
+        }
+    } else {
+        tipo.clone()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeVar {
     /// Unbound is an unbound variable. It is one specific type but we don't
@@ -594,10 +833,12 @@ impl TypeVar {
             Self::Link { tipo } => tipo.get_inner_types(),
             Self::Unbound { .. } => vec![],
             var => {
-                vec![Type::Var {
-                    tipo: RefCell::new(var.clone()).into(),
-                }
-                .into()]
+                vec![
+                    Type::Var {
+                        tipo: RefCell::new(var.clone()).into(),
+                    }
+                    .into(),
+                ]
             }
         }
     }

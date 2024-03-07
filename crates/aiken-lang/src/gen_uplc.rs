@@ -6,9 +6,8 @@ use self::{
     air::Air,
     builder::{
         air_holds_msg, cast_validator_args, constants_ir, convert_type_to_data, extract_constant,
-        lookup_data_type_by_tipo, modify_cyclic_calls, modify_self_calls, rearrange_list_clauses,
-        AssignmentProperties, ClauseProperties, CodeGenSpecialFuncs, CycleFunctionNames,
-        HoistableFunction, Variant,
+        modify_cyclic_calls, modify_self_calls, rearrange_list_clauses, AssignmentProperties,
+        ClauseProperties, CodeGenSpecialFuncs, CycleFunctionNames, HoistableFunction, Variant,
     },
     tree::{AirMsg, AirTree, TreePath},
 };
@@ -23,15 +22,16 @@ use crate::{
     gen_uplc::{
         air::ExpectLevel,
         builder::{
-            check_replaceable_opaque_type, convert_opaque_type, erase_opaque_type_operations,
-            find_and_replace_generics, find_list_clause_or_default_first, get_arg_type_name,
-            get_generic_id_and_type, get_generic_variant_name, get_line_columns_by_span,
-            get_src_code_by_span, known_data_to_type, monomorphize, pattern_has_conditions,
-            wrap_as_multi_validator, wrap_validator_condition, CodeGenFunction, SpecificClause,
+            erase_opaque_type_operations, find_list_clause_or_default_first,
+            get_generic_variant_name, get_line_columns_by_span, get_src_code_by_span,
+            known_data_to_type, monomorphize, pattern_has_conditions, wrap_as_multi_validator,
+            wrap_validator_condition, CodeGenFunction, SpecificClause,
         },
     },
     line_numbers::LineNumbers,
     tipo::{
+        check_replaceable_opaque_type, convert_opaque_type, find_and_replace_generics,
+        get_arg_type_name, get_generic_id_and_type, lookup_data_type_by_tipo,
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
         ValueConstructorVariant,
     },
@@ -3905,9 +3905,11 @@ impl<'a> CodeGenerator<'a> {
                     } else if constructor.tipo.is_void() {
                         Some(Term::Constant(UplcConstant::Unit.into()))
                     } else {
-                        let data_type =
-                            builder::lookup_data_type_by_tipo(&self.data_types, &constructor.tipo)
-                                .unwrap();
+                        let data_type = crate::tipo::lookup_data_type_by_tipo(
+                            &self.data_types,
+                            &constructor.tipo,
+                        )
+                        .unwrap();
 
                         let (constr_index, constr_type) = data_type
                             .constructors
