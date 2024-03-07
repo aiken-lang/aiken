@@ -4379,7 +4379,7 @@ fn expect_head3_no_tail() {
       test hi() {
         let a = [1, 2, 3]
         expect [h, i, j] = a
-        h == h && i == i && j == j
+        (h == h && i == i) && j == j
       }
     "#;
 
@@ -4451,7 +4451,7 @@ fn expect_head3_cast_data_no_tail() {
       test hi() {
         let a: Data = [1, 2, 3]
         expect [h, i, j]: List<Int> = a
-        h == h && i ==i && j == j
+        (h == h && i ==i) && j == j
       }
     "#;
 
