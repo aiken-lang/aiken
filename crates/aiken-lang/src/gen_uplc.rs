@@ -1322,6 +1322,8 @@ impl<'a> CodeGenerator<'a> {
         msg_func: Option<AirMsg>,
     ) -> AirTree {
         assert!(tipo.get_generic().is_none());
+        // Shouldn't be needed but still here just in case
+        // this function is called from anywhere else besides assignment
         let tipo = &convert_opaque_type(tipo, &self.data_types, true);
 
         if tipo.is_primitive() {
