@@ -453,7 +453,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             TraceLevel::Silent => Ok(typed_value),
             TraceLevel::Verbose | TraceLevel::Compact => Ok(TypedExpr::If {
                 location,
-                branches: vec![IfBranch {
+                branches: vec1::vec1![IfBranch {
                     condition: typed_value,
                     body: var_true,
                     location,
@@ -1428,7 +1428,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         let tipo = body.tipo();
 
-        let mut typed_branches = vec![TypedIfBranch {
+        let mut typed_branches = vec1::vec1![TypedIfBranch {
             body,
             condition,
             location: first.location,
