@@ -30,7 +30,7 @@ pub struct TypeAliasAnnotation {
     pub annotation: Annotation,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Type {
     /// A nominal (named) type such as `Int`, `Float`, or a programmer defined
     /// custom type such as `Person`. The type can take other types as
@@ -797,7 +797,7 @@ pub fn find_and_replace_generics(
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum TypeVar {
     /// Unbound is an unbound variable. It is one specific type but we don't
     /// know what yet in the inference process. It has a unique id which can be used to
@@ -971,7 +971,7 @@ impl TypeVar {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ValueConstructor {
     pub public: bool,
     pub variant: ValueConstructorVariant,
@@ -1022,7 +1022,7 @@ impl ValueConstructor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ValueConstructorVariant {
     /// A locally defined variable or function parameter
     LocalVariable { location: Span },
@@ -1119,7 +1119,7 @@ impl ValueConstructorVariant {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TypeInfo {
     pub name: String,
     pub kind: ModuleKind,
@@ -1131,7 +1131,7 @@ pub struct TypeInfo {
     pub annotations: HashMap<Annotation, Rc<Type>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TypeConstructor {
     pub public: bool,
     pub location: Span,
@@ -1140,14 +1140,14 @@ pub struct TypeConstructor {
     pub tipo: Rc<Type>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AccessorsMap {
     pub public: bool,
     pub tipo: Rc<Type>,
     pub accessors: HashMap<String, RecordAccessor>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RecordAccessor {
     // TODO: smaller int. Doesn't need to be this big
     pub index: u64,
@@ -1155,7 +1155,7 @@ pub struct RecordAccessor {
     pub tipo: Rc<Type>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum PatternConstructor {
     Record {
         name: String,
@@ -1163,7 +1163,7 @@ pub enum PatternConstructor {
     },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ModuleValueConstructor {
     Record {
         name: String,

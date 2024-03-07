@@ -8,7 +8,7 @@ use crate::ast::Term;
 /// All the possible builtin functions in Untyped Plutus Core.
 #[repr(u8)]
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone, PartialEq, Eq, Copy, EnumIter)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, EnumIter, serde::Serialize, serde::Deserialize)]
 pub enum DefaultFunction {
     // Integer functions
     AddInteger = 0,
