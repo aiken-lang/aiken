@@ -250,8 +250,6 @@ impl<'a> CodeGenerator<'a> {
                 panic!("Dangling expressions without an assignment")
             };
 
-            // let replaced_type = convert_opaque_type(tipo, &self.data_types, true);
-
             let air_value = self.build(value, module_build_name, &[]);
 
             let msg_func = match self.tracing {
