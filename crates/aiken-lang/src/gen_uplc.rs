@@ -250,7 +250,7 @@ impl<'a> CodeGenerator<'a> {
                 panic!("Dangling expressions without an assignment")
             };
 
-            let replaced_type = convert_opaque_type(tipo, &self.data_types, true);
+            // let replaced_type = convert_opaque_type(tipo, &self.data_types, true);
 
             let air_value = self.build(value, module_build_name, &[]);
 
@@ -294,7 +294,7 @@ impl<'a> CodeGenerator<'a> {
                 pattern,
                 air_value,
                 then,
-                &replaced_type,
+                tipo,
                 AssignmentProperties {
                     value_type: value.tipo(),
                     kind: *kind,
@@ -1200,6 +1200,7 @@ impl<'a> CodeGenerator<'a> {
                     // TODO: See if we can combine these two if-conditions;
                     //
                     // i.e. can we lift data_type assignment out of the first if?
+
                     let then = if props.kind.is_expect() {
                         let data_type = lookup_data_type_by_tipo(&self.data_types, tipo)
                             .unwrap_or_else(|| {
