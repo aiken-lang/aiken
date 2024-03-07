@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- **aiken-lang**: Boolean operators (`||` and `&&`) were (somewhat) left-associative. This is now fixed and changed to right-associativity. @KtorZ
 - **uplc**: `serialise_data` builtin wrongly encoding some larger ints as tagged CBOR bigints, instead of plain integers over 9 bytes. @KtorZ
 - **aiken-project**: Unit tests reports are now inline with the test with less noise. @KtorZ
 
