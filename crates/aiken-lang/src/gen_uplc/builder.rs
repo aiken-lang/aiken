@@ -208,14 +208,6 @@ impl CodeGenSpecialFuncs {
             ),
         );
 
-        key_to_func.insert(
-            TOO_MANY_ITEMS.to_string(),
-            (
-                Term::string("List/Tuple/Constr contains more items than expected"),
-                string(),
-            ),
-        );
-
         CodeGenSpecialFuncs {
             used_funcs: vec![],
             key_to_func,
