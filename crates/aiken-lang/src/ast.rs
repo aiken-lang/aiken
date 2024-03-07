@@ -273,56 +273,6 @@ impl From<TypedTest> for TypedFunction {
     }
 }
 
-impl TypedTest {
-    pub fn test_hint(&self) -> Option<(BinOp, Box<TypedExpr>, Box<TypedExpr>)> {
-        if self.arguments.is_empty() {
-            do_test_hint(&self.body)
-        } else {
-            None
-        }
-    }
-}
-
-pub fn do_test_hint(body: &TypedExpr) -> Option<(BinOp, Box<TypedExpr>, Box<TypedExpr>)> {
-    match body {
-        TypedExpr::BinOp {
-            name,
-            tipo,
-            left,
-            right,
-            ..
-        } if tipo == &bool() => Some((*name, left.clone(), right.clone())),
-        TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
-            if let Some((binop, left, right)) = do_test_hint(&expressions[expressions.len() - 1]) {
-                let mut new_left_expressions = expressions.clone();
-                new_left_expressions.pop();
-                new_left_expressions.push(*left);
-
-                let mut new_right_expressions = expressions.clone();
-                new_right_expressions.pop();
-                new_right_expressions.push(*right);
-
-                Some((
-                    binop,
-                    TypedExpr::Sequence {
-                        expressions: new_left_expressions,
-                        location: Span::empty(),
-                    }
-                    .into(),
-                    TypedExpr::Sequence {
-                        expressions: new_right_expressions,
-                        location: Span::empty(),
-                    }
-                    .into(),
-                ))
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TypeAlias<T> {
     pub alias: String,
