@@ -201,7 +201,7 @@ impl EventListener for Terminal {
 
                     let summary = format!("{}{}", seed_info, fmt_test_summary(results, true));
                     println!(
-                        "{}",
+                        "{}\n",
                         pretty::indent(
                             &pretty::open_box(&title, &tests, &summary, |border| border
                                 .if_supports_color(Stderr, |s| s.bright_black())
