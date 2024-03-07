@@ -38,7 +38,7 @@ use aiken_lang::{
     expr::UntypedExpr,
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
-    tipo::TypeInfo,
+    tipo::{Type, TypeInfo},
     IdGenerator,
 };
 use indexmap::IndexMap;
@@ -55,11 +55,12 @@ use std::{
     fs::{self, File},
     io::BufReader,
     path::{Path, PathBuf},
+    rc::Rc,
 };
 use telemetry::EventListener;
 use test_framework::{Test, TestResult};
 use uplc::{
-    ast::{Name, Program},
+    ast::{Constant, Name, Program},
     PlutusData,
 };
 
@@ -834,7 +835,7 @@ where
         Ok(tests)
     }
 
-    fn run_tests(&self, tests: Vec<Test>, seed: u32) -> Vec<TestResult<UntypedExpr>> {
+    fn run_tests(&self, tests: Vec<Test>, seed: u32) -> Vec<TestResult<UntypedExpr, UntypedExpr>> {
         use rayon::prelude::*;
 
         let data_types = utils::indexmap::as_ref_values(&self.data_types);
@@ -845,7 +846,7 @@ where
                 Test::UnitTest(unit_test) => unit_test.run(),
                 Test::PropertyTest(property_test) => property_test.run(seed),
             })
-            .collect::<Vec<TestResult<PlutusData>>>()
+            .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
             .into_iter()
             .map(|test| test.reify(&data_types))
             .collect()

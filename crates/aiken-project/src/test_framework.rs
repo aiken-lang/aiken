@@ -49,8 +49,6 @@ impl Test {
         module_name: String,
         input_path: PathBuf,
     ) -> Test {
-        let data_types = generator.data_types().clone();
-
         let program = generator.generate_raw(&test.body, &[], &module_name);
 
         let assertion = match test.body.try_into() {
@@ -65,10 +63,7 @@ impl Test {
                     .expect("failed to convert assertion operaand to NamedDeBruijn")
                     .eval(ExBudget::max())
                     .unwrap_constant()
-                    .map(|cst| {
-                        UntypedExpr::reify_constant(&data_types, cst, &side.tipo())
-                            .expect("failed to reify assertion operand?")
-                    })
+                    .map(|cst| (cst, side.tipo()))
                 };
 
                 Some(Assertion {
@@ -165,13 +160,13 @@ pub struct UnitTest {
     pub name: String,
     pub can_error: bool,
     pub program: Program<Name>,
-    pub assertion: Option<Assertion<UntypedExpr>>,
+    pub assertion: Option<Assertion<(Constant, Rc<Type>)>>,
 }
 
 unsafe impl Send for UnitTest {}
 
 impl UnitTest {
-    pub fn run<T>(self) -> TestResult<T> {
+    pub fn run<T>(self) -> TestResult<(Constant, Rc<Type>), T> {
         let mut eval_result = Program::<NamedDeBruijn>::try_from(self.program.clone())
             .unwrap()
             .eval(ExBudget::max());
@@ -184,6 +179,7 @@ impl UnitTest {
             spent_budget: eval_result.cost(),
             logs: eval_result.logs(),
             output: eval_result.result().ok(),
+            assertion: self.assertion,
         })
     }
 }
@@ -219,7 +215,7 @@ impl PropertyTest {
 
     /// Run a property test from a given seed. The property is run at most MAX_TEST_RUN times. It
     /// may stops earlier on failure; in which case a 'counterexample' is returned.
-    pub fn run(self, seed: u32) -> TestResult<PlutusData> {
+    pub fn run<U>(self, seed: u32) -> TestResult<U, PlutusData> {
         let n = PropertyTest::MAX_TEST_RUN;
 
         let (counterexample, iterations) = match self.run_n_times(n, Prng::from_seed(seed), None) {
@@ -679,20 +675,20 @@ impl<'a> Counterexample<'a> {
 // ----------------------------------------------------------------------------
 
 #[derive(Debug)]
-pub enum TestResult<T> {
-    UnitTestResult(UnitTestResult),
+pub enum TestResult<U, T> {
+    UnitTestResult(UnitTestResult<U>),
     PropertyTestResult(PropertyTestResult<T>),
 }
 
-unsafe impl<T> Send for TestResult<T> {}
+unsafe impl<U, T> Send for TestResult<U, T> {}
 
-impl TestResult<PlutusData> {
+impl TestResult<(Constant, Rc<Type>), PlutusData> {
     pub fn reify(
         self,
         data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
-    ) -> TestResult<UntypedExpr> {
+    ) -> TestResult<UntypedExpr, UntypedExpr> {
         match self {
-            TestResult::UnitTestResult(test) => TestResult::UnitTestResult(test),
+            TestResult::UnitTestResult(test) => TestResult::UnitTestResult(test.reify(data_types)),
             TestResult::PropertyTestResult(test) => {
                 TestResult::PropertyTestResult(test.reify(data_types))
             }
@@ -700,7 +696,7 @@ impl TestResult<PlutusData> {
     }
 }
 
-impl<T> TestResult<T> {
+impl<U, T> TestResult<U, T> {
     pub fn is_success(&self) -> bool {
         match self {
             TestResult::UnitTestResult(UnitTestResult { success, .. }) => *success,
@@ -766,15 +762,52 @@ impl<T> TestResult<T> {
 }
 
 #[derive(Debug)]
-pub struct UnitTestResult {
+pub struct UnitTestResult<T> {
     pub success: bool,
     pub spent_budget: ExBudget,
     pub output: Option<Term<NamedDeBruijn>>,
     pub logs: Vec<String>,
     pub test: UnitTest,
+    pub assertion: Option<Assertion<T>>,
 }
 
-unsafe impl Send for UnitTestResult {}
+unsafe impl<T> Send for UnitTestResult<T> {}
+
+impl UnitTestResult<(Constant, Rc<Type>)> {
+    pub fn reify(
+        self,
+        data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+    ) -> UnitTestResult<UntypedExpr> {
+        UnitTestResult {
+            success: self.success,
+            spent_budget: self.spent_budget,
+            output: self.output,
+            logs: self.logs,
+            test: self.test,
+            assertion: self.assertion.and_then(|assertion| {
+                // No need to spend time/cpu on reifying assertions for successful
+                // tests since they aren't shown.
+                if self.success {
+                    return None;
+                }
+
+                Some(Assertion {
+                    bin_op: assertion.bin_op,
+                    head: assertion.head.map(|(cst, tipo)| {
+                        UntypedExpr::reify_constant(data_types, cst, &tipo)
+                            .expect("failed to reify assertion operand?")
+                    }),
+                    tail: assertion.tail.map(|xs| {
+                        xs.mapped(|(cst, tipo)| {
+                            UntypedExpr::reify_constant(data_types, cst, &tipo)
+                                .expect("failed to reify assertion operand?")
+                        })
+                    }),
+                })
+            }),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct PropertyTestResult<T> {
@@ -791,17 +824,10 @@ impl PropertyTestResult<PlutusData> {
         data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
     ) -> PropertyTestResult<UntypedExpr> {
         PropertyTestResult {
-            counterexample: match self.counterexample {
-                None => None,
-                Some(counterexample) => Some(
-                    UntypedExpr::reify_data(
-                        data_types,
-                        counterexample,
-                        &self.test.fuzzer.type_info,
-                    )
-                    .expect("Failed to reify counterexample?"),
-                ),
-            },
+            counterexample: self.counterexample.map(|counterexample| {
+                UntypedExpr::reify_data(data_types, counterexample, &self.test.fuzzer.type_info)
+                    .expect("Failed to reify counterexample?")
+            }),
             iterations: self.iterations,
             test: self.test,
         }
@@ -1266,7 +1292,7 @@ mod test {
             }
         "#});
 
-        assert!(prop.run(42).is_success());
+        assert!(prop.run::<()>(42).is_success());
     }
 
     #[test]

@@ -38,7 +38,7 @@ pub enum Event {
     RunningTests,
     FinishedTests {
         seed: u32,
-        tests: Vec<TestResult<UntypedExpr>>,
+        tests: Vec<TestResult<UntypedExpr, UntypedExpr>>,
     },
     WaitingForBuildDirLock,
     ResolvingPackages {
@@ -266,7 +266,7 @@ impl EventListener for Terminal {
 }
 
 fn fmt_test(
-    result: &TestResult<UntypedExpr>,
+    result: &TestResult<UntypedExpr, UntypedExpr>,
     max_mem: usize,
     max_cpu: usize,
     max_iter: usize,
@@ -324,15 +324,15 @@ fn fmt_test(
     // Annotations
     match result {
         TestResult::UnitTestResult(UnitTestResult {
-            test: unit_test, ..
+            assertion: Some(assertion),
+            test: unit_test,
+            ..
         }) if !result.is_success() => {
-            if let Some(ref assertion) = unit_test.assertion {
-                test = format!(
-                    "{test}\n{}{new_line}",
-                    assertion.to_string(Stderr, unit_test.can_error),
-                    new_line = if result.logs().is_empty() { "\n" } else { "" },
-                );
-            }
+            test = format!(
+                "{test}\n{}{new_line}",
+                assertion.to_string(Stderr, unit_test.can_error),
+                new_line = if result.logs().is_empty() { "\n" } else { "" },
+            );
         }
         _ => (),
     }
@@ -396,7 +396,7 @@ fn fmt_test(
     test
 }
 
-fn fmt_test_summary<T>(tests: &[&TestResult<T>], styled: bool) -> String {
+fn fmt_test_summary<T>(tests: &[&TestResult<T, T>], styled: bool) -> String {
     let (n_passed, n_failed) = tests.iter().fold((0, 0), |(n_passed, n_failed), result| {
         if result.is_success() {
             (n_passed + 1, n_failed)
@@ -420,16 +420,16 @@ fn fmt_test_summary<T>(tests: &[&TestResult<T>], styled: bool) -> String {
     )
 }
 
-fn group_by_module<T>(results: &Vec<TestResult<T>>) -> BTreeMap<String, Vec<&TestResult<T>>> {
+fn group_by_module<T>(results: &Vec<TestResult<T, T>>) -> BTreeMap<String, Vec<&TestResult<T, T>>> {
     let mut modules = BTreeMap::new();
     for r in results {
-        let xs: &mut Vec<&TestResult<_>> = modules.entry(r.module().to_string()).or_default();
+        let xs: &mut Vec<&TestResult<_, _>> = modules.entry(r.module().to_string()).or_default();
         xs.push(r);
     }
     modules
 }
 
-fn find_max_execution_units<T>(xs: &[TestResult<T>]) -> (usize, usize, usize) {
+fn find_max_execution_units<T>(xs: &[TestResult<T, T>]) -> (usize, usize, usize) {
     let (max_mem, max_cpu, max_iter) =
         xs.iter()
             .fold((0, 0, 0), |(max_mem, max_cpu, max_iter), test| match test {
