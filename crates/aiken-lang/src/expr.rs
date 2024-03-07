@@ -125,7 +125,8 @@ pub enum TypedExpr {
 
     If {
         location: Span,
-        branches: Vec<IfBranch<Self>>,
+        #[serde(with = "Vec1Ref")]
+        branches: Vec1<IfBranch<Self>>,
         final_else: Box<Self>,
         tipo: Rc<Type>,
     },
@@ -178,6 +179,16 @@ pub enum TypedExpr {
         tipo: Rc<Type>,
         op: UnOp,
     },
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(remote = "Vec1")]
+struct Vec1Ref<T>(#[serde(getter = "Vec1::as_vec")] Vec<T>);
+
+impl<T> From<Vec1Ref<T>> for Vec1<T> {
+    fn from(v: Vec1Ref<T>) -> Self {
+        Vec1::try_from_vec(v.0).unwrap()
+    }
 }
 
 impl TypedExpr {
@@ -289,7 +300,7 @@ impl TypedExpr {
             | Self::RecordUpdate { location, .. }
             | Self::CurvePoint { location, .. } => *location,
 
-            Self::If { branches, .. } => branches.first().unwrap().body.type_defining_location(),
+            Self::If { branches, .. } => branches.first().body.type_defining_location(),
 
             Self::Sequence {
                 expressions,
