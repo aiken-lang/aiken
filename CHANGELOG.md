@@ -10,6 +10,11 @@
 - **aiken-project**: Property-based testing framework with integrated shrinking. @KtorZ
 - **aiken-project**: Unit tests now show assertion operands as Aiken expression instead of raw UPLC . @KtorZ
 - **aiken**: The `check` command now accept an extra arg `--seed` to provide an initial seed for the pseudo-random generator of properties. @KtorZ
+- **uplc**: add `integerToByteString` and `byteStringToInteger` builtins. @rvcas @Microproofs
+- **aiken-lang**: add `integer_to_byte_string` and `byte_string_to_integer` `aiken/builtins`. @rvcas
+- **uplc**: more conformance tests for `integerToByteString` and `byteStringToInteger` along with new ones. @rvcas
+- **aikup**: error message when version is not found. @rvcas
+- **aiken**: support outputting mainnet addresses for validators. @rvcas
 
 ### Fixed
 
@@ -20,6 +25,12 @@
 - **aiken-lang**: The identity reducer optimization was not removing the identity function before. That is fixed now.@Microproofs
 - **aiken-lang**: Inner opaque types can now be properly destructured by expect and when patterns. @Microproofs
 - **aiken-lang**: A codegen specific name-unique interner is now used to preserve lambda scoping. @Microproofs
+- **aiken-lang**: if there is only one clause we want to present a warning that suggests that a `let` binding should be used instead but only if it's an exhaustive pattern. @rvcas
+- **aiken-lang**: support nested void matching @rvcas
+- **uplc**: fix constr identity (`constr-3.uplc`) conformance test. @rvcas
+- **aiken-lang**: disallow `MLResult` in a type definition. @rvcas
+- **aiken-lang**: reversed deserialization of bls types out of data types. @rvcas
+- **aiken-lang**: validator args unexpectedly unbound causing code gen crashes. @rvcas
 
 ### Changed
 
@@ -30,7 +41,9 @@
 - **aiken-lang**: CONSTR_FIELD_EXPOSER and CONSTR_INDEX_EXPOSER now inline the builtins instead. @Microproofs
 - **aiken-lang**: SubtractInteger with a constant as the second arg is now flipped to addInteger with a negated constant. @Microproofs
 - **aiken-lang**: Validator arguments are now checked per arg instead of after all args are applied. @Microproofs
-
+- **aiken-project**: remove test definitions from dependency modules. @rvcas
+- **aiken-project**: ignore warnings from dependency modules. @rvcas
+- **aiken-project**: parse sources in parallel, this resulted in a nice speedup. @rvcas
 
 ## v1.0.24-alpha - 2024-01-31
 
