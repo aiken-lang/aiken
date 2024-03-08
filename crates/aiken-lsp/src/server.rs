@@ -1,10 +1,14 @@
-use crate::quickfix::Quickfix;
-use std::{
-    collections::{HashMap, HashSet},
-    fs,
-    path::{Path, PathBuf},
+use self::lsp_project::LspProject;
+use crate::{
+    cast::{cast_notification, cast_request},
+    error::Error as ServerError,
+    quickfix,
+    quickfix::Quickfix,
+    utils::{
+        path_to_uri, span_to_lsp_range, text_edit_replace, uri_to_module_name,
+        COMPILING_PROGRESS_TOKEN, CREATE_COMPILING_PROGRESS_TOKEN,
+    },
 };
-
 use aiken_lang::{
     ast::{Definition, Located, ModuleKind, Span, Use},
     error::ExtraData,
@@ -32,18 +36,11 @@ use lsp_types::{
     DocumentFormattingParams, InitializeParams, TextEdit,
 };
 use miette::Diagnostic;
-
-use crate::{
-    cast::{cast_notification, cast_request},
-    error::Error as ServerError,
-    quickfix,
-    utils::{
-        path_to_uri, span_to_lsp_range, text_edit_replace, uri_to_module_name,
-        COMPILING_PROGRESS_TOKEN, CREATE_COMPILING_PROGRESS_TOKEN,
-    },
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    path::{Path, PathBuf},
 };
-
-use self::lsp_project::LspProject;
 
 pub mod lsp_project;
 pub mod telemetry;

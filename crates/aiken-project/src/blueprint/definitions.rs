@@ -139,7 +139,7 @@ impl Reference {
                 }
             }
 
-            Type::Tuple { elems } => Self {
+            Type::Tuple { elems, .. } => Self {
                 inner: format!(
                     "Tuple{elems}",
                     elems = Self::from_types(elems, type_parameters)
@@ -150,7 +150,7 @@ impl Reference {
             //
             // Implementations below are only there for completeness. In practice, we should never
             // end up creating references for 'Var' or 'Fn' in the context of blueprints.
-            Type::Var { tipo } => match tipo.borrow().deref() {
+            Type::Var { tipo, .. } => match tipo.borrow().deref() {
                 TypeVar::Link { tipo } => Self::from_type(tipo.as_ref(), type_parameters),
                 TypeVar::Generic { id } | TypeVar::Unbound { id } => {
                     let tipo = type_parameters.get(id).unwrap();
@@ -158,7 +158,7 @@ impl Reference {
                 }
             },
 
-            Type::Fn { args, ret } => Self {
+            Type::Fn { args, ret, .. } => Self {
                 inner: format!(
                     "Fn{args}_{ret}",
                     args = Self::from_types(args, type_parameters),

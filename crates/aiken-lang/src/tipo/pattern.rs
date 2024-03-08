@@ -1,13 +1,5 @@
 //! Type inference and checking of patterns used in case expressions
 //! and variables bindings.
-use std::{
-    collections::{HashMap, HashSet},
-    ops::Deref,
-    rc::Rc,
-};
-
-use itertools::Itertools;
-
 use super::{
     environment::{assert_no_labeled_arguments, collapse_links, EntityKind, Environment},
     error::{Error, Warning},
@@ -17,6 +9,12 @@ use super::{
 use crate::{
     ast::{CallArg, Pattern, Span, TypedPattern, UntypedPattern},
     builtins::{int, list, tuple},
+};
+use itertools::Itertools;
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Deref,
+    rc::Rc,
 };
 
 pub struct PatternTyper<'a, 'b> {
@@ -238,7 +236,9 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
             },
 
             Pattern::Tuple { elems, location } => match collapse_links(tipo.clone()).deref() {
-                Type::Tuple { elems: type_elems } => {
+                Type::Tuple {
+                    elems: type_elems, ..
+                } => {
                     if elems.len() != type_elems.len() {
                         return Err(Error::IncorrectTupleArity {
                             location,
@@ -403,7 +403,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                 );
 
                 match instantiated_constructor_type.deref() {
-                    Type::Fn { args, ret } => {
+                    Type::Fn { args, ret, .. } => {
                         if with_spread && has_no_fields {
                             if pattern_args.len() == args.len() {
                                 return Err(Error::UnnecessarySpreadOperator {

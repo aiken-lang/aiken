@@ -1197,7 +1197,7 @@ impl TypedPattern {
             | Pattern::Tuple {
                 elems: elements, ..
             } => match &**value {
-                Type::Tuple { elems } => elements
+                Type::Tuple { elems, .. } => elements
                     .iter()
                     .zip(elems.iter())
                     .find_map(|(e, t)| e.find_node(byte_index, t))

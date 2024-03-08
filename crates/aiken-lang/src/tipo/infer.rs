@@ -382,10 +382,14 @@ fn infer_definition(
                         .scope
                         .get_mut(&f.name)
                         .expect("Could not find preregistered type for test");
-                    if let Type::Fn { ref ret, .. } = scope.tipo.as_ref() {
+                    if let Type::Fn {
+                        ref ret, ref alias, ..
+                    } = scope.tipo.as_ref()
+                    {
                         scope.tipo = Rc::new(Type::Fn {
                             ret: ret.clone(),
                             args: vec![inferred_inner_type.clone()],
+                            alias: alias.clone(),
                         })
                     }
 
@@ -782,7 +786,7 @@ fn infer_fuzzer(
                 module, name, args, ..
             } if module.is_empty() && name == "Option" && args.len() == 1 => {
                 match args.first().expect("args.len() == 1").borrow() {
-                    Type::Tuple { elems } if elems.len() == 2 => {
+                    Type::Tuple { elems, .. } if elems.len() == 2 => {
                         let wrapped = elems.get(1).expect("Tuple has two elements");
 
                         // NOTE: Although we've drilled through the Fuzzer structure to get here,
@@ -843,7 +847,7 @@ fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
             })
         }
 
-        Type::Tuple { elems } => {
+        Type::Tuple { elems, .. } => {
             let elems = elems
                 .iter()
                 .map(|arg| annotate_fuzzer(arg, location))
@@ -854,7 +858,7 @@ fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
             })
         }
 
-        Type::Var { tipo } => match &*tipo.deref().borrow() {
+        Type::Var { tipo, .. } => match &*tipo.deref().borrow() {
             TypeVar::Link { tipo } => annotate_fuzzer(tipo, location),
             _ => Err(Error::GenericLeftAtBoundary {
                 location: *location,
