@@ -10,7 +10,8 @@ use cryptoxide::{blake2b::Blake2b, digest::Digest};
 use indexmap::IndexMap;
 use owo_colors::{OwoColorize, Stream};
 use pallas::ledger::primitives::alonzo::{Constr, PlutusData};
-use std::{borrow::Borrow, convert::TryFrom, path::PathBuf, rc::Rc};
+use patricia_tree::PatriciaMap;
+use std::{borrow::Borrow, convert::TryFrom, ops::Deref, path::PathBuf, rc::Rc};
 use uplc::{
     ast::{Constant, Data, Name, NamedDeBruijn, Program, Term},
     machine::{cost_model::ExBudget, eval_result::EvalResult},
@@ -262,7 +263,26 @@ impl PropertyTest {
             let mut counterexample = Counterexample {
                 value,
                 choices: next_prng.choices(),
-                property: self,
+                cache: Cache::new(|choices| {
+                    match Prng::from_choices(choices).sample(&self.fuzzer.program) {
+                        None => Status::Invalid,
+                        Some((_, value)) => {
+                            let result = self.eval(&value);
+
+                            let is_failure = result.failed(self.can_error);
+
+                            let expect_failure = self.can_error;
+
+                            // If the test no longer fails, it isn't better as we're only
+                            // interested in counterexamples.
+                            if (expect_failure && is_failure) || (!expect_failure && !is_failure) {
+                                Status::Ignore
+                            } else {
+                                Status::Keep(value)
+                            }
+                        }
+                    }
+                }),
             };
 
             if !counterexample.choices.is_empty() {
@@ -459,11 +479,10 @@ impl Prng {
 /// of random choices that led to this value. It holds a reference to the underlying
 /// property and fuzzer. In many cases, a counterexample can be simplified (a.k.a "shrinked")
 /// into a smaller counterexample.
-#[derive(Debug)]
 pub struct Counterexample<'a> {
     pub value: PlutusData,
     pub choices: Vec<u8>,
-    pub property: &'a PropertyTest,
+    pub cache: Cache<'a, PlutusData>,
 }
 
 impl<'a> Counterexample<'a> {
@@ -472,29 +491,9 @@ impl<'a> Counterexample<'a> {
             return true;
         }
 
-        // TODO: Memoize test cases & choices in a cache. Due to the nature of
-        // our integrated shrinking approach, we may end up re-executing the same
-        // test cases many times. Given that tests are fully deterministic, we can
-        // memoize the already seen choices to avoid re-running the generators and
-        // the test (which can be quite expensive).
-        match Prng::from_choices(choices).sample(&self.property.fuzzer.program) {
-            // Shrinked choices led to an impossible generation.
-            None => false,
-
-            // Shrinked choices let to a new valid generated value, now, is it better?
-            Some((_, value)) => {
-                let result = self.property.eval(&value);
-
-                let is_failure = result.failed(self.property.can_error);
-
-                let expect_failure = self.property.can_error;
-
-                // If the test no longer fails, it isn't better as we're only
-                // interested in counterexamples.
-                if (expect_failure && is_failure) || (!expect_failure && !is_failure) {
-                    return false;
-                }
-
+        match self.cache.get(choices) {
+            Status::Invalid | Status::Ignore => false,
+            Status::Keep(value) => {
                 // If these new choices are shorter or smaller, then we pick them
                 // as new choices and inform that it's been an improvement.
                 if choices.len() <= self.choices.len() || choices < &self.choices[..] {
@@ -663,6 +662,80 @@ impl<'a> Counterexample<'a> {
         }
 
         self.consider(&choices)
+    }
+}
+
+/// ----- Cache -----------------------------------------------------------------------
+///
+/// A simple cache as a Patricia-trie to look for already explored options. The simplification
+/// steps does often generate the same paths and the generation of new test values as well as the
+/// properties can take a significant time.
+///
+/// Yet, sequences have interesting properties:
+///
+/// 1. The generation and test execution is entirely deterministic.
+///
+///
+pub struct Cache<'a, T> {
+    db: PatriciaMap<Status<T>>,
+    #[allow(clippy::type_complexity)]
+    run: Box<dyn Fn(&[u8]) -> Status<T> + 'a>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Status<T> {
+    Keep(T),
+    Ignore,
+    Invalid,
+}
+
+impl<'a, T> Cache<'a, T>
+where
+    T: PartialEq + Clone,
+{
+    pub fn new<F>(run: F) -> Cache<'a, T>
+    where
+        F: Fn(&[u8]) -> Status<T> + 'a,
+    {
+        Cache {
+            db: PatriciaMap::new(),
+            run: Box::new(run),
+        }
+    }
+
+    pub fn size(&self) -> usize {
+        self.db.len()
+    }
+
+    pub fn get(&mut self, choices: &[u8]) -> Status<T> {
+        if let Some((prefix, status)) = self.db.get_longest_common_prefix(choices) {
+            let status = status.clone();
+            if status != Status::Invalid || prefix == choices {
+                return status;
+            }
+        }
+
+        let status = self.run.deref()(choices);
+
+        // Clear longer path on non-invalid cases, as we will never reach them
+        // again due to a now-shorter prefix found.
+        //
+        // This hopefully keeps the cache under a reasonable size as we prune
+        // the tree as we discover shorter paths.
+        if status != Status::Invalid {
+            let keys = self
+                .db
+                .iter_prefix(choices)
+                .map(|(k, _)| k)
+                .collect::<Vec<_>>();
+            for k in keys {
+                self.db.remove(k);
+            }
+        }
+
+        self.db.insert(choices, status.clone());
+
+        status
     }
 }
 
@@ -1537,5 +1610,37 @@ mod test {
             reify(counterexample.value),
             "Dict([(#\"2cd15ed0\", Dict([]))])"
         );
+    }
+
+    #[test]
+    fn test_cache() {
+        let called = std::cell::RefCell::new(0);
+
+        let mut cache = Cache::new(|choices| {
+            called.replace_with(|n| *n + 1);
+
+            match choices {
+                [0, 0, 0] => Status::Keep(true),
+                _ => {
+                    if choices.len() <= 2 {
+                        Status::Invalid
+                    } else {
+                        Status::Ignore
+                    }
+                }
+            }
+        });
+
+        assert_eq!(cache.get(&[1, 1]), Status::Invalid); // Fn executed
+        assert_eq!(cache.get(&[1, 1, 2, 3]), Status::Ignore); // Fn executed
+        assert_eq!(cache.get(&[1, 1, 2]), Status::Ignore); // Fnexecuted
+        assert_eq!(cache.get(&[1, 1, 2, 2]), Status::Ignore); // Cached result
+        assert_eq!(cache.get(&[1, 1, 2, 1]), Status::Ignore); // Cached result
+        assert_eq!(cache.get(&[0, 1, 2]), Status::Ignore); // Fn executed
+        assert_eq!(cache.get(&[0, 0, 0]), Status::Keep(true)); // Fn executed
+        assert_eq!(cache.get(&[0, 0, 0]), Status::Keep(true)); // Cached result
+
+        assert_eq!(called.borrow().deref().to_owned(), 5, "execution calls");
+        assert_eq!(cache.size(), 4, "cache size");
     }
 }
