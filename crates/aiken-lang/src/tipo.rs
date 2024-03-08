@@ -833,12 +833,10 @@ impl TypeVar {
             Self::Link { tipo } => tipo.get_inner_types(),
             Self::Unbound { .. } => vec![],
             var => {
-                vec![
-                    Type::Var {
-                        tipo: RefCell::new(var.clone()).into(),
-                    }
-                    .into(),
-                ]
+                vec![Type::Var {
+                    tipo: RefCell::new(var.clone()).into(),
+                }
+                .into()]
             }
         }
     }
