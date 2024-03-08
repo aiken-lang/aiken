@@ -94,6 +94,19 @@ fn validator_illegal_return_type() {
 }
 
 #[test]
+fn implicitly_discard_void() {
+    let source_code = r#"
+      pub fn label(str: String) -> Void {
+        trace str Void
+      }
+    "#;
+
+    let (warnings, _) = check_validator(parse(source_code)).expect("should type-check");
+
+    assert!(warnings.is_empty(), "no warnings: {warnings:#?}");
+}
+
+#[test]
 fn validator_illegal_arity() {
     let source_code = r#"
       validator {

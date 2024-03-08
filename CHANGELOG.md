@@ -32,6 +32,7 @@
 - **aiken-lang**: disallow `MLResult` in a type definition. @rvcas
 - **aiken-lang**: reversed deserialization of bls types out of data types. @rvcas
 - **aiken-lang**: validator args unexpectedly unbound causing code gen crashes. @rvcas
+- **aiken-lang**: allow implicitly discarded values when right-hand-side unified with `Void`. @KtorZ
 
 ### Changed
 

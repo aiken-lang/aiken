@@ -9,16 +9,19 @@ use super::{
 use crate::{
     ast::{
         Annotation, Arg, ArgName, AssignmentKind, BinOp, Bls12_381Point, ByteArrayFormatPreference,
-        CallArg, ClauseGuard, Constant, Curve, IfBranch, LogicalOpChainKind, RecordUpdateSpread,
-        Span, TraceKind, TraceLevel, Tracing, TypedArg, TypedCallArg, TypedClause,
-        TypedClauseGuard, TypedIfBranch, TypedPattern, TypedRecordUpdateArg, UnOp, UntypedArg,
-        UntypedClause, UntypedClauseGuard, UntypedIfBranch, UntypedPattern, UntypedRecordUpdateArg,
+        CallArg, ClauseGuard, Constant, Curve, IfBranch, LogicalOpChainKind, Pattern,
+        RecordUpdateSpread, Span, TraceKind, TraceLevel, Tracing, TypedArg, TypedCallArg,
+        TypedClause, TypedClauseGuard, TypedIfBranch, TypedPattern, TypedRecordUpdateArg, UnOp,
+        UntypedArg, UntypedClause, UntypedClauseGuard, UntypedIfBranch, UntypedPattern,
+        UntypedRecordUpdateArg,
     },
-    builtins::{bool, byte_array, function, g1_element, g2_element, int, list, string, tuple},
+    builtins::{
+        bool, byte_array, function, g1_element, g2_element, int, list, string, tuple, void,
+    },
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
     line_numbers::LineNumbers,
-    tipo::fields::FieldMap,
+    tipo::{fields::FieldMap, PatternConstructor},
 };
 use std::{cmp::Ordering, collections::HashMap, rc::Rc};
 use vec1::Vec1;
@@ -1699,20 +1702,25 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             let mut expressions = Vec::with_capacity(count);
 
             for (i, expression) in untyped.into_iter().enumerate() {
-                match i.cmp(&(count - 1)) {
+                let no_assignment = assert_no_assignment(&expression);
+
+                let typed_expression = scope.infer(expression)?;
+
+                expressions.push(match i.cmp(&(count - 1)) {
                     // When the expression is the last in a sequence, we enforce it is NOT
                     // an assignment (kind of treat assignments like statements).
-                    Ordering::Equal => assert_no_assignment(&expression)?,
+                    Ordering::Equal => {
+                        no_assignment?;
+                        typed_expression
+                    }
 
                     // This isn't the final expression in the sequence, so it *must*
                     // be a let-binding; we do not allow anything else.
-                    Ordering::Less => assert_assignment(&expression)?,
+                    Ordering::Less => assert_assignment(typed_expression)?,
 
                     // Can't actually happen
-                    Ordering::Greater => (),
-                }
-
-                expressions.push(scope.infer(expression)?);
+                    Ordering::Greater => typed_expression,
+                })
             }
 
             Ok(expressions)
@@ -2076,12 +2084,35 @@ fn assert_no_assignment(expr: &UntypedExpr) -> Result<(), Error> {
         | UntypedExpr::CurvePoint { .. } => Ok(()),
     }
 }
-fn assert_assignment(expr: &UntypedExpr) -> Result<(), Error> {
-    if !matches!(*expr, UntypedExpr::Assignment { .. }) {
+
+fn assert_assignment(expr: TypedExpr) -> Result<TypedExpr, Error> {
+    if !matches!(expr, TypedExpr::Assignment { .. }) {
+        if expr.tipo().is_void() {
+            return Ok(TypedExpr::Assignment {
+                location: expr.location(),
+                tipo: void(),
+                value: expr.clone().into(),
+                pattern: Pattern::Constructor {
+                    is_record: false,
+                    location: expr.location(),
+                    name: "Void".to_string(),
+                    constructor: PatternConstructor::Record {
+                        name: "Void".to_string(),
+                        field_map: None,
+                    },
+                    arguments: vec![],
+                    module: None,
+                    with_spread: false,
+                    tipo: void(),
+                },
+                kind: AssignmentKind::Let,
+            });
+        }
+
         return Err(Error::ImplicitlyDiscardedExpression {
             location: expr.location(),
         });
     }
 
-    Ok(())
+    Ok(expr)
 }
