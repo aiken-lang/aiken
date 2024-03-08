@@ -7,6 +7,7 @@ use pallas::ledger::primitives::babbage::{BigInt, PlutusData};
 
 use crate::{
     ast::{Constant, Data, Name, NamedDeBruijn, Program, Term, Type},
+    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
     builtins::DefaultFunction,
 };
 
@@ -1089,7 +1090,7 @@ impl Program<Name> {
     pub fn force_delay_reducer(self) -> Self {
         self.traverse_uplc_with(&mut |_id, term, _arg_stack, _scope| {
             if let Term::Force(f) = term {
-                let f = Rc::make_mut(f);
+                let f = f.as_ref();
 
                 if let Term::Delay(body) = f {
                     *term = body.as_ref().clone();
@@ -1105,6 +1106,26 @@ impl Program<Name> {
                 body,
             } if parameter_name.text == NO_INLINE => *term = body.as_ref().clone(),
             _ => {}
+        })
+    }
+
+    pub fn inline_constr_ops(self) -> Self {
+        self.traverse_uplc_with(&mut |_, term, _, _| {
+            if let Term::Apply { function, argument } = term {
+                if let Term::Var(name) = function.as_ref() {
+                    if name.text == CONSTR_FIELDS_EXPOSER {
+                        *term = Term::snd_pair().apply(Term::Apply {
+                            function: Term::unconstr_data().into(),
+                            argument: argument.clone(),
+                        })
+                    } else if name.text == CONSTR_INDEX_EXPOSER {
+                        *term = Term::fst_pair().apply(Term::Apply {
+                            function: Term::unconstr_data().into(),
+                            argument: argument.clone(),
+                        })
+                    }
+                }
+            }
         })
     }
 
