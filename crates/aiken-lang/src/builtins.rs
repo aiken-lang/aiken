@@ -1,12 +1,12 @@
 use crate::{
     ast::{
-        Arg, ArgName, CallArg, DataTypeKey, Function, FunctionAccessKey, ModuleKind, Span,
-        TypedDataType, TypedFunction, UnOp,
+        Annotation, Arg, ArgName, CallArg, DataTypeKey, Function, FunctionAccessKey, ModuleKind,
+        Span, TypedDataType, TypedFunction, UnOp,
     },
     expr::TypedExpr,
     tipo::{
-        fields::FieldMap, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
-        ValueConstructorVariant,
+        fields::FieldMap, Type, TypeAliasAnnotation, TypeConstructor, TypeInfo, TypeVar,
+        ValueConstructor, ValueConstructorVariant,
     },
     IdGenerator,
 };
@@ -1349,10 +1349,42 @@ pub fn prng() -> Rc<Type> {
 }
 
 pub fn fuzzer(a: Rc<Type>) -> Rc<Type> {
+    let prng_annotation = Annotation::Constructor {
+        location: Span::empty(),
+        module: None,
+        name: "PRNG".to_string(),
+        arguments: vec![],
+    };
     Rc::new(Type::Fn {
         args: vec![prng()],
         ret: option(tuple(vec![prng(), a])),
-        alias: Some(("Fuzzer".to_string(), vec!["a".to_string()])),
+        alias: Some(
+            TypeAliasAnnotation {
+                alias: "Fuzzer".to_string(),
+                parameters: vec!["a".to_string()],
+                annotation: Annotation::Fn {
+                    location: Span::empty(),
+                    arguments: vec![prng_annotation.clone()],
+                    ret: Annotation::Constructor {
+                        location: Span::empty(),
+                        module: None,
+                        name: "Option".to_string(),
+                        arguments: vec![Annotation::Tuple {
+                            location: Span::empty(),
+                            elems: vec![
+                                prng_annotation,
+                                Annotation::Var {
+                                    location: Span::empty(),
+                                    name: "a".to_string(),
+                                },
+                            ],
+                        }],
+                    }
+                    .into(),
+                },
+            }
+            .into(),
+        ),
     })
 }
 

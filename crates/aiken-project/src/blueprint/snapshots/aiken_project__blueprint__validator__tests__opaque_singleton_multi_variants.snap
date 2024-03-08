@@ -11,6 +11,7 @@ Schema {
                 module: "test_module",
                 name: "Rational",
                 args: [],
+                alias: None,
             },
         ],
     },

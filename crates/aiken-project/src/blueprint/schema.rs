@@ -1125,13 +1125,11 @@ pub mod tests {
 
     #[test]
     fn serialize_data_constr_1() {
-        let schema = Schema::Data(Data::AnyOf(vec![
-            Constructor {
-                index: 0,
-                fields: vec![],
-            }
-            .into(),
-        ]));
+        let schema = Schema::Data(Data::AnyOf(vec![Constructor {
+            index: 0,
+            fields: vec![],
+        }
+        .into()]));
         assert_json(
             &schema,
             json!({
@@ -1292,16 +1290,14 @@ pub mod tests {
     #[test]
     fn deserialize_any_of() {
         assert_eq!(
-            Data::AnyOf(vec![
-                Constructor {
-                    index: 0,
-                    fields: vec![
-                        Declaration::Referenced(Reference::new("foo")).into(),
-                        Declaration::Referenced(Reference::new("bar")).into()
-                    ],
-                }
-                .into()
-            ]),
+            Data::AnyOf(vec![Constructor {
+                index: 0,
+                fields: vec![
+                    Declaration::Referenced(Reference::new("foo")).into(),
+                    Declaration::Referenced(Reference::new("bar")).into()
+                ],
+            }
+            .into()]),
             serde_json::from_value(json!({
                 "anyOf": [{
                     "index": 0,
@@ -1322,16 +1318,14 @@ pub mod tests {
     #[test]
     fn deserialize_one_of() {
         assert_eq!(
-            Data::AnyOf(vec![
-                Constructor {
-                    index: 0,
-                    fields: vec![
-                        Declaration::Referenced(Reference::new("foo")).into(),
-                        Declaration::Referenced(Reference::new("bar")).into()
-                    ],
-                }
-                .into()
-            ]),
+            Data::AnyOf(vec![Constructor {
+                index: 0,
+                fields: vec![
+                    Declaration::Referenced(Reference::new("foo")).into(),
+                    Declaration::Referenced(Reference::new("bar")).into()
+                ],
+            }
+            .into()]),
             serde_json::from_value(json!({
                 "oneOf": [{
                     "index": 0,

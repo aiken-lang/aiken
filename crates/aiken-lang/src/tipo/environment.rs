@@ -12,7 +12,7 @@ use crate::{
         UnqualifiedImport, UntypedArg, UntypedDefinition, Use, Validator, PIPE_VARIABLE,
     },
     builtins::{function, generic_var, tuple, unbound_var},
-    tipo::fields::FieldMap,
+    tipo::{fields::FieldMap, TypeAliasAnnotation},
     IdGenerator,
 };
 use std::{
@@ -567,7 +567,7 @@ impl<'a> Environment<'a> {
                     TypeVar::Link { tipo } => {
                         return Type::with_alias(
                             self.instantiate(tipo.clone(), ids, hydrator),
-                            alias,
+                            alias.clone(),
                         );
                     }
 
@@ -603,7 +603,7 @@ impl<'a> Environment<'a> {
                         .collect(),
                     self.instantiate(ret.clone(), ids, hydrator),
                 ),
-                alias,
+                alias.clone(),
             ),
 
             Type::Tuple { elems, alias } => Type::with_alias(
@@ -613,7 +613,7 @@ impl<'a> Environment<'a> {
                         .map(|t| self.instantiate(t.clone(), ids, hydrator))
                         .collect(),
                 ),
-                alias,
+                alias.clone(),
             ),
         }
     }
@@ -1046,7 +1046,14 @@ impl<'a> Environment<'a> {
                     .type_from_annotation(resolved_type, self)?
                     .as_ref()
                     .to_owned()
-                    .set_alias(name, args);
+                    .set_alias(Some(
+                        TypeAliasAnnotation {
+                            alias: name.to_string(),
+                            parameters: args.to_vec(),
+                            annotation: resolved_type.clone(),
+                        }
+                        .into(),
+                    ));
 
                 self.insert_type_constructor(
                     name.clone(),
@@ -1842,7 +1849,7 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
                     alias: None,
                 }),
             },
-            alias,
+            alias.clone(),
         ),
 
         Type::App {
@@ -1873,7 +1880,7 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
                     .collect(),
                 generalise(ret.clone(), ctx_level),
             ),
-            alias,
+            alias.clone(),
         ),
 
         Type::Tuple { elems, alias } => Type::with_alias(
@@ -1883,7 +1890,7 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
                     .map(|t| generalise(t.clone(), ctx_level))
                     .collect(),
             ),
-            alias,
+            alias.clone(),
         ),
     }
 }

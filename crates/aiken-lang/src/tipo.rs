@@ -24,6 +24,13 @@ mod pipe;
 pub mod pretty;
 
 #[derive(Debug, Clone)]
+pub struct TypeAliasAnnotation {
+    pub alias: String,
+    pub parameters: Vec<String>,
+    pub annotation: Annotation,
+}
+
+#[derive(Debug, Clone)]
 pub enum Type {
     /// A nominal (named) type such as `Int`, `Float`, or a programmer defined
     /// custom type such as `Person`. The type can take other types as
@@ -38,7 +45,7 @@ pub enum Type {
         module: String,
         name: String,
         args: Vec<Rc<Type>>,
-        alias: Option<(String, Vec<String>)>,
+        alias: Option<Rc<TypeAliasAnnotation>>,
     },
 
     /// The type of a function. It takes arguments and returns a value.
@@ -46,14 +53,14 @@ pub enum Type {
     Fn {
         args: Vec<Rc<Type>>,
         ret: Rc<Type>,
-        alias: Option<(String, Vec<String>)>,
+        alias: Option<Rc<TypeAliasAnnotation>>,
     },
 
     /// A type variable. See the contained `TypeVar` enum for more information.
     ///
     Var {
         tipo: Rc<RefCell<TypeVar>>,
-        alias: Option<(String, Vec<String>)>,
+        alias: Option<Rc<TypeAliasAnnotation>>,
     },
     // /// A tuple is an ordered collection of 0 or more values, each of which
     // /// can have a different type, so the `tuple` type is the sum of all the
@@ -61,7 +68,7 @@ pub enum Type {
     // ///
     Tuple {
         elems: Vec<Rc<Type>>,
-        alias: Option<(String, Vec<String>)>,
+        alias: Option<Rc<TypeAliasAnnotation>>,
     },
 }
 
@@ -125,15 +132,23 @@ impl PartialEq for Type {
 }
 
 impl Type {
-    pub fn with_alias(tipo: Rc<Type>, alias: &Option<(String, Vec<String>)>) -> Rc<Type> {
-        match alias {
-            None => tipo,
-            Some((name, args)) => tipo.as_ref().to_owned().set_alias(name, args),
+    pub fn alias(&self) -> Option<Rc<TypeAliasAnnotation>> {
+        match self {
+            Type::App { alias, .. }
+            | Type::Fn { alias, .. }
+            | Type::Var { alias, .. }
+            | Type::Tuple { alias, .. } => alias.clone(),
         }
     }
 
-    pub fn set_alias(self, name: &str, args: &[String]) -> Rc<Type> {
-        let alias = Some((name.to_string(), args.to_vec()));
+    pub fn with_alias(tipo: Rc<Type>, alias: Option<Rc<TypeAliasAnnotation>>) -> Rc<Type> {
+        match alias {
+            None => tipo,
+            Some(alias) => tipo.deref().to_owned().set_alias(Some(alias)),
+        }
+    }
+
+    pub fn set_alias(self, alias: Option<Rc<TypeAliasAnnotation>>) -> Rc<Type> {
         Rc::new(match self {
             Type::App {
                 public,
@@ -939,13 +954,11 @@ impl TypeVar {
             Self::Link { tipo } => tipo.get_inner_types(),
             Self::Unbound { .. } => vec![],
             var => {
-                vec![
-                    Type::Var {
-                        tipo: RefCell::new(var.clone()).into(),
-                        alias: None,
-                    }
-                    .into(),
-                ]
+                vec![Type::Var {
+                    tipo: RefCell::new(var.clone()).into(),
+                    alias: None,
+                }
+                .into()]
             }
         }
     }

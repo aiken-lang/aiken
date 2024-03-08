@@ -2,6 +2,7 @@ use super::{Type, TypeVar};
 use crate::{
     docvec,
     pretty::{nil, *},
+    tipo::{Annotation, TypeAliasAnnotation},
 };
 use itertools::Itertools;
 use std::{collections::HashMap, rc::Rc};
@@ -46,75 +47,66 @@ impl Printer {
     // Is this possible? The lifetime would have to go through the Rc<Refcell<Type>>
     // for TypeVar::Link'd types.
     pub fn print<'a>(&mut self, typ: &Type) -> Document<'a> {
+        if let Some(TypeAliasAnnotation {
+            alias,
+            parameters,
+            annotation,
+        }) = typ.alias().as_deref()
+        {
+            if let Some(resolved_parameters) = resolve_alias(parameters, annotation, typ) {
+                return self.type_alias_doc(alias.to_string(), resolved_parameters);
+            }
+        }
+
         match typ {
             Type::App {
-                name,
-                args,
-                module,
-                alias,
-                ..
-            } => match alias {
-                Some(alias) => self.type_alias_doc(alias.clone()),
-                None => {
-                    let doc = if self.name_clashes_if_unqualified(name, module) {
-                        qualify_type_name(module, name)
-                    } else {
-                        self.printed_types.insert(name.clone(), module.clone());
-                        Document::String(name.clone())
-                    };
-                    if args.is_empty() {
-                        doc
-                    } else {
-                        doc.append("<")
-                            .append(self.args_to_aiken_doc(args))
-                            .append(">")
-                    }
+                name, args, module, ..
+            } => {
+                let doc = if self.name_clashes_if_unqualified(name, module) {
+                    qualify_type_name(module, name)
+                } else {
+                    self.printed_types.insert(name.clone(), module.clone());
+                    Document::String(name.clone())
+                };
+                if args.is_empty() {
+                    doc
+                } else {
+                    doc.append("<")
+                        .append(self.args_to_aiken_doc(args))
+                        .append(">")
                 }
-            },
+            }
 
-            Type::Fn { args, ret, alias } => match alias {
-                Some(alias) => self.type_alias_doc(alias.clone()),
-                None => "fn("
-                    .to_doc()
-                    .append(self.args_to_aiken_doc(args))
-                    .append(") ->")
-                    .append(break_("", " ").append(self.print(ret)).nest(INDENT).group()),
-            },
+            Type::Fn { args, ret, .. } => "fn("
+                .to_doc()
+                .append(self.args_to_aiken_doc(args))
+                .append(") ->")
+                .append(break_("", " ").append(self.print(ret)).nest(INDENT).group()),
 
-            Type::Var { tipo: typ, alias } => match alias {
-                Some(alias) => self.type_alias_doc(alias.clone()),
-                None => self.type_var_doc(&typ.borrow()),
-            },
+            Type::Var { tipo: typ, .. } => self.type_var_doc(&typ.borrow()),
 
-            Type::Tuple { elems, alias } => match alias {
-                Some(alias) => self.type_alias_doc(alias.clone()),
-                None => self.args_to_aiken_doc(elems).surround("(", ")"),
-            },
+            Type::Tuple { elems, .. } => self.args_to_aiken_doc(elems).surround("(", ")"),
         }
     }
 
-    fn type_alias_doc<'a>(&mut self, alias: (String, Vec<String>)) -> Document<'a> {
-        let mut doc = Document::String(alias.0.to_owned());
+    fn type_alias_doc<'a>(&mut self, alias: String, parameters: Vec<Rc<Type>>) -> Document<'a> {
+        let doc = Document::String(alias);
 
-        if !alias.1.is_empty() {
-            let args = concat(Itertools::intersperse(
-                alias.1.into_iter().map(Document::String),
-                break_(",", ", "),
-            ));
-
-            doc = doc
-                .append("<")
-                .append(
-                    break_("", "")
-                        .append(args)
-                        .nest(INDENT)
-                        .append(break_(",", ""))
-                        .group(),
-                )
-                .append(">");
+        if !parameters.is_empty() {
+            doc.append(
+                break_("", "")
+                    .append(concat(Itertools::intersperse(
+                        parameters.iter().map(|t| self.print(t)),
+                        break_(",", ", "),
+                    )))
+                    .nest(INDENT)
+                    .append(break_(",", ""))
+                    .group()
+                    .surround("<", ">"),
+            )
+        } else {
+            doc
         }
-
-        doc
     }
 
     fn name_clashes_if_unqualified(&mut self, tipo: &String, module: &String) -> bool {
@@ -205,10 +197,77 @@ fn qualify_type_name(module: &String, typ_name: &str) -> Document<'static> {
     }
 }
 
+fn resolve_alias(
+    parameters: &[String],
+    annotation: &Annotation,
+    typ: &Type,
+) -> Option<Vec<Rc<Type>>> {
+    let mut types = Vec::new();
+
+    fn resolve_one(parameter: &str, annotation: &Annotation, typ: Rc<Type>) -> Option<Rc<Type>> {
+        match (annotation, typ.as_ref()) {
+            (
+                Annotation::Fn {
+                    arguments: args,
+                    ret,
+                    ..
+                },
+                Type::Fn {
+                    args: t_args,
+                    ret: t_ret,
+                    ..
+                },
+            ) => {
+                let mut result = resolve_one(parameter, ret, t_ret.clone());
+                for (ann, t) in args.iter().zip(t_args) {
+                    result = result.or_else(|| resolve_one(parameter, ann, t.clone()));
+                }
+                result
+            }
+
+            (
+                Annotation::Constructor {
+                    arguments: args, ..
+                },
+                Type::App { args: t_args, .. },
+            ) => {
+                let mut result = None;
+                for (ann, t) in args.iter().zip(t_args) {
+                    result = result.or_else(|| resolve_one(parameter, ann, t.clone()));
+                }
+                result
+            }
+
+            (Annotation::Tuple { elems, .. }, Type::Tuple { elems: t_elems, .. }) => {
+                let mut result = None;
+                for (ann, t) in elems.iter().zip(t_elems) {
+                    result = result.or_else(|| resolve_one(parameter, ann, t.clone()));
+                }
+                result
+            }
+
+            (Annotation::Var { name, .. }, ..) if name == parameter => Some(typ),
+
+            _ => None,
+        }
+    }
+
+    let rc: Rc<Type> = typ.to_owned().into();
+
+    for parameter in parameters {
+        types.push(resolve_one(parameter, annotation, rc.clone())?);
+    }
+
+    Some(types)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builtins::{function, int};
+    use crate::{
+        builtins::{function, int},
+        tipo::Span,
+    };
     use pretty_assertions::assert_eq;
     use std::cell::RefCell;
 
@@ -415,6 +474,143 @@ mod tests {
                 }),
             ),
             "fn(a) -> b",
+        );
+        assert_string!(
+            Type::Fn {
+                args: vec![Rc::new(Type::App {
+                    public: true,
+                    module: "".to_string(),
+                    name: "PRNG".to_string(),
+                    args: vec![],
+                    alias: None,
+                })],
+                ret: Rc::new(Type::App {
+                    public: true,
+                    module: "".to_string(),
+                    name: "Option".to_string(),
+                    args: vec![Rc::new(Type::Tuple {
+                        elems: vec![
+                            Rc::new(Type::App {
+                                public: true,
+                                module: "".to_string(),
+                                name: "PRNG".to_string(),
+                                args: vec![],
+                                alias: None,
+                            }),
+                            Rc::new(Type::App {
+                                public: true,
+                                module: "".to_string(),
+                                name: "Bool".to_string(),
+                                args: vec![],
+                                alias: None,
+                            }),
+                        ],
+                        alias: None,
+                    })],
+                    alias: None,
+                }),
+                alias: Some(Rc::new(TypeAliasAnnotation {
+                    alias: "Fuzzer".to_string(),
+                    parameters: vec!["a".to_string(),],
+                    annotation: Annotation::Fn {
+                        location: Span::empty(),
+                        arguments: vec![Annotation::Constructor {
+                            location: Span::empty(),
+                            module: None,
+                            name: "PRNG".to_string(),
+                            arguments: vec![],
+                        },],
+                        ret: Box::new(Annotation::Constructor {
+                            location: Span::empty(),
+                            module: None,
+                            name: "Option".to_string(),
+                            arguments: vec![Annotation::Tuple {
+                                location: Span::empty(),
+                                elems: vec![
+                                    Annotation::Constructor {
+                                        location: Span::empty(),
+                                        module: None,
+                                        name: "PRNG".to_string(),
+                                        arguments: vec![],
+                                    },
+                                    Annotation::Var {
+                                        location: Span::empty(),
+                                        name: "a".to_string(),
+                                    },
+                                ],
+                            }],
+                        }),
+                    },
+                })),
+            },
+            "Fuzzer<Bool>",
+        );
+        assert_string!(
+            Type::Fn {
+                args: vec![Rc::new(Type::App {
+                    public: true,
+                    module: "".to_string(),
+                    name: "PRNG".to_string(),
+                    args: vec![],
+                    alias: None,
+                })],
+                ret: Rc::new(Type::App {
+                    public: true,
+                    module: "".to_string(),
+                    name: "Option".to_string(),
+                    args: vec![Rc::new(Type::Tuple {
+                        elems: vec![
+                            Rc::new(Type::App {
+                                public: true,
+                                module: "".to_string(),
+                                name: "PRNG".to_string(),
+                                args: vec![],
+                                alias: None,
+                            }),
+                            Rc::new(Type::Var {
+                                tipo: Rc::new(RefCell::new(TypeVar::Generic { id: 0 })),
+                                alias: None,
+                            }),
+                        ],
+                        alias: None,
+                    })],
+                    alias: None,
+                }),
+                alias: Some(Rc::new(TypeAliasAnnotation {
+                    alias: "Fuzzer".to_string(),
+                    parameters: vec!["a".to_string(),],
+                    annotation: Annotation::Fn {
+                        location: Span::empty(),
+                        arguments: vec![Annotation::Constructor {
+                            location: Span::empty(),
+                            module: None,
+                            name: "PRNG".to_string(),
+                            arguments: vec![],
+                        },],
+                        ret: Box::new(Annotation::Constructor {
+                            location: Span::empty(),
+                            module: None,
+                            name: "Option".to_string(),
+                            arguments: vec![Annotation::Tuple {
+                                location: Span::empty(),
+                                elems: vec![
+                                    Annotation::Constructor {
+                                        location: Span::empty(),
+                                        module: None,
+                                        name: "PRNG".to_string(),
+                                        arguments: vec![],
+                                    },
+                                    Annotation::Var {
+                                        location: Span::empty(),
+                                        name: "a".to_string(),
+                                    },
+                                ],
+                            }],
+                        }),
+                    },
+                })),
+            },
+            "Fuzzer<a>",
         );
     }
 
