@@ -342,8 +342,39 @@ fn infer_definition(
                     let typed_via =
                         ExprTyper::new(environment, lines, tracing).infer(arg.via.clone())?;
 
-                    let (inferred_annotation, inner_type) =
-                        infer_fuzzer(environment, &typed_via.tipo(), &arg.via.location())?;
+                    let hydrator: &mut Hydrator = hydrators.get_mut(&f.name).unwrap();
+
+                    let provided_inner_type = arg
+                        .annotation
+                        .as_ref()
+                        .map(|ann| hydrator.type_from_annotation(ann, environment))
+                        .transpose()?;
+
+                    let (inferred_annotation, inferred_inner_type) = infer_fuzzer(
+                        environment,
+                        provided_inner_type.clone(),
+                        &typed_via.tipo(),
+                        &arg.via.location(),
+                    )?;
+
+                    // Ensure that the annotation, if any, matches the type inferred from the
+                    // Fuzzer.
+                    if let Some(provided_inner_type) = provided_inner_type {
+                        if !arg
+                            .annotation
+                            .as_ref()
+                            .unwrap()
+                            .is_logically_equal(&inferred_annotation)
+                        {
+                            return Err(Error::CouldNotUnify {
+                                location: arg.location,
+                                expected: inferred_inner_type.clone(),
+                                given: provided_inner_type.clone(),
+                                situation: Some(UnifyErrorSituation::FuzzerAnnotationMismatch),
+                                rigid_type_names: hydrator.rigid_names(),
+                            });
+                        }
+                    }
 
                     // Replace the pre-registered type for the test function, to allow inferring
                     // the function body with the right type arguments.
@@ -354,30 +385,14 @@ fn infer_definition(
                     if let Type::Fn { ref ret, .. } = scope.tipo.as_ref() {
                         scope.tipo = Rc::new(Type::Fn {
                             ret: ret.clone(),
-                            args: vec![inner_type.clone()],
+                            args: vec![inferred_inner_type.clone()],
                         })
                     }
 
-                    // Ensure that the annotation, if any, matches the type inferred from the
-                    // Fuzzer.
-                    if let Some(ref provided_annotation) = arg.annotation {
-                        let hydrator: &mut Hydrator = hydrators.get_mut(&f.name).unwrap();
-
-                        let given =
-                            hydrator.type_from_annotation(provided_annotation, environment)?;
-
-                        if !provided_annotation.is_logically_equal(&inferred_annotation) {
-                            return Err(Error::CouldNotUnify {
-                                location: arg.location,
-                                expected: inner_type.clone(),
-                                given,
-                                situation: Some(UnifyErrorSituation::FuzzerAnnotationMismatch),
-                                rigid_type_names: hydrator.rigid_names(),
-                            });
-                        }
-                    }
-
-                    Ok((Some((typed_via, inner_type)), Some(inferred_annotation)))
+                    Ok((
+                        Some((typed_via, inferred_inner_type)),
+                        Some(inferred_annotation),
+                    ))
                 }
                 None => Ok((None, None)),
             }?;
@@ -745,12 +760,17 @@ fn infer_function(
 
 fn infer_fuzzer(
     environment: &mut Environment<'_>,
+    expected_inner_type: Option<Rc<Type>>,
     tipo: &Rc<Type>,
     location: &Span,
 ) -> Result<(Annotation, Rc<Type>), Error> {
     let could_not_unify = || Error::CouldNotUnify {
         location: *location,
-        expected: fuzzer(generic_var(0)),
+        expected: fuzzer(
+            expected_inner_type
+                .clone()
+                .unwrap_or_else(|| generic_var(0)),
+        ),
         given: tipo.clone(),
         situation: None,
         rigid_type_names: HashMap::new(),
@@ -789,8 +809,10 @@ fn infer_fuzzer(
             _ => Err(could_not_unify()),
         },
 
-        Type::Var { tipo } => match &*tipo.deref().borrow() {
-            TypeVar::Link { tipo } => infer_fuzzer(environment, tipo, location),
+        Type::Var { tipo, .. } => match &*tipo.deref().borrow() {
+            TypeVar::Link { tipo } => {
+                infer_fuzzer(environment, expected_inner_type, tipo, location)
+            }
             _ => Err(Error::GenericLeftAtBoundary {
                 location: *location,
             }),
