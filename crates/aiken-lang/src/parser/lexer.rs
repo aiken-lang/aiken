@@ -1,13 +1,12 @@
-use chumsky::prelude::*;
-use num_bigint::BigInt;
-use ordinal::Ordinal;
-
 use super::{
     error::ParseError,
     extra::ModuleExtra,
     token::{Base, Token},
 };
 use crate::ast::Span;
+use chumsky::prelude::*;
+use num_bigint::BigInt;
+use ordinal::Ordinal;
 
 pub struct LexInfo {
     pub tokens: Vec<(Token, Span)>,
@@ -199,7 +198,8 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
             .or(just('"'))
             .or(just('n').to('\n'))
             .or(just('r').to('\r'))
-            .or(just('t').to('\t')),
+            .or(just('t').to('\t'))
+            .or(just('0').to('\0')),
     );
 
     let string = just('@')

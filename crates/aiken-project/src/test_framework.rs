@@ -11,7 +11,9 @@ use indexmap::IndexMap;
 use owo_colors::{OwoColorize, Stream};
 use pallas::ledger::primitives::alonzo::{Constr, PlutusData};
 use patricia_tree::PatriciaMap;
-use std::{borrow::Borrow, convert::TryFrom, ops::Deref, path::PathBuf, rc::Rc};
+use std::{
+    borrow::Borrow, collections::BTreeMap, convert::TryFrom, ops::Deref, path::PathBuf, rc::Rc,
+};
 use uplc::{
     ast::{Constant, Data, Name, NamedDeBruijn, Program, Term},
     machine::{cost_model::ExBudget, eval_result::EvalResult},
@@ -219,15 +221,21 @@ impl PropertyTest {
     pub fn run<U>(self, seed: u32) -> TestResult<U, PlutusData> {
         let n = PropertyTest::MAX_TEST_RUN;
 
-        let (counterexample, iterations) = match self.run_n_times(n, Prng::from_seed(seed), None) {
-            None => (None, n),
-            Some((remaining, counterexample)) => (Some(counterexample.value), n - remaining + 1),
-        };
+        let mut labels = BTreeMap::new();
+
+        let (counterexample, iterations) =
+            match self.run_n_times(n, Prng::from_seed(seed), None, &mut labels) {
+                None => (None, n),
+                Some((remaining, counterexample)) => {
+                    (Some(counterexample.value), n - remaining + 1)
+                }
+            };
 
         TestResult::PropertyTestResult(PropertyTestResult {
             test: self,
             counterexample,
             iterations,
+            labels,
         })
     }
 
@@ -236,30 +244,50 @@ impl PropertyTest {
         remaining: usize,
         prng: Prng,
         counterexample: Option<(usize, Counterexample<'a>)>,
+        labels: &mut BTreeMap<String, usize>,
     ) -> Option<(usize, Counterexample<'a>)> {
         // We short-circuit failures in case we have any. The counterexample is already simplified
         // at this point.
         if remaining > 0 && counterexample.is_none() {
-            let (next_prng, counterexample) = self.run_once(prng);
+            let (next_prng, counterexample) = self.run_once(prng, labels);
             self.run_n_times(
                 remaining - 1,
                 next_prng,
                 counterexample.map(|c| (remaining, c)),
+                labels,
             )
         } else {
             counterexample
         }
     }
 
-    fn run_once(&self, prng: Prng) -> (Prng, Option<Counterexample<'_>>) {
+    fn run_once(
+        &self,
+        prng: Prng,
+        labels: &mut BTreeMap<String, usize>,
+    ) -> (Prng, Option<Counterexample<'_>>) {
         let (next_prng, value) = prng
             .sample(&self.fuzzer.program)
             .expect("running seeded Prng cannot fail.");
 
+        let mut result = self.eval(&value);
+
+        for label in result.logs() {
+            // NOTE: There may be other log outputs that interefere with labels. So *by
+            // convention*, we treat as label strings that starts with a NUL byte, which
+            // should be a guard sufficient to prevent inadvertent clashes.
+            if label.starts_with('\0') {
+                labels
+                    .entry(label.split_at(1).1.to_string())
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
+            }
+        }
+
         // NOTE: We do NOT pass self.can_error here, because when searching for
         // failing properties, we do want to _keep running_ until we find a
         // a failing case. It may not occur on the first run.
-        if self.eval(&value).failed(false) {
+        if result.failed(false) {
             let mut counterexample = Counterexample {
                 value,
                 choices: next_prng.choices(),
@@ -416,8 +444,10 @@ impl Prng {
         fn as_prng(cst: &PlutusData) -> Prng {
             if let PlutusData::Constr(Constr { tag, fields, .. }) = cst {
                 if *tag == 121 + Prng::SEEDED {
-                    if let [PlutusData::BoundedBytes(bytes), PlutusData::BoundedBytes(choices)] =
-                        &fields[..]
+                    if let [
+                        PlutusData::BoundedBytes(bytes),
+                        PlutusData::BoundedBytes(choices),
+                    ] = &fields[..]
                     {
                         return Prng::Seeded {
                             choices: choices.to_vec(),
@@ -885,6 +915,7 @@ pub struct PropertyTestResult<T> {
     pub test: PropertyTest,
     pub counterexample: Option<T>,
     pub iterations: usize,
+    pub labels: BTreeMap<String, usize>,
 }
 
 unsafe impl<T> Send for PropertyTestResult<T> {}
@@ -901,6 +932,7 @@ impl PropertyTestResult<PlutusData> {
             }),
             iterations: self.iterations,
             test: self.test,
+            labels: self.labels,
         }
     }
 }
@@ -954,9 +986,11 @@ impl TryFrom<TypedExpr> for Assertion<TypedExpr> {
                 final_else,
                 ..
             } => {
-                if let [IfBranch {
-                    condition, body, ..
-                }] = &branches[..]
+                if let [
+                    IfBranch {
+                        condition, body, ..
+                    },
+                ] = &branches[..]
                 {
                     let then_is_true = match body {
                         TypedExpr::Var {
@@ -1346,7 +1380,13 @@ mod test {
 
     impl PropertyTest {
         fn expect_failure(&self) -> Counterexample {
-            match self.run_n_times(PropertyTest::MAX_TEST_RUN, Prng::from_seed(42), None) {
+            let mut labels = BTreeMap::new();
+            match self.run_n_times(
+                PropertyTest::MAX_TEST_RUN,
+                Prng::from_seed(42),
+                None,
+                &mut labels,
+            ) {
                 Some((_, counterexample)) => counterexample,
                 _ => panic!("expected property to fail but it didn't."),
             }
@@ -1362,6 +1402,40 @@ mod test {
         "#});
 
         assert!(prop.run::<()>(42).is_success());
+    }
+
+    #[test]
+    fn test_prop_labels() {
+        let (prop, _) = property(indoc! { r#"
+            fn label(str: String) -> Void {
+              str
+                |> builtin.append_string(@"\0", _)
+                |> builtin.debug(Void)
+            }
+
+            test foo(head_or_tail via bool()) {
+                if head_or_tail {
+                    label(@"head")
+                } else {
+                    label(@"tail")
+                }
+                True
+            }
+        "#});
+
+        match prop.run::<()>(42) {
+            TestResult::UnitTestResult(..) => unreachable!("property returned unit-test result ?!"),
+            TestResult::PropertyTestResult(result) => {
+                assert!(
+                    result
+                        .labels
+                        .iter()
+                        .eq(vec![(&"head".to_string(), &53), (&"tail".to_string(), &47)]),
+                    "labels: {:#?}",
+                    result.labels
+                )
+            }
+        }
     }
 
     #[test]
