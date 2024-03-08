@@ -626,7 +626,7 @@ impl UntypedExpr {
             &Type,
         ) -> Result<Self, String>,
     {
-        if let Type::Var { tipo: var_tipo } = tipo {
+        if let Type::Var { tipo: var_tipo, .. } = tipo {
             match &*var_tipo.borrow() {
                 TypeVar::Link { tipo } => {
                     return Self::reify_with(generics, data_types, t, tipo, with);
@@ -724,7 +724,7 @@ impl UntypedExpr {
                             )
                         }
                     }
-                    Type::Tuple { elems } => Ok(UntypedExpr::Tuple {
+                    Type::Tuple { elems, .. } => Ok(UntypedExpr::Tuple {
                         location: Span::empty(),
                         elems: args
                             .into_iter()
@@ -740,7 +740,7 @@ impl UntypedExpr {
                 },
 
                 uplc::ast::Constant::ProtoPair(_, _, left, right) => match tipo {
-                    Type::Tuple { elems } => Ok(UntypedExpr::Tuple {
+                    Type::Tuple { elems, .. } => Ok(UntypedExpr::Tuple {
                         location: Span::empty(),
                         elems: [left.as_ref(), right.as_ref()]
                             .into_iter()
@@ -959,7 +959,7 @@ impl UntypedExpr {
                             )
                         }
                     }
-                    Type::Tuple { elems } => Ok(UntypedExpr::Tuple {
+                    Type::Tuple { elems, .. } => Ok(UntypedExpr::Tuple {
                         location: Span::empty(),
                         elems: args
                             .into_iter()

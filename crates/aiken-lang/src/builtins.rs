@@ -1270,6 +1270,7 @@ pub fn int() -> Rc<Type> {
         name: INT.to_string(),
         module: "".to_string(),
         args: vec![],
+        alias: None,
     })
 }
 
@@ -1279,6 +1280,7 @@ pub fn data() -> Rc<Type> {
         name: DATA.to_string(),
         module: "".to_string(),
         args: vec![],
+        alias: None,
     })
 }
 
@@ -1288,6 +1290,7 @@ pub fn byte_array() -> Rc<Type> {
         public: true,
         name: BYTE_ARRAY.to_string(),
         module: "".to_string(),
+        alias: None,
     })
 }
 
@@ -1297,6 +1300,7 @@ pub fn g1_element() -> Rc<Type> {
         module: "".to_string(),
         name: G1_ELEMENT.to_string(),
         args: vec![],
+        alias: None,
     })
 }
 
@@ -1306,6 +1310,7 @@ pub fn g2_element() -> Rc<Type> {
         module: "".to_string(),
         name: G2_ELEMENT.to_string(),
         args: vec![],
+        alias: None,
     })
 }
 
@@ -1315,11 +1320,12 @@ pub fn miller_loop_result() -> Rc<Type> {
         module: "".to_string(),
         name: MILLER_LOOP_RESULT.to_string(),
         args: vec![],
+        alias: None,
     })
 }
 
 pub fn tuple(elems: Vec<Rc<Type>>) -> Rc<Type> {
-    Rc::new(Type::Tuple { elems })
+    Rc::new(Type::Tuple { elems, alias: None })
 }
 
 pub fn bool() -> Rc<Type> {
@@ -1328,6 +1334,7 @@ pub fn bool() -> Rc<Type> {
         public: true,
         name: BOOL.to_string(),
         module: "".to_string(),
+        alias: None,
     })
 }
 
@@ -1337,6 +1344,7 @@ pub fn prng() -> Rc<Type> {
         public: true,
         name: PRNG.to_string(),
         module: "".to_string(),
+        alias: None,
     })
 }
 
@@ -1344,6 +1352,7 @@ pub fn fuzzer(a: Rc<Type>) -> Rc<Type> {
     Rc::new(Type::Fn {
         args: vec![prng()],
         ret: option(tuple(vec![prng(), a])),
+        alias: Some(("Fuzzer".to_string(), vec!["a".to_string()])),
     })
 }
 
@@ -1353,6 +1362,7 @@ pub fn list(t: Rc<Type>) -> Rc<Type> {
         name: LIST.to_string(),
         module: "".to_string(),
         args: vec![t],
+        alias: None,
     })
 }
 
@@ -1362,6 +1372,7 @@ pub fn string() -> Rc<Type> {
         public: true,
         name: STRING.to_string(),
         module: "".to_string(),
+        alias: None,
     })
 }
 
@@ -1371,6 +1382,7 @@ pub fn void() -> Rc<Type> {
         public: true,
         name: VOID.to_string(),
         module: "".to_string(),
+        alias: None,
     })
 }
 
@@ -1380,6 +1392,7 @@ pub fn option(a: Rc<Type>) -> Rc<Type> {
         name: OPTION.to_string(),
         module: "".to_string(),
         args: vec![a],
+        alias: None,
     })
 }
 
@@ -1389,23 +1402,26 @@ pub fn ordering() -> Rc<Type> {
         name: ORDERING.to_string(),
         module: "".to_string(),
         args: vec![],
+        alias: None,
     })
 }
 
 pub fn function(args: Vec<Rc<Type>>, ret: Rc<Type>) -> Rc<Type> {
-    Rc::new(Type::Fn { ret, args })
+    Rc::new(Type::Fn {
+        ret,
+        args,
+        alias: None,
+    })
 }
 
 pub fn generic_var(id: u64) -> Rc<Type> {
     let tipo = Rc::new(RefCell::new(TypeVar::Generic { id }));
-
-    Rc::new(Type::Var { tipo })
+    Rc::new(Type::Var { tipo, alias: None })
 }
 
 pub fn unbound_var(id: u64) -> Rc<Type> {
     let tipo = Rc::new(RefCell::new(TypeVar::Unbound { id }));
-
-    Rc::new(Type::Var { tipo })
+    Rc::new(Type::Var { tipo, alias: None })
 }
 
 pub fn wrapped_redeemer(redeemer: Rc<Type>) -> Rc<Type> {
@@ -1414,5 +1430,6 @@ pub fn wrapped_redeemer(redeemer: Rc<Type>) -> Rc<Type> {
         module: "".to_string(),
         name: REDEEMER_WRAPPER.to_string(),
         args: vec![redeemer],
+        alias: None,
     })
 }

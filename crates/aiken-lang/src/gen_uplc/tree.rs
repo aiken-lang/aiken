@@ -1,15 +1,13 @@
-use indexmap::IndexSet;
-use itertools::Itertools;
-use std::{borrow::BorrowMut, rc::Rc, slice::Iter};
-use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
-
+use super::air::{Air, ExpectLevel};
 use crate::{
     ast::{BinOp, Curve, Span, UnOp},
     builtins::{bool, byte_array, data, int, list, string, void},
     tipo::{Type, ValueConstructor, ValueConstructorVariant},
 };
-
-use super::air::{Air, ExpectLevel};
+use indexmap::IndexSet;
+use itertools::Itertools;
+use std::{borrow::BorrowMut, rc::Rc, slice::Iter};
+use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TreePath {
@@ -720,6 +718,7 @@ impl AirTree {
                         Type::Fn {
                             args: vec![list(data())],
                             ret: data(),
+                            alias: None,
                         }
                         .into(),
                         ValueConstructorVariant::ModuleFn {

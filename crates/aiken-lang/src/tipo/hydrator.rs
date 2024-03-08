@@ -1,16 +1,14 @@
-use std::{collections::HashMap, rc::Rc};
-
-use crate::{
-    ast::Annotation,
-    builtins::{function, tuple},
-    tipo::Span,
-};
-
 use super::{
     environment::Environment,
     error::{Error, Warning},
     Type, TypeConstructor,
 };
+use crate::{
+    ast::Annotation,
+    builtins::{function, tuple},
+    tipo::Span,
+};
+use std::{collections::HashMap, rc::Rc};
 
 /// The Hydrator takes an AST representing a type (i.e. a type annotation
 /// for a function argument) and returns a Type for that annotation.

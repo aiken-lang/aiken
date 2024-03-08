@@ -1,9 +1,10 @@
-use std::{
-    collections::{HashMap, HashSet},
-    ops::Deref,
-    rc::Rc,
+use super::{
+    error::{Error, Snippet, Warning},
+    exhaustive::{simplify, Matrix, PatternStack},
+    hydrator::Hydrator,
+    AccessorsMap, RecordAccessor, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
+    ValueConstructorVariant,
 };
-
 use crate::{
     ast::{
         Annotation, CallArg, DataType, Definition, Function, ModuleConstant, ModuleKind,
@@ -14,13 +15,10 @@ use crate::{
     tipo::fields::FieldMap,
     IdGenerator,
 };
-
-use super::{
-    error::{Error, Snippet, Warning},
-    exhaustive::{simplify, Matrix, PatternStack},
-    hydrator::Hydrator,
-    AccessorsMap, RecordAccessor, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
-    ValueConstructorVariant,
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Deref,
+    rc::Rc,
 };
 
 #[derive(Debug)]
@@ -119,7 +117,7 @@ impl<'a> Environment<'a> {
         fn_location: Span,
         call_location: Span,
     ) -> Result<(Vec<Rc<Type>>, Rc<Type>), Error> {
-        if let Type::Var { tipo } = tipo.deref() {
+        if let Type::Var { tipo, .. } = tipo.deref() {
             let new_value = match tipo.borrow().deref() {
                 TypeVar::Link { tipo, .. } => {
                     return self.match_fun_type(tipo.clone(), arity, fn_location, call_location);
@@ -145,7 +143,7 @@ impl<'a> Environment<'a> {
             }
         }
 
-        if let Type::Fn { args, ret } = tipo.deref() {
+        if let Type::Fn { args, ret, .. } = tipo.deref() {
             return if args.len() != arity {
                 Err(Error::IncorrectFunctionCallArity {
                     expected: args.len(),
@@ -549,6 +547,7 @@ impl<'a> Environment<'a> {
                 name,
                 module,
                 args,
+                alias,
             } => {
                 let args = args
                     .iter()
@@ -558,15 +557,26 @@ impl<'a> Environment<'a> {
                     public: *public,
                     name: name.clone(),
                     module: module.clone(),
+                    alias: alias.clone(),
                     args,
                 })
             }
 
-            Type::Var { tipo } => {
+            Type::Var { tipo, alias } => {
                 match tipo.borrow().deref() {
-                    TypeVar::Link { tipo } => return self.instantiate(tipo.clone(), ids, hydrator),
+                    TypeVar::Link { tipo } => {
+                        return Type::with_alias(
+                            self.instantiate(tipo.clone(), ids, hydrator),
+                            alias,
+                        );
+                    }
 
-                    TypeVar::Unbound { .. } => return Rc::new(Type::Var { tipo: tipo.clone() }),
+                    TypeVar::Unbound { .. } => {
+                        return Rc::new(Type::Var {
+                            tipo: tipo.clone(),
+                            alias: alias.clone(),
+                        });
+                    }
 
                     TypeVar::Generic { id } => match ids.get(id) {
                         Some(t) => return t.clone(),
@@ -576,27 +586,34 @@ impl<'a> Environment<'a> {
                                 let v = self.new_unbound_var();
                                 ids.insert(*id, v.clone());
                                 return v;
-                            } else {
-                                // tracing::trace!(id = id, "not_instantiating_rigid_type_var")
                             }
                         }
                     },
                 }
-                Rc::new(Type::Var { tipo: tipo.clone() })
+                Rc::new(Type::Var {
+                    tipo: tipo.clone(),
+                    alias: alias.clone(),
+                })
             }
 
-            Type::Fn { args, ret, .. } => function(
-                args.iter()
-                    .map(|t| self.instantiate(t.clone(), ids, hydrator))
-                    .collect(),
-                self.instantiate(ret.clone(), ids, hydrator),
+            Type::Fn { args, ret, alias } => Type::with_alias(
+                function(
+                    args.iter()
+                        .map(|t| self.instantiate(t.clone(), ids, hydrator))
+                        .collect(),
+                    self.instantiate(ret.clone(), ids, hydrator),
+                ),
+                alias,
             ),
 
-            Type::Tuple { elems } => tuple(
-                elems
-                    .iter()
-                    .map(|t| self.instantiate(t.clone(), ids, hydrator))
-                    .collect(),
+            Type::Tuple { elems, alias } => Type::with_alias(
+                tuple(
+                    elems
+                        .iter()
+                        .map(|t| self.instantiate(t.clone(), ids, hydrator))
+                        .collect(),
+                ),
+                alias,
             ),
         }
     }
@@ -981,6 +998,7 @@ impl<'a> Environment<'a> {
                     module: module.to_owned(),
                     name: name.clone(),
                     args: parameters.clone(),
+                    alias: None,
                 });
 
                 hydrators.insert(name.to_string(), hydrator);
@@ -1024,7 +1042,11 @@ impl<'a> Environment<'a> {
                 hydrator.disallow_new_type_variables();
 
                 // Create the type that the alias resolves to
-                let tipo = hydrator.type_from_annotation(resolved_type, self)?;
+                let tipo = hydrator
+                    .type_from_annotation(resolved_type, self)?
+                    .as_ref()
+                    .to_owned()
+                    .set_alias(name, args);
 
                 self.insert_type_constructor(
                     name.clone(),
@@ -1353,13 +1375,13 @@ impl<'a> Environment<'a> {
         }
 
         // Collapse right hand side type links. Left hand side will be collapsed in the next block.
-        if let Type::Var { tipo } = t2.deref() {
-            if let TypeVar::Link { tipo } = tipo.borrow().deref() {
+        if let Type::Var { tipo, .. } = t2.deref() {
+            if let TypeVar::Link { tipo, .. } = tipo.borrow().deref() {
                 return self.unify(t1, tipo.clone(), location, allow_cast);
             }
         }
 
-        if let Type::Var { tipo } = t1.deref() {
+        if let Type::Var { tipo, .. } = t1.deref() {
             enum Action {
                 Unify(Rc<Type>),
                 CouldNotUnify,
@@ -1375,7 +1397,7 @@ impl<'a> Environment<'a> {
                 }
 
                 TypeVar::Generic { id } => {
-                    if let Type::Var { tipo } = t2.deref() {
+                    if let Type::Var { tipo, .. } = t2.deref() {
                         if tipo.borrow().is_unbound() {
                             *tipo.borrow_mut() = TypeVar::Generic { id: *id };
                             return Ok(());
@@ -1642,10 +1664,10 @@ pub enum EntityKind {
 /// could cause naively-implemented type checking to diverge.
 /// While traversing the type tree.
 fn unify_unbound_type(tipo: Rc<Type>, own_id: u64, location: Span) -> Result<(), Error> {
-    if let Type::Var { tipo } = tipo.deref() {
+    if let Type::Var { tipo, .. } = tipo.deref() {
         let new_value = match tipo.borrow().deref() {
             TypeVar::Link { tipo, .. } => {
-                return unify_unbound_type(tipo.clone(), own_id, location)
+                return unify_unbound_type(tipo.clone(), own_id, location);
             }
 
             TypeVar::Unbound { id } => {
@@ -1674,7 +1696,7 @@ fn unify_unbound_type(tipo: Rc<Type>, own_id: u64, location: Span) -> Result<(),
             Ok(())
         }
 
-        Type::Fn { args, ret } => {
+        Type::Fn { args, ret, .. } => {
             for arg in args {
                 unify_unbound_type(arg.clone(), own_id, location)?;
             }
@@ -1769,7 +1791,7 @@ pub(super) fn assert_no_labeled_arguments<A>(args: &[CallArg<A>]) -> Option<(Spa
 }
 
 pub(super) fn collapse_links(t: Rc<Type>) -> Rc<Type> {
-    if let Type::Var { tipo } = t.deref() {
+    if let Type::Var { tipo, .. } = t.deref() {
         if let TypeVar::Link { tipo } = tipo.borrow().deref() {
             return tipo.clone();
         }
@@ -1811,17 +1833,24 @@ fn get_compatible_record_fields<A>(
 #[allow(clippy::only_used_in_recursion)]
 pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
     match t.deref() {
-        Type::Var { tipo } => match tipo.borrow().deref() {
-            TypeVar::Unbound { id } => generic_var(*id),
-            TypeVar::Link { tipo } => generalise(tipo.clone(), ctx_level),
-            TypeVar::Generic { .. } => Rc::new(Type::Var { tipo: tipo.clone() }),
-        },
+        Type::Var { tipo, alias } => Type::with_alias(
+            match tipo.borrow().deref() {
+                TypeVar::Unbound { id } => generic_var(*id),
+                TypeVar::Link { tipo } => generalise(tipo.clone(), ctx_level),
+                TypeVar::Generic { .. } => Rc::new(Type::Var {
+                    tipo: tipo.clone(),
+                    alias: None,
+                }),
+            },
+            alias,
+        ),
 
         Type::App {
             public,
             module,
             name,
             args,
+            alias,
         } => {
             let args = args
                 .iter()
@@ -1833,21 +1862,28 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
                 module: module.clone(),
                 name: name.clone(),
                 args,
+                alias: alias.clone(),
             })
         }
 
-        Type::Fn { args, ret } => function(
-            args.iter()
-                .map(|t| generalise(t.clone(), ctx_level))
-                .collect(),
-            generalise(ret.clone(), ctx_level),
+        Type::Fn { args, ret, alias } => Type::with_alias(
+            function(
+                args.iter()
+                    .map(|t| generalise(t.clone(), ctx_level))
+                    .collect(),
+                generalise(ret.clone(), ctx_level),
+            ),
+            alias,
         ),
 
-        Type::Tuple { elems } => tuple(
-            elems
-                .iter()
-                .map(|t| generalise(t.clone(), ctx_level))
-                .collect(),
+        Type::Tuple { elems, alias } => Type::with_alias(
+            tuple(
+                elems
+                    .iter()
+                    .map(|t| generalise(t.clone(), ctx_level))
+                    .collect(),
+            ),
+            alias,
         ),
     }
 }

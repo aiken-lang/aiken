@@ -608,7 +608,7 @@ pub(super) fn simplify(
             Ok(Pattern::Constructor(
                 TUPLE_NAME.to_string(),
                 vec![tipo::ValueConstructor {
-                    tipo: tipo::Type::Tuple { elems: vec![] }.into(),
+                    tipo: tipo::Type::Tuple { elems: vec![], alias: None }.into(),
                     public: true,
                     variant: tipo::ValueConstructorVariant::Record {
                         name: TUPLE_NAME.to_string(),

@@ -1,12 +1,10 @@
-use std::{collections::HashMap, rc::Rc};
-
-use itertools::Itertools;
-
 use super::{Type, TypeVar};
 use crate::{
     docvec,
     pretty::{nil, *},
 };
+use itertools::Itertools;
+use std::{collections::HashMap, rc::Rc};
 
 const INDENT: isize = 2;
 
@@ -50,33 +48,73 @@ impl Printer {
     pub fn print<'a>(&mut self, typ: &Type) -> Document<'a> {
         match typ {
             Type::App {
-                name, args, module, ..
-            } => {
-                let doc = if self.name_clashes_if_unqualified(name, module) {
-                    qualify_type_name(module, name)
-                } else {
-                    self.printed_types.insert(name.clone(), module.clone());
-                    Document::String(name.clone())
-                };
-                if args.is_empty() {
-                    doc
-                } else {
-                    doc.append("<")
-                        .append(self.args_to_aiken_doc(args))
-                        .append(">")
+                name,
+                args,
+                module,
+                alias,
+                ..
+            } => match alias {
+                Some(alias) => self.type_alias_doc(alias.clone()),
+                None => {
+                    let doc = if self.name_clashes_if_unqualified(name, module) {
+                        qualify_type_name(module, name)
+                    } else {
+                        self.printed_types.insert(name.clone(), module.clone());
+                        Document::String(name.clone())
+                    };
+                    if args.is_empty() {
+                        doc
+                    } else {
+                        doc.append("<")
+                            .append(self.args_to_aiken_doc(args))
+                            .append(">")
+                    }
                 }
-            }
+            },
 
-            Type::Fn { args, ret } => "fn("
-                .to_doc()
-                .append(self.args_to_aiken_doc(args))
-                .append(") ->")
-                .append(break_("", " ").append(self.print(ret)).nest(INDENT).group()),
+            Type::Fn { args, ret, alias } => match alias {
+                Some(alias) => self.type_alias_doc(alias.clone()),
+                None => "fn("
+                    .to_doc()
+                    .append(self.args_to_aiken_doc(args))
+                    .append(") ->")
+                    .append(break_("", " ").append(self.print(ret)).nest(INDENT).group()),
+            },
 
-            Type::Var { tipo: typ, .. } => self.type_var_doc(&typ.borrow()),
+            Type::Var { tipo: typ, alias } => match alias {
+                Some(alias) => self.type_alias_doc(alias.clone()),
+                None => self.type_var_doc(&typ.borrow()),
+            },
 
-            Type::Tuple { elems, .. } => self.args_to_aiken_doc(elems).surround("(", ")"),
+            Type::Tuple { elems, alias } => match alias {
+                Some(alias) => self.type_alias_doc(alias.clone()),
+                None => self.args_to_aiken_doc(elems).surround("(", ")"),
+            },
         }
+    }
+
+    fn type_alias_doc<'a>(&mut self, alias: (String, Vec<String>)) -> Document<'a> {
+        let mut doc = Document::String(alias.0.to_owned());
+
+        if !alias.1.is_empty() {
+            let args = concat(Itertools::intersperse(
+                alias.1.into_iter().map(Document::String),
+                break_(",", ", "),
+            ));
+
+            doc = doc
+                .append("<")
+                .append(
+                    break_("", "")
+                        .append(args)
+                        .nest(INDENT)
+                        .append(break_(",", ""))
+                        .group(),
+                )
+                .append(">");
+        }
+
+        doc
     }
 
     fn name_clashes_if_unqualified(&mut self, tipo: &String, module: &String) -> bool {
@@ -169,13 +207,10 @@ fn qualify_type_name(module: &String, typ_name: &str) -> Document<'static> {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
-
-    use pretty_assertions::assert_eq;
-
-    use crate::builtins::{function, int};
-
     use super::*;
+    use crate::builtins::{function, int};
+    use pretty_assertions::assert_eq;
+    use std::cell::RefCell;
 
     #[test]
     fn next_letter_test() {
@@ -275,6 +310,7 @@ mod tests {
                 name: "Int".to_string(),
                 public: true,
                 args: vec![],
+                alias: None
             },
             "Int",
         );
@@ -283,18 +319,21 @@ mod tests {
                 module: "".to_string(),
                 name: "Pair".to_string(),
                 public: true,
+                alias: None,
                 args: vec![
                     Rc::new(Type::App {
                         module: "whatever".to_string(),
                         name: "Int".to_string(),
                         public: true,
                         args: vec![],
+                        alias: None
                     }),
                     Rc::new(Type::App {
                         module: "whatever".to_string(),
                         name: "Bool".to_string(),
                         public: true,
                         args: vec![],
+                        alias: None
                     }),
                 ],
             },
@@ -308,12 +347,14 @@ mod tests {
                         module: "whatever".to_string(),
                         name: "Int".to_string(),
                         public: true,
+                        alias: None,
                     }),
                     Rc::new(Type::App {
                         args: vec![],
                         module: "whatever".to_string(),
                         name: "Bool".to_string(),
                         public: true,
+                        alias: None,
                     }),
                 ],
                 ret: Rc::new(Type::App {
@@ -321,14 +362,18 @@ mod tests {
                     module: "whatever".to_string(),
                     name: "Bool".to_string(),
                     public: true,
+                    alias: None,
                 }),
+                alias: None,
             },
             "fn(Int, Bool) -> Bool",
         );
         assert_string!(
             Type::Var {
+                alias: None,
                 tipo: Rc::new(RefCell::new(TypeVar::Link {
                     tipo: Rc::new(Type::App {
+                        alias: None,
                         args: vec![],
                         module: "whatever".to_string(),
                         name: "Int".to_string(),
@@ -341,6 +386,7 @@ mod tests {
         assert_string!(
             Type::Var {
                 tipo: Rc::new(RefCell::new(TypeVar::Unbound { id: 2231 })),
+                alias: None,
             },
             "a",
         );
@@ -348,9 +394,11 @@ mod tests {
             function(
                 vec![Rc::new(Type::Var {
                     tipo: Rc::new(RefCell::new(TypeVar::Unbound { id: 78 })),
+                    alias: None,
                 })],
                 Rc::new(Type::Var {
                     tipo: Rc::new(RefCell::new(TypeVar::Unbound { id: 2 })),
+                    alias: None,
                 }),
             ),
             "fn(a) -> b",
@@ -359,9 +407,11 @@ mod tests {
             function(
                 vec![Rc::new(Type::Var {
                     tipo: Rc::new(RefCell::new(TypeVar::Generic { id: 78 })),
+                    alias: None,
                 })],
                 Rc::new(Type::Var {
                     tipo: Rc::new(RefCell::new(TypeVar::Generic { id: 2 })),
+                    alias: None,
                 }),
             ),
             "fn(a) -> b",
