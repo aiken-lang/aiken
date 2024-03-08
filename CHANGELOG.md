@@ -16,10 +16,20 @@
 - **aiken-lang**: Boolean operators (`||` and `&&`) were (somewhat) left-associative. This is now fixed and changed to right-associativity. @KtorZ
 - **uplc**: `serialise_data` builtin wrongly encoding some larger ints as tagged CBOR bigints, instead of plain integers over 9 bytes. @KtorZ
 - **aiken-project**: Unit tests reports are now inline with the test with less noise. @KtorZ
+- **aiken-lang**: Data deserialization for primitive types (pairs, bools, void) now do full checks on the Data structure. @Microproofs
+- **aiken-lang**: The identity reducer optimization was not removing the identity function before. That is fixed now.@Microproofs
+- **aiken-lang**: Inner opaque types can now be properly destructured by expect and when patterns. @Microproofs
+- **aiken-lang**: A codegen specific name-unique interner is now used to preserve lambda scoping. @Microproofs
 
 ### Changed
 
 - **aiken-lang**: Discards will now also type check the validator arguments instead of completely ignoring them. @Microproofs
+- **aiken-lang**: The set of curriable builtins with arguments that occur 3 or more times are now hoisted in scope with the arguments curried. @Microproofs
+- **aiken-lang**: Improved the way the lambda inliner works to prevent unnecessary inlining into functions. @Microproofs
+- **aiken-lang**: Simplifications to the AirTree type in codegen. @Microproofs
+- **aiken-lang**: CONSTR_FIELD_EXPOSER and CONSTR_INDEX_EXPOSER now inline the builtins instead. @Microproofs
+- **aiken-lang**: SubtractInteger with a constant as the second arg is now flipped to addInteger with a negated constant. @Microproofs
+
 
 ## v1.0.24-alpha - 2024-01-31
 
@@ -33,6 +43,7 @@
   the validator issues being seen for previously succeeding validators on 1.0.21-alpha. @MicroProofs
 - **aiken-lang**: Out of Span issue is now solved. This also fixes incorrectly selected
   traces from the wrong module, which in some cases lead to the out of span issue. @MicroProofs
+- **aiken-lang**: Calling head_list on a list of pairs no longer throws a type error. @MicroProofs
 
 ## v1.0.23-alpha - 2024-01-24
 
