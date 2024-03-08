@@ -29,6 +29,7 @@
 - **aiken-lang**: Simplifications to the AirTree type in codegen. @Microproofs
 - **aiken-lang**: CONSTR_FIELD_EXPOSER and CONSTR_INDEX_EXPOSER now inline the builtins instead. @Microproofs
 - **aiken-lang**: SubtractInteger with a constant as the second arg is now flipped to addInteger with a negated constant. @Microproofs
+- **aiken-lang**: Validator arguments are now checked per arg instead of after all args are applied. @Microproofs
 
 
 ## v1.0.24-alpha - 2024-01-31
