@@ -24,6 +24,7 @@ impl ExitFailure {
 }
 
 struct Summary {
+    check_count: Option<usize>,
     warning_count: usize,
     error_count: usize,
 }
@@ -31,10 +32,22 @@ struct Summary {
 impl Display for Summary {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str(&format!(
-            "      {} {} {}, {} {}",
+            "      {} {}{}{} {}, {} {}",
             "Summary"
                 .if_supports_color(Stderr, |s| s.purple())
                 .if_supports_color(Stderr, |s| s.bold()),
+            if let Some(c) = self.check_count {
+                format!("{} ", c)
+            } else {
+                "".to_string()
+            },
+            match self.check_count {
+                Some(1) => "check, ",
+                Some(_) => "checks, ",
+                None => "",
+            }
+            .if_supports_color(Stderr, |s| s.green())
+            .if_supports_color(Stderr, |s| s.bold()),
             self.error_count,
             if self.error_count == 1 {
                 "error"
@@ -111,6 +124,7 @@ where
         eprintln!(
             "{}",
             Summary {
+                check_count: project.checks_count,
                 warning_count,
                 error_count: errs.len(),
             }
@@ -122,6 +136,7 @@ where
     eprintln!(
         "{}",
         Summary {
+            check_count: project.checks_count,
             error_count: 0,
             warning_count
         }

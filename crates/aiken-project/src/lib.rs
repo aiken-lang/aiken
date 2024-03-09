@@ -89,6 +89,7 @@ where
     root: PathBuf,
     sources: Vec<Source>,
     warnings: Vec<Warning>,
+    checks_count: Option<usize>,
     event_listener: T,
     functions: IndexMap<FunctionAccessKey, TypedFunction>,
     data_types: IndexMap<DataTypeKey, TypedDataType>,
@@ -128,6 +129,7 @@ where
             root,
             sources: vec![],
             warnings: vec![],
+            checks_count: None,
             event_listener,
             functions,
             data_types,
@@ -335,6 +337,17 @@ where
                 }
 
                 let tests = self.run_tests(tests, seed);
+
+                self.checks_count = if tests.is_empty() {
+                    None
+                } else {
+                    Some(tests.iter().fold(0, |acc, test| {
+                        acc + match test {
+                            TestResult::PropertyTestResult(r) => r.iterations,
+                            _ => 1,
+                        }
+                    }))
+                };
 
                 let errors: Vec<Error> = tests
                     .iter()
