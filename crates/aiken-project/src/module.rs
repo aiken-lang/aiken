@@ -9,6 +9,7 @@ use aiken_lang::{
 use petgraph::{algo, graph::NodeIndex, Direction, Graph};
 use std::{
     collections::{HashMap, HashSet},
+    io,
     ops::{Deref, DerefMut},
     path::PathBuf,
 };
@@ -181,6 +182,26 @@ pub struct CheckedModule {
 }
 
 impl CheckedModule {
+    pub fn to_cbor(&self) -> Vec<u8> {
+        let mut module_bytes = vec![];
+
+        ciborium::into_writer(&self, &mut module_bytes)
+            .expect("modules should not fail to serialize");
+
+        module_bytes
+    }
+
+    pub fn from_cbor(bytes: &[u8]) -> Result<Self, ciborium::de::Error<io::Error>> {
+        ciborium::from_reader(bytes)
+    }
+
+    pub fn to_cbor_hex(&self) -> (String, Vec<u8>) {
+        let module_bytes = self.to_cbor();
+        let hex_str = hex::encode(&module_bytes);
+
+        (hex_str, module_bytes)
+    }
+
     pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
         self.ast.find_node(byte_index)
     }
