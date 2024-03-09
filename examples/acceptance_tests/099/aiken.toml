@@ -1,0 +1,14 @@
+name = "aiken-lang/acceptance_test_096"
+version = "0.0.0"
+license = "Apache-2.0"
+description = "Aiken contracts for project 'aiken-lang/096'"
+
+[repository]
+user = "aiken-lang"
+project = "096"
+platform = "github"
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "1.7.0"
+source = "github"
