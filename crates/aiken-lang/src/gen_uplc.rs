@@ -4201,7 +4201,7 @@ impl<'a> CodeGenerator<'a> {
                         }
                     } else if let Term::Apply { .. } = &term {
                         // Case for mutually recursive zero arg functions
-                        Some(term)
+                        Some(term.force())
                     } else {
                         unreachable!(
                             "Shouldn't call anything other than var or apply {:#?}",
@@ -4493,8 +4493,12 @@ impl<'a> CodeGenerator<'a> {
 
                 for (params, func_body) in cyclic_functions.into_iter() {
                     let mut function = func_body;
-                    for param in params.iter().rev() {
-                        function = function.lambda(param);
+                    if params.is_empty() {
+                        function = function.delay();
+                    } else {
+                        for param in params.iter().rev() {
+                            function = function.lambda(param);
+                        }
                     }
 
                     // We basically Scott encode our function bodies and use the chooser function
