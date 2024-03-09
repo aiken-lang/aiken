@@ -123,6 +123,70 @@ fn validator_illegal_arity() {
 }
 
 #[test]
+fn list_illegal_inhabitants() {
+    let source_code = r#"
+        fn main() {
+          [identity]
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::IllegalTypeInData { .. }))
+    ))
+}
+
+#[test]
+fn tuple_illegal_inhabitants() {
+    let source_code = r#"
+        fn main() {
+          (identity, always)
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::IllegalTypeInData { .. }))
+    ))
+}
+
+#[test]
+fn illegal_inhabitants_nested() {
+    let source_code = r#"
+        fn main() {
+          [(identity, always)]
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::IllegalTypeInData { .. }))
+    ))
+}
+
+#[test]
+fn illegal_inhabitants_returned() {
+    let source_code = r#"
+        type Fuzzer<a> = fn(PRNG) -> (a, PRNG)
+
+        fn constant(a: a) -> Fuzzer<a> {
+          fn (prng) {
+            (a, prng)
+          }
+        }
+
+        fn main() -> Fuzzer<Fuzzer<Int>> {
+          constant(constant(42))
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::IllegalTypeInData { .. }))
+    ))
+}
+
+#[test]
 fn mark_constructors_as_used_via_field_access() {
     let source_code = r#"
       type Datum {

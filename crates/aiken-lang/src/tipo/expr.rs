@@ -21,9 +21,9 @@ use crate::{
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
     line_numbers::LineNumbers,
-    tipo::{fields::FieldMap, PatternConstructor},
+    tipo::{fields::FieldMap, PatternConstructor, TypeVar},
 };
-use std::{cmp::Ordering, collections::HashMap, rc::Rc};
+use std::{cmp::Ordering, collections::HashMap, ops::Deref, rc::Rc};
 use vec1::Vec1;
 
 #[derive(Debug)]
@@ -1571,6 +1571,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             })?;
         }
 
+        // Ensure elements are serialisable to Data.
+        ensure_serialisable(true, body.tipo(), body.type_defining_location())?;
+
         Ok((args, body))
     }
 
@@ -1600,6 +1603,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             elems.push(element)
         }
+
+        // Ensure elements are serialisable to Data.
+        ensure_serialisable(false, tipo.clone(), location)?;
 
         // Type check the ..tail, if there is one
         let tipo = list(tipo);
@@ -1767,6 +1773,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         for elem in elems {
             let typed_elem = self.infer(elem)?;
+
+            // Ensure elements are serialisable to Data.
+            ensure_serialisable(false, typed_elem.tipo(), location)?;
 
             typed_elems.push(typed_elem);
         }
@@ -2115,4 +2124,53 @@ fn assert_assignment(expr: TypedExpr) -> Result<TypedExpr, Error> {
     }
 
     Ok(expr)
+}
+
+pub fn ensure_serialisable(allow_fn: bool, t: Rc<Type>, location: Span) -> Result<(), Error> {
+    match t.deref() {
+        Type::App { args, .. } => {
+            if t.is_ml_result() {
+                return Err(Error::IllegalTypeInData {
+                    tipo: t.clone(),
+                    location,
+                });
+            }
+
+            args.iter()
+                .map(|e| ensure_serialisable(false, e.clone(), location))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            Ok(())
+        }
+
+        Type::Tuple { elems, .. } => {
+            elems
+                .iter()
+                .map(|e| ensure_serialisable(false, e.clone(), location))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            Ok(())
+        }
+
+        Type::Fn { args, ret, .. } => {
+            if !allow_fn {
+                return Err(Error::IllegalTypeInData {
+                    tipo: t.clone(),
+                    location,
+                });
+            }
+
+            args.iter()
+                .map(|e| ensure_serialisable(allow_fn, e.clone(), location))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            ensure_serialisable(allow_fn, ret.clone(), location)
+        }
+
+        Type::Var { tipo, .. } => match tipo.borrow().deref() {
+            TypeVar::Unbound { .. } => Ok(()),
+            TypeVar::Generic { .. } => Ok(()),
+            TypeVar::Link { tipo } => ensure_serialisable(allow_fn, tipo.clone(), location),
+        },
+    }
 }

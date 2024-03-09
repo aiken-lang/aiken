@@ -269,11 +269,14 @@ You can use '{discard}' and numbers to distinguish between similar names.
         location: Span,
     },
 
-    #[error("I found a type definition that has an unsupported type in it.\n")]
+    #[error("I found a type definition that has unsupported inhabitants.\n")]
     #[diagnostic(code("illegal::type_in_data"))]
     #[diagnostic(help(
-        r#"Data-types can't contain type {type_info} because it isn't serializable into a Plutus Data. Yet, this is a strong requirement for types found in compound structures such as List or Tuples."#,
-        type_info = tipo.to_pretty(0).if_supports_color(Stdout, |s| s.red())
+        r#"Data-types cannot contain values of type {type_info} because they aren't serialisable into a Plutus Data. Yet this is necessary for inhabitants of compound structures like {List}, {Tuple} or {Fuzzer}."#,
+        type_info = tipo.to_pretty(0).if_supports_color(Stdout, |s| s.red()),
+        List = "List".if_supports_color(Stdout, |s| s.cyan()),
+        Tuple = "Tuple".if_supports_color(Stdout, |s| s.cyan()),
+        Fuzzer = "Fuzzer".if_supports_color(Stdout, |s| s.cyan()),
     ))]
     IllegalTypeInData {
         #[label]
