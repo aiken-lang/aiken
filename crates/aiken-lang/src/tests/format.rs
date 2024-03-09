@@ -21,6 +21,18 @@ fn format_simple_module() {
 }
 
 #[test]
+fn format_nul_byte() {
+    assert_format!(
+        r#"
+        fn label(str: String) -> Void {
+          str
+            |> builtin.append_string(@"\0", _)
+            |> builtin.debug(Void)
+        }"#
+    );
+}
+
+#[test]
 fn format_g1_element_constant() {
     assert_format!(
         r#"

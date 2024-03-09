@@ -16,6 +16,7 @@
 - **aikup**: error message when version is not found. @rvcas
 - **aiken**: support outputting mainnet addresses for validators. @rvcas
 - **aiken-lang**: added serde to CheckedModule to encode modules as cbor. @rvcas
+- **aiken-lang**: Strings can contain a nul byte using the escape sequence `\0`. @KtorZ
 
 ### Fixed
 
@@ -32,7 +33,7 @@
 - **aiken-lang**: disallow `MLResult` in a type definition. @rvcas
 - **aiken-lang**: reversed deserialization of bls types out of data types. @rvcas
 - **aiken-lang**: validator args unexpectedly unbound causing code gen crashes. @rvcas
-- **aiken-lang**: allow implicitly discarded values when right-hand-side unified with `Void`. @KtorZ
+- **aiken-lang**: allow implicitly discarded values when right-hand side unified with `Void`. @KtorZ
 
 ### Changed
 

@@ -1,0 +1,9 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn label(str: String) -> Void {\n  str\n    |> builtin.append_string(@\"\\0\", _)\n    |> builtin.debug(Void)\n}"
+---
+fn label(str: String) -> Void {
+  str
+    |> builtin.append_string(@"\0", _)
+    |> builtin.debug(Void)
+}
