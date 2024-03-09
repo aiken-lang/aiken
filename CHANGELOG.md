@@ -15,6 +15,7 @@
 - **uplc**: more conformance tests for `integerToByteString` and `byteStringToInteger` along with new ones. @rvcas
 - **aikup**: error message when version is not found. @rvcas
 - **aiken**: support outputting mainnet addresses for validators. @rvcas
+- **aiken-lang**: added serde to CheckedModule to encode modules as cbor. @rvcas
 
 ### Fixed
 
