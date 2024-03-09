@@ -4153,11 +4153,10 @@ impl<'a> CodeGenerator<'a> {
                 } else {
                     let term = arg_stack.pop().unwrap();
 
-                    let zero_arg_functions = self.zero_arg_functions.clone();
-
                     // How we handle zero arg anon functions has changed
                     // We now delay zero arg anon functions and force them on a call operation
                     if let Term::Var(name) = &term {
+                        let zero_arg_functions = self.zero_arg_functions.clone();
                         let text = &name.text;
 
                         if let Some((_, air_vec)) = zero_arg_functions.iter().find(
@@ -4200,8 +4199,14 @@ impl<'a> CodeGenerator<'a> {
                         } else {
                             Some(term.force())
                         }
+                    } else if let Term::Apply { .. } = &term {
+                        // Case for mutually recursive zero arg functions
+                        Some(term)
                     } else {
-                        unreachable!("Shouldn't call anything other than var")
+                        unreachable!(
+                            "Shouldn't call anything other than var or apply {:#?}",
+                            term
+                        )
                     }
                 }
             }
