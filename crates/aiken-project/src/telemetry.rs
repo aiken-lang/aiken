@@ -346,7 +346,7 @@ fn fmt_test(
         let is_expected_failure = result.is_success();
 
         test = format!(
-            "{test}\n{}\n{}{new_line}",
+            "{test}\n{}\n{}",
             if is_expected_failure {
                 "★ counterexample"
                     .if_supports_color(Stderr, |s| s.green())
@@ -375,13 +375,12 @@ fn fmt_test(
                 })
                 .collect::<Vec<String>>()
                 .join("\n"),
-            new_line = if result.logs().is_empty() { "\n" } else { "" },
         );
     }
 
     // Labels
     if let TestResult::PropertyTestResult(PropertyTestResult { labels, .. }) = result {
-        if !labels.is_empty() {
+        if !labels.is_empty() && result.is_success() {
             test = format!(
                 "{test}\n{title}",
                 title = "· with coverage".if_supports_color(Stderr, |s| s.bold())
@@ -412,7 +411,7 @@ fn fmt_test(
     // Traces
     if !result.logs().is_empty() && result.is_success() {
         test = format!(
-            "{test}\n{title}\n{logs}\n",
+            "{test}\n{title}\n{logs}",
             title = "· with traces".if_supports_color(Stderr, |s| s.bold()),
             logs = result
                 .logs()
