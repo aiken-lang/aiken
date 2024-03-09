@@ -35,6 +35,8 @@
 - **aiken-lang**: reversed deserialization of bls types out of data types. @rvcas
 - **aiken-lang**: validator args unexpectedly unbound causing code gen crashes. @rvcas
 - **aiken-lang**: allow implicitly discarded values when right-hand side unified with `Void`. @KtorZ
+- **aiken-lang**: allow zero arg mutually recursive functions. @Microproofs
+- **aiken-lang**: function aliases now resolved to the module and function name in codegen. @Microproofs
 
 ### Changed
 
