@@ -379,8 +379,38 @@ fn fmt_test(
         );
     }
 
+    // Labels
+    if let TestResult::PropertyTestResult(PropertyTestResult { labels, .. }) = result {
+        if !labels.is_empty() {
+            test = format!(
+                "{test}\n{title}",
+                title = "· with coverage".if_supports_color(Stderr, |s| s.bold())
+            );
+            let mut total = 0;
+            let mut pad = 0;
+            for (k, v) in labels {
+                total += v;
+                if k.len() > pad {
+                    pad = k.len();
+                }
+            }
+
+            let mut labels = labels.iter().collect::<Vec<_>>();
+            labels.sort_by(|a, b| b.1.cmp(a.1));
+
+            for (k, v) in labels {
+                test = format!(
+                    "{test}\n| {} {:>5.1}%",
+                    pretty::pad_right(k.to_owned(), pad, " ")
+                        .if_supports_color(Stderr, |s| s.bold()),
+                    100.0 * (*v as f64) / (total as f64),
+                );
+            }
+        }
+    }
+
     // Traces
-    if !result.logs().is_empty() {
+    if !result.logs().is_empty() && result.is_success() {
         test = format!(
             "{test}\n{title}\n{logs}\n",
             title = "· with traces".if_supports_color(Stderr, |s| s.bold()),
