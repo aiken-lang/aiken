@@ -338,7 +338,9 @@ where
 
                 let tests = self.run_tests(tests, seed);
 
-                self.checks_count = if tests.is_empty() { None } else {
+                self.checks_count = if tests.is_empty() {
+                    None
+                } else {
                     Some(tests.iter().fold(0, |acc, test| {
                         acc + match test {
                             TestResult::PropertyTestResult(r) => r.iterations,

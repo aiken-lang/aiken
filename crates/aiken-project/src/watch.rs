@@ -36,11 +36,15 @@ impl Display for Summary {
             "Summary"
                 .if_supports_color(Stderr, |s| s.purple())
                 .if_supports_color(Stderr, |s| s.bold()),
-            if let Some(c) = self.check_count { format!("{} ", c) } else { "".to_string() },
+            if let Some(c) = self.check_count {
+                format!("{} ", c)
+            } else {
+                "".to_string()
+            },
             match self.check_count {
                 Some(1) => "check, ",
                 Some(_) => "checks, ",
-                None => ""
+                None => "",
             }
             .if_supports_color(Stderr, |s| s.green())
             .if_supports_color(Stderr, |s| s.bold()),
