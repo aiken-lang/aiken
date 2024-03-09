@@ -39,6 +39,7 @@
 - **aiken-lang**: allow zero arg mutually recursive functions. @Microproofs
 - **aiken-lang**: function aliases now resolved to the module and function name in codegen. @Microproofs
 - **aiken-lang**: fix indentation of pipelines to remain a multiple of the base indent increment. @KtorZ
+- **aiken-lang**: forbid presence of non-serialisable data-types in compound structures like List and Tuple. @KtorZ
 
 ### Changed
 
