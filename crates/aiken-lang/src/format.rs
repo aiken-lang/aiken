@@ -1842,7 +1842,11 @@ impl<'a> Documentable<'a> for &'a ArgName {
 }
 
 fn pub_(public: bool) -> Document<'static> {
-    if public { "pub ".to_doc() } else { nil() }
+    if public {
+        "pub ".to_doc()
+    } else {
+        nil()
+    }
 }
 
 impl<'a> Documentable<'a> for &'a UnqualifiedImport {

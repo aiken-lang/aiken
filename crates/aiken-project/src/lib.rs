@@ -180,7 +180,11 @@ where
         self.compile(options)
     }
 
-    pub fn docs(&mut self, destination: Option<PathBuf>) -> Result<(), Vec<Error>> {
+    pub fn docs(
+        &mut self,
+        destination: Option<PathBuf>,
+        include_dependencies: bool,
+    ) -> Result<(), Vec<Error>> {
         self.compile_deps()?;
 
         self.event_listener
@@ -205,7 +209,9 @@ where
         let modules = self
             .checked_modules
             .values_mut()
-            .filter(|CheckedModule { package, .. }| package == &self.config.name.to_string())
+            .filter(|CheckedModule { package, .. }| {
+                include_dependencies || package == &self.config.name.to_string()
+            })
             .map(|m| {
                 m.attach_doc_and_module_comments();
                 &*m
