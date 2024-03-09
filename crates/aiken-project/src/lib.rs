@@ -728,12 +728,6 @@ where
                     input_path: path,
                 };
 
-                let mut module_bytes = vec![];
-
-                ciborium::into_writer(&checked_module, &mut module_bytes).unwrap();
-
-                println!("{name}\n{}", hex::encode(&module_bytes));
-
                 self.checked_modules.insert(name, checked_module);
             }
         }
