@@ -147,7 +147,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         expected_args: &[Rc<Type>],
         body: UntypedExpr,
         return_annotation: &Option<Annotation>,
-    ) -> Result<(Vec<TypedArg>, TypedExpr), Error> {
+    ) -> Result<(Vec<TypedArg>, TypedExpr, Rc<Type>), Error> {
         // Construct an initial type for each argument of the function- either an unbound
         // type variable or a type provided by an annotation.
 
@@ -1491,11 +1491,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         return_annotation: Option<Annotation>,
         location: Span,
     ) -> Result<TypedExpr, Error> {
-        let (args, body) = self.do_infer_fn(args, expected_args, body, &return_annotation)?;
+        let (args, body, return_type) =
+            self.do_infer_fn(args, expected_args, body, &return_annotation)?;
 
         let args_types = args.iter().map(|a| a.tipo.clone()).collect();
 
-        let tipo = function(args_types, body.tipo());
+        let tipo = function(args_types, return_type);
 
         Ok(TypedExpr::Fn {
             location,
@@ -1512,7 +1513,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         args: Vec<TypedArg>,
         body: UntypedExpr,
         return_type: Option<Rc<Type>>,
-    ) -> Result<(Vec<TypedArg>, TypedExpr), Error> {
+    ) -> Result<(Vec<TypedArg>, TypedExpr, Rc<Type>), Error> {
         assert_no_assignment(&body)?;
 
         let (body_rigid_names, body_infer) = self.in_new_scope(|body_typer| {
@@ -1558,23 +1559,28 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let body = body_infer.map_err(|e| e.with_unify_error_rigid_names(&body_rigid_names))?;
 
         // Check that any return type is accurate.
-        if let Some(return_type) = return_type {
-            self.unify(
-                return_type.clone(),
-                body.tipo(),
-                body.type_defining_location(),
-                return_type.is_data(),
-            )
-            .map_err(|e| {
-                e.return_annotation_mismatch()
-                    .with_unify_error_rigid_names(&body_rigid_names)
-            })?;
-        }
+        let return_type = match return_type {
+            Some(return_type) => {
+                self.unify(
+                    return_type.clone(),
+                    body.tipo(),
+                    body.type_defining_location(),
+                    return_type.is_data(),
+                )
+                .map_err(|e| {
+                    e.return_annotation_mismatch()
+                        .with_unify_error_rigid_names(&body_rigid_names)
+                })?;
+
+                Type::with_alias(body.tipo(), return_type.alias())
+            }
+            None => body.tipo(),
+        };
 
         // Ensure elements are serialisable to Data.
-        ensure_serialisable(true, body.tipo(), body.type_defining_location())?;
+        ensure_serialisable(true, return_type.clone(), body.type_defining_location())?;
 
-        Ok((args, body))
+        Ok((args, body, return_type))
     }
 
     fn infer_uint(&mut self, value: String, location: Span) -> TypedExpr {

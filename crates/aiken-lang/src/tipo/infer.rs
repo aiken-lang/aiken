@@ -701,11 +701,12 @@ fn infer_function(
             .remove(&name)
             .expect("Could not find hydrator for fn");
 
-        let (args, body) = expr_typer.infer_fn_with_known_types(args, body, Some(return_type))?;
+        let (args, body, return_type) =
+            expr_typer.infer_fn_with_known_types(args, body, Some(return_type))?;
 
         let args_types = args.iter().map(|a| a.tipo.clone()).collect();
 
-        let tipo = function(args_types, body.tipo());
+        let tipo = function(args_types, return_type);
 
         let safe_to_generalise = !expr_typer.ungeneralised_function_used;
 

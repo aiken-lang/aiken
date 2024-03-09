@@ -117,16 +117,18 @@ impl<'a> Environment<'a> {
         fn_location: Span,
         call_location: Span,
     ) -> Result<(Vec<Rc<Type>>, Rc<Type>), Error> {
-        if let Type::Var { tipo, .. } = tipo.deref() {
+        if let Type::Var { tipo, alias } = tipo.deref() {
             let new_value = match tipo.borrow().deref() {
-                TypeVar::Link { tipo, .. } => {
-                    return self.match_fun_type(tipo.clone(), arity, fn_location, call_location);
+                TypeVar::Link { tipo } => {
+                    let (args, ret) =
+                        self.match_fun_type(tipo.clone(), arity, fn_location, call_location)?;
+                    return Ok((args, Type::with_alias(ret, alias.clone())));
                 }
 
                 TypeVar::Unbound { .. } => {
                     let args: Vec<_> = (0..arity).map(|_| self.new_unbound_var()).collect();
 
-                    let ret = self.new_unbound_var();
+                    let ret = Type::with_alias(self.new_unbound_var(), alias.clone());
 
                     Some((args, ret))
                 }
@@ -139,7 +141,7 @@ impl<'a> Environment<'a> {
                     tipo: function(args.clone(), ret.clone()),
                 };
 
-                return Ok((args, ret));
+                return Ok((args, Type::with_alias(ret, alias.clone())));
             }
         }
 
@@ -579,11 +581,11 @@ impl<'a> Environment<'a> {
                     }
 
                     TypeVar::Generic { id } => match ids.get(id) {
-                        Some(t) => return t.clone(),
+                        Some(t) => return Type::with_alias(t.clone(), alias.clone()),
                         None => {
                             if !hydrator.is_rigid(id) {
                                 // Check this in the hydrator, i.e. is it a created type
-                                let v = self.new_unbound_var();
+                                let v = Type::with_alias(self.new_unbound_var(), alias.clone());
                                 ids.insert(*id, v.clone());
                                 return v;
                             }
