@@ -120,7 +120,7 @@ where
         eprintln!(
             "{}",
             Summary {
-                check_count: None,
+                check_count: project.checks_count,
                 warning_count,
                 error_count: errs.len(),
             }
@@ -132,7 +132,7 @@ where
     eprintln!(
         "{}",
         Summary {
-            check_count: Some(41),
+            check_count: project.checks_count,
             error_count: 0,
             warning_count
         }
