@@ -214,13 +214,11 @@ pub struct Fuzzer<T> {
 }
 
 impl PropertyTest {
-    const MAX_TEST_RUN: usize = 100;
+    pub const DEFAULT_MAX_SUCCESS: usize = 100;
 
-    /// Run a property test from a given seed. The property is run at most MAX_TEST_RUN times. It
+    /// Run a property test from a given seed. The property is run at most DEFAULT_MAX_SUCCESS times. It
     /// may stops earlier on failure; in which case a 'counterexample' is returned.
-    pub fn run<U>(self, seed: u32) -> TestResult<U, PlutusData> {
-        let n = PropertyTest::MAX_TEST_RUN;
-
+    pub fn run<U>(self, seed: u32, n: usize) -> TestResult<U, PlutusData> {
         let mut labels = BTreeMap::new();
 
         let (counterexample, iterations) =
@@ -1378,7 +1376,7 @@ mod test {
         fn expect_failure(&self) -> Counterexample {
             let mut labels = BTreeMap::new();
             match self.run_n_times(
-                PropertyTest::MAX_TEST_RUN,
+                PropertyTest::DEFAULT_MAX_SUCCESS,
                 Prng::from_seed(42),
                 None,
                 &mut labels,
@@ -1397,7 +1395,9 @@ mod test {
             }
         "#});
 
-        assert!(prop.run::<()>(42).is_success());
+        assert!(prop
+            .run::<()>(42, PropertyTest::DEFAULT_MAX_SUCCESS)
+            .is_success());
     }
 
     #[test]
@@ -1419,7 +1419,7 @@ mod test {
             }
         "#});
 
-        match prop.run::<()>(42) {
+        match prop.run::<()>(42, PropertyTest::DEFAULT_MAX_SUCCESS) {
             TestResult::UnitTestResult(..) => unreachable!("property returned unit-test result ?!"),
             TestResult::PropertyTestResult(result) => {
                 assert!(

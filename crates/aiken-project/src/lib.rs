@@ -223,6 +223,7 @@ where
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn check(
         &mut self,
         skip_tests: bool,
@@ -230,6 +231,7 @@ where
         verbose: bool,
         exact_match: bool,
         seed: u32,
+        property_max_success: usize,
         tracing: Tracing,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
@@ -242,6 +244,7 @@ where
                     verbose,
                     exact_match,
                     seed,
+                    property_max_success,
                 }
             },
         };
@@ -328,6 +331,7 @@ where
                 verbose,
                 exact_match,
                 seed,
+                property_max_success,
             } => {
                 let tests =
                     self.collect_tests(verbose, match_tests, exact_match, options.tracing)?;
@@ -336,7 +340,7 @@ where
                     self.event_listener.handle_event(Event::RunningTests);
                 }
 
-                let tests = self.run_tests(tests, seed);
+                let tests = self.run_tests(tests, seed, property_max_success);
 
                 self.checks_count = if tests.is_empty() {
                     None
@@ -848,7 +852,12 @@ where
         Ok(tests)
     }
 
-    fn run_tests(&self, tests: Vec<Test>, seed: u32) -> Vec<TestResult<UntypedExpr, UntypedExpr>> {
+    fn run_tests(
+        &self,
+        tests: Vec<Test>,
+        seed: u32,
+        property_max_success: usize,
+    ) -> Vec<TestResult<UntypedExpr, UntypedExpr>> {
         use rayon::prelude::*;
 
         let data_types = utils::indexmap::as_ref_values(&self.data_types);
@@ -857,7 +866,7 @@ where
             .into_par_iter()
             .map(|test| match test {
                 Test::UnitTest(unit_test) => unit_test.run(),
-                Test::PropertyTest(property_test) => property_test.run(seed),
+                Test::PropertyTest(property_test) => property_test.run(seed, property_max_success),
             })
             .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
             .into_iter()

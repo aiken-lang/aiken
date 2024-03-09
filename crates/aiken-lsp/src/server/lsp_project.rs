@@ -1,5 +1,8 @@
 use aiken_lang::{ast::Tracing, line_numbers::LineNumbers};
-use aiken_project::{config::Config, error::Error as ProjectError, module::CheckedModule, Project};
+use aiken_project::{
+    config::Config, error::Error as ProjectError, module::CheckedModule,
+    test_framework::PropertyTest, Project,
+};
 use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Debug)]
@@ -29,9 +32,15 @@ impl LspProject {
     pub fn compile(&mut self) -> Result<(), Vec<ProjectError>> {
         let checkpoint = self.project.checkpoint();
 
-        let result =
-            self.project
-                .check(true, None, false, false, u32::default(), Tracing::silent());
+        let result = self.project.check(
+            true,
+            None,
+            false,
+            false,
+            u32::default(),
+            PropertyTest::DEFAULT_MAX_SUCCESS,
+            Tracing::silent(),
+        );
 
         self.project.restore(checkpoint);
 

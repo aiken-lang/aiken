@@ -11,6 +11,7 @@ pub enum CodeGenMode {
         verbose: bool,
         exact_match: bool,
         seed: u32,
+        property_max_success: usize,
     },
     Build(bool),
     NoOp,

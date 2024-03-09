@@ -17,6 +17,7 @@
 - **aiken**: support outputting mainnet addresses for validators. @rvcas
 - **aiken-lang**: added serde to CheckedModule to encode modules as cbor. @rvcas
 - **aiken-lang**: Strings can contain a nul byte using the escape sequence `\0`. @KtorZ
+- **aiken**: The `check` command now accept an extra (optional) option `--max-success` to control the number of property-test iterations to perform. @KtorZ
 
 ### Fixed
 

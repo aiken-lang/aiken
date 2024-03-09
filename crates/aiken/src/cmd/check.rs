@@ -1,6 +1,9 @@
 use super::build::{filter_traces_parser, trace_level_parser};
 use aiken_lang::ast::{TraceLevel, Tracing};
-use aiken_project::watch::{self, watch_project, with_project};
+use aiken_project::{
+    test_framework::PropertyTest,
+    watch::{self, watch_project, with_project},
+};
 use rand::prelude::*;
 use std::{path::PathBuf, process};
 
@@ -29,6 +32,10 @@ pub struct Args {
     /// An initial seed to initialize the pseudo-random generator for property-tests.
     #[clap(long)]
     seed: Option<u32>,
+
+    /// Maximum number of successful test run for considering a property-based test valid.
+    #[clap(long, default_value_t = PropertyTest::DEFAULT_MAX_SUCCESS)]
+    max_success: usize,
 
     /// Only run tests if they match any of these strings.
     /// You can match a module with `-m aiken/list` or `-m list`.
@@ -72,6 +79,7 @@ pub fn exec(
         filter_traces,
         trace_level,
         seed,
+        max_success,
     }: Args,
 ) -> miette::Result<()> {
     let mut rng = rand::thread_rng();
@@ -86,6 +94,7 @@ pub fn exec(
                 debug,
                 exact_match,
                 seed,
+                max_success,
                 match filter_traces {
                     Some(filter_traces) => filter_traces(trace_level),
                     None => Tracing::All(trace_level),
@@ -100,6 +109,7 @@ pub fn exec(
                 debug,
                 exact_match,
                 seed,
+                max_success,
                 match filter_traces {
                     Some(filter_traces) => filter_traces(trace_level),
                     None => Tracing::All(trace_level),
