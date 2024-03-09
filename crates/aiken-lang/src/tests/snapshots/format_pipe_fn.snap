@@ -5,9 +5,8 @@ description: "Code:\n\nfn foo() {\n  outputs\n    |> list.any(\n    fn(output) {
 fn foo() {
   outputs
     |> list.any(
-         fn(output) {
-           value.quantity_of(output.value, policy_id, asset_name) == 1
-         },
-       )
+        fn(output) {
+          value.quantity_of(output.value, policy_id, asset_name) == 1
+        },
+      )
 }
-

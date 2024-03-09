@@ -1244,7 +1244,7 @@ impl<'comments> Formatter<'comments> {
 
             let expr = self
                 .operator_side(doc, 4, expr.binop_precedence())
-                .nest(2 * INDENT + 1);
+                .nest(2 * INDENT);
 
             match printed_comments(comments, true) {
                 None => {
@@ -1842,11 +1842,7 @@ impl<'a> Documentable<'a> for &'a ArgName {
 }
 
 fn pub_(public: bool) -> Document<'static> {
-    if public {
-        "pub ".to_doc()
-    } else {
-        nil()
-    }
+    if public { "pub ".to_doc() } else { nil() }
 }
 
 impl<'a> Documentable<'a> for &'a UnqualifiedImport {
