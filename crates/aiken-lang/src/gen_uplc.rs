@@ -3880,10 +3880,7 @@ impl<'a> CodeGenerator<'a> {
 
                         Some(term)
                     } else {
-                        let name = if (*func_name == name
-                            || name == format!("{module}_{func_name}"))
-                            && !module.is_empty()
-                        {
+                        let name = if !module.is_empty() {
                             format!("{module}_{func_name}{variant_name}")
                         } else {
                             format!("{func_name}{variant_name}")
