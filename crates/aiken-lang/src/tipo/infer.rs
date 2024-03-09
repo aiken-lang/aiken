@@ -7,7 +7,7 @@ use super::{
 };
 use crate::{
     ast::{
-        Annotation, Arg, ArgName, ArgVia, DataType, Definition, Function, Layer, ModuleConstant,
+        Annotation, Arg, ArgName, ArgVia, DataType, Definition, Function, ModuleConstant,
         ModuleKind, RecordConstructor, RecordConstructorArg, Tracing, TypeAlias, TypedArg,
         TypedDefinition, TypedFunction, TypedModule, UntypedArg, UntypedDefinition, UntypedModule,
         Use, Validator,
@@ -584,7 +584,7 @@ fn infer_definition(
             location,
             module,
             as_name,
-            mut unqualified,
+            unqualified,
             ..
         }) => {
             let name = module.join("/");
@@ -599,15 +599,6 @@ fn infer_definition(
                         name,
                         imported_modules: environment.imported_modules.keys().cloned().collect(),
                     })?;
-
-            // TODO: remove this most likely
-            // Record any imports that are types only as this information is
-            // needed to prevent types being imported in generated JavaScript
-            for import in unqualified.iter_mut() {
-                if environment.imported_types.contains(import.variable_name()) {
-                    import.layer = Layer::Type;
-                }
-            }
 
             Ok(Definition::Use(Use {
                 location,

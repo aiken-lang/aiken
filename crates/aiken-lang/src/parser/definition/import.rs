@@ -1,9 +1,8 @@
-use chumsky::prelude::*;
-
 use crate::{
     ast,
     parser::{error::ParseError, token::Token},
 };
+use chumsky::prelude::*;
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
     let unqualified_import = choice((
@@ -22,7 +21,6 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
         name,
         location: span,
         as_name,
-        layer: Default::default(),
     });
 
     let unqualified_imports = just(Token::Dot)

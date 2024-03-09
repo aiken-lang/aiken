@@ -857,16 +857,11 @@ pub struct UnqualifiedImport {
     pub location: Span,
     pub name: String,
     pub as_name: Option<String>,
-    pub layer: Layer,
 }
 
 impl UnqualifiedImport {
     pub fn variable_name(&self) -> &str {
         self.as_name.as_deref().unwrap_or(&self.name)
-    }
-
-    pub fn is_value(&self) -> bool {
-        self.layer.is_value()
     }
 }
 
@@ -1012,20 +1007,6 @@ impl Annotation {
                 _ => false,
             },
         }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
-pub enum Layer {
-    #[default]
-    Value,
-    Type,
-}
-
-impl Layer {
-    /// Returns `true` if the layer is [`Value`].
-    pub fn is_value(&self) -> bool {
-        matches!(self, Self::Value)
     }
 }
 
