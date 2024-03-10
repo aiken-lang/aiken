@@ -423,12 +423,12 @@ fn fmt_test(
     }
 
     // Traces
-    if !result.logs().is_empty() {
+    if !result.traces().is_empty() {
         test = format!(
-            "{test}\n{title}\n{logs}",
+            "{test}\n{title}\n{traces}",
             title = "· with traces".if_supports_color(Stderr, |s| s.bold()),
-            logs = result
-                .logs()
+            traces = result
+                .traces()
                 .iter()
                 .map(|line| { format!("| {line}",) })
                 .collect::<Vec<_>>()

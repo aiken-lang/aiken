@@ -180,8 +180,7 @@ impl UnitTest {
             success,
             test: self.to_owned(),
             spent_budget: eval_result.cost(),
-            logs: eval_result.logs(),
-            output: eval_result.result().ok(),
+            traces: eval_result.logs(),
             assertion: self.assertion,
         })
     }
@@ -829,9 +828,9 @@ impl<U, T> TestResult<U, T> {
         }
     }
 
-    pub fn logs(&self) -> &[String] {
+    pub fn traces(&self) -> &[String] {
         match self {
-            TestResult::UnitTestResult(UnitTestResult { ref logs, .. }) => logs.as_slice(),
+            TestResult::UnitTestResult(UnitTestResult { ref traces, .. }) => traces.as_slice(),
             TestResult::PropertyTestResult(..) => &[],
         }
     }
@@ -862,8 +861,7 @@ impl<U, T> TestResult<U, T> {
 pub struct UnitTestResult<T> {
     pub success: bool,
     pub spent_budget: ExBudget,
-    pub output: Option<Term<NamedDeBruijn>>,
-    pub logs: Vec<String>,
+    pub traces: Vec<String>,
     pub test: UnitTest,
     pub assertion: Option<Assertion<T>>,
 }
@@ -878,8 +876,7 @@ impl UnitTestResult<(Constant, Rc<Type>)> {
         UnitTestResult {
             success: self.success,
             spent_budget: self.spent_budget,
-            output: self.output,
-            logs: self.logs,
+            traces: self.traces,
             test: self.test,
             assertion: self.assertion.and_then(|assertion| {
                 // No need to spend time/cpu on reifying assertions for successful
