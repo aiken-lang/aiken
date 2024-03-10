@@ -999,12 +999,26 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                             },
                             pattern_location: untyped_pattern.location(),
                             value_location: untyped_value.location(),
-                            sample: UntypedExpr::Assignment {
-                                location: Span::empty(),
-                                value: Box::new(untyped_value),
-                                pattern: untyped_pattern,
-                                kind: AssignmentKind::Let { backpassing: false },
-                                annotation: None,
+                            sample: match untyped_value {
+                                UntypedExpr::Var { name, .. } if name == ast::BACKPASS_VARIABLE => {
+                                    UntypedExpr::Assignment {
+                                        location: Span::empty(),
+                                        value: Box::new(UntypedExpr::Var {
+                                            name: "...".to_string(),
+                                            location: Span::empty(),
+                                        }),
+                                        pattern: untyped_pattern,
+                                        kind: AssignmentKind::Let { backpassing: true },
+                                        annotation: None,
+                                    }
+                                }
+                                _ => UntypedExpr::Assignment {
+                                    location: Span::empty(),
+                                    value: Box::new(untyped_value),
+                                    pattern: untyped_pattern,
+                                    kind: AssignmentKind::let_(),
+                                    annotation: None,
+                                },
                             },
                         });
                 }
@@ -1720,6 +1734,16 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             _ => unreachable!("backpass misuse: breakpoint isn't an Assignment ?!"),
         };
 
+        let value_location = value.location();
+
+        let call_location = Span {
+            start: value_location.end,
+            end: continuation
+                .last()
+                .map(|expr| expr.location().end)
+                .unwrap_or_else(|| value_location.end),
+        };
+
         // In case where we have a Pattern that isn't simply a let-binding to a name, we do insert an extra let-binding
         // in front of the continuation sequence. This is because we do not support patterns in function argument
         // (which is perhaps something we should support?).
@@ -1749,15 +1773,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         };
 
         match *value {
-            UntypedExpr::Call {
-                location: call_location,
-                fun,
-                arguments,
-            } => {
+            UntypedExpr::Call { fun, arguments, .. } => {
                 let mut new_arguments = Vec::new();
                 new_arguments.extend(arguments);
                 new_arguments.push(CallArg {
-                    location: assign_location,
+                    location: call_location,
                     label: None,
                     value: UntypedExpr::lambda(name, continuation, call_location),
                 });
@@ -1776,7 +1796,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             // Now, whether this leads to an invalid call usage, that's not *our* immediate
             // problem.
             UntypedExpr::Fn {
-                location: call_location,
                 fn_style,
                 ref arguments,
                 ref return_annotation,
@@ -1790,7 +1809,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     location: call_location,
                     fun: value,
                     arguments: vec![CallArg {
-                        location: assign_location,
+                        location: call_location,
                         label: None,
                         value: UntypedExpr::lambda(name, continuation, call_location),
                     }],
@@ -1814,12 +1833,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             // type-checker will catch that eventually in exactly the same way as if the code was
             // written like that to begin with.
             _ => UntypedExpr::Call {
-                location: assign_location,
+                location: call_location,
                 fun: value,
                 arguments: vec![CallArg {
-                    location: assign_location,
+                    location: call_location,
                     label: None,
-                    value: UntypedExpr::lambda(name, continuation, assign_location),
+                    value: UntypedExpr::lambda(name, continuation, call_location),
                 }],
             },
         }
