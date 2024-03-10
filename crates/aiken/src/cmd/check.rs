@@ -106,7 +106,7 @@ pub fn exec(
                     if let Some(c) = stdin.next() {
                         match c {
                             Ok(termion::event::Key::Backspace) => {
-                                if working != "" {
+                                if !working.is_empty() {
                                     working = working[..working.len() - 1].to_string();
                                 }
                             }
@@ -134,13 +134,13 @@ pub fn exec(
             |p| {
                 let filt = filter.lock().unwrap();
                 let final_match_tests = match match_tests.clone() {
-                    Some(existing) if *filt == "" => Some(existing),
+                    Some(existing) if filt.is_empty() => Some(existing),
                     Some(existing) => {
                         let mut e = existing.clone();
                         e.push(filt.clone());
                         Some(e)
                     }
-                    None if *filt != "" => Some(vec![filt.clone()]),
+                    None if !filt.is_empty() => Some(vec![filt.clone()]),
                     None => None,
                 };
                 let result = p.check(
