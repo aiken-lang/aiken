@@ -684,9 +684,10 @@ impl<'comments> Formatter<'comments> {
         kind: AssignmentKind,
         annotation: &'a Option<Annotation>,
     ) -> Document<'a> {
-        let keyword = match kind {
-            AssignmentKind::Let => "let",
-            AssignmentKind::Expect => "expect",
+        let (keyword, equal) = match kind {
+            AssignmentKind::Let => ("let", "="),
+            AssignmentKind::Bind => ("let", "<-"),
+            AssignmentKind::Expect => ("expect", "="),
         };
 
         match pattern {
@@ -708,7 +709,8 @@ impl<'comments> Formatter<'comments> {
                     .to_doc()
                     .append(" ")
                     .append(pattern.append(annotation).group())
-                    .append(" =")
+                    .append(" ")
+                    .append(equal)
                     .append(self.case_clause_value(value))
             }
         }
@@ -1842,11 +1844,7 @@ impl<'a> Documentable<'a> for &'a ArgName {
 }
 
 fn pub_(public: bool) -> Document<'static> {
-    if public {
-        "pub ".to_doc()
-    } else {
-        nil()
-    }
+    if public { "pub ".to_doc() } else { nil() }
 }
 
 impl<'a> Documentable<'a> for &'a UnqualifiedImport {

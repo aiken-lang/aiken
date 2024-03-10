@@ -1425,6 +1425,7 @@ impl Default for Bls12_381Point {
 #[derive(Debug, Clone, PartialEq, Eq, Copy, serde::Serialize, serde::Deserialize)]
 pub enum AssignmentKind {
     Let,
+    Bind,
     Expect,
 }
 
@@ -1440,6 +1441,7 @@ impl AssignmentKind {
     pub fn location_offset(&self) -> usize {
         match self {
             AssignmentKind::Let => 3,
+            AssignmentKind::Bind => 3,
             AssignmentKind::Expect => 6,
         }
     }

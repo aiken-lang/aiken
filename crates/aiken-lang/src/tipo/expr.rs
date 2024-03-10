@@ -24,7 +24,7 @@ use crate::{
     tipo::{fields::FieldMap, PatternConstructor, TypeVar},
 };
 use std::{cmp::Ordering, collections::HashMap, ops::Deref, rc::Rc};
-use vec1::Vec1;
+use vec1::{vec1, Vec1};
 
 #[derive(Debug)]
 pub(crate) struct ExprTyper<'a, 'b> {
@@ -978,6 +978,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         // If `expect` is explicitly used, we still check exhaustiveness but instead of returning an
         // error we emit a warning which explains that using `expect` is unnecessary.
         match kind {
+            AssignmentKind::Bind => {
+                unreachable!("monadic-bind should have been desugared earlier.")
+            }
+
             AssignmentKind::Let => {
                 self.environment
                     .check_exhaustiveness(&[&pattern], location, true)?
@@ -1708,15 +1712,26 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     }
 
     fn infer_seq(&mut self, location: Span, untyped: Vec<UntypedExpr>) -> Result<TypedExpr, Error> {
-        let sequence = self.in_new_scope(|scope| {
+        let mut breakpoint = None;
+
+        let mut sequence = self.in_new_scope(|scope| {
             let count = untyped.len();
 
             let mut expressions = Vec::with_capacity(count);
 
-            for (i, expression) in untyped.into_iter().enumerate() {
-                let no_assignment = assert_no_assignment(&expression);
+            for (i, expression) in untyped.iter().enumerate() {
+                let no_assignment = assert_no_assignment(expression);
 
-                let typed_expression = scope.infer(expression)?;
+                let typed_expression = match expression {
+                    UntypedExpr::Assignment {
+                        kind: AssignmentKind::Bind,
+                        ..
+                    } => {
+                        breakpoint = Some((i, expression.clone()));
+                        return Ok(expressions);
+                    }
+                    _ => scope.infer(expression.to_owned())?,
+                };
 
                 expressions.push(match i.cmp(&(count - 1)) {
                     // When the expression is the last in a sequence, we enforce it is NOT
@@ -1737,6 +1752,74 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             Ok(expressions)
         })?;
+
+        if let Some((
+            i,
+            UntypedExpr::Assignment {
+                location,
+                value,
+                pattern,
+                ..
+            },
+        )) = breakpoint
+        {
+            let then = UntypedExpr::Sequence {
+                location,
+                expressions: untyped.into_iter().skip(i + 1).collect::<Vec<_>>(),
+            };
+
+            // TODO: This must be constructed based on the inferred type of *value*.
+            //
+            //     let tipo = self.infer(untyped_value.clone())?.tipo();
+            //
+            // The following is the `and_then` for Option. The one for Fuzzer is a bit
+            // different.
+            let desugar = UntypedExpr::When {
+                location,
+                subject: value.clone(),
+                clauses: vec![
+                    UntypedClause {
+                        location,
+                        guard: None,
+                        patterns: vec1![Pattern::Constructor {
+                            location,
+                            is_record: false,
+                            with_spread: false,
+                            name: "None".to_string(),
+                            module: None,
+                            constructor: (),
+                            tipo: (),
+                            arguments: vec![],
+                        }],
+                        then: UntypedExpr::Var {
+                            location,
+                            name: "None".to_string(),
+                        },
+                    },
+                    UntypedClause {
+                        location,
+                        guard: None,
+                        patterns: vec1![Pattern::Constructor {
+                            location,
+                            is_record: false,
+                            with_spread: false,
+                            name: "Some".to_string(),
+                            module: None,
+                            constructor: (),
+                            tipo: (),
+                            arguments: vec![CallArg {
+                                location,
+                                label: None,
+                                value: pattern.clone(),
+                            }],
+                        }],
+                        then,
+                    },
+                ],
+            };
+
+            sequence.push(self.infer(desugar)?);
+        };
 
         let unused = self
             .environment

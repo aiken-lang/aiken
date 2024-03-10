@@ -1,10 +1,9 @@
-use chumsky::prelude::*;
-
 use crate::{
     ast,
     expr::UntypedExpr,
     parser::{annotation, error::ParseError, pattern, token::Token},
 };
+use chumsky::prelude::*;
 
 pub fn let_(
     r: Recursive<'_, Token, UntypedExpr, ParseError>,
@@ -12,9 +11,9 @@ pub fn let_(
     just(Token::Let)
         .ignore_then(pattern())
         .then(just(Token::Colon).ignore_then(annotation()).or_not())
-        .then_ignore(just(Token::Equal))
+        .then(choice((just(Token::Equal), just(Token::LArrow))))
         .then(r.clone())
-        .validate(move |((pattern, annotation), value), span, emit| {
+        .validate(move |(((pattern, annotation), kind), value), span, emit| {
             if matches!(value, UntypedExpr::Assignment { .. }) {
                 emit(ParseError::invalid_assignment_right_hand_side(span))
             }
@@ -23,7 +22,11 @@ pub fn let_(
                 location: span,
                 value: Box::new(value),
                 pattern,
-                kind: ast::AssignmentKind::Let,
+                kind: if kind == Token::LArrow {
+                    ast::AssignmentKind::Bind
+                } else {
+                    ast::AssignmentKind::Let
+                },
                 annotation,
             }
         })
