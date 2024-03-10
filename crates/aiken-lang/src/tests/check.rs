@@ -1206,6 +1206,46 @@ fn backpassing_basic() {
 }
 
 #[test]
+fn backpassing_expect_simple() {
+    let source_code = r#"
+        fn and_then(opt: Option<a>, then: fn(a) -> Option<b>) -> Option<b> {
+          when opt is {
+            None -> None
+            Some(a) -> then(a)
+          }
+        }
+
+        fn backpassing(opt_i: Option<Int>, opt_j: Option<Int>) -> Option<Int> {
+          expect 42 <- and_then(opt_i)
+          let j <- and_then(opt_j)
+          Some(j + 42)
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn backpassing_expect_nested() {
+    let source_code = r#"
+        fn and_then(opt: Option<a>, then: fn(Option<a>) -> Option<b>) -> Option<b> {
+          when opt is {
+            None -> None
+            Some(a) -> then(Some(a))
+          }
+        }
+
+        fn backpassing(opt_i: Option<Int>, opt_j: Option<Int>) -> Option<Int> {
+          expect Some(i) <- and_then(opt_i)
+          expect Some(j) <- and_then(opt_j)
+          Some(i + j)
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
 fn backpassing_interleaved_capture() {
     let source_code = r#"
         fn and_then(opt: Option<a>, then: fn(a) -> Option<b>) -> Option<b> {
@@ -1317,6 +1357,29 @@ fn backpassing_unsaturated_fn() {
     assert!(matches!(
         check(parse(source_code)),
         Err((_, Error::IncorrectFieldsArity { .. }))
+    ))
+}
+
+#[test]
+fn backpassing_expect_type_mismatch() {
+    let source_code = r#"
+        fn and_then(opt: Option<a>, then: fn(a) -> Option<b>) -> Option<b> {
+          when opt is {
+            None -> None
+            Some(a) -> then(a)
+          }
+        }
+
+        fn backpassing(opt_i: Option<Int>, opt_j: Option<Int>) -> Option<Int> {
+          expect Some(i) <- and_then(opt_i)
+          let j <- and_then(opt_j)
+          Some(i + j)
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CouldNotUnify { .. }))
     ))
 }
 

@@ -1708,14 +1708,15 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     }
 
     fn backpass(&mut self, breakpoint: UntypedExpr, continuation: Vec<UntypedExpr>) -> UntypedExpr {
-        let (assign_location, value, pattern, annotation) = match breakpoint {
+        let (value, pattern, annotation, kind, assign_location) = match breakpoint {
             UntypedExpr::Assignment {
                 location,
                 value,
                 pattern,
                 annotation,
+                kind,
                 ..
-            } => (location, value, pattern, annotation),
+            } => (value, pattern, annotation, kind, location),
             _ => unreachable!("backpass misuse: breakpoint isn't an Assignment ?!"),
         };
 
@@ -1723,19 +1724,23 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         // in front of the continuation sequence. This is because we do not support patterns in function argument
         // (which is perhaps something we should support?).
         let (name, continuation) = match pattern {
-            Pattern::Var { name, .. } | Pattern::Discard { name, .. } => {
+            Pattern::Var { name, .. } | Pattern::Discard { name, .. } if kind.is_let() => {
                 (name.clone(), continuation)
             }
             _ => {
                 let mut with_assignment = vec![UntypedExpr::Assignment {
                     location: assign_location,
                     value: UntypedExpr::Var {
-                        location: assign_location,
+                        location: value_location,
                         name: ast::BACKPASS_VARIABLE.to_string(),
                     }
                     .into(),
                     pattern,
-                    kind: AssignmentKind::Let { backpassing: false },
+                    // Erase backpassing while preserving assignment kind.
+                    kind: match kind {
+                        AssignmentKind::Let { .. } => AssignmentKind::let_(),
+                        AssignmentKind::Expect { .. } => AssignmentKind::expect(),
+                    },
                     annotation,
                 }];
                 with_assignment.extend(continuation);
@@ -2126,7 +2131,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     location: Span::empty(),
                     value: Box::new(subject.clone()),
                     pattern: clauses[0].patterns[0].clone(),
-                    kind: AssignmentKind::Let { backpassing: false },
+                    kind: AssignmentKind::let_(),
                     annotation: None,
                 },
             });

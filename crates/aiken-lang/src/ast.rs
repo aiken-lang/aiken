@@ -1479,13 +1479,17 @@ impl AssignmentKind<bool> {
     }
 }
 
-impl AssignmentKind<()> {
+impl<T: Default> AssignmentKind<T> {
     pub fn let_() -> Self {
-        AssignmentKind::Let { backpassing: () }
+        AssignmentKind::Let {
+            backpassing: Default::default(),
+        }
     }
 
     pub fn expect() -> Self {
-        AssignmentKind::Expect { backpassing: () }
+        AssignmentKind::Expect {
+            backpassing: Default::default(),
+        }
     }
 }
 
