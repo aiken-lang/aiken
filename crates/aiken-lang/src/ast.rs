@@ -16,6 +16,7 @@ use std::{
 use uplc::machine::runtime::Compressable;
 use vec1::Vec1;
 
+pub const BACKPASS_VARIABLE: &str = "_backpass";
 pub const CAPTURE_VARIABLE: &str = "_capture";
 pub const PIPE_VARIABLE: &str = "_pipe";
 
@@ -790,6 +791,19 @@ impl<A> Arg<A> {
 
     pub fn get_variable_name(&self) -> Option<&str> {
         self.arg_name.get_variable_name()
+    }
+
+    pub fn is_capture(&self) -> bool {
+        if let ArgName::Named {
+            ref name, location, ..
+        } = self.arg_name
+        {
+            return name.starts_with(CAPTURE_VARIABLE)
+                && location == Span::empty()
+                && self.location == Span::empty();
+        }
+
+        false
     }
 
     pub fn put_doc(&mut self, new_doc: String) {

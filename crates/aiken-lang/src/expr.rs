@@ -1,10 +1,10 @@
 use crate::{
     ast::{
-        self, Annotation, Arg, AssignmentKind, BinOp, Bls12_381Point, ByteArrayFormatPreference,
-        CallArg, Curve, DataType, DataTypeKey, DefinitionLocation, IfBranch, Located,
-        LogicalOpChainKind, ParsedCallArg, Pattern, RecordConstructorArg, RecordUpdateSpread, Span,
-        TraceKind, TypedClause, TypedDataType, TypedRecordUpdateArg, UnOp, UntypedClause,
-        UntypedRecordUpdateArg,
+        self, Annotation, Arg, ArgName, AssignmentKind, BinOp, Bls12_381Point,
+        ByteArrayFormatPreference, CallArg, Curve, DataType, DataTypeKey, DefinitionLocation,
+        IfBranch, Located, LogicalOpChainKind, ParsedCallArg, Pattern, RecordConstructorArg,
+        RecordUpdateSpread, Span, TraceKind, TypedClause, TypedDataType, TypedRecordUpdateArg,
+        UnOp, UntypedClause, UntypedRecordUpdateArg,
     },
     builtins::void,
     parser::token::Base,
@@ -1298,5 +1298,30 @@ impl UntypedExpr {
             self,
             Self::String { .. } | Self::UInt { .. } | Self::ByteArray { .. }
         )
+    }
+
+    pub fn lambda(name: String, expressions: Vec<UntypedExpr>, location: Span) -> Self {
+        Self::Fn {
+            location,
+            fn_style: FnStyle::Plain,
+            arguments: vec![Arg {
+                location,
+                doc: None,
+                annotation: None,
+                tipo: (),
+                arg_name: ArgName::Named {
+                    label: name.clone(),
+                    name,
+                    location,
+                    is_validator_param: false,
+                },
+            }],
+            body: Self::Sequence {
+                location,
+                expressions,
+            }
+            .into(),
+            return_annotation: None,
+        }
     }
 }

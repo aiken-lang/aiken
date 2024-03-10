@@ -1186,6 +1186,141 @@ fn trace_if_false_ok() {
 }
 
 #[test]
+fn backpassing_basic() {
+    let source_code = r#"
+        fn and_then(opt: Option<a>, then: fn(a) -> Option<b>) -> Option<b> {
+          when opt is {
+            None -> None
+            Some(a) -> then(a)
+          }
+        }
+
+        fn backpassing(opt_i: Option<Int>, opt_j: Option<Int>) -> Option<Int> {
+          let i <- and_then(opt_i)
+          let j <- and_then(opt_j)
+          Some(i + j)
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn backpassing_interleaved_capture() {
+    let source_code = r#"
+        fn and_then(opt: Option<a>, then: fn(a) -> Option<b>) -> Option<b> {
+          when opt is {
+            None -> None
+            Some(a) -> then(a)
+          }
+        }
+
+        fn backpassing(opt_i: Option<Int>, opt_j: Option<Int>) -> Option<Int> {
+          let f = and_then(opt_i, _)
+          let i <- f
+          let g = and_then(opt_j, _)
+          let j <- g
+          Some(i + j)
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn backpassing_patterns() {
+    let source_code = r#"
+        fn and_then(opt: Option<a>, then: fn(a) -> Option<b>) -> Option<b> {
+          when opt is {
+            None -> None
+            Some(a) -> then(a)
+          }
+        }
+
+        type Foo {
+          foo: Int,
+        }
+
+        fn backpassing(opt_i: Option<Foo>, opt_j: Option<Foo>) -> Option<Int> {
+          let Foo { foo: i } <- and_then(opt_i)
+          let Foo { foo: j } <- and_then(opt_j)
+          Some(i + j)
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn backpassing_not_a_function() {
+    let source_code = r#"
+        fn and_then(opt: Option<a>, then: fn(a) -> Option<b>) -> Option<b> {
+          when opt is {
+            None -> None
+            Some(a) -> then(a)
+          }
+        }
+
+        fn backpassing(opt_i: Option<Int>, opt_j: Option<Int>) -> Option<Int> {
+          let i <- opt_i
+          let j <- and_then(opt_j)
+          Some(i + j)
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::NotFn { .. }))
+    ))
+}
+
+#[test]
+fn backpassing_non_exhaustive_pattern() {
+    let source_code = r#"
+        fn and_then(opt: Option<a>, then: fn(a) -> Option<b>) -> Option<b> {
+          when opt is {
+            None -> None
+            Some(a) -> then(a)
+          }
+        }
+
+        fn backpassing(opt_i: Option<Int>, opt_j: Option<Int>) -> Option<Int> {
+          let 42 <- and_then(opt_i)
+          let j <- and_then(opt_j)
+          Some(i + j)
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::NotExhaustivePatternMatch { .. }))
+    ))
+}
+
+#[test]
+fn backpassing_unsaturated_fn() {
+    let source_code = r#"
+        fn and_then(opt: Option<a>, then: fn(a) -> Option<b>) -> Option<b> {
+          when opt is {
+            None -> None
+            Some(a) -> then(a)
+          }
+        }
+
+        fn backpassing(opt_i: Option<Int>, opt_j: Option<Int>) -> Option<Int> {
+          let i <- and_then
+          let j <- and_then(opt_j)
+          Some(i + j)
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::IncorrectFieldsArity { .. }))
+    ))
+}
+
+#[test]
 fn trace_if_false_ko() {
     let source_code = r#"
         fn add(a: Int, b: Int) {
