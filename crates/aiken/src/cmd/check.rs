@@ -6,8 +6,13 @@ use aiken_project::{
 };
 use owo_colors::{OwoColorize, Stream::Stderr};
 use rand::prelude::*;
+use std::{
+    path::PathBuf,
+    process,
+    sync::{Arc, Mutex},
+    thread,
+};
 use termion::input::TermRead;
-use std::{path::PathBuf, process, sync::{Arc, Mutex}, thread};
 
 #[derive(clap::Args)]
 /// Type-check an Aiken project
@@ -104,7 +109,7 @@ pub fn exec(
                                 if working != "" {
                                     working = working[..working.len() - 1].to_string();
                                 }
-                            },
+                            }
                             Ok(termion::event::Key::Char('\n')) => {
                                 let mut filt = filter.lock().unwrap();
                                 *filt = working;
@@ -113,48 +118,55 @@ pub fn exec(
                             }
                             Ok(termion::event::Key::Char(c)) => {
                                 working.push(c);
-                            },
-                            _ => {},
+                            }
+                            _ => {}
                         }
                     }
                 }
             });
         }
 
-        watch_project(directory.as_deref(), Some(receiver), watch::default_filter, 500, |p| {
-            let filt = filter.lock().unwrap();
-            let final_match_tests = match match_tests.clone() {
-                Some(existing) if *filt == "" => { Some(existing) }
-                Some(existing) => {
-                    let mut e = existing.clone();
-                    e.push(filt.clone());
-                    Some(e)
-                },
-                None if *filt != "" => Some(vec![filt.clone()]),
-                None => None,
-            };
-            let result = p.check(
-                skip_tests,
-                final_match_tests.clone(),
-                debug,
-                exact_match,
-                seed,
-                max_success,
-                match filter_traces {
-                    Some(filter_traces) => filter_traces(trace_level),
-                    None => Tracing::All(trace_level),
-                },
-            );
-            if let Some(fmt) = final_match_tests {
-                println!("      {} {}",
-                    "Filtered by:"
-                        .if_supports_color(Stderr, |s| s.bold())
-                        .if_supports_color(Stderr, |s| s.purple()),
-                        fmt.join(", ")
+        watch_project(
+            directory.as_deref(),
+            Some(receiver),
+            watch::default_filter,
+            500,
+            |p| {
+                let filt = filter.lock().unwrap();
+                let final_match_tests = match match_tests.clone() {
+                    Some(existing) if *filt == "" => Some(existing),
+                    Some(existing) => {
+                        let mut e = existing.clone();
+                        e.push(filt.clone());
+                        Some(e)
+                    }
+                    None if *filt != "" => Some(vec![filt.clone()]),
+                    None => None,
+                };
+                let result = p.check(
+                    skip_tests,
+                    final_match_tests.clone(),
+                    debug,
+                    exact_match,
+                    seed,
+                    max_success,
+                    match filter_traces {
+                        Some(filter_traces) => filter_traces(trace_level),
+                        None => Tracing::All(trace_level),
+                    },
                 );
-            }
-            result
-        })
+                if let Some(fmt) = final_match_tests {
+                    println!(
+                        "      {} {}",
+                        "Filtered by:"
+                            .if_supports_color(Stderr, |s| s.bold())
+                            .if_supports_color(Stderr, |s| s.purple()),
+                        fmt.join(", ")
+                    );
+                }
+                result
+            },
+        )
     } else {
         with_project(directory.as_deref(), deny, |p| {
             p.check(

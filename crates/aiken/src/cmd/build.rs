@@ -51,15 +51,21 @@ pub fn exec(
     }: Args,
 ) -> miette::Result<()> {
     let result = if watch {
-        watch_project(directory.as_deref(), None, watch::default_filter, 500, |p| {
-            p.build(
-                uplc,
-                match filter_traces {
-                    Some(filter_traces) => filter_traces(trace_level),
-                    None => Tracing::All(trace_level),
-                },
-            )
-        })
+        watch_project(
+            directory.as_deref(),
+            None,
+            watch::default_filter,
+            500,
+            |p| {
+                p.build(
+                    uplc,
+                    match filter_traces {
+                        Some(filter_traces) => filter_traces(trace_level),
+                        None => Tracing::All(trace_level),
+                    },
+                )
+            },
+        )
     } else {
         with_project(directory.as_deref(), deny, |p| {
             p.build(
