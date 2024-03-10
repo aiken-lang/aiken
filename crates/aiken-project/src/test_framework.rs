@@ -220,12 +220,18 @@ impl PropertyTest {
     pub fn run<U>(self, seed: u32, n: usize) -> TestResult<U, PlutusData> {
         let mut labels = BTreeMap::new();
 
-        let (counterexample, iterations) =
+        let (traces, counterexample, iterations) =
             match self.run_n_times(n, Prng::from_seed(seed), None, &mut labels) {
-                None => (None, n),
-                Some((remaining, counterexample)) => {
-                    (Some(counterexample.value), n - remaining + 1)
-                }
+                None => (Vec::new(), None, n),
+                Some((remaining, counterexample)) => (
+                    self.eval(&counterexample.value)
+                        .logs()
+                        .into_iter()
+                        .filter(|s| PropertyTest::extract_label(s).is_none())
+                        .collect(),
+                    Some(counterexample.value),
+                    n - remaining + 1,
+                ),
             };
 
         TestResult::PropertyTestResult(PropertyTestResult {
@@ -233,6 +239,7 @@ impl PropertyTest {
             counterexample,
             iterations,
             labels,
+            traces,
         })
     }
 
@@ -269,13 +276,13 @@ impl PropertyTest {
 
         let mut result = self.eval(&value);
 
-        for label in result.logs() {
+        for s in result.logs() {
             // NOTE: There may be other log outputs that interefere with labels. So *by
             // convention*, we treat as label strings that starts with a NUL byte, which
             // should be a guard sufficient to prevent inadvertent clashes.
-            if label.starts_with('\0') {
+            if let Some(label) = PropertyTest::extract_label(&s) {
                 labels
-                    .entry(label.split_at(1).1.to_string())
+                    .entry(label)
                     .and_modify(|count| *count += 1)
                     .or_insert(1);
             }
@@ -326,6 +333,14 @@ impl PropertyTest {
         Program::<NamedDeBruijn>::try_from(program)
             .unwrap()
             .eval(ExBudget::max())
+    }
+
+    fn extract_label(s: &str) -> Option<String> {
+        if s.starts_with('\0') {
+            Some(s.split_at(1).1.to_string())
+        } else {
+            None
+        }
     }
 }
 
@@ -830,8 +845,10 @@ impl<U, T> TestResult<U, T> {
 
     pub fn traces(&self) -> &[String] {
         match self {
-            TestResult::UnitTestResult(UnitTestResult { ref traces, .. }) => traces.as_slice(),
-            TestResult::PropertyTestResult(..) => &[],
+            TestResult::UnitTestResult(UnitTestResult { ref traces, .. })
+            | TestResult::PropertyTestResult(PropertyTestResult { ref traces, .. }) => {
+                traces.as_slice()
+            }
         }
     }
 
@@ -909,6 +926,7 @@ pub struct PropertyTestResult<T> {
     pub counterexample: Option<T>,
     pub iterations: usize,
     pub labels: BTreeMap<String, usize>,
+    pub traces: Vec<String>,
 }
 
 unsafe impl<T> Send for PropertyTestResult<T> {}
@@ -926,6 +944,7 @@ impl PropertyTestResult<PlutusData> {
             iterations: self.iterations,
             test: self.test,
             labels: self.labels,
+            traces: self.traces,
         }
     }
 }
