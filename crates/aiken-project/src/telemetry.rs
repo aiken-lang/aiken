@@ -329,15 +329,29 @@ fn fmt_test(
             ..
         }) if !result.is_success() => {
             test = format!(
-                "{test}\n{}{new_line}",
+                "{test}\n{}",
                 assertion.to_string(Stderr, unit_test.can_error),
-                new_line = if result.logs().is_empty() { "\n" } else { "" },
             );
         }
         _ => (),
     }
 
-    // CounterExample
+    // CounterExamples
+    if let TestResult::PropertyTestResult(PropertyTestResult {
+        counterexample: None,
+        ..
+    }) = result
+    {
+        if !result.is_success() {
+            test = format!(
+                "{test}\n{}",
+                "× no counterexample found"
+                    .if_supports_color(Stderr, |s| s.red())
+                    .if_supports_color(Stderr, |s| s.bold())
+            );
+        }
+    }
+
     if let TestResult::PropertyTestResult(PropertyTestResult {
         counterexample: Some(counterexample),
         ..
@@ -409,7 +423,7 @@ fn fmt_test(
     }
 
     // Traces
-    if !result.logs().is_empty() && result.is_success() {
+    if !result.logs().is_empty() {
         test = format!(
             "{test}\n{title}\n{logs}",
             title = "· with traces".if_supports_color(Stderr, |s| s.bold()),
