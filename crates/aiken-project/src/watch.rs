@@ -162,6 +162,7 @@ where
 /// ```
 pub fn watch_project<F, A>(
     directory: Option<&Path>,
+    rebuild: Option<std::sync::mpsc::Receiver<()>>,
     filter: F,
     debounce: u32,
     mut action: A,
@@ -225,8 +226,14 @@ where
         // release the lock here, in case other events come in
         drop(queue);
 
+        let force_rebuild = if let Some(ref r) = rebuild {
+            r.try_recv().is_ok()
+        } else {
+            false
+        };
+
         // If we have an event that survived the filter, then we can construct the project and invoke the action
-        if latest.is_some() {
+        if latest.is_some() || force_rebuild {
             print!("{esc}c", esc = 27 as char);
             eprint!("{esc}c", esc = 27 as char);
             eprintln!(

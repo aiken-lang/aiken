@@ -4,8 +4,10 @@ use aiken_project::{
     test_framework::PropertyTest,
     watch::{self, watch_project, with_project},
 };
+use owo_colors::{OwoColorize, Stream::Stderr};
 use rand::prelude::*;
-use std::{path::PathBuf, process};
+use termion::input::TermRead;
+use std::{path::PathBuf, process, sync::{Arc, Mutex}, thread};
 
 #[derive(clap::Args)]
 /// Type-check an Aiken project
@@ -87,10 +89,53 @@ pub fn exec(
     let seed = seed.unwrap_or_else(|| rng.gen());
 
     let result = if watch {
-        watch_project(directory.as_deref(), watch::default_filter, 500, |p| {
-            p.check(
+        let mut stdin = termion::async_stdin().keys();
+
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let filter = Arc::new(Mutex::new("".to_string()));
+        {
+            let filter = filter.clone();
+            thread::spawn(move || {
+                let mut working = "".to_string();
+                loop {
+                    if let Some(c) = stdin.next() {
+                        match c {
+                            Ok(termion::event::Key::Backspace) => {
+                                if working != "" {
+                                    working = working[..working.len() - 1].to_string();
+                                }
+                            },
+                            Ok(termion::event::Key::Char('\n')) => {
+                                let mut filt = filter.lock().unwrap();
+                                *filt = working;
+                                working = "".to_string();
+                                sender.send(()).unwrap();
+                            }
+                            Ok(termion::event::Key::Char(c)) => {
+                                working.push(c);
+                            },
+                            _ => {},
+                        }
+                    }
+                }
+            });
+        }
+
+        watch_project(directory.as_deref(), Some(receiver), watch::default_filter, 500, |p| {
+            let filt = filter.lock().unwrap();
+            let final_match_tests = match match_tests.clone() {
+                Some(existing) if *filt == "" => { Some(existing) }
+                Some(existing) => {
+                    let mut e = existing.clone();
+                    e.push(filt.clone());
+                    Some(e)
+                },
+                None if *filt != "" => Some(vec![filt.clone()]),
+                None => None,
+            };
+            let result = p.check(
                 skip_tests,
-                match_tests.clone(),
+                final_match_tests.clone(),
                 debug,
                 exact_match,
                 seed,
@@ -99,7 +144,16 @@ pub fn exec(
                     Some(filter_traces) => filter_traces(trace_level),
                     None => Tracing::All(trace_level),
                 },
-            )
+            );
+            if let Some(fmt) = final_match_tests {
+                println!("      {} {}",
+                    "Filtered by:"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.purple()),
+                        fmt.join(", ")
+                );
+            }
+            result
         })
     } else {
         with_project(directory.as_deref(), deny, |p| {
