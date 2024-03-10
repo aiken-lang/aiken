@@ -1,10 +1,10 @@
 use crate::{
     ast::{
-        self, Annotation, Arg, ArgName, AssignmentKind, BinOp, Bls12_381Point,
-        ByteArrayFormatPreference, CallArg, Curve, DataType, DataTypeKey, DefinitionLocation,
-        IfBranch, Located, LogicalOpChainKind, ParsedCallArg, Pattern, RecordConstructorArg,
-        RecordUpdateSpread, Span, TraceKind, TypedClause, TypedDataType, TypedRecordUpdateArg,
-        UnOp, UntypedClause, UntypedRecordUpdateArg,
+        self, Annotation, Arg, ArgName, BinOp, Bls12_381Point, ByteArrayFormatPreference, CallArg,
+        Curve, DataType, DataTypeKey, DefinitionLocation, IfBranch, Located, LogicalOpChainKind,
+        ParsedCallArg, Pattern, RecordConstructorArg, RecordUpdateSpread, Span, TraceKind,
+        TypedAssignmentKind, TypedClause, TypedDataType, TypedRecordUpdateArg, UnOp,
+        UntypedAssignmentKind, UntypedClause, UntypedRecordUpdateArg,
     },
     builtins::void,
     parser::token::Base,
@@ -106,7 +106,7 @@ pub enum TypedExpr {
         tipo: Rc<Type>,
         value: Box<Self>,
         pattern: Pattern<PatternConstructor, Rc<Type>>,
-        kind: AssignmentKind,
+        kind: TypedAssignmentKind,
     },
 
     Trace {
@@ -519,7 +519,7 @@ pub enum UntypedExpr {
         location: Span,
         value: Box<Self>,
         pattern: Pattern<(), ()>,
-        kind: AssignmentKind,
+        kind: UntypedAssignmentKind,
         annotation: Option<Annotation>,
     },
 

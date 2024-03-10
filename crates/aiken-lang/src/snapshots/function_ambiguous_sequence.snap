@@ -23,7 +23,9 @@ Module {
                                 location: 19..20,
                                 name: "a",
                             },
-                            kind: Let,
+                            kind: Let {
+                                backpassing: false,
+                            },
                             annotation: None,
                         },
                         UInt {
@@ -61,7 +63,9 @@ Module {
                                 location: 56..57,
                                 name: "a",
                             },
-                            kind: Let,
+                            kind: Let {
+                                backpassing: false,
+                            },
                             annotation: None,
                         },
                         UInt {
@@ -110,7 +114,9 @@ Module {
                         location: 93..94,
                         name: "a",
                     },
-                    kind: Let,
+                    kind: Let {
+                        backpassing: false,
+                    },
                     annotation: None,
                 },
                 doc: None,
@@ -155,7 +161,9 @@ Module {
                                 location: 126..127,
                                 name: "a",
                             },
-                            kind: Let,
+                            kind: Let {
+                                backpassing: false,
+                            },
                             annotation: None,
                         },
                         BinOp {

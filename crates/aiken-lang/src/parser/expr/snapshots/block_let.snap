@@ -20,7 +20,9 @@ Assignment {
                     location: 16..17,
                     name: "x",
                 },
-                kind: Let,
+                kind: Let {
+                    backpassing: false,
+                },
                 annotation: None,
             },
             BinOp {
@@ -44,6 +46,8 @@ Assignment {
         location: 4..5,
         name: "b",
     },
-    kind: Let,
+    kind: Let {
+        backpassing: false,
+    },
     annotation: None,
 }

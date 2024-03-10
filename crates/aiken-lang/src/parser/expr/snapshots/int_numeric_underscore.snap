@@ -18,7 +18,9 @@ Sequence {
                 location: 8..9,
                 name: "i",
             },
-            kind: Let,
+            kind: Let {
+                backpassing: false,
+            },
             annotation: None,
         },
         Assignment {
@@ -34,7 +36,9 @@ Sequence {
                 location: 28..29,
                 name: "j",
             },
-            kind: Let,
+            kind: Let {
+                backpassing: false,
+            },
             annotation: None,
         },
         Assignment {
@@ -54,7 +58,9 @@ Sequence {
                 location: 48..49,
                 name: "k",
             },
-            kind: Let,
+            kind: Let {
+                backpassing: false,
+            },
             annotation: None,
         },
     ],

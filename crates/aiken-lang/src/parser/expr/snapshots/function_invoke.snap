@@ -31,7 +31,9 @@ Sequence {
                 location: 4..5,
                 name: "x",
             },
-            kind: Let,
+            kind: Let {
+                backpassing: false,
+            },
             annotation: None,
         },
         Assignment {
@@ -115,7 +117,9 @@ Sequence {
                 location: 24..33,
                 name: "map_add_x",
             },
-            kind: Let,
+            kind: Let {
+                backpassing: false,
+            },
             annotation: None,
         },
         Call {

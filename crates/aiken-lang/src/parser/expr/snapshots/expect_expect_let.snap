@@ -20,7 +20,9 @@ Assignment {
                     location: 13..14,
                     name: "a",
                 },
-                kind: Let,
+                kind: Let {
+                    backpassing: false,
+                },
                 annotation: None,
             },
         ],
@@ -35,6 +37,8 @@ Assignment {
         with_spread: false,
         tipo: (),
     },
-    kind: Expect,
+    kind: Expect {
+        backpassing: false,
+    },
     annotation: None,
 }

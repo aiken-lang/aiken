@@ -1436,28 +1436,56 @@ impl Default for Bls12_381Point {
     }
 }
 
+pub type UntypedAssignmentKind = AssignmentKind<bool>;
+pub type TypedAssignmentKind = AssignmentKind<()>;
+
 #[derive(Debug, Clone, PartialEq, Eq, Copy, serde::Serialize, serde::Deserialize)]
-pub enum AssignmentKind {
-    Let,
-    Bind,
-    Expect,
+pub enum AssignmentKind<T> {
+    Let { backpassing: T },
+    Expect { backpassing: T },
 }
 
-impl AssignmentKind {
+impl From<UntypedAssignmentKind> for TypedAssignmentKind {
+    fn from(kind: UntypedAssignmentKind) -> TypedAssignmentKind {
+        match kind {
+            AssignmentKind::Let { .. } => AssignmentKind::Let { backpassing: () },
+            AssignmentKind::Expect { .. } => AssignmentKind::Expect { backpassing: () },
+        }
+    }
+}
+
+impl<T> AssignmentKind<T> {
     pub fn is_let(&self) -> bool {
-        matches!(self, AssignmentKind::Let)
+        matches!(self, AssignmentKind::Let { .. })
     }
 
     pub fn is_expect(&self) -> bool {
-        matches!(self, AssignmentKind::Expect)
+        matches!(self, AssignmentKind::Expect { .. })
     }
 
     pub fn location_offset(&self) -> usize {
         match self {
-            AssignmentKind::Let => 3,
-            AssignmentKind::Bind => 3,
-            AssignmentKind::Expect => 6,
+            AssignmentKind::Let { .. } => 3,
+            AssignmentKind::Expect { .. } => 6,
         }
+    }
+}
+
+impl AssignmentKind<bool> {
+    pub fn is_backpassing(&self) -> bool {
+        match self {
+            Self::Let { backpassing } | Self::Expect { backpassing } => *backpassing,
+        }
+    }
+}
+
+impl AssignmentKind<()> {
+    pub fn let_() -> Self {
+        AssignmentKind::Let { backpassing: () }
+    }
+
+    pub fn expect() -> Self {
+        AssignmentKind::Expect { backpassing: () }
     }
 }
 

@@ -31,7 +31,9 @@ Sequence {
                 location: 4..5,
                 name: "a",
             },
-            kind: Let,
+            kind: Let {
+                backpassing: false,
+            },
             annotation: None,
         },
         Tuple {

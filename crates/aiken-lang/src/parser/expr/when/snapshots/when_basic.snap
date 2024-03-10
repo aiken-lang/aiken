@@ -89,7 +89,9 @@ When {
                             location: 55..62,
                             name: "amazing",
                         },
-                        kind: Let,
+                        kind: Let {
+                            backpassing: false,
+                        },
                         annotation: None,
                     },
                     Var {

@@ -30,6 +30,8 @@ Assignment {
         with_spread: false,
         tipo: (),
     },
-    kind: Expect,
+    kind: Expect {
+        backpassing: false,
+    },
     annotation: None,
 }

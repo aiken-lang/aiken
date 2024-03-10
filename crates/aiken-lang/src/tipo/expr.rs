@@ -12,8 +12,8 @@ use crate::{
         ByteArrayFormatPreference, CallArg, ClauseGuard, Constant, Curve, IfBranch,
         LogicalOpChainKind, Pattern, RecordUpdateSpread, Span, TraceKind, TraceLevel, Tracing,
         TypedArg, TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch, TypedPattern,
-        TypedRecordUpdateArg, UnOp, UntypedArg, UntypedClause, UntypedClauseGuard, UntypedIfBranch,
-        UntypedPattern, UntypedRecordUpdateArg,
+        TypedRecordUpdateArg, UnOp, UntypedArg, UntypedAssignmentKind, UntypedClause,
+        UntypedClauseGuard, UntypedIfBranch, UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{
         bool, byte_array, function, g1_element, g2_element, int, list, string, tuple, void,
@@ -916,7 +916,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         &mut self,
         untyped_pattern: UntypedPattern,
         untyped_value: UntypedExpr,
-        kind: AssignmentKind,
+        kind: UntypedAssignmentKind,
         annotation: &Option<Annotation>,
         location: Span,
     ) -> Result<TypedExpr, Error> {
@@ -978,16 +978,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         // If `expect` is explicitly used, we still check exhaustiveness but instead of returning an
         // error we emit a warning which explains that using `expect` is unnecessary.
         match kind {
-            AssignmentKind::Bind => {
-                unreachable!("monadic-bind should have been desugared earlier.")
-            }
-
-            AssignmentKind::Let => {
+            AssignmentKind::Let { .. } => {
                 self.environment
                     .check_exhaustiveness(&[&pattern], location, true)?
             }
 
-            AssignmentKind::Expect => {
+            AssignmentKind::Expect { .. } => {
                 let is_exaustive_pattern = self
                     .environment
                     .check_exhaustiveness(&[&pattern], location, false)
@@ -1007,7 +1003,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                                 location: Span::empty(),
                                 value: Box::new(untyped_value),
                                 pattern: untyped_pattern,
-                                kind: AssignmentKind::Let,
+                                kind: AssignmentKind::Let { backpassing: false },
                                 annotation: None,
                             },
                         });
@@ -1018,7 +1014,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         Ok(TypedExpr::Assignment {
             location,
             tipo: value_typ,
-            kind,
+            kind: kind.into(),
             pattern,
             value: Box::new(typed_value),
         })
@@ -1739,7 +1735,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     }
                     .into(),
                     pattern,
-                    kind: AssignmentKind::Let,
+                    kind: AssignmentKind::Let { backpassing: false },
                     annotation,
                 }];
                 with_assignment.extend(continuation);
@@ -1830,15 +1826,15 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let mut prefix = Vec::with_capacity(untyped.len());
         let mut suffix = Vec::with_capacity(untyped.len());
         for expression in untyped.into_iter() {
-            match expression {
-                _ if breakpoint.is_some() => suffix.push(expression),
-                UntypedExpr::Assignment {
-                    kind: AssignmentKind::Bind,
-                    ..
-                } => {
-                    breakpoint = Some(expression);
+            if breakpoint.is_some() {
+                suffix.push(expression);
+            } else {
+                match expression {
+                    UntypedExpr::Assignment { kind, .. } if kind.is_backpassing() => {
+                        breakpoint = Some(expression);
+                    }
+                    _ => prefix.push(expression),
                 }
-                _ => prefix.push(expression),
             }
         }
         if let Some(breakpoint) = breakpoint {
@@ -2130,7 +2126,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     location: Span::empty(),
                     value: Box::new(subject.clone()),
                     pattern: clauses[0].patterns[0].clone(),
-                    kind: AssignmentKind::Let,
+                    kind: AssignmentKind::Let { backpassing: false },
                     annotation: None,
                 },
             });
@@ -2258,7 +2254,7 @@ fn assert_assignment(expr: TypedExpr) -> Result<TypedExpr, Error> {
                     with_spread: false,
                     tipo: void(),
                 },
-                kind: AssignmentKind::Let,
+                kind: AssignmentKind::let_(),
             });
         }
 

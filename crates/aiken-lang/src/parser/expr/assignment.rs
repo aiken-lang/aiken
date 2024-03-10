@@ -22,10 +22,8 @@ pub fn let_(
                 location: span,
                 value: Box::new(value),
                 pattern,
-                kind: if kind == Token::LArrow {
-                    ast::AssignmentKind::Bind
-                } else {
-                    ast::AssignmentKind::Let
+                kind: ast::AssignmentKind::Let {
+                    backpassing: kind == Token::LArrow,
                 },
                 annotation,
             }
@@ -39,24 +37,27 @@ pub fn expect(
         .ignore_then(
             pattern()
                 .then(just(Token::Colon).ignore_then(annotation()).or_not())
-                .then_ignore(just(Token::Equal))
+                .then(choice((just(Token::Equal), just(Token::LArrow))))
                 .or_not(),
         )
         .then(r.clone())
         .validate(move |(opt_pattern, value), span, emit| {
-            let (pattern, annotation) = opt_pattern.unwrap_or_else(|| {
+            let ((pattern, annotation), kind) = opt_pattern.unwrap_or_else(|| {
                 (
-                    ast::UntypedPattern::Constructor {
-                        is_record: false,
-                        location: span,
-                        name: "True".to_string(),
-                        arguments: vec![],
-                        module: None,
-                        constructor: (),
-                        with_spread: false,
-                        tipo: (),
-                    },
-                    None,
+                    (
+                        ast::UntypedPattern::Constructor {
+                            is_record: false,
+                            location: span,
+                            name: "True".to_string(),
+                            arguments: vec![],
+                            module: None,
+                            constructor: (),
+                            with_spread: false,
+                            tipo: (),
+                        },
+                        None,
+                    ),
+                    Token::Equal,
                 )
             });
 
@@ -68,7 +69,9 @@ pub fn expect(
                 location: span,
                 value: Box::new(value),
                 pattern,
-                kind: ast::AssignmentKind::Expect,
+                kind: ast::AssignmentKind::Expect {
+                    backpassing: kind == Token::LArrow,
+                },
                 annotation,
             }
         })
