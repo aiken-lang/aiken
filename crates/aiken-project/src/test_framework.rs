@@ -212,6 +212,13 @@ pub struct Fuzzer<T> {
     pub stripped_type_info: Rc<Type>,
 }
 
+#[derive(Debug, Clone, thiserror::Error, miette::Diagnostic)]
+#[error("Fuzzer exited unexpectedly: {uplc_error}")]
+pub struct FuzzerError {
+    traces: Vec<String>,
+    uplc_error: uplc::machine::Error,
+}
+
 impl PropertyTest {
     pub const DEFAULT_MAX_SUCCESS: usize = 100;
 
@@ -222,15 +229,23 @@ impl PropertyTest {
 
         let (traces, counterexample, iterations) =
             match self.run_n_times(n, Prng::from_seed(seed), None, &mut labels) {
-                None => (Vec::new(), None, n),
-                Some((remaining, counterexample)) => (
+                Ok(None) => (Vec::new(), Ok(None), n),
+                Ok(Some((remaining, counterexample))) => (
                     self.eval(&counterexample.value)
                         .logs()
                         .into_iter()
                         .filter(|s| PropertyTest::extract_label(s).is_none())
                         .collect(),
-                    Some(counterexample.value),
+                    Ok(Some(counterexample.value)),
                     n - remaining + 1,
+                ),
+                Err(FuzzerError { traces, uplc_error }) => (
+                    traces
+                        .into_iter()
+                        .filter(|s| PropertyTest::extract_label(s).is_none())
+                        .collect(),
+                    Err(uplc_error),
+                    0,
                 ),
             };
 
@@ -249,11 +264,11 @@ impl PropertyTest {
         prng: Prng,
         counterexample: Option<(usize, Counterexample<'a>)>,
         labels: &mut BTreeMap<String, usize>,
-    ) -> Option<(usize, Counterexample<'a>)> {
+    ) -> Result<Option<(usize, Counterexample<'a>)>, FuzzerError> {
         // We short-circuit failures in case we have any. The counterexample is already simplified
         // at this point.
         if remaining > 0 && counterexample.is_none() {
-            let (next_prng, counterexample) = self.run_once(prng, labels);
+            let (next_prng, counterexample) = self.run_once(prng, labels)?;
             self.run_n_times(
                 remaining - 1,
                 next_prng,
@@ -261,7 +276,7 @@ impl PropertyTest {
                 labels,
             )
         } else {
-            counterexample
+            Ok(counterexample)
         }
     }
 
@@ -269,10 +284,10 @@ impl PropertyTest {
         &self,
         prng: Prng,
         labels: &mut BTreeMap<String, usize>,
-    ) -> (Prng, Option<Counterexample<'_>>) {
+    ) -> Result<(Prng, Option<Counterexample<'_>>), FuzzerError> {
         let (next_prng, value) = prng
-            .sample(&self.fuzzer.program)
-            .expect("running seeded Prng cannot fail.");
+            .sample(&self.fuzzer.program)?
+            .expect("A seeded PRNG returned 'None' which indicates a fuzzer is ill-formed and implemented wrongly; please contact library's authors.");
 
         let mut result = self.eval(&value);
 
@@ -297,8 +312,9 @@ impl PropertyTest {
                 choices: next_prng.choices(),
                 cache: Cache::new(|choices| {
                     match Prng::from_choices(choices).sample(&self.fuzzer.program) {
-                        None => Status::Invalid,
-                        Some((_, value)) => {
+                        Err(..) => Status::Invalid,
+                        Ok(None) => Status::Invalid,
+                        Ok(Some((_, value))) => {
                             let result = self.eval(&value);
 
                             let is_failure = result.failed(self.can_error);
@@ -321,9 +337,9 @@ impl PropertyTest {
                 counterexample.simplify();
             }
 
-            (next_prng, Some(counterexample))
+            Ok((next_prng, Some(counterexample)))
         } else {
-            (next_prng, None)
+            Ok((next_prng, None))
         }
     }
 
@@ -431,14 +447,19 @@ impl Prng {
     }
 
     /// Generate a pseudo-random value from a fuzzer using the given PRNG.
-    pub fn sample(&self, fuzzer: &Program<Name>) -> Option<(Prng, PlutusData)> {
+    pub fn sample(
+        &self,
+        fuzzer: &Program<Name>,
+    ) -> Result<Option<(Prng, PlutusData)>, FuzzerError> {
         let program = Program::<NamedDeBruijn>::try_from(fuzzer.apply_data(self.uplc())).unwrap();
-        Prng::from_result(
-            program
-                .eval(ExBudget::max())
-                .result()
-                .expect("Fuzzer crashed?"),
-        )
+        let mut result = program.eval(ExBudget::max());
+        result
+            .result()
+            .map_err(|uplc_error| FuzzerError {
+                traces: result.logs(),
+                uplc_error,
+            })
+            .map(Prng::from_result)
     }
 
     /// Obtain a Prng back from a fuzzer execution. As a reminder, fuzzers have the following
@@ -812,7 +833,11 @@ impl<U, T> TestResult<U, T> {
         match self {
             TestResult::UnitTestResult(UnitTestResult { success, .. }) => *success,
             TestResult::PropertyTestResult(PropertyTestResult {
-                counterexample,
+                counterexample: Err(..),
+                ..
+            }) => false,
+            TestResult::PropertyTestResult(PropertyTestResult {
+                counterexample: Ok(counterexample),
                 test,
                 ..
             }) => {
@@ -923,7 +948,7 @@ impl UnitTestResult<(Constant, Rc<Type>)> {
 #[derive(Debug)]
 pub struct PropertyTestResult<T> {
     pub test: PropertyTest,
-    pub counterexample: Option<T>,
+    pub counterexample: Result<Option<T>, uplc::machine::Error>,
     pub iterations: usize,
     pub labels: BTreeMap<String, usize>,
     pub traces: Vec<String>,
@@ -937,9 +962,11 @@ impl PropertyTestResult<PlutusData> {
         data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
     ) -> PropertyTestResult<UntypedExpr> {
         PropertyTestResult {
-            counterexample: self.counterexample.map(|counterexample| {
-                UntypedExpr::reify_data(data_types, counterexample, &self.test.fuzzer.type_info)
-                    .expect("Failed to reify counterexample?")
+            counterexample: self.counterexample.map(|ok| {
+                ok.map(|counterexample| {
+                    UntypedExpr::reify_data(data_types, counterexample, &self.test.fuzzer.type_info)
+                        .expect("Failed to reify counterexample?")
+                })
             }),
             iterations: self.iterations,
             test: self.test,
@@ -1397,7 +1424,7 @@ mod test {
                 None,
                 &mut labels,
             ) {
-                Some((_, counterexample)) => counterexample,
+                Ok(Some((_, counterexample))) => counterexample,
                 _ => panic!("expected property to fail but it didn't."),
             }
         }
