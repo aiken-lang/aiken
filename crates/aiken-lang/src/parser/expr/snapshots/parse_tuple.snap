@@ -44,7 +44,9 @@ Sequence {
                 location: 4..9,
                 name: "tuple",
             },
-            kind: Let,
+            kind: Let {
+                backpassing: false,
+            },
             annotation: None,
         },
         BinOp {

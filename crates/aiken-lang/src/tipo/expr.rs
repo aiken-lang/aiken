@@ -8,12 +8,12 @@ use super::{
 };
 use crate::{
     ast::{
-        Annotation, Arg, ArgName, AssignmentKind, BinOp, Bls12_381Point, ByteArrayFormatPreference,
-        CallArg, ClauseGuard, Constant, Curve, IfBranch, LogicalOpChainKind, Pattern,
-        RecordUpdateSpread, Span, TraceKind, TraceLevel, Tracing, TypedArg, TypedCallArg,
-        TypedClause, TypedClauseGuard, TypedIfBranch, TypedPattern, TypedRecordUpdateArg, UnOp,
-        UntypedArg, UntypedClause, UntypedClauseGuard, UntypedIfBranch, UntypedPattern,
-        UntypedRecordUpdateArg,
+        self, Annotation, Arg, ArgName, AssignmentKind, BinOp, Bls12_381Point,
+        ByteArrayFormatPreference, CallArg, ClauseGuard, Constant, Curve, IfBranch,
+        LogicalOpChainKind, Pattern, RecordUpdateSpread, Span, TraceKind, TraceLevel, Tracing,
+        TypedArg, TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch, TypedPattern,
+        TypedRecordUpdateArg, UnOp, UntypedArg, UntypedAssignmentKind, UntypedClause,
+        UntypedClauseGuard, UntypedIfBranch, UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{
         bool, byte_array, function, g1_element, g2_element, int, list, string, tuple, void,
@@ -916,7 +916,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         &mut self,
         untyped_pattern: UntypedPattern,
         untyped_value: UntypedExpr,
-        kind: AssignmentKind,
+        kind: UntypedAssignmentKind,
         annotation: &Option<Annotation>,
         location: Span,
     ) -> Result<TypedExpr, Error> {
@@ -978,12 +978,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         // If `expect` is explicitly used, we still check exhaustiveness but instead of returning an
         // error we emit a warning which explains that using `expect` is unnecessary.
         match kind {
-            AssignmentKind::Let => {
+            AssignmentKind::Let { .. } => {
                 self.environment
                     .check_exhaustiveness(&[&pattern], location, true)?
             }
 
-            AssignmentKind::Expect => {
+            AssignmentKind::Expect { .. } => {
                 let is_exaustive_pattern = self
                     .environment
                     .check_exhaustiveness(&[&pattern], location, false)
@@ -999,12 +999,26 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                             },
                             pattern_location: untyped_pattern.location(),
                             value_location: untyped_value.location(),
-                            sample: UntypedExpr::Assignment {
-                                location: Span::empty(),
-                                value: Box::new(untyped_value),
-                                pattern: untyped_pattern,
-                                kind: AssignmentKind::Let,
-                                annotation: None,
+                            sample: match untyped_value {
+                                UntypedExpr::Var { name, .. } if name == ast::BACKPASS_VARIABLE => {
+                                    UntypedExpr::Assignment {
+                                        location: Span::empty(),
+                                        value: Box::new(UntypedExpr::Var {
+                                            name: "...".to_string(),
+                                            location: Span::empty(),
+                                        }),
+                                        pattern: untyped_pattern,
+                                        kind: AssignmentKind::Let { backpassing: true },
+                                        annotation: None,
+                                    }
+                                }
+                                _ => UntypedExpr::Assignment {
+                                    location: Span::empty(),
+                                    value: Box::new(untyped_value),
+                                    pattern: untyped_pattern,
+                                    kind: AssignmentKind::let_(),
+                                    annotation: None,
+                                },
                             },
                         });
                 }
@@ -1014,7 +1028,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         Ok(TypedExpr::Assignment {
             location,
             tipo: value_typ,
-            kind,
+            kind: kind.into(),
             pattern,
             value: Box::new(typed_value),
         })
@@ -1707,13 +1721,157 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         PipeTyper::infer(self, expressions)
     }
 
+    fn backpass(&mut self, breakpoint: UntypedExpr, continuation: Vec<UntypedExpr>) -> UntypedExpr {
+        let (value, pattern, annotation, kind, assign_location) = match breakpoint {
+            UntypedExpr::Assignment {
+                location,
+                value,
+                pattern,
+                annotation,
+                kind,
+                ..
+            } => (value, pattern, annotation, kind, location),
+            _ => unreachable!("backpass misuse: breakpoint isn't an Assignment ?!"),
+        };
+
+        let value_location = value.location();
+
+        let call_location = Span {
+            start: value_location.end,
+            end: continuation
+                .last()
+                .map(|expr| expr.location().end)
+                .unwrap_or_else(|| value_location.end),
+        };
+
+        // In case where we have a Pattern that isn't simply a let-binding to a name, we do insert an extra let-binding
+        // in front of the continuation sequence. This is because we do not support patterns in function argument
+        // (which is perhaps something we should support?).
+        let (name, continuation) = match pattern {
+            Pattern::Var { name, .. } | Pattern::Discard { name, .. } if kind.is_let() => {
+                (name.clone(), continuation)
+            }
+            _ => {
+                let mut with_assignment = vec![UntypedExpr::Assignment {
+                    location: assign_location,
+                    value: UntypedExpr::Var {
+                        location: value_location,
+                        name: ast::BACKPASS_VARIABLE.to_string(),
+                    }
+                    .into(),
+                    pattern,
+                    // Erase backpassing while preserving assignment kind.
+                    kind: match kind {
+                        AssignmentKind::Let { .. } => AssignmentKind::let_(),
+                        AssignmentKind::Expect { .. } => AssignmentKind::expect(),
+                    },
+                    annotation,
+                }];
+                with_assignment.extend(continuation);
+                (ast::BACKPASS_VARIABLE.to_string(), with_assignment)
+            }
+        };
+
+        match *value {
+            UntypedExpr::Call { fun, arguments, .. } => {
+                let mut new_arguments = Vec::new();
+                new_arguments.extend(arguments);
+                new_arguments.push(CallArg {
+                    location: call_location,
+                    label: None,
+                    value: UntypedExpr::lambda(name, continuation, call_location),
+                });
+
+                UntypedExpr::Call {
+                    location: call_location,
+                    fun,
+                    arguments: new_arguments,
+                }
+            }
+
+            // This typically occurs on function captures. We do not try to assert anything on the
+            // length of the arguments here. We defer that to the rest of the type-checker. The
+            // only thing we have to do is rewrite the AST as-if someone had passed a callback.
+            //
+            // Now, whether this leads to an invalid call usage, that's not *our* immediate
+            // problem.
+            UntypedExpr::Fn {
+                fn_style,
+                ref arguments,
+                ref return_annotation,
+                ..
+            } => {
+                let return_annotation = return_annotation.clone();
+
+                let arguments = arguments.iter().skip(1).cloned().collect::<Vec<_>>();
+
+                let call = UntypedExpr::Call {
+                    location: call_location,
+                    fun: value,
+                    arguments: vec![CallArg {
+                        location: call_location,
+                        label: None,
+                        value: UntypedExpr::lambda(name, continuation, call_location),
+                    }],
+                };
+
+                if arguments.is_empty() {
+                    call
+                } else {
+                    UntypedExpr::Fn {
+                        location: call_location,
+                        fn_style,
+                        arguments,
+                        body: call.into(),
+                        return_annotation,
+                    }
+                }
+            }
+
+            // Similarly to function captures, if we have any other expression we simply call it
+            // with our continuation. If the expression isn't callable? No problem, the
+            // type-checker will catch that eventually in exactly the same way as if the code was
+            // written like that to begin with.
+            _ => UntypedExpr::Call {
+                location: call_location,
+                fun: value,
+                arguments: vec![CallArg {
+                    location: call_location,
+                    label: None,
+                    value: UntypedExpr::lambda(name, continuation, call_location),
+                }],
+            },
+        }
+    }
+
     fn infer_seq(&mut self, location: Span, untyped: Vec<UntypedExpr>) -> Result<TypedExpr, Error> {
+        // Search for backpassing.
+        let mut breakpoint = None;
+        let mut prefix = Vec::with_capacity(untyped.len());
+        let mut suffix = Vec::with_capacity(untyped.len());
+        for expression in untyped.into_iter() {
+            if breakpoint.is_some() {
+                suffix.push(expression);
+            } else {
+                match expression {
+                    UntypedExpr::Assignment { kind, .. } if kind.is_backpassing() => {
+                        breakpoint = Some(expression);
+                    }
+                    _ => prefix.push(expression),
+                }
+            }
+        }
+        if let Some(breakpoint) = breakpoint {
+            prefix.push(self.backpass(breakpoint, suffix));
+            return self.infer_seq(location, prefix);
+        }
+
         let sequence = self.in_new_scope(|scope| {
-            let count = untyped.len();
+            let count = prefix.len();
 
             let mut expressions = Vec::with_capacity(count);
 
-            for (i, expression) in untyped.into_iter().enumerate() {
+            for (i, expression) in prefix.into_iter().enumerate() {
                 let no_assignment = assert_no_assignment(&expression);
 
                 let typed_expression = scope.infer(expression)?;
@@ -1992,7 +2150,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     location: Span::empty(),
                     value: Box::new(subject.clone()),
                     pattern: clauses[0].patterns[0].clone(),
-                    kind: AssignmentKind::Let,
+                    kind: AssignmentKind::let_(),
                     annotation: None,
                 },
             });
@@ -2120,7 +2278,7 @@ fn assert_assignment(expr: TypedExpr) -> Result<TypedExpr, Error> {
                     with_spread: false,
                     tipo: void(),
                 },
-                kind: AssignmentKind::Let,
+                kind: AssignmentKind::let_(),
             });
         }
 

@@ -559,7 +559,7 @@ impl<'a> CodeGenerator<'a> {
                             &subject_type,
                             AssignmentProperties {
                                 value_type: subject.tipo(),
-                                kind: AssignmentKind::Let,
+                                kind: AssignmentKind::let_(),
                                 remove_unused: false,
                                 full_check: false,
                                 msg_func: None,
@@ -843,7 +843,7 @@ impl<'a> CodeGenerator<'a> {
     ) -> AirTree {
         assert!(
             match &value {
-                AirTree::Var { name, .. } if props.kind == AssignmentKind::Let => {
+                AirTree::Var { name, .. } if props.kind.is_let() => {
                     name != "_"
                 }
                 _ => true,
@@ -2812,7 +2812,7 @@ impl<'a> CodeGenerator<'a> {
                         &actual_type,
                         AssignmentProperties {
                             value_type: data(),
-                            kind: AssignmentKind::Expect,
+                            kind: AssignmentKind::expect(),
                             remove_unused: false,
                             full_check: true,
                             msg_func,

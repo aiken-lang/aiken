@@ -163,6 +163,8 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         just("!=").to(Token::NotEqual),
         just('!').to(Token::Bang),
         just('?').to(Token::Question),
+        just("<-").to(Token::LArrow),
+        just("->").to(Token::RArrow),
         choice((
             just("<=").to(Token::LessEqual),
             just('<').to(Token::Less),
@@ -170,7 +172,6 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
             just('>').to(Token::Greater),
         )),
         just('+').to(Token::Plus),
-        just("->").to(Token::RArrow),
         just('-').to(Token::Minus),
         just('*').to(Token::Star),
         just('/').to(Token::Slash),

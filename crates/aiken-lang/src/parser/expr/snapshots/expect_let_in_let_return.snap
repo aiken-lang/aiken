@@ -20,7 +20,9 @@ Assignment {
                     location: 16..17,
                     name: "b",
                 },
-                kind: Let,
+                kind: Let {
+                    backpassing: false,
+                },
                 annotation: None,
             },
             Var {
@@ -33,6 +35,8 @@ Assignment {
         location: 4..5,
         name: "a",
     },
-    kind: Let,
+    kind: Let {
+        backpassing: false,
+    },
     annotation: None,
 }

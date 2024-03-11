@@ -16,6 +16,7 @@ use std::{
 use uplc::machine::runtime::Compressable;
 use vec1::Vec1;
 
+pub const BACKPASS_VARIABLE: &str = "_backpass";
 pub const CAPTURE_VARIABLE: &str = "_capture";
 pub const PIPE_VARIABLE: &str = "_pipe";
 
@@ -792,6 +793,19 @@ impl<A> Arg<A> {
         self.arg_name.get_variable_name()
     }
 
+    pub fn is_capture(&self) -> bool {
+        if let ArgName::Named {
+            ref name, location, ..
+        } = self.arg_name
+        {
+            return name.starts_with(CAPTURE_VARIABLE)
+                && location == Span::empty()
+                && self.location == Span::empty();
+        }
+
+        false
+    }
+
     pub fn put_doc(&mut self, new_doc: String) {
         self.doc = Some(new_doc);
     }
@@ -1422,25 +1436,59 @@ impl Default for Bls12_381Point {
     }
 }
 
+pub type UntypedAssignmentKind = AssignmentKind<bool>;
+pub type TypedAssignmentKind = AssignmentKind<()>;
+
 #[derive(Debug, Clone, PartialEq, Eq, Copy, serde::Serialize, serde::Deserialize)]
-pub enum AssignmentKind {
-    Let,
-    Expect,
+pub enum AssignmentKind<T> {
+    Let { backpassing: T },
+    Expect { backpassing: T },
 }
 
-impl AssignmentKind {
+impl From<UntypedAssignmentKind> for TypedAssignmentKind {
+    fn from(kind: UntypedAssignmentKind) -> TypedAssignmentKind {
+        match kind {
+            AssignmentKind::Let { .. } => AssignmentKind::Let { backpassing: () },
+            AssignmentKind::Expect { .. } => AssignmentKind::Expect { backpassing: () },
+        }
+    }
+}
+
+impl<T> AssignmentKind<T> {
     pub fn is_let(&self) -> bool {
-        matches!(self, AssignmentKind::Let)
+        matches!(self, AssignmentKind::Let { .. })
     }
 
     pub fn is_expect(&self) -> bool {
-        matches!(self, AssignmentKind::Expect)
+        matches!(self, AssignmentKind::Expect { .. })
     }
 
     pub fn location_offset(&self) -> usize {
         match self {
-            AssignmentKind::Let => 3,
-            AssignmentKind::Expect => 6,
+            AssignmentKind::Let { .. } => 3,
+            AssignmentKind::Expect { .. } => 6,
+        }
+    }
+}
+
+impl AssignmentKind<bool> {
+    pub fn is_backpassing(&self) -> bool {
+        match self {
+            Self::Let { backpassing } | Self::Expect { backpassing } => *backpassing,
+        }
+    }
+}
+
+impl<T: Default> AssignmentKind<T> {
+    pub fn let_() -> Self {
+        AssignmentKind::Let {
+            backpassing: Default::default(),
+        }
+    }
+
+    pub fn expect() -> Self {
+        AssignmentKind::Expect {
+            backpassing: Default::default(),
         }
     }
 }

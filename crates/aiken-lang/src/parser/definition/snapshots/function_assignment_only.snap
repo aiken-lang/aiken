@@ -29,7 +29,9 @@ Fn(
                 location: 17..18,
                 name: "x",
             },
-            kind: Let,
+            kind: Let {
+                backpassing: false,
+            },
             annotation: None,
         },
         doc: None,

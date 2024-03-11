@@ -4,9 +4,9 @@ use crate::{
         CallArg, ClauseGuard, Constant, CurveType, DataType, Definition, Function, IfBranch,
         LogicalOpChainKind, ModuleConstant, Pattern, RecordConstructor, RecordConstructorArg,
         RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg, UnOp, UnqualifiedImport,
-        UntypedArg, UntypedArgVia, UntypedClause, UntypedClauseGuard, UntypedDefinition,
-        UntypedFunction, UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use, Validator,
-        CAPTURE_VARIABLE,
+        UntypedArg, UntypedArgVia, UntypedAssignmentKind, UntypedClause, UntypedClauseGuard,
+        UntypedDefinition, UntypedFunction, UntypedModule, UntypedPattern, UntypedRecordUpdateArg,
+        Use, Validator, CAPTURE_VARIABLE,
     },
     docvec,
     expr::{FnStyle, UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
@@ -681,13 +681,15 @@ impl<'comments> Formatter<'comments> {
         &mut self,
         pattern: &'a UntypedPattern,
         value: &'a UntypedExpr,
-        kind: AssignmentKind,
+        kind: UntypedAssignmentKind,
         annotation: &'a Option<Annotation>,
     ) -> Document<'a> {
         let keyword = match kind {
-            AssignmentKind::Let => "let",
-            AssignmentKind::Expect => "expect",
+            AssignmentKind::Let { .. } => "let",
+            AssignmentKind::Expect { .. } => "expect",
         };
+
+        let symbol = if kind.is_backpassing() { "<-" } else { "=" };
 
         match pattern {
             UntypedPattern::Constructor {
@@ -708,7 +710,8 @@ impl<'comments> Formatter<'comments> {
                     .to_doc()
                     .append(" ")
                     .append(pattern.append(annotation).group())
-                    .append(" =")
+                    .append(" ")
+                    .append(symbol)
                     .append(self.case_clause_value(value))
             }
         }

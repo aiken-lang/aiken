@@ -1,10 +1,9 @@
-use chumsky::prelude::*;
-
 use crate::{
     ast,
     expr::UntypedExpr,
     parser::{annotation, error::ParseError, pattern, token::Token},
 };
+use chumsky::prelude::*;
 
 pub fn let_(
     r: Recursive<'_, Token, UntypedExpr, ParseError>,
@@ -12,9 +11,9 @@ pub fn let_(
     just(Token::Let)
         .ignore_then(pattern())
         .then(just(Token::Colon).ignore_then(annotation()).or_not())
-        .then_ignore(just(Token::Equal))
+        .then(choice((just(Token::Equal), just(Token::LArrow))))
         .then(r.clone())
-        .validate(move |((pattern, annotation), value), span, emit| {
+        .validate(move |(((pattern, annotation), kind), value), span, emit| {
             if matches!(value, UntypedExpr::Assignment { .. }) {
                 emit(ParseError::invalid_assignment_right_hand_side(span))
             }
@@ -23,7 +22,9 @@ pub fn let_(
                 location: span,
                 value: Box::new(value),
                 pattern,
-                kind: ast::AssignmentKind::Let,
+                kind: ast::AssignmentKind::Let {
+                    backpassing: kind == Token::LArrow,
+                },
                 annotation,
             }
         })
@@ -36,24 +37,27 @@ pub fn expect(
         .ignore_then(
             pattern()
                 .then(just(Token::Colon).ignore_then(annotation()).or_not())
-                .then_ignore(just(Token::Equal))
+                .then(choice((just(Token::Equal), just(Token::LArrow))))
                 .or_not(),
         )
         .then(r.clone())
         .validate(move |(opt_pattern, value), span, emit| {
-            let (pattern, annotation) = opt_pattern.unwrap_or_else(|| {
+            let ((pattern, annotation), kind) = opt_pattern.unwrap_or_else(|| {
                 (
-                    ast::UntypedPattern::Constructor {
-                        is_record: false,
-                        location: span,
-                        name: "True".to_string(),
-                        arguments: vec![],
-                        module: None,
-                        constructor: (),
-                        with_spread: false,
-                        tipo: (),
-                    },
-                    None,
+                    (
+                        ast::UntypedPattern::Constructor {
+                            is_record: false,
+                            location: span,
+                            name: "True".to_string(),
+                            arguments: vec![],
+                            module: None,
+                            constructor: (),
+                            with_spread: false,
+                            tipo: (),
+                        },
+                        None,
+                    ),
+                    Token::Equal,
                 )
             });
 
@@ -65,7 +69,9 @@ pub fn expect(
                 location: span,
                 value: Box::new(value),
                 pattern,
-                kind: ast::AssignmentKind::Expect,
+                kind: ast::AssignmentKind::Expect {
+                    backpassing: kind == Token::LArrow,
+                },
                 annotation,
             }
         })
