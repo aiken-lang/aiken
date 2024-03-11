@@ -27,14 +27,18 @@ Sequence {
                 },
                 location: 8..18,
             },
-            pattern: Var {
-                location: 4..5,
-                name: "x",
-            },
+            patterns: [
+                (
+                    Var {
+                        location: 4..5,
+                        name: "x",
+                    },
+                    None,
+                ),
+            ],
             kind: Let {
                 backpassing: false,
             },
-            annotation: None,
         },
         Assignment {
             location: 20..65,
@@ -113,14 +117,18 @@ Sequence {
                 },
                 return_annotation: None,
             },
-            pattern: Var {
-                location: 24..33,
-                name: "map_add_x",
-            },
+            patterns: [
+                (
+                    Var {
+                        location: 24..33,
+                        name: "map_add_x",
+                    },
+                    None,
+                ),
+            ],
             kind: Let {
                 backpassing: false,
             },
-            annotation: None,
         },
         Call {
             arguments: [

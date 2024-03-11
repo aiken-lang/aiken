@@ -16,14 +16,18 @@ Assignment {
                         numeric_underscore: false,
                     },
                 },
-                pattern: Var {
-                    location: 16..17,
-                    name: "b",
-                },
+                patterns: [
+                    (
+                        Var {
+                            location: 16..17,
+                            name: "b",
+                        },
+                        None,
+                    ),
+                ],
                 kind: Let {
                     backpassing: false,
                 },
-                annotation: None,
             },
             Var {
                 location: 25..26,
@@ -31,12 +35,16 @@ Assignment {
             },
         ],
     },
-    pattern: Var {
-        location: 4..5,
-        name: "a",
-    },
+    patterns: [
+        (
+            Var {
+                location: 4..5,
+                name: "a",
+            },
+            None,
+        ),
+    ],
     kind: Let {
         backpassing: false,
     },
-    annotation: None,
 }

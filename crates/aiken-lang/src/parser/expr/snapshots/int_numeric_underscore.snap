@@ -14,14 +14,18 @@ Sequence {
                     numeric_underscore: true,
                 },
             },
-            pattern: Var {
-                location: 8..9,
-                name: "i",
-            },
+            patterns: [
+                (
+                    Var {
+                        location: 8..9,
+                        name: "i",
+                    },
+                    None,
+                ),
+            ],
             kind: Let {
                 backpassing: false,
             },
-            annotation: None,
         },
         Assignment {
             location: 24..41,
@@ -32,14 +36,18 @@ Sequence {
                     numeric_underscore: true,
                 },
             },
-            pattern: Var {
-                location: 28..29,
-                name: "j",
-            },
+            patterns: [
+                (
+                    Var {
+                        location: 28..29,
+                        name: "j",
+                    },
+                    None,
+                ),
+            ],
             kind: Let {
                 backpassing: false,
             },
-            annotation: None,
         },
         Assignment {
             location: 44..59,
@@ -54,14 +62,18 @@ Sequence {
                     },
                 },
             },
-            pattern: Var {
-                location: 48..49,
-                name: "k",
-            },
+            patterns: [
+                (
+                    Var {
+                        location: 48..49,
+                        name: "k",
+                    },
+                    None,
+                ),
+            ],
             kind: Let {
                 backpassing: false,
             },
-            annotation: None,
         },
     ],
 }

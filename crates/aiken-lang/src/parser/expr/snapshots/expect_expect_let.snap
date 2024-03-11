@@ -16,29 +16,37 @@ Assignment {
                         numeric_underscore: false,
                     },
                 },
-                pattern: Var {
-                    location: 13..14,
-                    name: "a",
-                },
+                patterns: [
+                    (
+                        Var {
+                            location: 13..14,
+                            name: "a",
+                        },
+                        None,
+                    ),
+                ],
                 kind: Let {
                     backpassing: false,
                 },
-                annotation: None,
             },
         ],
     },
-    pattern: Constructor {
-        is_record: false,
-        location: 0..21,
-        name: "True",
-        arguments: [],
-        module: None,
-        constructor: (),
-        with_spread: false,
-        tipo: (),
-    },
+    patterns: [
+        (
+            Constructor {
+                is_record: false,
+                location: 0..21,
+                name: "True",
+                arguments: [],
+                module: None,
+                constructor: (),
+                with_spread: false,
+                tipo: (),
+            },
+            None,
+        ),
+    ],
     kind: Expect {
         backpassing: false,
     },
-    annotation: None,
 }

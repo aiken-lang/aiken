@@ -4,7 +4,7 @@ use crate::{
         Curve, DataType, DataTypeKey, DefinitionLocation, IfBranch, Located, LogicalOpChainKind,
         ParsedCallArg, Pattern, RecordConstructorArg, RecordUpdateSpread, Span, TraceKind,
         TypedAssignmentKind, TypedClause, TypedDataType, TypedRecordUpdateArg, UnOp,
-        UntypedAssignmentKind, UntypedClause, UntypedRecordUpdateArg,
+        UntypedAssignmentKind, UntypedClause, UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::void,
     parser::token::Base,
@@ -518,9 +518,8 @@ pub enum UntypedExpr {
     Assignment {
         location: Span,
         value: Box<Self>,
-        pattern: Pattern<(), ()>,
+        patterns: Vec1<(UntypedPattern, Option<Annotation>)>,
         kind: UntypedAssignmentKind,
-        annotation: Option<Annotation>,
     },
 
     Trace {
@@ -1300,22 +1299,25 @@ impl UntypedExpr {
         )
     }
 
-    pub fn lambda(name: String, expressions: Vec<UntypedExpr>, location: Span) -> Self {
+    pub fn lambda(names: Vec<String>, expressions: Vec<UntypedExpr>, location: Span) -> Self {
         Self::Fn {
             location,
             fn_style: FnStyle::Plain,
-            arguments: vec![Arg {
-                location,
-                doc: None,
-                annotation: None,
-                tipo: (),
-                arg_name: ArgName::Named {
-                    label: name.clone(),
-                    name,
+            arguments: names
+                .into_iter()
+                .map(|name| Arg {
                     location,
-                    is_validator_param: false,
-                },
-            }],
+                    doc: None,
+                    annotation: None,
+                    tipo: (),
+                    arg_name: ArgName::Named {
+                        label: name.clone(),
+                        name,
+                        location,
+                        is_validator_param: false,
+                    },
+                })
+                .collect(),
             body: Self::Sequence {
                 location,
                 expressions,

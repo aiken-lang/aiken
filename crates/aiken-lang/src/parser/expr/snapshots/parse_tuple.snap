@@ -40,14 +40,18 @@ Sequence {
                     },
                 ],
             },
-            pattern: Var {
-                location: 4..9,
-                name: "tuple",
-            },
+            patterns: [
+                (
+                    Var {
+                        location: 4..9,
+                        name: "tuple",
+                    },
+                    None,
+                ),
+            ],
             kind: Let {
                 backpassing: false,
             },
-            annotation: None,
         },
         BinOp {
             location: 25..70,

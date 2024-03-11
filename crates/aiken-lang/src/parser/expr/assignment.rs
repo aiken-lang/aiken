@@ -9,23 +9,30 @@ pub fn let_(
     r: Recursive<'_, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + '_ {
     just(Token::Let)
-        .ignore_then(pattern())
-        .then(just(Token::Colon).ignore_then(annotation()).or_not())
+        .ignore_then(
+            pattern()
+                .then(just(Token::Colon).ignore_then(annotation()).or_not())
+                .separated_by(just(Token::Comma))
+                .at_least(1),
+        )
         .then(choice((just(Token::Equal), just(Token::LArrow))))
         .then(r.clone())
-        .validate(move |(((pattern, annotation), kind), value), span, emit| {
+        .validate(move |((patterns, kind), value), span, emit| {
             if matches!(value, UntypedExpr::Assignment { .. }) {
                 emit(ParseError::invalid_assignment_right_hand_side(span))
             }
 
+            let patterns = patterns
+                .try_into()
+                .expect("We use at_least(1) so this should never be empty");
+
             UntypedExpr::Assignment {
                 location: span,
                 value: Box::new(value),
-                pattern,
+                patterns,
                 kind: ast::AssignmentKind::Let {
                     backpassing: kind == Token::LArrow,
                 },
-                annotation,
             }
         })
 }
@@ -37,14 +44,20 @@ pub fn expect(
         .ignore_then(
             pattern()
                 .then(just(Token::Colon).ignore_then(annotation()).or_not())
+                .separated_by(just(Token::Comma))
+                .at_least(1)
                 .then(choice((just(Token::Equal), just(Token::LArrow))))
                 .or_not(),
         )
         .then(r.clone())
         .validate(move |(opt_pattern, value), span, emit| {
-            let ((pattern, annotation), kind) = opt_pattern.unwrap_or_else(|| {
+            if matches!(value, UntypedExpr::Assignment { .. }) {
+                emit(ParseError::invalid_assignment_right_hand_side(span))
+            }
+
+            let (patterns, kind) = opt_pattern.unwrap_or_else(|| {
                 (
-                    (
+                    vec![(
                         ast::UntypedPattern::Constructor {
                             is_record: false,
                             location: span,
@@ -56,23 +69,22 @@ pub fn expect(
                             tipo: (),
                         },
                         None,
-                    ),
+                    )],
                     Token::Equal,
                 )
             });
 
-            if matches!(value, UntypedExpr::Assignment { .. }) {
-                emit(ParseError::invalid_assignment_right_hand_side(span))
-            }
+            let patterns = patterns
+                .try_into()
+                .expect("We use at_least(1) so this should never be empty");
 
             UntypedExpr::Assignment {
                 location: span,
+                patterns,
                 value: Box::new(value),
-                pattern,
                 kind: ast::AssignmentKind::Expect {
                     backpassing: kind == Token::LArrow,
                 },
-                annotation,
             }
         })
 }

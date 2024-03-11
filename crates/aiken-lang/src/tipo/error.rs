@@ -707,6 +707,19 @@ Perhaps, try the following:
         with_spread: bool,
     },
 
+    #[error("I discovered a regular let assignment with multiple patterns.\n")]
+    #[diagnostic(code("unexpected::multi_pattern_assignment"))]
+    #[diagnostic(help(
+        "Did you mean to use backpassing syntax with {}?",
+        "<-".if_supports_color(Stdout, |s| s.purple())
+    ))]
+    UnexpectedMultiPatternAssignment {
+        #[label("unexpected")]
+        location: Span,
+        #[label("<-")]
+        arrow: Span,
+    },
+
     #[error("I tripped over some unknown labels in a pattern or function.\n")]
     #[diagnostic(code("unknown::labels"))]
     UnknownLabels(#[related] Vec<UnknownLabels>),
@@ -1031,6 +1044,7 @@ impl ExtraData for Error {
             | Error::ValidatorImported { .. }
             | Error::IncorrectTestArity { .. }
             | Error::GenericLeftAtBoundary { .. }
+            | Error::UnexpectedMultiPatternAssignment { .. }
             | Error::ValidatorMustReturnBool { .. } => None,
 
             Error::UnknownType { name, .. }

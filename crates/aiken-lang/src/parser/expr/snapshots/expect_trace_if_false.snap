@@ -11,18 +11,22 @@ Assignment {
             name: "foo",
         },
     },
-    pattern: Constructor {
-        is_record: false,
-        location: 0..11,
-        name: "True",
-        arguments: [],
-        module: None,
-        constructor: (),
-        with_spread: false,
-        tipo: (),
-    },
+    patterns: [
+        (
+            Constructor {
+                is_record: false,
+                location: 0..11,
+                name: "True",
+                arguments: [],
+                module: None,
+                constructor: (),
+                with_spread: false,
+                tipo: (),
+            },
+            None,
+        ),
+    ],
     kind: Expect {
         backpassing: false,
     },
-    annotation: None,
 }

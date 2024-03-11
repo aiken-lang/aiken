@@ -1384,6 +1384,74 @@ fn backpassing_expect_type_mismatch() {
 }
 
 #[test]
+fn backpassing_multi_args() {
+    let source_code = r#"
+        fn fold(list: List<a>, init: b, then: fn(a, b) -> b) -> b {
+          when list is {
+            [] -> init
+            [x, ..rest] -> fold(rest, then(x, init), then)
+          }
+        }
+
+        fn backpassing() -> Int {
+          let elem, acc <- fold([1, 2, 3], 0)
+
+          elem + acc
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn backpassing_multi_args_expect() {
+    let source_code = r#"
+        pub type Bar {
+          Foo(Int)
+          Wow(Int)
+        }
+
+        fn fold(list: List<a>, init: b, then: fn(a, b) -> b) -> b {
+          when list is {
+            [] -> init
+            [x, ..rest] -> fold(rest, then(x, init), then)
+          }
+        }
+
+        pub fn backpassing() -> Bar {
+          expect Foo(elem), Wow(acc) <- fold([Foo(1), Foo(2), Foo(3)], Wow(0))
+
+          Wow(elem + acc)
+        }
+    "#;
+
+    assert!(matches!(check(parse(source_code)), Ok((warnings, _)) if warnings.is_empty()))
+}
+
+#[test]
+fn backpassing_multi_args_using_equals() {
+    let source_code = r#"
+        fn fold(list: List<a>, init: b, then: fn(a, b) -> b) -> b {
+          when list is {
+            [] -> init
+            [x, ..rest] -> fold(rest, then(x, init), then)
+          }
+        }
+
+        fn backpassing() -> Int {
+          let elem, acc = fold([1, 2, 3], 0, fn(elem, acc) { elem + acc })
+
+          elem + acc
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::UnexpectedMultiPatternAssignment { .. }))
+    ))
+}
+
+#[test]
 fn trace_if_false_ko() {
     let source_code = r#"
         fn add(a: Int, b: Int) {
