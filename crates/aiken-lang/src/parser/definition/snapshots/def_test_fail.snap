@@ -15,8 +15,8 @@ Test(
                         name: "False",
                     },
                     patterns: [
-                        (
-                            Constructor {
+                        AssignmentPattern {
+                            pattern: Constructor {
                                 is_record: false,
                                 location: 38..42,
                                 name: "True",
@@ -26,8 +26,8 @@ Test(
                                 with_spread: false,
                                 tipo: (),
                             },
-                            None,
-                        ),
+                            annotation: None,
+                        },
                     ],
                     kind: Expect {
                         backpassing: false,

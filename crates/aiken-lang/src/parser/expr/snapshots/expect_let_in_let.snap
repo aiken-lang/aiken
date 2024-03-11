@@ -17,13 +17,13 @@ Assignment {
                     },
                 },
                 patterns: [
-                    (
-                        Var {
+                    AssignmentPattern {
+                        pattern: Var {
                             location: 14..15,
                             name: "b",
                         },
-                        None,
-                    ),
+                        annotation: None,
+                    },
                 ],
                 kind: Let {
                     backpassing: false,
@@ -32,13 +32,13 @@ Assignment {
         ],
     },
     patterns: [
-        (
-            Var {
+        AssignmentPattern {
+            pattern: Var {
                 location: 4..5,
                 name: "a",
             },
-            None,
-        ),
+            annotation: None,
+        },
     ],
     kind: Let {
         backpassing: false,

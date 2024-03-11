@@ -26,13 +26,13 @@ Fn(
                 },
             },
             patterns: [
-                (
-                    Var {
+                AssignmentPattern {
+                    pattern: Var {
                         location: 17..18,
                         name: "x",
                     },
-                    None,
-                ),
+                    annotation: None,
+                },
             ],
             kind: Let {
                 backpassing: false,

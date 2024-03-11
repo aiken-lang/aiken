@@ -12,8 +12,8 @@ Assignment {
         },
     },
     patterns: [
-        (
-            Constructor {
+        AssignmentPattern {
+            pattern: Constructor {
                 is_record: false,
                 location: 0..11,
                 name: "True",
@@ -23,8 +23,8 @@ Assignment {
                 with_spread: false,
                 tipo: (),
             },
-            None,
-        ),
+            annotation: None,
+        },
     ],
     kind: Expect {
         backpassing: false,

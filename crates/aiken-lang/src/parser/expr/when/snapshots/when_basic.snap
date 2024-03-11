@@ -86,13 +86,13 @@ When {
                             },
                         },
                         patterns: [
-                            (
-                                Var {
+                            AssignmentPattern {
+                                pattern: Var {
                                     location: 55..62,
                                     name: "amazing",
                                 },
-                                None,
-                            ),
+                                annotation: None,
+                            },
                         ],
                         kind: Let {
                             backpassing: false,

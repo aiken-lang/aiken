@@ -29,13 +29,13 @@ Assignment {
         tail: None,
     },
     patterns: [
-        (
-            Var {
+        AssignmentPattern {
+            pattern: Var {
                 location: 4..9,
                 name: "thing",
             },
-            None,
-        ),
+            annotation: None,
+        },
     ],
     kind: Let {
         backpassing: false,
