@@ -19,14 +19,18 @@ Module {
                                 location: 23..26,
                                 name: "bar",
                             },
-                            pattern: Var {
-                                location: 19..20,
-                                name: "a",
-                            },
+                            patterns: [
+                                (
+                                    Var {
+                                        location: 19..20,
+                                        name: "a",
+                                    },
+                                    None,
+                                ),
+                            ],
                             kind: Let {
                                 backpassing: false,
                             },
-                            annotation: None,
                         },
                         UInt {
                             location: 30..32,
@@ -59,14 +63,18 @@ Module {
                                 location: 60..63,
                                 name: "bar",
                             },
-                            pattern: Var {
-                                location: 56..57,
-                                name: "a",
-                            },
+                            patterns: [
+                                (
+                                    Var {
+                                        location: 56..57,
+                                        name: "a",
+                                    },
+                                    None,
+                                ),
+                            ],
                             kind: Let {
                                 backpassing: false,
                             },
-                            annotation: None,
                         },
                         UInt {
                             location: 67..69,
@@ -110,14 +118,18 @@ Module {
                             },
                         },
                     },
-                    pattern: Var {
-                        location: 93..94,
-                        name: "a",
-                    },
+                    patterns: [
+                        (
+                            Var {
+                                location: 93..94,
+                                name: "a",
+                            },
+                            None,
+                        ),
+                    ],
                     kind: Let {
                         backpassing: false,
                     },
-                    annotation: None,
                 },
                 doc: None,
                 location: 74..84,
@@ -157,14 +169,18 @@ Module {
                                 },
                                 location: 130..137,
                             },
-                            pattern: Var {
-                                location: 126..127,
-                                name: "a",
-                            },
+                            patterns: [
+                                (
+                                    Var {
+                                        location: 126..127,
+                                        name: "a",
+                                    },
+                                    None,
+                                ),
+                            ],
                             kind: Let {
                                 backpassing: false,
                             },
-                            annotation: None,
                         },
                         BinOp {
                             location: 141..153,

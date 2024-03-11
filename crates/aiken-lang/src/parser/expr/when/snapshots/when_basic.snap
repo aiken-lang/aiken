@@ -85,14 +85,18 @@ When {
                                 numeric_underscore: false,
                             },
                         },
-                        pattern: Var {
-                            location: 55..62,
-                            name: "amazing",
-                        },
+                        patterns: [
+                            (
+                                Var {
+                                    location: 55..62,
+                                    name: "amazing",
+                                },
+                                None,
+                            ),
+                        ],
                         kind: Let {
                             backpassing: false,
                         },
-                        annotation: None,
                     },
                     Var {
                         location: 71..78,

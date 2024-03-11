@@ -679,10 +679,9 @@ impl<'comments> Formatter<'comments> {
 
     fn assignment<'a>(
         &mut self,
-        pattern: &'a UntypedPattern,
+        patterns: &'a Vec1<(UntypedPattern, Option<Annotation>)>,
         value: &'a UntypedExpr,
         kind: UntypedAssignmentKind,
-        annotation: &'a Option<Annotation>,
     ) -> Document<'a> {
         let keyword = match kind {
             AssignmentKind::Let { .. } => "let",
@@ -691,26 +690,39 @@ impl<'comments> Formatter<'comments> {
 
         let symbol = if kind.is_backpassing() { "<-" } else { "=" };
 
-        match pattern {
-            UntypedPattern::Constructor {
-                name, module: None, ..
-            } if name == "True" && annotation.is_none() && kind.is_expect() => {
+        match patterns.first() {
+            (
+                UntypedPattern::Constructor {
+                    name, module: None, ..
+                },
+                annotation,
+            ) if name == "True"
+                && annotation.is_none()
+                && kind.is_expect()
+                && patterns.len() == 1 =>
+            {
                 keyword.to_doc().append(self.case_clause_value(value))
             }
             _ => {
-                self.pop_empty_lines(pattern.location().end);
+                let patterns = patterns.into_iter().map(|(pattern, annotation)| {
+                    self.pop_empty_lines(pattern.location().end);
 
-                let pattern = self.pattern(pattern);
+                    let pattern = self.pattern(pattern);
 
-                let annotation = annotation
-                    .as_ref()
-                    .map(|a| ": ".to_doc().append(self.annotation(a)));
+                    let annotation = annotation
+                        .as_ref()
+                        .map(|a| ": ".to_doc().append(self.annotation(a)));
+
+                    pattern.append(annotation).group()
+                });
 
                 keyword
                     .to_doc()
-                    .append(" ")
-                    .append(pattern.append(annotation).group())
-                    .append(" ")
+                    .append(break_("", " "))
+                    .append(join(patterns, break_(",", ", ")))
+                    .nest(INDENT)
+                    .append(break_(",", ""))
+                    .append(break_("", " "))
                     .append(symbol)
                     .append(self.case_clause_value(value))
             }
@@ -907,11 +919,10 @@ impl<'comments> Formatter<'comments> {
 
             UntypedExpr::Assignment {
                 value,
-                pattern,
-                annotation,
+                patterns,
                 kind,
                 ..
-            } => self.assignment(pattern, value, *kind, annotation),
+            } => self.assignment(patterns, value, *kind),
 
             UntypedExpr::Trace {
                 kind, text, then, ..

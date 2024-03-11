@@ -262,12 +262,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             UntypedExpr::Assignment {
                 location,
-                pattern,
+                patterns,
                 value,
                 kind,
-                annotation,
                 ..
-            } => self.infer_assignment(pattern, *value, kind, &annotation, location),
+            } => {
+                // at this point due to backpassing rewrites,
+                // patterns is guaranteed to have one item
+                let (pattern, annotation) = patterns.into_vec().swap_remove(0);
+
+                self.infer_assignment(pattern, *value, kind, &annotation, location)
+            }
 
             UntypedExpr::Trace {
                 location,
@@ -340,7 +345,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 location,
                 value,
                 op,
-            } => self.infer_un_op(location, value, op),
+            } => self.infer_un_op(location, *value, op),
 
             UntypedExpr::TraceIfFalse { value, location } => {
                 self.infer_trace_if_false(*value, location)
@@ -663,10 +668,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     fn infer_un_op(
         &mut self,
         location: Span,
-        value: Box<UntypedExpr>,
+        value: UntypedExpr,
         op: UnOp,
     ) -> Result<TypedExpr, Error> {
-        let value = self.infer(*value)?;
+        let value = self.infer(value)?;
 
         let tipo = match op {
             UnOp::Not => bool(),
@@ -949,19 +954,20 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             )?
         } else {
             if value_is_data && !untyped_pattern.is_var() && !untyped_pattern.is_discard() {
+                let ann = Annotation::Constructor {
+                    location: Span::empty(),
+                    module: None,
+                    name: "Type".to_string(),
+                    arguments: vec![],
+                };
+
                 return Err(Error::CastDataNoAnn {
                     location,
                     value: UntypedExpr::Assignment {
                         location,
                         value: untyped_value.into(),
-                        pattern: untyped_pattern,
+                        patterns: Vec1::new((untyped_pattern, Some(ann))),
                         kind,
-                        annotation: Some(Annotation::Constructor {
-                            location: Span::empty(),
-                            module: None,
-                            name: "Type".to_string(),
-                            arguments: vec![],
-                        }),
                     },
                 });
             }
@@ -1007,17 +1013,15 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                                             name: "...".to_string(),
                                             location: Span::empty(),
                                         }),
-                                        pattern: untyped_pattern,
+                                        patterns: Vec1::new((untyped_pattern, None)),
                                         kind: AssignmentKind::Let { backpassing: true },
-                                        annotation: None,
                                     }
                                 }
                                 _ => UntypedExpr::Assignment {
                                     location: Span::empty(),
                                     value: Box::new(untyped_value),
-                                    pattern: untyped_pattern,
+                                    patterns: Vec1::new((untyped_pattern, None)),
                                     kind: AssignmentKind::let_(),
-                                    annotation: None,
                                 },
                             },
                         });
@@ -1721,17 +1725,20 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         PipeTyper::infer(self, expressions)
     }
 
-    fn backpass(&mut self, breakpoint: UntypedExpr, continuation: Vec<UntypedExpr>) -> UntypedExpr {
-        let (value, pattern, annotation, kind, assign_location) = match breakpoint {
-            UntypedExpr::Assignment {
-                location,
-                value,
-                pattern,
-                annotation,
-                kind,
-                ..
-            } => (value, pattern, annotation, kind, location),
-            _ => unreachable!("backpass misuse: breakpoint isn't an Assignment ?!"),
+    fn backpass(
+        &mut self,
+        breakpoint: UntypedExpr,
+        mut continuation: Vec<UntypedExpr>,
+    ) -> UntypedExpr {
+        let UntypedExpr::Assignment {
+            location: assign_location,
+            value,
+            kind,
+            patterns,
+            ..
+        } = breakpoint
+        else {
+            unreachable!("backpass misuse: breakpoint isn't an Assignment ?!");
         };
 
         let value_location = value.location();
@@ -1744,33 +1751,41 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 .unwrap_or_else(|| value_location.end),
         };
 
-        // In case where we have a Pattern that isn't simply a let-binding to a name, we do insert an extra let-binding
-        // in front of the continuation sequence. This is because we do not support patterns in function argument
-        // (which is perhaps something we should support?).
-        let (name, continuation) = match pattern {
-            Pattern::Var { name, .. } | Pattern::Discard { name, .. } if kind.is_let() => {
-                (name.clone(), continuation)
+        let mut names = Vec::new();
+
+        for (index, (pattern, annotation)) in patterns.into_iter().enumerate() {
+            // In case where we have a Pattern that isn't simply a let-binding to a name, we do insert an extra let-binding
+            // in front of the continuation sequence. This is because we do not support patterns in function argument
+            // (which is perhaps something we should support?).
+            match pattern {
+                Pattern::Var { name, .. } | Pattern::Discard { name, .. } if kind.is_let() => {
+                    names.push(name.clone());
+                }
+                _ => {
+                    let name = format!("{}_{}", ast::BACKPASS_VARIABLE, index);
+
+                    continuation.insert(
+                        0,
+                        UntypedExpr::Assignment {
+                            location: assign_location,
+                            value: UntypedExpr::Var {
+                                location: value_location,
+                                name: name.clone(),
+                            }
+                            .into(),
+                            patterns: Vec1::new((pattern, annotation)),
+                            // erase backpassing while preserving assignment kind.
+                            kind: match kind {
+                                AssignmentKind::Let { .. } => AssignmentKind::let_(),
+                                AssignmentKind::Expect { .. } => AssignmentKind::expect(),
+                            },
+                        },
+                    );
+
+                    names.push(name);
+                }
             }
-            _ => {
-                let mut with_assignment = vec![UntypedExpr::Assignment {
-                    location: assign_location,
-                    value: UntypedExpr::Var {
-                        location: value_location,
-                        name: ast::BACKPASS_VARIABLE.to_string(),
-                    }
-                    .into(),
-                    pattern,
-                    // Erase backpassing while preserving assignment kind.
-                    kind: match kind {
-                        AssignmentKind::Let { .. } => AssignmentKind::let_(),
-                        AssignmentKind::Expect { .. } => AssignmentKind::expect(),
-                    },
-                    annotation,
-                }];
-                with_assignment.extend(continuation);
-                (ast::BACKPASS_VARIABLE.to_string(), with_assignment)
-            }
-        };
+        }
 
         match *value {
             UntypedExpr::Call { fun, arguments, .. } => {
@@ -1779,7 +1794,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 new_arguments.push(CallArg {
                     location: call_location,
                     label: None,
-                    value: UntypedExpr::lambda(name, continuation, call_location),
+                    value: UntypedExpr::lambda(names, continuation, call_location),
                 });
 
                 UntypedExpr::Call {
@@ -1811,7 +1826,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     arguments: vec![CallArg {
                         location: call_location,
                         label: None,
-                        value: UntypedExpr::lambda(name, continuation, call_location),
+                        value: UntypedExpr::lambda(names, continuation, call_location),
                     }],
                 };
 
@@ -1838,7 +1853,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 arguments: vec![CallArg {
                     location: call_location,
                     label: None,
-                    value: UntypedExpr::lambda(name, continuation, call_location),
+                    value: UntypedExpr::lambda(names, continuation, call_location),
                 }],
             },
         }
@@ -1857,10 +1872,28 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     UntypedExpr::Assignment { kind, .. } if kind.is_backpassing() => {
                         breakpoint = Some(expression);
                     }
+                    UntypedExpr::Assignment {
+                        patterns, location, ..
+                    } if patterns.len() > 1 => {
+                        return Err(Error::UnexpectedMultiPatternAssignment {
+                            arrow: patterns
+                                .last()
+                                .0
+                                .location()
+                                .map(|_, c_end| (c_end + 1, c_end + 1)),
+                            location: patterns[1..]
+                                .iter()
+                                .map(|(p, _)| p.location())
+                                .reduce(|acc, loc| acc.union(loc))
+                                .unwrap_or(location)
+                                .map_end(|current| current - 1),
+                        });
+                    }
                     _ => prefix.push(expression),
                 }
             }
         }
+
         if let Some(breakpoint) = breakpoint {
             prefix.push(self.backpass(breakpoint, suffix));
             return self.infer_seq(location, prefix);
@@ -2149,9 +2182,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 sample: UntypedExpr::Assignment {
                     location: Span::empty(),
                     value: Box::new(subject.clone()),
-                    pattern: clauses[0].patterns[0].clone(),
+                    patterns: Vec1::new((clauses[0].patterns[0].clone(), None)),
                     kind: AssignmentKind::let_(),
-                    annotation: None,
                 },
             });
         }

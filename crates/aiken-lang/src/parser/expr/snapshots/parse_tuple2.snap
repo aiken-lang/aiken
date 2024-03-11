@@ -27,14 +27,18 @@ Sequence {
                 },
                 location: 8..15,
             },
-            pattern: Var {
-                location: 4..5,
-                name: "a",
-            },
+            patterns: [
+                (
+                    Var {
+                        location: 4..5,
+                        name: "a",
+                    },
+                    None,
+                ),
+            ],
             kind: Let {
                 backpassing: false,
             },
-            annotation: None,
         },
         Tuple {
             location: 16..23,

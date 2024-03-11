@@ -16,14 +16,18 @@ Assignment {
                         numeric_underscore: false,
                     },
                 },
-                pattern: Var {
-                    location: 16..17,
-                    name: "x",
-                },
+                patterns: [
+                    (
+                        Var {
+                            location: 16..17,
+                            name: "x",
+                        },
+                        None,
+                    ),
+                ],
                 kind: Let {
                     backpassing: false,
                 },
-                annotation: None,
             },
             BinOp {
                 location: 24..29,
@@ -42,12 +46,16 @@ Assignment {
             },
         ],
     },
-    pattern: Var {
-        location: 4..5,
-        name: "b",
-    },
+    patterns: [
+        (
+            Var {
+                location: 4..5,
+                name: "b",
+            },
+            None,
+        ),
+    ],
     kind: Let {
         backpassing: false,
     },
-    annotation: None,
 }

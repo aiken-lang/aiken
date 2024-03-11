@@ -22,14 +22,18 @@ Module {
                                 ],
                                 preferred_format: Utf8String,
                             },
-                            pattern: Var {
-                                location: 17..18,
-                                name: "x",
-                            },
+                            patterns: [
+                                (
+                                    Var {
+                                        location: 17..18,
+                                        name: "x",
+                                    },
+                                    None,
+                                ),
+                            ],
                             kind: Let {
                                 backpassing: false,
                             },
-                            annotation: None,
                         },
                         Var {
                             location: 27..28,

@@ -1782,6 +1782,47 @@ impl Span {
         }
     }
 
+    /// Map the current start and end of the Span to new values.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use aiken_lang::ast::Span;
+    ///
+    /// let span = Span { start: 0, end: 1 };
+    ///
+    /// let other = span.map(|start, end| (start + 2, end + 4));
+    ///
+    /// assert_eq!(other.start, 2);
+    /// assert_eq!(other.end, 5);
+    /// ```
+    pub fn map<F: FnOnce(usize, usize) -> (usize, usize)>(&self, f: F) -> Self {
+        let (start, end) = f(self.start, self.end);
+
+        Self { start, end }
+    }
+
+    /// Map the current end of the Span to a new value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use aiken_lang::ast::Span;
+    ///
+    /// let span = Span { start: 0, end: 1 };
+    ///
+    /// let other = span.map_end(|end| end + 1);
+    ///
+    /// assert_eq!(other.start, 0);
+    /// assert_eq!(other.end, 2);
+    /// ```
+    pub fn map_end<F: FnOnce(usize) -> usize>(&self, f: F) -> Self {
+        Self {
+            start: self.start,
+            end: f(self.end),
+        }
+    }
+
     pub fn contains(&self, byte_index: usize) -> bool {
         byte_index >= self.start && byte_index < self.end
     }

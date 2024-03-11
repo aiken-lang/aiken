@@ -25,14 +25,18 @@ Fn(
                     },
                 },
             },
-            pattern: Var {
-                location: 17..18,
-                name: "x",
-            },
+            patterns: [
+                (
+                    Var {
+                        location: 17..18,
+                        name: "x",
+                    },
+                    None,
+                ),
+            ],
             kind: Let {
                 backpassing: false,
             },
-            annotation: None,
         },
         doc: None,
         location: 0..8,
