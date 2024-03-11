@@ -12,6 +12,10 @@ pub fn let_(
         .ignore_then(
             pattern()
                 .then(just(Token::Colon).ignore_then(annotation()).or_not())
+                .map(|(pattern, annotation)| ast::AssignmentPattern {
+                    pattern,
+                    annotation,
+                })
                 .separated_by(just(Token::Comma))
                 .at_least(1),
         )
@@ -44,6 +48,10 @@ pub fn expect(
         .ignore_then(
             pattern()
                 .then(just(Token::Colon).ignore_then(annotation()).or_not())
+                .map(|(pattern, annotation)| ast::AssignmentPattern {
+                    pattern,
+                    annotation,
+                })
                 .separated_by(just(Token::Comma))
                 .at_least(1)
                 .then(choice((just(Token::Equal), just(Token::LArrow))))
@@ -57,8 +65,8 @@ pub fn expect(
 
             let (patterns, kind) = opt_pattern.unwrap_or_else(|| {
                 (
-                    vec![(
-                        ast::UntypedPattern::Constructor {
+                    vec![ast::AssignmentPattern {
+                        pattern: ast::UntypedPattern::Constructor {
                             is_record: false,
                             location: span,
                             name: "True".to_string(),
@@ -68,8 +76,8 @@ pub fn expect(
                             with_spread: false,
                             tipo: (),
                         },
-                        None,
-                    )],
+                        annotation: None,
+                    }],
                     Token::Equal,
                 )
             });

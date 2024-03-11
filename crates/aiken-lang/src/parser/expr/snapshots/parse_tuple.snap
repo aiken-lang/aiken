@@ -41,13 +41,13 @@ Sequence {
                 ],
             },
             patterns: [
-                (
-                    Var {
+                AssignmentPattern {
+                    pattern: Var {
                         location: 4..9,
                         name: "tuple",
                     },
-                    None,
-                ),
+                    annotation: None,
+                },
             ],
             kind: Let {
                 backpassing: false,

@@ -1436,6 +1436,27 @@ impl Default for Bls12_381Point {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct AssignmentPattern {
+    pub pattern: UntypedPattern,
+    pub annotation: Option<Annotation>,
+}
+
+impl AssignmentPattern {
+    pub fn new(pattern: UntypedPattern, annotation: Option<Annotation>) -> AssignmentPattern {
+        Self {
+            pattern,
+            annotation,
+        }
+    }
+}
+
+impl From<AssignmentPattern> for Vec1<AssignmentPattern> {
+    fn from(value: AssignmentPattern) -> Self {
+        Vec1::new(value)
+    }
+}
+
 pub type UntypedAssignmentKind = AssignmentKind<bool>;
 pub type TypedAssignmentKind = AssignmentKind<()>;
 

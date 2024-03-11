@@ -20,13 +20,13 @@ Module {
                                 name: "bar",
                             },
                             patterns: [
-                                (
-                                    Var {
+                                AssignmentPattern {
+                                    pattern: Var {
                                         location: 19..20,
                                         name: "a",
                                     },
-                                    None,
-                                ),
+                                    annotation: None,
+                                },
                             ],
                             kind: Let {
                                 backpassing: false,
@@ -64,13 +64,13 @@ Module {
                                 name: "bar",
                             },
                             patterns: [
-                                (
-                                    Var {
+                                AssignmentPattern {
+                                    pattern: Var {
                                         location: 56..57,
                                         name: "a",
                                     },
-                                    None,
-                                ),
+                                    annotation: None,
+                                },
                             ],
                             kind: Let {
                                 backpassing: false,
@@ -119,13 +119,13 @@ Module {
                         },
                     },
                     patterns: [
-                        (
-                            Var {
+                        AssignmentPattern {
+                            pattern: Var {
                                 location: 93..94,
                                 name: "a",
                             },
-                            None,
-                        ),
+                            annotation: None,
+                        },
                     ],
                     kind: Let {
                         backpassing: false,
@@ -170,13 +170,13 @@ Module {
                                 location: 130..137,
                             },
                             patterns: [
-                                (
-                                    Var {
+                                AssignmentPattern {
+                                    pattern: Var {
                                         location: 126..127,
                                         name: "a",
                                     },
-                                    None,
-                                ),
+                                    annotation: None,
+                                },
                             ],
                             kind: Let {
                                 backpassing: false,

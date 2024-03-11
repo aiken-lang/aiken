@@ -8,7 +8,7 @@ use super::{
 };
 use crate::{
     ast::{
-        self, Annotation, Arg, ArgName, AssignmentKind, BinOp, Bls12_381Point,
+        self, Annotation, Arg, ArgName, AssignmentKind, AssignmentPattern, BinOp, Bls12_381Point,
         ByteArrayFormatPreference, CallArg, ClauseGuard, Constant, Curve, IfBranch,
         LogicalOpChainKind, Pattern, RecordUpdateSpread, Span, TraceKind, TraceLevel, Tracing,
         TypedArg, TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch, TypedPattern,
@@ -269,7 +269,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             } => {
                 // at this point due to backpassing rewrites,
                 // patterns is guaranteed to have one item
-                let (pattern, annotation) = patterns.into_vec().swap_remove(0);
+                let AssignmentPattern {
+                    pattern,
+                    annotation,
+                } = patterns.into_vec().swap_remove(0);
 
                 self.infer_assignment(pattern, *value, kind, &annotation, location)
             }
@@ -966,7 +969,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     value: UntypedExpr::Assignment {
                         location,
                         value: untyped_value.into(),
-                        patterns: Vec1::new((untyped_pattern, Some(ann))),
+                        patterns: AssignmentPattern::new(untyped_pattern, Some(ann)).into(),
                         kind,
                     },
                 });
@@ -1013,14 +1016,15 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                                             name: "...".to_string(),
                                             location: Span::empty(),
                                         }),
-                                        patterns: Vec1::new((untyped_pattern, None)),
+                                        patterns: AssignmentPattern::new(untyped_pattern, None)
+                                            .into(),
                                         kind: AssignmentKind::Let { backpassing: true },
                                     }
                                 }
                                 _ => UntypedExpr::Assignment {
                                     location: Span::empty(),
                                     value: Box::new(untyped_value),
-                                    patterns: Vec1::new((untyped_pattern, None)),
+                                    patterns: AssignmentPattern::new(untyped_pattern, None).into(),
                                     kind: AssignmentKind::let_(),
                                 },
                             },
@@ -1753,7 +1757,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         let mut names = Vec::new();
 
-        for (index, (pattern, annotation)) in patterns.into_iter().enumerate() {
+        for (index, assignment_pattern) in patterns.into_iter().enumerate() {
+            let AssignmentPattern {
+                pattern,
+                annotation,
+            } = assignment_pattern;
+
             // In case where we have a Pattern that isn't simply a let-binding to a name, we do insert an extra let-binding
             // in front of the continuation sequence. This is because we do not support patterns in function argument
             // (which is perhaps something we should support?).
@@ -1773,7 +1782,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                                 name: name.clone(),
                             }
                             .into(),
-                            patterns: Vec1::new((pattern, annotation)),
+                            patterns: AssignmentPattern::new(pattern, annotation).into(),
                             // erase backpassing while preserving assignment kind.
                             kind: match kind {
                                 AssignmentKind::Let { .. } => AssignmentKind::let_(),
@@ -1878,12 +1887,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         return Err(Error::UnexpectedMultiPatternAssignment {
                             arrow: patterns
                                 .last()
-                                .0
+                                .pattern
                                 .location()
                                 .map(|_, c_end| (c_end + 1, c_end + 1)),
                             location: patterns[1..]
                                 .iter()
-                                .map(|(p, _)| p.location())
+                                .map(|ap| ap.pattern.location())
                                 .reduce(|acc, loc| acc.union(loc))
                                 .unwrap_or(location)
                                 .map_end(|current| current - 1),
@@ -2182,7 +2191,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 sample: UntypedExpr::Assignment {
                     location: Span::empty(),
                     value: Box::new(subject.clone()),
-                    patterns: Vec1::new((clauses[0].patterns[0].clone(), None)),
+                    patterns: AssignmentPattern::new(clauses[0].patterns[0].clone(), None).into(),
                     kind: AssignmentKind::let_(),
                 },
             });

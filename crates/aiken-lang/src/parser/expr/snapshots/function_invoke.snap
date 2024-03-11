@@ -28,13 +28,13 @@ Sequence {
                 location: 8..18,
             },
             patterns: [
-                (
-                    Var {
+                AssignmentPattern {
+                    pattern: Var {
                         location: 4..5,
                         name: "x",
                     },
-                    None,
-                ),
+                    annotation: None,
+                },
             ],
             kind: Let {
                 backpassing: false,
@@ -118,13 +118,13 @@ Sequence {
                 return_annotation: None,
             },
             patterns: [
-                (
-                    Var {
+                AssignmentPattern {
+                    pattern: Var {
                         location: 24..33,
                         name: "map_add_x",
                     },
-                    None,
-                ),
+                    annotation: None,
+                },
             ],
             kind: Let {
                 backpassing: false,

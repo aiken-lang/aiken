@@ -1,12 +1,12 @@
 use crate::{
     ast::{
-        Annotation, Arg, ArgName, ArgVia, AssignmentKind, BinOp, ByteArrayFormatPreference,
-        CallArg, ClauseGuard, Constant, CurveType, DataType, Definition, Function, IfBranch,
-        LogicalOpChainKind, ModuleConstant, Pattern, RecordConstructor, RecordConstructorArg,
-        RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg, UnOp, UnqualifiedImport,
-        UntypedArg, UntypedArgVia, UntypedAssignmentKind, UntypedClause, UntypedClauseGuard,
-        UntypedDefinition, UntypedFunction, UntypedModule, UntypedPattern, UntypedRecordUpdateArg,
-        Use, Validator, CAPTURE_VARIABLE,
+        Annotation, Arg, ArgName, ArgVia, AssignmentKind, AssignmentPattern, BinOp,
+        ByteArrayFormatPreference, CallArg, ClauseGuard, Constant, CurveType, DataType, Definition,
+        Function, IfBranch, LogicalOpChainKind, ModuleConstant, Pattern, RecordConstructor,
+        RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg, UnOp,
+        UnqualifiedImport, UntypedArg, UntypedArgVia, UntypedAssignmentKind, UntypedClause,
+        UntypedClauseGuard, UntypedDefinition, UntypedFunction, UntypedModule, UntypedPattern,
+        UntypedRecordUpdateArg, Use, Validator, CAPTURE_VARIABLE,
     },
     docvec,
     expr::{FnStyle, UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
@@ -679,7 +679,7 @@ impl<'comments> Formatter<'comments> {
 
     fn assignment<'a>(
         &mut self,
-        patterns: &'a Vec1<(UntypedPattern, Option<Annotation>)>,
+        patterns: &'a Vec1<AssignmentPattern>,
         value: &'a UntypedExpr,
         kind: UntypedAssignmentKind,
     ) -> Document<'a> {
@@ -691,12 +691,13 @@ impl<'comments> Formatter<'comments> {
         let symbol = if kind.is_backpassing() { "<-" } else { "=" };
 
         match patterns.first() {
-            (
-                UntypedPattern::Constructor {
-                    name, module: None, ..
-                },
+            AssignmentPattern {
+                pattern:
+                    UntypedPattern::Constructor {
+                        name, module: None, ..
+                    },
                 annotation,
-            ) if name == "True"
+            } if name == "True"
                 && annotation.is_none()
                 && kind.is_expect()
                 && patterns.len() == 1 =>
@@ -704,17 +705,22 @@ impl<'comments> Formatter<'comments> {
                 keyword.to_doc().append(self.case_clause_value(value))
             }
             _ => {
-                let patterns = patterns.into_iter().map(|(pattern, annotation)| {
-                    self.pop_empty_lines(pattern.location().end);
+                let patterns = patterns.into_iter().map(
+                    |AssignmentPattern {
+                         pattern,
+                         annotation,
+                     }| {
+                        self.pop_empty_lines(pattern.location().end);
 
-                    let pattern = self.pattern(pattern);
+                        let pattern = self.pattern(pattern);
 
-                    let annotation = annotation
-                        .as_ref()
-                        .map(|a| ": ".to_doc().append(self.annotation(a)));
+                        let annotation = annotation
+                            .as_ref()
+                            .map(|a| ": ".to_doc().append(self.annotation(a)));
 
-                    pattern.append(annotation).group()
-                });
+                        pattern.append(annotation).group()
+                    },
+                );
 
                 keyword
                     .to_doc()

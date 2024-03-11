@@ -28,13 +28,13 @@ Sequence {
                 location: 8..15,
             },
             patterns: [
-                (
-                    Var {
+                AssignmentPattern {
+                    pattern: Var {
                         location: 4..5,
                         name: "a",
                     },
-                    None,
-                ),
+                    annotation: None,
+                },
             ],
             kind: Let {
                 backpassing: false,
