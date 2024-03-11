@@ -20,6 +20,7 @@
 - **aiken**: The `check` command now accept an extra (optional) option `--max-success` to control the number of property-test iterations to perform. @KtorZ
 - **aiken**: The `docs` command now accept an optional flag `--include-dependencies` to include all dependencies in the generated documentation. @KtorZ
 - **aiken-lang**: Implement [function backpassing](https://www.roc-lang.org/tutorial#backpassing) as a syntactic sugar. @KtorZ
+- **aiken-lang**: Extend backpassing to support multiple patterns/arguments. @rvcas
 
 ### Fixed
 
