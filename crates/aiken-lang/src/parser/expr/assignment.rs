@@ -17,6 +17,7 @@ pub fn let_(
                     annotation,
                 })
                 .separated_by(just(Token::Comma))
+                .allow_trailing()
                 .at_least(1),
         )
         .then(choice((just(Token::Equal), just(Token::LArrow))))
@@ -53,6 +54,7 @@ pub fn expect(
                     annotation,
                 })
                 .separated_by(just(Token::Comma))
+                .allow_trailing()
                 .at_least(1)
                 .then(choice((just(Token::Equal), just(Token::LArrow))))
                 .or_not(),
