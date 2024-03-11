@@ -1894,8 +1894,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                                 .iter()
                                 .map(|ap| ap.pattern.location())
                                 .reduce(|acc, loc| acc.union(loc))
-                                .unwrap_or(location)
-                                .map_end(|current| current - 1),
+                                .unwrap_or(location),
                         });
                     }
                     _ => prefix.push(expression),
