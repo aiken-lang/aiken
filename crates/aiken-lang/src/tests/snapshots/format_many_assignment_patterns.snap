@@ -1,0 +1,21 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn backpassing() -> Int {\n\n  let\n    elem, accumulator, wow,\n    who,\n    thing,\n    what,\n    idk,\n    wee,\n    will,\n    it,\n    break,\n\n\n\n  <- fold([1, 2, 3],\n  0)\n\n  elem + accumulator\n}\n"
+---
+fn backpassing() -> Int {
+  let
+    elem,
+    accumulator,
+    wow,
+    who,
+    thing,
+    what,
+    idk,
+    wee,
+    will,
+    it,
+    break,
+  <- fold([1, 2, 3], 0)
+
+  elem + accumulator
+}

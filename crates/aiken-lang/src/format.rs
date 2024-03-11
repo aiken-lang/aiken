@@ -727,8 +727,7 @@ impl<'comments> Formatter<'comments> {
                     .append(break_("", " "))
                     .append(join(patterns, break_(",", ", ")))
                     .nest(INDENT)
-                    .append(break_(",", ""))
-                    .append(break_("", " "))
+                    .append(break_(",", " "))
                     .append(symbol)
                     .append(self.case_clause_value(value))
             }
