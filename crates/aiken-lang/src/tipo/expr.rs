@@ -932,12 +932,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let mut value_typ = typed_value.tipo();
 
         let value_is_data = value_typ.is_data();
+        let value_is_opaque = value_typ.is_opaque();
 
         // Check that any type annotation is accurate.
         let pattern = if let Some(ann) = annotation {
             let ann_typ = self
                 .type_from_annotation(ann)
                 .map(|t| self.instantiate(t, &mut HashMap::new()))?;
+
+            if kind.is_expect() && (ann_typ.is_opaque() || value_is_opaque) {
+                return Err(Error::ExpectOnOpaqueType { location });
+            }
 
             self.unify(
                 ann_typ.clone(),
@@ -973,6 +978,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         kind,
                     },
                 });
+            }
+
+            if kind.is_expect() && value_is_opaque {
+                return Err(Error::ExpectOnOpaqueType { location });
             }
 
             // Ensure the pattern matches the type of the value

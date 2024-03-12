@@ -546,6 +546,7 @@ impl<'a> Environment<'a> {
         match t.deref() {
             Type::App {
                 public,
+                opaque,
                 name,
                 module,
                 args,
@@ -555,8 +556,10 @@ impl<'a> Environment<'a> {
                     .iter()
                     .map(|t| self.instantiate(t.clone(), ids, hydrator))
                     .collect();
+
                 Rc::new(Type::App {
                     public: *public,
+                    opaque: *opaque,
                     name: name.clone(),
                     module: module.clone(),
                     alias: alias.clone(),
@@ -983,6 +986,7 @@ impl<'a> Environment<'a> {
             Definition::DataType(DataType {
                 name,
                 public,
+                opaque,
                 parameters,
                 location,
                 constructors,
@@ -997,6 +1001,7 @@ impl<'a> Environment<'a> {
 
                 let tipo = Rc::new(Type::App {
                     public: *public,
+                    opaque: *opaque,
                     module: module.to_owned(),
                     name: name.clone(),
                     args: parameters.clone(),
@@ -1856,6 +1861,7 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
 
         Type::App {
             public,
+            opaque,
             module,
             name,
             args,
@@ -1868,6 +1874,7 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
 
             Rc::new(Type::App {
                 public: *public,
+                opaque: *opaque,
                 module: module.clone(),
                 name: name.clone(),
                 args,

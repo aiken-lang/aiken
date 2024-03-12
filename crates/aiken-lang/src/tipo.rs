@@ -42,6 +42,7 @@ pub enum Type {
     ///
     App {
         public: bool,
+        opaque: bool,
         module: String,
         name: String,
         args: Vec<Rc<Type>>,
@@ -152,12 +153,14 @@ impl Type {
         Rc::new(match self {
             Type::App {
                 public,
+                opaque,
                 module,
                 name,
                 args,
                 ..
             } => Type::App {
                 public,
+                opaque,
                 module,
                 name,
                 args,
@@ -181,15 +184,11 @@ impl Type {
         }
     }
 
-    pub fn is_result_constructor(&self) -> bool {
+    pub fn is_opaque(&self) -> bool {
         match self {
-            Type::Fn { ret, .. } => ret.is_result(),
+            Type::App { opaque, .. } => *opaque,
             _ => false,
         }
-    }
-
-    pub fn is_result(&self) -> bool {
-        matches!(self, Self::App { name, module, .. } if "Result" == name && module.is_empty())
     }
 
     pub fn is_unbound(&self) -> bool {
@@ -459,6 +458,7 @@ impl Type {
     pub fn get_app_args(
         &self,
         public: bool,
+        opaque: bool,
         module: &str,
         name: &str,
         arity: usize,
@@ -481,7 +481,7 @@ impl Type {
             Self::Var { tipo, alias } => {
                 let args: Vec<_> = match tipo.borrow().deref() {
                     TypeVar::Link { tipo } => {
-                        return tipo.get_app_args(public, module, name, arity, environment);
+                        return tipo.get_app_args(public, opaque, module, name, arity, environment);
                     }
 
                     TypeVar::Unbound { .. } => {
@@ -496,6 +496,7 @@ impl Type {
                 *tipo.borrow_mut() = TypeVar::Link {
                     tipo: Rc::new(Self::App {
                         public,
+                        opaque,
                         name: name.to_string(),
                         module: module.to_owned(),
                         args: args.clone(),
@@ -650,6 +651,7 @@ pub fn convert_opaque_type(
         match t.as_ref() {
             Type::App {
                 public,
+                opaque,
                 module,
                 name,
                 args,
@@ -662,6 +664,7 @@ pub fn convert_opaque_type(
                 }
                 Type::App {
                     public: *public,
+                    opaque: *opaque,
                     module: module.clone(),
                     name: name.clone(),
                     args: new_args,
@@ -736,6 +739,7 @@ pub fn find_and_replace_generics(
             Type::App {
                 args,
                 public,
+                opaque,
                 module,
                 name,
                 alias,
@@ -748,6 +752,7 @@ pub fn find_and_replace_generics(
                 let t = Type::App {
                     args: new_args,
                     public: *public,
+                    opaque: *opaque,
                     module: module.clone(),
                     name: name.clone(),
                     alias: alias.clone(),

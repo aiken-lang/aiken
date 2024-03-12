@@ -259,6 +259,13 @@ You can use '{discard}' and numbers to distinguish between similar names.
         name: String,
     },
 
+    #[error("I found an expect assignment involving an opaque type. This is not allowed.\n")]
+    #[diagnostic(code("illegal::expect_on_opaque"))]
+    ExpectOnOpaqueType {
+        #[label]
+        location: Span,
+    },
+
     #[error("I found a type definition that has a function type in it. This is not allowed.\n")]
     #[diagnostic(code("illegal::function_in_type"))]
     #[diagnostic(help(
@@ -1045,6 +1052,7 @@ impl ExtraData for Error {
             | Error::IncorrectTestArity { .. }
             | Error::GenericLeftAtBoundary { .. }
             | Error::UnexpectedMultiPatternAssignment { .. }
+            | Error::ExpectOnOpaqueType { .. }
             | Error::ValidatorMustReturnBool { .. } => None,
 
             Error::UnknownType { name, .. }

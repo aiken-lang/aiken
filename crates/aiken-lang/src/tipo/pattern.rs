@@ -202,7 +202,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                 location,
                 elements,
                 tail,
-            } => match tipo.get_app_args(true, "", "List", 1, self.environment) {
+            } => match tipo.get_app_args(true, false, "", "List", 1, self.environment) {
                 Some(args) => {
                     let tipo = args
                         .first()

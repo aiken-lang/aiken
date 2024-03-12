@@ -8,6 +8,7 @@ Schema {
         breadcrumbs: [
             App {
                 public: true,
+                opaque: true,
                 module: "test_module",
                 name: "Dict",
                 args: [
@@ -16,6 +17,7 @@ Schema {
                             value: Link {
                                 tipo: App {
                                     public: false,
+                                    opaque: false,
                                     module: "test_module",
                                     name: "UUID",
                                     args: [],
@@ -30,6 +32,7 @@ Schema {
                             value: Link {
                                 tipo: App {
                                     public: true,
+                                    opaque: false,
                                     module: "",
                                     name: "Int",
                                     args: [],

@@ -1793,3 +1793,41 @@ fn backpassing_type_annotation() {
 
     assert!(check(parse(source_code)).is_ok())
 }
+
+fn forbid_expect_into_opaque_type_from_data() {
+    let source_code = r#"
+        opaque type Thing { inner: Int }
+
+        fn bar(n: Data) {
+          expect a: Thing = n
+
+          a
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_opaque_type_constructor() {
+    let source_code = r#"
+        opaque type Thing {
+          Foo(Int)
+          Bar(Int)
+        }
+
+        fn bar(n: Thing) {
+          expect Foo(a) = n
+
+          a
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
