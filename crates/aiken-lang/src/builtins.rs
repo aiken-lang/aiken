@@ -1335,7 +1335,11 @@ pub fn tuple(elems: Vec<Rc<Type>>) -> Rc<Type> {
 }
 
 pub fn pair(fst: Rc<Type>, snd: Rc<Type>) -> Rc<Type> {
-    Rc::new(Type::Pair { fst, snd })
+    Rc::new(Type::Pair {
+        fst,
+        snd,
+        alias: None,
+    })
 }
 
 pub fn bool() -> Rc<Type> {

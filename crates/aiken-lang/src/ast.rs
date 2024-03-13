@@ -970,6 +970,11 @@ pub enum Annotation {
         location: Span,
         elems: Vec<Self>,
     },
+    Pair {
+        location: Span,
+        fst: Box<Self>,
+        snd: Box<Self>,
+    },
 }
 
 impl Annotation {
@@ -979,7 +984,8 @@ impl Annotation {
             | Annotation::Tuple { location, .. }
             | Annotation::Var { location, .. }
             | Annotation::Hole { location, .. }
-            | Annotation::Constructor { location, .. } => *location,
+            | Annotation::Constructor { location, .. }
+            | Annotation::Pair { location, .. } => *location,
         }
     }
 
@@ -1081,6 +1087,18 @@ impl Annotation {
                 } => name == o_name,
                 _ => false,
             },
+            Annotation::Pair { fst, snd, .. } => {
+                if let Annotation::Pair {
+                    fst: o_fst,
+                    snd: o_snd,
+                    ..
+                } = other
+                {
+                    fst.is_logically_equal(o_fst) && snd.is_logically_equal(o_snd)
+                } else {
+                    false
+                }
+            }
         }
     }
 

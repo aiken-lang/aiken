@@ -75,6 +75,7 @@ pub enum Type {
     Pair {
         fst: Rc<Type>,
         snd: Rc<Type>,
+        alias: Option<Rc<TypeAliasAnnotation>>,
     },
 }
 
@@ -143,6 +144,18 @@ impl PartialEq for Type {
                     false
                 }
             }
+            Type::Pair { fst, snd, .. } => {
+                if let Type::Pair {
+                    fst: fst2,
+                    snd: snd2,
+                    ..
+                } = other
+                {
+                    fst == fst2 && snd == snd2
+                } else {
+                    false
+                }
+            }
         }
     }
 }
@@ -153,7 +166,8 @@ impl Type {
             Type::App { alias, .. }
             | Type::Fn { alias, .. }
             | Type::Var { alias, .. }
-            | Type::Tuple { alias, .. } => alias.clone(),
+            | Type::Tuple { alias, .. }
+            | Type::Pair { alias, .. } => alias.clone(),
         }
     }
 
@@ -188,6 +202,7 @@ impl Type {
             } => Type::Fn { args, ret, alias },
             Type::Var { tipo, alias: _ } => Type::Var { tipo, alias },
             Type::Tuple { elems, alias: _ } => Type::Tuple { elems, alias },
+            Type::Pair { fst, snd, alias: _ } => Type::Pair { fst, snd, alias },
         })
     }
 
@@ -200,6 +215,7 @@ impl Type {
                 _ => None,
             },
             Type::Tuple { .. } => Some((String::new(), "Tuple".to_string())),
+            Type::Pair { .. } => Some((String::new(), "Pair".to_string())),
         }
     }
 
@@ -350,14 +366,14 @@ impl Type {
                 .first()
                 .expect("unreachable: List should have an inner type")
                 .is_pair(),
-            Self::Var { tipo } => tipo.borrow().is_map(),
+            Self::Var { tipo, .. } => tipo.borrow().is_map(),
             _ => false,
         }
     }
 
     pub fn is_tuple(&self) -> bool {
         match self {
-            Self::Var { tipo } => tipo.borrow().is_tuple(),
+            Self::Var { tipo, .. } => tipo.borrow().is_tuple(),
             Self::Tuple { .. } => true,
             _ => false,
         }
@@ -365,7 +381,7 @@ impl Type {
 
     pub fn is_pair(&self) -> bool {
         match self {
-            Self::Var { tipo } => tipo.borrow().is_pair(),
+            Self::Var { tipo, .. } => tipo.borrow().is_pair(),
             Self::Pair { .. } => true,
             _ => false,
         }
@@ -389,22 +405,22 @@ impl Type {
                 is_a_generic
             }
 
-            Self::Var { tipo } => tipo.borrow().is_generic(),
-            Self::Tuple { elems } => {
+            Self::Var { tipo, .. } => tipo.borrow().is_generic(),
+            Self::Tuple { elems, .. } => {
                 let mut is_a_generic = false;
                 for elem in elems {
                     is_a_generic = is_a_generic || elem.is_generic();
                 }
                 is_a_generic
             }
-            Self::Fn { args, ret } => {
+            Self::Fn { args, ret, .. } => {
                 let mut is_a_generic = false;
                 for arg in args {
                     is_a_generic = is_a_generic || arg.is_generic();
                 }
                 is_a_generic || ret.is_generic()
             }
-            Self::Pair { fst, snd } => fst.is_generic() || snd.is_generic(),
+            Self::Pair { fst, snd, .. } => fst.is_generic() || snd.is_generic(),
         }
     }
 
@@ -419,7 +435,7 @@ impl Type {
 
     pub fn get_generic(&self) -> Option<u64> {
         match self {
-            Self::Var { tipo } => tipo.borrow().get_generic(),
+            Self::Var { tipo, .. } => tipo.borrow().get_generic(),
             _ => None,
         }
     }
@@ -470,7 +486,7 @@ impl Type {
         } else if self.is_tuple() {
             match self {
                 Self::Tuple { .. } => UplcType::List(UplcType::Data.into()),
-                Self::Var { tipo } => tipo.borrow().get_uplc_type().unwrap(),
+                Self::Var { tipo, .. } => tipo.borrow().get_uplc_type().unwrap(),
                 _ => unreachable!(),
             }
         } else if self.is_pair() {
@@ -563,7 +579,7 @@ impl Type {
 
                 TypeVar::Link { tipo, .. } => tipo.find_private_type(),
             },
-            Self::Pair { fst, snd } => {
+            Self::Pair { fst, snd, .. } => {
                 if let Some(private_type) = fst.find_private_type() {
                     Some(private_type)
                 } else {
@@ -749,6 +765,16 @@ pub fn convert_opaque_type(
                 }
                 .into()
             }
+            Type::Pair { fst, snd, alias } => {
+                let fst = convert_opaque_type(fst, data_types, deep);
+                let snd = convert_opaque_type(snd, data_types, deep);
+                Type::Pair {
+                    fst,
+                    snd,
+                    alias: alias.clone(),
+                }
+                .into()
+            }
         }
     }
 }
@@ -837,6 +863,16 @@ pub fn find_and_replace_generics(
                     TypeVar::Link { tipo } => find_and_replace_generics(&tipo, mono_types),
                     TypeVar::Generic { .. } | TypeVar::Unbound { .. } => unreachable!(),
                 }
+            }
+            Type::Pair { fst, snd, alias } => {
+                let fst = find_and_replace_generics(fst, mono_types);
+                let snd = find_and_replace_generics(snd, mono_types);
+                Type::Pair {
+                    fst,
+                    snd,
+                    alias: alias.clone(),
+                }
+                .into()
             }
         }
     } else {

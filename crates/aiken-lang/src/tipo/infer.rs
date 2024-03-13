@@ -843,7 +843,7 @@ fn infer_fuzzer(
             }),
         },
 
-        Type::App { .. } | Type::Tuple { .. } => Err(could_not_unify()),
+        Type::App { .. } | Type::Tuple { .. } | Type::Pair { .. } => Err(could_not_unify()),
     }
 }
 
@@ -894,5 +894,14 @@ fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
             location: *location,
             tipo: Rc::new(tipo.clone()),
         }),
+        Type::Pair { fst, snd, .. } => {
+            let fst = annotate_fuzzer(fst, location)?;
+            let snd = annotate_fuzzer(snd, location)?;
+            Ok(Annotation::Pair {
+                fst: Box::new(fst),
+                snd: Box::new(snd),
+                location: *location,
+            })
+        }
     }
 }

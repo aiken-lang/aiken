@@ -2442,5 +2442,9 @@ pub fn ensure_serialisable(allow_fn: bool, t: Rc<Type>, location: Span) -> Resul
                 location,
             ),
         },
+        Type::Pair { fst, snd, .. } => {
+            ensure_serialisable(false, fst.clone(), location)?;
+            ensure_serialisable(false, snd.clone(), location)
+        }
     }
 }
