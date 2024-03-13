@@ -1812,17 +1812,91 @@ fn forbid_expect_into_opaque_type_from_data() {
 }
 
 #[test]
-fn forbid_expect_into_opaque_type_constructor() {
+fn forbid_expect_into_opaque_type_constructor_without_typecasting() {
     let source_code = r#"
         opaque type Thing {
           Foo(Int)
           Bar(Int)
         }
 
-        fn bar(n: Thing) {
-          expect Foo(a) = n
-
+        fn bar(thing: Thing) {
+          expect Foo(a) = thing
           a
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_opaque_type_constructor_with_typecasting() {
+    let source_code = r#"
+        opaque type Thing {
+          Foo(Int)
+          Bar(Int)
+        }
+
+        fn bar(data: Data) {
+          expect Foo(a): Thing = data
+          a
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_nested_opaque_in_record_without_typecasting() {
+    let source_code = r#"
+        opaque type Thing { inner: Int }
+
+        type Foo { foo: Thing }
+
+        fn bar(thing: Thing) {
+          expect Foo { foo: Thing { inner } } : Foo = thing
+          Void
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_nested_opaque_in_record_with_typecasting() {
+    let source_code = r#"
+        opaque type Thing { inner: Int }
+
+        type Foo { foo: Thing }
+
+        fn bar(a: Data) {
+          expect Foo { foo: Thing { inner } } : Foo = a
+          Void
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
+}
+
+#[test]
+fn forbid_expect_into_nested_opaque_in_list() {
+    let source_code = r#"
+        opaque type Thing { inner: Int }
+
+        fn bar(a: Data) {
+          expect [x]: List<Thing> = [a]
+          Void
         }
     "#;
 
