@@ -424,6 +424,7 @@ impl<'comments> Formatter<'comments> {
             Annotation::Tuple { elems, .. } => {
                 wrap_args(elems.iter().map(|t| (self.annotation(t), false)))
             }
+            Annotation::Pair { .. } => todo!(),
         }
         .group()
     }

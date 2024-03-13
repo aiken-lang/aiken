@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{
     ast::Annotation,
-    builtins::{function, tuple},
+    builtins::{function, pair, tuple},
     tipo::Span,
 };
 use std::{collections::HashMap, rc::Rc};
@@ -245,6 +245,12 @@ impl Hydrator {
                 }
 
                 Ok(tuple(typed_elems))
+            }
+            Annotation::Pair { fst, snd, .. } => {
+                let fst = self.do_type_from_annotation(fst, environment, unbounds)?;
+                let snd = self.do_type_from_annotation(snd, environment, unbounds)?;
+
+                Ok(pair(fst, snd))
             }
         }?;
 

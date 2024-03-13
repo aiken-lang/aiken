@@ -11,7 +11,7 @@ use crate::{
         RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition, TypedPattern,
         UnqualifiedImport, UntypedArg, UntypedDefinition, Use, Validator, PIPE_VARIABLE,
     },
-    builtins::{function, generic_var, tuple, unbound_var},
+    builtins::{function, generic_var, pair, tuple, unbound_var},
     tipo::{fields::FieldMap, TypeAliasAnnotation},
     IdGenerator,
 };
@@ -641,6 +641,13 @@ impl<'a> Environment<'a> {
                         .iter()
                         .map(|t| self.instantiate(t.clone(), ids, hydrator))
                         .collect(),
+                ),
+                alias.clone(),
+            ),
+            Type::Pair { fst, snd, alias } => Type::with_alias(
+                pair(
+                    self.instantiate(fst.clone(), ids, hydrator),
+                    self.instantiate(snd.clone(), ids, hydrator),
                 ),
                 alias.clone(),
             ),
@@ -1794,7 +1801,7 @@ fn unify_unbound_type(tipo: Rc<Type>, own_id: u64, location: Span) -> Result<(),
 
             Ok(())
         }
-        Type::Pair { fst, snd } => {
+        Type::Pair { fst, snd, .. } => {
             unify_unbound_type(fst.clone(), own_id, location)?;
             unify_unbound_type(snd.clone(), own_id, location)?;
 
@@ -1973,6 +1980,13 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
                     .iter()
                     .map(|t| generalise(t.clone(), ctx_level))
                     .collect(),
+            ),
+            alias.clone(),
+        ),
+        Type::Pair { fst, snd, alias } => Type::with_alias(
+            pair(
+                generalise(fst.clone(), ctx_level),
+                generalise(snd.clone(), ctx_level),
             ),
             alias.clone(),
         ),
