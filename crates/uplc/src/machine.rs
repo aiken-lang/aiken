@@ -88,6 +88,18 @@ impl Machine {
         }
     }
 
+    pub fn step(&mut self, state: MachineState) -> Result<MachineState, Error> {
+        use MachineState::*;
+        let state = match state {
+            Compute(context, env, t) => self.compute(context, env, t)?,
+            Return(context, value) => self.return_compute(context, value)?,
+            Done(t) => {
+                return Ok(Done(t));
+            }
+        };
+        return Ok(state);
+    }
+
     fn compute(
         &mut self,
         context: Context,
