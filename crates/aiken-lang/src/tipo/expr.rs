@@ -928,17 +928,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let mut value_typ = typed_value.tipo();
 
         let value_is_data = value_typ.is_data();
-        let value_is_opaque = value_typ.is_opaque();
 
         // Check that any type annotation is accurate.
-        let pattern = if let Some(ann) = annotation {
+        let ann_typ = if let Some(ann) = annotation {
             let ann_typ = self
                 .type_from_annotation(ann)
                 .map(|t| self.instantiate(t, &mut HashMap::new()))?;
-
-            if kind.is_expect() && (ann_typ.is_opaque() || value_is_opaque) {
-                return Err(Error::ExpectOnOpaqueType { location });
-            }
 
             self.unify(
                 ann_typ.clone(),
@@ -949,13 +944,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             value_typ = ann_typ.clone();
 
-            // Ensure the pattern matches the type of the value
-            PatternTyper::new(self.environment, &self.hydrator).unify(
-                untyped_pattern.clone(),
-                value_typ.clone(),
-                Some(ann_typ),
-                kind.is_let(),
-            )?
+            Some(ann_typ)
         } else {
             if value_is_data && !untyped_pattern.is_var() && !untyped_pattern.is_discard() {
                 let ann = Annotation::Constructor {
@@ -976,18 +965,20 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 });
             }
 
-            if kind.is_expect() && value_is_opaque {
-                return Err(Error::ExpectOnOpaqueType { location });
-            }
-
-            // Ensure the pattern matches the type of the value
-            PatternTyper::new(self.environment, &self.hydrator).unify(
-                untyped_pattern.clone(),
-                value_typ.clone(),
-                None,
-                kind.is_let(),
-            )?
+            None
         };
+
+        if kind.is_expect() && value_typ.is_or_holds_opaque() {
+            return Err(Error::ExpectOnOpaqueType { location });
+        }
+
+        // Ensure the pattern matches the type of the value
+        let pattern = PatternTyper::new(self.environment, &self.hydrator).unify(
+            untyped_pattern.clone(),
+            value_typ.clone(),
+            ann_typ,
+            kind.is_let(),
+        )?;
 
         // If `expect` is explicitly used, we still check exhaustiveness but instead of returning an
         // error we emit a warning which explains that using `expect` is unnecessary.

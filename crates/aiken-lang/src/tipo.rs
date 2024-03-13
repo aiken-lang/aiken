@@ -195,10 +195,14 @@ impl Type {
         }
     }
 
-    pub fn is_opaque(&self) -> bool {
+    pub fn is_or_holds_opaque(&self) -> bool {
         match self {
-            Type::App { opaque, .. } => *opaque,
-            _ => false,
+            Type::Var { tipo, .. } => tipo.borrow().is_or_holds_opaque(),
+            Type::App { opaque, args, .. } => {
+                *opaque || args.iter().any(|arg| arg.is_or_holds_opaque())
+            }
+            Type::Tuple { elems, .. } => elems.iter().any(|elem| elem.is_or_holds_opaque()),
+            Type::Fn { .. } => false,
         }
     }
 
@@ -843,6 +847,13 @@ pub enum TypeVar {
 impl TypeVar {
     pub fn is_unbound(&self) -> bool {
         matches!(self, Self::Unbound { .. })
+    }
+
+    pub fn is_or_holds_opaque(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_or_holds_opaque(),
+            _ => false,
+        }
     }
 
     pub fn is_void(&self) -> bool {
