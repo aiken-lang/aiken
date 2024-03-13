@@ -939,7 +939,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 ann_typ.clone(),
                 value_typ.clone(),
                 typed_value.type_defining_location(),
-                (kind.is_let() && ann_typ.is_data()) || (kind.is_expect() && value_is_data),
+                (kind.is_let() && ann_typ.is_data()) || kind.is_expect(),
             )?;
 
             value_typ = ann_typ.clone();
