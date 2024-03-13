@@ -86,7 +86,7 @@ impl Printer {
             Type::Var { tipo: typ, .. } => self.type_var_doc(&typ.borrow()),
 
             Type::Tuple { elems, .. } => self.args_to_aiken_doc(elems).surround("(", ")"),
-            Type::Pair { fst, snd } => self
+            Type::Pair { fst, snd, .. } => self
                 .args_to_aiken_doc(&[fst.clone(), snd.clone()])
                 .surround("Pair<", ">"),
         }
