@@ -1744,3 +1744,52 @@ fn discarded_let_bindings() {
         _ => unreachable!("ast isn't a Fn"),
     }
 }
+
+#[test]
+fn backpassing_type_annotation() {
+    let source_code = r#"
+        pub type Foo {
+          foo: Int,
+        }
+
+        fn transition_fold4(
+          inputs,
+          callback,
+        ) {
+          when inputs is {
+            [] -> {
+              (Foo(1), inputs)
+            }
+            [input, ..remaining_inputs] -> {
+        
+              callback(input)(
+                fn(foo) {
+                  transition_fold4(
+                    remaining_inputs,
+                    callback,
+                  )
+                },
+              )
+            }
+          }
+        }
+
+        pub fn backpassing(x) {
+          let input: Foo <-
+            transition_fold4(
+              x,
+            )
+          
+          fn(g){
+            g(if input.foo == 1{
+              1
+            } else {
+              2
+            })
+          }
+          
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}

@@ -1768,7 +1768,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             // (which is perhaps something we should support?).
             match pattern {
                 Pattern::Var { name, .. } | Pattern::Discard { name, .. } if kind.is_let() => {
-                    names.push(name.clone());
+                    names.push((name.clone(), annotation));
                 }
                 _ => {
                     let name = format!("{}_{}", ast::BACKPASS_VARIABLE, index);
@@ -1782,7 +1782,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                                 name: name.clone(),
                             }
                             .into(),
-                            patterns: AssignmentPattern::new(pattern, annotation).into(),
+                            patterns: AssignmentPattern::new(pattern, annotation.clone()).into(),
                             // erase backpassing while preserving assignment kind.
                             kind: match kind {
                                 AssignmentKind::Let { .. } => AssignmentKind::let_(),
@@ -1791,7 +1791,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         },
                     );
 
-                    names.push(name);
+                    names.push((name, annotation));
                 }
             }
         }

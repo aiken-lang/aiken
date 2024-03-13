@@ -1299,16 +1299,20 @@ impl UntypedExpr {
         )
     }
 
-    pub fn lambda(names: Vec<String>, expressions: Vec<UntypedExpr>, location: Span) -> Self {
+    pub fn lambda(
+        names: Vec<(String, Option<Annotation>)>,
+        expressions: Vec<UntypedExpr>,
+        location: Span,
+    ) -> Self {
         Self::Fn {
             location,
             fn_style: FnStyle::Plain,
             arguments: names
                 .into_iter()
-                .map(|name| Arg {
+                .map(|(name, annotation)| Arg {
                     location,
                     doc: None,
-                    annotation: None,
+                    annotation,
                     tipo: (),
                     arg_name: ArgName::Named {
                         label: name.clone(),
