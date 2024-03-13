@@ -81,19 +81,22 @@ impl PartialEq for Type {
                 module,
                 name,
                 args,
-                ..
+                opaque,
+                alias: _,
             } => {
                 if let Type::App {
                     public: public2,
                     module: module2,
                     name: name2,
                     args: args2,
-                    ..
+                    opaque: opaque2,
+                    alias: _,
                 } = other
                 {
                     name == name2
                         && module == module2
                         && public == public2
+                        && opaque == opaque2
                         && args.iter().zip(args2).all(|(left, right)| left == right)
                 } else {
                     false
@@ -104,7 +107,7 @@ impl PartialEq for Type {
                 if let Type::Fn {
                     args: args2,
                     ret: ret2,
-                    ..
+                    alias: _,
                 } = other
                 {
                     ret == ret2 && args.iter().zip(args2).all(|(left, right)| left == right)
@@ -113,7 +116,7 @@ impl PartialEq for Type {
                 }
             }
 
-            Type::Tuple { elems, .. } => {
+            Type::Tuple { elems, alias: _ } => {
                 if let Type::Tuple { elems: elems2, .. } = other {
                     elems.iter().zip(elems2).all(|(left, right)| left == right)
                 } else {
@@ -121,8 +124,12 @@ impl PartialEq for Type {
                 }
             }
 
-            Type::Var { tipo, .. } => {
-                if let Type::Var { tipo: tipo2, .. } = other {
+            Type::Var { tipo, alias: _ } => {
+                if let Type::Var {
+                    tipo: tipo2,
+                    alias: _,
+                } = other
+                {
                     tipo == tipo2
                 } else {
                     false
@@ -157,7 +164,7 @@ impl Type {
                 module,
                 name,
                 args,
-                ..
+                alias: _,
             } => Type::App {
                 public,
                 opaque,
@@ -166,9 +173,13 @@ impl Type {
                 args,
                 alias,
             },
-            Type::Fn { args, ret, .. } => Type::Fn { args, ret, alias },
-            Type::Var { tipo, .. } => Type::Var { tipo, alias },
-            Type::Tuple { elems, .. } => Type::Tuple { elems, alias },
+            Type::Fn {
+                args,
+                ret,
+                alias: _,
+            } => Type::Fn { args, ret, alias },
+            Type::Var { tipo, alias: _ } => Type::Var { tipo, alias },
+            Type::Tuple { elems, alias: _ } => Type::Tuple { elems, alias },
         })
     }
 
@@ -959,11 +970,13 @@ impl TypeVar {
             Self::Link { tipo } => tipo.get_inner_types(),
             Self::Unbound { .. } => vec![],
             var => {
-                vec![Type::Var {
-                    tipo: RefCell::new(var.clone()).into(),
-                    alias: None,
-                }
-                .into()]
+                vec![
+                    Type::Var {
+                        tipo: RefCell::new(var.clone()).into(),
+                        alias: None,
+                    }
+                    .into(),
+                ]
             }
         }
     }

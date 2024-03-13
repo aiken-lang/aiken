@@ -197,7 +197,8 @@ fn infer_definition(
                         ArgName::Named {
                             name,
                             is_validator_param,
-                            ..
+                            label: _,
+                            location: _,
                         } if *is_validator_param => {
                             environment.insert_variable(
                                 name.to_string(),
@@ -383,7 +384,9 @@ fn infer_definition(
                         .get_mut(&f.name)
                         .expect("Could not find preregistered type for test");
                     if let Type::Fn {
-                        ref ret, ref alias, ..
+                        ref ret,
+                        ref alias,
+                        args: _,
                     } = scope.tipo.as_ref()
                     {
                         scope.tipo = Rc::new(Type::Fn {
@@ -425,7 +428,11 @@ fn infer_definition(
                 arguments: match typed_via {
                     Some((via, tipo)) => {
                         let Arg {
-                            arg_name, location, ..
+                            arg_name,
+                            location,
+                            annotation: _,
+                            doc: _,
+                            tipo: _,
                         } = typed_f
                             .arguments
                             .first()
@@ -457,7 +464,7 @@ fn infer_definition(
             alias,
             parameters,
             annotation,
-            ..
+            tipo: _,
         }) => {
             let tipo = environment
                 .get_type_constructor(&None, &alias, location)
@@ -484,7 +491,7 @@ fn infer_definition(
             name,
             parameters,
             constructors: untyped_constructors,
-            ..
+            typed_parameters: _,
         }) => {
             let constructors = untyped_constructors
                 .into_iter()
@@ -514,7 +521,7 @@ fn infer_definition(
                                             annotation,
                                             location,
                                             doc,
-                                            ..
+                                            tipo: _,
                                         },
                                         t,
                                     )| {
@@ -561,7 +568,14 @@ fn infer_definition(
             };
 
             for constr in &typed_data.constructors {
-                for RecordConstructorArg { tipo, location, .. } in &constr.arguments {
+                for RecordConstructorArg {
+                    tipo,
+                    location,
+                    doc: _,
+                    label: _,
+                    annotation: _,
+                } in &constr.arguments
+                {
                     if tipo.is_function() {
                         return Err(Error::FunctionTypeInData {
                             location: *location,
@@ -585,7 +599,7 @@ fn infer_definition(
             module,
             as_name,
             unqualified,
-            ..
+            package: _,
         }) => {
             let name = module.join("/");
 
@@ -616,7 +630,7 @@ fn infer_definition(
             annotation,
             public,
             value,
-            ..
+            tipo: _,
         }) => {
             let typed_expr =
                 ExprTyper::new(environment, lines, tracing).infer_const(&annotation, *value)?;
@@ -672,7 +686,7 @@ fn infer_function(
         return_annotation,
         end_position,
         can_error,
-        ..
+        return_type: _,
     } = f;
 
     let preregistered_fn = environment
@@ -773,9 +787,18 @@ fn infer_fuzzer(
     };
 
     match tipo.borrow() {
-        Type::Fn { ret, .. } => match ret.borrow() {
+        Type::Fn {
+            ret,
+            args: _,
+            alias: _,
+        } => match ret.borrow() {
             Type::App {
-                module, name, args, ..
+                module,
+                name,
+                args,
+                public: _,
+                opaque: _,
+                alias: _,
             } if module.is_empty() && name == "Option" && args.len() == 1 => {
                 match args.first().expect("args.len() == 1").borrow() {
                     Type::Tuple { elems, .. } if elems.len() == 2 => {
@@ -805,10 +828,13 @@ fn infer_fuzzer(
             _ => Err(could_not_unify()),
         },
 
-        Type::Var { tipo, .. } => match &*tipo.deref().borrow() {
-            TypeVar::Link { tipo } => {
-                infer_fuzzer(environment, expected_inner_type, tipo, location)
-            }
+        Type::Var { tipo, alias } => match &*tipo.deref().borrow() {
+            TypeVar::Link { tipo } => infer_fuzzer(
+                environment,
+                expected_inner_type,
+                &Type::with_alias(tipo.clone(), alias.clone()),
+                location,
+            ),
             _ => Err(Error::GenericLeftAtBoundary {
                 location: *location,
             }),
@@ -821,7 +847,12 @@ fn infer_fuzzer(
 fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
     match tipo {
         Type::App {
-            name, module, args, ..
+            name,
+            module,
+            args,
+            public: _,
+            opaque: _,
+            alias: _,
         } => {
             let arguments = args
                 .iter()
@@ -839,7 +870,7 @@ fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
             })
         }
 
-        Type::Tuple { elems, .. } => {
+        Type::Tuple { elems, alias: _ } => {
             let elems = elems
                 .iter()
                 .map(|arg| annotate_fuzzer(arg, location))
@@ -850,7 +881,7 @@ fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
             })
         }
 
-        Type::Var { tipo, .. } => match &*tipo.deref().borrow() {
+        Type::Var { tipo, alias: _ } => match &*tipo.deref().borrow() {
             TypeVar::Link { tipo } => annotate_fuzzer(tipo, location),
             _ => Err(Error::GenericLeftAtBoundary {
                 location: *location,
