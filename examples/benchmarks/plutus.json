@@ -1,0 +1,14 @@
+{
+  "preamble": {
+    "title": "aiken/benchmarks",
+    "description": "Aiken contracts for project 'aiken/benchmarks'",
+    "version": "0.0.0",
+    "plutusVersion": "v2",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.0.21-alpha+4b04517"
+    },
+    "license": "Apache-2.0"
+  },
+  "validators": []
+}
