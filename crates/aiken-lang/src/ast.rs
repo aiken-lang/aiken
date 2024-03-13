@@ -1225,7 +1225,6 @@ impl TypedPattern {
     }
 
     pub fn tipo(&self, value: &TypedExpr) -> Option<Rc<Type>> {
-        // expect thing: Wow = thing
         match self {
             Pattern::Int { .. } => Some(builtins::int()),
             Pattern::Constructor { tipo, .. } => Some(tipo.clone()),
