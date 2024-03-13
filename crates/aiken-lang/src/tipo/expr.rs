@@ -968,10 +968,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             None
         };
 
-        if kind.is_expect() && value_typ.is_or_holds_opaque() {
-            return Err(Error::ExpectOnOpaqueType { location });
-        }
-
         // Ensure the pattern matches the type of the value
         let pattern = PatternTyper::new(self.environment, &self.hydrator).unify(
             untyped_pattern.clone(),
@@ -979,6 +975,14 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             ann_typ,
             kind.is_let(),
         )?;
+
+        // FIXME: This check is insufficient as we need to also assert the type
+        // definition itself since there might be nested opaque types on the rhs.
+        //
+        // For that, we must lookup
+        if kind.is_expect() && value_typ.is_or_holds_opaque() {
+            return Err(Error::ExpectOnOpaqueType { location });
+        }
 
         // If `expect` is explicitly used, we still check exhaustiveness but instead of returning an
         // error we emit a warning which explains that using `expect` is unnecessary.
