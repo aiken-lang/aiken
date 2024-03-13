@@ -722,12 +722,29 @@ impl<'comments> Formatter<'comments> {
                     },
                 );
 
-                keyword
+                let pattern_len = patterns.len();
+
+                let assignment = keyword
                     .to_doc()
-                    .append(break_("", " "))
-                    .append(join(patterns, break_(",", ", ")))
-                    .nest(INDENT)
-                    .append(break_(",", " "))
+                    .append(if pattern_len == 1 {
+                        " ".to_doc()
+                    } else {
+                        break_("", " ")
+                    })
+                    .append(join(patterns, break_(",", ", ")));
+
+                let assignment = if pattern_len == 1 {
+                    assignment
+                } else {
+                    assignment.nest(INDENT)
+                };
+
+                assignment
+                    .append(if pattern_len == 1 {
+                        " ".to_doc()
+                    } else {
+                        break_(",", " ")
+                    })
                     .append(symbol)
                     .append(self.case_clause_value(value))
             }
