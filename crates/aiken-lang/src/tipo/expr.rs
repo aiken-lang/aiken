@@ -976,10 +976,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             kind.is_let(),
         )?;
 
-        if kind.is_expect() && value_typ.contains_opaque() {
-            return Err(Error::ExpectOnOpaqueType { location });
-        }
-
         // If `expect` is explicitly used, we still check exhaustiveness but instead of returning an
         // error we emit a warning which explains that using `expect` is unnecessary.
         match kind {

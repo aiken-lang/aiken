@@ -16,6 +16,7 @@ fn parse(source_code: &str) -> UntypedModule {
 
 fn check_module(
     ast: UntypedModule,
+    extra: Vec<(String, UntypedModule)>,
     kind: ModuleKind,
 ) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
     let id_gen = IdGenerator::new();
@@ -25,6 +26,21 @@ fn check_module(
     let mut module_types = HashMap::new();
     module_types.insert("aiken".to_string(), builtins::prelude(&id_gen));
     module_types.insert("aiken/builtin".to_string(), builtins::plutus(&id_gen));
+
+    for (package, module) in extra {
+        let mut warnings = vec![];
+        let typed_module = module
+            .infer(
+                &id_gen,
+                kind,
+                &package,
+                &module_types,
+                Tracing::All(TraceLevel::Verbose),
+                &mut warnings,
+            )
+            .expect("extra dependency did not compile");
+        module_types.insert(package.clone(), typed_module.type_info.clone());
+    }
 
     let result = ast.infer(
         &id_gen,
@@ -41,13 +57,20 @@ fn check_module(
 }
 
 fn check(ast: UntypedModule) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
-    check_module(ast, ModuleKind::Lib)
+    check_module(ast, Vec::new(), ModuleKind::Lib)
+}
+
+fn check_with_deps(
+    ast: UntypedModule,
+    extra: Vec<(String, UntypedModule)>,
+) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
+    check_module(ast, extra, ModuleKind::Lib)
 }
 
 fn check_validator(
     ast: UntypedModule,
 ) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
-    check_module(ast, ModuleKind::Validator)
+    check_module(ast, Vec::new(), ModuleKind::Validator)
 }
 
 #[test]
@@ -1813,7 +1836,7 @@ fn forbid_expect_into_opaque_type_from_data() {
 }
 
 #[test]
-fn forbid_expect_into_opaque_type_constructor_without_typecasting() {
+fn forbid_expect_into_opaque_type_constructor_without_typecasting_in_module() {
     let source_code = r#"
         opaque type Thing {
           Foo(Int)
@@ -1826,10 +1849,51 @@ fn forbid_expect_into_opaque_type_constructor_without_typecasting() {
         }
     "#;
 
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn forbid_importing_or_using_opaque_constructors() {
+    let dependency = r#"
+        pub opaque type Thing {
+          Foo(Int)
+          Bar(Int)
+        }
+    "#;
+
+    let source_code = r#"
+        use foo/thing.{Thing, Foo}
+
+        fn bar(thing: Thing) {
+          expect Foo(a) = thing
+          a
+        }
+    "#;
+
     assert!(matches!(
-        check(parse(source_code)),
-        Err((_, Error::ExpectOnOpaqueType { .. }))
-    ))
+        check_with_deps(
+            parse(source_code),
+            vec![("foo/thing".to_string(), parse(dependency))],
+        ),
+        Err((_, Error::UnknownModuleField { .. })),
+    ));
+
+    let source_code = r#"
+        use foo/thing.{Thing}
+
+        fn bar(thing: Thing) {
+          expect Foo(a) = thing
+          a
+        }
+    "#;
+
+    assert!(matches!(
+        check_with_deps(
+            parse(source_code),
+            vec![("foo/thing".to_string(), parse(dependency))],
+        ),
+        Err((_, Error::UnknownTypeConstructor { .. })),
+    ));
 }
 
 #[test]
@@ -1914,7 +1978,6 @@ fn allow_expect_on_var_patterns_that_are_opaque() {
 
         fn bar(a: Option<Thing>) {
           expect Some(thing) = a
-
           thing.inner
         }
     "#;
