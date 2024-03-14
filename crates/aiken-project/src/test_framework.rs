@@ -226,11 +226,12 @@ impl PropertyTest {
     /// may stops earlier on failure; in which case a 'counterexample' is returned.
     pub fn run<U>(self, seed: u32, n: usize) -> TestResult<U, PlutusData> {
         let mut labels = BTreeMap::new();
+        let mut remaining = n;
 
         let (traces, counterexample, iterations) =
-            match self.run_n_times(n, Prng::from_seed(seed), None, &mut labels) {
+            match self.run_n_times(&mut remaining, Prng::from_seed(seed), &mut labels) {
                 Ok(None) => (Vec::new(), Ok(None), n),
-                Ok(Some((remaining, counterexample))) => (
+                Ok(Some(counterexample)) => (
                     self.eval(&counterexample.value)
                         .logs()
                         .into_iter()
@@ -260,24 +261,19 @@ impl PropertyTest {
 
     fn run_n_times<'a>(
         &'a self,
-        remaining: usize,
-        prng: Prng,
-        counterexample: Option<(usize, Counterexample<'a>)>,
+        remaining: &mut usize,
+        initial_prng: Prng,
         labels: &mut BTreeMap<String, usize>,
-    ) -> Result<Option<(usize, Counterexample<'a>)>, FuzzerError> {
-        // We short-circuit failures in case we have any. The counterexample is already simplified
-        // at this point.
-        if remaining > 0 && counterexample.is_none() {
-            let (next_prng, counterexample) = self.run_once(prng, labels)?;
-            self.run_n_times(
-                remaining - 1,
-                next_prng,
-                counterexample.map(|c| (remaining, c)),
-                labels,
-            )
-        } else {
-            Ok(counterexample)
+    ) -> Result<Option<Counterexample<'a>>, FuzzerError> {
+        let mut prng = initial_prng;
+        let mut counterexample = None;
+
+        while *remaining > 0 && counterexample.is_none() {
+            (prng, counterexample) = self.run_once(prng, labels)?;
+            *remaining -= 1;
         }
+
+        Ok(counterexample)
     }
 
     fn run_once(
@@ -1418,13 +1414,9 @@ mod test {
     impl PropertyTest {
         fn expect_failure(&self) -> Counterexample {
             let mut labels = BTreeMap::new();
-            match self.run_n_times(
-                PropertyTest::DEFAULT_MAX_SUCCESS,
-                Prng::from_seed(42),
-                None,
-                &mut labels,
-            ) {
-                Ok(Some((_, counterexample))) => counterexample,
+            let mut remaining = PropertyTest::DEFAULT_MAX_SUCCESS;
+            match self.run_n_times(&mut remaining, Prng::from_seed(42), &mut labels) {
+                Ok(Some(counterexample)) => counterexample,
                 _ => panic!("expected property to fail but it didn't."),
             }
         }
