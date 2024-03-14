@@ -8,7 +8,7 @@ Schema {
         breadcrumbs: [
             App {
                 public: true,
-                opaque: true,
+                contains_opaque: true,
                 module: "test_module",
                 name: "Rational",
                 args: [],
