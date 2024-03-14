@@ -8,7 +8,7 @@ use aiken_lang::{
 };
 use petgraph::{algo, graph::NodeIndex, Direction, Graph};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap},
     io,
     ops::{Deref, DerefMut},
     path::PathBuf,
@@ -47,7 +47,7 @@ impl ParsedModules {
         Self(HashMap::new())
     }
 
-    pub fn sequence(&self, our_modules: &HashSet<String>) -> Result<Vec<String>, Error> {
+    pub fn sequence(&self, our_modules: &BTreeSet<String>) -> Result<Vec<String>, Error> {
         let inputs = self
             .0
             .values()
@@ -60,7 +60,7 @@ impl ParsedModules {
 
         let mut indices = HashMap::with_capacity(capacity);
 
-        let mut our_indices = HashSet::with_capacity(our_modules.len());
+        let mut our_indices = BTreeSet::new();
 
         for (value, _) in &inputs {
             let index = graph.add_node(value.to_string());
@@ -90,7 +90,7 @@ impl ParsedModules {
             // know starting indices for our search, so when we remove a dependency, we need find
             // back what those indices are.
             if messed_up_indices {
-                our_indices = HashSet::with_capacity(our_modules.len());
+                our_indices = BTreeSet::new();
                 for j in graph.node_indices() {
                     if our_modules.contains(graph[j].as_str()) {
                         our_indices.insert(j);
@@ -125,7 +125,7 @@ impl ParsedModules {
 
                 let mut path = vec![];
 
-                find_cycle(origin, origin, &graph, &mut path, &mut HashSet::new());
+                find_cycle(origin, origin, &graph, &mut path, &mut BTreeSet::new());
 
                 let modules = path
                     .iter()
@@ -176,7 +176,7 @@ fn find_cycle<W>(
     parent: NodeIndex,
     graph: &petgraph::Graph<W, ()>,
     path: &mut Vec<NodeIndex>,
-    seen: &mut HashSet<NodeIndex>,
+    seen: &mut BTreeSet<NodeIndex>,
 ) -> bool {
     seen.insert(parent);
 

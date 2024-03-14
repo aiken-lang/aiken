@@ -51,7 +51,7 @@ use pallas::ledger::{
     traverse::ComputeHash,
 };
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap},
     fs::{self, File},
     io::BufReader,
     path::{Path, PathBuf},
@@ -198,7 +198,7 @@ where
 
         let mut modules = self.parse_sources(self.config.name.clone())?;
 
-        let our_modules: HashSet<String> = modules.keys().cloned().collect();
+        let our_modules: BTreeSet<String> = modules.keys().cloned().collect();
 
         self.with_dependencies(&mut modules)?;
 
@@ -296,7 +296,7 @@ where
 
         let mut modules = self.parse_sources(self.config.name.clone())?;
 
-        let our_modules: HashSet<String> = modules.keys().cloned().collect();
+        let our_modules: BTreeSet<String> = modules.keys().cloned().collect();
 
         self.with_dependencies(&mut modules)?;
 
@@ -684,7 +684,7 @@ where
 
     fn type_check(
         &mut self,
-        our_modules: &HashSet<String>,
+        our_modules: &BTreeSet<String>,
         mut all_modules: ParsedModules,
         tracing: Tracing,
         validate_module_name: bool,
