@@ -51,7 +51,7 @@ use pallas::ledger::{
     traverse::ComputeHash,
 };
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{self, File},
     io::BufReader,
     path::{Path, PathBuf},
@@ -185,8 +185,6 @@ where
         destination: Option<PathBuf>,
         include_dependencies: bool,
     ) -> Result<(), Vec<Error>> {
-        self.compile_deps()?;
-
         self.event_listener
             .handle_event(Event::BuildingDocumentation {
                 root: self.root.clone(),
@@ -198,9 +196,13 @@ where
 
         let destination = destination.unwrap_or_else(|| self.root.join("docs"));
 
-        let parsed_modules = self.parse_sources(self.config.name.clone())?;
+        let mut modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(parsed_modules, Tracing::silent(), false, false)?;
+        let our_modules: HashSet<String> = modules.keys().cloned().collect();
+
+        self.with_dependencies(&mut modules)?;
+
+        self.type_check(&our_modules, modules, Tracing::silent(), false)?;
 
         self.event_listener.handle_event(Event::GeneratingDocFiles {
             output_path: destination.clone(),
@@ -283,8 +285,6 @@ where
     }
 
     pub fn compile(&mut self, options: Options) -> Result<(), Vec<Error>> {
-        self.compile_deps()?;
-
         self.event_listener
             .handle_event(Event::StartingCompilation {
                 root: self.root.clone(),
@@ -294,9 +294,13 @@ where
 
         self.read_source_files()?;
 
-        let parsed_modules = self.parse_sources(self.config.name.clone())?;
+        let mut modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(parsed_modules, options.tracing, true, false)?;
+        let our_modules: HashSet<String> = modules.keys().cloned().collect();
+
+        self.with_dependencies(&mut modules)?;
+
+        self.type_check(&our_modules, modules, options.tracing, true)?;
 
         match options.code_gen_mode {
             CodeGenMode::Build(uplc_dump) => {
@@ -537,7 +541,7 @@ where
         Ok(blueprint)
     }
 
-    fn compile_deps(&mut self) -> Result<(), Vec<Error>> {
+    fn with_dependencies(&mut self, parsed_packages: &mut ParsedModules) -> Result<(), Vec<Error>> {
         let manifest = deps::download(&self.event_listener, &self.root, &self.config)?;
 
         for package in manifest.packages {
@@ -565,7 +569,7 @@ where
                         .retain(|def| !matches!(def, Definition::Test { .. }))
                 });
 
-            self.type_check(parsed_modules, Tracing::silent(), true, true)?;
+            parsed_packages.extend(Into::<HashMap<_, _>>::into(parsed_modules));
         }
 
         Ok(())
@@ -680,12 +684,12 @@ where
 
     fn type_check(
         &mut self,
-        mut parsed_modules: ParsedModules,
+        our_modules: &HashSet<String>,
+        mut all_modules: ParsedModules,
         tracing: Tracing,
         validate_module_name: bool,
-        is_dependency: bool,
     ) -> Result<(), Error> {
-        let processing_sequence = parsed_modules.sequence()?;
+        let processing_sequence = all_modules.sequence(our_modules)?;
 
         for name in processing_sequence {
             if let Some(ParsedModule {
@@ -696,7 +700,7 @@ where
                 extra,
                 package,
                 ast,
-            }) = parsed_modules.remove(&name)
+            }) = all_modules.remove(&name)
             {
                 let mut type_warnings = Vec::new();
 
@@ -725,7 +729,7 @@ where
                     .into_iter()
                     .map(|w| Warning::from_type_warning(w, path.clone(), code.clone()));
 
-                if !is_dependency {
+                if our_modules.contains(name.as_str()) {
                     self.warnings.extend(type_warnings);
                 }
 

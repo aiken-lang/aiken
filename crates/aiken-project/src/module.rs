@@ -47,7 +47,7 @@ impl ParsedModules {
         Self(HashMap::new())
     }
 
-    pub fn sequence(&self) -> Result<Vec<String>, Error> {
+    pub fn sequence(&self, our_modules: &HashSet<String>) -> Result<Vec<String>, Error> {
         let inputs = self
             .0
             .values()
@@ -56,18 +56,18 @@ impl ParsedModules {
 
         let capacity = inputs.len();
 
-        let mut graph = Graph::<(), ()>::with_capacity(capacity, capacity * 5);
+        let mut graph = Graph::<String, ()>::with_capacity(capacity, capacity * 5);
 
-        // TODO: maybe use a bimap?
         let mut indices = HashMap::with_capacity(capacity);
-        let mut values = HashMap::with_capacity(capacity);
+
+        let mut our_indices = HashSet::with_capacity(our_modules.len());
 
         for (value, _) in &inputs {
-            let index = graph.add_node(());
-
+            let index = graph.add_node(value.to_string());
             indices.insert(value.clone(), index);
-
-            values.insert(index, value.clone());
+            if our_modules.contains(value) {
+                our_indices.insert(index);
+            }
         }
 
         for (value, deps) in inputs {
@@ -80,12 +80,42 @@ impl ParsedModules {
             }
         }
 
+        let mut messed_up_indices = false;
+
+        // Prune the dependency graph to only keep nodes that have a path to one of our (i.e. the
+        // current project) module. This effectively prunes dependencies that are unused from the
+        // graph to ensure that we only compile the modules we actually depend on.
+        graph.retain_nodes(|graph, ix| {
+            // When discarding a node, indices in the graph end up being rewritten. Yet, we need to
+            // know starting indices for our search, so when we remove a dependency, we need find
+            // back what those indices are.
+            if messed_up_indices {
+                our_indices = HashSet::with_capacity(our_modules.len());
+                for j in graph.node_indices() {
+                    if our_modules.contains(graph[j].as_str()) {
+                        our_indices.insert(j);
+                    }
+                }
+            }
+
+            for start in our_indices.iter() {
+                if algo::astar(&*graph, *start, |end| end == ix, |_| 1, |_| 0).is_some() {
+                    messed_up_indices = false;
+                    return true;
+                }
+            }
+
+            messed_up_indices = true;
+            false
+        });
+
         match algo::toposort(&graph, None) {
             Ok(sequence) => {
                 let sequence = sequence
                     .iter()
-                    .filter_map(|i| values.remove(i))
+                    .filter_map(|i| graph.node_weight(*i))
                     .rev()
+                    .cloned()
                     .collect();
 
                 Ok(sequence)
@@ -99,7 +129,8 @@ impl ParsedModules {
 
                 let modules = path
                     .iter()
-                    .filter_map(|index| values.remove(index))
+                    .filter_map(|i| graph.node_weight(*i))
+                    .cloned()
                     .collect();
 
                 Err(Error::ImportCycle { modules })
@@ -140,10 +171,10 @@ impl DerefMut for ParsedModules {
     }
 }
 
-fn find_cycle(
+fn find_cycle<W>(
     origin: NodeIndex,
     parent: NodeIndex,
-    graph: &petgraph::Graph<(), ()>,
+    graph: &petgraph::Graph<W, ()>,
     path: &mut Vec<NodeIndex>,
     seen: &mut HashSet<NodeIndex>,
 ) -> bool {
