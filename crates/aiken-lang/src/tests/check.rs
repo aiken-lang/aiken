@@ -1761,7 +1761,7 @@ fn backpassing_type_annotation() {
               (Foo(1), inputs)
             }
             [input, ..remaining_inputs] -> {
-        
+
               callback(input)(
                 fn(foo) {
                   transition_fold4(
@@ -1779,7 +1779,7 @@ fn backpassing_type_annotation() {
             transition_fold4(
               x,
             )
-          
+
           fn(g){
             g(if input.foo == 1{
               1
@@ -1787,13 +1787,14 @@ fn backpassing_type_annotation() {
               2
             })
           }
-          
+
         }
     "#;
 
     assert!(check(parse(source_code)).is_ok())
 }
 
+#[test]
 fn forbid_expect_into_opaque_type_from_data() {
     let source_code = r#"
         opaque type Thing { inner: Int }
