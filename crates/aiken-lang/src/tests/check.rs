@@ -1858,7 +1858,7 @@ fn forbid_expect_into_nested_opaque_in_record_without_typecasting() {
 
         type Foo { foo: Thing }
 
-        fn bar(thing: Thing) {
+        fn bar(thing: Foo) {
           expect Foo { foo: Thing { inner } } : Foo = thing
           Void
         }
@@ -1904,4 +1904,19 @@ fn forbid_expect_into_nested_opaque_in_list() {
         check(parse(source_code)),
         Err((_, Error::ExpectOnOpaqueType { .. }))
     ))
+}
+
+#[test]
+fn allow_expect_on_var_patterns_that_are_opaque() {
+    let source_code = r#"
+        opaque type Thing { inner: Int }
+
+        fn bar(a: Option<Thing>) {
+          expect Some(thing) = a
+
+          thing.inner
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
 }

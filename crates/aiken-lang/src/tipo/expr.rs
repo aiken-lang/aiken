@@ -976,11 +976,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             kind.is_let(),
         )?;
 
-        // FIXME: This check is insufficient as we need to also assert the type
-        // definition itself since there might be nested opaque types on the rhs.
-        //
-        // For that, we must lookup
-        if kind.is_expect() && value_typ.is_or_holds_opaque() {
+        if kind.is_expect() && value_typ.contains_opaque() {
             return Err(Error::ExpectOnOpaqueType { location });
         }
 
@@ -2347,7 +2343,7 @@ pub fn ensure_serialisable(allow_fn: bool, t: Rc<Type>, location: Span) -> Resul
             name: _,
             module: _,
             public: _,
-            opaque: _,
+            contains_opaque: _,
             alias: _,
         } => {
             if t.is_ml_result() {

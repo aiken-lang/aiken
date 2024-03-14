@@ -1267,7 +1267,7 @@ pub fn prelude_data_types(id_gen: &IdGenerator) -> IndexMap<DataTypeKey, TypedDa
 pub fn int() -> Rc<Type> {
     Rc::new(Type::App {
         public: true,
-        opaque: false,
+        contains_opaque: false,
         name: INT.to_string(),
         module: "".to_string(),
         args: vec![],
@@ -1278,7 +1278,7 @@ pub fn int() -> Rc<Type> {
 pub fn data() -> Rc<Type> {
     Rc::new(Type::App {
         public: true,
-        opaque: false,
+        contains_opaque: false,
         name: DATA.to_string(),
         module: "".to_string(),
         args: vec![],
@@ -1290,7 +1290,7 @@ pub fn byte_array() -> Rc<Type> {
     Rc::new(Type::App {
         args: vec![],
         public: true,
-        opaque: false,
+        contains_opaque: false,
         name: BYTE_ARRAY.to_string(),
         module: "".to_string(),
         alias: None,
@@ -1300,7 +1300,7 @@ pub fn byte_array() -> Rc<Type> {
 pub fn g1_element() -> Rc<Type> {
     Rc::new(Type::App {
         public: true,
-        opaque: false,
+        contains_opaque: false,
         module: "".to_string(),
         name: G1_ELEMENT.to_string(),
         args: vec![],
@@ -1311,7 +1311,7 @@ pub fn g1_element() -> Rc<Type> {
 pub fn g2_element() -> Rc<Type> {
     Rc::new(Type::App {
         public: true,
-        opaque: false,
+        contains_opaque: false,
         module: "".to_string(),
         name: G2_ELEMENT.to_string(),
         args: vec![],
@@ -1322,7 +1322,7 @@ pub fn g2_element() -> Rc<Type> {
 pub fn miller_loop_result() -> Rc<Type> {
     Rc::new(Type::App {
         public: true,
-        opaque: false,
+        contains_opaque: false,
         module: "".to_string(),
         name: MILLER_LOOP_RESULT.to_string(),
         args: vec![],
@@ -1338,7 +1338,7 @@ pub fn bool() -> Rc<Type> {
     Rc::new(Type::App {
         args: vec![],
         public: true,
-        opaque: false,
+        contains_opaque: false,
         name: BOOL.to_string(),
         module: "".to_string(),
         alias: None,
@@ -1349,7 +1349,7 @@ pub fn prng() -> Rc<Type> {
     Rc::new(Type::App {
         args: vec![],
         public: true,
-        opaque: false,
+        contains_opaque: false,
         name: PRNG.to_string(),
         module: "".to_string(),
         alias: None,
@@ -1400,7 +1400,7 @@ pub fn fuzzer(a: Rc<Type>) -> Rc<Type> {
 pub fn list(t: Rc<Type>) -> Rc<Type> {
     Rc::new(Type::App {
         public: true,
-        opaque: false,
+        contains_opaque: false,
         name: LIST.to_string(),
         module: "".to_string(),
         args: vec![t],
@@ -1412,7 +1412,7 @@ pub fn string() -> Rc<Type> {
     Rc::new(Type::App {
         args: vec![],
         public: true,
-        opaque: false,
+        contains_opaque: false,
         name: STRING.to_string(),
         module: "".to_string(),
         alias: None,
@@ -1423,7 +1423,7 @@ pub fn void() -> Rc<Type> {
     Rc::new(Type::App {
         args: vec![],
         public: true,
-        opaque: false,
+        contains_opaque: false,
         name: VOID.to_string(),
         module: "".to_string(),
         alias: None,
@@ -1433,7 +1433,7 @@ pub fn void() -> Rc<Type> {
 pub fn option(a: Rc<Type>) -> Rc<Type> {
     Rc::new(Type::App {
         public: true,
-        opaque: false,
+        contains_opaque: false,
         name: OPTION.to_string(),
         module: "".to_string(),
         args: vec![a],
@@ -1444,7 +1444,7 @@ pub fn option(a: Rc<Type>) -> Rc<Type> {
 pub fn ordering() -> Rc<Type> {
     Rc::new(Type::App {
         public: true,
-        opaque: false,
+        contains_opaque: false,
         name: ORDERING.to_string(),
         module: "".to_string(),
         args: vec![],
@@ -1475,7 +1475,7 @@ pub fn unbound_var(id: u64) -> Rc<Type> {
 pub fn wrapped_redeemer(redeemer: Rc<Type>) -> Rc<Type> {
     Rc::new(Type::App {
         public: true,
-        opaque: false,
+        contains_opaque: false,
         module: "".to_string(),
         name: REDEEMER_WRAPPER.to_string(),
         args: vec![redeemer],

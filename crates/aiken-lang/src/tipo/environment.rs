@@ -301,6 +301,25 @@ impl<'a> Environment<'a> {
         }
     }
 
+    pub fn get_type_constructor_mut(
+        &mut self,
+        name: &str,
+        location: Span,
+    ) -> Result<&mut TypeConstructor, Error> {
+        let types = self.module_types.keys().map(|t| t.to_string()).collect();
+
+        let constructor = self
+            .module_types
+            .get_mut(name)
+            .ok_or_else(|| Error::UnknownType {
+                location,
+                name: name.to_string(),
+                types,
+            })?;
+
+        Ok(constructor)
+    }
+
     /// Lookup a type in the current scope.
     pub fn get_type_constructor(
         &mut self,
@@ -551,7 +570,7 @@ impl<'a> Environment<'a> {
         match t.deref() {
             Type::App {
                 public,
-                opaque,
+                contains_opaque: opaque,
                 name,
                 module,
                 args,
@@ -564,7 +583,7 @@ impl<'a> Environment<'a> {
 
                 Rc::new(Type::App {
                     public: *public,
-                    opaque: *opaque,
+                    contains_opaque: *opaque,
                     name: name.clone(),
                     module: module.clone(),
                     alias: alias.clone(),
@@ -1006,7 +1025,7 @@ impl<'a> Environment<'a> {
 
                 let tipo = Rc::new(Type::App {
                     public: *public,
-                    opaque: *opaque,
+                    contains_opaque: *opaque,
                     module: module.to_owned(),
                     name: name.clone(),
                     args: parameters.clone(),
@@ -1471,7 +1490,7 @@ impl<'a> Environment<'a> {
                     name: n1,
                     args: args1,
                     public: _,
-                    opaque: _,
+                    contains_opaque: _,
                     alias: _,
                 },
                 Type::App {
@@ -1479,7 +1498,7 @@ impl<'a> Environment<'a> {
                     name: n2,
                     args: args2,
                     public: _,
-                    opaque: _,
+                    contains_opaque: _,
                     alias: _,
                 },
             ) if m1 == m2 && n1 == n2 && args1.len() == args2.len() => {
@@ -1742,7 +1761,7 @@ fn unify_unbound_type(tipo: Rc<Type>, own_id: u64, location: Span) -> Result<(),
             name: _,
             public: _,
             alias: _,
-            opaque: _,
+            contains_opaque: _,
         } => {
             for arg in args {
                 unify_unbound_type(arg.clone(), own_id, location)?
@@ -1906,7 +1925,7 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
 
         Type::App {
             public,
-            opaque,
+            contains_opaque: opaque,
             module,
             name,
             args,
@@ -1919,7 +1938,7 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
 
             Rc::new(Type::App {
                 public: *public,
-                opaque: *opaque,
+                contains_opaque: *opaque,
                 module: module.clone(),
                 name: name.clone(),
                 args,

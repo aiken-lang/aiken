@@ -89,6 +89,7 @@ impl UntypedModule {
                 &self.lines,
                 tracing,
             )?;
+
             definitions.push(definition);
         }
 
@@ -495,60 +496,62 @@ fn infer_definition(
         }) => {
             let constructors = untyped_constructors
                 .into_iter()
-                .map(
-                    |RecordConstructor {
-                         location,
-                         name,
-                         arguments: args,
-                         doc,
-                         sugar,
-                     }| {
-                        let preregistered_fn = environment
-                            .get_variable(&name)
-                            .expect("Could not find preregistered type for function");
+                .map(|constructor| {
+                    let preregistered_fn = environment
+                        .get_variable(&constructor.name)
+                        .expect("Could not find preregistered type for function");
 
-                        let preregistered_type = preregistered_fn.tipo.clone();
+                    let preregistered_type = preregistered_fn.tipo.clone();
 
-                        let args = if let Some((args_types, _return_type)) =
-                            preregistered_type.function_types()
-                        {
-                            args.into_iter()
+                    let args = preregistered_type.function_types().map_or(
+                        Ok(vec![]),
+                        |(args_types, _return_type)| {
+                            constructor
+                                .arguments
+                                .into_iter()
                                 .zip(&args_types)
-                                .map(
-                                    |(
-                                        RecordConstructorArg {
-                                            label,
-                                            annotation,
-                                            location,
-                                            doc,
-                                            tipo: _,
-                                        },
-                                        t,
-                                    )| {
-                                        RecordConstructorArg {
-                                            label,
-                                            annotation,
-                                            location,
-                                            tipo: t.clone(),
-                                            doc,
-                                        }
-                                    },
-                                )
-                                .collect()
-                        } else {
-                            vec![]
-                        };
+                                .map(|(arg, t)| {
+                                    if t.is_function() {
+                                        return Err(Error::FunctionTypeInData {
+                                            location: arg.location,
+                                        });
+                                    }
 
-                        RecordConstructor {
-                            location,
-                            name,
-                            arguments: args,
-                            doc,
-                            sugar,
-                        }
-                    },
-                )
-                .collect();
+                                    if t.is_ml_result() {
+                                        return Err(Error::IllegalTypeInData {
+                                            location: arg.location,
+                                            tipo: t.clone(),
+                                        });
+                                    }
+
+                                    if t.contains_opaque() {
+                                        let parent = environment
+                                            .get_type_constructor_mut(&name, location)?;
+
+                                        Rc::make_mut(&mut parent.tipo).set_opaque(true)
+                                    }
+
+                                    Ok(RecordConstructorArg {
+                                        label: arg.label,
+                                        annotation: arg.annotation,
+                                        location: arg.location,
+                                        doc: arg.doc,
+                                        tipo: t.clone(),
+                                    })
+                                })
+                                .collect()
+                        },
+                    )?;
+
+                    Ok(RecordConstructor {
+                        location: constructor.location,
+                        name: constructor.name,
+                        arguments: args,
+                        doc: constructor.doc,
+                        sugar: constructor.sugar,
+                    })
+                })
+                .collect::<Result<_, Error>>()?;
 
             let typed_parameters = environment
                 .get_type_constructor(&None, &name, location)
@@ -797,7 +800,7 @@ fn infer_fuzzer(
                 name,
                 args,
                 public: _,
-                opaque: _,
+                contains_opaque: _,
                 alias: _,
             } if module.is_empty() && name == "Option" && args.len() == 1 => {
                 match args.first().expect("args.len() == 1").borrow() {
@@ -851,7 +854,7 @@ fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
             module,
             args,
             public: _,
-            opaque: _,
+            contains_opaque: _,
             alias: _,
         } => {
             let arguments = args

@@ -42,7 +42,7 @@ pub enum Type {
     ///
     App {
         public: bool,
-        opaque: bool,
+        contains_opaque: bool,
         module: String,
         name: String,
         args: Vec<Rc<Type>>,
@@ -81,7 +81,7 @@ impl PartialEq for Type {
                 module,
                 name,
                 args,
-                opaque,
+                contains_opaque: opaque,
                 alias: _,
             } => {
                 if let Type::App {
@@ -89,7 +89,7 @@ impl PartialEq for Type {
                     module: module2,
                     name: name2,
                     args: args2,
-                    opaque: opaque2,
+                    contains_opaque: opaque2,
                     alias: _,
                 } = other
                 {
@@ -160,14 +160,14 @@ impl Type {
         Rc::new(match self {
             Type::App {
                 public,
-                opaque,
+                contains_opaque: opaque,
                 module,
                 name,
                 args,
                 alias: _,
             } => Type::App {
                 public,
-                opaque,
+                contains_opaque: opaque,
                 module,
                 name,
                 args,
@@ -195,14 +195,27 @@ impl Type {
         }
     }
 
-    pub fn is_or_holds_opaque(&self) -> bool {
+    pub fn contains_opaque(&self) -> bool {
         match self {
             Type::Var { tipo, .. } => tipo.borrow().is_or_holds_opaque(),
-            Type::App { opaque, args, .. } => {
-                *opaque || args.iter().any(|arg| arg.is_or_holds_opaque())
-            }
-            Type::Tuple { elems, .. } => elems.iter().any(|elem| elem.is_or_holds_opaque()),
+            Type::App {
+                contains_opaque: opaque,
+                args,
+                ..
+            } => *opaque || args.iter().any(|arg| arg.contains_opaque()),
+            Type::Tuple { elems, .. } => elems.iter().any(|elem| elem.contains_opaque()),
             Type::Fn { .. } => false,
+        }
+    }
+
+    pub fn set_opaque(&mut self, opaque: bool) {
+        match self {
+            Type::App {
+                contains_opaque, ..
+            } => {
+                *contains_opaque = opaque;
+            }
+            Type::Fn { .. } | Type::Var { .. } | Type::Tuple { .. } => (),
         }
     }
 
@@ -511,7 +524,7 @@ impl Type {
                 *tipo.borrow_mut() = TypeVar::Link {
                     tipo: Rc::new(Self::App {
                         public,
-                        opaque,
+                        contains_opaque: opaque,
                         name: name.to_string(),
                         module: module.to_owned(),
                         args: args.clone(),
@@ -666,7 +679,7 @@ pub fn convert_opaque_type(
         match t.as_ref() {
             Type::App {
                 public,
-                opaque,
+                contains_opaque: opaque,
                 module,
                 name,
                 args,
@@ -679,7 +692,7 @@ pub fn convert_opaque_type(
                 }
                 Type::App {
                     public: *public,
-                    opaque: *opaque,
+                    contains_opaque: *opaque,
                     module: module.clone(),
                     name: name.clone(),
                     args: new_args,
@@ -754,7 +767,7 @@ pub fn find_and_replace_generics(
             Type::App {
                 args,
                 public,
-                opaque,
+                contains_opaque: opaque,
                 module,
                 name,
                 alias,
@@ -767,7 +780,7 @@ pub fn find_and_replace_generics(
                 let t = Type::App {
                     args: new_args,
                     public: *public,
-                    opaque: *opaque,
+                    contains_opaque: *opaque,
                     module: module.clone(),
                     name: name.clone(),
                     alias: alias.clone(),
@@ -851,7 +864,7 @@ impl TypeVar {
 
     pub fn is_or_holds_opaque(&self) -> bool {
         match self {
-            Self::Link { tipo } => tipo.is_or_holds_opaque(),
+            Self::Link { tipo } => tipo.contains_opaque(),
             _ => false,
         }
     }
@@ -981,13 +994,11 @@ impl TypeVar {
             Self::Link { tipo } => tipo.get_inner_types(),
             Self::Unbound { .. } => vec![],
             var => {
-                vec![
-                    Type::Var {
-                        tipo: RefCell::new(var.clone()).into(),
-                        alias: None,
-                    }
-                    .into(),
-                ]
+                vec![Type::Var {
+                    tipo: RefCell::new(var.clone()).into(),
+                    alias: None,
+                }
+                .into()]
             }
         }
     }

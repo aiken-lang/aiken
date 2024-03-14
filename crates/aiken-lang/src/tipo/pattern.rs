@@ -154,6 +154,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                             location,
                         });
                 };
+
                 Ok(Pattern::Discard { name, location })
             }
 
