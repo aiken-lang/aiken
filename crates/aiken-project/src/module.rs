@@ -1,11 +1,17 @@
-use crate::error::Error;
+use crate::{Error, Warning};
 use aiken_lang::{
     ast::{
-        DataType, Definition, Function, Located, ModuleKind, TypedModule, TypedValidator,
-        UntypedModule, Validator,
+        DataType, DataTypeKey, Definition, Function, FunctionAccessKey, Located, ModuleKind,
+        Tracing, TypedDataType, TypedFunction, TypedModule, TypedValidator, UntypedModule,
+        Validator,
     },
+    line_numbers::LineNumbers,
     parser::extra::{comments_before, Comment, ModuleExtra},
+    tipo::TypeInfo,
+    IdGenerator,
 };
+use indexmap::IndexMap;
+use miette::NamedSource;
 use petgraph::{algo, graph::NodeIndex, Direction, Graph};
 use std::{
     collections::{BTreeSet, HashMap},
@@ -37,6 +43,74 @@ impl ParsedModule {
             .collect();
 
         (name, deps)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn infer(
+        self,
+        id_gen: &IdGenerator,
+        package: &str,
+        tracing: Tracing,
+        validate_module_name: bool,
+        module_sources: &mut HashMap<String, (String, LineNumbers)>,
+        module_types: &mut HashMap<String, TypeInfo>,
+        functions: &mut IndexMap<FunctionAccessKey, TypedFunction>,
+        data_types: &mut IndexMap<DataTypeKey, TypedDataType>,
+    ) -> Result<(CheckedModule, Vec<Warning>), Error> {
+        let mut warnings = Vec::new();
+
+        let ast = self
+            .ast
+            .infer(
+                id_gen,
+                self.kind,
+                package,
+                module_types,
+                tracing,
+                &mut warnings,
+            )
+            .map_err(|error| Error::Type {
+                path: self.path.clone(),
+                src: self.code.clone(),
+                named: NamedSource::new(self.path.display().to_string(), self.code.clone()),
+                error,
+            })?;
+
+        let warnings = warnings
+            .into_iter()
+            .map(|w| Warning::from_type_warning(w, self.path.clone(), self.code.clone()))
+            .collect::<Vec<_>>();
+
+        // Unless we're compiling prelude documentation, prevent keywords in module name
+        if validate_module_name {
+            ast.validate_module_name()?;
+        }
+
+        // Register module sources for an easier access later.
+        module_sources.insert(
+            self.name.clone(),
+            (self.code.clone(), LineNumbers::new(&self.code)),
+        );
+
+        // Register the types from this module so they can be
+        // imported into other modules.
+        module_types.insert(self.name.clone(), ast.type_info.clone());
+
+        // Register function definitions & data-types for easier access later.
+        ast.register_definitions(functions, data_types);
+
+        Ok((
+            CheckedModule {
+                ast,
+                kind: self.kind,
+                extra: self.extra,
+                name: self.name,
+                code: self.code,
+                package: self.package,
+                input_path: self.path,
+            },
+            warnings,
+        ))
     }
 }
 

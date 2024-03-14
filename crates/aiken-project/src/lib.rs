@@ -194,15 +194,11 @@ where
 
         self.read_source_files()?;
 
-        let destination = destination.unwrap_or_else(|| self.root.join("docs"));
-
         let mut modules = self.parse_sources(self.config.name.clone())?;
 
-        let our_modules: BTreeSet<String> = modules.keys().cloned().collect();
+        self.type_check(&mut modules, Tracing::silent(), false)?;
 
-        self.with_dependencies(&mut modules)?;
-
-        self.type_check(&our_modules, modules, Tracing::silent(), false)?;
+        let destination = destination.unwrap_or_else(|| self.root.join("docs"));
 
         self.event_listener.handle_event(Event::GeneratingDocFiles {
             output_path: destination.clone(),
@@ -296,11 +292,7 @@ where
 
         let mut modules = self.parse_sources(self.config.name.clone())?;
 
-        let our_modules: BTreeSet<String> = modules.keys().cloned().collect();
-
-        self.with_dependencies(&mut modules)?;
-
-        self.type_check(&our_modules, modules, options.tracing, true)?;
+        self.type_check(&mut modules, options.tracing, true)?;
 
         match options.code_gen_mode {
             CodeGenMode::Build(uplc_dump) => {
@@ -684,78 +676,33 @@ where
 
     fn type_check(
         &mut self,
-        our_modules: &BTreeSet<String>,
-        mut all_modules: ParsedModules,
+        modules: &mut ParsedModules,
         tracing: Tracing,
         validate_module_name: bool,
-    ) -> Result<(), Error> {
-        let processing_sequence = all_modules.sequence(our_modules)?;
+    ) -> Result<(), Vec<Error>> {
+        let our_modules: BTreeSet<String> = modules.keys().cloned().collect();
 
-        for name in processing_sequence {
-            if let Some(ParsedModule {
-                name,
-                path,
-                code,
-                kind,
-                extra,
-                package,
-                ast,
-            }) = all_modules.remove(&name)
-            {
-                let mut type_warnings = Vec::new();
+        self.with_dependencies(modules)?;
 
-                let ast = ast
-                    .infer(
-                        &self.id_gen,
-                        kind,
-                        &self.config.name.to_string(),
-                        &self.module_types,
-                        tracing,
-                        &mut type_warnings,
-                    )
-                    .map_err(|error| Error::Type {
-                        path: path.clone(),
-                        src: code.clone(),
-                        named: NamedSource::new(path.display().to_string(), code.clone()),
-                        error,
-                    })?;
+        for name in modules.sequence(&our_modules)? {
+            if let Some(module) = modules.remove(&name) {
+                let (checked_module, warnings) = module.infer(
+                    &self.id_gen,
+                    &self.config.name.to_string(),
+                    tracing,
+                    validate_module_name,
+                    &mut self.module_sources,
+                    &mut self.module_types,
+                    &mut self.functions,
+                    &mut self.data_types,
+                )?;
 
-                if validate_module_name {
-                    ast.validate_module_name()?;
+                if our_modules.contains(checked_module.name.as_str()) {
+                    self.warnings.extend(warnings);
                 }
 
-                // Register any warnings emitted as type warnings
-                let type_warnings = type_warnings
-                    .into_iter()
-                    .map(|w| Warning::from_type_warning(w, path.clone(), code.clone()));
-
-                if our_modules.contains(name.as_str()) {
-                    self.warnings.extend(type_warnings);
-                }
-
-                // Register module sources for an easier access later.
-                self.module_sources
-                    .insert(name.clone(), (code.clone(), LineNumbers::new(&code)));
-
-                // Register the types from this module so they can be
-                // imported into other modules.
-                self.module_types
-                    .insert(name.clone(), ast.type_info.clone());
-
-                // Register function definitions & data-types for easier access later.
-                ast.register_definitions(&mut self.functions, &mut self.data_types);
-
-                let checked_module = CheckedModule {
-                    kind,
-                    extra,
-                    name: name.clone(),
-                    code,
-                    ast,
-                    package,
-                    input_path: path,
-                };
-
-                self.checked_modules.insert(name, checked_module);
+                self.checked_modules
+                    .insert(checked_module.name.clone(), checked_module);
             }
         }
 
