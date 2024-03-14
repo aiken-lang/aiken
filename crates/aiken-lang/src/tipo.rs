@@ -42,6 +42,7 @@ pub enum Type {
     ///
     App {
         public: bool,
+        contains_opaque: bool,
         module: String,
         name: String,
         args: Vec<Rc<Type>>,
@@ -80,19 +81,22 @@ impl PartialEq for Type {
                 module,
                 name,
                 args,
-                ..
+                contains_opaque: opaque,
+                alias: _,
             } => {
                 if let Type::App {
                     public: public2,
                     module: module2,
                     name: name2,
                     args: args2,
-                    ..
+                    contains_opaque: opaque2,
+                    alias: _,
                 } = other
                 {
                     name == name2
                         && module == module2
                         && public == public2
+                        && opaque == opaque2
                         && args.iter().zip(args2).all(|(left, right)| left == right)
                 } else {
                     false
@@ -103,7 +107,7 @@ impl PartialEq for Type {
                 if let Type::Fn {
                     args: args2,
                     ret: ret2,
-                    ..
+                    alias: _,
                 } = other
                 {
                     ret == ret2 && args.iter().zip(args2).all(|(left, right)| left == right)
@@ -112,7 +116,7 @@ impl PartialEq for Type {
                 }
             }
 
-            Type::Tuple { elems, .. } => {
+            Type::Tuple { elems, alias: _ } => {
                 if let Type::Tuple { elems: elems2, .. } = other {
                     elems.iter().zip(elems2).all(|(left, right)| left == right)
                 } else {
@@ -120,8 +124,12 @@ impl PartialEq for Type {
                 }
             }
 
-            Type::Var { tipo, .. } => {
-                if let Type::Var { tipo: tipo2, .. } = other {
+            Type::Var { tipo, alias: _ } => {
+                if let Type::Var {
+                    tipo: tipo2,
+                    alias: _,
+                } = other
+                {
                     tipo == tipo2
                 } else {
                     false
@@ -152,20 +160,26 @@ impl Type {
         Rc::new(match self {
             Type::App {
                 public,
+                contains_opaque: opaque,
                 module,
                 name,
                 args,
-                ..
+                alias: _,
             } => Type::App {
                 public,
+                contains_opaque: opaque,
                 module,
                 name,
                 args,
                 alias,
             },
-            Type::Fn { args, ret, .. } => Type::Fn { args, ret, alias },
-            Type::Var { tipo, .. } => Type::Var { tipo, alias },
-            Type::Tuple { elems, .. } => Type::Tuple { elems, alias },
+            Type::Fn {
+                args,
+                ret,
+                alias: _,
+            } => Type::Fn { args, ret, alias },
+            Type::Var { tipo, alias: _ } => Type::Var { tipo, alias },
+            Type::Tuple { elems, alias: _ } => Type::Tuple { elems, alias },
         })
     }
 
@@ -181,15 +195,28 @@ impl Type {
         }
     }
 
-    pub fn is_result_constructor(&self) -> bool {
+    pub fn contains_opaque(&self) -> bool {
         match self {
-            Type::Fn { ret, .. } => ret.is_result(),
-            _ => false,
+            Type::Var { tipo, .. } => tipo.borrow().is_or_holds_opaque(),
+            Type::App {
+                contains_opaque: opaque,
+                args,
+                ..
+            } => *opaque || args.iter().any(|arg| arg.contains_opaque()),
+            Type::Tuple { elems, .. } => elems.iter().any(|elem| elem.contains_opaque()),
+            Type::Fn { .. } => false,
         }
     }
 
-    pub fn is_result(&self) -> bool {
-        matches!(self, Self::App { name, module, .. } if "Result" == name && module.is_empty())
+    pub fn set_opaque(&mut self, opaque: bool) {
+        match self {
+            Type::App {
+                contains_opaque, ..
+            } => {
+                *contains_opaque = opaque;
+            }
+            Type::Fn { .. } | Type::Var { .. } | Type::Tuple { .. } => (),
+        }
     }
 
     pub fn is_unbound(&self) -> bool {
@@ -459,6 +486,7 @@ impl Type {
     pub fn get_app_args(
         &self,
         public: bool,
+        opaque: bool,
         module: &str,
         name: &str,
         arity: usize,
@@ -481,7 +509,7 @@ impl Type {
             Self::Var { tipo, alias } => {
                 let args: Vec<_> = match tipo.borrow().deref() {
                     TypeVar::Link { tipo } => {
-                        return tipo.get_app_args(public, module, name, arity, environment);
+                        return tipo.get_app_args(public, opaque, module, name, arity, environment);
                     }
 
                     TypeVar::Unbound { .. } => {
@@ -496,6 +524,7 @@ impl Type {
                 *tipo.borrow_mut() = TypeVar::Link {
                     tipo: Rc::new(Self::App {
                         public,
+                        contains_opaque: opaque,
                         name: name.to_string(),
                         module: module.to_owned(),
                         args: args.clone(),
@@ -650,6 +679,7 @@ pub fn convert_opaque_type(
         match t.as_ref() {
             Type::App {
                 public,
+                contains_opaque: opaque,
                 module,
                 name,
                 args,
@@ -662,6 +692,7 @@ pub fn convert_opaque_type(
                 }
                 Type::App {
                     public: *public,
+                    contains_opaque: *opaque,
                     module: module.clone(),
                     name: name.clone(),
                     args: new_args,
@@ -736,6 +767,7 @@ pub fn find_and_replace_generics(
             Type::App {
                 args,
                 public,
+                contains_opaque: opaque,
                 module,
                 name,
                 alias,
@@ -748,6 +780,7 @@ pub fn find_and_replace_generics(
                 let t = Type::App {
                     args: new_args,
                     public: *public,
+                    contains_opaque: *opaque,
                     module: module.clone(),
                     name: name.clone(),
                     alias: alias.clone(),
@@ -827,6 +860,13 @@ pub enum TypeVar {
 impl TypeVar {
     pub fn is_unbound(&self) -> bool {
         matches!(self, Self::Unbound { .. })
+    }
+
+    pub fn is_or_holds_opaque(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.contains_opaque(),
+            _ => false,
+        }
     }
 
     pub fn is_void(&self) -> bool {

@@ -89,6 +89,7 @@ impl UntypedModule {
                 &self.lines,
                 tracing,
             )?;
+
             definitions.push(definition);
         }
 
@@ -197,7 +198,8 @@ fn infer_definition(
                         ArgName::Named {
                             name,
                             is_validator_param,
-                            ..
+                            label: _,
+                            location: _,
                         } if *is_validator_param => {
                             environment.insert_variable(
                                 name.to_string(),
@@ -383,7 +385,9 @@ fn infer_definition(
                         .get_mut(&f.name)
                         .expect("Could not find preregistered type for test");
                     if let Type::Fn {
-                        ref ret, ref alias, ..
+                        ref ret,
+                        ref alias,
+                        args: _,
                     } = scope.tipo.as_ref()
                     {
                         scope.tipo = Rc::new(Type::Fn {
@@ -425,7 +429,11 @@ fn infer_definition(
                 arguments: match typed_via {
                     Some((via, tipo)) => {
                         let Arg {
-                            arg_name, location, ..
+                            arg_name,
+                            location,
+                            annotation: _,
+                            doc: _,
+                            tipo: _,
                         } = typed_f
                             .arguments
                             .first()
@@ -457,7 +465,7 @@ fn infer_definition(
             alias,
             parameters,
             annotation,
-            ..
+            tipo: _,
         }) => {
             let tipo = environment
                 .get_type_constructor(&None, &alias, location)
@@ -484,64 +492,66 @@ fn infer_definition(
             name,
             parameters,
             constructors: untyped_constructors,
-            ..
+            typed_parameters: _,
         }) => {
             let constructors = untyped_constructors
                 .into_iter()
-                .map(
-                    |RecordConstructor {
-                         location,
-                         name,
-                         arguments: args,
-                         doc,
-                         sugar,
-                     }| {
-                        let preregistered_fn = environment
-                            .get_variable(&name)
-                            .expect("Could not find preregistered type for function");
+                .map(|constructor| {
+                    let preregistered_fn = environment
+                        .get_variable(&constructor.name)
+                        .expect("Could not find preregistered type for function");
 
-                        let preregistered_type = preregistered_fn.tipo.clone();
+                    let preregistered_type = preregistered_fn.tipo.clone();
 
-                        let args = if let Some((args_types, _return_type)) =
-                            preregistered_type.function_types()
-                        {
-                            args.into_iter()
+                    let args = preregistered_type.function_types().map_or(
+                        Ok(vec![]),
+                        |(args_types, _return_type)| {
+                            constructor
+                                .arguments
+                                .into_iter()
                                 .zip(&args_types)
-                                .map(
-                                    |(
-                                        RecordConstructorArg {
-                                            label,
-                                            annotation,
-                                            location,
-                                            doc,
-                                            ..
-                                        },
-                                        t,
-                                    )| {
-                                        RecordConstructorArg {
-                                            label,
-                                            annotation,
-                                            location,
-                                            tipo: t.clone(),
-                                            doc,
-                                        }
-                                    },
-                                )
-                                .collect()
-                        } else {
-                            vec![]
-                        };
+                                .map(|(arg, t)| {
+                                    if t.is_function() {
+                                        return Err(Error::FunctionTypeInData {
+                                            location: arg.location,
+                                        });
+                                    }
 
-                        RecordConstructor {
-                            location,
-                            name,
-                            arguments: args,
-                            doc,
-                            sugar,
-                        }
-                    },
-                )
-                .collect();
+                                    if t.is_ml_result() {
+                                        return Err(Error::IllegalTypeInData {
+                                            location: arg.location,
+                                            tipo: t.clone(),
+                                        });
+                                    }
+
+                                    if t.contains_opaque() {
+                                        let parent = environment
+                                            .get_type_constructor_mut(&name, location)?;
+
+                                        Rc::make_mut(&mut parent.tipo).set_opaque(true)
+                                    }
+
+                                    Ok(RecordConstructorArg {
+                                        label: arg.label,
+                                        annotation: arg.annotation,
+                                        location: arg.location,
+                                        doc: arg.doc,
+                                        tipo: t.clone(),
+                                    })
+                                })
+                                .collect()
+                        },
+                    )?;
+
+                    Ok(RecordConstructor {
+                        location: constructor.location,
+                        name: constructor.name,
+                        arguments: args,
+                        doc: constructor.doc,
+                        sugar: constructor.sugar,
+                    })
+                })
+                .collect::<Result<_, Error>>()?;
 
             let typed_parameters = environment
                 .get_type_constructor(&None, &name, location)
@@ -561,7 +571,14 @@ fn infer_definition(
             };
 
             for constr in &typed_data.constructors {
-                for RecordConstructorArg { tipo, location, .. } in &constr.arguments {
+                for RecordConstructorArg {
+                    tipo,
+                    location,
+                    doc: _,
+                    label: _,
+                    annotation: _,
+                } in &constr.arguments
+                {
                     if tipo.is_function() {
                         return Err(Error::FunctionTypeInData {
                             location: *location,
@@ -585,7 +602,7 @@ fn infer_definition(
             module,
             as_name,
             unqualified,
-            ..
+            package: _,
         }) => {
             let name = module.join("/");
 
@@ -616,7 +633,7 @@ fn infer_definition(
             annotation,
             public,
             value,
-            ..
+            tipo: _,
         }) => {
             let typed_expr =
                 ExprTyper::new(environment, lines, tracing).infer_const(&annotation, *value)?;
@@ -672,7 +689,7 @@ fn infer_function(
         return_annotation,
         end_position,
         can_error,
-        ..
+        return_type: _,
     } = f;
 
     let preregistered_fn = environment
@@ -773,9 +790,18 @@ fn infer_fuzzer(
     };
 
     match tipo.borrow() {
-        Type::Fn { ret, .. } => match ret.borrow() {
+        Type::Fn {
+            ret,
+            args: _,
+            alias: _,
+        } => match ret.borrow() {
             Type::App {
-                module, name, args, ..
+                module,
+                name,
+                args,
+                public: _,
+                contains_opaque: _,
+                alias: _,
             } if module.is_empty() && name == "Option" && args.len() == 1 => {
                 match args.first().expect("args.len() == 1").borrow() {
                     Type::Tuple { elems, .. } if elems.len() == 2 => {
@@ -805,10 +831,13 @@ fn infer_fuzzer(
             _ => Err(could_not_unify()),
         },
 
-        Type::Var { tipo, .. } => match &*tipo.deref().borrow() {
-            TypeVar::Link { tipo } => {
-                infer_fuzzer(environment, expected_inner_type, tipo, location)
-            }
+        Type::Var { tipo, alias } => match &*tipo.deref().borrow() {
+            TypeVar::Link { tipo } => infer_fuzzer(
+                environment,
+                expected_inner_type,
+                &Type::with_alias(tipo.clone(), alias.clone()),
+                location,
+            ),
             _ => Err(Error::GenericLeftAtBoundary {
                 location: *location,
             }),
@@ -821,7 +850,12 @@ fn infer_fuzzer(
 fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
     match tipo {
         Type::App {
-            name, module, args, ..
+            name,
+            module,
+            args,
+            public: _,
+            contains_opaque: _,
+            alias: _,
         } => {
             let arguments = args
                 .iter()
@@ -839,7 +873,7 @@ fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
             })
         }
 
-        Type::Tuple { elems, .. } => {
+        Type::Tuple { elems, alias: _ } => {
             let elems = elems
                 .iter()
                 .map(|arg| annotate_fuzzer(arg, location))
@@ -850,7 +884,7 @@ fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
             })
         }
 
-        Type::Var { tipo, .. } => match &*tipo.deref().borrow() {
+        Type::Var { tipo, alias: _ } => match &*tipo.deref().borrow() {
             TypeVar::Link { tipo } => annotate_fuzzer(tipo, location),
             _ => Err(Error::GenericLeftAtBoundary {
                 location: *location,

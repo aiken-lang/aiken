@@ -368,6 +368,7 @@ mod tests {
                 module: "whatever".to_string(),
                 name: "Int".to_string(),
                 public: true,
+                contains_opaque: false,
                 args: vec![],
                 alias: None
             },
@@ -378,12 +379,14 @@ mod tests {
                 module: "".to_string(),
                 name: "Pair".to_string(),
                 public: true,
+                contains_opaque: false,
                 alias: None,
                 args: vec![
                     Rc::new(Type::App {
                         module: "whatever".to_string(),
                         name: "Int".to_string(),
                         public: true,
+                        contains_opaque: false,
                         args: vec![],
                         alias: None
                     }),
@@ -391,6 +394,7 @@ mod tests {
                         module: "whatever".to_string(),
                         name: "Bool".to_string(),
                         public: true,
+                        contains_opaque: false,
                         args: vec![],
                         alias: None
                     }),
@@ -406,6 +410,7 @@ mod tests {
                         module: "whatever".to_string(),
                         name: "Int".to_string(),
                         public: true,
+                        contains_opaque: false,
                         alias: None,
                     }),
                     Rc::new(Type::App {
@@ -413,6 +418,7 @@ mod tests {
                         module: "whatever".to_string(),
                         name: "Bool".to_string(),
                         public: true,
+                        contains_opaque: false,
                         alias: None,
                     }),
                 ],
@@ -421,6 +427,7 @@ mod tests {
                     module: "whatever".to_string(),
                     name: "Bool".to_string(),
                     public: true,
+                    contains_opaque: false,
                     alias: None,
                 }),
                 alias: None,
@@ -437,6 +444,7 @@ mod tests {
                         module: "whatever".to_string(),
                         name: "Int".to_string(),
                         public: true,
+                        contains_opaque: false,
                     }),
                 })),
             },
@@ -479,6 +487,7 @@ mod tests {
             Type::Fn {
                 args: vec![Rc::new(Type::App {
                     public: true,
+                    contains_opaque: false,
                     module: "".to_string(),
                     name: "PRNG".to_string(),
                     args: vec![],
@@ -486,12 +495,14 @@ mod tests {
                 })],
                 ret: Rc::new(Type::App {
                     public: true,
+                    contains_opaque: false,
                     module: "".to_string(),
                     name: "Option".to_string(),
                     args: vec![Rc::new(Type::Tuple {
                         elems: vec![
                             Rc::new(Type::App {
                                 public: true,
+                                contains_opaque: false,
                                 module: "".to_string(),
                                 name: "PRNG".to_string(),
                                 args: vec![],
@@ -499,6 +510,7 @@ mod tests {
                             }),
                             Rc::new(Type::App {
                                 public: true,
+                                contains_opaque: false,
                                 module: "".to_string(),
                                 name: "Bool".to_string(),
                                 args: vec![],
@@ -549,6 +561,7 @@ mod tests {
             Type::Fn {
                 args: vec![Rc::new(Type::App {
                     public: true,
+                    contains_opaque: false,
                     module: "".to_string(),
                     name: "PRNG".to_string(),
                     args: vec![],
@@ -556,12 +569,14 @@ mod tests {
                 })],
                 ret: Rc::new(Type::App {
                     public: true,
+                    contains_opaque: false,
                     module: "".to_string(),
                     name: "Option".to_string(),
                     args: vec![Rc::new(Type::Tuple {
                         elems: vec![
                             Rc::new(Type::App {
                                 public: true,
+                                contains_opaque: false,
                                 module: "".to_string(),
                                 name: "PRNG".to_string(),
                                 args: vec![],

@@ -141,11 +141,11 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
         pattern: UntypedPattern,
         tipo: Rc<Type>,
         ann_type: Option<Rc<Type>>,
-        is_assignment: bool,
+        is_let: bool,
     ) -> Result<TypedPattern, Error> {
         match pattern {
             Pattern::Discard { name, location } => {
-                if is_assignment {
+                if is_let {
                     // Register declaration for the unused variable detection
                     self.environment
                         .warnings
@@ -154,6 +154,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                             location,
                         });
                 };
+
                 Ok(Pattern::Discard { name, location })
             }
 
@@ -202,7 +203,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                 location,
                 elements,
                 tail,
-            } => match tipo.get_app_args(true, "", "List", 1, self.environment) {
+            } => match tipo.get_app_args(true, false, "", "List", 1, self.environment) {
                 Some(args) => {
                     let tipo = args
                         .first()

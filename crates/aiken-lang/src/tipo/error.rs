@@ -259,6 +259,19 @@ You can use '{discard}' and numbers to distinguish between similar names.
         name: String,
     },
 
+    #[error("I caught an opaque type possibly breaking its abstraction boundary.\n")]
+    #[diagnostic(code("illegal::expect_on_opaque"))]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/modules#opaque-types"))]
+    #[diagnostic(help(
+        "This expression is trying to convert something unknown into an opaque type. An opaque type is a data-type which hides its internal details; usually because it enforces some specific invariant on its internal structure. For example, you might define a {Natural} type that holds an {Integer} but ensures that it never gets negative.\n\nA direct consequence means that it isn't generally possible, nor safe, to turn *any* value into an opaque type. Instead, use the constructors and methods provided for lifting values into that opaque type while ensuring that any structural invariant is checked for.",
+        Natural = "Natural".if_supports_color(Stdout, |s| s.cyan()),
+        Integer = "Integer".if_supports_color(Stdout, |s| s.cyan()),
+    ))]
+    ExpectOnOpaqueType {
+        #[label("reckless opaque cast")]
+        location: Span,
+    },
+
     #[error("I found a type definition that has a function type in it. This is not allowed.\n")]
     #[diagnostic(code("illegal::function_in_type"))]
     #[diagnostic(help(
@@ -1045,6 +1058,7 @@ impl ExtraData for Error {
             | Error::IncorrectTestArity { .. }
             | Error::GenericLeftAtBoundary { .. }
             | Error::UnexpectedMultiPatternAssignment { .. }
+            | Error::ExpectOnOpaqueType { .. }
             | Error::ValidatorMustReturnBool { .. } => None,
 
             Error::UnknownType { name, .. }
