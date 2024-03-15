@@ -8,6 +8,7 @@ use aiken_lang::{
 };
 use cryptoxide::{blake2b::Blake2b, digest::Digest};
 use indexmap::IndexMap;
+use itertools::Itertools;
 use owo_colors::{OwoColorize, Stream};
 use pallas::ledger::primitives::alonzo::{Constr, PlutusData};
 use patricia_tree::PatriciaMap;
@@ -580,10 +581,10 @@ impl<'a> Counterexample<'a> {
     ///
     /// - Deleting chunks
     /// - Transforming chunks into sequence of zeroes
-    /// - Decrementing chunks of values
-    /// - Replacing chunks of values
-    /// - Sorting chunks
-    /// - Redistribute values between nearby pairs
+    /// - Replacing chunks of values with smaller values
+    /// - Sorting chunks in ascending order
+    /// - Swapping nearby pairs
+    /// - Redistributing values between nearby pairs
     fn simplify(&mut self) {
         let mut prev;
 
@@ -640,37 +641,71 @@ impl<'a> Counterexample<'a> {
                 k /= 2
             }
 
-            // Now we try replacing region of choices with zeroes. Note that unlike the above we
-            // skip k = 1 because we handle that in the next step. Often (but not always) a block
-            // of all zeroes is the smallest value that a region can be.
-            let mut k: isize = 8;
-            while k > 1 {
-                let mut i: isize = self.choices.len() as isize - k;
-                while i >= 0 {
-                    let ivs = (i..i + k).map(|j| (j as usize, 0)).collect::<Vec<_>>();
-                    i -= if self.replace(ivs) { k } else { 1 }
+            if !self.choices.is_empty() {
+                // Now we try replacing region of choices with zeroes. Note that unlike the above we
+                // skip k = 1 because we handle that in the next step. Often (but not always) a block
+                // of all zeroes is the smallest value that a region can be.
+                let mut k = 8;
+                while k > 1 {
+                    let mut i = self.choices.len();
+                    while i >= k {
+                        let ivs = (i - k..i).map(|j| (j, 0)).collect::<Vec<_>>();
+                        i -= if self.replace(ivs) { k } else { 1 }
+                    }
+                    k /= 2
                 }
-                k /= 2
-            }
 
-            // Replace choices with smaller value, by doing a binary search. This will replace n
-            // with 0 or n - 1, if possible, but will also more efficiently replace it with, a
-            // smaller number than doing multiple subtractions would.
-            let (mut i, mut underflow) = if self.choices.is_empty() {
-                (0, true)
-            } else {
-                (self.choices.len() - 1, false)
-            };
-            while !underflow {
-                self.binary_search_replace(0, self.choices[i], |v| vec![(i, v)]);
-                (i, underflow) = i.overflowing_sub(1);
-            }
+                // Replace choices with smaller value, by doing a binary search. This will replace n
+                // with 0 or n - 1, if possible, but will also more efficiently replace it with, a
+                // smaller number than doing multiple subtractions would.
+                let (mut i, mut underflow) = (self.choices.len() - 1, false);
+                while !underflow {
+                    self.binary_search_replace(0, self.choices[i], |v| vec![(i, v)]);
+                    (i, underflow) = i.overflowing_sub(1);
+                }
 
-            // TODO: Remaining shrinking strategies...
-            //
-            // - Swaps
-            // - Sorting
-            // - Pair adjustments
+                // Sort out of orders chunks in ascending order
+                let mut k = 8;
+                while k > 1 {
+                    let mut i = self.choices.len() - 1;
+                    while i >= k {
+                        let (from, to) = (i - k, i);
+                        self.replace(
+                            (from..to)
+                                .zip(self.choices[from..to].iter().cloned().sorted())
+                                .collect(),
+                        );
+                        i -= 1;
+                    }
+                    k /= 2
+                }
+
+                // Try adjusting nearby pairs by:
+                //
+                // - Swapping them if they are out-of-order
+                // - Redistributing values between them.
+                for k in [2, 1] {
+                    let mut j = self.choices.len() - 1;
+                    while j >= k {
+                        let i = j - k;
+
+                        // Swap
+                        if self.choices[i] > self.choices[j] {
+                            self.replace(vec![(i, self.choices[j]), (j, self.choices[i])]);
+                        }
+
+                        let iv = self.choices[i];
+                        let jv = self.choices[j];
+
+                        // Replace
+                        if iv > 0 && jv <= u8::max_value() - iv {
+                            self.binary_search_replace(0, iv, |v| vec![(i, v), (j, jv + (iv - v))]);
+                        }
+
+                        j -= 1
+                    }
+                }
+            }
 
             // If we've reached a fixed point, then we cannot shrink further. We've reached a
             // (local) minimum, which is as good as a counterexample we'll get with this approach.
@@ -682,7 +717,6 @@ impl<'a> Counterexample<'a> {
 
     /// Try to replace a value with a smaller value by doing a binary search between
     /// two extremes. This converges relatively fast in order to shrink down values.
-    /// fast.
     fn binary_search_replace<F>(&mut self, lo: u8, hi: u8, f: F) -> u8
     where
         F: Fn(u8) -> Vec<(usize, u8)>,
@@ -1508,8 +1542,8 @@ mod test {
 
         counterexample.simplify();
 
-        assert_eq!(counterexample.choices, vec![252, 149]);
-        assert_eq!(reify(counterexample.value), "(252, 149)");
+        assert_eq!(counterexample.choices, vec![149, 252]);
+        assert_eq!(reify(counterexample.value), "(149, 252)");
     }
 
     #[test]
