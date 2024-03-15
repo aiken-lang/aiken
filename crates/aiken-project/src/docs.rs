@@ -3,7 +3,10 @@ use crate::{
     module::CheckedModule,
 };
 use aiken_lang::{
-    ast::{Definition, RecordConstructor, TypedDefinition},
+    ast::{
+        DataType, Definition, Function, ModuleConstant, RecordConstructor, TypeAlias,
+        TypedDefinition,
+    },
     format,
     tipo::Type,
 };
@@ -76,7 +79,7 @@ impl<'a> PageTemplate<'a> {
     }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 struct DocLink {
     name: String,
     path: String,
@@ -123,8 +126,10 @@ pub fn generate_all(root: &Path, config: &Config, modules: Vec<&CheckedModule>) 
             &source,
             &timestamp,
         );
-        search_indexes.extend(indexes);
-        output_files.push(file);
+        if !indexes.is_empty() {
+            search_indexes.extend(indexes);
+            output_files.push(file);
+        }
     }
 
     output_files.extend(generate_static_assets(search_indexes));
@@ -184,8 +189,13 @@ fn generate_module(
         .iter()
         .for_each(|constant| search_indexes.push(SearchIndex::from_constant(module, constant)));
 
+    let is_empty = functions.is_empty() && types.is_empty() && constants.is_empty();
+
     // Module
-    search_indexes.push(SearchIndex::from_module(module));
+    if !is_empty {
+        search_indexes.push(SearchIndex::from_module(module));
+    }
+
     let module = ModuleTemplate {
         aiken_version: VERSION,
         breadcrumbs: to_breadcrumbs(&module.name),
@@ -299,9 +309,21 @@ fn generate_readme(
     }
 }
 
-fn generate_modules_links(modules: &Vec<&CheckedModule>) -> (String, Vec<DocLink>) {
+fn generate_modules_links(modules: &[&CheckedModule]) -> (String, Vec<DocLink>) {
+    let non_empty_modules = modules.iter().filter(|module| {
+        module.ast.definitions.iter().any(|def| {
+            matches!(
+                def,
+                Definition::Fn(Function { public: true, .. })
+                    | Definition::DataType(DataType { public: true, .. })
+                    | Definition::TypeAlias(TypeAlias { public: true, .. })
+                    | Definition::ModuleConstant(ModuleConstant { public: true, .. })
+            )
+        })
+    });
+
     let mut modules_links = vec![];
-    for module in modules {
+    for module in non_empty_modules {
         let module_path = [&module.name.clone(), ".html"].concat();
         modules_links.push(DocLink {
             path: module_path,
@@ -310,15 +332,21 @@ fn generate_modules_links(modules: &Vec<&CheckedModule>) -> (String, Vec<DocLink
     }
     modules_links.sort();
 
-    let prefix = find_modules_prefix(&modules_links);
+    let prefix = if modules_links.len() > 1 {
+        let prefix = find_modules_prefix(&modules_links);
 
-    for module in &mut modules_links {
-        let name = module.name.strip_prefix(&prefix).unwrap_or_default();
-        module.name = name.strip_prefix('/').unwrap_or(name).to_string();
-        if module.name == String::new() {
-            module.name = "/".to_string()
+        for module in &mut modules_links {
+            let name = module.name.strip_prefix(&prefix).unwrap_or_default();
+            module.name = name.strip_prefix('/').unwrap_or(name).to_string();
+            if module.name == String::new() {
+                module.name = "/".to_string()
+            }
         }
-    }
+
+        prefix
+    } else {
+        String::new()
+    };
 
     (prefix, modules_links)
 }
