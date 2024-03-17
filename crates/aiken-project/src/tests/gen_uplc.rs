@@ -89,6 +89,8 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
 
             let expected = optimize::aiken_optimize_and_intern(expected);
 
+            println!("EXPECTED: {}", expected.to_pretty());
+
             let expected: Program<DeBruijn> = expected.try_into().unwrap();
 
             assert_eq!(debruijn_program.to_pretty(), expected.to_pretty());
@@ -3252,7 +3254,18 @@ fn when_tuple_deconstruction() {
                     .apply(Term::var("red:RedSpend")),
             )
             .lambda("red")
-            .apply(Term::var("red"))
+            .apply(
+                Term::var("__val")
+                    .delayed_choose_data(
+                        Term::var("__val"),
+                        Term::Error.delayed_trace(Term::var("red:RedSpend")),
+                        Term::Error.delayed_trace(Term::var("red:RedSpend")),
+                        Term::Error.delayed_trace(Term::var("red:RedSpend")),
+                        Term::Error.delayed_trace(Term::var("red:RedSpend")),
+                    )
+                    .lambda("__val")
+                    .apply(Term::var("red")),
+            )
             .lambda("red")
             .lambda("_")
             .apply(
@@ -3278,8 +3291,23 @@ fn when_tuple_deconstruction() {
                                             )
                                             .lambda("field_1")
                                             .apply(
-                                                Term::head_list()
-                                                    .apply(Term::var("dat_constr_fields")),
+                                                Term::var("__val")
+                                                    .delayed_choose_data(
+                                                        Term::var("__val"),
+                                                        Term::Error
+                                                            .delayed_trace(Term::var("param_msg")),
+                                                        Term::Error
+                                                            .delayed_trace(Term::var("param_msg")),
+                                                        Term::Error
+                                                            .delayed_trace(Term::var("param_msg")),
+                                                        Term::Error
+                                                            .delayed_trace(Term::var("param_msg")),
+                                                    )
+                                                    .lambda("__val")
+                                                    .apply(
+                                                        Term::head_list()
+                                                            .apply(Term::var("dat_constr_fields")),
+                                                    ),
                                             ),
                                     )
                                     .lambda("dat_constr_fields")
@@ -3357,6 +3385,19 @@ fn when_tuple_deconstruction() {
                     .apply(Term::var("dat:Datum")),
             )
             .lambda("dat")
+            .apply(
+                Term::var("__val")
+                    .delayed_choose_data(
+                        Term::var("__val"),
+                        Term::Error.delayed_trace(Term::var("dat:Datum")),
+                        Term::Error.delayed_trace(Term::var("dat:Datum")),
+                        Term::Error.delayed_trace(Term::var("dat:Datum")),
+                        Term::Error.delayed_trace(Term::var("dat:Datum")),
+                    )
+                    .lambda("__val")
+                    .apply(Term::var("dat")),
+            )
+            .lambda("dat")
             .apply(Term::var("dat"))
             .lambda("dat")
             .lambda(CONSTR_FIELDS_EXPOSER)
@@ -3365,10 +3406,10 @@ fn when_tuple_deconstruction() {
                     .apply(Term::unconstr_data().apply(Term::var("x")))
                     .lambda("x"),
             )
-            .lambda("dat:Datum")
-            .apply(Term::string("dat: Datum"))
             .lambda("red:RedSpend")
             .apply(Term::string("red: RedSpend"))
+            .lambda("dat:Datum")
+            .apply(Term::string("dat: Datum"))
             .lambda(CONSTR_INDEX_EXPOSER)
             .apply(
                 Term::fst_pair()
@@ -3477,6 +3518,8 @@ fn generic_validator_type_test() {
       }
     "#;
 
+    let field_b = Term::head_list().apply(Term::var("tail_1"));
+
     let void_check = Term::equals_integer()
         .apply(Term::integer(0.into()))
         .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("__val"))))
@@ -3567,8 +3610,24 @@ fn generic_validator_type_test() {
                                                             )
                                                             .lambda("field_B")
                                                             .apply(
-                                                                Term::head_list()
-                                                                    .apply(Term::var("tail_1")),
+                                                                Term::var("__val")
+                                                                    .delayed_choose_data(
+                                                                        Term::var("__val"),
+                                                                        Term::Error.delayed_trace(
+                                                                            Term::var("param_msg"),
+                                                                        ),
+                                                                        Term::Error.delayed_trace(
+                                                                            Term::var("param_msg"),
+                                                                        ),
+                                                                        Term::Error.delayed_trace(
+                                                                            Term::var("param_msg"),
+                                                                        ),
+                                                                        Term::Error.delayed_trace(
+                                                                            Term::var("param_msg"),
+                                                                        ),
+                                                                    )
+                                                                    .lambda("__val")
+                                                                    .apply(field_b),
                                                             ),
                                                     )
                                                     .lambda("tail_1")
@@ -3664,6 +3723,19 @@ fn generic_validator_type_test() {
                     )
                     .apply(Term::var("r"))
                     .apply(Term::var("r:A<B>")),
+            )
+            .lambda("r")
+            .apply(
+                Term::var("__val")
+                    .delayed_choose_data(
+                        Term::var("__val"),
+                        Term::Error.delayed_trace(Term::var("r:A<B>")),
+                        Term::Error.delayed_trace(Term::var("r:A<B>")),
+                        Term::Error.delayed_trace(Term::var("r:A<B>")),
+                        Term::Error.delayed_trace(Term::var("r:A<B>")),
+                    )
+                    .lambda("__val")
+                    .apply(Term::var("r")),
             )
             .lambda("r")
             .apply(Term::var("r"))
@@ -5774,6 +5846,19 @@ fn opaque_value_in_datum() {
                     )
                     .apply(Term::var("dat"))
                     .apply(Term::var("dat:Dat")),
+            )
+            .lambda("dat")
+            .apply(
+                Term::var("__val")
+                    .delayed_choose_data(
+                        Term::var("__val"),
+                        Term::Error.delayed_trace(Term::var("dat:Dat")),
+                        Term::Error.delayed_trace(Term::var("dat:Dat")),
+                        Term::Error.delayed_trace(Term::var("dat:Dat")),
+                        Term::Error.delayed_trace(Term::var("dat:Dat")),
+                    )
+                    .lambda("__val")
+                    .apply(Term::var("dat")),
             )
             .lambda("dat")
             .constr_fields_exposer()

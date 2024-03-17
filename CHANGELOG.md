@@ -46,6 +46,7 @@
 ### Changed
 
 - **aiken-lang**: Discards will now also type check the validator arguments instead of completely ignoring them. @Microproofs
+- **aiken-lang**: Further improvements to tracing when using expect casting from Data. @Microproofs
 - **aiken-lang**: The set of curriable builtins with arguments that occur 3 or more times are now hoisted in scope with the arguments curried. @Microproofs
 - **aiken-lang**: Improved the way the lambda inliner works to prevent unnecessary inlining into functions. @Microproofs
 - **aiken-lang**: Simplifications to the AirTree type in codegen. @Microproofs

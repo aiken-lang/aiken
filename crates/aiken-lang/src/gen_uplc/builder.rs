@@ -1193,7 +1193,16 @@ pub fn unknown_data_to_type_debug(
     } else if field_type.is_ml_result() {
         panic!("ML Result not supported")
     } else {
-        term
+        Term::var("__val")
+            .delayed_choose_data(
+                Term::var("__val"),
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+            )
+            .lambda("__val")
+            .apply(term)
     }
 }
 
