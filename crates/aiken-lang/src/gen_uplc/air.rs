@@ -51,6 +51,9 @@ pub enum Air {
         tipo: Rc<Type>,
         count: usize,
     },
+    Pair {
+        tipo: Rc<Type>,
+    },
     Void,
     Var {
         constructor: ValueConstructor,
@@ -136,6 +139,13 @@ pub enum Air {
         subject_name: String,
         complex_clause: bool,
     },
+    PairClause {
+        subject_tipo: Rc<Type>,
+        subject_name: String,
+        fst_name: Option<String>,
+        snd_name: Option<String>,
+        complex_clause: bool,
+    },
     ClauseGuard {
         subject_name: String,
         subject_tipo: Rc<Type>,
@@ -150,6 +160,12 @@ pub enum Air {
         subject_tipo: Rc<Type>,
         indices: IndexSet<(usize, String)>,
         subject_name: String,
+    },
+    PairGuard {
+        subject_tipo: Rc<Type>,
+        subject_name: String,
+        fst_name: Option<String>,
+        snd_name: Option<String>,
     },
     Finally,
     // If
@@ -187,6 +203,13 @@ pub enum Air {
     // Tuple Access
     TupleAccessor {
         names: Vec<String>,
+        tipo: Rc<Type>,
+        is_expect: bool,
+    },
+    // Tuple Access
+    PairAccessor {
+        fst: Option<String>,
+        snd: Option<String>,
         tipo: Rc<Type>,
         is_expect: bool,
     },
