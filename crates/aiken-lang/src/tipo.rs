@@ -229,7 +229,7 @@ impl Type {
             } => *opaque || args.iter().any(|arg| arg.contains_opaque()),
             Type::Tuple { elems, .. } => elems.iter().any(|elem| elem.contains_opaque()),
             Type::Fn { .. } => false,
-            Type::Pair { fst, snd } => fst.contains_opaque() || snd.contains_opaque(),
+            Type::Pair { fst, snd, .. } => fst.contains_opaque() || snd.contains_opaque(),
         }
     }
 
