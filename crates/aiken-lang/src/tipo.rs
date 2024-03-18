@@ -453,6 +453,12 @@ impl Type {
                 Self::Var { tipo, .. } => tipo.borrow().get_inner_types(),
                 _ => vec![],
             }
+        } else if self.is_pair() {
+            match self {
+                Self::Pair { fst, snd, .. } => vec![fst.clone(), snd.clone()],
+                Self::Var { tipo, .. } => tipo.borrow().get_inner_types(),
+                _ => vec![],
+            }
         } else if matches!(self.get_uplc_type(), UplcType::Data) {
             match self {
                 Type::App { args, .. } => args.clone(),
