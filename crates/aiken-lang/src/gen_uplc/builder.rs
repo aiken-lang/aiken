@@ -1852,6 +1852,7 @@ pub fn air_holds_msg(air: &Air) -> bool {
 
         Air::FieldsExpose { is_expect, .. }
         | Air::TupleAccessor { is_expect, .. }
+        | Air::PairAccessor { is_expect, .. }
         | Air::CastFromData { is_expect, .. } => *is_expect,
 
         Air::ListAccessor { expect_level, .. } => {

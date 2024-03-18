@@ -1091,6 +1091,7 @@ impl<'a> CodeGenerator<'a> {
                 tipo: constr_tipo,
                 ..
             } => {
+                // TODO: Implement Pair pattern
                 if tipo.is_bool() {
                     assert!(props.kind.is_expect());
 
@@ -1364,12 +1365,13 @@ impl<'a> CodeGenerator<'a> {
                 msg_func.clone(),
             );
 
-            let anon_func_body = AirTree::tuple_access(
-                vec![fst_name, snd_name],
+            let anon_func_body = AirTree::pair_access(
+                Some(fst_name),
+                Some(snd_name),
                 inner_list_type.clone(),
                 AirTree::local_var(&pair_name, inner_list_type.clone()),
                 msg_func.clone(),
-                msg_func.is_some(),
+                true,
                 AirTree::let_assignment("_", expect_fst, expect_snd),
             );
 
@@ -1512,16 +1514,17 @@ impl<'a> CodeGenerator<'a> {
                 msg_func.clone(),
             );
 
-            let tuple_access = AirTree::tuple_access(
-                vec![fst_name, snd_name],
+            let pair_access = AirTree::pair_access(
+                Some(fst_name.clone()),
+                Some(snd_name.clone()),
                 tipo.clone(),
                 AirTree::local_var(&pair_name, tipo.clone()),
                 msg_func.clone(),
-                msg_func.is_some(),
+                true,
                 AirTree::let_assignment("_", expect_fst, expect_snd),
             );
 
-            AirTree::let_assignment(&pair_name, value, tuple_access)
+            AirTree::let_assignment(&pair_name, value, pair_access)
         } else if tipo.is_tuple() {
             let tuple_inner_types = tipo.get_inner_types();
 
@@ -1799,6 +1802,7 @@ impl<'a> CodeGenerator<'a> {
             }
 
             match &mut props.specific_clause {
+                // TODO: Implement PairClause and PairClauseGuard
                 SpecificClause::ConstrClause => {
                     let data_type = lookup_data_type_by_tipo(&self.data_types, subject_tipo);
 
@@ -3845,7 +3849,7 @@ impl<'a> CodeGenerator<'a> {
 
                         DefaultFunction::MkCons | DefaultFunction::MkPairData => {
                             unimplemented!(
-                                "MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z).\n"
+                                "MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z) or Pair {{fst:a, snd: b}}.\n"
                             )
                         }
                         _ => {
@@ -4792,31 +4796,49 @@ impl<'a> CodeGenerator<'a> {
                         .apply(next_clause.delay());
                 }
 
-                if tipo.is_pair() {
-                    for (index, name) in indices.iter() {
-                        if name == "_" {
-                            continue;
-                        }
-                        let builtin = if *index == 0 {
-                            Term::fst_pair()
-                        } else {
-                            Term::snd_pair()
-                        };
-
-                        term = term.lambda(name).apply(builder::known_data_to_type(
-                            builtin.apply(Term::var(subject_name.clone())),
-                            &tuple_types[*index].clone(),
-                        ));
-                    }
-                } else {
-                    for (index, name) in indices.iter() {
-                        term = term.lambda(name.clone()).apply(builder::known_data_to_type(
-                            Term::head_list()
-                                .apply(Term::var(subject_name.clone()).repeat_tail_list(*index)),
-                            &tuple_types[*index].clone(),
-                        ));
-                    }
+                for (index, name) in indices.iter() {
+                    term = term.lambda(name.clone()).apply(builder::known_data_to_type(
+                        Term::head_list()
+                            .apply(Term::var(subject_name.clone()).repeat_tail_list(*index)),
+                        &tuple_types[*index].clone(),
+                    ));
                 }
+
+                Some(term)
+            }
+            Air::PairClause {
+                subject_tipo: tipo,
+                complex_clause,
+                subject_name,
+                fst_name,
+                snd_name,
+            } => {
+                let mut term = arg_stack.pop().unwrap();
+
+                let next_clause = arg_stack.pop().unwrap();
+
+                let pair_types = tipo.get_inner_types();
+
+                if complex_clause {
+                    term = term
+                        .lambda("__other_clauses_delayed")
+                        .apply(next_clause.delay());
+                }
+
+                if let Some(fst) = fst_name {
+                    term = term.lambda(fst).apply(builder::known_data_to_type(
+                        Term::fst_pair().apply(Term::var(subject_name.clone())),
+                        &pair_types[0].clone(),
+                    ));
+                }
+
+                if let Some(snd) = snd_name {
+                    term = term.lambda(snd).apply(builder::known_data_to_type(
+                        Term::snd_pair().apply(Term::var(subject_name.clone())),
+                        &pair_types[1].clone(),
+                    ));
+                }
+
                 Some(term)
             }
             Air::ClauseGuard {
@@ -4913,31 +4935,40 @@ impl<'a> CodeGenerator<'a> {
 
                 let tuple_types = tipo.get_inner_types();
 
-                if tuple_types.len() == 2 {
-                    for (index, name) in indices.iter() {
-                        if name == "_" {
-                            continue;
-                        }
-                        let builtin = if *index == 0 {
-                            Term::fst_pair()
-                        } else {
-                            Term::snd_pair()
-                        };
-
-                        term = term.lambda(name).apply(builder::known_data_to_type(
-                            builtin.apply(Term::var(subject_name.clone())),
-                            &tuple_types[*index].clone(),
-                        ));
-                    }
-                } else {
-                    for (index, name) in indices.iter() {
-                        term = term.lambda(name.clone()).apply(builder::known_data_to_type(
-                            Term::head_list()
-                                .apply(Term::var(subject_name.clone()).repeat_tail_list(*index)),
-                            &tuple_types[*index].clone(),
-                        ));
-                    }
+                for (index, name) in indices.iter() {
+                    term = term.lambda(name.clone()).apply(builder::known_data_to_type(
+                        Term::head_list()
+                            .apply(Term::var(subject_name.clone()).repeat_tail_list(*index)),
+                        &tuple_types[*index].clone(),
+                    ));
                 }
+
+                Some(term)
+            }
+            Air::PairGuard {
+                subject_tipo: tipo,
+                subject_name,
+                fst_name,
+                snd_name,
+            } => {
+                let mut term = arg_stack.pop().unwrap();
+
+                let tuple_types = tipo.get_inner_types();
+
+                if let Some(fst) = fst_name {
+                    term = term.lambda(fst).apply(builder::known_data_to_type(
+                        Term::fst_pair().apply(Term::var(subject_name.clone())),
+                        &tuple_types[0].clone(),
+                    ));
+                }
+
+                if let Some(snd) = snd_name {
+                    term = term.lambda(snd).apply(builder::known_data_to_type(
+                        Term::snd_pair().apply(Term::var(subject_name.clone())),
+                        &tuple_types[1].clone(),
+                    ));
+                }
+
                 Some(term)
             }
             Air::Finally => {
@@ -5094,34 +5125,9 @@ impl<'a> CodeGenerator<'a> {
                 if constants.len() == args.len() {
                     let data_constants = builder::convert_constants_to_data(constants);
 
-                    if count == 2 {
-                        let term = Term::Constant(
-                            UplcConstant::ProtoPair(
-                                UplcType::Data,
-                                UplcType::Data,
-                                data_constants[0].clone().into(),
-                                data_constants[1].clone().into(),
-                            )
-                            .into(),
-                        );
-                        Some(term)
-                    } else {
-                        let term = Term::Constant(
-                            UplcConstant::ProtoList(UplcType::Data, data_constants).into(),
-                        );
-                        Some(term)
-                    }
-                } else if count == 2 {
-                    let term = Term::mk_pair_data()
-                        .apply(builder::convert_type_to_data(
-                            args[0].clone(),
-                            &tuple_sub_types[0],
-                        ))
-                        .apply(builder::convert_type_to_data(
-                            args[1].clone(),
-                            &tuple_sub_types[1],
-                        ));
-
+                    let term = Term::Constant(
+                        UplcConstant::ProtoList(UplcType::Data, data_constants).into(),
+                    );
                     Some(term)
                 } else {
                     let mut term = Term::empty_list();
@@ -5131,6 +5137,38 @@ impl<'a> CodeGenerator<'a> {
                             .apply(term);
                     }
                     Some(term)
+                }
+            }
+            Air::Pair { tipo } => {
+                let fst = arg_stack.pop().unwrap();
+                let snd = arg_stack.pop().unwrap();
+
+                match (extract_constant(&fst), extract_constant(&snd)) {
+                    (Some(fst), Some(snd)) => {
+                        let term = Term::Constant(
+                            UplcConstant::ProtoPair(
+                                UplcType::Data,
+                                UplcType::Data,
+                                fst.clone(),
+                                snd.clone(),
+                            )
+                            .into(),
+                        );
+                        Some(term)
+                    }
+                    _ => {
+                        let term = Term::mk_pair_data()
+                            .apply(builder::convert_type_to_data(
+                                fst,
+                                &tipo.get_inner_types()[0],
+                            ))
+                            .apply(builder::convert_type_to_data(
+                                snd,
+                                &tipo.get_inner_types()[1],
+                            ));
+
+                        Some(term)
+                    }
                 }
             }
             Air::RecordUpdate {
@@ -5261,67 +5299,75 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
                 let list_id = self.id_gen.next();
 
-                if tipo.is_pair() {
-                    assert!(names.len() == 2);
+                let mut id_list = vec![];
+                id_list.push(list_id);
 
-                    if names[1] != "_" {
-                        term = term.lambda(names[1].clone()).apply(if is_expect {
-                            convert_data_to_type(
-                                Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                                &inner_types[1],
-                            )
-                        } else {
-                            known_data_to_type(
-                                Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                                &inner_types[1],
-                            )
-                        });
-                    }
+                names.iter().for_each(|_| {
+                    id_list.push(self.id_gen.next());
+                });
 
-                    if names[0] != "_" {
-                        term = term.lambda(names[0].clone()).apply(if is_expect {
-                            convert_data_to_type(
-                                Term::fst_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                                &inner_types[0],
-                            )
-                        } else {
-                            known_data_to_type(
-                                Term::fst_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                                &inner_types[0],
-                            )
-                        })
-                    }
+                let names_types = names
+                    .into_iter()
+                    .zip(inner_types)
+                    .zip(id_list)
+                    .map(|((name, tipo), id)| (name, tipo, id))
+                    .collect_vec();
 
-                    term = term.lambda(format!("__tuple_{list_id}")).apply(value);
+                term = builder::list_access_to_uplc(
+                    &names_types,
+                    false,
+                    term,
+                    false,
+                    is_expect.into(),
+                    error_term,
+                )
+                .apply(value);
 
-                    Some(term)
-                } else {
-                    let mut id_list = vec![];
-                    id_list.push(list_id);
+                Some(term)
+            }
+            Air::PairAccessor {
+                fst,
+                snd,
+                tipo,
+                is_expect,
+            } => {
+                let inner_types = tipo.get_inner_types();
+                let value = arg_stack.pop().unwrap();
 
-                    names.iter().for_each(|_| {
-                        id_list.push(self.id_gen.next());
+                let mut term = arg_stack.pop().unwrap();
+                let list_id = self.id_gen.next();
+
+                if let Some(name) = snd {
+                    term = term.lambda(name).apply(if is_expect {
+                        convert_data_to_type(
+                            Term::snd_pair().apply(Term::var(format!("__pair_{list_id}"))),
+                            &inner_types[1],
+                        )
+                    } else {
+                        known_data_to_type(
+                            Term::snd_pair().apply(Term::var(format!("__pair_{list_id}"))),
+                            &inner_types[1],
+                        )
                     });
-
-                    let names_types = names
-                        .into_iter()
-                        .zip(inner_types)
-                        .zip(id_list)
-                        .map(|((name, tipo), id)| (name, tipo, id))
-                        .collect_vec();
-
-                    term = builder::list_access_to_uplc(
-                        &names_types,
-                        false,
-                        term,
-                        false,
-                        is_expect.into(),
-                        error_term,
-                    )
-                    .apply(value);
-
-                    Some(term)
                 }
+
+                if let Some(name) = fst {
+                    term = term.lambda(name).apply(if is_expect {
+                        convert_data_to_type(
+                            Term::fst_pair().apply(Term::var(format!("__pair_{list_id}"))),
+                            &inner_types[0],
+                        )
+                    } else {
+                        known_data_to_type(
+                            Term::fst_pair().apply(Term::var(format!("__pair_{list_id}"))),
+                            &inner_types[0],
+                        )
+                    })
+                }
+
+                term = term.lambda(format!("__pair_{list_id}")).apply(value);
+
+                Some(term)
             }
             Air::Trace { .. } => {
                 let text = arg_stack.pop().unwrap();
