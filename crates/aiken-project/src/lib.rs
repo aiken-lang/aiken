@@ -31,11 +31,11 @@ use crate::{
 };
 use aiken_lang::{
     ast::{
-        DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Tracing, TypedDataType,
+        DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Span, Tracing, TypedDataType,
         TypedFunction,
     },
-    builtins,
-    expr::UntypedExpr,
+    builtins::{self, function},
+    expr::{TypedExpr, UntypedExpr},
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
     tipo::{Type, TypeInfo},
@@ -462,6 +462,42 @@ where
                 Ok(validator_hash)
             }
         })
+    }
+
+    pub fn export(&self, module: &str, name: &str) -> Result<String, Error> {
+        let mut generator = self.new_generator(Tracing::silent());
+
+        self.checked_modules
+            .get(module)
+            .and_then(|checked_module| {
+                checked_module.ast.definitions().find_map(|def| match def {
+                    Definition::Fn(func) if func.name == name => {
+                        let typed_anon = TypedExpr::Fn {
+                            location: Span::empty(),
+                            tipo: function(
+                                func.arguments.iter().map(|arg| arg.tipo.clone()).collect(),
+                                func.return_type.clone(),
+                            ),
+                            is_capture: false,
+                            args: func.arguments.clone(),
+                            body: func.body.clone().into(),
+                            return_annotation: None,
+                        };
+
+                        Some(typed_anon)
+                    }
+                    _ => None,
+                })
+            })
+            .map(|body| {
+                let program = generator.generate_raw(&body, &[], module);
+
+                program.to_pretty()
+            })
+            .ok_or_else(|| Error::ExportNotFound {
+                module: module.to_string(),
+                name: name.to_string(),
+            })
     }
 
     pub fn construct_parameter_incrementally<F>(

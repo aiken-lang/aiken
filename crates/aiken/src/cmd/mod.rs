@@ -6,6 +6,7 @@ pub mod build;
 pub mod check;
 pub mod completion;
 pub mod docs;
+pub mod export;
 pub mod fmt;
 pub mod lsp;
 pub mod new;
@@ -20,6 +21,8 @@ pub mod uplc;
 pub enum Cmd {
     New(new::Args),
     Fmt(fmt::Args),
+
+    Export(export::Args),
 
     #[clap(visible_alias("b"))]
     Build(build::Args),
