@@ -1984,3 +1984,27 @@ fn allow_expect_on_var_patterns_that_are_opaque() {
 
     assert!(check(parse(source_code)).is_ok())
 }
+
+#[test]
+fn correct_span_for_backpassing_args() {
+    let source_code = r#"
+        fn fold(list: List<a>, acc: b, f: fn(a, b) -> b) -> b {
+          when list is {
+            [] -> acc
+            [x, ..xs] -> fold(xs, f(x, acc), f)
+          }
+        }
+
+        pub fn sum(list: List<Int>) -> Int {
+          let a, b <- fold(list, 0)
+
+          a + 1
+        }
+    "#;
+
+    let (warnings, _ast) = check(parse(source_code)).unwrap();
+
+    assert!(
+        matches!(&warnings[0], Warning::UnusedVariable { ref name, location } if name == "b" && location.start == 245 && location.end == 246)
+    );
+}

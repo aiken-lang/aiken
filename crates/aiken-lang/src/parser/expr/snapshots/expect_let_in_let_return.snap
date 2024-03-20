@@ -23,6 +23,7 @@ Assignment {
                             name: "b",
                         },
                         annotation: None,
+                        location: 16..17,
                     },
                 ],
                 kind: Let {
@@ -42,6 +43,7 @@ Assignment {
                 name: "a",
             },
             annotation: None,
+            location: 4..5,
         },
     ],
     kind: Let {

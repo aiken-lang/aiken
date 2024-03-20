@@ -34,6 +34,7 @@ Sequence {
                         name: "a",
                     },
                     annotation: None,
+                    location: 4..5,
                 },
             ],
             kind: Let {

@@ -268,6 +268,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 let AssignmentPattern {
                     pattern,
                     annotation,
+                    location: _,
                 } = patterns.into_vec().swap_remove(0);
 
                 self.infer_assignment(pattern, *value, kind, &annotation, location)
@@ -959,7 +960,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     value: UntypedExpr::Assignment {
                         location,
                         value: untyped_value.into(),
-                        patterns: AssignmentPattern::new(untyped_pattern, Some(ann)).into(),
+                        patterns: AssignmentPattern::new(untyped_pattern, Some(ann), Span::empty())
+                            .into(),
                         kind,
                     },
                 });
@@ -1008,15 +1010,24 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                                             name: "...".to_string(),
                                             location: Span::empty(),
                                         }),
-                                        patterns: AssignmentPattern::new(untyped_pattern, None)
-                                            .into(),
+                                        patterns: AssignmentPattern::new(
+                                            untyped_pattern,
+                                            None,
+                                            Span::empty(),
+                                        )
+                                        .into(),
                                         kind: AssignmentKind::Let { backpassing: true },
                                     }
                                 }
                                 _ => UntypedExpr::Assignment {
                                     location: Span::empty(),
                                     value: Box::new(untyped_value),
-                                    patterns: AssignmentPattern::new(untyped_pattern, None).into(),
+                                    patterns: AssignmentPattern::new(
+                                        untyped_pattern,
+                                        None,
+                                        Span::empty(),
+                                    )
+                                    .into(),
                                     kind: AssignmentKind::let_(),
                                 },
                             },
@@ -1725,7 +1736,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         mut continuation: Vec<UntypedExpr>,
     ) -> UntypedExpr {
         let UntypedExpr::Assignment {
-            location: assign_location,
+            location: _,
             value,
             kind,
             patterns,
@@ -1750,6 +1761,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             let AssignmentPattern {
                 pattern,
                 annotation,
+                location: assignment_pattern_location,
             } = assignment_pattern;
 
             // In case where we have a Pattern that isn't simply a let-binding to a name, we do insert an extra let-binding
@@ -1759,7 +1771,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 Pattern::Var { name, location: _ } | Pattern::Discard { name, location: _ }
                     if kind.is_let() =>
                 {
-                    names.push((name.clone(), annotation));
+                    names.push((name.clone(), assignment_pattern_location, annotation));
                 }
                 _ => {
                     let name = format!("{}_{}", ast::BACKPASS_VARIABLE, index);
@@ -1767,13 +1779,18 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     continuation.insert(
                         0,
                         UntypedExpr::Assignment {
-                            location: assign_location,
+                            location: assignment_pattern_location,
                             value: UntypedExpr::Var {
-                                location: value_location,
+                                location: assignment_pattern_location,
                                 name: name.clone(),
                             }
                             .into(),
-                            patterns: AssignmentPattern::new(pattern, annotation.clone()).into(),
+                            patterns: AssignmentPattern::new(
+                                pattern,
+                                annotation.clone(),
+                                assignment_pattern_location,
+                            )
+                            .into(),
                             // erase backpassing while preserving assignment kind.
                             kind: match kind {
                                 AssignmentKind::Let { .. } => AssignmentKind::let_(),
@@ -1782,7 +1799,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         },
                     );
 
-                    names.push((name, annotation));
+                    names.push((name, assignment_pattern_location, annotation));
                 }
             }
         }
@@ -2192,7 +2209,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 sample: UntypedExpr::Assignment {
                     location: Span::empty(),
                     value: Box::new(subject.clone()),
-                    patterns: AssignmentPattern::new(clauses[0].patterns[0].clone(), None).into(),
+                    patterns: AssignmentPattern::new(
+                        clauses[0].patterns[0].clone(),
+                        None,
+                        Span::empty(),
+                    )
+                    .into(),
                     kind: AssignmentKind::let_(),
                 },
             });

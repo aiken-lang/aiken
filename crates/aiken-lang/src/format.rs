@@ -697,6 +697,7 @@ impl<'comments> Formatter<'comments> {
                         name, module: None, ..
                     },
                 annotation,
+                location: _,
             } if name == "True"
                 && annotation.is_none()
                 && kind.is_expect()
@@ -709,6 +710,7 @@ impl<'comments> Formatter<'comments> {
                     |AssignmentPattern {
                          pattern,
                          annotation,
+                         location: _,
                      }| {
                         self.pop_empty_lines(pattern.location().end);
 

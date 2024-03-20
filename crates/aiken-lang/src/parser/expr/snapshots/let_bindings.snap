@@ -35,6 +35,7 @@ Assignment {
                 name: "thing",
             },
             annotation: None,
+            location: 4..9,
         },
     ],
     kind: Let {

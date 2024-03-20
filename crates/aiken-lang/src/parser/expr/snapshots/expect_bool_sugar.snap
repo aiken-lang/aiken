@@ -33,6 +33,7 @@ Assignment {
                 tipo: (),
             },
             annotation: None,
+            location: 0..0,
         },
     ],
     kind: Expect {

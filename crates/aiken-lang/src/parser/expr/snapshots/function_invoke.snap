@@ -34,6 +34,7 @@ Sequence {
                         name: "x",
                     },
                     annotation: None,
+                    location: 4..5,
                 },
             ],
             kind: Let {
@@ -124,6 +125,7 @@ Sequence {
                         name: "map_add_x",
                     },
                     annotation: None,
+                    location: 24..33,
                 },
             ],
             kind: Let {

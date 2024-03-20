@@ -27,6 +27,7 @@ Test(
                                 tipo: (),
                             },
                             annotation: None,
+                            location: 38..42,
                         },
                     ],
                     kind: Expect {

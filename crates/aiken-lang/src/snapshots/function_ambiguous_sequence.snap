@@ -26,6 +26,7 @@ Module {
                                         name: "a",
                                     },
                                     annotation: None,
+                                    location: 19..20,
                                 },
                             ],
                             kind: Let {
@@ -70,6 +71,7 @@ Module {
                                         name: "a",
                                     },
                                     annotation: None,
+                                    location: 56..57,
                                 },
                             ],
                             kind: Let {
@@ -125,6 +127,7 @@ Module {
                                 name: "a",
                             },
                             annotation: None,
+                            location: 93..94,
                         },
                     ],
                     kind: Let {
@@ -176,6 +179,7 @@ Module {
                                         name: "a",
                                     },
                                     annotation: None,
+                                    location: 126..127,
                                 },
                             ],
                             kind: Let {

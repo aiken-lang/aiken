@@ -92,6 +92,7 @@ When {
                                     name: "amazing",
                                 },
                                 annotation: None,
+                                location: 55..62,
                             },
                         ],
                         kind: Let {

@@ -1176,6 +1176,21 @@ impl<A, B> Pattern<A, B> {
     }
 }
 
+impl UntypedPattern {
+    pub fn true_(location: Span) -> UntypedPattern {
+        UntypedPattern::Constructor {
+            location,
+            name: "True".to_string(),
+            arguments: vec![],
+            constructor: (),
+            with_spread: false,
+            tipo: (),
+            module: None,
+            is_record: false,
+        }
+    }
+}
+
 impl TypedPattern {
     pub fn find_node<'a>(&'a self, byte_index: usize, value: &Rc<Type>) -> Option<Located<'a>> {
         if !self.location().contains(byte_index) {
@@ -1440,13 +1455,19 @@ impl Default for Bls12_381Point {
 pub struct AssignmentPattern {
     pub pattern: UntypedPattern,
     pub annotation: Option<Annotation>,
+    pub location: Span,
 }
 
 impl AssignmentPattern {
-    pub fn new(pattern: UntypedPattern, annotation: Option<Annotation>) -> AssignmentPattern {
+    pub fn new(
+        pattern: UntypedPattern,
+        annotation: Option<Annotation>,
+        location: Span,
+    ) -> AssignmentPattern {
         Self {
             pattern,
             annotation,
+            location,
         }
     }
 }

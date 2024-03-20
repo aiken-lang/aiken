@@ -32,6 +32,7 @@ Fn(
                         name: "x",
                     },
                     annotation: None,
+                    location: 17..18,
                 },
             ],
             kind: Let {

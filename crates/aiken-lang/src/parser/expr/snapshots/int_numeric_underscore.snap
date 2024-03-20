@@ -21,6 +21,7 @@ Sequence {
                         name: "i",
                     },
                     annotation: None,
+                    location: 8..9,
                 },
             ],
             kind: Let {
@@ -43,6 +44,7 @@ Sequence {
                         name: "j",
                     },
                     annotation: None,
+                    location: 28..29,
                 },
             ],
             kind: Let {
@@ -69,6 +71,7 @@ Sequence {
                         name: "k",
                     },
                     annotation: None,
+                    location: 48..49,
                 },
             ],
             kind: Let {

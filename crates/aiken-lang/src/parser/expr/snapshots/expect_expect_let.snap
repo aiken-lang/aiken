@@ -23,6 +23,7 @@ Assignment {
                             name: "a",
                         },
                         annotation: None,
+                        location: 13..14,
                     },
                 ],
                 kind: Let {
@@ -44,6 +45,7 @@ Assignment {
                 tipo: (),
             },
             annotation: None,
+            location: 0..0,
         },
     ],
     kind: Expect {

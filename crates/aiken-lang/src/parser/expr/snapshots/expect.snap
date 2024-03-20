@@ -34,6 +34,7 @@ Assignment {
                 tipo: (),
             },
             annotation: None,
+            location: 7..14,
         },
     ],
     kind: Expect {
