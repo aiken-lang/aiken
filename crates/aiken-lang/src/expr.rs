@@ -1300,7 +1300,7 @@ impl UntypedExpr {
     }
 
     pub fn lambda(
-        names: Vec<(String, Span, Option<Annotation>)>,
+        names: Vec<(ArgName, Span, Option<Annotation>)>,
         expressions: Vec<UntypedExpr>,
         location: Span,
     ) -> Self {
@@ -1309,17 +1309,12 @@ impl UntypedExpr {
             fn_style: FnStyle::Plain,
             arguments: names
                 .into_iter()
-                .map(|(name, location, annotation)| Arg {
+                .map(|(arg_name, location, annotation)| Arg {
                     location,
                     doc: None,
                     annotation,
                     tipo: (),
-                    arg_name: ArgName::Named {
-                        label: name.clone(),
-                        name,
-                        location,
-                        is_validator_param: false,
-                    },
+                    arg_name,
                 })
                 .collect(),
             body: Self::Sequence {

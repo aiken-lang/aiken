@@ -1768,13 +1768,40 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             // in front of the continuation sequence. This is because we do not support patterns in function argument
             // (which is perhaps something we should support?).
             match pattern {
-                Pattern::Var { name, location: _ } | Pattern::Discard { name, location: _ }
-                    if kind.is_let() =>
-                {
-                    names.push((name.clone(), assignment_pattern_location, annotation));
+                Pattern::Var {
+                    name,
+                    location: var_location,
+                } if kind.is_let() => {
+                    let name = ArgName::Named {
+                        label: name.clone(),
+                        name,
+                        location: var_location,
+                        is_validator_param: false,
+                    };
+
+                    names.push((name, assignment_pattern_location, annotation));
+                }
+                Pattern::Discard {
+                    name,
+                    location: var_location,
+                } if kind.is_let() => {
+                    let name = ArgName::Discarded {
+                        label: name.clone(),
+                        name,
+                        location: var_location,
+                    };
+
+                    names.push((name, assignment_pattern_location, annotation));
                 }
                 _ => {
                     let name = format!("{}_{}", ast::BACKPASS_VARIABLE, index);
+
+                    let arg_name = ArgName::Named {
+                        label: name.clone(),
+                        name: name.clone(),
+                        location: pattern.location(),
+                        is_validator_param: false,
+                    };
 
                     continuation.insert(
                         0,
@@ -1799,7 +1826,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         },
                     );
 
-                    names.push((name, assignment_pattern_location, annotation));
+                    names.push((arg_name, assignment_pattern_location, annotation));
                 }
             }
         }
