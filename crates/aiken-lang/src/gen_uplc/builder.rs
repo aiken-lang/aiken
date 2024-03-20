@@ -95,6 +95,7 @@ pub enum SpecificClause {
     TupleClause {
         defined_tuple_indices: IndexSet<(usize, String)>,
     },
+    PairClause,
 }
 
 impl ClauseProperties {
@@ -112,7 +113,7 @@ impl ClauseProperties {
                     checked_index: -1,
                 },
             }
-        } else if t.is_tuple() || t.is_pair() {
+        } else if t.is_tuple() {
             ClauseProperties {
                 clause_var_name: constr_var,
                 complex_clause: false,
@@ -122,6 +123,15 @@ impl ClauseProperties {
                 specific_clause: SpecificClause::TupleClause {
                     defined_tuple_indices: IndexSet::new(),
                 },
+            }
+        } else if t.is_pair() {
+            ClauseProperties {
+                clause_var_name: constr_var,
+                complex_clause: false,
+                original_subject_name: subject_name,
+                needs_constr_var: false,
+                final_clause: false,
+                specific_clause: SpecificClause::PairClause,
             }
         } else {
             ClauseProperties {
@@ -154,7 +164,7 @@ impl ClauseProperties {
                     checked_index: -1,
                 },
             }
-        } else if t.is_tuple() || t.is_pair() {
+        } else if t.is_tuple() {
             ClauseProperties {
                 clause_var_name: constr_var,
                 complex_clause: false,
@@ -164,6 +174,15 @@ impl ClauseProperties {
                 specific_clause: SpecificClause::TupleClause {
                     defined_tuple_indices: IndexSet::new(),
                 },
+            }
+        } else if t.is_pair() {
+            ClauseProperties {
+                clause_var_name: constr_var,
+                complex_clause: false,
+                original_subject_name: subject_name,
+                needs_constr_var: false,
+                final_clause,
+                specific_clause: SpecificClause::PairClause,
             }
         } else {
             ClauseProperties {
@@ -985,7 +1004,7 @@ pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
         Term::unmap_data().apply(term)
     } else if field_type.is_string() {
         Term::Builtin(DefaultFunction::DecodeUtf8).apply(Term::un_b_data().apply(term))
-    } else if field_type.is_tuple() && matches!(field_type.get_uplc_type(), UplcType::Pair(_, _)) {
+    } else if field_type.is_pair() {
         Term::tail_list()
             .apply(Term::tail_list().apply(Term::var("__list_data")))
             .delayed_choose_list(
@@ -1410,7 +1429,7 @@ pub fn list_access_to_uplc(
     let head_item = |name, tipo: &Rc<Type>, tail_name: &str| {
         if name == "_" {
             Term::unit()
-        } else if matches!(tipo.get_uplc_type(), UplcType::Pair(_, _)) && is_list_accessor {
+        } else if tipo.is_pair() && is_list_accessor {
             Term::head_list().apply(Term::var(tail_name.to_string()))
         } else if matches!(expect_level, ExpectLevel::Full) {
             // Expect level is full so we have an unknown piece of data to cast

@@ -1645,18 +1645,18 @@ impl AirTree {
         match self {
             AirTree::ClauseGuard { subject_tipo, .. }
             | AirTree::ListClauseGuard { subject_tipo, .. }
-            | AirTree::TupleGuard { subject_tipo, .. } => vec![subject_tipo],
+            | AirTree::PairGuard { subject_tipo, .. }
+            | AirTree::TupleGuard { subject_tipo, .. }
+            | AirTree::Clause { subject_tipo, .. }
+            | AirTree::ListClause { subject_tipo, .. }
+            | AirTree::TupleClause { subject_tipo, .. }
+            | AirTree::PairClause { subject_tipo, .. } => vec![subject_tipo],
+
             AirTree::ListAccessor { tipo, .. }
             | AirTree::ListExpose { tipo, .. }
-            | AirTree::TupleAccessor { tipo, .. } => vec![tipo],
-            AirTree::FieldsExpose { indices, .. } => {
-                let mut types = vec![];
-                for (_, _, tipo) in indices {
-                    types.push(tipo);
-                }
-                types
-            }
-            AirTree::List { tipo, .. }
+            | AirTree::TupleAccessor { tipo, .. }
+            | AirTree::PairAccessor { tipo, .. }
+            | AirTree::List { tipo, .. }
             | AirTree::Tuple { tipo, .. }
             | AirTree::Call { tipo, .. }
             | AirTree::Builtin { tipo, .. }
@@ -1665,7 +1665,17 @@ impl AirTree {
             | AirTree::If { tipo, .. }
             | AirTree::Constr { tipo, .. }
             | AirTree::ErrorTerm { tipo, .. }
-            | AirTree::Trace { tipo, .. } => vec![tipo],
+            | AirTree::Trace { tipo, .. }
+            | AirTree::Pair { tipo, .. } => vec![tipo],
+
+            AirTree::FieldsExpose { indices, .. } => {
+                let mut types = vec![];
+                for (_, _, tipo) in indices {
+                    types.push(tipo);
+                }
+                types
+            }
+
             AirTree::Var { constructor, .. } => {
                 vec![constructor.tipo.borrow_mut()]
             }
@@ -1679,9 +1689,7 @@ impl AirTree {
             AirTree::When {
                 tipo, subject_tipo, ..
             } => vec![tipo, subject_tipo],
-            AirTree::Clause { subject_tipo, .. }
-            | AirTree::ListClause { subject_tipo, .. }
-            | AirTree::TupleClause { subject_tipo, .. } => vec![subject_tipo],
+
             AirTree::RecordUpdate { tipo, indices, .. } => {
                 let mut types = vec![tipo];
                 for (_, tipo) in indices {
@@ -1689,9 +1697,24 @@ impl AirTree {
                 }
                 types
             }
-            _ => {
-                vec![]
-            }
+            AirTree::Let { .. }
+            | AirTree::DefineFunc { .. }
+            | AirTree::DefineCyclicFuncs { .. }
+            | AirTree::AssertConstr { .. }
+            | AirTree::AssertBool { .. }
+            | AirTree::FieldsEmpty { .. }
+            | AirTree::ListEmpty { .. }
+            | AirTree::NoOp { .. }
+            | AirTree::Int { .. }
+            | AirTree::String { .. }
+            | AirTree::ByteArray { .. }
+            | AirTree::CurvePoint { .. }
+            | AirTree::Bool { .. }
+            | AirTree::Void
+            | AirTree::Fn { .. }
+            | AirTree::UnOp { .. }
+            | AirTree::WrapClause { .. }
+            | AirTree::Finally { .. } => vec![],
         }
     }
 
