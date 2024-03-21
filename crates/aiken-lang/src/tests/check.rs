@@ -1860,6 +1860,29 @@ fn allow_expect_into_type_from_data_2() {
 }
 
 #[test]
+fn forbid_expect_from_arbitrary_type() {
+    let source_code = r#"
+        type Foo {
+          x: Int
+        }
+
+        type Bar {
+          y: Int
+        }
+
+        fn bar(f: Foo) {
+          expect b: Bar = f
+          Void
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CouldNotUnify { .. }))
+    ))
+}
+
+#[test]
 fn forbid_expect_into_opaque_type_constructor_without_typecasting_in_module() {
     let source_code = r#"
         opaque type Thing {
