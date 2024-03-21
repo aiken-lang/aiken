@@ -1415,13 +1415,8 @@ impl<'a> Environment<'a> {
             && !(t1.is_function() || t2.is_function())
             && !(t1.is_generic() || t2.is_generic())
             && !(t1.is_string() || t2.is_string())
-            && !(t1.contains_opaque() || t2.contains_opaque())
         {
             return Ok(());
-        }
-
-        if allow_cast && (t1.contains_opaque() || t2.contains_opaque()) {
-            return Err(Error::ExpectOnOpaqueType { location });
         }
 
         // Collapse right hand side type links. Left hand side will be collapsed in the next block.

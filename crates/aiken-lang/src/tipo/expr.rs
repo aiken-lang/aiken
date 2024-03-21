@@ -936,11 +936,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 .type_from_annotation(ann)
                 .map(|t| self.instantiate(t, &mut HashMap::new()))?;
 
+            let is_down_cast = kind.is_let() && ann_typ.is_data();
+            // TODO: https://github.com/aiken-lang/aiken/discussions/895
+            // here we include ann_type.is_data() because of returning an error we can just let the usual expect on
+            // single constructor warning show up.
+            let is_up_cast = kind.is_expect() && (value_is_data || ann_typ.is_data());
+
             self.unify(
                 ann_typ.clone(),
                 value_typ.clone(),
                 typed_value.type_defining_location(),
-                (kind.is_let() && ann_typ.is_data()) || kind.is_expect(),
+                is_down_cast || is_up_cast,
             )?;
 
             value_typ = ann_typ.clone();
@@ -977,6 +983,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             ann_typ,
             kind.is_let(),
         )?;
+
+        if kind.is_expect() && !is_pattern_expectable(&pattern, value_is_data) {
+            return Err(Error::ExpectOnOpaqueType { location });
+        }
 
         // If `expect` is explicitly used, we still check exhaustiveness but instead of returning an
         // error we emit a warning which explains that using `expect` is unnecessary.
@@ -2442,5 +2452,46 @@ pub fn ensure_serialisable(allow_fn: bool, t: Rc<Type>, location: Span) -> Resul
                 location,
             ),
         },
+    }
+}
+
+fn is_pattern_expectable(pattern: &TypedPattern, value_is_data: bool) -> bool {
+    match pattern {
+        Pattern::Int { .. } | Pattern::Discard { .. } => true,
+        Pattern::Var { .. } => !value_is_data,
+        Pattern::Assign { pattern, .. } => is_pattern_expectable(pattern, value_is_data),
+        Pattern::List { elements, tail, .. } => {
+            elements
+                .iter()
+                .all(|p| is_pattern_expectable(p, value_is_data))
+                && tail
+                    .as_ref()
+                    .map(|p| is_pattern_expectable(p, value_is_data))
+                    .unwrap_or(true)
+        }
+        Pattern::Constructor {
+            arguments, tipo, ..
+        } => match tipo.deref() {
+            Type::App {
+                contains_opaque, ..
+            } => !contains_opaque,
+            Type::Fn { ret, .. } => match ret.deref() {
+                Type::App {
+                    contains_opaque, ..
+                } => {
+                    !contains_opaque
+                        && arguments
+                            .iter()
+                            .all(|p| is_pattern_expectable(&p.value, value_is_data))
+                }
+                _ => {
+                    unreachable!("ret should be a Type::App")
+                }
+            },
+            _ => unreachable!("tipo should be a Type::App"),
+        },
+        Pattern::Tuple { elems, .. } => elems
+            .iter()
+            .all(|p| is_pattern_expectable(p, value_is_data)),
     }
 }

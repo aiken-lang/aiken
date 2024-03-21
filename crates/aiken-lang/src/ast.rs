@@ -1243,9 +1243,8 @@ impl TypedPattern {
         match self {
             Pattern::Int { .. } => Some(builtins::int()),
             Pattern::Constructor { tipo, .. } => Some(tipo.clone()),
-            Pattern::Var { .. } | Pattern::Assign { .. } | Pattern::Discard { .. } => {
-                Some(value.tipo())
-            }
+            Pattern::Assign { pattern, .. } => pattern.tipo(value),
+            Pattern::Var { .. } | Pattern::Discard { .. } => Some(value.tipo()),
             Pattern::List { .. } | Pattern::Tuple { .. } => None,
         }
     }

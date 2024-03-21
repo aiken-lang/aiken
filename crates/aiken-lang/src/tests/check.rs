@@ -1849,7 +1849,10 @@ fn forbid_expect_into_opaque_type_constructor_without_typecasting_in_module() {
         }
     "#;
 
-    assert!(check(parse(source_code)).is_ok());
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::ExpectOnOpaqueType { .. }))
+    ))
 }
 
 #[test]
@@ -1967,7 +1970,7 @@ fn forbid_expect_into_nested_opaque_in_list() {
 
     assert!(matches!(
         check(parse(source_code)),
-        Err((_, Error::ExpectOnOpaqueType { .. }))
+        Err((_, Error::CouldNotUnify { .. }))
     ))
 }
 
@@ -2029,4 +2032,18 @@ fn allow_discard_for_backpassing_args() {
     let (warnings, _ast) = check(parse(source_code)).unwrap();
 
     assert_eq!(warnings.len(), 0);
+}
+
+#[test]
+fn can_down_cast_to_data_always() {
+    let source_code = r#"
+        pub opaque type Foo { x: Int }
+
+        pub fn bar(a: Foo) {
+          let b: Data = a
+          b
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
 }
