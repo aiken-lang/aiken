@@ -1431,7 +1431,7 @@ impl<'a> Environment<'a> {
                     lhs,
                     Type::with_alias(tipo.clone(), alias.clone()),
                     location,
-                    allow_cast,
+                    false,
                 );
             }
         }
@@ -1470,7 +1470,7 @@ impl<'a> Environment<'a> {
                     Ok(())
                 }
 
-                Action::Unify(t) => self.unify(t, rhs, location, allow_cast),
+                Action::Unify(t) => self.unify(t, rhs, location, false),
 
                 Action::CouldNotUnify => Err(Error::CouldNotUnify {
                     location,
@@ -1484,7 +1484,7 @@ impl<'a> Environment<'a> {
 
         if let Type::Var { .. } = rhs.deref() {
             return self
-                .unify(rhs, lhs, location, allow_cast)
+                .unify(rhs, lhs, location, false)
                 .map_err(|e| e.flip_unify());
         }
 
@@ -1511,7 +1511,7 @@ impl<'a> Environment<'a> {
                     unify_enclosed_type(
                         lhs.clone(),
                         rhs.clone(),
-                        self.unify(a.clone(), b.clone(), location, allow_cast),
+                        self.unify(a.clone(), b.clone(), location, false),
                     )?;
                 }
                 Ok(())
@@ -1531,7 +1531,7 @@ impl<'a> Environment<'a> {
                     unify_enclosed_type(
                         lhs.clone(),
                         rhs.clone(),
-                        self.unify(a.clone(), b.clone(), location, allow_cast),
+                        self.unify(a.clone(), b.clone(), location, false),
                     )?;
                 }
                 Ok(())
@@ -1550,7 +1550,7 @@ impl<'a> Environment<'a> {
                 },
             ) if args1.len() == args2.len() => {
                 for (a, b) in args1.iter().zip(args2) {
-                    self.unify(a.clone(), b.clone(), location, allow_cast)
+                    self.unify(a.clone(), b.clone(), location, false)
                         .map_err(|_| Error::CouldNotUnify {
                             location,
                             expected: lhs.clone(),
@@ -1559,7 +1559,7 @@ impl<'a> Environment<'a> {
                             rigid_type_names: HashMap::new(),
                         })?;
                 }
-                self.unify(retrn1.clone(), retrn2.clone(), location, allow_cast)
+                self.unify(retrn1.clone(), retrn2.clone(), location, false)
                     .map_err(|_| Error::CouldNotUnify {
                         location,
                         expected: lhs.clone(),

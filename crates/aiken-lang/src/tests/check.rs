@@ -1848,6 +1848,44 @@ fn allow_expect_into_type_from_data() {
 }
 
 #[test]
+fn forbid_partial_down_casting() {
+    let source_code = r#"
+        type Foo {
+          x: Int
+        }
+
+        fn bar(n: List<Foo>) {
+          expect a: List<Data> = n
+          a
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { .. }))
+    ))
+}
+
+#[test]
+fn forbid_partial_up_casting() {
+    let source_code = r#"
+        type Foo {
+          x: Int
+        }
+
+        fn bar(n: List<Data>) {
+          expect a: List<Foo> = n
+          a
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { .. }))
+    ))
+}
+
+#[test]
 fn allow_expect_into_type_from_data_2() {
     let source_code = r#"
         fn bar(n: Data) {
