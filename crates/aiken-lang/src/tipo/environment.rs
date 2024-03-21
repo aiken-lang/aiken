@@ -1399,36 +1399,36 @@ impl<'a> Environment<'a> {
     #[allow(clippy::only_used_in_recursion)]
     pub fn unify(
         &mut self,
-        t1: Rc<Type>,
-        t2: Rc<Type>,
+        lhs: Rc<Type>,
+        rhs: Rc<Type>,
         location: Span,
         allow_cast: bool,
     ) -> Result<(), Error> {
-        if t1 == t2 {
+        if lhs == rhs {
             return Ok(());
         }
 
         // TODO: maybe we also care to check is_link?
         if allow_cast
-            && (t1.is_data() || t2.is_data())
-            && !(t1.is_unbound() || t2.is_unbound())
-            && !(t1.is_function() || t2.is_function())
-            && !(t1.is_generic() || t2.is_generic())
-            && !(t1.is_string() || t2.is_string())
-            && !t1.contains_opaque()
+            && (lhs.is_data() || rhs.is_data())
+            && !(lhs.is_unbound() || rhs.is_unbound())
+            && !(lhs.is_function() || rhs.is_function())
+            && !(lhs.is_generic() || rhs.is_generic())
+            && !(lhs.is_string() || rhs.is_string())
+            && !lhs.contains_opaque()
         {
             return Ok(());
         }
 
-        if allow_cast && t1.contains_opaque() {
+        if allow_cast && lhs.contains_opaque() {
             return Err(Error::ExpectOnOpaqueType { location });
         }
 
         // Collapse right hand side type links. Left hand side will be collapsed in the next block.
-        if let Type::Var { tipo, alias } = t2.deref() {
+        if let Type::Var { tipo, alias } = rhs.deref() {
             if let TypeVar::Link { tipo } = tipo.borrow().deref() {
                 return self.unify(
-                    t1,
+                    lhs,
                     Type::with_alias(tipo.clone(), alias.clone()),
                     location,
                     allow_cast,
@@ -1436,7 +1436,7 @@ impl<'a> Environment<'a> {
             }
         }
 
-        if let Type::Var { tipo, alias } = t1.deref() {
+        if let Type::Var { tipo, alias } = lhs.deref() {
             enum Action {
                 Unify(Rc<Type>),
                 CouldNotUnify,
@@ -1449,12 +1449,12 @@ impl<'a> Environment<'a> {
                 }
 
                 TypeVar::Unbound { id } => {
-                    unify_unbound_type(t2.clone(), *id, location)?;
+                    unify_unbound_type(rhs.clone(), *id, location)?;
                     Action::Link
                 }
 
                 TypeVar::Generic { id } => {
-                    if let Type::Var { tipo, alias: _ } = t2.deref() {
+                    if let Type::Var { tipo, alias: _ } = rhs.deref() {
                         if tipo.borrow().is_unbound() {
                             *tipo.borrow_mut() = TypeVar::Generic { id: *id };
                             return Ok(());
@@ -1466,29 +1466,29 @@ impl<'a> Environment<'a> {
 
             return match action {
                 Action::Link => {
-                    *tipo.borrow_mut() = TypeVar::Link { tipo: t2 };
+                    *tipo.borrow_mut() = TypeVar::Link { tipo: rhs };
                     Ok(())
                 }
 
-                Action::Unify(t) => self.unify(t, t2, location, allow_cast),
+                Action::Unify(t) => self.unify(t, rhs, location, allow_cast),
 
                 Action::CouldNotUnify => Err(Error::CouldNotUnify {
                     location,
-                    expected: t1.clone(),
-                    given: t2,
+                    expected: lhs.clone(),
+                    given: rhs,
                     situation: None,
                     rigid_type_names: HashMap::new(),
                 }),
             };
         }
 
-        if let Type::Var { .. } = t2.deref() {
+        if let Type::Var { .. } = rhs.deref() {
             return self
-                .unify(t2, t1, location, allow_cast)
+                .unify(rhs, lhs, location, allow_cast)
                 .map_err(|e| e.flip_unify());
         }
 
-        match (t1.deref(), t2.deref()) {
+        match (lhs.deref(), rhs.deref()) {
             (
                 Type::App {
                     module: m1,
@@ -1509,8 +1509,8 @@ impl<'a> Environment<'a> {
             ) if m1 == m2 && n1 == n2 && args1.len() == args2.len() => {
                 for (a, b) in args1.iter().zip(args2) {
                     unify_enclosed_type(
-                        t1.clone(),
-                        t2.clone(),
+                        lhs.clone(),
+                        rhs.clone(),
                         self.unify(a.clone(), b.clone(), location, allow_cast),
                     )?;
                 }
@@ -1529,8 +1529,8 @@ impl<'a> Environment<'a> {
             ) if elems1.len() == elems2.len() => {
                 for (a, b) in elems1.iter().zip(elems2) {
                     unify_enclosed_type(
-                        t1.clone(),
-                        t2.clone(),
+                        lhs.clone(),
+                        rhs.clone(),
                         self.unify(a.clone(), b.clone(), location, allow_cast),
                     )?;
                 }
@@ -1553,8 +1553,8 @@ impl<'a> Environment<'a> {
                     self.unify(a.clone(), b.clone(), location, allow_cast)
                         .map_err(|_| Error::CouldNotUnify {
                             location,
-                            expected: t1.clone(),
-                            given: t2.clone(),
+                            expected: lhs.clone(),
+                            given: rhs.clone(),
                             situation: None,
                             rigid_type_names: HashMap::new(),
                         })?;
@@ -1562,8 +1562,8 @@ impl<'a> Environment<'a> {
                 self.unify(retrn1.clone(), retrn2.clone(), location, allow_cast)
                     .map_err(|_| Error::CouldNotUnify {
                         location,
-                        expected: t1.clone(),
-                        given: t2.clone(),
+                        expected: lhs.clone(),
+                        given: rhs.clone(),
                         situation: None,
                         rigid_type_names: HashMap::new(),
                     })
@@ -1571,8 +1571,8 @@ impl<'a> Environment<'a> {
 
             _ => Err(Error::CouldNotUnify {
                 location,
-                expected: t1.clone(),
-                given: t2.clone(),
+                expected: lhs.clone(),
+                given: rhs.clone(),
                 situation: None,
                 rigid_type_names: HashMap::new(),
             }),
