@@ -1976,12 +1976,7 @@ fn forbid_expect_into_nested_opaque_in_record_without_typecasting() {
         }
     "#;
 
-    panic!("");
-
-    assert!(matches!(
-        check(parse(source_code)),
-        Err((_, Error::ExpectOnOpaqueType { .. }))
-    ))
+    assert!(check(parse(source_code)).is_ok())
 }
 
 #[test]

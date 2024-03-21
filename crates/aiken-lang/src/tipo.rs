@@ -81,7 +81,7 @@ impl PartialEq for Type {
                 module,
                 name,
                 args,
-                contains_opaque: opaque,
+                contains_opaque: _,
                 alias: _,
             } => {
                 if let Type::App {
@@ -89,14 +89,13 @@ impl PartialEq for Type {
                     module: module2,
                     name: name2,
                     args: args2,
-                    contains_opaque: opaque2,
+                    contains_opaque: _,
                     alias: _,
                 } = other
                 {
                     name == name2
                         && module == module2
                         && public == public2
-                        && opaque == opaque2
                         && args.iter().zip(args2).all(|(left, right)| left == right)
                 } else {
                     false
