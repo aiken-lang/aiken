@@ -1,0 +1,7 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\ntest foo(n: Int via int()) {\n  todo\n}\n"
+---
+test foo(n: Int via int()) {
+  todo
+}

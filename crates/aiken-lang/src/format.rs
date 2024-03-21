@@ -476,12 +476,17 @@ impl<'comments> Formatter<'comments> {
 
         let doc_comments = self.doc_comments(arg.location.start);
 
-        let doc = arg
-            .arg_name
-            .to_doc()
-            .append(" via ")
-            .append(self.expr(&arg.via, false))
-            .group();
+        let doc = match &arg.annotation {
+            None => arg.arg_name.to_doc(),
+            Some(a) => arg
+                .arg_name
+                .to_doc()
+                .append(": ")
+                .append(self.annotation(a)),
+        }
+        .append(" via ")
+        .append(self.expr(&arg.via, false))
+        .group();
 
         let doc = doc_comments.append(doc.group()).group();
 

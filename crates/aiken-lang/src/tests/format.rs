@@ -478,7 +478,7 @@ fn format_many_assignment_patterns() {
     assert_format!(
         r#"
         fn backpassing() -> Int {
-        
+
           let
             elem, accumulator, wow,
             who,
@@ -740,6 +740,17 @@ fn fail_expr() {
         r#"
         fn foo() {
           fail some_var
+        }
+        "#
+    );
+}
+
+#[test]
+fn fuzzer_annotations() {
+    assert_format!(
+        r#"
+        test foo(n: Int via int()) {
+          todo
         }
         "#
     );
