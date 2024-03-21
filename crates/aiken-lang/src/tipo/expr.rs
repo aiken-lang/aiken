@@ -984,7 +984,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             kind.is_let(),
         )?;
 
-        if kind.is_expect() && !is_pattern_expectable(&pattern, value_is_data) {
+        if kind.is_expect() && !is_pattern_expectable(&pattern, value_is_data, 0) {
             return Err(Error::ExpectOnOpaqueType { location });
         }
 
@@ -2455,18 +2455,18 @@ pub fn ensure_serialisable(allow_fn: bool, t: Rc<Type>, location: Span) -> Resul
     }
 }
 
-fn is_pattern_expectable(pattern: &TypedPattern, value_is_data: bool) -> bool {
+fn is_pattern_expectable(pattern: &TypedPattern, value_is_data: bool, level: usize) -> bool {
     match pattern {
         Pattern::Int { .. } | Pattern::Discard { .. } => true,
-        Pattern::Var { .. } => !value_is_data,
-        Pattern::Assign { pattern, .. } => is_pattern_expectable(pattern, value_is_data),
+        Pattern::Var { .. } => !value_is_data || level != 0,
+        Pattern::Assign { pattern, .. } => is_pattern_expectable(pattern, value_is_data, level),
         Pattern::List { elements, tail, .. } => {
             elements
                 .iter()
-                .all(|p| is_pattern_expectable(p, value_is_data))
+                .all(|p| is_pattern_expectable(p, value_is_data, level + 1))
                 && tail
                     .as_ref()
-                    .map(|p| is_pattern_expectable(p, value_is_data))
+                    .map(|p| is_pattern_expectable(p, value_is_data, level + 1))
                     .unwrap_or(true)
         }
         Pattern::Constructor {
@@ -2482,7 +2482,7 @@ fn is_pattern_expectable(pattern: &TypedPattern, value_is_data: bool) -> bool {
                     !contains_opaque
                         && arguments
                             .iter()
-                            .all(|p| is_pattern_expectable(&p.value, value_is_data))
+                            .all(|p| is_pattern_expectable(&p.value, value_is_data, level + 1))
                 }
                 _ => {
                     unreachable!("ret should be a Type::App")
@@ -2492,6 +2492,6 @@ fn is_pattern_expectable(pattern: &TypedPattern, value_is_data: bool) -> bool {
         },
         Pattern::Tuple { elems, .. } => elems
             .iter()
-            .all(|p| is_pattern_expectable(p, value_is_data)),
+            .all(|p| is_pattern_expectable(p, value_is_data, level + 1)),
     }
 }
