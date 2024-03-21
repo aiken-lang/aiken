@@ -1836,6 +1836,30 @@ fn forbid_expect_into_opaque_type_from_data() {
 }
 
 #[test]
+fn allow_expect_into_type_from_data() {
+    let source_code = r#"
+        fn bar(n: Data) {
+          expect a: Option<Int> = n
+          a
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn allow_expect_into_type_from_data_2() {
+    let source_code = r#"
+        fn bar(n: Data) {
+          expect Some(a): Option<Int> = n
+          a
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
 fn forbid_expect_into_opaque_type_constructor_without_typecasting_in_module() {
     let source_code = r#"
         opaque type Thing {
@@ -1983,6 +2007,19 @@ fn allow_expect_on_var_patterns_that_are_opaque() {
     "#;
 
     assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn can_down_cast_to_data_always() {
+    let source_code = r#"
+        pub opaque type Foo { x: Int }
+        pub fn bar(a: Foo) {
+          let b: Data = a
+          b
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
 }
 
 #[test]
