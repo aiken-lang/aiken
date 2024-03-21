@@ -30,6 +30,8 @@ regex = "1.7.1"
 serde_json = "1.0.94"
 thiserror = "1.0.39"
 
+termion = "3.0.0"
+
 aiken-lang = { path = "../aiken-lang", version = "1.0.24-alpha" }
 aiken-lsp = { path = "../aiken-lsp", version = "1.0.24-alpha" }
 aiken-project = { path = '../aiken-project', version = "1.0.24-alpha" }
