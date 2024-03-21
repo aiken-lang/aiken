@@ -1836,6 +1836,32 @@ fn forbid_expect_into_opaque_type_from_data() {
 }
 
 #[test]
+fn allow_expect_into_type_from_data() {
+    let source_code = r#"
+        fn bar(n: Data) {
+          expect a: Option<Int> = n
+
+          a
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn allow_expect_into_type_from_data_2() {
+    let source_code = r#"
+        fn bar(n: Data) {
+          expect Some(a): Option<Int> = n
+
+          a
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
 fn forbid_expect_into_opaque_type_constructor_without_typecasting_in_module() {
     let source_code = r#"
         opaque type Thing {

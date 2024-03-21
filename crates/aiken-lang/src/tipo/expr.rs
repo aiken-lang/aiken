@@ -980,11 +980,13 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let pattern = PatternTyper::new(self.environment, &self.hydrator).unify(
             untyped_pattern.clone(),
             value_typ.clone(),
-            ann_typ,
+            ann_typ.clone(),
             kind.is_let(),
         )?;
 
-        if kind.is_expect() && !is_pattern_expectable(&pattern, value_is_data, 0) {
+        let is_cast = value_is_data && ann_typ.map(|t| t.contains_opaque()).unwrap_or(false);
+
+        if kind.is_expect() && !is_pattern_expectable(&pattern, is_cast, 0) {
             return Err(Error::ExpectOnOpaqueType { location });
         }
 
@@ -2455,18 +2457,18 @@ pub fn ensure_serialisable(allow_fn: bool, t: Rc<Type>, location: Span) -> Resul
     }
 }
 
-fn is_pattern_expectable(pattern: &TypedPattern, value_is_data: bool, level: usize) -> bool {
+fn is_pattern_expectable(pattern: &TypedPattern, is_cast: bool, level: usize) -> bool {
     match pattern {
         Pattern::Int { .. } | Pattern::Discard { .. } => true,
-        Pattern::Var { .. } => !value_is_data || level != 0,
-        Pattern::Assign { pattern, .. } => is_pattern_expectable(pattern, value_is_data, level),
+        Pattern::Var { .. } => !is_cast || level != 0,
+        Pattern::Assign { pattern, .. } => is_pattern_expectable(pattern, is_cast, level),
         Pattern::List { elements, tail, .. } => {
             elements
                 .iter()
-                .all(|p| is_pattern_expectable(p, value_is_data, level + 1))
+                .all(|p| is_pattern_expectable(p, is_cast, level + 1))
                 && tail
                     .as_ref()
-                    .map(|p| is_pattern_expectable(p, value_is_data, level + 1))
+                    .map(|p| is_pattern_expectable(p, is_cast, level + 1))
                     .unwrap_or(true)
         }
         Pattern::Constructor {
@@ -2482,7 +2484,7 @@ fn is_pattern_expectable(pattern: &TypedPattern, value_is_data: bool, level: usi
                     !contains_opaque
                         && arguments
                             .iter()
-                            .all(|p| is_pattern_expectable(&p.value, value_is_data, level + 1))
+                            .all(|p| is_pattern_expectable(&p.value, is_cast, level + 1))
                 }
                 _ => {
                     unreachable!("ret should be a Type::App")
@@ -2492,6 +2494,6 @@ fn is_pattern_expectable(pattern: &TypedPattern, value_is_data: bool, level: usi
         },
         Pattern::Tuple { elems, .. } => elems
             .iter()
-            .all(|p| is_pattern_expectable(p, value_is_data, level + 1)),
+            .all(|p| is_pattern_expectable(p, is_cast, level + 1)),
     }
 }
