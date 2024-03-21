@@ -1970,11 +1970,13 @@ fn forbid_expect_into_nested_opaque_in_record_without_typecasting() {
 
         type Foo { foo: Thing }
 
-        fn bar(thing: Foo) {
-          expect Foo { foo: Thing { inner } } : Foo = thing
+        fn bar(f: Foo) {
+          expect Foo { foo: Thing { inner } } : Foo = f
           Void
         }
     "#;
+
+    panic!("");
 
     assert!(matches!(
         check(parse(source_code)),

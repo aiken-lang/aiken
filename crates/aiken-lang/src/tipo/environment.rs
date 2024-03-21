@@ -1408,6 +1408,9 @@ impl<'a> Environment<'a> {
             return Ok(());
         }
 
+        println!("lhs: {lhs:#?}");
+        println!("rhs: {rhs:#?}");
+
         // TODO: maybe we also care to check is_link?
         if allow_cast
             && (lhs.is_data() || rhs.is_data())
