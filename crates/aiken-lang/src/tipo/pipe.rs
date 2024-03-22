@@ -92,7 +92,7 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
 
                     match fun.tipo().fn_arity() {
                         // Rewrite as right(left, ..args)
-                        Some(arity) if arity == arguments.len() + 1 => {
+                        Some(arity) if arguments.len() < arity => {
                             self.infer_insert_pipe(fun, arguments, location)?
                         }
 

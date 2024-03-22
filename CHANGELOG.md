@@ -42,6 +42,7 @@
 - **aiken-lang**: function aliases now resolved to the module and function name in codegen. @Microproofs
 - **aiken-lang**: fix indentation of pipelines to remain a multiple of the base indent increment. @KtorZ
 - **aiken-lang**: forbid presence of non-serialisable data-types in compound structures like List and Tuple. @KtorZ
+- **aiken-lang**: fix 'given' arity reported by 'incorrect arity' error message. @rvcas
 
 ### Changed
 

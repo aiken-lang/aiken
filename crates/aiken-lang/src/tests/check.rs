@@ -1596,6 +1596,57 @@ fn pipe_with_wrong_type_and_full_args() {
 }
 
 #[test]
+fn pipe_wrong_arity_partially_applied() {
+    let source_code = r#"
+        fn f(_a: Int, _b: Int, _c: Int) -> Int {
+            todo
+        }
+
+        test foo() {
+            0 |> f(0)
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::IncorrectFieldsArity { given, expected, .. })) if given == 2 && expected == 3
+    ))
+}
+
+#[test]
+fn pipe_wrong_arity_fully_saturated() {
+    let source_code = r#"
+        fn f(_a: Int, _b: Int, _c: Int) -> Int {
+            todo
+        }
+
+        test foo() {
+            0 |> f(0, 0, 0)
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::NotFn { .. }))
+    ))
+}
+
+#[test]
+fn pipe_wrong_arity_fully_saturated_return_fn() {
+    let source_code = r#"
+        fn f(_a: Int, _b: Int, _c: Int) -> fn(Int) -> Int {
+            todo
+        }
+
+        test foo() {
+            (0 |> f(0, 0, 0)) == 0
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
 fn fuzzer_ok_basic() {
     let source_code = r#"
         fn int() -> Fuzzer<Int> { todo }
