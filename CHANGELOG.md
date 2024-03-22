@@ -56,6 +56,7 @@
 - **aiken-project**: remove test definitions from dependency modules. @rvcas
 - **aiken-project**: ignore warnings from dependency modules. @rvcas
 - **aiken-project**: parse sources in parallel, this resulted in a nice speedup. @rvcas
+- **aiken-lang**: You can no longer use expect on opaque types in various situations. @rvcas & @KtorZ
 
 ## v1.0.24-alpha - 2024-01-31
 
