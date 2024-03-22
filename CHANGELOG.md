@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.0.25-alpha - UNRELEASED
+## v1.0.25-alpha - 2024-03-22
 
 ### Added
 
