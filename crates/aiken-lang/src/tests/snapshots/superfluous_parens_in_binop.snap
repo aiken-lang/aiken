@@ -1,0 +1,7 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\npub fn bar() {\n  a && ( b && c )\n}\n"
+---
+pub fn bar() {
+  a && b && c
+}

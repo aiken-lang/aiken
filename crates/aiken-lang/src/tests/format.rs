@@ -755,3 +755,25 @@ fn fuzzer_annotations() {
         "#
     );
 }
+
+#[test]
+fn preserve_associativity_parens_in_binop() {
+    assert_format!(
+        r#"
+        pub fn bar() {
+          ( a || b ) || c
+        }
+        "#
+    );
+}
+
+#[test]
+fn superfluous_parens_in_binop() {
+    assert_format!(
+        r#"
+        pub fn bar() {
+          a && ( b && c )
+        }
+        "#
+    );
+}

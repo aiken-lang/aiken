@@ -1219,11 +1219,27 @@ impl<'comments> Formatter<'comments> {
         let left = self.expr(left, false);
         let right = self.expr(right, false);
 
-        self.operator_side(left, precedence, left_precedence)
-            .append(" ")
-            .append(name)
-            .append(" ")
-            .append(self.operator_side(right, precedence, right_precedence.saturating_sub(1)))
+        self.operator_side(
+            left,
+            precedence,
+            if matches!(name, BinOp::Or | BinOp::And) {
+                left_precedence.saturating_sub(1)
+            } else {
+                left_precedence
+            },
+        )
+        .append(" ")
+        .append(name)
+        .append(" ")
+        .append(self.operator_side(
+            right,
+            precedence,
+            if matches!(name, BinOp::Or | BinOp::And) {
+                right_precedence
+            } else {
+                right_precedence.saturating_sub(1)
+            },
+        ))
     }
 
     pub fn operator_side<'a>(&mut self, doc: Document<'a>, op: u8, side: u8) -> Document<'a> {
