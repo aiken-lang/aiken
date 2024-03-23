@@ -2132,6 +2132,40 @@ fn can_down_cast_to_data_always() {
 }
 
 #[test]
+fn can_down_cast_to_data_on_fn_call() {
+    let source_code = r#"
+        pub type Foo { Foo }
+
+        pub fn serialise(data: Data) -> ByteArray {
+            ""
+        }
+
+        test foo() {
+            serialise(Foo) == ""
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn can_down_cast_to_data_on_pipe() {
+    let source_code = r#"
+        pub type Foo { Foo }
+
+        pub fn serialise(data: Data) -> ByteArray {
+            ""
+        }
+
+        test foo() {
+            (Foo |> serialise) == ""
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
 fn correct_span_for_backpassing_args() {
     let source_code = r#"
         fn fold(list: List<a>, acc: b, f: fn(a, b) -> b) -> b {
