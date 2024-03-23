@@ -1431,7 +1431,7 @@ impl<'a> Environment<'a> {
                     lhs,
                     Type::with_alias(tipo.clone(), alias.clone()),
                     location,
-                    false,
+                    allow_cast,
                 );
             }
         }
@@ -1470,7 +1470,7 @@ impl<'a> Environment<'a> {
                     Ok(())
                 }
 
-                Action::Unify(t) => self.unify(t, rhs, location, false),
+                Action::Unify(t) => self.unify(t, rhs, location, allow_cast),
 
                 Action::CouldNotUnify => Err(Error::CouldNotUnify {
                     location,
@@ -1550,7 +1550,7 @@ impl<'a> Environment<'a> {
                 },
             ) if args1.len() == args2.len() => {
                 for (a, b) in args1.iter().zip(args2) {
-                    self.unify(a.clone(), b.clone(), location, false)
+                    self.unify(a.clone(), b.clone(), location, allow_cast)
                         .map_err(|_| Error::CouldNotUnify {
                             location,
                             expected: lhs.clone(),
