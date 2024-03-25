@@ -1099,13 +1099,19 @@ impl<'a> CodeGenerator<'a> {
                 } else if tipo.is_void() {
                     AirTree::let_assignment("_", value, then)
                 } else {
+                    // Constr and Pair execution branch
                     let field_map = field_map.clone();
 
                     let mut type_map: IndexMap<usize, Rc<Type>> = IndexMap::new();
 
                     for (index, arg) in constr_tipo
                         .arg_types()
-                        .expect("Mismatched type")
+                        .unwrap_or_else(|| {
+                            // TODO refactor out pair from constr branch later
+                            assert!(constr_tipo.is_pair());
+
+                            constr_tipo.get_inner_types()
+                        })
                         .iter()
                         .enumerate()
                     {
@@ -1195,6 +1201,29 @@ impl<'a> CodeGenerator<'a> {
 
                     let then = if check_replaceable_opaque_type(tipo, &self.data_types) {
                         AirTree::let_assignment(&fields[0].1, local_value, then)
+                    } else if tipo.is_pair() {
+                        let (is_expect, msg) = if props.full_check {
+                            (true, props.msg_func.clone())
+                        } else {
+                            (false, None)
+                        };
+                        assert!(fields.len() == 2);
+
+                        AirTree::pair_access(
+                            fields
+                                .first()
+                                .map(|x| if x.1 == "_" { None } else { Some(x.1.clone()) })
+                                .unwrap(),
+                            fields
+                                .last()
+                                .map(|x| if x.1 == "_" { None } else { Some(x.1.clone()) })
+                                .unwrap(),
+                            tipo.clone(),
+                            local_value,
+                            msg,
+                            is_expect,
+                            then,
+                        )
                     } else {
                         let (is_expect, msg) = if props.full_check {
                             (true, props.msg_func.clone())
@@ -2102,6 +2131,7 @@ impl<'a> CodeGenerator<'a> {
                         )
                     }
                 }
+                SpecificClause::PairClause => todo!(),
             }
         } else {
             // handle final_clause
