@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.26-alpha - 2024-03-25
+
+### Fixed
+
+- **aiken-lang**: allow casting of types to Data in function pipiing. @KtorZ
+
 ## v1.0.25-alpha - 2024-03-22
 
 ### Added
