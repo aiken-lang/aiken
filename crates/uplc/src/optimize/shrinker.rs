@@ -520,9 +520,7 @@ impl CurriedArgs {
     fn get_id_args(&self, path: &BuiltinArgs) -> Option<Vec<UplcNode>> {
         match (self, path) {
             (CurriedArgs::TwoArgs { fst_args, snd_args }, BuiltinArgs::TwoArgs { fst, snd }) => {
-                let Some(arg) = fst_args.iter().find(|item| fst.1 == item.term) else {
-                    return None;
-                };
+                let arg = fst_args.iter().find(|item| fst.1 == item.term)?;
 
                 let Some(arg2) = snd_args.iter().find(|item| match snd {
                     Some(snd) => item.term == snd.1,
@@ -609,9 +607,7 @@ impl CurriedArgs {
                 },
                 BuiltinArgs::ThreeArgs { fst, snd, thd },
             ) => {
-                let Some(arg) = fst_args.iter().find(|item| fst.1 == item.term) else {
-                    return None;
-                };
+                let arg = fst_args.iter().find(|item| fst.1 == item.term)?;
 
                 let Some(arg2) = snd_args.iter().find(|item| match snd {
                     Some(snd) => item.term == snd.1,
