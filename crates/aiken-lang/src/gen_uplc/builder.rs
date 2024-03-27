@@ -1192,6 +1192,8 @@ pub fn unknown_data_to_type_debug(
             .apply(term)
     } else if field_type.is_ml_result() {
         panic!("ML Result not supported")
+    } else if field_type.is_data() {
+        term
     } else {
         Term::var("__val")
             .delayed_choose_data(
