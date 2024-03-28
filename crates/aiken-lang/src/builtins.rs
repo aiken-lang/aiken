@@ -20,6 +20,7 @@ pub const BOOL: &str = "Bool";
 pub const INT: &str = "Int";
 pub const DATA: &str = "Data";
 pub const LIST: &str = "List";
+pub const PAIR: &str = "Pair";
 pub const VOID: &str = "Void";
 pub const G1_ELEMENT: &str = "G1Element";
 pub const G2_ELEMENT: &str = "G2Element";
@@ -318,6 +319,49 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
             module: "".to_string(),
             public: true,
         },
+    );
+
+    // Pair(a, b)
+    let fst_parameter = generic_var(id_gen.next());
+    let snd_parameter = generic_var(id_gen.next());
+    prelude.types.insert(
+        PAIR.to_string(),
+        TypeConstructor {
+            location: Span::empty(),
+            parameters: vec![fst_parameter.clone(), snd_parameter.clone()],
+            tipo: pair(fst_parameter.clone(), snd_parameter.clone()),
+            module: "".to_string(),
+            public: true,
+        },
+    );
+
+    prelude
+        .types_constructors
+        .insert(PAIR.to_string(), vec![PAIR.to_string()]);
+
+    let mut pair_fields = HashMap::new();
+    pair_fields.insert("fst".to_string(), (0, Span::empty()));
+    pair_fields.insert("snd".to_string(), (1, Span::empty()));
+    prelude.values.insert(
+        PAIR.to_string(),
+        ValueConstructor::public(
+            function(
+                vec![fst_parameter.clone(), snd_parameter.clone()],
+                pair(fst_parameter, snd_parameter),
+            ),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: PAIR.to_string(),
+                field_map: Some(FieldMap {
+                    arity: 2,
+                    fields: pair_fields,
+                    is_function: false,
+                }),
+                arity: 2,
+                location: Span::empty(),
+                constructors_count: 1,
+            },
+        ),
     );
 
     // String
