@@ -95,6 +95,7 @@ pub enum SpecificClause {
     TupleClause {
         defined_tuple_indices: IndexSet<(usize, String)>,
     },
+    PairClause,
 }
 
 impl ClauseProperties {
@@ -122,6 +123,15 @@ impl ClauseProperties {
                 specific_clause: SpecificClause::TupleClause {
                     defined_tuple_indices: IndexSet::new(),
                 },
+            }
+        } else if t.is_pair() {
+            ClauseProperties {
+                clause_var_name: constr_var,
+                complex_clause: false,
+                original_subject_name: subject_name,
+                needs_constr_var: false,
+                final_clause: false,
+                specific_clause: SpecificClause::PairClause,
             }
         } else {
             ClauseProperties {
@@ -164,6 +174,15 @@ impl ClauseProperties {
                 specific_clause: SpecificClause::TupleClause {
                     defined_tuple_indices: IndexSet::new(),
                 },
+            }
+        } else if t.is_pair() {
+            ClauseProperties {
+                clause_var_name: constr_var,
+                complex_clause: false,
+                original_subject_name: subject_name,
+                needs_constr_var: false,
+                final_clause,
+                specific_clause: SpecificClause::PairClause,
             }
         } else {
             ClauseProperties {
@@ -356,7 +375,7 @@ pub fn get_generic_variant_name(t: &Rc<Type>) -> String {
         "_ml_result".to_string()
     } else if t.is_map() {
         "_map".to_string()
-    } else if t.is_2_tuple() {
+    } else if t.is_pair() {
         "_pair".to_string()
     } else if t.is_list() {
         "_list".to_string()
@@ -941,7 +960,7 @@ pub fn known_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
         Term::unmap_data().apply(term)
     } else if field_type.is_string() {
         Term::Builtin(DefaultFunction::DecodeUtf8).apply(Term::un_b_data().apply(term))
-    } else if field_type.is_tuple() && matches!(field_type.get_uplc_type(), UplcType::Pair(_, _)) {
+    } else if field_type.is_pair() {
         Term::mk_pair_data()
             .apply(Term::head_list().apply(Term::var("__list_data")))
             .apply(Term::head_list().apply(Term::tail_list().apply(Term::var("__list_data"))))
@@ -985,7 +1004,7 @@ pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
         Term::unmap_data().apply(term)
     } else if field_type.is_string() {
         Term::Builtin(DefaultFunction::DecodeUtf8).apply(Term::un_b_data().apply(term))
-    } else if field_type.is_tuple() && matches!(field_type.get_uplc_type(), UplcType::Pair(_, _)) {
+    } else if field_type.is_pair() {
         Term::tail_list()
             .apply(Term::tail_list().apply(Term::var("__list_data")))
             .delayed_choose_list(
@@ -1098,7 +1117,7 @@ pub fn unknown_data_to_type_debug(
             )
             .lambda("__val")
             .apply(term)
-    } else if field_type.is_tuple() && matches!(field_type.get_uplc_type(), UplcType::Pair(_, _)) {
+    } else if field_type.is_pair() {
         Term::var("__val")
             .delayed_choose_data(
                 error_term.clone(),
@@ -1313,7 +1332,7 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
         Term::map_data().apply(term)
     } else if field_type.is_string() {
         Term::b_data().apply(Term::Builtin(DefaultFunction::EncodeUtf8).apply(term))
-    } else if field_type.is_tuple() && matches!(field_type.get_uplc_type(), UplcType::Pair(_, _)) {
+    } else if field_type.is_pair() {
         Term::list_data()
             .apply(
                 Term::mk_cons()
@@ -1410,7 +1429,7 @@ pub fn list_access_to_uplc(
     let head_item = |name, tipo: &Rc<Type>, tail_name: &str| {
         if name == "_" {
             Term::unit()
-        } else if matches!(tipo.get_uplc_type(), UplcType::Pair(_, _)) && is_list_accessor {
+        } else if tipo.is_pair() && is_list_accessor {
             Term::head_list().apply(Term::var(tail_name.to_string()))
         } else if matches!(expect_level, ExpectLevel::Full) {
             // Expect level is full so we have an unknown piece of data to cast
@@ -1852,6 +1871,7 @@ pub fn air_holds_msg(air: &Air) -> bool {
 
         Air::FieldsExpose { is_expect, .. }
         | Air::TupleAccessor { is_expect, .. }
+        | Air::PairAccessor { is_expect, .. }
         | Air::CastFromData { is_expect, .. } => *is_expect,
 
         Air::ListAccessor { expect_level, .. } => {
