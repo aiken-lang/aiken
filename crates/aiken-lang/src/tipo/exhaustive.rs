@@ -3,7 +3,8 @@ use std::{collections::BTreeMap, iter, ops::Deref};
 use itertools::Itertools;
 
 use crate::{
-    ast, builtins,
+    ast,
+    builtins::{self, PAIR},
     tipo::{self, environment::Environment, error::Error},
 };
 
@@ -563,6 +564,8 @@ pub(super) fn simplify(
             constructor: super::PatternConstructor::Record { name, .. },
             ..
         } => {
+            let (empty, pair) = (&"".to_string(), &PAIR.to_string());
+
             let (module, type_name, arity) = match tipo.deref() {
                 tipo::Type::App {
                     name: type_name,
@@ -575,11 +578,13 @@ pub(super) fn simplify(
                         module,
                         ..
                     } => (module, type_name, args.len()),
+                    tipo::Type::Pair { .. } => (empty, pair, 2),
                     _ => {
-                        unreachable!("ret should be a Type::App")
+                        unreachable!("ret should be a Type::App or Type::Pair")
                     }
                 },
-                _ => unreachable!("tipo should be a Type::App"),
+                tipo::Type::Pair { .. } => (empty, pair, 2),
+                _ => unreachable!("tipo should be a Type::App or Type::Pair"),
             };
 
             let alts = environment.get_constructors_for_type(module, type_name, *location)?;
