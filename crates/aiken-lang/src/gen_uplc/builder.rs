@@ -695,13 +695,21 @@ pub fn pattern_has_conditions(
         Pattern::Constructor {
             arguments, tipo, ..
         } => {
-            let data_type =
-                lookup_data_type_by_tipo(data_types, tipo).expect("Data type not found");
-
-            data_type.constructors.len() > 1
-                || arguments
+            if tipo.is_pair()
+                || (tipo.is_function() && tipo.return_type().map(|t| t.is_pair()).unwrap_or(false))
+            {
+                arguments
                     .iter()
                     .any(|arg| pattern_has_conditions(&arg.value, data_types))
+            } else {
+                let data_type = lookup_data_type_by_tipo(data_types, tipo)
+                    .unwrap_or_else(|| panic!("Data type not found: {:#?}", tipo));
+
+                data_type.constructors.len() > 1
+                    || arguments
+                        .iter()
+                        .any(|arg| pattern_has_conditions(&arg.value, data_types))
+            }
         }
         Pattern::Assign { pattern, .. } => pattern_has_conditions(pattern, data_types),
         Pattern::Var { .. } | Pattern::Discard { .. } => false,

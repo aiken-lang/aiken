@@ -372,32 +372,42 @@ impl<'a> CodeGenerator<'a> {
                             },
                         ..
                     } => {
-                        let data_type = lookup_data_type_by_tipo(&self.data_types, tipo)
-                            .expect("Creating a record with no record definition.");
+                        if tipo.is_pair() {
+                            assert!(args.len() == 2);
 
-                        let (constr_index, _) = data_type
-                            .constructors
-                            .iter()
-                            .enumerate()
-                            .find(|(_, dt)| &dt.name == constr_name)
-                            .unwrap();
+                            let arg1 = self.build(&args[0].value, module_build_name, &[]);
 
-                        let constr_args = args
-                            .iter()
-                            .zip(constr_tipo.arg_types().unwrap())
-                            .map(|(arg, tipo)| {
-                                if tipo.is_data() {
-                                    AirTree::cast_to_data(
-                                        self.build(&arg.value, module_build_name, &[]),
-                                        arg.value.tipo(),
-                                    )
-                                } else {
-                                    self.build(&arg.value, module_build_name, &[])
-                                }
-                            })
-                            .collect_vec();
+                            let arg2 = self.build(&args[1].value, module_build_name, &[]);
 
-                        AirTree::create_constr(constr_index, constr_tipo.clone(), constr_args)
+                            AirTree::pair(arg1, arg2, tipo.clone())
+                        } else {
+                            let data_type = lookup_data_type_by_tipo(&self.data_types, tipo)
+                                .expect("Creating a record with no record definition.");
+
+                            let (constr_index, _) = data_type
+                                .constructors
+                                .iter()
+                                .enumerate()
+                                .find(|(_, dt)| &dt.name == constr_name)
+                                .unwrap();
+
+                            let constr_args = args
+                                .iter()
+                                .zip(constr_tipo.arg_types().unwrap())
+                                .map(|(arg, tipo)| {
+                                    if tipo.is_data() {
+                                        AirTree::cast_to_data(
+                                            self.build(&arg.value, module_build_name, &[]),
+                                            arg.value.tipo(),
+                                        )
+                                    } else {
+                                        self.build(&arg.value, module_build_name, &[])
+                                    }
+                                })
+                                .collect_vec();
+
+                            AirTree::create_constr(constr_index, constr_tipo.clone(), constr_args)
+                        }
                     }
 
                     TypedExpr::Var {
@@ -5420,12 +5430,13 @@ impl<'a> CodeGenerator<'a> {
 
                 match (extract_constant(&fst), extract_constant(&snd)) {
                     (Some(fst), Some(snd)) => {
+                        let mut pair_fields = builder::convert_constants_to_data(vec![fst, snd]);
                         let term = Term::Constant(
                             UplcConstant::ProtoPair(
                                 UplcType::Data,
                                 UplcType::Data,
-                                fst.clone(),
-                                snd.clone(),
+                                pair_fields.remove(0).into(),
+                                pair_fields.remove(0).into(),
                             )
                             .into(),
                         );
