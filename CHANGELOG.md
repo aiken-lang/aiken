@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.27-alpha - unreleased
+
+### Fixed
+
+- **aiken-lang**: formatter should not erase `pub` on validators. @rvcas
+
 ## v1.0.26-alpha - 2024-03-25
 
 ### Fixed
