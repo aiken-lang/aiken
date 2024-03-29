@@ -42,12 +42,16 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                 },
             ));
 
+            let fun = functions
+                .next()
+                .expect("unwrapping safe because there's 'at_least(1)' function");
+
+            let other_fun = functions.next();
+
             ast::UntypedDefinition::Validator(ast::Validator {
                 doc: None,
-                fun: functions
-                    .next()
-                    .expect("unwrapping safe because there's 'at_least(1)' function"),
-                other_fun: functions.next(),
+                fun,
+                other_fun,
                 location: ast::Span {
                     start: span.start,
                     // capture the span from the optional params

@@ -318,13 +318,13 @@ fn infer_definition(
 
                         Ok(other_typed_fun)
                     })
-                    .transpose();
+                    .transpose()?;
 
                 Ok(Definition::Validator(Validator {
                     doc,
                     end_position,
                     fun: typed_fun,
-                    other_fun: typed_other_fun?,
+                    other_fun: typed_other_fun,
                     location,
                     params: typed_params,
                 }))

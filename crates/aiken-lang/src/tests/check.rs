@@ -95,8 +95,6 @@ fn bls12_381_ml_result_in_data_type() {
 
     let res = check(parse(source_code));
 
-    dbg!(&res);
-
     assert!(matches!(res, Err((_, Error::IllegalTypeInData { .. }))))
 }
 
@@ -1912,7 +1910,7 @@ fn forbid_partial_down_casting() {
     "#;
 
     assert!(matches!(
-        dbg!(check(parse(source_code))),
+        check(parse(source_code)),
         Err((_, Error::CouldNotUnify { .. }))
     ))
 }
@@ -1931,7 +1929,7 @@ fn forbid_partial_up_casting() {
     "#;
 
     assert!(matches!(
-        dbg!(check(parse(source_code))),
+        check(parse(source_code)),
         Err((_, Error::CouldNotUnify { .. }))
     ))
 }
