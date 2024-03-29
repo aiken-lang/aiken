@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -x
 set -e
 set -o pipefail
 
@@ -91,6 +92,8 @@ main() {
     err "failed to download aiken: version not found or network error"
   }
 
+
+
   for bin in "${BINS[@]}"; do
     bin_path="$AIKEN_BIN_DIR/$bin"
 
@@ -110,6 +113,12 @@ in your 'PATH' to allow the newly installed version to take precedence!
 EOF
     fi
   done
+
+  if [ "${PLATFORM}" = "linux" ]; then
+      "$AIKEN_BIN_DIR/$bin" completion "$(basename ${SHELL})" --install || say "Aiken version ${AIKUP_VERSION} doesn't support installing completions"
+  fi
+
+      
 
   say "done"
 }
