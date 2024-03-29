@@ -72,13 +72,46 @@ fn zsh() -> miette::Result<()> {
 
 }
 
+fn fish() -> miette::Result<()> {
+    // NOTE: Installing completion on ~/.confi/fish/completions
+    let xdg_dirs = xdg::BaseDirectories::with_prefix("fish/completions").expect("Error finding directory");
+    let completion_path = xdg_dirs
+        .place_config_file("aiken.fish").expect("Cannot create path");
+    let mut completion_file = File::create(completion_path).expect("cannot open file");
+    generate_wrapper(Shell::Fish, &mut completion_file);
+    Ok(())
+}
+
+fn bash() -> miette::Result<()> {
+    let xdg_dirs = xdg::BaseDirectories::with_prefix("bash-completion/completions").expect("Error finding directory");
+    let home = std::env::var("HOME").expect("Cannot find your home directory");
+    let config_home = xdg_dirs.get_config_home();
+    let completion_path = xdg_dirs
+        .place_config_file("aiken.completion.bash").expect("Cannot create path");
+
+    let mut bashrc = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .open(format!("{}/.bashrc", home))
+        .expect(".bashrc file not found");
+    if let Some(config) = config_home.to_str() {
+        let path: String = format!("source {config}");
+        if let Err(e) = writeln!(bashrc, "{}", path) {
+            eprintln!("Couldn't write to file: {}", e);
+        }
+    }
+    let mut completion_file = File::create(completion_path).expect("cannot open file");
+    generate_wrapper(Shell::Bash, &mut completion_file);
+    Ok(())
+}
+
 fn completions_to_file(shell: Shell) -> miette::Result<()> {
     match shell {
         Shell::Bash => {
-            todo!()
+            bash()?;
         }
         Shell::Fish => {
-            todo!()
+            fish()?;
         }
         Shell::Zsh => {
             zsh()?;
