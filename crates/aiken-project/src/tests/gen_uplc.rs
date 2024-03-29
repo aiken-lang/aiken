@@ -2994,7 +2994,238 @@ fn acceptance_test_28_unique_list() {
 }
 
 #[test]
-fn acceptance_test_29_union() {
+fn acceptance_test_29_union_pair() {
+    let src = r#"
+      type Map<a,b> = List<Pair<a,b>>
+
+      pub opaque type AssocList<key, value> {
+        inner: Map<key, value>,
+      }
+
+      pub fn new() -> AssocList<key, value> {
+        AssocList { inner: [] }
+      }
+
+      pub fn from_list(xs: Map<key, value>) -> AssocList<key, value> {
+        AssocList { inner: do_from_list(xs) }
+      }
+
+      fn do_from_list(xs: Map<key, value>) -> Map<key, value> {
+        when xs is {
+          [] ->
+            []
+          [Pair(k, v), ..rest] ->
+            do_insert(do_from_list(rest), k, v)
+        }
+      }
+
+      pub fn insert(
+        in m: AssocList<key, value>,
+        key k: key,
+        value v: value,
+      ) -> AssocList<key, value> {
+        AssocList { inner: do_insert(m.inner, k, v) }
+      }
+
+      fn do_insert(elems: Map<key, value>, k: key, v: value) -> Map<key, value> {
+        when elems is {
+          [] ->
+            [Pair(k, v)]
+          [Pair(k2, v2), ..rest] ->
+            if k == k2 {
+              [Pair(k, v), ..rest]
+            } else {
+              [Pair(k2, v2), ..do_insert(rest, k, v)]
+            }
+        }
+      }
+
+      pub fn union(
+        left: AssocList<key, value>,
+        right: AssocList<key, value>,
+      ) -> AssocList<key, value> {
+        AssocList { inner: do_union(left.inner, right.inner) }
+      }
+
+      fn do_union(
+        left: Map<key, value>,
+        right: Map<key, value>,
+      ) -> Map<key, value> {
+        when left is {
+          [] ->
+            right
+          [Pair{fst: k, snd: v}, ..rest] ->
+            do_union(rest, do_insert(right, k, v))
+        }
+      }
+
+      fn fixture_1() {
+        new()
+          |> insert("foo", 42)
+          |> insert("bar", 14)
+      }
+
+      test union_1() {
+        union(fixture_1(), new()) == fixture_1()
+      }
+
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::map_data().apply(
+                    Term::var("union")
+                        .lambda("union")
+                        .apply(
+                            Term::var("do_union")
+                                .apply(Term::var("left"))
+                                .apply(Term::var("right"))
+                                .lambda("right")
+                                .lambda("left"),
+                        )
+                        .lambda("do_union")
+                        .apply(Term::var("do_union").apply(Term::var("do_union")))
+                        .lambda("do_union")
+                        .apply(
+                            Term::var("left")
+                                .delayed_choose_list(
+                                    Term::var("right"),
+                                    Term::var("do_union")
+                                        .apply(Term::var("do_union"))
+                                        .apply(Term::var("rest"))
+                                        .apply(
+                                            Term::var("do_insert")
+                                                .apply(Term::var("right"))
+                                                .apply(Term::var("k"))
+                                                .apply(Term::var("v")),
+                                        )
+                                        .lambda("v")
+                                        .apply(
+                                            Term::un_i_data()
+                                                .apply(Term::snd_pair().apply(Term::var("pair"))),
+                                        )
+                                        .lambda("k")
+                                        .apply(
+                                            Term::un_b_data()
+                                                .apply(Term::fst_pair().apply(Term::var("pair"))),
+                                        )
+                                        .lambda("rest")
+                                        .apply(Term::tail_list().apply(Term::var("left")))
+                                        .lambda("pair")
+                                        .apply(Term::head_list().apply(Term::var("left"))),
+                                )
+                                .lambda("right")
+                                .lambda("left")
+                                .lambda("do_union"),
+                        )
+                        .lambda("do_insert")
+                        .apply(
+                            Term::var("do_insert")
+                                .apply(Term::var("do_insert"))
+                                .apply(Term::var("elems"))
+                                .lambda("do_insert")
+                                .apply(
+                                    Term::var("elems")
+                                        .delayed_choose_list(
+                                            Term::mk_cons()
+                                                .apply(
+                                                    Term::mk_pair_data()
+                                                        .apply(Term::b_data().apply(Term::var("k")))
+                                                        .apply(
+                                                            Term::i_data().apply(Term::var("v")),
+                                                        ),
+                                                )
+                                                .apply(Term::empty_map()),
+                                            Term::equals_bytestring()
+                                                .apply(Term::var("k"))
+                                                .apply(Term::var("k2"))
+                                                .delayed_if_then_else(
+                                                    Term::mk_cons()
+                                                        .apply(
+                                                            Term::mk_pair_data()
+                                                                .apply(
+                                                                    Term::b_data()
+                                                                        .apply(Term::var("k")),
+                                                                )
+                                                                .apply(
+                                                                    Term::i_data()
+                                                                        .apply(Term::var("v")),
+                                                                ),
+                                                        )
+                                                        .apply(Term::var("rest")),
+                                                    Term::mk_cons()
+                                                        .apply(
+                                                            Term::mk_pair_data()
+                                                                .apply(
+                                                                    Term::b_data()
+                                                                        .apply(Term::var("k2")),
+                                                                )
+                                                                .apply(
+                                                                    Term::i_data()
+                                                                        .apply(Term::var("v2")),
+                                                                ),
+                                                        )
+                                                        .apply(
+                                                            Term::var("do_insert")
+                                                                .apply(Term::var("do_insert"))
+                                                                .apply(Term::var("rest")),
+                                                        ),
+                                                )
+                                                .lambda("v2")
+                                                .apply(Term::un_i_data().apply(
+                                                    Term::snd_pair().apply(Term::var("pair")),
+                                                ))
+                                                .lambda("k2")
+                                                .apply(Term::un_b_data().apply(
+                                                    Term::fst_pair().apply(Term::var("pair")),
+                                                ))
+                                                .lambda("rest")
+                                                .apply(Term::tail_list().apply(Term::var("elems")))
+                                                .lambda("pair")
+                                                .apply(Term::head_list().apply(Term::var("elems"))),
+                                        )
+                                        .lambda("elems")
+                                        .lambda("do_insert"),
+                                )
+                                .lambda("v")
+                                .lambda("k")
+                                .lambda("elems"),
+                        )
+                        .apply(Term::map_values(vec![
+                            Constant::ProtoPair(
+                                Type::Data,
+                                Type::Data,
+                                Constant::Data(Data::bytestring("foo".as_bytes().to_vec())).into(),
+                                Constant::Data(Data::integer(42.into())).into(),
+                            ),
+                            Constant::ProtoPair(
+                                Type::Data,
+                                Type::Data,
+                                Constant::Data(Data::bytestring("bar".as_bytes().to_vec())).into(),
+                                Constant::Data(Data::integer(14.into())).into(),
+                            ),
+                        ]))
+                        .apply(Term::empty_map()),
+                ),
+            )
+            .apply(Term::data(Data::map(vec![
+                (
+                    Data::bytestring("foo".as_bytes().to_vec()),
+                    Data::integer(42.into()),
+                ),
+                (
+                    Data::bytestring("bar".as_bytes().to_vec()),
+                    Data::integer(14.into()),
+                ),
+            ]))),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_29_union_tuple() {
     let src = r#"
       pub opaque type AssocList<key, value> {
         inner: List<(key, value)>,
