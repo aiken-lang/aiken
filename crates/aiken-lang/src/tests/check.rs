@@ -2208,3 +2208,69 @@ fn allow_discard_for_backpassing_args() {
 
     assert_eq!(warnings.len(), 0);
 }
+
+#[test]
+fn validator_private_type_leak() {
+    let source_code = r#"
+        type Datum {
+          foo: Int,
+        }
+
+        type Redeemer {
+          bar: Int,
+        }
+
+        validator {
+          pub fn bar(datum: Datum, redeemer: Redeemer, _ctx) {
+            datum.foo == redeemer.bar
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::PrivateTypeLeak { .. }))
+    ))
+}
+
+#[test]
+fn validator_public() {
+    let source_code = r#"
+        pub type Datum {
+          foo: Int,
+        }
+
+        pub type Redeemer {
+          bar: Int,
+        }
+
+        validator {
+          pub fn bar(datum: Datum, redeemer: Redeemer, _ctx) {
+            datum.foo == redeemer.bar
+          }
+        }
+    "#;
+
+    assert!(check_validator(parse(source_code)).is_ok())
+}
+
+#[test]
+fn validator_private_everything() {
+    let source_code = r#"
+        type Datum {
+          foo: Int,
+        }
+
+        type Redeemer {
+          bar: Int,
+        }
+
+        validator {
+          fn bar(datum: Datum, redeemer: Redeemer, _ctx) {
+            datum.foo == redeemer.bar
+          }
+        }
+    "#;
+
+    assert!(check_validator(parse(source_code)).is_ok())
+}

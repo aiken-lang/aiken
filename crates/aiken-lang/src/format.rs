@@ -583,7 +583,7 @@ impl<'comments> Formatter<'comments> {
         let fun_doc_comments = self.doc_comments(fun.location.start);
         let first_fn = self
             .definition_fn(
-                &false,
+                &fun.public,
                 &fun.name,
                 &fun.arguments,
                 &fun.return_annotation,
@@ -601,7 +601,7 @@ impl<'comments> Formatter<'comments> {
 
                 let other_fn = self
                     .definition_fn(
-                        &false,
+                        &other.public,
                         &other.name,
                         &other.arguments,
                         &other.return_annotation,

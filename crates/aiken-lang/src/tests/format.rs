@@ -186,6 +186,21 @@ fn format_double_validator() {
 }
 
 #[test]
+fn format_double_validator_public() {
+    assert_format!(
+        r#"
+        validator ( param1 : ByteArray ) {
+        pub fn foo (d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
+        True
+        }
+        /// This is bar
+    pub fn bar(r: Redeemer, ctx    : ScriptContext  )   ->   Bool { True }
+        }
+    "#
+    );
+}
+
+#[test]
 fn format_when() {
     assert_format!(
         r#"
