@@ -497,14 +497,8 @@ impl Type {
             UplcType::Unit
         } else if self.is_map() {
             UplcType::List(UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()).into())
-        } else if self.is_list() {
+        } else if self.is_list() || self.is_tuple() {
             UplcType::List(UplcType::Data.into())
-        } else if self.is_tuple() {
-            match self {
-                Self::Tuple { .. } => UplcType::List(UplcType::Data.into()),
-                Self::Var { tipo, .. } => tipo.borrow().get_uplc_type().unwrap(),
-                _ => unreachable!(),
-            }
         } else if self.is_pair() {
             UplcType::Pair(UplcType::Data.into(), UplcType::Data.into())
         } else if self.is_bls381_12_g1() {
