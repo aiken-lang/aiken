@@ -1516,6 +1516,7 @@ impl<'a> CodeGenerator<'a> {
         let uplc_type = tipo.get_uplc_type();
 
         match uplc_type {
+            // primitives
             UplcType::Integer
             | UplcType::String
             | UplcType::Bool
@@ -4618,138 +4619,100 @@ impl<'a> CodeGenerator<'a> {
                 let left = arg_stack.pop().unwrap();
                 let right = arg_stack.pop().unwrap();
 
-                let builtin = if tipo.is_int() {
-                    Term::equals_integer()
-                } else if tipo.is_string() {
-                    Term::equals_string()
-                } else if tipo.is_bytearray() {
-                    Term::equals_bytestring()
-                } else if tipo.is_bls381_12_g1() {
-                    Term::bls12_381_g1_equal()
-                } else if tipo.is_bls381_12_g2() {
-                    Term::bls12_381_g2_equal()
-                } else if tipo.is_ml_result() {
-                    panic!("ML Result equality is not supported")
-                } else {
-                    Term::equals_data()
+                let uplc_type = tipo.get_uplc_type();
+
+                let term = match name {
+                    BinOp::And => left.delayed_if_then_else(right, Term::bool(false)),
+                    BinOp::Or => left.delayed_if_then_else(Term::bool(true), right),
+                    BinOp::Eq | BinOp::NotEq => {
+                        let builtin = match &uplc_type {
+                            UplcType::Integer => Term::equals_integer(),
+                            UplcType::String => Term::equals_string(),
+                            UplcType::ByteString => Term::equals_bytestring(),
+                            UplcType::Bls12_381G1Element => Term::bls12_381_g1_equal(),
+                            UplcType::Bls12_381G2Element => Term::bls12_381_g2_equal(),
+                            UplcType::Bool | UplcType::Unit => Term::unit(),
+                            UplcType::List(_) | UplcType::Pair(_, _) | UplcType::Data => {
+                                Term::equals_data()
+                            }
+                            UplcType::Bls12_381MlResult => {
+                                panic!("ML Result equality is not supported")
+                            }
+                        };
+
+                        let binop_eq = match uplc_type {
+                            UplcType::Bool => {
+                                if matches!(name, BinOp::Eq) {
+                                    left.delayed_if_then_else(
+                                        right.clone(),
+                                        right.if_then_else(Term::bool(false), Term::bool(true)),
+                                    )
+                                } else {
+                                    left.delayed_if_then_else(
+                                        right
+                                            .clone()
+                                            .if_then_else(Term::bool(false), Term::bool(true)),
+                                        right,
+                                    )
+                                }
+                            }
+                            UplcType::List(_) if tipo.is_map() => builtin
+                                .apply(Term::map_data().apply(left))
+                                .apply(Term::map_data().apply(right)),
+                            UplcType::List(_) => builtin
+                                .apply(Term::list_data().apply(left))
+                                .apply(Term::list_data().apply(right)),
+                            UplcType::Pair(_, _) => {
+                                builtin
+                                    .apply(Term::map_data().apply(
+                                        Term::mk_cons().apply(left).apply(Term::empty_map()),
+                                    ))
+                                    .apply(Term::map_data().apply(
+                                        Term::mk_cons().apply(right).apply(Term::empty_map()),
+                                    ))
+                            }
+                            UplcType::Data
+                            | UplcType::Bls12_381G1Element
+                            | UplcType::Bls12_381G2Element
+                            | UplcType::Bls12_381MlResult
+                            | UplcType::Integer
+                            | UplcType::String
+                            | UplcType::ByteString => builtin.apply(left).apply(right),
+                            UplcType::Unit => left.choose_unit(right.choose_unit(Term::bool(true))),
+                        };
+
+                        if !tipo.is_bool() && matches!(name, BinOp::NotEq) {
+                            binop_eq.if_then_else(Term::bool(false), Term::bool(true))
+                        } else {
+                            binop_eq
+                        }
+                    }
+                    BinOp::LtInt => Term::Builtin(DefaultFunction::LessThanInteger)
+                        .apply(left)
+                        .apply(right),
+                    BinOp::LtEqInt => Term::Builtin(DefaultFunction::LessThanEqualsInteger)
+                        .apply(left)
+                        .apply(right),
+                    BinOp::GtEqInt => Term::Builtin(DefaultFunction::LessThanEqualsInteger)
+                        .apply(right)
+                        .apply(left),
+                    BinOp::GtInt => Term::Builtin(DefaultFunction::LessThanInteger)
+                        .apply(right)
+                        .apply(left),
+                    BinOp::AddInt => Term::add_integer().apply(left).apply(right),
+                    BinOp::SubInt => Term::Builtin(DefaultFunction::SubtractInteger)
+                        .apply(left)
+                        .apply(right),
+                    BinOp::MultInt => Term::Builtin(DefaultFunction::MultiplyInteger)
+                        .apply(left)
+                        .apply(right),
+                    BinOp::DivInt => Term::Builtin(DefaultFunction::DivideInteger)
+                        .apply(left)
+                        .apply(right),
+                    BinOp::ModInt => Term::Builtin(DefaultFunction::ModInteger)
+                        .apply(left)
+                        .apply(right),
                 };
-
-                let term =
-                    match name {
-                        BinOp::And => left.delayed_if_then_else(right, Term::bool(false)),
-                        BinOp::Or => left.delayed_if_then_else(Term::bool(true), right),
-                        BinOp::Eq => {
-                            if tipo.is_bool() {
-                                let term = left.delayed_if_then_else(
-                                    right.clone(),
-                                    right.if_then_else(Term::bool(false), Term::bool(true)),
-                                );
-
-                                return Some(term);
-                            }
-                            if tipo.is_map() {
-                                let term = builtin
-                                    .apply(Term::map_data().apply(left))
-                                    .apply(Term::map_data().apply(right));
-                                return Some(term);
-                            }
-                            if tipo.is_pair() {
-                                let term = builtin
-                                    .apply(Term::map_data().apply(
-                                        Term::mk_cons().apply(left).apply(Term::empty_map()),
-                                    ))
-                                    .apply(Term::map_data().apply(
-                                        Term::mk_cons().apply(right).apply(Term::empty_map()),
-                                    ));
-                                return Some(term);
-                            }
-                            if tipo.is_list() || tipo.is_tuple() {
-                                let term = builtin
-                                    .apply(Term::list_data().apply(left))
-                                    .apply(Term::list_data().apply(right));
-
-                                return Some(term);
-                            }
-                            if tipo.is_void() {
-                                let term = left.choose_unit(right.choose_unit(Term::bool(true)));
-
-                                return Some(term);
-                            }
-
-                            builtin.apply(left).apply(right)
-                        }
-                        BinOp::NotEq => {
-                            if tipo.is_bool() {
-                                let term = left.delayed_if_then_else(
-                                    right
-                                        .clone()
-                                        .if_then_else(Term::bool(false), Term::bool(true)),
-                                    right,
-                                );
-
-                                return Some(term);
-                            }
-                            if tipo.is_map() {
-                                let term = builtin
-                                    .apply(Term::map_data().apply(left))
-                                    .apply(Term::map_data().apply(right))
-                                    .if_then_else(Term::bool(false), Term::bool(true));
-
-                                return Some(term);
-                            }
-                            if tipo.is_pair() {
-                                let term = builtin
-                                    .apply(Term::map_data().apply(
-                                        Term::mk_cons().apply(left).apply(Term::empty_map()),
-                                    ))
-                                    .apply(Term::map_data().apply(
-                                        Term::mk_cons().apply(right).apply(Term::empty_map()),
-                                    ))
-                                    .if_then_else(Term::bool(false), Term::bool(true));
-                                return Some(term);
-                            }
-                            if tipo.is_list() || tipo.is_tuple() {
-                                let term = builtin
-                                    .apply(Term::list_data().apply(left))
-                                    .apply(Term::list_data().apply(right))
-                                    .if_then_else(Term::bool(false), Term::bool(true));
-                                return Some(term);
-                            }
-                            if tipo.is_void() {
-                                return Some(Term::bool(false));
-                            }
-
-                            builtin
-                                .apply(left)
-                                .apply(right)
-                                .if_then_else(Term::bool(false), Term::bool(true))
-                        }
-                        BinOp::LtInt => Term::Builtin(DefaultFunction::LessThanInteger)
-                            .apply(left)
-                            .apply(right),
-                        BinOp::LtEqInt => Term::Builtin(DefaultFunction::LessThanEqualsInteger)
-                            .apply(left)
-                            .apply(right),
-                        BinOp::GtEqInt => Term::Builtin(DefaultFunction::LessThanEqualsInteger)
-                            .apply(right)
-                            .apply(left),
-                        BinOp::GtInt => Term::Builtin(DefaultFunction::LessThanInteger)
-                            .apply(right)
-                            .apply(left),
-                        BinOp::AddInt => Term::add_integer().apply(left).apply(right),
-                        BinOp::SubInt => Term::Builtin(DefaultFunction::SubtractInteger)
-                            .apply(left)
-                            .apply(right),
-                        BinOp::MultInt => Term::Builtin(DefaultFunction::MultiplyInteger)
-                            .apply(left)
-                            .apply(right),
-                        BinOp::DivInt => Term::Builtin(DefaultFunction::DivideInteger)
-                            .apply(left)
-                            .apply(right),
-                        BinOp::ModInt => Term::Builtin(DefaultFunction::ModInteger)
-                            .apply(left)
-                            .apply(right),
-                    };
                 Some(term)
             }
             Air::DefineFunc {
@@ -4973,25 +4936,25 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 let subject = arg_stack.pop().unwrap();
 
-                let subject = if tipo.is_int()
-                    || tipo.is_bytearray()
-                    || tipo.is_string()
-                    || tipo.is_list()
-                    || tipo.is_tuple()
-                    || tipo.is_pair()
-                    || tipo.is_bool()
-                    || tipo.is_bls381_12_g1()
-                    || tipo.is_bls381_12_g2()
-                {
-                    subject
-                } else if tipo.is_ml_result() {
-                    unreachable!()
-                } else {
-                    Term::var(
+                let uplc_type = tipo.get_uplc_type();
+
+                let subject = match uplc_type {
+                    UplcType::Bool
+                    | UplcType::Integer
+                    | UplcType::String
+                    | UplcType::ByteString
+                    | UplcType::Unit
+                    | UplcType::List(_)
+                    | UplcType::Pair(_, _)
+                    | UplcType::Bls12_381G1Element
+                    | UplcType::Bls12_381G2Element
+                    | UplcType::Bls12_381MlResult => subject,
+                    UplcType::Data if tipo.is_data() => subject,
+                    UplcType::Data => Term::var(
                         self.special_functions
                             .use_function_uplc(CONSTR_INDEX_EXPOSER.to_string()),
                     )
-                    .apply(subject)
+                    .apply(subject),
                 };
 
                 let mut term = arg_stack.pop().unwrap();
@@ -5009,67 +4972,66 @@ impl<'a> CodeGenerator<'a> {
                 let clause = arg_stack.pop().unwrap();
 
                 // the body to be run if the clause matches
-                let mut body = arg_stack.pop().unwrap();
+                let body = arg_stack.pop().unwrap();
 
                 // the next branch in the when expression
-                let mut term = arg_stack.pop().unwrap();
+                let term = arg_stack.pop().unwrap();
 
-                if tipo.is_bool() {
-                    let other_clauses = if complex_clause {
-                        Term::var("__other_clauses_delayed")
-                    } else {
-                        term.clone().delay()
-                    };
+                let other_clauses = if complex_clause {
+                    Term::var("__other_clauses_delayed")
+                } else {
+                    term.clone().delay()
+                };
 
+                let body = if tipo.is_bool() {
                     if matches!(clause, Term::Constant(boolean) if matches!(boolean.as_ref(), UplcConstant::Bool(true)))
                     {
-                        body = Term::var(subject_name)
+                        Term::var(subject_name)
                             .if_then_else(body.delay(), other_clauses)
-                            .force();
+                            .force()
                     } else {
-                        body = Term::var(subject_name)
+                        Term::var(subject_name)
                             .if_then_else(other_clauses, body.delay())
-                            .force();
-                    }
-
-                    if complex_clause {
-                        term = body.lambda("__other_clauses_delayed").apply(term.delay());
-                    } else {
-                        term = body;
+                            .force()
                     }
                 } else {
-                    let condition = if tipo.is_int() {
-                        Term::equals_integer()
+                    let uplc_type = tipo.get_uplc_type();
+
+                    let condition = match uplc_type {
+                        UplcType::Bool
+                        | UplcType::Unit
+                        | UplcType::List(_)
+                        | UplcType::Pair(_, _)
+                        | UplcType::Bls12_381MlResult => unreachable!("{:#?}", tipo),
+                        UplcType::Integer => Term::equals_integer()
                             .apply(clause)
-                            .apply(Term::var(subject_name))
-                    } else if tipo.is_bytearray() {
-                        Term::equals_bytestring()
+                            .apply(Term::var(subject_name)),
+                        UplcType::String => Term::equals_string()
                             .apply(clause)
-                            .apply(Term::var(subject_name))
-                    } else if tipo.is_string() {
-                        Term::equals_string()
+                            .apply(Term::var(subject_name)),
+                        UplcType::ByteString => Term::equals_bytestring()
                             .apply(clause)
-                            .apply(Term::var(subject_name))
-                    } else if tipo.is_list() || tipo.is_tuple() || tipo.is_pair() {
-                        unreachable!("{:#?}", tipo)
-                    } else {
-                        Term::equals_integer()
+                            .apply(Term::var(subject_name)),
+                        UplcType::Data if tipo.is_data() => unimplemented!(),
+                        UplcType::Data => Term::equals_integer()
                             .apply(clause)
-                            .apply(Term::var(subject_name))
+                            .apply(Term::var(subject_name)),
+                        UplcType::Bls12_381G1Element => Term::bls12_381_g1_equal()
+                            .apply(clause)
+                            .apply(Term::var(subject_name)),
+                        UplcType::Bls12_381G2Element => Term::bls12_381_g2_equal()
+                            .apply(clause)
+                            .apply(Term::var(subject_name)),
                     };
 
-                    if complex_clause {
-                        term = condition
-                            .if_then_else(body.delay(), Term::var("__other_clauses_delayed"))
-                            .force()
-                            .lambda("__other_clauses_delayed")
-                            .apply(term.delay());
-                    } else {
-                        term = condition.delayed_if_then_else(body, term);
-                    }
-                }
+                    condition.if_then_else(body.delay(), other_clauses).force()
+                };
 
-                Some(term)
+                if complex_clause {
+                    Some(body.lambda("__other_clauses_delayed").apply(term.delay()))
+                } else {
+                    Some(body)
+                }
             }
             Air::ListClause {
                 tail_name,
@@ -5181,50 +5143,61 @@ impl<'a> CodeGenerator<'a> {
 
                 let then = arg_stack.pop().unwrap();
 
+                let term = Term::var("__other_clauses_delayed");
+
                 if tipo.is_bool() {
-                    let mut term = Term::var("__other_clauses_delayed");
                     if matches!(checker, Term::Constant(boolean) if matches!(boolean.as_ref(), UplcConstant::Bool(true)))
                     {
-                        term = Term::var(subject_name)
-                            .if_then_else(then.delay(), term)
-                            .force();
+                        Some(
+                            Term::var(subject_name)
+                                .if_then_else(then.delay(), term)
+                                .force(),
+                        )
                     } else {
-                        term = Term::var(subject_name)
-                            .if_then_else(term, then.delay())
-                            .force();
+                        Some(
+                            Term::var(subject_name)
+                                .if_then_else(term, then.delay())
+                                .force(),
+                        )
                     }
-                    Some(term)
                 } else if tipo.is_void() {
                     Some(then.lambda("_").apply(Term::var(subject_name)))
                 } else {
-                    let condition = if tipo.is_int() {
-                        Term::equals_integer()
+                    let uplc_type = tipo.get_uplc_type();
+
+                    let condition = match uplc_type {
+                        UplcType::Bool
+                        | UplcType::Unit
+                        | UplcType::List(_)
+                        | UplcType::Pair(_, _)
+                        | UplcType::Bls12_381MlResult => unreachable!("{:#?}", tipo),
+                        UplcType::Integer => Term::equals_integer()
                             .apply(checker)
-                            .apply(Term::var(subject_name))
-                    } else if tipo.is_bytearray() {
-                        Term::equals_bytestring()
+                            .apply(Term::var(subject_name)),
+                        UplcType::String => Term::equals_string()
                             .apply(checker)
-                            .apply(Term::var(subject_name))
-                    } else if tipo.is_string() {
-                        Term::equals_string()
+                            .apply(Term::var(subject_name)),
+                        UplcType::ByteString => Term::equals_bytestring()
                             .apply(checker)
-                            .apply(Term::var(subject_name))
-                    } else if tipo.is_list() || tipo.is_tuple() {
-                        unreachable!()
-                    } else {
-                        Term::equals_integer().apply(checker).apply(
+                            .apply(Term::var(subject_name)),
+
+                        UplcType::Data if tipo.is_data() => unimplemented!(),
+                        UplcType::Data => Term::equals_integer().apply(checker).apply(
                             Term::var(
                                 self.special_functions
                                     .use_function_uplc(CONSTR_INDEX_EXPOSER.to_string()),
                             )
                             .apply(Term::var(subject_name)),
-                        )
+                        ),
+                        UplcType::Bls12_381G1Element => Term::bls12_381_g1_equal()
+                            .apply(checker)
+                            .apply(Term::var(subject_name)),
+                        UplcType::Bls12_381G2Element => Term::bls12_381_g2_equal()
+                            .apply(checker)
+                            .apply(Term::var(subject_name)),
                     };
 
-                    let term = condition
-                        .if_then_else(then.delay(), Term::var("__other_clauses_delayed"))
-                        .force();
-                    Some(term)
+                    Some(condition.if_then_else(then.delay(), term).force())
                 }
             }
             Air::ListClauseGuard {

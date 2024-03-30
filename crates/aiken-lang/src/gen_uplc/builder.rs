@@ -359,38 +359,25 @@ pub fn handle_clause_guard(clause_guard: &TypedClauseGuard) -> AirTree {
 }
 
 pub fn get_generic_variant_name(t: &Rc<Type>) -> String {
-    if t.is_string() {
-        "_string".to_string()
-    } else if t.is_int() {
-        "_int".to_string()
-    } else if t.is_bool() {
-        "_bool".to_string()
-    } else if t.is_bytearray() {
-        "_bytearray".to_string()
-    } else if t.is_bls381_12_g1() {
-        "_bls381_12_g1".to_string()
-    } else if t.is_bls381_12_g2() {
-        "_bls381_12_g2".to_string()
-    } else if t.is_ml_result() {
-        "_ml_result".to_string()
-    } else if t.is_map() {
-        "_map".to_string()
-    } else if t.is_pair() {
-        "_pair".to_string()
-    } else if t.is_list() {
-        "_list".to_string()
-    } else if t.is_tuple() {
-        "_tuple".to_string()
-    } else if t.is_unbound() {
-        "_unbound".to_string()
-    } else {
-        let full_type = "_data".to_string();
+    let uplc_type = t.get_uplc_type();
 
-        if t.is_generic() {
-            panic!("FOUND A POLYMORPHIC TYPE. EXPECTED MONOMORPHIC TYPE");
+    match uplc_type {
+        UplcType::Bool => "_bool".to_string(),
+        UplcType::Integer => "_int".to_string(),
+        UplcType::String => "_string".to_string(),
+        UplcType::ByteString => "_bytearray".to_string(),
+        UplcType::Unit => "_void".to_string(),
+        UplcType::List(_) if t.is_map() => "_map".to_string(),
+        UplcType::List(_) => "_list".to_string(),
+        UplcType::Pair(_, _) => "_pair".to_string(),
+        UplcType::Bls12_381G1Element => "_bls381_12_g1".to_string(),
+        UplcType::Bls12_381G2Element => "_bls381_12_g2".to_string(),
+        UplcType::Bls12_381MlResult => "_ml_result".to_string(),
+        UplcType::Data if t.is_unbound() => "_unbound".to_string(),
+        UplcType::Data if t.is_generic() => {
+            unreachable!("FOUND A POLYMORPHIC TYPE. EXPECTED MONOMORPHIC TYPE")
         }
-
-        full_type
+        UplcType::Data => "_data".to_string(),
     }
 }
 
@@ -958,62 +945,54 @@ pub fn find_list_clause_or_default_first(clauses: &[TypedClause]) -> &TypedClaus
 }
 
 pub fn known_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
-    if field_type.is_int() {
-        Term::un_i_data().apply(term)
-    } else if field_type.is_bytearray() {
-        Term::un_b_data().apply(term)
-    } else if field_type.is_void() {
-        Term::unit().lambda("_").apply(term)
-    } else if field_type.is_map() {
-        Term::unmap_data().apply(term)
-    } else if field_type.is_string() {
-        Term::Builtin(DefaultFunction::DecodeUtf8).apply(Term::un_b_data().apply(term))
-    } else if field_type.is_pair() {
-        Term::mk_pair_data()
+    let uplc_type = field_type.get_uplc_type();
+
+    match uplc_type {
+        UplcType::Integer => Term::un_i_data().apply(term),
+        UplcType::ByteString => Term::un_b_data().apply(term),
+        UplcType::Bool => Term::less_than_integer()
+            .apply(Term::integer(0.into()))
+            .apply(Term::fst_pair().apply(Term::unconstr_data().apply(term))),
+        UplcType::String => Term::decode_utf8().apply(Term::un_b_data().apply(term)),
+        UplcType::Unit => Term::unit().lambda("_").apply(term),
+        UplcType::List(_) if field_type.is_map() => Term::unmap_data().apply(term),
+        UplcType::List(_) => Term::unlist_data().apply(term),
+        UplcType::Pair(_, _) => Term::mk_pair_data()
             .apply(Term::head_list().apply(Term::var("__list_data")))
             .apply(Term::head_list().apply(Term::tail_list().apply(Term::var("__list_data"))))
             .lambda("__list_data")
-            .apply(Term::unlist_data().apply(term))
-    } else if field_type.is_list() || field_type.is_tuple() {
-        Term::unlist_data().apply(term)
-    } else if field_type.is_bool() {
-        Term::less_than_integer()
-            .apply(Term::integer(0.into()))
-            .apply(Term::fst_pair().apply(Term::unconstr_data().apply(term)))
-    } else if field_type.is_bls381_12_g1() {
-        Term::bls12_381_g1_uncompress().apply(Term::un_b_data().apply(term))
-    } else if field_type.is_bls381_12_g2() {
-        Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(term))
-    } else if field_type.is_ml_result() {
-        panic!("ML Result not supported")
-    } else {
-        term
+            .apply(Term::unlist_data().apply(term)),
+        UplcType::Data if field_type.is_data() => term,
+        UplcType::Data => term,
+        UplcType::Bls12_381G1Element => {
+            Term::bls12_381_g1_uncompress().apply(Term::un_b_data().apply(term))
+        }
+        UplcType::Bls12_381G2Element => {
+            Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(term))
+        }
+        UplcType::Bls12_381MlResult => panic!("ML Result not supported"),
     }
 }
 
 pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
-    if field_type.is_int() {
-        Term::un_i_data().apply(term)
-    } else if field_type.is_bytearray() {
-        Term::un_b_data().apply(term)
-    } else if field_type.is_void() {
-        Term::equals_integer()
-            .apply(Term::integer(0.into()))
-            .apply(Term::fst_pair().apply(Term::var("__pair__")))
-            .delayed_if_then_else(
-                Term::snd_pair()
-                    .apply(Term::var("__pair__"))
-                    .delayed_choose_list(Term::unit(), Term::Error),
-                Term::Error,
-            )
-            .lambda("__pair__")
-            .apply(Term::unconstr_data().apply(term))
-    } else if field_type.is_map() {
-        Term::unmap_data().apply(term)
-    } else if field_type.is_string() {
-        Term::Builtin(DefaultFunction::DecodeUtf8).apply(Term::un_b_data().apply(term))
-    } else if field_type.is_pair() {
-        Term::tail_list()
+    let uplc_type = field_type.get_uplc_type();
+
+    match uplc_type {
+        UplcType::Integer => Term::un_i_data().apply(term),
+        UplcType::ByteString => Term::un_b_data().apply(term),
+        UplcType::String => Term::decode_utf8().apply(Term::un_b_data().apply(term)),
+        UplcType::List(_) if field_type.is_map() => Term::unmap_data().apply(term),
+        UplcType::List(_) => Term::unlist_data().apply(term),
+        UplcType::Data if field_type.is_data() => term,
+        UplcType::Data => term,
+        UplcType::Bls12_381G1Element => {
+            Term::bls12_381_g1_uncompress().apply(Term::un_b_data().apply(term))
+        }
+        UplcType::Bls12_381G2Element => {
+            Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(term))
+        }
+        UplcType::Bls12_381MlResult => panic!("ML Result not supported"),
+        UplcType::Pair(_, _) => Term::tail_list()
             .apply(Term::tail_list().apply(Term::var("__list_data")))
             .delayed_choose_list(
                 Term::mk_pair_data()
@@ -1024,11 +1003,8 @@ pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
                 Term::Error,
             )
             .lambda("__list_data")
-            .apply(Term::unlist_data().apply(term))
-    } else if field_type.is_list() || field_type.is_tuple() {
-        Term::unlist_data().apply(term)
-    } else if field_type.is_bool() {
-        Term::snd_pair()
+            .apply(Term::unlist_data().apply(term)),
+        UplcType::Bool => Term::snd_pair()
             .apply(Term::var("__pair__"))
             .delayed_choose_list(
                 Term::equals_integer()
@@ -1044,25 +1020,33 @@ pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
                 Term::Error,
             )
             .lambda("__pair__")
-            .apply(Term::unconstr_data().apply(term))
-    } else if field_type.is_bls381_12_g1() {
-        Term::bls12_381_g1_uncompress().apply(Term::un_b_data().apply(term))
-    } else if field_type.is_bls381_12_g2() {
-        Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(term))
-    } else if field_type.is_ml_result() {
-        panic!("ML Result not supported")
-    } else {
-        term
+            .apply(Term::unconstr_data().apply(term)),
+        UplcType::Unit => Term::equals_integer()
+            .apply(Term::integer(0.into()))
+            .apply(Term::fst_pair().apply(Term::var("__pair__")))
+            .delayed_if_then_else(
+                Term::snd_pair()
+                    .apply(Term::var("__pair__"))
+                    .delayed_choose_list(Term::unit(), Term::Error),
+                Term::Error,
+            )
+            .lambda("__pair__")
+            .apply(Term::unconstr_data().apply(term)),
     }
 }
 
+/// Due to the nature of the types BLS12_381_G1Element and BLS12_381_G2Element and String coming from bytearray
+/// We don't have error handling if the bytearray is not properly aligned to the type. Oh well lol
+/// For BLS12_381_G1Element and BLS12_381_G2Element, hash to group exists so just adopt that.
 pub fn unknown_data_to_type_debug(
     term: Term<Name>,
     field_type: &Type,
     error_term: Term<Name>,
 ) -> Term<Name> {
-    if field_type.is_int() {
-        Term::var("__val")
+    let uplc_type = field_type.get_uplc_type();
+
+    match uplc_type {
+        UplcType::Integer => Term::var("__val")
             .delayed_choose_data(
                 error_term.clone(),
                 error_term.clone(),
@@ -1071,9 +1055,8 @@ pub fn unknown_data_to_type_debug(
                 error_term.clone(),
             )
             .lambda("__val")
-            .apply(term)
-    } else if field_type.is_bytearray() {
-        Term::var("__val")
+            .apply(term),
+        UplcType::ByteString => Term::var("__val")
             .delayed_choose_data(
                 error_term.clone(),
                 error_term.clone(),
@@ -1082,28 +1065,19 @@ pub fn unknown_data_to_type_debug(
                 Term::un_b_data().apply(Term::var("__val")),
             )
             .lambda("__val")
-            .apply(term)
-    } else if field_type.is_void() {
-        Term::var("__val")
+            .apply(term),
+        UplcType::String => Term::var("__val")
             .delayed_choose_data(
-                Term::equals_integer()
-                    .apply(Term::integer(0.into()))
-                    .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("__val"))))
-                    .delayed_if_then_else(
-                        Term::snd_pair()
-                            .apply(Term::unconstr_data().apply(Term::var("__val")))
-                            .delayed_choose_list(Term::unit(), error_term.clone()),
-                        error_term.clone(),
-                    ),
                 error_term.clone(),
                 error_term.clone(),
                 error_term.clone(),
                 error_term.clone(),
+                Term::decode_utf8().apply(Term::un_b_data().apply(Term::var("__val"))),
             )
             .lambda("__val")
-            .apply(term)
-    } else if field_type.is_map() {
-        Term::var("__val")
+            .apply(term),
+
+        UplcType::List(_) if field_type.is_map() => Term::var("__val")
             .delayed_choose_data(
                 error_term.clone(),
                 Term::unmap_data().apply(Term::var("__val")),
@@ -1112,21 +1086,51 @@ pub fn unknown_data_to_type_debug(
                 error_term.clone(),
             )
             .lambda("__val")
-            .apply(term)
-    } else if field_type.is_string() {
-        Term::var("__val")
+            .apply(term),
+        UplcType::List(_) => Term::var("__val")
+            .delayed_choose_data(
+                error_term.clone(),
+                error_term.clone(),
+                Term::unlist_data().apply(Term::var("__val")),
+                error_term.clone(),
+                error_term.clone(),
+            )
+            .lambda("__val")
+            .apply(term),
+        UplcType::Data if field_type.is_data() => term,
+        // constr type
+        UplcType::Data => Term::var("__val")
+            .delayed_choose_data(
+                Term::var("__val"),
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+            )
+            .lambda("__val")
+            .apply(term),
+        UplcType::Bls12_381G1Element => Term::var("__val")
             .delayed_choose_data(
                 error_term.clone(),
                 error_term.clone(),
                 error_term.clone(),
                 error_term.clone(),
-                Term::Builtin(DefaultFunction::DecodeUtf8)
-                    .apply(Term::un_b_data().apply(Term::var("__val"))),
+                Term::bls12_381_g1_uncompress().apply(Term::un_b_data().apply(Term::var("__val"))),
             )
             .lambda("__val")
-            .apply(term)
-    } else if field_type.is_pair() {
-        Term::var("__val")
+            .apply(term),
+        UplcType::Bls12_381G2Element => Term::var("__val")
+            .delayed_choose_data(
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+                Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(Term::var("__val"))),
+            )
+            .lambda("__val")
+            .apply(term),
+        UplcType::Bls12_381MlResult => panic!("ML Result not supported"),
+        UplcType::Pair(_, _) => Term::var("__val")
             .delayed_choose_data(
                 error_term.clone(),
                 error_term.clone(),
@@ -1156,20 +1160,8 @@ pub fn unknown_data_to_type_debug(
                 error_term.clone(),
             )
             .lambda("__val")
-            .apply(term)
-    } else if field_type.is_list() || field_type.is_tuple() {
-        Term::var("__val")
-            .delayed_choose_data(
-                error_term.clone(),
-                error_term.clone(),
-                Term::unlist_data().apply(Term::var("__val")),
-                error_term.clone(),
-                error_term.clone(),
-            )
-            .lambda("__val")
-            .apply(term)
-    } else if field_type.is_bool() {
-        Term::var("__val")
+            .apply(term),
+        UplcType::Bool => Term::var("__val")
             .delayed_choose_data(
                 Term::snd_pair()
                     .apply(Term::var("__pair__"))
@@ -1194,44 +1186,25 @@ pub fn unknown_data_to_type_debug(
                 error_term.clone(),
             )
             .lambda("__val")
-            .apply(term)
-    } else if field_type.is_bls381_12_g1() {
-        Term::var("__val")
+            .apply(term),
+        UplcType::Unit => Term::var("__val")
             .delayed_choose_data(
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                Term::bls12_381_g1_uncompress().apply(Term::un_b_data().apply(Term::var("__val"))),
-            )
-            .lambda("__val")
-            .apply(term)
-    } else if field_type.is_bls381_12_g2() {
-        Term::var("__val")
-            .delayed_choose_data(
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(Term::var("__val"))),
-            )
-            .lambda("__val")
-            .apply(term)
-    } else if field_type.is_ml_result() {
-        panic!("ML Result not supported")
-    } else if field_type.is_data() {
-        term
-    } else {
-        Term::var("__val")
-            .delayed_choose_data(
-                Term::var("__val"),
+                Term::equals_integer()
+                    .apply(Term::integer(0.into()))
+                    .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("__val"))))
+                    .delayed_if_then_else(
+                        Term::snd_pair()
+                            .apply(Term::unconstr_data().apply(Term::var("__val")))
+                            .delayed_choose_list(Term::unit(), error_term.clone()),
+                        error_term.clone(),
+                    ),
                 error_term.clone(),
                 error_term.clone(),
                 error_term.clone(),
                 error_term.clone(),
             )
             .lambda("__val")
-            .apply(term)
+            .apply(term),
     }
 }
 
@@ -1323,25 +1296,24 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
 }
 
 pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Name> {
-    if field_type.is_bytearray() {
-        Term::b_data().apply(term)
-    } else if field_type.is_int() {
-        Term::i_data().apply(term)
-    } else if field_type.is_void() {
-        term.choose_unit(Term::Constant(
-            UplcConstant::Data(PlutusData::Constr(Constr {
-                tag: convert_constr_to_tag(0).unwrap(),
-                any_constructor: None,
-                fields: vec![],
-            }))
-            .into(),
-        ))
-    } else if field_type.is_map() {
-        Term::map_data().apply(term)
-    } else if field_type.is_string() {
-        Term::b_data().apply(Term::Builtin(DefaultFunction::EncodeUtf8).apply(term))
-    } else if field_type.is_pair() {
-        Term::list_data()
+    let uplc_type = field_type.get_uplc_type();
+
+    match uplc_type {
+        UplcType::Integer => Term::i_data().apply(term),
+        UplcType::String => Term::b_data().apply(Term::encode_utf8().apply(term)),
+        UplcType::ByteString => Term::b_data().apply(term),
+        UplcType::List(_) if field_type.is_map() => Term::map_data().apply(term),
+        UplcType::List(_) => Term::list_data().apply(term),
+        UplcType::Data if field_type.is_data() => term,
+        UplcType::Data => term,
+        UplcType::Bls12_381G1Element => {
+            Term::b_data().apply(Term::bls12_381_g1_compress().apply(term))
+        }
+        UplcType::Bls12_381G2Element => {
+            Term::b_data().apply(Term::bls12_381_g2_compress().apply(term))
+        }
+        UplcType::Bls12_381MlResult => panic!("ML Result not supported"),
+        UplcType::Pair(_, _) => Term::list_data()
             .apply(
                 Term::mk_cons()
                     .apply(Term::fst_pair().apply(Term::var("__pair")))
@@ -1352,11 +1324,18 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
                     ),
             )
             .lambda("__pair")
-            .apply(term)
-    } else if field_type.is_list() || field_type.is_tuple() {
-        Term::list_data().apply(term)
-    } else if field_type.is_bool() {
-        term.if_then_else(
+            .apply(term),
+        UplcType::Unit => Term::Constant(
+            UplcConstant::Data(PlutusData::Constr(Constr {
+                tag: convert_constr_to_tag(0).unwrap(),
+                any_constructor: None,
+                fields: vec![],
+            }))
+            .into(),
+        )
+        .lambda("_")
+        .apply(term),
+        UplcType::Bool => term.if_then_else(
             Term::Constant(
                 UplcConstant::Data(PlutusData::Constr(Constr {
                     tag: convert_constr_to_tag(1).unwrap(),
@@ -1373,15 +1352,7 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
                 }))
                 .into(),
             ),
-        )
-    } else if field_type.is_bls381_12_g1() {
-        Term::b_data().apply(Term::bls12_381_g1_compress().apply(term))
-    } else if field_type.is_bls381_12_g2() {
-        Term::b_data().apply(Term::bls12_381_g2_compress().apply(term))
-    } else if field_type.is_ml_result() {
-        panic!("ML Result not supported")
-    } else {
-        term
+        ),
     }
 }
 

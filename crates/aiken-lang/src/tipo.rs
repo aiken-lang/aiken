@@ -267,12 +267,21 @@ impl Type {
     }
 
     pub fn is_primitive(&self) -> bool {
-        self.is_bool()
-            || self.is_bytearray()
-            || self.is_int()
-            || self.is_string()
-            || self.is_void()
-            || self.is_data()
+        let uplc_type = self.get_uplc_type();
+        match uplc_type {
+            UplcType::Bool
+            | UplcType::Integer
+            | UplcType::String
+            | UplcType::ByteString
+            | UplcType::Unit
+            | UplcType::Bls12_381G1Element
+            | UplcType::Bls12_381G2Element
+            | UplcType::Bls12_381MlResult => true,
+
+            UplcType::Data if self.is_data() => true,
+            UplcType::Data => false,
+            UplcType::List(_) | UplcType::Pair(_, _) => false,
+        }
     }
 
     pub fn is_void(&self) -> bool {
@@ -475,7 +484,6 @@ impl Type {
         }
     }
 
-    // TODO: THIS WILL CHANGE DUE TO PAIRS
     pub fn get_uplc_type(&self) -> UplcType {
         if self.is_int() {
             UplcType::Integer
@@ -485,6 +493,8 @@ impl Type {
             UplcType::String
         } else if self.is_bool() {
             UplcType::Bool
+        } else if self.is_void() {
+            UplcType::Unit
         } else if self.is_map() {
             UplcType::List(UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()).into())
         } else if self.is_list() {
