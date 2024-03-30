@@ -3304,7 +3304,7 @@ fn acceptance_test_29_union_tuple() {
         src,
         Term::equals_data()
             .apply(
-                Term::map_data().apply(
+                Term::list_data().apply(
                     Term::var("union")
                         .lambda("union")
                         .apply(
@@ -3332,18 +3332,22 @@ fn acceptance_test_29_union_tuple() {
                                         )
                                         .lambda("v")
                                         .apply(
-                                            Term::un_i_data()
-                                                .apply(Term::snd_pair().apply(Term::var("pair"))),
+                                            Term::un_i_data().apply(Term::head_list().apply(
+                                                Term::tail_list().apply(Term::var("tuple")),
+                                            )),
                                         )
                                         .lambda("k")
                                         .apply(
                                             Term::un_b_data()
-                                                .apply(Term::fst_pair().apply(Term::var("pair"))),
+                                                .apply(Term::head_list().apply(Term::var("tuple"))),
                                         )
                                         .lambda("rest")
                                         .apply(Term::tail_list().apply(Term::var("left")))
-                                        .lambda("pair")
-                                        .apply(Term::head_list().apply(Term::var("left"))),
+                                        .lambda("tuple")
+                                        .apply(
+                                            Term::unlist_data()
+                                                .apply(Term::head_list().apply(Term::var("left"))),
+                                        ),
                                 )
                                 .lambda("right")
                                 .lambda("left")
@@ -3360,41 +3364,75 @@ fn acceptance_test_29_union_tuple() {
                                         .delayed_choose_list(
                                             Term::mk_cons()
                                                 .apply(
-                                                    Term::mk_pair_data()
-                                                        .apply(Term::b_data().apply(Term::var("k")))
-                                                        .apply(
-                                                            Term::i_data().apply(Term::var("v")),
-                                                        ),
+                                                    Term::list_data().apply(
+                                                        Term::mk_cons()
+                                                            .apply(
+                                                                Term::b_data()
+                                                                    .apply(Term::var("k")),
+                                                            )
+                                                            .apply(
+                                                                Term::mk_cons()
+                                                                    .apply(
+                                                                        Term::i_data()
+                                                                            .apply(Term::var("v")),
+                                                                    )
+                                                                    .apply(Term::empty_list()),
+                                                            ),
+                                                    ),
                                                 )
-                                                .apply(Term::empty_map()),
+                                                .apply(Term::empty_list()),
                                             Term::equals_bytestring()
                                                 .apply(Term::var("k"))
                                                 .apply(Term::var("k2"))
                                                 .delayed_if_then_else(
                                                     Term::mk_cons()
                                                         .apply(
-                                                            Term::mk_pair_data()
-                                                                .apply(
-                                                                    Term::b_data()
-                                                                        .apply(Term::var("k")),
-                                                                )
-                                                                .apply(
-                                                                    Term::i_data()
-                                                                        .apply(Term::var("v")),
-                                                                ),
+                                                            Term::list_data().apply(
+                                                                Term::mk_cons()
+                                                                    .apply(
+                                                                        Term::b_data()
+                                                                            .apply(Term::var("k")),
+                                                                    )
+                                                                    .apply(
+                                                                        Term::mk_cons()
+                                                                            .apply(
+                                                                                Term::i_data()
+                                                                                    .apply(
+                                                                                        Term::var(
+                                                                                            "v",
+                                                                                        ),
+                                                                                    ),
+                                                                            )
+                                                                            .apply(
+                                                                                Term::empty_list(),
+                                                                            ),
+                                                                    ),
+                                                            ),
                                                         )
                                                         .apply(Term::var("rest")),
                                                     Term::mk_cons()
                                                         .apply(
-                                                            Term::mk_pair_data()
-                                                                .apply(
-                                                                    Term::b_data()
-                                                                        .apply(Term::var("k2")),
-                                                                )
-                                                                .apply(
-                                                                    Term::i_data()
-                                                                        .apply(Term::var("v2")),
-                                                                ),
+                                                            Term::list_data().apply(
+                                                                Term::mk_cons()
+                                                                    .apply(
+                                                                        Term::b_data()
+                                                                            .apply(Term::var("k2")),
+                                                                    )
+                                                                    .apply(
+                                                                        Term::mk_cons()
+                                                                            .apply(
+                                                                                Term::i_data()
+                                                                                    .apply(
+                                                                                        Term::var(
+                                                                                            "v2",
+                                                                                        ),
+                                                                                    ),
+                                                                            )
+                                                                            .apply(
+                                                                                Term::empty_list(),
+                                                                            ),
+                                                                    ),
+                                                            ),
                                                         )
                                                         .apply(
                                                             Term::var("do_insert")
@@ -3404,16 +3442,20 @@ fn acceptance_test_29_union_tuple() {
                                                 )
                                                 .lambda("v2")
                                                 .apply(Term::un_i_data().apply(
-                                                    Term::snd_pair().apply(Term::var("pair")),
+                                                    Term::head_list().apply(
+                                                        Term::tail_list().apply(Term::var("tuple")),
+                                                    ),
                                                 ))
                                                 .lambda("k2")
                                                 .apply(Term::un_b_data().apply(
-                                                    Term::fst_pair().apply(Term::var("pair")),
+                                                    Term::head_list().apply(Term::var("tuple")),
                                                 ))
                                                 .lambda("rest")
                                                 .apply(Term::tail_list().apply(Term::var("elems")))
-                                                .lambda("pair")
-                                                .apply(Term::head_list().apply(Term::var("elems"))),
+                                                .lambda("tuple")
+                                                .apply(Term::unlist_data().apply(
+                                                    Term::head_list().apply(Term::var("elems")),
+                                                )),
                                         )
                                         .lambda("elems")
                                         .lambda("do_insert"),
@@ -3422,32 +3464,28 @@ fn acceptance_test_29_union_tuple() {
                                 .lambda("k")
                                 .lambda("elems"),
                         )
-                        .apply(Term::map_values(vec![
-                            Constant::ProtoPair(
-                                Type::Data,
-                                Type::Data,
-                                Constant::Data(Data::bytestring("foo".as_bytes().to_vec())).into(),
-                                Constant::Data(Data::integer(42.into())).into(),
-                            ),
-                            Constant::ProtoPair(
-                                Type::Data,
-                                Type::Data,
-                                Constant::Data(Data::bytestring("bar".as_bytes().to_vec())).into(),
-                                Constant::Data(Data::integer(14.into())).into(),
-                            ),
+                        .apply(Term::list_values(vec![
+                            Constant::Data(Data::list(vec![
+                                Data::bytestring("foo".as_bytes().to_vec()),
+                                Data::integer(42.into()),
+                            ])),
+                            Constant::Data(Data::list(vec![
+                                Data::bytestring("bar".as_bytes().to_vec()),
+                                Data::integer(14.into()),
+                            ])),
                         ]))
-                        .apply(Term::empty_map()),
+                        .apply(Term::empty_list()),
                 ),
             )
-            .apply(Term::data(Data::map(vec![
-                (
+            .apply(Term::data(Data::list(vec![
+                Data::list(vec![
                     Data::bytestring("foo".as_bytes().to_vec()),
                     Data::integer(42.into()),
-                ),
-                (
+                ]),
+                Data::list(vec![
                     Data::bytestring("bar".as_bytes().to_vec()),
                     Data::integer(14.into()),
-                ),
+                ]),
             ]))),
         false,
     );
