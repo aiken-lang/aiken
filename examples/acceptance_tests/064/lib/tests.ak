@@ -6,7 +6,7 @@ type Foo {
 }
 
 fn get_constr(data: Data) -> Int {
-  builtin.un_constr_data(data).1st
+  builtin.un_constr_data(data).fst
 }
 
 test foo() {
@@ -23,7 +23,7 @@ fn map(list: List<a>, f: fn(a) -> b) -> List<b> {
 }
 
 fn get_fields(data: Data) -> List<Int> {
-  builtin.un_constr_data(data).2nd
+  builtin.un_constr_data(data).snd
     |> map(builtin.un_i_data)
 }
 
