@@ -1880,9 +1880,9 @@ fn acceptance_test_19_map_wrap_void() {
                                     .apply(
                                         Term::mk_cons()
                                             .apply(
-                                                Term::var("f").apply(Term::var("a")).choose_unit(
-                                                    Term::data(Data::constr(0, vec![])),
-                                                ),
+                                                Term::data(Data::constr(0, vec![]))
+                                                    .lambda("_")
+                                                    .apply(Term::var("f").apply(Term::var("a"))),
                                             )
                                             .apply(Term::empty_list()),
                                     )
@@ -6173,7 +6173,7 @@ fn opaque_value_in_datum() {
       }
 
       opaque type Dict<v> {
-        inner: List<(ByteArray, v)>
+        inner: List<Pair<ByteArray, v>>
       }
 
       type Dat {
@@ -6186,9 +6186,9 @@ fn opaque_value_in_datum() {
         fn spend(dat: Dat, red: Data, ctx: Data) {
           let val = dat.a
 
-          expect [(_, amount)] = val.inner.inner
+          expect [Pair(_, amount)] = val.inner.inner
 
-          let final_amount = [(#"AA", 4)] |> Dict
+          let final_amount = [Pair(#"AA", 4)] |> Dict
 
           final_amount == amount
 
@@ -6278,7 +6278,7 @@ fn opaque_value_in_datum() {
         src,
         Term::var("val")
             .delayed_choose_list(
-                Term::Error.delayed_trace(Term::var("expect[(_,amount)]=val.inner.inner")),
+                Term::Error.delayed_trace(Term::var("expect[Pair(_,amount)]=val.inner.inner")),
                 Term::tail_list()
                     .apply(Term::var("val"))
                     .delayed_choose_list(
@@ -6297,7 +6297,8 @@ fn opaque_value_in_datum() {
                                 Term::unmap_data()
                                     .apply(Term::snd_pair().apply(Term::var("tuple_item_0"))),
                             ),
-                        Term::Error.delayed_trace(Term::var("expect[(_,amount)]=val.inner.inner")),
+                        Term::Error
+                            .delayed_trace(Term::var("expect[Pair(_,amount)]=val.inner.inner")),
                     )
                     .lambda("tuple_item_0")
                     .apply(Term::head_list().apply(Term::var("val"))),
@@ -6415,8 +6416,8 @@ fn opaque_value_in_datum() {
             )
             .lambda("dat")
             .constr_fields_exposer()
-            .lambda("expect[(_,amount)]=val.inner.inner")
-            .apply(Term::string("expect [(_, amount)] = val.inner.inner"))
+            .lambda("expect[Pair(_,amount)]=val.inner.inner")
+            .apply(Term::string("expect [Pair(_, amount)] = val.inner.inner"))
             .lambda("dat:Dat")
             .apply(Term::string("dat: Dat"))
             .constr_index_exposer(),
@@ -6432,7 +6433,7 @@ fn opaque_value_in_test() {
         }
 
         pub opaque type Dict<v> {
-          inner: List<(ByteArray, v)>
+          inner: List<Pair<ByteArray, v>>
         }
 
         pub type Dat {
@@ -6441,7 +6442,7 @@ fn opaque_value_in_test() {
         }
 
         pub fn dat_new() -> Dat {
-          let v = Value { inner: Dict { inner: [("", [(#"aa", 4)] |> Dict)] } }
+          let v = Value { inner: Dict { inner: [Pair("", [Pair(#"aa", 4)] |> Dict)] } }
           Dat {
             c: 0,
             a: v
@@ -6454,9 +6455,9 @@ fn opaque_value_in_test() {
 
           let val = dat.a
 
-          expect [(_, amount)] = val.inner.inner
+          expect [Pair(_, amount)] = val.inner.inner
 
-          let final_amount = [(#"AA", 4)] |> Dict
+          let final_amount = [Pair(#"AA", 4)] |> Dict
 
           final_amount == amount
         }
@@ -6466,7 +6467,7 @@ fn opaque_value_in_test() {
         src,
         Term::var("val")
             .delayed_choose_list(
-                Term::Error.delayed_trace(Term::var("expect[(_,amount)]=val.inner.inner")),
+                Term::Error.delayed_trace(Term::var("expect[Pair(_,amount)]=val.inner.inner")),
                 Term::tail_list()
                     .apply(Term::var("val"))
                     .delayed_choose_list(
@@ -6485,7 +6486,8 @@ fn opaque_value_in_test() {
                                 Term::unmap_data()
                                     .apply(Term::snd_pair().apply(Term::var("tuple_item_0"))),
                             ),
-                        Term::Error.delayed_trace(Term::var("expect[(_,amount)]=val.inner.inner")),
+                        Term::Error
+                            .delayed_trace(Term::var("expect[Pair(_,amount)]=val.inner.inner")),
                     )
                     .lambda("tuple_item_0")
                     .apply(Term::head_list().apply(Term::var("val"))),
@@ -6519,8 +6521,8 @@ fn opaque_value_in_test() {
                 )]))
                 .into(),
             )]))
-            .lambda("expect[(_,amount)]=val.inner.inner")
-            .apply(Term::string("expect [(_, amount)] = val.inner.inner"))
+            .lambda("expect[Pair(_,amount)]=val.inner.inner")
+            .apply(Term::string("expect [Pair(_, amount)] = val.inner.inner"))
             .constr_fields_exposer(),
         false,
     );
@@ -6561,8 +6563,8 @@ fn head_list_on_map() {
         use aiken/builtin
 
         test exp_none() {
-          let x = [(1, ""), (2, #"aa")]
-          builtin.head_list(x) == (1, "")
+          let x = [Pair(1, ""), Pair(2, #"aa")]
+          builtin.head_list(x) == Pair(1, "")
         }
   "#;
 
