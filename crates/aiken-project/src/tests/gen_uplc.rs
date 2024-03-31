@@ -4387,7 +4387,7 @@ fn record_update_output_2_vals() {
 
       type Output {
         address: Address,
-        value: List<(ByteArray, List<(ByteArray, Int)>)>,
+        value: List<Pair<ByteArray, List<Pair<ByteArray, Int>>>>,
         datum: Datum,
         script_ref: Option<ByteArray>,
       }
@@ -4489,7 +4489,7 @@ fn record_update_output_1_val() {
 
       type Output {
         address: Address,
-        value: List<(ByteArray, List<(ByteArray, Int)>)>,
+        value: List<Pair<ByteArray, List<Pair<ByteArray, Int>>>>,
         datum: Datum,
         script_ref: Option<ByteArray>,
       }
@@ -4590,7 +4590,7 @@ fn record_update_output_first_last_val() {
 
       type Output {
         address: Address,
-        value: List<(ByteArray, List<(ByteArray, Int)>)>,
+        value: List<Pair<ByteArray, List<Pair<ByteArray, Int>>>>,
         datum: Datum,
         script_ref: Option<ByteArray>,
       }
