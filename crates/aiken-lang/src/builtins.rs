@@ -5,8 +5,8 @@ use crate::{
     },
     expr::TypedExpr,
     tipo::{
-        fields::FieldMap, Type, TypeAliasAnnotation, TypeConstructor, TypeInfo, TypeVar,
-        ValueConstructor, ValueConstructorVariant,
+        fields::FieldMap, AccessorsMap, RecordAccessor, Type, TypeAliasAnnotation, TypeConstructor,
+        TypeInfo, TypeVar, ValueConstructor, ValueConstructorVariant,
     },
     IdGenerator,
 };
@@ -347,7 +347,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         ValueConstructor::public(
             function(
                 vec![fst_parameter.clone(), snd_parameter.clone()],
-                pair(fst_parameter, snd_parameter),
+                pair(fst_parameter.clone(), snd_parameter.clone()),
             ),
             ValueConstructorVariant::Record {
                 module: "".into(),
@@ -362,6 +362,34 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
                 constructors_count: 1,
             },
         ),
+    );
+
+    let mut accessors = HashMap::new();
+    accessors.insert(
+        "fst".to_string(),
+        RecordAccessor {
+            index: 0,
+            label: "fst".to_string(),
+            tipo: fst_parameter.clone(),
+        },
+    );
+
+    accessors.insert(
+        "snd".to_string(),
+        RecordAccessor {
+            index: 1,
+            label: "snd".to_string(),
+            tipo: snd_parameter.clone(),
+        },
+    );
+
+    prelude.accessors.insert(
+        PAIR.to_string(),
+        AccessorsMap {
+            public: true,
+            tipo: pair(fst_parameter.clone(), snd_parameter.clone()),
+            accessors,
+        },
     );
 
     // String
@@ -702,7 +730,7 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             (tipo, 2)
         }
         DefaultFunction::MapData => {
-            let tipo = function(vec![list(tuple(vec![data(), data()]))], data());
+            let tipo = function(vec![list(pair(data(), data()))], data());
 
             (tipo, 1)
         }
@@ -722,12 +750,12 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             (tipo, 1)
         }
         DefaultFunction::UnConstrData => {
-            let tipo = function(vec![data()], tuple(vec![int(), list(data())]));
+            let tipo = function(vec![data()], pair(int(), list(data())));
 
             (tipo, 1)
         }
         DefaultFunction::UnMapData => {
-            let tipo = function(vec![data()], list(tuple(vec![data(), data()])));
+            let tipo = function(vec![data()], list(pair(data(), data())));
 
             (tipo, 1)
         }
@@ -772,7 +800,7 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             (tipo, 6)
         }
         DefaultFunction::MkPairData => {
-            let tipo = function(vec![data(), data()], tuple(vec![data(), data()]));
+            let tipo = function(vec![data(), data()], pair(data(), data()));
             (tipo, 2)
         }
         DefaultFunction::MkNilData => {
@@ -780,7 +808,7 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             (tipo, 0)
         }
         DefaultFunction::MkNilPairData => {
-            let tipo = function(vec![], list(tuple(vec![data(), data()])));
+            let tipo = function(vec![], list(pair(data(), data())));
             (tipo, 0)
         }
         DefaultFunction::ChooseUnit => {
@@ -796,13 +824,13 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
         DefaultFunction::FstPair => {
             let a = generic_var(id_gen.next());
             let b = generic_var(id_gen.next());
-            let tipo = function(vec![tuple(vec![a.clone(), b])], a);
+            let tipo = function(vec![pair(a.clone(), b)], a);
             (tipo, 1)
         }
         DefaultFunction::SndPair => {
             let a = generic_var(id_gen.next());
             let b = generic_var(id_gen.next());
-            let tipo = function(vec![tuple(vec![a, b.clone()])], b);
+            let tipo = function(vec![pair(a, b.clone())], b);
             (tipo, 1)
         }
         DefaultFunction::ChooseList => {

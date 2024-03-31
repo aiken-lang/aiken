@@ -837,7 +837,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 .get(module)
                 .and_then(|module| module.accessors.get(name)),
 
-            _something_without_fields => return Err(unknown_field(vec![])),
+            Type::Pair { .. } => self.environment.accessors.get("Pair"),
+
+            _something_without_fields => {
+                return Err(unknown_field(vec![]));
+            }
         }
         .ok_or_else(|| unknown_field(vec![]))?;
 
