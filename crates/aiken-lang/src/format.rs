@@ -957,9 +957,7 @@ impl<'comments> Formatter<'comments> {
                 kind, text, then, ..
             } => self.trace(kind, text, then),
 
-            UntypedExpr::Emit {
-                text, then, ..
-            } => self.emit(text, then),
+            UntypedExpr::Emit { text, then, .. } => self.emit(text, then),
 
             UntypedExpr::When {
                 subject, clauses, ..
@@ -1049,23 +1047,18 @@ impl<'comments> Formatter<'comments> {
         }
     }
 
-    pub fn emit<'a>(
-        &mut self,
-        text: &'a UntypedExpr,
-        then: &'a UntypedExpr,
-    ) -> Document<'a> {
+    pub fn emit<'a>(&mut self, text: &'a UntypedExpr, then: &'a UntypedExpr) -> Document<'a> {
         let body = "emit"
-                .to_doc()
-                .append(" ")
-                .append(self.wrap_expr(text))
-                .group();
-        body
-                .append(if self.pop_empty_lines(then.start_byte_index()) {
-                    lines(2)
-                } else {
-                    line()
-                })
-                .append(self.expr(then, true))
+            .to_doc()
+            .append(" ")
+            .append(self.wrap_expr(text))
+            .group();
+        body.append(if self.pop_empty_lines(then.start_byte_index()) {
+            lines(2)
+        } else {
+            line()
+        })
+        .append(self.expr(then, true))
     }
 
     pub fn pattern_constructor<'a>(

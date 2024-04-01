@@ -371,7 +371,7 @@ impl TypedExpr {
                 .find_node(byte_index)
                 .or_else(|| then.find_node(byte_index))
                 .or(Some(Located::Expression(self))),
-            
+
             TypedExpr::Emit { text, then, .. } => text
                 .find_node(byte_index)
                 .or_else(|| then.find_node(byte_index))
@@ -1307,7 +1307,9 @@ impl UntypedExpr {
                 .map(|e| e.start_byte_index())
                 .unwrap_or(location.start),
             Self::PipeLine { expressions, .. } => expressions.first().start_byte_index(),
-            Self::Trace { location, .. } | Self::Emit{ location, .. } | Self::Assignment { location, .. } => location.start,
+            Self::Trace { location, .. }
+            | Self::Emit { location, .. }
+            | Self::Assignment { location, .. } => location.start,
             _ => self.location().start,
         }
     }
