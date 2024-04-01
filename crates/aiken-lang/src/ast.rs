@@ -1732,6 +1732,7 @@ pub enum TraceKind {
     Trace,
     Todo,
     Error,
+    Emit,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
