@@ -639,7 +639,7 @@ impl<'comments> Formatter<'comments> {
     ) -> Document<'a> {
         let args = wrap_args(args.iter().map(|e| (self.fn_arg(e), false))).group();
         let body = match body {
-            UntypedExpr::Trace { .. } | UntypedExpr::Emit { .. } | UntypedExpr::When { .. } => {
+            UntypedExpr::Trace { .. } | UntypedExpr::When { .. } => {
                 self.expr(body, true).force_break()
             }
             _ => self.expr(body, true),
@@ -957,8 +957,6 @@ impl<'comments> Formatter<'comments> {
                 kind, text, then, ..
             } => self.trace(kind, text, then),
 
-            UntypedExpr::Emit { text, then, .. } => self.emit(text, then),
-
             UntypedExpr::When {
                 subject, clauses, ..
             } => self.when(subject, clauses),
@@ -1022,6 +1020,7 @@ impl<'comments> Formatter<'comments> {
             TraceKind::Trace => ("trace", None),
             TraceKind::Error => ("fail", Some(DEFAULT_ERROR_STR.to_string())),
             TraceKind::Todo => ("todo", Some(DEFAULT_TODO_STR.to_string())),
+            TraceKind::Emit => ("emit", None),
         };
 
         let body = match text {
@@ -1037,7 +1036,7 @@ impl<'comments> Formatter<'comments> {
 
         match kind {
             TraceKind::Error | TraceKind::Todo => body,
-            TraceKind::Trace => body
+            TraceKind::Trace | TraceKind::Emit => body
                 .append(if self.pop_empty_lines(then.start_byte_index()) {
                     lines(2)
                 } else {
@@ -1045,20 +1044,6 @@ impl<'comments> Formatter<'comments> {
                 })
                 .append(self.expr(then, true)),
         }
-    }
-
-    pub fn emit<'a>(&mut self, text: &'a UntypedExpr, then: &'a UntypedExpr) -> Document<'a> {
-        let body = "emit"
-            .to_doc()
-            .append(" ")
-            .append(self.wrap_expr(text))
-            .group();
-        body.append(if self.pop_empty_lines(then.start_byte_index()) {
-            lines(2)
-        } else {
-            line()
-        })
-        .append(self.expr(then, true))
     }
 
     pub fn pattern_constructor<'a>(
@@ -1675,7 +1660,6 @@ impl<'comments> Formatter<'comments> {
                 kind: TraceKind::Trace,
                 ..
             }
-            | UntypedExpr::Emit { .. }
             | UntypedExpr::Sequence { .. }
             | UntypedExpr::Assignment { .. } => "{"
                 .to_doc()
@@ -1718,7 +1702,6 @@ impl<'comments> Formatter<'comments> {
                 kind: TraceKind::Trace,
                 ..
             }
-            | UntypedExpr::Emit { .. }
             | UntypedExpr::Sequence { .. }
             | UntypedExpr::Assignment { .. } => " {"
                 .to_doc()
