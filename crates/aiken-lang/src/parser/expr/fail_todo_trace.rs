@@ -36,6 +36,14 @@ pub fn parser<'a>(
                 then: Box::new(then_.unwrap_or_else(|| UntypedExpr::todo(None, span))),
                 text: Box::new(text),
             }),
+        just(Token::Emit)
+            .ignore_then(choice((string::hybrid(), expression.clone())))
+            .then(sequence.clone().or_not())
+            .map_with_span(|(text, then_), span| UntypedExpr::Emit {
+                location: span,
+                then: Box::new(then_.unwrap_or_else(|| UntypedExpr::todo(None, span))),
+                text: Box::new(text),
+            }),
     ))
 }
 

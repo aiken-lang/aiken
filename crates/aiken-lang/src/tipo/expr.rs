@@ -281,6 +281,22 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 kind,
             } => self.infer_trace(kind, *then, location, *text),
 
+            UntypedExpr::Emit {
+                location,
+                then,
+                text,
+            } => {
+                let text = self.infer(*text)?;
+                self.unify(string(), text.tipo(), text.location(), false)?;
+                let then = self.infer(*then)?;
+                Ok(TypedExpr::Emit {
+                    location,
+                    tipo: then.tipo(),
+                    then: Box::new(then),
+                    text: Box::new(text),
+                })
+            }
+
             UntypedExpr::When {
                 location,
                 subject,
@@ -2324,7 +2340,7 @@ fn assert_no_assignment(expr: &UntypedExpr) -> Result<(), Error> {
             location: expr.location(),
             expr: *value.clone(),
         }),
-        UntypedExpr::Trace { then, .. } => assert_no_assignment(then),
+        UntypedExpr::Trace { then, .. } | UntypedExpr::Emit { then, .. } => assert_no_assignment(then),
         UntypedExpr::Fn { .. }
         | UntypedExpr::BinOp { .. }
         | UntypedExpr::ByteArray { .. }

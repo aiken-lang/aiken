@@ -116,6 +116,13 @@ pub enum TypedExpr {
         text: Box<Self>,
     },
 
+    Emit {
+        location: Span,
+        tipo: Rc<Type>,
+        then: Box<Self>,
+        text: Box<Self>,
+    },
+
     When {
         location: Span,
         tipo: Rc<Type>,
@@ -196,6 +203,7 @@ impl TypedExpr {
         match self {
             Self::Var { constructor, .. } => constructor.tipo.clone(),
             Self::Trace { then, .. } => then.tipo(),
+            Self::Emit { then, .. } => then.tipo(),
             Self::Fn { tipo, .. }
             | Self::UInt { tipo, .. }
             | Self::ErrorTerm { tipo, .. }
@@ -241,6 +249,7 @@ impl TypedExpr {
             TypedExpr::Fn { .. }
             | TypedExpr::UInt { .. }
             | TypedExpr::Trace { .. }
+            | TypedExpr::Emit { .. }
             | TypedExpr::List { .. }
             | TypedExpr::Call { .. }
             | TypedExpr::When { .. }
@@ -283,6 +292,7 @@ impl TypedExpr {
             | Self::UInt { location, .. }
             | Self::Var { location, .. }
             | Self::Trace { location, .. }
+            | Self::Emit { location, .. }
             | Self::ErrorTerm { location, .. }
             | Self::When { location, .. }
             | Self::Call { location, .. }
@@ -318,6 +328,7 @@ impl TypedExpr {
             Self::Fn { location, .. }
             | Self::UInt { location, .. }
             | Self::Trace { location, .. }
+            | Self::Emit { location, .. }
             | Self::Var { location, .. }
             | Self::ErrorTerm { location, .. }
             | Self::When { location, .. }
@@ -357,6 +368,11 @@ impl TypedExpr {
             | TypedExpr::CurvePoint { .. } => Some(Located::Expression(self)),
 
             TypedExpr::Trace { text, then, .. } => text
+                .find_node(byte_index)
+                .or_else(|| then.find_node(byte_index))
+                .or(Some(Located::Expression(self))),
+            
+            TypedExpr::Emit { text, then, .. } => text
                 .find_node(byte_index)
                 .or_else(|| then.find_node(byte_index))
                 .or(Some(Located::Expression(self))),
@@ -524,6 +540,12 @@ pub enum UntypedExpr {
 
     Trace {
         kind: TraceKind,
+        location: Span,
+        then: Box<Self>,
+        text: Box<Self>,
+    },
+
+    Emit {
         location: Span,
         then: Box<Self>,
         text: Box<Self>,
@@ -1240,6 +1262,7 @@ impl UntypedExpr {
         match self {
             Self::PipeLine { expressions, .. } => expressions.last().location(),
             Self::Trace { then, .. } => then.location(),
+            Self::Emit { then, .. } => then.location(),
             Self::TraceIfFalse { location, .. }
             | Self::Fn { location, .. }
             | Self::Var { location, .. }
@@ -1279,7 +1302,7 @@ impl UntypedExpr {
                 .map(|e| e.start_byte_index())
                 .unwrap_or(location.start),
             Self::PipeLine { expressions, .. } => expressions.first().start_byte_index(),
-            Self::Trace { location, .. } | Self::Assignment { location, .. } => location.start,
+            Self::Trace { location, .. } | Self::Emit{ location, .. } | Self::Assignment { location, .. } => location.start,
             _ => self.location().start,
         }
     }

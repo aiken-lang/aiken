@@ -198,6 +198,9 @@ pub enum Air {
     Trace {
         tipo: Rc<Type>,
     },
+    Emit {
+        tipo: Rc<Type>,
+    },
     NoOp,
     FieldsEmpty,
     ListEmpty,

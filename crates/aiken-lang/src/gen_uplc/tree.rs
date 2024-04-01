@@ -354,6 +354,11 @@ pub enum AirTree {
         msg: Box<AirTree>,
         then: Box<AirTree>,
     },
+    Emit {
+        tipo: Rc<Type>,
+        msg: Box<AirTree>,
+        then: Box<AirTree>,
+    },
     // End Expressions
 }
 
@@ -825,6 +830,13 @@ impl AirTree {
     }
     pub fn trace(msg: AirTree, tipo: Rc<Type>, then: AirTree) -> AirTree {
         AirTree::Trace {
+            tipo,
+            msg: msg.into(),
+            then: then.into(),
+        }
+    }
+    pub fn emit(msg: AirTree, tipo: Rc<Type>, then: AirTree) -> AirTree {
+        AirTree::Emit {
             tipo,
             msg: msg.into(),
             then: then.into(),
@@ -1379,6 +1391,11 @@ impl AirTree {
                 msg.create_air_vec(air_vec);
                 then.create_air_vec(air_vec);
             }
+            AirTree::Emit { tipo, msg, then } => {
+                air_vec.push(Air::Emit { tipo: tipo.clone() });
+                msg.create_air_vec(air_vec);
+                then.create_air_vec(air_vec);
+            }
         }
     }
 
@@ -1400,7 +1417,8 @@ impl AirTree {
             | AirTree::Constr { tipo, .. }
             | AirTree::RecordUpdate { tipo, .. }
             | AirTree::ErrorTerm { tipo, .. }
-            | AirTree::Trace { tipo, .. } => tipo.clone(),
+            | AirTree::Trace { tipo, .. }
+            | AirTree::Emit { tipo, .. } => tipo.clone(),
             AirTree::Void => void(),
             AirTree::Var { constructor, .. } => constructor.tipo.clone(),
             AirTree::Fn { func_body, .. } => func_body.return_type(),
@@ -1456,7 +1474,8 @@ impl AirTree {
             | AirTree::If { tipo, .. }
             | AirTree::Constr { tipo, .. }
             | AirTree::ErrorTerm { tipo, .. }
-            | AirTree::Trace { tipo, .. } => vec![tipo],
+            | AirTree::Trace { tipo, .. }
+            | AirTree::Emit { tipo, .. } => vec![tipo],
             AirTree::Var { constructor, .. } => {
                 vec![constructor.tipo.borrow_mut()]
             }
@@ -1940,6 +1959,23 @@ impl AirTree {
                     apply_with_func_last,
                 );
             }
+            AirTree::Emit { msg, then, .. } => {
+                msg.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
             AirTree::DefineFunc {
                 func_body, then, ..
             } => {
@@ -2276,6 +2312,15 @@ impl AirTree {
                     item.do_find_air_tree_node(tree_path_iter)
                 }
                 AirTree::Trace { msg, then, .. } => {
+                    if *index == 0 {
+                        msg.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
+                    }
+                }
+                AirTree::Emit { msg, then, .. } => {
                     if *index == 0 {
                         msg.as_mut().do_find_air_tree_node(tree_path_iter)
                     } else if *index == 1 {
