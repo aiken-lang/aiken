@@ -3726,14 +3726,16 @@ fn when_tuple_deconstruction() {
             .lambda("other_clauses")
             .apply(Term::bool(true).delay())
             .lambda("dat")
-            .apply(Term::fst_pair().apply(Term::var("pair_subject")))
+            .apply(Term::head_list().apply(Term::var("pair_subject")))
             .lambda("red")
-            .apply(Term::snd_pair().apply(Term::var("pair_subject")))
+            .apply(Term::head_list().apply(Term::tail_list().apply(Term::var("pair_subject"))))
             .lambda("pair_subject")
             .apply(
-                Term::mk_pair_data()
-                    .apply(Term::var("dat"))
-                    .apply(Term::var("red")),
+                Term::mk_cons().apply(Term::var("dat")).apply(
+                    Term::mk_cons()
+                        .apply(Term::var("red"))
+                        .apply(Term::empty_list()),
+                ),
             )
             .delayed_if_then_else(
                 Term::unit(),
@@ -4017,19 +4019,22 @@ fn when_tuple_empty_lists() {
                             .delay(),
                     )
                     .lambda("bucket_tuple_snd")
-                    .apply(
-                        Term::unlist_data()
-                            .apply(Term::snd_pair().apply(Term::var("bucket_tuple"))),
-                    )
+                    .apply(Term::unlist_data().apply(
+                        Term::head_list().apply(Term::tail_list().apply(Term::var("bucket_tuple"))),
+                    ))
                     .delay(),
             )
             .lambda("bucket_tuple_fst")
-            .apply(Term::unlist_data().apply(Term::fst_pair().apply(Term::var("bucket_tuple"))))
+            .apply(Term::unlist_data().apply(Term::head_list().apply(Term::var("bucket_tuple"))))
             .lambda("bucket_tuple")
             .apply(
-                Term::mk_pair_data()
+                Term::mk_cons()
                     .apply(Term::list_data().apply(Term::var("bucket1")))
-                    .apply(Term::list_data().apply(Term::var("bucket2"))),
+                    .apply(
+                        Term::mk_cons()
+                            .apply(Term::list_data().apply(Term::var("bucket2")))
+                            .apply(Term::empty_list()),
+                    ),
             )
             .lambda("bucket2")
             .apply(Term::list_values(vec![
@@ -6673,34 +6678,19 @@ fn tuple_2_match() {
                                     .lambda("x2")
                                     .apply(
                                         Term::un_i_data().apply(
-                                            Term::fst_pair().apply(Term::var("field_0_pair")),
+                                            Term::head_list().apply(Term::var("field_0_pair")),
                                         ),
                                     )
                                     .lambda("y2")
-                                    .apply(
-                                        Term::un_i_data().apply(
-                                            Term::snd_pair().apply(Term::var("field_0_pair")),
+                                    .apply(Term::un_i_data().apply(
+                                        Term::head_list().apply(
+                                            Term::tail_list().apply(Term::var("field_0_pair")),
                                         ),
-                                    )
+                                    ))
                                     .lambda("field_0_pair")
-                                    .apply(
-                                        Term::mk_pair_data()
-                                            .apply(
-                                                Term::head_list().apply(Term::var("__list_data")),
-                                            )
-                                            .apply(Term::head_list().apply(Term::var("__tail")))
-                                            .lambda("__tail")
-                                            .apply(
-                                                Term::tail_list().apply(Term::var("__list_data")),
-                                            )
-                                            .lambda("__list_data")
-                                            .apply(
-                                                Term::unlist_data().apply(
-                                                    Term::head_list()
-                                                        .apply(Term::var("tuple_index_1_fields")),
-                                                ),
-                                            ),
-                                    )
+                                    .apply(Term::unlist_data().apply(
+                                        Term::head_list().apply(Term::var("tuple_index_1_fields")),
+                                    ))
                                     .lambda("tuple_index_1_fields")
                                     .apply(
                                         Term::var(CONSTR_FIELDS_EXPOSER)
@@ -6713,24 +6703,20 @@ fn tuple_2_match() {
                             .lambda("x1")
                             .apply(
                                 Term::un_i_data()
-                                    .apply(Term::fst_pair().apply(Term::var("field_0_pair"))),
+                                    .apply(Term::head_list().apply(Term::var("field_0_pair"))),
                             )
                             .lambda("y1")
                             .apply(
-                                Term::un_i_data()
-                                    .apply(Term::snd_pair().apply(Term::var("field_0_pair"))),
+                                Term::un_i_data().apply(
+                                    Term::head_list()
+                                        .apply(Term::tail_list().apply(Term::var("field_0_pair"))),
+                                ),
                             )
                             .lambda("field_0_pair")
                             .apply(
-                                Term::mk_pair_data()
-                                    .apply(Term::head_list().apply(Term::var("__list_data")))
-                                    .apply(Term::head_list().apply(Term::var("__tail")))
-                                    .lambda("__tail")
-                                    .apply(Term::tail_list().apply(Term::var("__list_data")))
-                                    .lambda("__list_data")
-                                    .apply(Term::unlist_data().apply(
-                                        Term::head_list().apply(Term::var("tuple_index_0_fields")),
-                                    )),
+                                Term::unlist_data().apply(
+                                    Term::head_list().apply(Term::var("tuple_index_0_fields")),
+                                ),
                             )
                             .lambda("tuple_index_0_fields")
                             .apply(
@@ -6794,14 +6780,16 @@ fn tuple_2_match() {
                             .delay(),
                     )
                     .lambda("tuple_index_0")
-                    .apply(Term::fst_pair().apply(Term::var("input")))
+                    .apply(Term::head_list().apply(Term::var("input")))
                     .lambda("tuple_index_1")
-                    .apply(Term::snd_pair().apply(Term::var("input")))
+                    .apply(Term::head_list().apply(Term::tail_list().apply(Term::var("input"))))
                     .lambda("input")
                     .apply(
-                        Term::mk_pair_data()
-                            .apply(Term::var("ec1"))
-                            .apply(Term::var("ec2")),
+                        Term::mk_cons().apply(Term::var("ec1")).apply(
+                            Term::mk_cons()
+                                .apply(Term::var("ec2"))
+                                .apply(Term::empty_list()),
+                        ),
                     )
                     .lambda("ec2")
                     .lambda("ec1"),
