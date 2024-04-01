@@ -89,6 +89,7 @@ pub enum Token {
     Type,
     When,
     Trace,
+    Emit,
     Validator,
     Via,
 }
@@ -175,6 +176,7 @@ impl fmt::Display for Token {
             Token::Pub => "pub",
             Token::Todo => "todo",
             Token::Trace => "trace",
+            Token::Emit => "emit",
             Token::Type => "type",
             Token::Test => "test",
             Token::Fail => "fail",
