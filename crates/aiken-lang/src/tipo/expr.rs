@@ -2340,7 +2340,9 @@ fn assert_no_assignment(expr: &UntypedExpr) -> Result<(), Error> {
             location: expr.location(),
             expr: *value.clone(),
         }),
-        UntypedExpr::Trace { then, .. } | UntypedExpr::Emit { then, .. } => assert_no_assignment(then),
+        UntypedExpr::Trace { then, .. } | UntypedExpr::Emit { then, .. } => {
+            assert_no_assignment(then)
+        }
         UntypedExpr::Fn { .. }
         | UntypedExpr::BinOp { .. }
         | UntypedExpr::ByteArray { .. }
