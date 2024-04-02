@@ -1133,7 +1133,7 @@ impl<'a> Environment<'a> {
         let mut field_map = FieldMap::new(arguments.len(), true);
 
         for (i, arg) in arguments.iter().enumerate() {
-            field_map.insert(arg.arg_name.get_label().clone(), i, &arg.location)?;
+            field_map.insert(arg.arg_name.get_label(), i, &arg.location)?;
         }
         let field_map = field_map.into_option();
 
