@@ -2,13 +2,15 @@
 
 ## v1.0.27-alpha - unreleased
 
-### Fixed
-
-- **aiken-lang**: formatter should not erase `pub` on validators. @rvcas
-
 ### Added
 
 - **aiken-lsp**: hover and goto definition support on list tail. @rvcas
+- **aiken-lsp**: hover on prop test via expression. @rvcas
+
+### Fixed
+
+- **aiken-lang**: formatter should not erase `pub` on validators. @rvcas
+- **aiken-lang**: error on using tuple index when a tuple is returned by a generic function. @rvcas
 
 ## v1.0.26-alpha - 2024-03-25
 
