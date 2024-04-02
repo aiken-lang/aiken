@@ -371,10 +371,15 @@ impl TypedExpr {
 
             TypedExpr::Tuple {
                 elems: elements, ..
-            }
-            | TypedExpr::List { elements, .. } => elements
+            } => elements
                 .iter()
                 .find_map(|e| e.find_node(byte_index))
+                .or(Some(Located::Expression(self))),
+
+            TypedExpr::List { elements, tail, .. } => elements
+                .iter()
+                .find_map(|e| e.find_node(byte_index))
+                .or_else(|| tail.as_ref().and_then(|t| t.find_node(byte_index)))
                 .or(Some(Located::Expression(self))),
 
             TypedExpr::Call { fun, args, .. } => args
