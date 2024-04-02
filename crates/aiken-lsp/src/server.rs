@@ -399,6 +399,12 @@ impl Server {
 
             // TODO: autocompletion for expressions
             Some(Located::Expression(_expression)) => None,
+
+            // TODO: autocompletion for arguments?
+            Some(Located::Argument(_arg_name, _tipo)) => None,
+
+            // TODO: autocompletion for annotation?
+            Some(Located::Annotation(_annotation)) => None,
         }
     }
 
@@ -510,7 +516,9 @@ impl Server {
                 Some(expression.tipo()),
             ),
             Located::Pattern(pattern, tipo) => (pattern.location(), None, Some(tipo)),
+            Located::Argument(arg_name, tipo) => (arg_name.location(), None, Some(tipo)),
             Located::Definition(_) => return Ok(None),
+            Located::Annotation(_) => return Ok(None),
         };
 
         let doc = definition_location
@@ -525,6 +533,8 @@ impl Server {
             .and_then(|node| match node {
                 Located::Expression(_) => None,
                 Located::Pattern(_, _) => None,
+                Located::Argument(_, _) => None,
+                Located::Annotation(_) => None,
                 Located::Definition(def) => def.doc(),
             })
             .unwrap_or_default();
