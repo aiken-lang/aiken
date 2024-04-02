@@ -6,6 +6,10 @@
 
 - **aiken-lang**: formatter should not erase `pub` on validators. @rvcas
 
+### Added
+
+- **aiken-lsp**: hover and goto definition support on list tail. @rvcas
+
 ## v1.0.26-alpha - 2024-03-25
 
 ### Fixed
