@@ -2045,7 +2045,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     ) -> Result<TypedExpr, Error> {
         let tuple = self.infer(tuple)?;
 
-        let tipo = match *tuple.tipo() {
+        let tipo = match *collapse_links(tuple.tipo()) {
             Type::Tuple {
                 ref elems,
                 alias: _,

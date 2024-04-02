@@ -2274,3 +2274,24 @@ fn validator_private_everything() {
 
     assert!(check_validator(parse(source_code)).is_ok())
 }
+
+#[test]
+fn tuple_access_on_call() {
+    let source_code = r#"
+        use aiken/builtin
+
+        pub fn list_at(xs: List<a>, index: Int) -> a {
+          if index == 0 {
+            builtin.head_list(xs)
+          } else {
+            list_at(builtin.tail_list(xs), index - 1)
+          }
+        }
+
+        fn foo() {
+          [list_at([(1, 2)], 0).2nd, ..[1, 2]]
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
