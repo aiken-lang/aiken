@@ -62,6 +62,27 @@ where
         Self::from_cbor(cbor_buffer, flat_buffer)
     }
 
+    /// Convert a program to cbor bytes.
+    ///
+    /// _note: The cbor bytes of a program are merely
+    /// the flat bytes of the program encoded as cbor bytes._
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use uplc::ast::{Program, Name, Term};
+    ///
+    /// let term = Term::var("x").lambda("x");
+    /// let program = Program { version: (1, 0, 0), term };
+    ///
+    /// assert_eq!(
+    ///     program.to_debruijn().unwrap().to_cbor().unwrap(),
+    ///     vec![
+    ///         0x46, 0x01, 0x00, 0x00,
+    ///         0x20, 0x01, 0x01
+    ///     ],
+    /// );
+    /// ```
     pub fn to_cbor(&self) -> Result<Vec<u8>, en::Error> {
         let flat_bytes = self.flat()?;
 
@@ -76,12 +97,50 @@ where
         Ok(bytes)
     }
 
-    // convenient so that people don't need to depend on the flat crate
-    // directly to call programs flat function
+    /// Convert a program to a flat bytes.
+    ///
+    /// _**note**: Convenient so that people don't need to depend on the flat crate
+    /// directly to call programs flat function._
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use uplc::ast::{Program, Name, Term};
+    ///
+    /// let term = Term::var("x").lambda("x");
+    /// let program = Program { version: (1, 0, 0), term };
+    ///
+    /// assert_eq!(
+    ///     program
+    ///         .to_debruijn()
+    ///         .unwrap()
+    ///         .to_flat()
+    ///         .unwrap(),
+    ///     vec![
+    ///         0x01, 0x00, 0x00,
+    ///         0x20, 0x01, 0x01
+    ///     ],
+    /// );
+    /// ```
     pub fn to_flat(&self) -> Result<Vec<u8>, en::Error> {
         self.flat()
     }
 
+    /// Convert a program to hex encoded cbor bytes
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use uplc::ast::{Program, Name, Term};
+    ///
+    /// let term = Term::var("x").lambda("x");
+    /// let program = Program { version: (1, 0, 0), term };
+    ///
+    /// assert_eq!(
+    ///     program.to_debruijn().unwrap().to_hex().unwrap(),
+    ///     "46010000200101".to_string(),
+    /// );
+    /// ```
     pub fn to_hex(&self) -> Result<String, en::Error> {
         let bytes = self.to_cbor()?;
 
