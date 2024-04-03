@@ -249,6 +249,21 @@ fn resolve_alias(
                 result
             }
 
+            (
+                Annotation::Pair { fst, snd, .. },
+                Type::Pair {
+                    fst: t_fst,
+                    snd: t_snd,
+                    ..
+                },
+            ) => {
+                let mut result = None;
+                for (ann, t) in [fst, snd].into_iter().zip([t_fst, t_snd]) {
+                    result = result.or_else(|| resolve_one(parameter, ann, t.clone()));
+                }
+                result
+            }
+
             (Annotation::Var { name, .. }, ..) if name == parameter => Some(typ),
 
             _ => None,
