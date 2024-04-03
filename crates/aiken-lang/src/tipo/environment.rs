@@ -1495,172 +1495,116 @@ impl<'a> Environment<'a> {
                 .map_err(|e| e.flip_unify());
         }
 
-        match lhs.deref() {
-            Type::App {
-                module: m1,
-                name: n1,
-                args: args1,
-                public: _,
-                contains_opaque: _,
-                alias: _,
-            } => {
-                if let Type::App {
+        match (lhs.deref(), rhs.deref()) {
+            (
+                Type::App {
+                    module: m1,
+                    name: n1,
+                    args: args1,
+                    public: _,
+                    contains_opaque: _,
+                    alias: _,
+                },
+                Type::App {
                     module: m2,
                     name: n2,
                     args: args2,
                     public: _,
                     contains_opaque: _,
                     alias: _,
-                } = rhs.deref()
-                {
-                    if m1 == m2 && n1 == n2 && args1.len() == args2.len() {
-                        for (a, b) in args1.iter().zip(args2) {
-                            unify_enclosed_type(
-                                lhs.clone(),
-                                rhs.clone(),
-                                self.unify(a.clone(), b.clone(), location, false),
-                            )?;
-                        }
-                        Ok(())
-                    } else {
-                        Err(Error::CouldNotUnify {
-                            location,
-                            expected: lhs.clone(),
-                            given: rhs.clone(),
-                            situation: None,
-                            rigid_type_names: HashMap::new(),
-                        })
-                    }
-                } else {
-                    Err(Error::CouldNotUnify {
-                        location,
-                        expected: lhs.clone(),
-                        given: rhs.clone(),
-                        situation: None,
-                        rigid_type_names: HashMap::new(),
-                    })
+                },
+            ) if m1 == m2 && n1 == n2 && args1.len() == args2.len() => {
+                for (a, b) in args1.iter().zip(args2) {
+                    unify_enclosed_type(
+                        lhs.clone(),
+                        rhs.clone(),
+                        self.unify(a.clone(), b.clone(), location, false),
+                    )?;
                 }
+                Ok(())
             }
 
-            Type::Tuple {
-                elems: elems1,
-                alias: _,
-            } => {
-                if let Type::Tuple {
+            (
+                Type::Tuple {
+                    elems: elems1,
+                    alias: _,
+                },
+                Type::Tuple {
                     elems: elems2,
                     alias: _,
-                } = rhs.deref()
-                {
-                    if elems1.len() == elems2.len() {
-                        for (a, b) in elems1.iter().zip(elems2) {
-                            unify_enclosed_type(
-                                lhs.clone(),
-                                rhs.clone(),
-                                self.unify(a.clone(), b.clone(), location, false),
-                            )?;
-                        }
-                        Ok(())
-                    } else {
-                        Err(Error::CouldNotUnify {
-                            location,
-                            expected: lhs.clone(),
-                            given: rhs.clone(),
-                            situation: None,
-                            rigid_type_names: HashMap::new(),
-                        })
-                    }
-                } else {
-                    Err(Error::CouldNotUnify {
-                        location,
-                        expected: lhs.clone(),
-                        given: rhs.clone(),
-                        situation: None,
-                        rigid_type_names: HashMap::new(),
-                    })
+                },
+            ) if elems1.len() == elems2.len() => {
+                for (a, b) in elems1.iter().zip(elems2) {
+                    unify_enclosed_type(
+                        lhs.clone(),
+                        rhs.clone(),
+                        self.unify(a.clone(), b.clone(), location, false),
+                    )?;
                 }
+                Ok(())
             }
 
-            Type::Fn {
-                args: args1,
-                ret: retrn1,
-                alias: _,
-            } => {
-                if let Type::Fn {
+            (
+                Type::Pair {
+                    fst: lhs_fst,
+                    snd: lhs_snd,
+                    alias: _,
+                },
+                Type::Pair {
+                    fst: rhs_fst,
+                    snd: rhs_snd,
+                    alias: _,
+                },
+            ) => {
+                for (a, b) in [lhs_fst, lhs_snd].into_iter().zip([rhs_fst, rhs_snd]) {
+                    unify_enclosed_type(
+                        lhs.clone(),
+                        rhs.clone(),
+                        self.unify(a.clone(), b.clone(), location, false),
+                    )?;
+                }
+                Ok(())
+            }
+
+            (
+                Type::Fn {
+                    args: args1,
+                    ret: retrn1,
+                    alias: _,
+                },
+                Type::Fn {
                     args: args2,
                     ret: retrn2,
                     alias: _,
-                } = rhs.deref()
-                {
-                    if args1.len() == args2.len() {
-                        for (a, b) in args1.iter().zip(args2) {
-                            self.unify(a.clone(), b.clone(), location, allow_cast)
-                                .map_err(|_| Error::CouldNotUnify {
-                                    location,
-                                    expected: lhs.clone(),
-                                    given: rhs.clone(),
-                                    situation: None,
-                                    rigid_type_names: HashMap::new(),
-                                })?;
-                        }
-                        self.unify(retrn1.clone(), retrn2.clone(), location, false)
-                            .map_err(|_| Error::CouldNotUnify {
-                                location,
-                                expected: lhs.clone(),
-                                given: rhs.clone(),
-                                situation: None,
-                                rigid_type_names: HashMap::new(),
-                            })
-                    } else {
-                        Err(Error::CouldNotUnify {
+                },
+            ) if args1.len() == args2.len() => {
+                for (a, b) in args1.iter().zip(args2) {
+                    self.unify(a.clone(), b.clone(), location, allow_cast)
+                        .map_err(|_| Error::CouldNotUnify {
                             location,
                             expected: lhs.clone(),
                             given: rhs.clone(),
                             situation: None,
                             rigid_type_names: HashMap::new(),
-                        })
-                    }
-                } else {
-                    Err(Error::CouldNotUnify {
+                        })?;
+                }
+                self.unify(retrn1.clone(), retrn2.clone(), location, false)
+                    .map_err(|_| Error::CouldNotUnify {
                         location,
                         expected: lhs.clone(),
                         given: rhs.clone(),
                         situation: None,
                         rigid_type_names: HashMap::new(),
                     })
-                }
-            }
-            Type::Pair { fst, snd, alias: _ } => {
-                if let Type::Pair {
-                    fst: fst2,
-                    snd: snd2,
-                    alias: _,
-                } = rhs.deref()
-                {
-                    unify_enclosed_type(
-                        lhs.clone(),
-                        rhs.clone(),
-                        self.unify(fst.clone(), fst2.clone(), location, false),
-                    )?;
-
-                    unify_enclosed_type(
-                        lhs.clone(),
-                        rhs.clone(),
-                        self.unify(snd.clone(), snd2.clone(), location, false),
-                    )?;
-
-                    Ok(())
-                } else {
-                    Err(Error::CouldNotUnify {
-                        location,
-                        expected: lhs.clone(),
-                        given: rhs.clone(),
-                        situation: None,
-                        rigid_type_names: HashMap::new(),
-                    })
-                }
             }
 
-            Type::Var { .. } => unreachable!(),
+            _ => Err(Error::CouldNotUnify {
+                location,
+                expected: lhs.clone(),
+                given: rhs.clone(),
+                situation: None,
+                rigid_type_names: HashMap::new(),
+            }),
         }
     }
 
