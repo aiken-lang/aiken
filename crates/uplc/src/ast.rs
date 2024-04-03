@@ -92,6 +92,16 @@ impl Program<Name> {
 
         program
     }
+
+    /// A convenient method to convery named programs to debruijn programs.
+    pub fn to_debruijn(self) -> Result<Program<DeBruijn>, debruijn::Error> {
+        self.try_into()
+    }
+
+    /// A convenient method to convery named programs to named debruijn programs.
+    pub fn to_named_debruijn(self) -> Result<Program<NamedDeBruijn>, debruijn::Error> {
+        self.try_into()
+    }
 }
 
 impl<'a, T> Display for Program<T>
