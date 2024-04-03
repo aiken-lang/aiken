@@ -26,9 +26,11 @@ pub fn exec(
     with_project(directory.as_deref(), false, |p| {
         p.compile(Options::default())?;
 
-        let raw_uplc = p.export(&module, &name)?;
+        let export = p.export(&module, &name)?;
 
-        println!("{}", raw_uplc);
+        let json = serde_json::to_string_pretty(&export).unwrap();
+
+        println!("{}", json);
 
         Ok(())
     })
