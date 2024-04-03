@@ -20,6 +20,7 @@ pub const BOOL: &str = "Bool";
 pub const INT: &str = "Int";
 pub const DATA: &str = "Data";
 pub const LIST: &str = "List";
+pub const MAP: &str = "Map";
 pub const PAIR: &str = "Pair";
 pub const VOID: &str = "Void";
 pub const G1_ELEMENT: &str = "G1Element";
@@ -494,7 +495,6 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     //   Seeded { seed: ByteArray, choices: ByteArray }
     //   Replayed { cursor: Int, choices: ByteArray }
     // }
-
     prelude.types.insert(
         PRNG.to_string(),
         TypeConstructor {
@@ -559,7 +559,6 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     //
     // pub type Fuzzer<a> =
     //   fn(PRNG) -> Option<(PRNG, a)>
-
     let fuzzer_value = generic_var(id_gen.next());
     prelude.types.insert(
         FUZZER.to_string(),
@@ -567,6 +566,22 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
             location: Span::empty(),
             parameters: vec![fuzzer_value.clone()],
             tipo: fuzzer(fuzzer_value),
+            module: "".to_string(),
+            public: true,
+        },
+    );
+
+    // Map
+    //
+    // pub type Map<k, v> = List<Pair<k, v>>
+    let map_key = generic_var(id_gen.next());
+    let map_value = generic_var(id_gen.next());
+    prelude.types.insert(
+        MAP.to_string(),
+        TypeConstructor {
+            location: Span::empty(),
+            parameters: vec![map_key.clone(), map_value.clone()],
+            tipo: map(map_key, map_value),
             module: "".to_string(),
             public: true,
         },
@@ -1477,9 +1492,43 @@ pub fn fuzzer(a: Rc<Type>) -> Rc<Type> {
     })
 }
 
+pub fn map(k: Rc<Type>, v: Rc<Type>) -> Rc<Type> {
+    Rc::new(Type::App {
+        public: true,
+        contains_opaque: false,
+        module: "".to_string(),
+        name: LIST.to_string(),
+        args: vec![pair(k, v)],
+        alias: Some(
+            TypeAliasAnnotation {
+                alias: MAP.to_string(),
+                parameters: vec!["k".to_string(), "v".to_string()],
+                annotation: Annotation::Constructor {
+                    location: Span::empty(),
+                    module: None,
+                    name: LIST.to_string(),
+                    arguments: vec![Annotation::Pair {
+                        location: Span::empty(),
+                        fst: Box::new(Annotation::Var {
+                            location: Span::empty(),
+                            name: "k".to_string(),
+                        }),
+                        snd: Box::new(Annotation::Var {
+                            location: Span::empty(),
+                            name: "v".to_string(),
+                        }),
+                    }],
+                },
+            }
+            .into(),
+        ),
+    })
+}
+
 pub fn list(t: Rc<Type>) -> Rc<Type> {
     Rc::new(Type::App {
         public: true,
+        // FIXME: We should probably have t.contains_opaque here?
         contains_opaque: false,
         name: LIST.to_string(),
         module: "".to_string(),
@@ -1513,6 +1562,7 @@ pub fn void() -> Rc<Type> {
 pub fn option(a: Rc<Type>) -> Rc<Type> {
     Rc::new(Type::App {
         public: true,
+        // FIXME: We should probably have t.contains_opaque here?
         contains_opaque: false,
         name: OPTION.to_string(),
         module: "".to_string(),
