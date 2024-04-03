@@ -3,6 +3,7 @@ pub mod config;
 pub mod deps;
 pub mod docs;
 pub mod error;
+pub mod export;
 pub mod format;
 pub mod github;
 pub mod module;
@@ -31,11 +32,11 @@ use crate::{
 };
 use aiken_lang::{
     ast::{
-        DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Span, Tracing, TypedDataType,
+        DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Tracing, TypedDataType,
         TypedFunction,
     },
-    builtins::{self, function},
-    expr::{TypedExpr, UntypedExpr},
+    builtins::{self},
+    expr::UntypedExpr,
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
     tipo::{Type, TypeInfo},
@@ -471,28 +472,14 @@ where
             .get(module)
             .and_then(|checked_module| {
                 checked_module.ast.definitions().find_map(|def| match def {
-                    Definition::Fn(func) if func.name == name => {
-                        let typed_anon = TypedExpr::Fn {
-                            location: Span::empty(),
-                            tipo: function(
-                                func.arguments.iter().map(|arg| arg.tipo.clone()).collect(),
-                                func.return_type.clone(),
-                            ),
-                            is_capture: false,
-                            args: func.arguments.clone(),
-                            body: func.body.clone().into(),
-                            return_annotation: None,
-                        };
-
-                        Some(typed_anon)
-                    }
+                    Definition::Fn(func) if func.name == name => Some(func),
                     _ => None,
                 })
             })
-            .map(|body| {
-                let program = generator.generate_raw(&body, &[], module);
+            .map(|func| {
+                let program = generator.generate_raw(&func.body, &func.arguments, module);
 
-                program.to_pretty()
+                program.to_debruijn().unwrap().to_hex().unwrap()
             })
             .ok_or_else(|| Error::ExportNotFound {
                 module: module.to_string(),
