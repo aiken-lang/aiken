@@ -4,13 +4,14 @@ pub mod parameter;
 pub mod schema;
 pub mod validator;
 
+pub use error::Error;
+
 use crate::{
     config::{self, Config},
     module::CheckedModules,
 };
 use aiken_lang::gen_uplc::CodeGenerator;
 use definitions::Definitions;
-use error::Error;
 use schema::{Annotated, Schema};
 use std::fmt::Debug;
 use validator::Validator;
