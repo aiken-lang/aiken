@@ -42,6 +42,7 @@ use aiken_lang::{
     tipo::{Type, TypeInfo},
     IdGenerator,
 };
+use export::Export;
 use indexmap::IndexMap;
 use miette::NamedSource;
 use options::{CodeGenMode, Options};
@@ -465,22 +466,21 @@ where
         })
     }
 
-    pub fn export(&self, module: &str, name: &str) -> Result<String, Error> {
-        let mut generator = self.new_generator(Tracing::silent());
-
+    pub fn export(&self, module: &str, name: &str) -> Result<Export, Error> {
         self.checked_modules
             .get(module)
             .and_then(|checked_module| {
                 checked_module.ast.definitions().find_map(|def| match def {
-                    Definition::Fn(func) if func.name == name => Some(func),
+                    Definition::Fn(func) if func.name == name => Some((checked_module, func)),
                     _ => None,
                 })
             })
-            .map(|func| {
-                let program = generator.generate_raw(&func.body, &func.arguments, module);
+            .map(|(checked_module, func)| {
+                let mut generator = self.new_generator(Tracing::silent());
 
-                program.to_debruijn().unwrap().to_hex().unwrap()
+                Export::from_function(func, checked_module, &mut generator, &self.checked_modules)
             })
+            .transpose()?
             .ok_or_else(|| Error::ExportNotFound {
                 module: module.to_string(),
                 name: name.to_string(),
