@@ -167,7 +167,7 @@ impl Validator {
     }
 }
 
-fn tipo_or_annotation<'a>(module: &'a CheckedModule, arg: &'a TypedArg) -> &'a Type {
+pub fn tipo_or_annotation<'a>(module: &'a CheckedModule, arg: &'a TypedArg) -> &'a Type {
     match *arg.tipo.borrow() {
         Type::App {
             module: ref module_name,
