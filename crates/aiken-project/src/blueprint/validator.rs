@@ -49,7 +49,7 @@ impl Validator {
         module: &CheckedModule,
         def: &TypedValidator,
     ) -> Vec<Result<Validator, Error>> {
-        let program = generator.generate(def, &module.name).try_into().unwrap();
+        let program = generator.generate(def, &module.name).to_debruijn().unwrap();
 
         let is_multi_validator = def.other_fun.is_some();
 
@@ -86,10 +86,6 @@ impl Validator {
     ) -> Result<Validator, Error> {
         let mut args = func.arguments.iter().rev();
         let (_, redeemer, datum) = (args.next(), args.next().unwrap(), args.next());
-
-        let mut arguments = Vec::with_capacity(params.len() + func.arguments.len());
-        arguments.extend(params.to_vec());
-        arguments.extend(func.arguments.clone());
 
         let mut definitions = Definitions::new();
 
