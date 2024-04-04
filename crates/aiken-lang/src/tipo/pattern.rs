@@ -8,7 +8,7 @@ use super::{
 };
 use crate::{
     ast::{CallArg, Pattern, Span, TypedPattern, UntypedPattern},
-    builtins::{int, list, tuple},
+    builtins::{int, list, pair, tuple},
 };
 use itertools::Itertools;
 use std::{
@@ -230,6 +230,46 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                 None => Err(Error::CouldNotUnify {
                     given: list(self.environment.new_unbound_var()),
                     expected: tipo.clone(),
+                    situation: None,
+                    location,
+                    rigid_type_names: HashMap::new(),
+                }),
+            },
+
+            Pattern::Pair { fst, snd, location } => match collapse_links(tipo.clone()).deref() {
+                Type::Pair {
+                    fst: t_fst,
+                    snd: t_snd,
+                    ..
+                } => {
+                    let fst = Box::new(self.unify(*fst, t_fst.clone(), None, false)?);
+                    let snd = Box::new(self.unify(*snd, t_snd.clone(), None, false)?);
+                    Ok(Pattern::Pair { fst, snd, location })
+                }
+
+                Type::Var { .. } => {
+                    let t_fst = self.environment.new_unbound_var();
+                    let t_snd = self.environment.new_unbound_var();
+
+                    self.environment.unify(
+                        pair(t_fst.clone(), t_snd.clone()),
+                        tipo,
+                        location,
+                        false,
+                    )?;
+
+                    let fst = Box::new(self.unify(*fst, t_fst, None, false)?);
+                    let snd = Box::new(self.unify(*snd, t_snd, None, false)?);
+
+                    Ok(Pattern::Pair { fst, snd, location })
+                }
+
+                _ => Err(Error::CouldNotUnify {
+                    given: pair(
+                        self.environment.new_unbound_var(),
+                        self.environment.new_unbound_var(),
+                    ),
+                    expected: tipo,
                     situation: None,
                     location,
                     rigid_type_names: HashMap::new(),

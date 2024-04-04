@@ -1243,6 +1243,12 @@ pub enum Pattern<Constructor, Type> {
         tipo: Type,
     },
 
+    Pair {
+        location: Span,
+        fst: Box<Self>,
+        snd: Box<Self>,
+    },
+
     Tuple {
         location: Span,
         elems: Vec<Self>,
@@ -1258,6 +1264,7 @@ impl<A, B> Pattern<A, B> {
             | Pattern::List { location, .. }
             | Pattern::Discard { location, .. }
             | Pattern::Tuple { location, .. }
+            | Pattern::Pair { location, .. }
             | Pattern::Constructor { location, .. } => *location,
         }
     }
@@ -1327,6 +1334,19 @@ impl TypedPattern {
                 _ => None,
             },
 
+            Pattern::Pair { fst, snd, .. } => match &**value {
+                Type::Pair {
+                    fst: fst_v,
+                    snd: snd_v,
+                    ..
+                } => [fst, snd]
+                    .into_iter()
+                    .zip([fst_v, snd_v].iter())
+                    .find_map(|(e, t)| e.find_node(byte_index, t))
+                    .or(Some(Located::Pattern(self, value.clone()))),
+                _ => None,
+            },
+
             Pattern::Constructor {
                 arguments, tipo, ..
             } => match &**tipo {
@@ -1340,6 +1360,7 @@ impl TypedPattern {
         }
     }
 
+    // TODO: This function definition is weird, see where this is used and how.
     pub fn tipo(&self, value: &TypedExpr) -> Option<Rc<Type>> {
         match self {
             Pattern::Int { .. } => Some(builtins::int()),
@@ -1347,7 +1368,7 @@ impl TypedPattern {
             Pattern::Var { .. } | Pattern::Assign { .. } | Pattern::Discard { .. } => {
                 Some(value.tipo())
             }
-            Pattern::List { .. } | Pattern::Tuple { .. } => None,
+            Pattern::List { .. } | Pattern::Tuple { .. } | Pattern::Pair { .. } => None,
         }
     }
 }

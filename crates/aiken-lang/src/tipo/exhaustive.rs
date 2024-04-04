@@ -1,12 +1,10 @@
-use std::{collections::BTreeMap, iter, ops::Deref};
-
-use itertools::Itertools;
-
 use crate::{
     ast,
-    builtins::{self, PAIR},
+    builtins::{self},
     tipo::{self, environment::Environment, error::Error},
 };
+use itertools::Itertools;
+use std::{collections::BTreeMap, iter, ops::Deref};
 
 const NIL_NAME: &str = "[]";
 const CONS_NAME: &str = "::";
@@ -88,8 +86,8 @@ impl PatternStack {
                 Some(self.chain_tail_into_iter(vec![Pattern::Wildcard; arity].into_iter()))
             }
             Pattern::Literal(_) => unreachable!(
-            "constructors and literals should never align in pattern match exhaustiveness checks."
-        ),
+                "constructors and literals should never align in pattern match exhaustiveness checks."
+            ),
         }
     }
 
@@ -564,8 +562,6 @@ pub(super) fn simplify(
             constructor: super::PatternConstructor::Record { name, .. },
             ..
         } => {
-            let (empty, pair) = (&"".to_string(), &PAIR.to_string());
-
             let (module, type_name, arity) = match tipo.deref() {
                 tipo::Type::App {
                     name: type_name,
@@ -578,13 +574,11 @@ pub(super) fn simplify(
                         module,
                         ..
                     } => (module, type_name, args.len()),
-                    tipo::Type::Pair { .. } => (empty, pair, 2),
                     _ => {
-                        unreachable!("ret should be a Type::App or Type::Pair")
+                        unreachable!("ret should be a Type::App")
                     }
                 },
-                tipo::Type::Pair { .. } => (empty, pair, 2),
-                _ => unreachable!("tipo should be a Type::App or Type::Pair"),
+                _ => unreachable!("tipo should be a Type::App"),
             };
 
             let alts = environment.get_constructors_for_type(module, type_name, *location)?;
@@ -603,6 +597,13 @@ pub(super) fn simplify(
 
             Ok(Pattern::Constructor(name.to_string(), alts, args))
         }
+        ast::Pattern::Pair { fst, snd, location } => simplify(
+            environment,
+            &ast::Pattern::Tuple {
+                elems: vec![*fst.clone(), *snd.clone()],
+                location: *location,
+            },
+        ),
         ast::Pattern::Tuple { elems, .. } => {
             let mut args = vec![];
 
