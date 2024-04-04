@@ -1,0 +1,44 @@
+---
+source: crates/aiken-lang/src/parser/pattern/mod.rs
+description: "Code:\n\nFoo(a, Pair(1, 2))"
+---
+Constructor {
+    is_record: false,
+    location: 0..18,
+    name: "Foo",
+    arguments: [
+        CallArg {
+            label: None,
+            location: 4..5,
+            value: Var {
+                location: 4..5,
+                name: "a",
+            },
+        },
+        CallArg {
+            label: None,
+            location: 7..17,
+            value: Pair {
+                location: 7..17,
+                fst: Int {
+                    location: 12..13,
+                    value: "1",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+                snd: Int {
+                    location: 15..16,
+                    value: "2",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+            },
+        },
+    ],
+    module: None,
+    constructor: (),
+    with_spread: false,
+    tipo: (),
+}

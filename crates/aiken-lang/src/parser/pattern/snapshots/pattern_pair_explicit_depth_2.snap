@@ -1,0 +1,60 @@
+---
+source: crates/aiken-lang/src/parser/pattern/mod.rs
+description: "Code:\n\nPair([1,2,3], Pair((14, 42), _))"
+---
+Pair {
+    location: 0..32,
+    fst: List {
+        location: 5..12,
+        elements: [
+            Int {
+                location: 6..7,
+                value: "1",
+                base: Decimal {
+                    numeric_underscore: false,
+                },
+            },
+            Int {
+                location: 8..9,
+                value: "2",
+                base: Decimal {
+                    numeric_underscore: false,
+                },
+            },
+            Int {
+                location: 10..11,
+                value: "3",
+                base: Decimal {
+                    numeric_underscore: false,
+                },
+            },
+        ],
+        tail: None,
+    },
+    snd: Pair {
+        location: 14..31,
+        fst: Tuple {
+            location: 19..27,
+            elems: [
+                Int {
+                    location: 20..22,
+                    value: "14",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+                Int {
+                    location: 24..26,
+                    value: "42",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
+                },
+            ],
+        },
+        snd: Discard {
+            name: "_",
+            location: 29..30,
+        },
+    },
+}

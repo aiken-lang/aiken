@@ -1,0 +1,15 @@
+---
+source: crates/aiken-lang/src/parser/pattern/mod.rs
+description: "Code:\n\nPair(_, _)"
+---
+Pair {
+    location: 0..10,
+    fst: Discard {
+        name: "_",
+        location: 5..6,
+    },
+    snd: Discard {
+        name: "_",
+        location: 8..9,
+    },
+}
