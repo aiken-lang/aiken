@@ -1,0 +1,24 @@
+---
+source: crates/aiken-project/src/export.rs
+description: "Code:\n\npub opaque type Thing {\n  a: Int\n}\n\npub fn add(a: Thing, b: Int) -> Int {\n    a.a + b\n}\n"
+---
+Schema {
+    error: Error {
+        context: IllegalOpaqueType,
+        breadcrumbs: [
+            App {
+                public: true,
+                contains_opaque: true,
+                module: "test_module",
+                name: "Thing",
+                args: [],
+                alias: None,
+            },
+        ],
+    },
+    location: 47..55,
+    source_code: NamedSource {
+        name: "",
+        source: "<redacted>",
+    ,
+}

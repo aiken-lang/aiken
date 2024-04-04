@@ -1,0 +1,52 @@
+---
+source: crates/aiken-project/src/export.rs
+description: "Code:\n\npub type Foo<a> {\n  Empty\n  Bar(a, Foo<a>)\n}\n\npub fn add(a: Foo<Int>, b: Foo<Int>) -> Int {\n  when (a, b) is {\n    (Empty, Empty) -> 0\n    (Bar(x, y), Bar(c, d)) -> x + c + add(y, d)\n    (Empty, Bar(c, d)) -> c + add(Empty, d)\n    (Bar(x, y), Empty) -> x + add(y, Empty)\n  }\n}\n"
+---
+{
+  "name": "test_module.add",
+  "parameters": [
+    {
+      "title": "a",
+      "schema": {
+        "$ref": "#/definitions/test_module~1Foo$Int"
+      }
+    },
+    {
+      "title": "b",
+      "schema": {
+        "$ref": "#/definitions/test_module~1Foo$Int"
+      }
+    }
+  ],
+  "compiledCode": "5901c3010000323232323222323232323253330083002300937540062a666010600460126ea801052000001001132323232533300b3004300c375400c2646464a66601c600e601e6ea80284c8cdc019b80003375a60240026600c0046024602600260206ea8028010c040c044008dd6980780098069baa006001132533300b3005300c375400c2a666016600860186ea801c4c8cdc01bad300f001330034c103d8798000300f3010001300d375400e00200226466e00dd698070009980118071807800a60103d8798000300c375400a600200244464646464a66601e601260206ea800854ccc03cc024c040dd50018a4000002002264a66601e601060206ea80084c8c8c94ccc048c02cc04cdd500309919b80337000066eb4c058004ccc02c02c008c058c05c004c050dd5003002180a180a8011bad301300130113754004002264a66601e601260206ea800854ccc03cc020c040dd500189919b80375a6026002666010010980103d8798000301330140013011375400600200226466e00dd6980900099980380398091809800a60103d879800030103754002601c004601c00266ec0008004dc3a40046e1d20003006002300600133760004002ae6955ceaab9e5742ae89",
+  "hash": "4ce96c928b3be798496fca0ec3666d15d09004115df638801715b5e8",
+  "definitions": {
+    "Int": {
+      "dataType": "integer"
+    },
+    "test_module/Foo$Int": {
+      "title": "Foo",
+      "anyOf": [
+        {
+          "title": "Empty",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "Bar",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "$ref": "#/definitions/test_module~1Foo$Int"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
