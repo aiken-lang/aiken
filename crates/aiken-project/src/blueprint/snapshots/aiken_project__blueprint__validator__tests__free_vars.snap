@@ -1,0 +1,24 @@
+---
+source: crates/aiken-project/src/blueprint/validator.rs
+description: "Code:\n\nvalidator {\n  fn generics(redeemer: a, ctx: Void) {\n    True\n  }\n}\n"
+---
+Schema {
+    error: Error {
+        context: FreeTypeVariable,
+        breadcrumbs: [
+            Var {
+                tipo: RefCell {
+                    value: Generic {
+                        id: 33,
+                    },
+                },
+                alias: None,
+            },
+        ],
+    },
+    location: 26..37,
+    source_code: NamedSource {
+        name: "",
+        source: "<redacted>",
+    ,
+}

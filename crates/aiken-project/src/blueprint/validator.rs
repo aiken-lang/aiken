@@ -1,6 +1,7 @@
 use super::{
     definitions::Definitions,
     error::Error,
+    memo_program::MemoProgram,
     parameter::Parameter,
     schema::{Annotated, Schema},
 };
@@ -49,27 +50,29 @@ impl Validator {
         module: &CheckedModule,
         def: &TypedValidator,
     ) -> Vec<Result<Validator, Error>> {
-        let program = generator.generate(def, &module.name).to_debruijn().unwrap();
-
         let is_multi_validator = def.other_fun.is_some();
 
+        let mut program = MemoProgram::new();
+
         let mut validators = vec![Validator::create_validator_blueprint(
+            generator,
             modules,
             module,
-            &program,
-            &def.params,
+            def,
             &def.fun,
             is_multi_validator,
+            &mut program,
         )];
 
         if let Some(ref other_func) = def.other_fun {
             validators.push(Validator::create_validator_blueprint(
+                generator,
                 modules,
                 module,
-                &program,
-                &def.params,
+                def,
                 other_func,
                 is_multi_validator,
+                &mut program,
             ));
         }
 
@@ -77,21 +80,24 @@ impl Validator {
     }
 
     fn create_validator_blueprint(
+        generator: &mut CodeGenerator,
         modules: &CheckedModules,
         module: &CheckedModule,
-        program: &Program<DeBruijn>,
-        params: &[TypedArg],
+        def: &TypedValidator,
         func: &TypedFunction,
         is_multi_validator: bool,
+        program: &mut MemoProgram,
     ) -> Result<Validator, Error> {
         let mut args = func.arguments.iter().rev();
         let (_, redeemer, datum) = (args.next(), args.next().unwrap(), args.next());
 
         let mut definitions = Definitions::new();
 
-        let parameters = params
+        let parameters = def
+            .params
             .iter()
             .map(|param| {
+                dbg!(&param);
                 Annotated::from_type(
                     modules.into(),
                     tipo_or_annotation(module, param),
@@ -112,56 +118,58 @@ impl Validator {
             })
             .collect::<Result<_, _>>()?;
 
+        let datum = datum
+            .map(|datum| {
+                Annotated::from_type(
+                    modules.into(),
+                    tipo_or_annotation(module, datum),
+                    &mut definitions,
+                )
+                .map_err(|error| Error::Schema {
+                    error,
+                    location: datum.location,
+                    source_code: NamedSource::new(
+                        module.input_path.display().to_string(),
+                        module.code.clone(),
+                    ),
+                })
+            })
+            .transpose()?
+            .map(|schema| Parameter {
+                title: datum.map(|datum| datum.arg_name.get_label()),
+                schema,
+            });
+
+        let redeemer = Annotated::from_type(
+            modules.into(),
+            tipo_or_annotation(module, redeemer),
+            &mut definitions,
+        )
+        .map_err(|error| Error::Schema {
+            error,
+            location: redeemer.location,
+            source_code: NamedSource::new(
+                module.input_path.display().to_string(),
+                module.code.clone(),
+            ),
+        })
+        .map(|schema| Parameter {
+            title: Some(redeemer.arg_name.get_label()),
+            schema: match datum {
+                Some(..) if is_multi_validator => {
+                    Annotated::as_wrapped_redeemer(&mut definitions, schema, redeemer.tipo.clone())
+                }
+                _ => schema,
+            },
+        })?;
+
         Ok(Validator {
             title: format!("{}.{}", &module.name, &func.name),
             description: func.doc.clone(),
             parameters,
-            datum: datum
-                .map(|datum| {
-                    Annotated::from_type(
-                        modules.into(),
-                        tipo_or_annotation(module, datum),
-                        &mut definitions,
-                    )
-                    .map_err(|error| Error::Schema {
-                        error,
-                        location: datum.location,
-                        source_code: NamedSource::new(
-                            module.input_path.display().to_string(),
-                            module.code.clone(),
-                        ),
-                    })
-                })
-                .transpose()?
-                .map(|schema| Parameter {
-                    title: datum.map(|datum| datum.arg_name.get_label()),
-                    schema,
-                }),
-            redeemer: Annotated::from_type(
-                modules.into(),
-                tipo_or_annotation(module, redeemer),
-                &mut definitions,
-            )
-            .map_err(|error| Error::Schema {
-                error,
-                location: redeemer.location,
-                source_code: NamedSource::new(
-                    module.input_path.display().to_string(),
-                    module.code.clone(),
-                ),
-            })
-            .map(|schema| Parameter {
-                title: Some(redeemer.arg_name.get_label()),
-                schema: match datum {
-                    Some(..) if is_multi_validator => Annotated::as_wrapped_redeemer(
-                        &mut definitions,
-                        schema,
-                        redeemer.tipo.clone(),
-                    ),
-                    _ => schema,
-                },
-            })?,
-            program: program.clone(),
+            datum,
+            redeemer,
+            program: program.get(generator, def, &module.name),
             definitions,
         })
     }
@@ -467,6 +475,19 @@ mod tests {
 
             validator {
               fn generics(redeemer: Either<ByteArray, Interval<Int>>, ctx: Void) {
+                True
+              }
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn free_vars() {
+        assert_validator!(
+            r#"
+            validator {
+              fn generics(redeemer: a, ctx: Void) {
                 True
               }
             }
