@@ -477,6 +477,20 @@ impl CheckedModules {
         items.into_iter()
     }
 
+    pub fn functions(&self) -> impl Iterator<Item = (&CheckedModule, &TypedFunction)> {
+        let mut items = vec![];
+
+        for module in self.0.values() {
+            for some_definition in module.ast.definitions() {
+                if let Definition::Fn(def) = some_definition {
+                    items.push((module, def));
+                }
+            }
+        }
+
+        items.into_iter()
+    }
+
     pub fn into_validators(self) -> impl Iterator<Item = CheckedModule> {
         self.0
             .into_values()
