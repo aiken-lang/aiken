@@ -975,6 +975,7 @@ impl<'a> CodeGenerator<'a> {
                     AirTree::let_assignment(name, value, then)
                 }
             }
+
             Pattern::Assign { name, pattern, .. } => {
                 let inner_pattern = self.assignment(
                     pattern,
@@ -985,6 +986,7 @@ impl<'a> CodeGenerator<'a> {
                 );
                 AirTree::let_assignment(name, value, inner_pattern)
             }
+
             Pattern::Discard { name, .. } => {
                 if props.full_check {
                     let name = &format!("__discard_expect_{}", name);
@@ -1015,6 +1017,7 @@ impl<'a> CodeGenerator<'a> {
                     AirTree::no_op(then)
                 }
             }
+
             Pattern::List { elements, tail, .. } => {
                 assert!(tipo.is_list());
                 assert!(props.kind.is_expect());
@@ -1141,47 +1144,33 @@ impl<'a> CodeGenerator<'a> {
                     )
                 }
             }
-            // Pairs overlap by using the Constructor pattern type
-            // The logic is slightly different for pairs
-            Pattern::Constructor {
-                arguments,
-                constructor: PatternConstructor::Record { name, field_map },
-                tipo: constr_tipo,
-                ..
-            } if tipo.is_pair() => {
-                // Constr and Pair execution branch
-                let field_map = field_map.clone();
 
+            Pattern::Pair {
+                fst,
+                snd,
+                location: _,
+            } => {
                 let mut type_map: IndexMap<usize, Rc<Type>> = IndexMap::new();
 
-                for (index, arg) in constr_tipo.get_inner_types().iter().enumerate() {
+                for (index, arg) in tipo.get_inner_types().iter().enumerate() {
                     let field_type = arg.clone();
-
                     type_map.insert(index, field_type);
                 }
 
-                assert!(type_map.len() >= arguments.len());
+                assert!(type_map.len() == 2);
 
                 let mut fields = vec![];
 
-                let then = arguments
+                let then = [fst, snd]
                     .iter()
                     .enumerate()
-                    .rfold(then, |then, (index, arg)| {
-                        let label = arg.label.clone().unwrap_or_default();
-
-                        let field_index = if let Some(field_map) = &field_map {
-                            *field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&index)
-                        } else {
-                            index
-                        };
-
-                        let field_name = match &arg.value {
+                    .rfold(then, |then, (field_index, arg)| {
+                        let field_name = match arg.as_ref() {
                             Pattern::Var { name, .. } => name.to_string(),
                             Pattern::Assign { name, .. } => name.to_string(),
                             Pattern::Discard { name, .. } => {
                                 if props.full_check {
-                                    format!("__discard_{}_{}", name, index)
+                                    format!("__discard_{}_{}", name, field_index)
                                 } else {
                                     "_".to_string()
                                 }
@@ -1189,15 +1178,15 @@ impl<'a> CodeGenerator<'a> {
                             _ => format!(
                                 "field_{}_span_{}_{}",
                                 field_index,
-                                arg.value.location().start,
-                                arg.value.location().end
+                                arg.location().start,
+                                arg.location().end
                             ),
                         };
 
                         let arg_type = type_map.get(&field_index).unwrap_or_else(|| {
                             unreachable!(
                                 "Missing type for field {} of constr {}",
-                                field_index, name
+                                field_index, field_name
                             )
                         });
 
@@ -1205,7 +1194,7 @@ impl<'a> CodeGenerator<'a> {
 
                         let then = if field_name != "_" {
                             self.assignment(
-                                &arg.value,
+                                arg,
                                 val,
                                 then,
                                 arg_type,
@@ -1232,7 +1221,7 @@ impl<'a> CodeGenerator<'a> {
                 // local var
                 let constructor_name = format!(
                     "__constructor_{}_span_{}_{}",
-                    name,
+                    "Pair",
                     pattern.location().start,
                     pattern.location().end
                 );
@@ -1421,6 +1410,7 @@ impl<'a> CodeGenerator<'a> {
 
                 AirTree::let_assignment(constructor_name, value, then)
             }
+
             Pattern::Tuple {
                 elems, location, ..
             } => {
@@ -2529,75 +2519,40 @@ impl<'a> CodeGenerator<'a> {
                 (AirTree::void(), list_assign)
             }
 
-            Pattern::Constructor {
-                name,
-                arguments,
-                constructor,
-                tipo: function_tipo,
-                ..
-            } if subject_tipo.is_pair() => {
-                assert!(
-                    matches!(function_tipo.as_ref().clone(), Type::Fn { .. })
-                        || matches!(function_tipo.as_ref().clone(), Type::App { .. })
-                );
+            Pattern::Pair { fst, snd, .. } => {
+                let items_type = subject_tipo.get_inner_types();
 
-                let field_map = match constructor {
-                    PatternConstructor::Record { field_map, .. } => field_map.clone(),
-                };
-
-                let mut type_map: IndexMap<usize, Rc<Type>> = IndexMap::new();
-
-                for (index, arg) in function_tipo.arg_types().unwrap().iter().enumerate() {
-                    let field_type = arg.clone();
-                    type_map.insert(index, field_type);
-                }
-
-                let mut fields = vec![];
+                let mut name_index_assigns = vec![];
 
                 let next_then =
-                    arguments
+                    [fst, snd]
                         .iter()
                         .enumerate()
-                        .rfold(then, |inner_then, (index, arg)| {
-                            let label = arg.label.clone().unwrap_or_default();
-
-                            let field_index = if let Some(field_map) = &field_map {
-                                *field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&index)
-                            } else {
-                                index
-                            };
-
-                            let field_name = match &arg.value {
+                        .rfold(then, |inner_then, (index, element)| {
+                            let elem_name = match element.as_ref() {
                                 Pattern::Var { name, .. } => Some(name.to_string()),
                                 Pattern::Assign { name, .. } => Some(name.to_string()),
                                 Pattern::Discard { .. } => None,
                                 _ => Some(format!(
-                                    "field_{}_span_{}_{}",
-                                    field_index,
-                                    arg.value.location().start,
-                                    arg.value.location().end
+                                    "pair_index_{}_span_{}_{}",
+                                    index,
+                                    element.location().start,
+                                    element.location().end
                                 )),
                             };
 
-                            let arg_type = type_map.get(&field_index).unwrap_or_else(|| {
-                                unreachable!(
-                                    "Missing type for field {} of constr {}",
-                                    field_index, name
-                                )
-                            });
-
-                            let mut field_props = ClauseProperties::init_inner(
-                                arg_type,
-                                field_name.clone().unwrap_or_else(|| "_".to_string()),
-                                field_name.clone().unwrap_or_else(|| "_".to_string()),
+                            let mut pair_props = ClauseProperties::init_inner(
+                                &items_type[index],
+                                elem_name.clone().unwrap_or_else(|| "_".to_string()),
+                                elem_name.clone().unwrap_or_else(|| "_".to_string()),
                                 props.final_clause,
                             );
 
-                            let statement = if field_name.is_some() {
+                            let elem = if elem_name.is_some() {
                                 self.nested_clause_condition(
-                                    &arg.value,
-                                    arg_type,
-                                    &mut field_props,
+                                    element,
+                                    &items_type[index],
+                                    &mut pair_props,
                                     inner_then,
                                 )
                             } else {
@@ -2605,21 +2560,21 @@ impl<'a> CodeGenerator<'a> {
                             };
 
                             props.complex_clause =
-                                props.complex_clause || field_props.complex_clause;
+                                props.complex_clause || pair_props.complex_clause;
 
-                            fields.push((field_name, arg_type.clone()));
+                            name_index_assigns.push((elem_name, index));
 
-                            statement
+                            elem
                         });
 
-                fields.reverse();
+                name_index_assigns.reverse();
 
-                let field_assign = if fields.iter().all(|s| s.0.is_none()) {
+                let field_assign = if name_index_assigns.iter().all(|s| s.0.is_none()) {
                     next_then
                 } else {
                     AirTree::pair_access(
-                        fields[0].0.clone(),
-                        fields[1].0.clone(),
+                        name_index_assigns[0].0.clone(),
+                        name_index_assigns[1].0.clone(),
                         subject_tipo.clone(),
                         AirTree::local_var(props.clause_var_name.clone(), subject_tipo.clone()),
                         None,
@@ -3020,9 +2975,8 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
 
-                Pattern::Constructor { .. } if subject_tipo.is_pair() => {
+                Pattern::Pair { .. } => {
                     let (_, assign) = self.clause_pattern(pattern, subject_tipo, props, then);
-
                     assign
                 }
 

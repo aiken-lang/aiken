@@ -433,6 +433,10 @@ impl Type {
         }
     }
 
+    // TODO: Self::App { args, ..} looks fishy, because App's args are referring
+    // to _type parameters_ not to value types unlike Fn's args. So this function
+    // definition is probably wrong. Luckily, we likely never hit the `Self::App`
+    // case at all.
     pub fn arg_types(&self) -> Option<Vec<Rc<Self>>> {
         match self {
             Self::Fn { args, .. } => Some(args.clone()),

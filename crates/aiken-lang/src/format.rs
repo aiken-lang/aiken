@@ -1779,6 +1779,14 @@ impl<'comments> Formatter<'comments> {
                 wrap_args(elems.iter().map(|e| (self.pattern(e), false))).group()
             }
 
+            Pattern::Pair { fst, snd, .. } => "Pair"
+                .to_doc()
+                .append("(")
+                .append(self.pattern(fst))
+                .append(",")
+                .append(self.pattern(snd))
+                .append(")"),
+
             Pattern::List { elements, tail, .. } => {
                 let elements_document =
                     join(elements.iter().map(|e| self.pattern(e)), break_(",", ", "));
