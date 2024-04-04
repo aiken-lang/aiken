@@ -1,0 +1,24 @@
+---
+source: crates/aiken-lang/src/parser/pattern/mod.rs
+description: "Code:\n\nPair(14, True)"
+---
+Pair {
+    location: 0..14,
+    fst: Int {
+        location: 5..7,
+        value: "14",
+        base: Decimal {
+            numeric_underscore: false,
+        },
+    },
+    snd: Constructor {
+        is_record: false,
+        location: 9..13,
+        name: "True",
+        arguments: [],
+        module: None,
+        constructor: (),
+        with_spread: false,
+        tipo: (),
+    },
+}

@@ -1,0 +1,8 @@
+---
+source: crates/aiken-lang/src/parser/pattern/mod.rs
+description: "Code:\n\n_"
+---
+Discard {
+    name: "_",
+    location: 0..1,
+}
