@@ -466,7 +466,7 @@ where
         })
     }
 
-    pub fn export(&self, module: &str, name: &str) -> Result<Export, Error> {
+    pub fn export(&self, module: &str, name: &str, tracing: Tracing) -> Result<Export, Error> {
         self.checked_modules
             .get(module)
             .and_then(|checked_module| {
@@ -476,7 +476,7 @@ where
                 })
             })
             .map(|(checked_module, func)| {
-                let mut generator = self.new_generator(Tracing::silent());
+                let mut generator = self.new_generator(tracing);
 
                 Export::from_function(func, checked_module, &mut generator, &self.checked_modules)
             })
