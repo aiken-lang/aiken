@@ -6,6 +6,7 @@
 
 - **aiken-lsp**: hover and goto definition support on list tail. @rvcas
 - **aiken-lsp**: hover on prop test via expression. @rvcas
+- **aiken**: added export command that exporting of regular function definitons. @rvcas
 
 ### Fixed
 
