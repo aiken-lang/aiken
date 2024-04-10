@@ -1119,6 +1119,9 @@ impl Annotation {
                 elems.iter().find_map(|arg| arg.find_node(byte_index))
             }
             Annotation::Var { .. } | Annotation::Hole { .. } => None,
+            Annotation::Pair { fst, snd, .. } => fst
+                .find_node(byte_index)
+                .or_else(|| snd.find_node(byte_index)),
         };
 
         located.or(Some(Located::Annotation(self)))

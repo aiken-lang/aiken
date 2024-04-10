@@ -937,7 +937,7 @@ impl AirTree {
         }
     }
 
-    pub fn pair_index(index: u64, tipo: Rc<Type>, tuple: AirTree) -> AirTree {
+    pub fn pair_index(index: usize, tipo: Rc<Type>, tuple: AirTree) -> AirTree {
         AirTree::cast_from_data(
             AirTree::builtin(
                 if index == 0 {

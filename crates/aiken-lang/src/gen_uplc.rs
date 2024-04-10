@@ -372,42 +372,32 @@ impl<'a> CodeGenerator<'a> {
                             },
                         ..
                     } => {
-                        if tipo.is_pair() {
-                            assert!(args.len() == 2);
+                        let data_type = lookup_data_type_by_tipo(&self.data_types, tipo)
+                            .expect("Creating a record with no record definition.");
 
-                            let arg1 = self.build(&args[0].value, module_build_name, &[]);
+                        let (constr_index, _) = data_type
+                            .constructors
+                            .iter()
+                            .enumerate()
+                            .find(|(_, dt)| &dt.name == constr_name)
+                            .unwrap();
 
-                            let arg2 = self.build(&args[1].value, module_build_name, &[]);
+                        let constr_args = args
+                            .iter()
+                            .zip(constr_tipo.arg_types().unwrap())
+                            .map(|(arg, tipo)| {
+                                if tipo.is_data() {
+                                    AirTree::cast_to_data(
+                                        self.build(&arg.value, module_build_name, &[]),
+                                        arg.value.tipo(),
+                                    )
+                                } else {
+                                    self.build(&arg.value, module_build_name, &[])
+                                }
+                            })
+                            .collect_vec();
 
-                            AirTree::pair(arg1, arg2, tipo.clone())
-                        } else {
-                            let data_type = lookup_data_type_by_tipo(&self.data_types, tipo)
-                                .expect("Creating a record with no record definition.");
-
-                            let (constr_index, _) = data_type
-                                .constructors
-                                .iter()
-                                .enumerate()
-                                .find(|(_, dt)| &dt.name == constr_name)
-                                .unwrap();
-
-                            let constr_args = args
-                                .iter()
-                                .zip(constr_tipo.arg_types().unwrap())
-                                .map(|(arg, tipo)| {
-                                    if tipo.is_data() {
-                                        AirTree::cast_to_data(
-                                            self.build(&arg.value, module_build_name, &[]),
-                                            arg.value.tipo(),
-                                        )
-                                    } else {
-                                        self.build(&arg.value, module_build_name, &[])
-                                    }
-                                })
-                                .collect_vec();
-
-                            AirTree::create_constr(constr_index, constr_tipo.clone(), constr_args)
-                        }
+                        AirTree::create_constr(constr_index, constr_tipo.clone(), constr_args)
                     }
 
                     TypedExpr::Var {
@@ -659,12 +649,6 @@ impl<'a> CodeGenerator<'a> {
                 } => {
                     if check_replaceable_opaque_type(&record.tipo(), &self.data_types) {
                         self.build(record, module_build_name, &[])
-                    } else if record.tipo().is_pair() {
-                        AirTree::pair_index(
-                            *index,
-                            tipo.clone(),
-                            self.build(record, module_build_name, &[]),
-                        )
                     } else {
                         let function_name = format!("__access_index_{}", *index);
 
@@ -714,19 +698,7 @@ impl<'a> CodeGenerator<'a> {
                         field_map,
                         ..
                     } => {
-                        let val_constructor = if tipo.is_pair() {
-                            ValueConstructor::public(
-                                tipo.clone(),
-                                ValueConstructorVariant::Record {
-                                    module: "".into(),
-                                    name: name.clone(),
-                                    field_map: field_map.clone(),
-                                    arity: 2,
-                                    location: Span::empty(),
-                                    constructors_count: 1,
-                                },
-                            )
-                        } else {
+                        let val_constructor = {
                             let data_type = lookup_data_type_by_tipo(&self.data_types, tipo);
 
                             ValueConstructor::public(
@@ -792,35 +764,43 @@ impl<'a> CodeGenerator<'a> {
                 TypedExpr::TupleIndex {
                     index, tuple, tipo, ..
                 } => {
-                    let function_name = format!("__access_index_{}", *index);
+                    if tuple.tipo().is_pair() {
+                        AirTree::pair_index(
+                            *index,
+                            tipo.clone(),
+                            self.build(tuple, module_build_name, &[]),
+                        )
+                    } else {
+                        let function_name = format!("__access_index_{}", *index);
 
-                    if self.code_gen_functions.get(&function_name).is_none() {
-                        let mut body = AirTree::local_var("__fields", list(data()));
+                        if self.code_gen_functions.get(&function_name).is_none() {
+                            let mut body = AirTree::local_var("__fields", list(data()));
 
-                        for _ in 0..*index {
-                            body = AirTree::builtin(
-                                DefaultFunction::TailList,
-                                list(data()),
-                                vec![body],
-                            )
+                            for _ in 0..*index {
+                                body = AirTree::builtin(
+                                    DefaultFunction::TailList,
+                                    list(data()),
+                                    vec![body],
+                                )
+                            }
+
+                            body = AirTree::builtin(DefaultFunction::HeadList, data(), vec![body]);
+
+                            self.code_gen_functions.insert(
+                                function_name.clone(),
+                                CodeGenFunction::Function {
+                                    body,
+                                    params: vec!["__fields".to_string()],
+                                },
+                            );
                         }
 
-                        body = AirTree::builtin(DefaultFunction::HeadList, data(), vec![body]);
-
-                        self.code_gen_functions.insert(
-                            function_name.clone(),
-                            CodeGenFunction::Function {
-                                body,
-                                params: vec!["__fields".to_string()],
-                            },
-                        );
+                        AirTree::index_access(
+                            function_name,
+                            tipo.clone(),
+                            self.build(tuple, module_build_name, &[]),
+                        )
                     }
-
-                    AirTree::index_access(
-                        function_name,
-                        tipo.clone(),
-                        self.build(tuple, module_build_name, &[]),
-                    )
                 }
 
                 TypedExpr::ErrorTerm { tipo, .. } => AirTree::error(tipo.clone(), false),
@@ -828,66 +808,32 @@ impl<'a> CodeGenerator<'a> {
                 TypedExpr::RecordUpdate {
                     tipo, spread, args, ..
                 } => {
-                    if tipo.is_pair() {
-                        assert!(args.len() == 1);
+                    let mut index_types = vec![];
+                    let mut update_args = vec![];
 
-                        let Some(arg) = args.first() else {
-                            unreachable!("Pair update with no arguments")
-                        };
+                    let mut highest_index = 0;
 
+                    for arg in args
+                        .iter()
+                        .sorted_by(|arg1, arg2| arg1.index.cmp(&arg2.index))
+                    {
                         let arg_val = self.build(&arg.value, module_build_name, &[]);
 
-                        let other_pair = self.build(spread, module_build_name, &[]);
-
-                        if arg.index == 0 {
-                            AirTree::pair(
-                                arg_val,
-                                AirTree::pair_index(
-                                    1,
-                                    tipo.get_inner_types()[1].clone(),
-                                    other_pair,
-                                ),
-                                tipo.clone(),
-                            )
-                        } else {
-                            AirTree::pair(
-                                AirTree::pair_index(
-                                    0,
-                                    tipo.get_inner_types()[0].clone(),
-                                    other_pair,
-                                ),
-                                arg_val,
-                                tipo.clone(),
-                            )
-                        }
-                    } else {
-                        let mut index_types = vec![];
-                        let mut update_args = vec![];
-
-                        let mut highest_index = 0;
-
-                        for arg in args
-                            .iter()
-                            .sorted_by(|arg1, arg2| arg1.index.cmp(&arg2.index))
-                        {
-                            let arg_val = self.build(&arg.value, module_build_name, &[]);
-
-                            if arg.index > highest_index {
-                                highest_index = arg.index;
-                            }
-
-                            index_types.push((arg.index, arg.value.tipo()));
-                            update_args.push(arg_val);
+                        if arg.index > highest_index {
+                            highest_index = arg.index;
                         }
 
-                        AirTree::record_update(
-                            index_types,
-                            highest_index,
-                            tipo.clone(),
-                            self.build(spread, module_build_name, &[]),
-                            update_args,
-                        )
+                        index_types.push((arg.index, arg.value.tipo()));
+                        update_args.push(arg_val);
                     }
+
+                    AirTree::record_update(
+                        index_types,
+                        highest_index,
+                        tipo.clone(),
+                        self.build(spread, module_build_name, &[]),
+                        update_args,
+                    )
                 }
                 TypedExpr::UnOp { value, op, .. } => {
                     AirTree::unop(*op, self.build(value, module_build_name, &[]))
@@ -4521,8 +4467,9 @@ impl<'a> CodeGenerator<'a> {
                     arg_vec.push(arg_stack.pop().unwrap());
                 }
 
-                let tipo = match tipo.as_ref() {
+                let ret_tipo = match tipo.as_ref() {
                     Type::Fn { ret, .. } => ret,
+                    // In this case the Air Opcode only holds the return type and not the function type
                     _ => &tipo,
                 };
 
@@ -4537,11 +4484,11 @@ impl<'a> CodeGenerator<'a> {
                     }
 
                     DefaultFunction::FstPair | DefaultFunction::SndPair => {
-                        builder::undata_builtin(&func, count, tipo, arg_vec)
+                        builder::undata_builtin(&func, count, ret_tipo, arg_vec)
                     }
 
                     DefaultFunction::HeadList if !tipo.is_pair() => {
-                        builder::undata_builtin(&func, count, tipo, arg_vec)
+                        builder::undata_builtin(&func, count, ret_tipo, arg_vec)
                     }
 
                     DefaultFunction::MkCons | DefaultFunction::MkPairData => {

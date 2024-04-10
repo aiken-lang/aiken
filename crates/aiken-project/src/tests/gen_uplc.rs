@@ -2117,7 +2117,7 @@ fn acceptance_test_22_filter_map() {
 fn acceptance_test_23_to_list() {
     let src = r#"
         pub type Map<key, value> =
-        List<Pair<key, value>>
+            List<Pair<key, value>>
     
         pub opaque type AssocList<key, value> {
             inner: Map<key, value>,
@@ -2143,11 +2143,11 @@ fn acceptance_test_23_to_list() {
             when elems is {
             [] ->
                 [Pair(k, v)]
-            [Pair { fst: k2, snd: v2 }, ..rest] ->
+            [Pair(k2, v2), ..rest] ->
                 if k == k2 {
-                [Pair(k, v), ..rest]
+                  [Pair(k, v), ..rest]
                 } else {
-                [Pair(k2, v2), ..do_insert(rest, k, v)]
+                  [Pair(k2, v2), ..do_insert(rest, k, v)]
                 }
             }
         }
@@ -2159,7 +2159,7 @@ fn acceptance_test_23_to_list() {
         }
         
         test to_list_2() {
-            to_list(fixture_1()) == [Pair("foo", 42), Pair("bar", 14)]
+            to_list(fixture_1()) == [Pair("foo", 42).2nd, Pair("bar", 14)]
         }
     "#;
 
@@ -2996,8 +2996,6 @@ fn acceptance_test_28_unique_list() {
 #[test]
 fn acceptance_test_29_union_pair() {
     let src = r#"
-      type Map<a,b> = List<Pair<a,b>>
-
       pub opaque type AssocList<key, value> {
         inner: Map<key, value>,
       }
@@ -3054,7 +3052,7 @@ fn acceptance_test_29_union_pair() {
         when left is {
           [] ->
             right
-          [Pair{fst: k, snd: v}, ..rest] ->
+          [Pair(k, v), ..rest] ->
             do_union(rest, do_insert(right, k, v))
         }
       }
