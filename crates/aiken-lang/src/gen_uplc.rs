@@ -649,6 +649,12 @@ impl<'a> CodeGenerator<'a> {
                 } => {
                     if check_replaceable_opaque_type(&record.tipo(), &self.data_types) {
                         self.build(record, module_build_name, &[])
+                    } else if record.tipo().is_pair() {
+                        AirTree::pair_index(
+                            usize::try_from(*index).unwrap(),
+                            tipo.clone(),
+                            self.build(record, module_build_name, &[]),
+                        )
                     } else {
                         let function_name = format!("__access_index_{}", *index);
 

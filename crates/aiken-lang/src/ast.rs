@@ -342,6 +342,19 @@ impl TypedDataType {
         }
     }
 
+    pub fn pair(fst_tipo: Rc<Type>, snd_tipo: Rc<Type>) -> Self {
+        DataType {
+            constructors: vec![],
+            doc: None,
+            location: Span::empty(),
+            name: "Pair".to_string(),
+            opaque: false,
+            parameters: vec!["a".to_string(), "b".to_string()],
+            public: true,
+            typed_parameters: vec![fst_tipo, snd_tipo],
+        }
+    }
+
     pub fn bool() -> Self {
         DataType {
             constructors: vec![
