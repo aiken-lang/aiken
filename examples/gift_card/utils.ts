@@ -9,8 +9,8 @@ import {
   SpendingValidator,
 } from "lucid/mod.ts";
 
-import { Blueprint } from "~/blueprint.ts";
-import blueprint from "~/plutus.json" assert { type: "json" };
+import { Blueprint } from "./blueprint.ts";
+import blueprint from "./plutus.json" assert { type: "json" };
 
 export type Validators = {
   redeem: SpendingValidator;
