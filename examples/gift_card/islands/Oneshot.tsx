@@ -1,15 +1,15 @@
 import { useEffect, useState } from "preact/hooks";
 import { Blockfrost, Constr, Data, fromText, Lucid } from "lucid/mod.ts";
 
-import { Input } from "~/components/Input.tsx";
-import { Button } from "~/components/Button.tsx";
+import { Input } from "../components/Input.tsx";
+import { Button } from "../components/Button.tsx";
 
 import {
   AppliedValidators,
   applyParams,
   LocalCache,
   Validators,
-} from "~/utils.ts";
+} from "../utils.ts";
 
 export interface AppProps {
   validators: Validators;

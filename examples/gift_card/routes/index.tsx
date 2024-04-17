@@ -1,9 +1,9 @@
 import { Head } from "$fresh/runtime.ts";
 import { Handlers, PageProps } from "$fresh/server.ts";
 
-import Oneshot from "~/islands/Oneshot.tsx";
+import Oneshot from "../islands/Oneshot.tsx";
 
-import { readValidators, Validators } from "~/utils.ts";
+import { readValidators, Validators } from "../utils.ts";
 
 interface Data {
   validators: Validators;
