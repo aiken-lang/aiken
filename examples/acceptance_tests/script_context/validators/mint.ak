@@ -1,4 +1,5 @@
 use aiken/dict
+use aiken/list
 use aiken/transaction.{Mint, ScriptContext}
 use aiken/transaction/value
 
@@ -36,6 +37,7 @@ fn assert_mint(purpose, transaction) {
 }
 
 fn assert_redeemers(ctx, my_redeemer) {
-  expect Some(redeemer) = dict.get(ctx.transaction.redeemers, ctx.purpose)
-  my_redeemer == redeemer && dict.size(ctx.transaction.redeemers) == 1
+  expect Some(Pair(_, redeemer)) =
+    list.find(ctx.transaction.redeemers, fn(kv) { kv.1st == ctx.purpose })
+  my_redeemer == redeemer && list.length(ctx.transaction.redeemers) == 1
 }

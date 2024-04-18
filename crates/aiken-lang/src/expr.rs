@@ -793,11 +793,10 @@ impl UntypedExpr {
                 },
 
                 uplc::ast::Constant::ProtoPair(_, _, left, right) => match tipo {
-                    Type::Tuple { elems, .. } => Ok(UntypedExpr::Tuple {
-                        location: Span::empty(),
-                        elems: [left.as_ref(), right.as_ref()]
+                    Type::Pair { fst, snd, .. } => {
+                        let elems = [left.as_ref(), right.as_ref()]
                             .into_iter()
-                            .zip(elems)
+                            .zip([fst, snd])
                             .map(|(arg, arg_type)| {
                                 UntypedExpr::do_reify_constant(
                                     generics,
@@ -806,10 +805,16 @@ impl UntypedExpr {
                                     arg_type,
                                 )
                             })
-                            .collect::<Result<Vec<_>, _>>()?,
-                    }),
+                            .collect::<Result<Vec<_>, _>>()?;
+
+                        Ok(UntypedExpr::Pair {
+                            location: Span::empty(),
+                            fst: elems.first().unwrap().to_owned().into(),
+                            snd: elems.last().unwrap().to_owned().into(),
+                        })
+                    }
                     _ => Err(format!(
-                        "invalid type annotation. expected Tuple but got: {tipo:?}"
+                        "invalid type annotation. expected Pair but got: {tipo:?}"
                     )),
                 },
 
@@ -904,9 +909,10 @@ impl UntypedExpr {
                     location: Span::empty(),
                     elements: kvs
                         .into_iter()
-                        .map(|(k, v)| UntypedExpr::Tuple {
+                        .map(|(k, v)| UntypedExpr::Pair {
                             location: Span::empty(),
-                            elems: vec![UntypedExpr::reify_blind(k), UntypedExpr::reify_blind(v)],
+                            fst: UntypedExpr::reify_blind(k).into(),
+                            snd: UntypedExpr::reify_blind(v).into(),
                         })
                         .collect::<Vec<_>>(),
                     tail: None,
@@ -1022,6 +1028,21 @@ impl UntypedExpr {
                             })
                             .collect::<Result<Vec<_>, _>>()?,
                     }),
+                    Type::Pair { fst, snd, .. } => {
+                        let mut elems = args
+                            .into_iter()
+                            .zip([fst, snd])
+                            .map(|(arg, arg_type)| {
+                                UntypedExpr::do_reify_data(generics, data_types, arg, arg_type)
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+
+                        Ok(UntypedExpr::Pair {
+                            location: Span::empty(),
+                            fst: elems.remove(0).into(),
+                            snd: elems.remove(0).into(),
+                        })
+                    }
                     _ => Err(format!(
                         "invalid type annotation. expected List but got: {tipo:?}"
                     )),
