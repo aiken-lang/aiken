@@ -9,7 +9,7 @@ Schema {
             Var {
                 tipo: RefCell {
                     value: Generic {
-                        id: 33,
+                        id: 37,
                     },
                 },
                 alias: None,
