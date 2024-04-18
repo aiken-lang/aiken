@@ -647,6 +647,11 @@ impl<'a> CodeGenerator<'a> {
                     record,
                     ..
                 } => {
+                    assert!(
+                        !record.tipo().is_pair(),
+                        "illegal record access on a Pair. This should have been a tuple-index access."
+                    );
+
                     if check_replaceable_opaque_type(&record.tipo(), &self.data_types) {
                         self.build(record, module_build_name, &[])
                     } else {
