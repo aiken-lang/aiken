@@ -653,15 +653,6 @@ pub fn lookup_data_type_by_tipo(
                 None
             }
         }
-        Type::Pair { .. } => {
-            let data_type_key = DataTypeKey {
-                module_name: "".to_string(),
-                defined_type: "Pair".to_string(),
-            };
-
-            data_types.get(&data_type_key).cloned().cloned()
-        }
-
         _ => None,
     }
 }
