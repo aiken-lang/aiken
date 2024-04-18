@@ -508,18 +508,16 @@ If you really meant to return that last expression, try to replace it with the f
         name: String,
     },
 
-    #[error(
-        "I tripped over an attempt to access tuple elements on something else than a tuple.\n"
-    )]
+    #[error("I tripped over an attempt to access elements on something that isn't indexable.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#tuples"))]
-    #[diagnostic(code("illegal::tuple_index"))]
+    #[diagnostic(code("illegal::indexable"))]
     #[diagnostic(help(
-        r#"Because you used a tuple-index on an element, I assumed it had to be a tuple but instead I found something of type:
+        r#"Because you used an ordinal index on an element, I assumed it had to be a tuple or a pair but instead I found something of type:
 
 ╰─▶ {type_info}"#,
         type_info = tipo.to_pretty(0).if_supports_color(Stdout, |s| s.red())
     ))]
-    NotATuple {
+    NotIndexable {
         #[label]
         location: Span,
         tipo: Rc<Type>,
@@ -675,10 +673,23 @@ You can help me by providing a type-annotation for 'x', as such:
     #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#tuples"))]
     #[diagnostic(code("invalid::tuple_index"))]
     TupleIndexOutOfBound {
-        #[label]
+        #[label("out of bounds")]
         location: Span,
         index: usize,
         size: usize,
+    },
+
+    #[error(
+        "I discovered an attempt to access the {} element of a {}.\n",
+        Ordinal(*index + 1).to_string().if_supports_color(Stdout, |s| s.purple()),
+        "Pair".if_supports_color(Stdout, |s| s.bright_blue()).if_supports_color(Stdout, |s| s.bold()),
+    )]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#pairs"))]
+    #[diagnostic(code("invalid::pair_index"))]
+    PairIndexOutOfBound {
+        #[label("out of bounds")]
+        location: Span,
+        index: usize,
     },
 
     #[error(
@@ -1035,7 +1046,7 @@ impl ExtraData for Error {
             | Error::MissingVarInAlternativePattern { .. }
             | Error::MultiValidatorEqualArgs { .. }
             | Error::NonLocalClauseGuardVariable { .. }
-            | Error::NotATuple { .. }
+            | Error::NotIndexable { .. }
             | Error::NotExhaustivePatternMatch { .. }
             | Error::NotFn { .. }
             | Error::PositionalArgumentAfterLabeled { .. }
@@ -1045,6 +1056,7 @@ impl ExtraData for Error {
             | Error::RecursiveType { .. }
             | Error::RedundantMatchClause { .. }
             | Error::TupleIndexOutOfBound { .. }
+            | Error::PairIndexOutOfBound { .. }
             | Error::UnexpectedLabeledArg { .. }
             | Error::UnexpectedLabeledArgInPattern { .. }
             | Error::UnknownLabels { .. }
