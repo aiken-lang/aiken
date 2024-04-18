@@ -373,7 +373,13 @@ impl<'a> CodeGenerator<'a> {
                         ..
                     } => {
                         let data_type = lookup_data_type_by_tipo(&self.data_types, tipo)
-                            .expect("Creating a record with no record definition.");
+                            .unwrap_or_else(||
+                                panic!(
+                                    "Creating a record of type {:?} with no record definition. Known definitions: {:?}",
+                                    tipo.to_pretty(0),
+                                    self.data_types.keys()
+                                )
+                            );
 
                         let (constr_index, _) = data_type
                             .constructors
@@ -757,6 +763,12 @@ impl<'a> CodeGenerator<'a> {
                         builder::constants_ir(literal)
                     }
                 },
+
+                TypedExpr::Pair { tipo, fst, snd, .. } => AirTree::pair(
+                    self.build(fst, module_build_name, &[]),
+                    self.build(snd, module_build_name, &[]),
+                    tipo.clone(),
+                ),
 
                 TypedExpr::Tuple { tipo, elems, .. } => AirTree::tuple(
                     elems

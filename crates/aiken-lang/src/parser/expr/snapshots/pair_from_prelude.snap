@@ -1,0 +1,21 @@
+---
+source: crates/aiken-lang/src/parser/expr/pair.rs
+description: "Code:\n\naiken.Pair(1, 2)"
+---
+Pair {
+    location: 10..16,
+    fst: UInt {
+        location: 11..12,
+        value: "1",
+        base: Decimal {
+            numeric_underscore: false,
+        },
+    },
+    snd: UInt {
+        location: 14..15,
+        value: "2",
+        base: Decimal {
+            numeric_underscore: false,
+        },
+    },
+}

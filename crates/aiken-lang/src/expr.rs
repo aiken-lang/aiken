@@ -161,6 +161,13 @@ pub enum TypedExpr {
         elems: Vec<Self>,
     },
 
+    Pair {
+        location: Span,
+        tipo: Rc<Type>,
+        fst: Box<Self>,
+        snd: Box<Self>,
+    },
+
     TupleIndex {
         location: Span,
         tipo: Rc<Type>,
@@ -214,6 +221,7 @@ impl TypedExpr {
             | Self::UnOp { tipo, .. }
             | Self::BinOp { tipo, .. }
             | Self::Tuple { tipo, .. }
+            | Self::Pair { tipo, .. }
             | Self::String { tipo, .. }
             | Self::ByteArray { tipo, .. }
             | Self::TupleIndex { tipo, .. }
@@ -256,6 +264,7 @@ impl TypedExpr {
             | TypedExpr::ErrorTerm { .. }
             | TypedExpr::BinOp { .. }
             | TypedExpr::Tuple { .. }
+            | TypedExpr::Pair { .. }
             | TypedExpr::UnOp { .. }
             | TypedExpr::String { .. }
             | TypedExpr::Sequence { .. }
@@ -299,6 +308,7 @@ impl TypedExpr {
             | Self::List { location, .. }
             | Self::BinOp { location, .. }
             | Self::Tuple { location, .. }
+            | Self::Pair { location, .. }
             | Self::String { location, .. }
             | Self::UnOp { location, .. }
             | Self::Pipeline { location, .. }
@@ -337,6 +347,7 @@ impl TypedExpr {
             | Self::List { location, .. }
             | Self::BinOp { location, .. }
             | Self::Tuple { location, .. }
+            | Self::Pair { location, .. }
             | Self::String { location, .. }
             | Self::UnOp { location, .. }
             | Self::Sequence { location, .. }
@@ -388,6 +399,11 @@ impl TypedExpr {
             TypedExpr::Tuple {
                 elems: elements, ..
             } => elements
+                .iter()
+                .find_map(|e| e.find_node(byte_index))
+                .or(Some(Located::Expression(self))),
+
+            TypedExpr::Pair { fst, snd, .. } => [fst, snd]
                 .iter()
                 .find_map(|e| e.find_node(byte_index))
                 .or(Some(Located::Expression(self))),
@@ -576,6 +592,12 @@ pub enum UntypedExpr {
     Tuple {
         location: Span,
         elems: Vec<Self>,
+    },
+
+    Pair {
+        location: Span,
+        fst: Box<Self>,
+        snd: Box<Self>,
     },
 
     TupleIndex {
@@ -1272,6 +1294,7 @@ impl UntypedExpr {
             | Self::ByteArray { location, .. }
             | Self::BinOp { location, .. }
             | Self::Tuple { location, .. }
+            | Self::Pair { location, .. }
             | Self::String { location, .. }
             | Self::Assignment { location, .. }
             | Self::TupleIndex { location, .. }

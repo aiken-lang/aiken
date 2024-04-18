@@ -15,6 +15,9 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use strum::IntoEnumIterator;
 use uplc::builtins::DefaultFunction;
 
+pub const PRELUDE: &str = "aiken";
+pub const BUILTIN: &str = "aiken/builtin";
+
 pub const BYTE_ARRAY: &str = "ByteArray";
 pub const BOOL: &str = "Bool";
 pub const INT: &str = "Int";
@@ -37,7 +40,7 @@ pub const FUZZER: &str = "Fuzzer";
 /// into a compiler pipeline
 pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     let mut prelude = TypeInfo {
-        name: "aiken".to_string(),
+        name: PRELUDE.to_string(),
         package: "".to_string(),
         kind: ModuleKind::Lib,
         types: HashMap::new(),
@@ -592,7 +595,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
 
 pub fn plutus(id_gen: &IdGenerator) -> TypeInfo {
     let mut plutus = TypeInfo {
-        name: "aiken/builtin".to_string(),
+        name: BUILTIN.to_string(),
         package: "".to_string(),
         kind: ModuleKind::Lib,
         types: HashMap::new(),
