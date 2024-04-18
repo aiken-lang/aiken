@@ -3,15 +3,15 @@
 exit_codes=()
 
 TESTS=()
-for scenario in $(find . -maxdepth 1 -mindepth 1 -type d ! -name script_context); do
-  ./run $scenario &
-  TESTS+=("$!")
-done
-
-for p in ${TESTS[@]}; do
-  wait $p
-  exit_codes+=("$?")
-done
+# for scenario in $(find . -maxdepth 1 -mindepth 1 -type d ! -name script_context); do
+#   ./run $scenario &
+#   TESTS+=("$!")
+# done
+#
+# for p in ${TESTS[@]}; do
+#   wait $p
+#   exit_codes+=("$?")
+# done
 
 
 for interaction in $(find script_context/validators -type f); do

@@ -5,8 +5,8 @@ use crate::{
     },
     expr::TypedExpr,
     tipo::{
-        fields::FieldMap, AccessorsMap, RecordAccessor, Type, TypeAliasAnnotation, TypeConstructor,
-        TypeInfo, TypeVar, ValueConstructor, ValueConstructorVariant,
+        fields::FieldMap, Type, TypeAliasAnnotation, TypeConstructor, TypeInfo, TypeVar,
+        ValueConstructor, ValueConstructorVariant,
     },
     IdGenerator,
 };
@@ -342,59 +342,6 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     prelude
         .types_constructors
         .insert(PAIR.to_string(), vec![PAIR.to_string()]);
-
-    let mut pair_fields = HashMap::new();
-    pair_fields.insert("fst".to_string(), (0, Span::empty()));
-    pair_fields.insert("snd".to_string(), (1, Span::empty()));
-    prelude.values.insert(
-        PAIR.to_string(),
-        ValueConstructor::public(
-            function(
-                vec![fst_parameter.clone(), snd_parameter.clone()],
-                pair(fst_parameter.clone(), snd_parameter.clone()),
-            ),
-            ValueConstructorVariant::Record {
-                module: "".into(),
-                name: PAIR.to_string(),
-                field_map: Some(FieldMap {
-                    arity: 2,
-                    fields: pair_fields,
-                    is_function: false,
-                }),
-                arity: 2,
-                location: Span::empty(),
-                constructors_count: 1,
-            },
-        ),
-    );
-
-    let mut accessors = HashMap::new();
-    accessors.insert(
-        "fst".to_string(),
-        RecordAccessor {
-            index: 0,
-            label: "fst".to_string(),
-            tipo: fst_parameter.clone(),
-        },
-    );
-
-    accessors.insert(
-        "snd".to_string(),
-        RecordAccessor {
-            index: 1,
-            label: "snd".to_string(),
-            tipo: snd_parameter.clone(),
-        },
-    );
-
-    prelude.accessors.insert(
-        PAIR.to_string(),
-        AccessorsMap {
-            public: true,
-            tipo: pair(fst_parameter.clone(), snd_parameter.clone()),
-            accessors,
-        },
-    );
 
     // String
     prelude.types.insert(
