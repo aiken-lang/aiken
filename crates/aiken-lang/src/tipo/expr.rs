@@ -2065,13 +2065,13 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
     fn infer_tuple_index(
         &mut self,
-        tuple: UntypedExpr,
+        tuple_or_pair: UntypedExpr,
         index: usize,
         location: Span,
     ) -> Result<TypedExpr, Error> {
-        let tuple = self.infer(tuple)?;
+        let tuple_or_pair = self.infer(tuple_or_pair)?;
 
-        let tipo = match *collapse_links(tuple.tipo()) {
+        let tipo = match *collapse_links(tuple_or_pair.tipo()) {
             Type::Tuple {
                 ref elems,
                 alias: _,
@@ -2087,9 +2087,22 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     Ok(elems[index].clone())
                 }
             }
-            _ => Err(Error::NotATuple {
+            Type::Pair {
+                ref fst,
+                ref snd,
+                alias: _,
+            } => {
+                if index == 0 {
+                    Ok(fst.clone())
+                } else if index == 1 {
+                    Ok(snd.clone())
+                } else {
+                    Err(Error::PairIndexOutOfBound { location, index })
+                }
+            }
+            _ => Err(Error::NotIndexable {
                 location,
-                tipo: tuple.tipo(),
+                tipo: tuple_or_pair.tipo(),
             }),
         }?;
 
@@ -2097,7 +2110,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             location,
             tipo,
             index,
-            tuple: Box::new(tuple),
+            tuple: Box::new(tuple_or_pair),
         })
     }
 

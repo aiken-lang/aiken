@@ -2349,3 +2349,52 @@ fn partial_eq_callback_return() {
         Err((_, Error::CouldNotUnify { .. }))
     ));
 }
+
+#[test]
+fn pair_access_on_call() {
+    let source_code = r#"
+        use aiken/builtin
+
+        pub fn list_at(xs: List<a>, index: Int) -> a {
+          if index == 0 {
+            builtin.head_list(xs)
+          } else {
+            list_at(builtin.tail_list(xs), index - 1)
+          }
+        }
+
+        fn foo() {
+          [list_at([Pair(1, 2)], 0).2nd, ..[1, 2]]
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn pair_index_out_of_bound() {
+    let source_code = r#"
+        pub fn foo() {
+            Pair(1, 2).3rd
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check_validator(parse(source_code))),
+        Err((_, Error::PairIndexOutOfBound { .. }))
+    ))
+}
+
+#[test]
+fn not_indexable() {
+    let source_code = r#"
+        pub fn foo() {
+            "foo".1st
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check_validator(parse(source_code))),
+        Err((_, Error::NotIndexable { .. }))
+    ))
+}

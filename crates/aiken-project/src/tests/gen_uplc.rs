@@ -2118,19 +2118,19 @@ fn acceptance_test_23_to_list() {
     let src = r#"
         pub type Map<key, value> =
             List<Pair<key, value>>
-    
+
         pub opaque type AssocList<key, value> {
             inner: Map<key, value>,
         }
-        
+
         pub fn new() -> AssocList<key, value> {
             AssocList { inner: [] }
         }
-        
+
         pub fn to_list(m: AssocList<key, value>) -> Map<key, value> {
             m.inner
         }
-        
+
         pub fn insert(
             in m: AssocList<key, value>,
             key k: key,
@@ -2138,7 +2138,7 @@ fn acceptance_test_23_to_list() {
         ) -> AssocList<key, value> {
             AssocList { inner: do_insert(m.inner, k, v) }
         }
-        
+
         fn do_insert(elems: Map<key, value>, k: key, v: value) -> Map<key, value> {
             when elems is {
             [] ->
@@ -2151,15 +2151,15 @@ fn acceptance_test_23_to_list() {
                 }
             }
         }
-        
+
         fn fixture_1() {
             new()
             |> insert("foo", 42)
             |> insert("bar", 14)
         }
-        
+
         test to_list_2() {
-            to_list(fixture_1()) == [Pair("foo", 42).2nd, Pair("bar", 14)]
+            to_list(fixture_1()) == [Pair("foo", 42), Pair("bar", 14)]
         }
     "#;
 
