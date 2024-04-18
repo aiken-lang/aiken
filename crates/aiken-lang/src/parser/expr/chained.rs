@@ -1,20 +1,11 @@
-use chumsky::prelude::*;
-
-use super::anonymous_function::parser as anonymous_function;
-use super::assignment;
-use super::block::parser as block;
-use super::bytearray::parser as bytearray;
-use super::if_else::parser as if_else;
-use super::int::parser as int;
-use super::list::parser as list;
-use super::record::parser as record;
-use super::record_update::parser as record_update;
-use super::string::parser as string;
-use super::tuple::parser as tuple;
-use super::var::parser as var;
-use super::when::parser as when;
-use super::{and_or_chain, anonymous_binop::parser as anonymous_binop};
-
+use super::{
+    and_or_chain, anonymous_binop::parser as anonymous_binop,
+    anonymous_function::parser as anonymous_function, assignment, block::parser as block,
+    bytearray::parser as bytearray, if_else::parser as if_else, int::parser as int,
+    list::parser as list, pair::parser as pair, record::parser as record,
+    record_update::parser as record_update, string::parser as string, tuple::parser as tuple,
+    var::parser as var, when::parser as when,
+};
 use crate::{
     expr::UntypedExpr,
     parser::{
@@ -23,6 +14,7 @@ use crate::{
         token::Token,
     },
 };
+use chumsky::prelude::*;
 
 pub fn parser<'a>(
     sequence: Recursive<'a, Token, UntypedExpr, ParseError>,
@@ -58,6 +50,7 @@ pub fn chain_start<'a>(
     choice((
         string(),
         int(),
+        pair(expression.clone()),
         record_update(expression.clone()),
         record(expression.clone()),
         field_access::constructor(),

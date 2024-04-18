@@ -16,7 +16,7 @@ use crate::{
         UntypedClauseGuard, UntypedIfBranch, UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{
-        bool, byte_array, function, g1_element, g2_element, int, list, string, tuple, void,
+        bool, byte_array, function, g1_element, g2_element, int, list, pair, string, tuple, void,
     },
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
@@ -225,6 +225,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             } => self.infer_seq(location, expressions),
 
             UntypedExpr::Tuple { location, elems } => self.infer_tuple(elems, location),
+
+            UntypedExpr::Pair { location, fst, snd } => self.infer_pair(*fst, *snd, location),
 
             UntypedExpr::String { location, value } => Ok(self.infer_string(value, location)),
 
@@ -2020,6 +2022,26 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         }
     }
 
+    fn infer_pair(
+        &mut self,
+        fst: UntypedExpr,
+        snd: UntypedExpr,
+        location: Span,
+    ) -> Result<TypedExpr, Error> {
+        let typed_fst = self.infer(fst)?;
+        ensure_serialisable(false, typed_fst.tipo(), location)?;
+
+        let typed_snd = self.infer(snd)?;
+        ensure_serialisable(false, typed_snd.tipo(), location)?;
+
+        Ok(TypedExpr::Pair {
+            location,
+            tipo: pair(typed_fst.tipo(), typed_snd.tipo()),
+            fst: typed_fst.into(),
+            snd: typed_snd.into(),
+        })
+    }
+
     fn infer_tuple(&mut self, elems: Vec<UntypedExpr>, location: Span) -> Result<TypedExpr, Error> {
         let mut typed_elems = vec![];
 
@@ -2343,6 +2365,7 @@ fn assert_no_assignment(expr: &UntypedExpr) -> Result<(), Error> {
         | UntypedExpr::Sequence { .. }
         | UntypedExpr::String { .. }
         | UntypedExpr::Tuple { .. }
+        | UntypedExpr::Pair { .. }
         | UntypedExpr::TupleIndex { .. }
         | UntypedExpr::UnOp { .. }
         | UntypedExpr::Var { .. }

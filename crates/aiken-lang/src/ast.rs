@@ -970,6 +970,7 @@ pub enum Annotation {
         location: Span,
         elems: Vec<Self>,
     },
+
     Pair {
         location: Span,
         fst: Box<Self>,
