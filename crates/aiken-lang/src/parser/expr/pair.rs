@@ -8,10 +8,10 @@ use chumsky::prelude::*;
 pub fn parser(
     r: Recursive<'_, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + '_ {
-    select! {Token::Name { name } if &name == PRELUDE => name}
+    select! {Token::Name { name } if name == PRELUDE => name}
         .then_ignore(just(Token::Dot))
         .or_not()
-        .then_ignore(select! {Token::UpName { name } if &name == PAIR => name})
+        .then_ignore(select! {Token::UpName { name } if name == PAIR => name})
         .ignore_then(
             r.clone()
                 .separated_by(just(Token::Comma))

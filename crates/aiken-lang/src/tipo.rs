@@ -269,18 +269,20 @@ impl Type {
     pub fn is_primitive(&self) -> bool {
         let uplc_type = self.get_uplc_type();
         match uplc_type {
-            UplcType::Bool
-            | UplcType::Integer
-            | UplcType::String
-            | UplcType::ByteString
-            | UplcType::Unit
-            | UplcType::Bls12_381G1Element
-            | UplcType::Bls12_381G2Element
-            | UplcType::Bls12_381MlResult => true,
+            Some(
+                UplcType::Bool
+                | UplcType::Integer
+                | UplcType::String
+                | UplcType::ByteString
+                | UplcType::Unit
+                | UplcType::Bls12_381G1Element
+                | UplcType::Bls12_381G2Element
+                | UplcType::Bls12_381MlResult
+                | UplcType::Data,
+            ) => true,
 
-            UplcType::Data if self.is_data() => true,
-            UplcType::Data => false,
-            UplcType::List(_) | UplcType::Pair(_, _) => false,
+            None => false,
+            Some(UplcType::List(_) | UplcType::Pair(_, _)) => false,
         }
     }
 
@@ -472,7 +474,7 @@ impl Type {
                 Self::Var { tipo, .. } => tipo.borrow().get_inner_types(),
                 _ => vec![],
             }
-        } else if matches!(self.get_uplc_type(), UplcType::Data) {
+        } else if self.get_uplc_type().is_none() {
             match self {
                 Type::App { args, .. } => args.clone(),
                 Type::Fn { args, ret, .. } => {
@@ -488,31 +490,35 @@ impl Type {
         }
     }
 
-    pub fn get_uplc_type(&self) -> UplcType {
+    pub fn get_uplc_type(&self) -> Option<UplcType> {
         if self.is_int() {
-            UplcType::Integer
+            Some(UplcType::Integer)
         } else if self.is_bytearray() {
-            UplcType::ByteString
+            Some(UplcType::ByteString)
         } else if self.is_string() {
-            UplcType::String
+            Some(UplcType::String)
         } else if self.is_bool() {
-            UplcType::Bool
+            Some(UplcType::Bool)
         } else if self.is_void() {
-            UplcType::Unit
+            Some(UplcType::Unit)
         } else if self.is_map() {
-            UplcType::List(UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()).into())
+            Some(UplcType::List(
+                UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()).into(),
+            ))
         } else if self.is_list() || self.is_tuple() {
-            UplcType::List(UplcType::Data.into())
+            Some(UplcType::List(UplcType::Data.into()))
         } else if self.is_pair() {
-            UplcType::Pair(UplcType::Data.into(), UplcType::Data.into())
+            Some(UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()))
         } else if self.is_bls381_12_g1() {
-            UplcType::Bls12_381G1Element
+            Some(UplcType::Bls12_381G1Element)
         } else if self.is_bls381_12_g2() {
-            UplcType::Bls12_381G2Element
+            Some(UplcType::Bls12_381G2Element)
         } else if self.is_ml_result() {
-            UplcType::Bls12_381MlResult
+            Some(UplcType::Bls12_381MlResult)
+        } else if self.is_data() {
+            Some(UplcType::Data)
         } else {
-            UplcType::Data
+            None
         }
     }
 
@@ -1064,13 +1070,6 @@ impl TypeVar {
                 }
                 .into()]
             }
-        }
-    }
-
-    pub fn get_uplc_type(&self) -> Option<UplcType> {
-        match self {
-            Self::Link { tipo } => Some(tipo.get_uplc_type()),
-            _ => None,
         }
     }
 }

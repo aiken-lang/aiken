@@ -1470,19 +1470,21 @@ impl<'a> CodeGenerator<'a> {
 
         match uplc_type {
             // primitives
-            UplcType::Integer
-            | UplcType::String
-            | UplcType::Bool
-            | UplcType::ByteString
-            | UplcType::Unit
-            | UplcType::Bls12_381G1Element
-            | UplcType::Bls12_381G2Element
-            | UplcType::Bls12_381MlResult => value,
+            Some(
+                UplcType::Integer
+                | UplcType::String
+                | UplcType::Bool
+                | UplcType::ByteString
+                | UplcType::Unit
+                | UplcType::Bls12_381G1Element
+                | UplcType::Bls12_381G2Element
+                | UplcType::Bls12_381MlResult,
+            ) => value,
             // Untyped Data
-            UplcType::Data if tipo.is_data() => value,
+            Some(UplcType::Data) => value,
 
             // Map type
-            UplcType::List(_) if tipo.is_map() => {
+            Some(UplcType::List(_)) if tipo.is_map() => {
                 assert!(!tipo.get_inner_types().is_empty());
 
                 let inner_list_type = &tipo.get_inner_types()[0];
@@ -1565,7 +1567,7 @@ impl<'a> CodeGenerator<'a> {
                 AirTree::let_assignment(&map_name, value, func_call)
             }
             // Tuple type
-            UplcType::List(_) if tipo.is_tuple() => {
+            Some(UplcType::List(_)) if tipo.is_tuple() => {
                 let tuple_inner_types = tipo.get_inner_types();
 
                 assert!(!tuple_inner_types.is_empty());
@@ -1610,7 +1612,7 @@ impl<'a> CodeGenerator<'a> {
                 AirTree::let_assignment(&tuple_name, value, tuple_access)
             }
             // Regular List type
-            UplcType::List(_) => {
+            Some(UplcType::List(_)) => {
                 assert!(!tipo.get_inner_types().is_empty());
 
                 let inner_list_type = &tipo.get_inner_types()[0];
@@ -1686,7 +1688,7 @@ impl<'a> CodeGenerator<'a> {
                 }
             }
             // Pair type
-            UplcType::Pair(_, _) => {
+            Some(UplcType::Pair(_, _)) => {
                 let tuple_inner_types = tipo.get_inner_types();
 
                 assert!(tuple_inner_types.len() == 2);
@@ -1726,7 +1728,7 @@ impl<'a> CodeGenerator<'a> {
             }
 
             // Constr type
-            UplcType::Data => {
+            None => {
                 let data_type =
                     lookup_data_type_by_tipo(&self.data_types, tipo).unwrap_or_else(|| {
                         unreachable!("We need a data type definition for type {:#?}", tipo)
@@ -4012,6 +4014,7 @@ impl<'a> CodeGenerator<'a> {
                 arg_stack.push(arg);
             }
         }
+        assert!(arg_stack.len() == 1, "Expected one term on the stack");
         arg_stack.pop().unwrap()
     }
 
@@ -4544,60 +4547,63 @@ impl<'a> CodeGenerator<'a> {
                     BinOp::Or => left.delayed_if_then_else(Term::bool(true), right),
                     BinOp::Eq | BinOp::NotEq => {
                         let builtin = match &uplc_type {
-                            UplcType::Integer => Term::equals_integer(),
-                            UplcType::String => Term::equals_string(),
-                            UplcType::ByteString => Term::equals_bytestring(),
-                            UplcType::Bls12_381G1Element => Term::bls12_381_g1_equal(),
-                            UplcType::Bls12_381G2Element => Term::bls12_381_g2_equal(),
-                            UplcType::Bool | UplcType::Unit => Term::unit(),
-                            UplcType::List(_) | UplcType::Pair(_, _) | UplcType::Data => {
-                                Term::equals_data()
-                            }
-                            UplcType::Bls12_381MlResult => {
+                            Some(UplcType::Integer) => Term::equals_integer(),
+                            Some(UplcType::String) => Term::equals_string(),
+                            Some(UplcType::ByteString) => Term::equals_bytestring(),
+                            Some(UplcType::Bls12_381G1Element) => Term::bls12_381_g1_equal(),
+                            Some(UplcType::Bls12_381G2Element) => Term::bls12_381_g2_equal(),
+                            Some(UplcType::Bool | UplcType::Unit) => Term::unit(),
+                            Some(UplcType::List(_) | UplcType::Pair(_, _) | UplcType::Data)
+                            | None => Term::equals_data(),
+                            Some(UplcType::Bls12_381MlResult) => {
                                 panic!("ML Result equality is not supported")
                             }
                         };
 
-                        let binop_eq = match uplc_type {
-                            UplcType::Bool => {
-                                if matches!(name, BinOp::Eq) {
-                                    left.delayed_if_then_else(
-                                        right.clone(),
-                                        right.if_then_else(Term::bool(false), Term::bool(true)),
-                                    )
-                                } else {
-                                    left.delayed_if_then_else(
-                                        right
-                                            .clone()
-                                            .if_then_else(Term::bool(false), Term::bool(true)),
-                                        right,
-                                    )
+                        let binop_eq =
+                            match uplc_type {
+                                Some(UplcType::Bool) => {
+                                    if matches!(name, BinOp::Eq) {
+                                        left.delayed_if_then_else(
+                                            right.clone(),
+                                            right.if_then_else(Term::bool(false), Term::bool(true)),
+                                        )
+                                    } else {
+                                        left.delayed_if_then_else(
+                                            right
+                                                .clone()
+                                                .if_then_else(Term::bool(false), Term::bool(true)),
+                                            right,
+                                        )
+                                    }
                                 }
-                            }
-                            UplcType::List(_) if tipo.is_map() => builtin
-                                .apply(Term::map_data().apply(left))
-                                .apply(Term::map_data().apply(right)),
-                            UplcType::List(_) => builtin
-                                .apply(Term::list_data().apply(left))
-                                .apply(Term::list_data().apply(right)),
-                            UplcType::Pair(_, _) => {
-                                builtin
+                                Some(UplcType::List(_)) if tipo.is_map() => builtin
+                                    .apply(Term::map_data().apply(left))
+                                    .apply(Term::map_data().apply(right)),
+                                Some(UplcType::List(_)) => builtin
+                                    .apply(Term::list_data().apply(left))
+                                    .apply(Term::list_data().apply(right)),
+                                Some(UplcType::Pair(_, _)) => builtin
                                     .apply(Term::map_data().apply(
                                         Term::mk_cons().apply(left).apply(Term::empty_map()),
                                     ))
                                     .apply(Term::map_data().apply(
                                         Term::mk_cons().apply(right).apply(Term::empty_map()),
-                                    ))
-                            }
-                            UplcType::Data
-                            | UplcType::Bls12_381G1Element
-                            | UplcType::Bls12_381G2Element
-                            | UplcType::Bls12_381MlResult
-                            | UplcType::Integer
-                            | UplcType::String
-                            | UplcType::ByteString => builtin.apply(left).apply(right),
-                            UplcType::Unit => left.choose_unit(right.choose_unit(Term::bool(true))),
-                        };
+                                    )),
+                                Some(
+                                    UplcType::Data
+                                    | UplcType::Bls12_381G1Element
+                                    | UplcType::Bls12_381G2Element
+                                    | UplcType::Bls12_381MlResult
+                                    | UplcType::Integer
+                                    | UplcType::String
+                                    | UplcType::ByteString,
+                                )
+                                | None => builtin.apply(left).apply(right),
+                                Some(UplcType::Unit) => {
+                                    left.choose_unit(right.choose_unit(Term::bool(true)))
+                                }
+                            };
 
                         if !tipo.is_bool() && matches!(name, BinOp::NotEq) {
                             binop_eq.if_then_else(Term::bool(false), Term::bool(true))
@@ -4857,18 +4863,22 @@ impl<'a> CodeGenerator<'a> {
                 let uplc_type = tipo.get_uplc_type();
 
                 let subject = match uplc_type {
-                    UplcType::Bool
-                    | UplcType::Integer
-                    | UplcType::String
-                    | UplcType::ByteString
-                    | UplcType::Unit
-                    | UplcType::List(_)
-                    | UplcType::Pair(_, _)
-                    | UplcType::Bls12_381G1Element
-                    | UplcType::Bls12_381G2Element
-                    | UplcType::Bls12_381MlResult => subject,
-                    UplcType::Data if tipo.is_data() => subject,
-                    UplcType::Data => Term::var(
+                    Some(
+                        UplcType::Bool
+                        | UplcType::Integer
+                        | UplcType::String
+                        | UplcType::ByteString
+                        | UplcType::Unit
+                        | UplcType::List(_)
+                        | UplcType::Pair(_, _)
+                        | UplcType::Bls12_381G1Element
+                        | UplcType::Bls12_381G2Element
+                        | UplcType::Bls12_381MlResult,
+                    ) => subject,
+
+                    Some(UplcType::Data) => subject,
+
+                    None => Term::var(
                         self.special_functions
                             .use_function_uplc(CONSTR_INDEX_EXPOSER.to_string()),
                     )
@@ -4916,28 +4926,30 @@ impl<'a> CodeGenerator<'a> {
                     let uplc_type = tipo.get_uplc_type();
 
                     let condition = match uplc_type {
-                        UplcType::Bool
-                        | UplcType::Unit
-                        | UplcType::List(_)
-                        | UplcType::Pair(_, _)
-                        | UplcType::Bls12_381MlResult => unreachable!("{:#?}", tipo),
-                        UplcType::Integer => Term::equals_integer()
+                        Some(
+                            UplcType::Bool
+                            | UplcType::Unit
+                            | UplcType::List(_)
+                            | UplcType::Pair(_, _)
+                            | UplcType::Bls12_381MlResult,
+                        ) => unreachable!("{:#?}", tipo),
+                        Some(UplcType::Data) => unimplemented!(),
+                        Some(UplcType::Integer) => Term::equals_integer()
                             .apply(clause)
                             .apply(Term::var(subject_name)),
-                        UplcType::String => Term::equals_string()
+                        Some(UplcType::String) => Term::equals_string()
                             .apply(clause)
                             .apply(Term::var(subject_name)),
-                        UplcType::ByteString => Term::equals_bytestring()
+                        Some(UplcType::ByteString) => Term::equals_bytestring()
                             .apply(clause)
                             .apply(Term::var(subject_name)),
-                        UplcType::Data if tipo.is_data() => unimplemented!(),
-                        UplcType::Data => Term::equals_integer()
+                        Some(UplcType::Bls12_381G1Element) => Term::bls12_381_g1_equal()
                             .apply(clause)
                             .apply(Term::var(subject_name)),
-                        UplcType::Bls12_381G1Element => Term::bls12_381_g1_equal()
+                        Some(UplcType::Bls12_381G2Element) => Term::bls12_381_g2_equal()
                             .apply(clause)
                             .apply(Term::var(subject_name)),
-                        UplcType::Bls12_381G2Element => Term::bls12_381_g2_equal()
+                        None => Term::equals_integer()
                             .apply(clause)
                             .apply(Term::var(subject_name)),
                     };
@@ -5084,35 +5096,36 @@ impl<'a> CodeGenerator<'a> {
                     let uplc_type = tipo.get_uplc_type();
 
                     let condition = match uplc_type {
-                        UplcType::Bool
-                        | UplcType::Unit
-                        | UplcType::List(_)
-                        | UplcType::Pair(_, _)
-                        | UplcType::Bls12_381MlResult => unreachable!("{:#?}", tipo),
-                        UplcType::Integer => Term::equals_integer()
+                        Some(
+                            UplcType::Bool
+                            | UplcType::Unit
+                            | UplcType::List(_)
+                            | UplcType::Pair(_, _)
+                            | UplcType::Bls12_381MlResult,
+                        ) => unreachable!("{:#?}", tipo),
+                        Some(UplcType::Data) => unimplemented!(),
+                        Some(UplcType::Integer) => Term::equals_integer()
                             .apply(checker)
                             .apply(Term::var(subject_name)),
-                        UplcType::String => Term::equals_string()
+                        Some(UplcType::String) => Term::equals_string()
                             .apply(checker)
                             .apply(Term::var(subject_name)),
-                        UplcType::ByteString => Term::equals_bytestring()
+                        Some(UplcType::ByteString) => Term::equals_bytestring()
                             .apply(checker)
                             .apply(Term::var(subject_name)),
-
-                        UplcType::Data if tipo.is_data() => unimplemented!(),
-                        UplcType::Data => Term::equals_integer().apply(checker).apply(
+                        Some(UplcType::Bls12_381G1Element) => Term::bls12_381_g1_equal()
+                            .apply(checker)
+                            .apply(Term::var(subject_name)),
+                        Some(UplcType::Bls12_381G2Element) => Term::bls12_381_g2_equal()
+                            .apply(checker)
+                            .apply(Term::var(subject_name)),
+                        None => Term::equals_integer().apply(checker).apply(
                             Term::var(
                                 self.special_functions
                                     .use_function_uplc(CONSTR_INDEX_EXPOSER.to_string()),
                             )
                             .apply(Term::var(subject_name)),
                         ),
-                        UplcType::Bls12_381G1Element => Term::bls12_381_g1_equal()
-                            .apply(checker)
-                            .apply(Term::var(subject_name)),
-                        UplcType::Bls12_381G2Element => Term::bls12_381_g2_equal()
-                            .apply(checker)
-                            .apply(Term::var(subject_name)),
                     };
 
                     Some(condition.if_then_else(then.delay(), term).force())
