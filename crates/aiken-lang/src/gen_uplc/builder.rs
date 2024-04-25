@@ -362,22 +362,22 @@ pub fn get_generic_variant_name(t: &Rc<Type>) -> String {
     let uplc_type = t.get_uplc_type();
 
     match uplc_type {
-        UplcType::Bool => "_bool".to_string(),
-        UplcType::Integer => "_int".to_string(),
-        UplcType::String => "_string".to_string(),
-        UplcType::ByteString => "_bytearray".to_string(),
-        UplcType::Unit => "_void".to_string(),
-        UplcType::List(_) if t.is_map() => "_map".to_string(),
-        UplcType::List(_) => "_list".to_string(),
-        UplcType::Pair(_, _) => "_pair".to_string(),
-        UplcType::Bls12_381G1Element => "_bls381_12_g1".to_string(),
-        UplcType::Bls12_381G2Element => "_bls381_12_g2".to_string(),
-        UplcType::Bls12_381MlResult => "_ml_result".to_string(),
-        UplcType::Data if t.is_unbound() => "_unbound".to_string(),
-        UplcType::Data if t.is_generic() => {
+        Some(UplcType::Bool) => "_bool".to_string(),
+        Some(UplcType::Integer) => "_int".to_string(),
+        Some(UplcType::String) => "_string".to_string(),
+        Some(UplcType::ByteString) => "_bytearray".to_string(),
+        Some(UplcType::Unit) => "_void".to_string(),
+        Some(UplcType::List(_)) if t.is_map() => "_map".to_string(),
+        Some(UplcType::List(_)) => "_list".to_string(),
+        Some(UplcType::Pair(_, _)) => "_pair".to_string(),
+        Some(UplcType::Bls12_381G1Element) => "_bls381_12_g1".to_string(),
+        Some(UplcType::Bls12_381G2Element) => "_bls381_12_g2".to_string(),
+        Some(UplcType::Bls12_381MlResult) => "_ml_result".to_string(),
+        None if t.is_unbound() => "_unbound".to_string(),
+        None if t.is_generic() => {
             unreachable!("FOUND A POLYMORPHIC TYPE. EXPECTED MONOMORPHIC TYPE")
         }
-        UplcType::Data => "_data".to_string(),
+        None | Some(UplcType::Data) => "_data".to_string(),
     }
 }
 
@@ -943,29 +943,29 @@ pub fn known_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
     let uplc_type = field_type.get_uplc_type();
 
     match uplc_type {
-        UplcType::Integer => Term::un_i_data().apply(term),
-        UplcType::ByteString => Term::un_b_data().apply(term),
-        UplcType::Bool => Term::less_than_integer()
+        Some(UplcType::Integer) => Term::un_i_data().apply(term),
+        Some(UplcType::ByteString) => Term::un_b_data().apply(term),
+        Some(UplcType::Bool) => Term::less_than_integer()
             .apply(Term::integer(0.into()))
             .apply(Term::fst_pair().apply(Term::unconstr_data().apply(term))),
-        UplcType::String => Term::decode_utf8().apply(Term::un_b_data().apply(term)),
-        UplcType::Unit => Term::unit().lambda("_").apply(term),
-        UplcType::List(_) if field_type.is_map() => Term::unmap_data().apply(term),
-        UplcType::List(_) => Term::unlist_data().apply(term),
-        UplcType::Pair(_, _) => Term::mk_pair_data()
+        Some(UplcType::String) => Term::decode_utf8().apply(Term::un_b_data().apply(term)),
+        Some(UplcType::Unit) => Term::unit().lambda("_").apply(term),
+        Some(UplcType::List(_)) if field_type.is_map() => Term::unmap_data().apply(term),
+        Some(UplcType::List(_)) => Term::unlist_data().apply(term),
+        Some(UplcType::Pair(_, _)) => Term::mk_pair_data()
             .apply(Term::head_list().apply(Term::var("__list_data")))
             .apply(Term::head_list().apply(Term::tail_list().apply(Term::var("__list_data"))))
             .lambda("__list_data")
             .apply(Term::unlist_data().apply(term)),
-        UplcType::Data if field_type.is_data() => term,
-        UplcType::Data => term,
-        UplcType::Bls12_381G1Element => {
+
+        Some(UplcType::Bls12_381G1Element) => {
             Term::bls12_381_g1_uncompress().apply(Term::un_b_data().apply(term))
         }
-        UplcType::Bls12_381G2Element => {
+        Some(UplcType::Bls12_381G2Element) => {
             Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(term))
         }
-        UplcType::Bls12_381MlResult => panic!("ML Result not supported"),
+        Some(UplcType::Bls12_381MlResult) => panic!("ML Result not supported"),
+        Some(UplcType::Data) | None => term,
     }
 }
 
@@ -973,21 +973,21 @@ pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
     let uplc_type = field_type.get_uplc_type();
 
     match uplc_type {
-        UplcType::Integer => Term::un_i_data().apply(term),
-        UplcType::ByteString => Term::un_b_data().apply(term),
-        UplcType::String => Term::decode_utf8().apply(Term::un_b_data().apply(term)),
-        UplcType::List(_) if field_type.is_map() => Term::unmap_data().apply(term),
-        UplcType::List(_) => Term::unlist_data().apply(term),
-        UplcType::Data if field_type.is_data() => term,
-        UplcType::Data => term,
-        UplcType::Bls12_381G1Element => {
+        Some(UplcType::Integer) => Term::un_i_data().apply(term),
+        Some(UplcType::ByteString) => Term::un_b_data().apply(term),
+        Some(UplcType::String) => Term::decode_utf8().apply(Term::un_b_data().apply(term)),
+        Some(UplcType::List(_)) if field_type.is_map() => Term::unmap_data().apply(term),
+        Some(UplcType::List(_)) => Term::unlist_data().apply(term),
+
+        Some(UplcType::Bls12_381G1Element) => {
             Term::bls12_381_g1_uncompress().apply(Term::un_b_data().apply(term))
         }
-        UplcType::Bls12_381G2Element => {
+        Some(UplcType::Bls12_381G2Element) => {
             Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(term))
         }
-        UplcType::Bls12_381MlResult => panic!("ML Result not supported"),
-        UplcType::Pair(_, _) => Term::tail_list()
+        Some(UplcType::Bls12_381MlResult) => panic!("ML Result not supported"),
+
+        Some(UplcType::Pair(_, _)) => Term::tail_list()
             .apply(Term::tail_list().apply(Term::var("__list_data")))
             .delayed_choose_list(
                 Term::mk_pair_data()
@@ -999,7 +999,7 @@ pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
             )
             .lambda("__list_data")
             .apply(Term::unlist_data().apply(term)),
-        UplcType::Bool => Term::snd_pair()
+        Some(UplcType::Bool) => Term::snd_pair()
             .apply(Term::var("__pair__"))
             .delayed_choose_list(
                 Term::equals_integer()
@@ -1016,7 +1016,7 @@ pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
             )
             .lambda("__pair__")
             .apply(Term::unconstr_data().apply(term)),
-        UplcType::Unit => Term::equals_integer()
+        Some(UplcType::Unit) => Term::equals_integer()
             .apply(Term::integer(0.into()))
             .apply(Term::fst_pair().apply(Term::var("__pair__")))
             .delayed_if_then_else(
@@ -1027,6 +1027,8 @@ pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
             )
             .lambda("__pair__")
             .apply(Term::unconstr_data().apply(term)),
+
+        Some(UplcType::Data) | None => term,
     }
 }
 
@@ -1041,7 +1043,7 @@ pub fn unknown_data_to_type_debug(
     let uplc_type = field_type.get_uplc_type();
 
     match uplc_type {
-        UplcType::Integer => Term::var("__val")
+        Some(UplcType::Integer) => Term::var("__val")
             .delayed_choose_data(
                 error_term.clone(),
                 error_term.clone(),
@@ -1051,7 +1053,7 @@ pub fn unknown_data_to_type_debug(
             )
             .lambda("__val")
             .apply(term),
-        UplcType::ByteString => Term::var("__val")
+        Some(UplcType::ByteString) => Term::var("__val")
             .delayed_choose_data(
                 error_term.clone(),
                 error_term.clone(),
@@ -1061,7 +1063,7 @@ pub fn unknown_data_to_type_debug(
             )
             .lambda("__val")
             .apply(term),
-        UplcType::String => Term::var("__val")
+        Some(UplcType::String) => Term::var("__val")
             .delayed_choose_data(
                 error_term.clone(),
                 error_term.clone(),
@@ -1072,7 +1074,7 @@ pub fn unknown_data_to_type_debug(
             .lambda("__val")
             .apply(term),
 
-        UplcType::List(_) if field_type.is_map() => Term::var("__val")
+        Some(UplcType::List(_)) if field_type.is_map() => Term::var("__val")
             .delayed_choose_data(
                 error_term.clone(),
                 Term::unmap_data().apply(Term::var("__val")),
@@ -1082,7 +1084,7 @@ pub fn unknown_data_to_type_debug(
             )
             .lambda("__val")
             .apply(term),
-        UplcType::List(_) => Term::var("__val")
+        Some(UplcType::List(_)) => Term::var("__val")
             .delayed_choose_data(
                 error_term.clone(),
                 error_term.clone(),
@@ -1092,19 +1094,8 @@ pub fn unknown_data_to_type_debug(
             )
             .lambda("__val")
             .apply(term),
-        UplcType::Data if field_type.is_data() => term,
-        // constr type
-        UplcType::Data => Term::var("__val")
-            .delayed_choose_data(
-                Term::var("__val"),
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-            )
-            .lambda("__val")
-            .apply(term),
-        UplcType::Bls12_381G1Element => Term::var("__val")
+
+        Some(UplcType::Bls12_381G1Element) => Term::var("__val")
             .delayed_choose_data(
                 error_term.clone(),
                 error_term.clone(),
@@ -1114,7 +1105,7 @@ pub fn unknown_data_to_type_debug(
             )
             .lambda("__val")
             .apply(term),
-        UplcType::Bls12_381G2Element => Term::var("__val")
+        Some(UplcType::Bls12_381G2Element) => Term::var("__val")
             .delayed_choose_data(
                 error_term.clone(),
                 error_term.clone(),
@@ -1124,8 +1115,8 @@ pub fn unknown_data_to_type_debug(
             )
             .lambda("__val")
             .apply(term),
-        UplcType::Bls12_381MlResult => panic!("ML Result not supported"),
-        UplcType::Pair(_, _) => Term::var("__val")
+        Some(UplcType::Bls12_381MlResult) => panic!("ML Result not supported"),
+        Some(UplcType::Pair(_, _)) => Term::var("__val")
             .delayed_choose_data(
                 error_term.clone(),
                 error_term.clone(),
@@ -1156,7 +1147,7 @@ pub fn unknown_data_to_type_debug(
             )
             .lambda("__val")
             .apply(term),
-        UplcType::Bool => Term::var("__val")
+        Some(UplcType::Bool) => Term::var("__val")
             .delayed_choose_data(
                 Term::snd_pair()
                     .apply(Term::var("__pair__"))
@@ -1182,7 +1173,7 @@ pub fn unknown_data_to_type_debug(
             )
             .lambda("__val")
             .apply(term),
-        UplcType::Unit => Term::var("__val")
+        Some(UplcType::Unit) => Term::var("__val")
             .delayed_choose_data(
                 Term::equals_integer()
                     .apply(Term::integer(0.into()))
@@ -1193,6 +1184,19 @@ pub fn unknown_data_to_type_debug(
                             .delayed_choose_list(Term::unit(), error_term.clone()),
                         error_term.clone(),
                     ),
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+                error_term.clone(),
+            )
+            .lambda("__val")
+            .apply(term),
+
+        Some(UplcType::Data) => term,
+        // constr type
+        None => Term::var("__val")
+            .delayed_choose_data(
+                Term::var("__val"),
                 error_term.clone(),
                 error_term.clone(),
                 error_term.clone(),
@@ -1294,21 +1298,20 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
     let uplc_type = field_type.get_uplc_type();
 
     match uplc_type {
-        UplcType::Integer => Term::i_data().apply(term),
-        UplcType::String => Term::b_data().apply(Term::encode_utf8().apply(term)),
-        UplcType::ByteString => Term::b_data().apply(term),
-        UplcType::List(_) if field_type.is_map() => Term::map_data().apply(term),
-        UplcType::List(_) => Term::list_data().apply(term),
-        UplcType::Data if field_type.is_data() => term,
-        UplcType::Data => term,
-        UplcType::Bls12_381G1Element => {
+        Some(UplcType::Integer) => Term::i_data().apply(term),
+        Some(UplcType::String) => Term::b_data().apply(Term::encode_utf8().apply(term)),
+        Some(UplcType::ByteString) => Term::b_data().apply(term),
+        Some(UplcType::List(_)) if field_type.is_map() => Term::map_data().apply(term),
+        Some(UplcType::List(_)) => Term::list_data().apply(term),
+
+        Some(UplcType::Bls12_381G1Element) => {
             Term::b_data().apply(Term::bls12_381_g1_compress().apply(term))
         }
-        UplcType::Bls12_381G2Element => {
+        Some(UplcType::Bls12_381G2Element) => {
             Term::b_data().apply(Term::bls12_381_g2_compress().apply(term))
         }
-        UplcType::Bls12_381MlResult => panic!("ML Result not supported"),
-        UplcType::Pair(_, _) => Term::list_data()
+        Some(UplcType::Bls12_381MlResult) => panic!("ML Result not supported"),
+        Some(UplcType::Pair(_, _)) => Term::list_data()
             .apply(
                 Term::mk_cons()
                     .apply(Term::fst_pair().apply(Term::var("__pair")))
@@ -1320,7 +1323,7 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
             )
             .lambda("__pair")
             .apply(term),
-        UplcType::Unit => Term::Constant(
+        Some(UplcType::Unit) => Term::Constant(
             UplcConstant::Data(PlutusData::Constr(Constr {
                 tag: convert_constr_to_tag(0).unwrap(),
                 any_constructor: None,
@@ -1330,7 +1333,7 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
         )
         .lambda("_")
         .apply(term),
-        UplcType::Bool => term.if_then_else(
+        Some(UplcType::Bool) => term.if_then_else(
             Term::Constant(
                 UplcConstant::Data(PlutusData::Constr(Constr {
                     tag: convert_constr_to_tag(1).unwrap(),
@@ -1348,6 +1351,8 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
                 .into(),
             ),
         ),
+
+        Some(UplcType::Data) | None => term,
     }
 }
 
@@ -1758,7 +1763,7 @@ pub fn get_list_elements_len_and_tail(
 pub fn cast_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Name> {
     let mut term = term;
     for arg in arguments.iter().rev() {
-        if !matches!(arg.tipo.get_uplc_type(), UplcType::Data) {
+        if !matches!(arg.tipo.get_uplc_type(), Some(UplcType::Data) | None) {
             term = term
                 .lambda(arg.arg_name.get_variable_name().unwrap_or("_"))
                 .apply(known_data_to_type(
