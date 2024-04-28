@@ -22,7 +22,7 @@ fn generate_wrapper(shell: Shell, buf: &mut dyn Write) {
 fn zsh() -> miette::Result<()> {
     //if oh-my-zsh
     let home = std::env::var("HOME").expect("Cannot find your home directory");
-    let xdg_dirs = xdg::BaseDirectories::with_prefix("zsh-completions/site-functions").unwrap();
+    let xdg_dirs = xdg::BaseDirectories::with_prefix("zsh-completions/site-functions").expect("Cannot load xdg-base directory");
     let data_home = xdg_dirs.get_data_home();
     let mut completion_file: File;
 
@@ -32,9 +32,9 @@ fn zsh() -> miette::Result<()> {
         let completions_path = oh_my_zsh_path.join("completions");
         let aiken_completion_path = completions_path.join("_aiken");
         if !completions_path.exists() {
-            std::fs::create_dir(completions_path.as_path()).expect("cannot create directory");
+            std::fs::create_dir(completions_path.as_path()).expect("Cannot create directory: {completions_path.into_os_string().into_string()}");
         }
-        completion_file = File::create(aiken_completion_path).expect("cannot open file");
+        completion_file = File::create(aiken_completion_path).expect("Cannot open file at: {aiken_completion_path.into_os_string().into_string()}");
 
         generate_wrapper(Shell::Zsh, &mut completion_file);
         return Ok(());
@@ -45,7 +45,7 @@ fn zsh() -> miette::Result<()> {
         let completion_path = xdg_dirs
             .place_data_file("_aiken")
             .expect("cannot create directory");
-        completion_file = File::create(completion_path).expect("cannot open file");
+        completion_file = File::create(completion_path).expect("Cannot open file at: {completion_path.into_os_string().into_string()}");
         generate_wrapper(Shell::Zsh, &mut completion_file);
         return Ok(());
     } 
@@ -53,7 +53,7 @@ fn zsh() -> miette::Result<()> {
     let completion_path = xdg_dirs
         .place_data_file("_aiken")
         .expect("cannot create directory");
-    completion_file = File::create(completion_path).expect("cannot open file");
+    completion_file = File::create(completion_path).expect("Cannot open file at: {completion_path.into_os_string().into_string()}");
 
     let mut zshrc = OpenOptions::new()
         .write(true)
@@ -74,20 +74,20 @@ fn zsh() -> miette::Result<()> {
 
 fn fish() -> miette::Result<()> {
     // NOTE: Installing completion on ~/.confi/fish/completions
-    let xdg_dirs = xdg::BaseDirectories::with_prefix("fish/completions").expect("Error finding directory");
+    let xdg_dirs = xdg::BaseDirectories::with_prefix("fish/completions").expect("Cannot find xdg-base directory");
     let completion_path = xdg_dirs
         .place_config_file("aiken.fish").expect("Cannot create path");
-    let mut completion_file = File::create(completion_path).expect("cannot open file");
+    let mut completion_file = File::create(completion_path).expect("Cannot open file at: {completion_path.into_os_string().into_string()}");
     generate_wrapper(Shell::Fish, &mut completion_file);
     Ok(())
 }
 
 fn bash() -> miette::Result<()> {
-    let xdg_dirs = xdg::BaseDirectories::with_prefix("bash-completion/completions").expect("Error finding directory");
+    let xdg_dirs = xdg::BaseDirectories::with_prefix("bash-completion/completions").expect("Cannot find xdg-base directory");
     let home = std::env::var("HOME").expect("Cannot find your home directory");
     let config_home = xdg_dirs.get_config_home();
     let completion_path = xdg_dirs
-        .place_config_file("aiken.completion.bash").expect("Cannot create path");
+        .place_config_file("aiken.completion.bash").expect("Cannot create file at: ~/config/bash-completion/completions");
 
     let mut bashrc = OpenOptions::new()
         .write(true)
@@ -100,7 +100,7 @@ fn bash() -> miette::Result<()> {
             eprintln!("Couldn't write to file: {}", e);
         }
     }
-    let mut completion_file = File::create(completion_path).expect("cannot open file");
+    let mut completion_file = File::create(completion_path).expect("Cannot open file at: {completion_path.into_os_string().into_string()}");
     generate_wrapper(Shell::Bash, &mut completion_file);
     Ok(())
 }
