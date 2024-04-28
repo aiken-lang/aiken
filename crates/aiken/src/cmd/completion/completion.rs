@@ -21,8 +21,9 @@ fn generate_wrapper(shell: Shell, buf: &mut dyn Write) {
 
 fn zsh() -> miette::Result<()> {
     //if oh-my-zsh
-    let home = std::env::var("HOME").expect("Cannot find your home directory");
-    let xdg_dirs = xdg::BaseDirectories::with_prefix("zsh-completions/site-functions").expect("Cannot load xdg-base directory");
+    let prefix_dir = "zsh-completions/site-functions";
+    let home = std::env::var("HOME").expect("Environment variable 'HOME' not set but needed.");
+    let xdg_dirs = xdg::BaseDirectories::with_prefix(prefix_dir).expect("Could not find completion directory {prefix_dir} in xdg directories.");
     let data_home = xdg_dirs.get_data_home();
     let mut completion_file: File;
 
@@ -74,7 +75,8 @@ fn zsh() -> miette::Result<()> {
 
 fn fish() -> miette::Result<()> {
     // NOTE: Installing completion on ~/.confi/fish/completions
-    let xdg_dirs = xdg::BaseDirectories::with_prefix("fish/completions").expect("Cannot find xdg-base directory");
+    let prefix_dir = "fish/completions";
+    let xdg_dirs = xdg::BaseDirectories::with_prefix(prefix_dir).expect("Could not find completion directory {prefix_dir} in xdg directories.");
     let completion_path = xdg_dirs
         .place_config_file("aiken.fish").expect("Cannot create path");
     let mut completion_file = File::create(completion_path).expect("Cannot open file at: {completion_path.into_os_string().into_string()}");
@@ -83,11 +85,13 @@ fn fish() -> miette::Result<()> {
 }
 
 fn bash() -> miette::Result<()> {
-    let xdg_dirs = xdg::BaseDirectories::with_prefix("bash-completion/completions").expect("Cannot find xdg-base directory");
-    let home = std::env::var("HOME").expect("Cannot find your home directory");
+
+    let prefix_dir = "bash-completion/completions";
+    let xdg_dirs = xdg::BaseDirectories::with_prefix(prefix_dir).expect("Cannot find xdg-base directory");
+    let home = std::env::var("HOME").expect("Environment variable 'HOME' not set but needed.");
     let config_home = xdg_dirs.get_config_home();
     let completion_path = xdg_dirs
-        .place_config_file("aiken.completion.bash").expect("Cannot create file at: ~/config/bash-completion/completions");
+        .place_config_file("aiken.completion.bash").expect("Could not find completion directory {prefix_dir} in xdg directories.");
 
     let mut bashrc = OpenOptions::new()
         .write(true)
