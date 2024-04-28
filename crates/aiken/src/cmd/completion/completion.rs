@@ -87,17 +87,18 @@ fn fish() -> miette::Result<()> {
 fn bash() -> miette::Result<()> {
 
     let prefix_dir = "bash-completion/completions";
-    let xdg_dirs = xdg::BaseDirectories::with_prefix(prefix_dir).expect("Cannot find xdg-base directory");
+    let aiken_bash = "aiken.completion.bash";
+    let xdg_dirs = xdg::BaseDirectories::with_prefix(prefix_dir).expect("Could not find completion directory {prefix_dir} in xdg directories.");
     let home = std::env::var("HOME").expect("Environment variable 'HOME' not set but needed.");
     let config_home = xdg_dirs.get_config_home();
     let completion_path = xdg_dirs
-        .place_config_file("aiken.completion.bash").expect("Could not find completion directory {prefix_dir} in xdg directories.");
+        .place_config_file(aiken_bash).expect("Cannot create completion file {aiken_bash} under xdg directories");
 
     let mut bashrc = OpenOptions::new()
         .write(true)
         .append(true)
         .open(format!("{}/.bashrc", home))
-        .expect(".bashrc file not found");
+        .expect(".bashrc file not found in {home} directory");
     if let Some(config) = config_home.to_str() {
         let path: String = format!("source {config}");
         if let Err(e) = writeln!(bashrc, "{}", path) {
