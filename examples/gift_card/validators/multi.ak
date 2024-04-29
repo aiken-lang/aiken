@@ -1,5 +1,5 @@
+use aiken/builtin
 use aiken/bytearray
-use aiken/cbor
 use aiken/dict
 use aiken/hash.{blake2b_256}
 use aiken/list
@@ -66,7 +66,7 @@ validator(creator: ByteArray) {
       Mint(total) -> {
         expect [input, ..] = inputs
         // Base is created from serializing a utxo ref being spent. Thus this guarantees a unique base
-        let base = cbor.serialise(input.output_reference)
+        let base = builtin.serialise_data(input.output_reference)
         // Create a list of expected token names
         let expected_minted_token_names =
           create_expected_minted_nfts(base, total, [])
