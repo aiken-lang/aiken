@@ -984,9 +984,10 @@ impl<'comments> Formatter<'comments> {
                 .to_doc()
                 .append("(")
                 .append(self.expr(fst, false))
-                .append(",")
+                .append(break_(",", ", "))
                 .append(self.expr(snd, false))
-                .append(")"),
+                .append(")")
+                .group(),
 
             UntypedExpr::TupleIndex { index, tuple, .. } => {
                 let suffix = Ordinal(*index + 1).suffix().to_doc();
@@ -1791,9 +1792,10 @@ impl<'comments> Formatter<'comments> {
                 .to_doc()
                 .append("(")
                 .append(self.pattern(fst))
-                .append(",")
+                .append(break_(",", ", "))
                 .append(self.pattern(snd))
-                .append(")"),
+                .append(")")
+                .group(),
 
             Pattern::List { elements, tail, .. } => {
                 let elements_document =
