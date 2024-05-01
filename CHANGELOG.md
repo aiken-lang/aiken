@@ -13,6 +13,7 @@
 
 - **aiken-lang**: formatter should not erase `pub` on validators. @rvcas
 - **aiken-lang**: error on using tuple index when a tuple is returned by a generic function. @rvcas
+- **aiken-lang**: fix a regression in the Type-checker introduced in v1.0.25-alpha regarding types comparison. See #917. @KtorZ
 
 ## v1.0.26-alpha - 2024-03-25
 

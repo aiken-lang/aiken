@@ -96,6 +96,7 @@ impl PartialEq for Type {
                     name == name2
                         && module == module2
                         && public == public2
+                        && args.len() == args2.len()
                         && args.iter().zip(args2).all(|(left, right)| left == right)
                 } else {
                     false
@@ -109,7 +110,9 @@ impl PartialEq for Type {
                     alias: _,
                 } = other
                 {
-                    ret == ret2 && args.iter().zip(args2).all(|(left, right)| left == right)
+                    ret == ret2
+                        && args.len() == args2.len()
+                        && args.iter().zip(args2).all(|(left, right)| left == right)
                 } else {
                     false
                 }
@@ -117,6 +120,7 @@ impl PartialEq for Type {
 
             Type::Tuple { elems, alias: _ } => {
                 if let Type::Tuple { elems: elems2, .. } = other {
+                    elems.len() == elems2.len() &&
                     elems.iter().zip(elems2).all(|(left, right)| left == right)
                 } else {
                     false

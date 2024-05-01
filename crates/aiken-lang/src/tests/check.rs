@@ -2295,3 +2295,57 @@ fn tuple_access_on_call() {
 
     assert!(check(parse(source_code)).is_ok())
 }
+
+#[test]
+fn partial_eq_call_args() {
+    let source_code = r#"
+        fn foo(a: Int, b: Int, c: Bool) -> Int {
+            todo
+        }
+
+        fn main() -> Int {
+            foo(14, 42)
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::IncorrectFieldsArity { .. }))
+    ));
+}
+
+#[test]
+fn partial_eq_callback_args() {
+    let source_code = r#"
+        fn foo(cb: fn(Int, Int, Bool) -> Int) -> Int {
+            todo
+        }
+
+        fn main() -> Int {
+            foo(fn(a, b) { a + b })
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { .. }))
+    ));
+}
+
+#[test]
+fn partial_eq_callback_return() {
+    let source_code = r#"
+        fn foo(cb: fn(Int, Int) -> (Int, Int, Bool)) -> Int {
+            todo
+        }
+
+        fn main() -> Int {
+            foo(fn(a, b) { (a, b) })
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { .. }))
+    ));
+}
