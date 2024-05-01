@@ -1,8 +1,9 @@
-use chumsky::prelude::*;
-
-use crate::ast;
-
 use super::{error::ParseError, token::Token};
+use crate::{
+    ast,
+    builtins::{PAIR, PRELUDE},
+};
+use chumsky::prelude::*;
 
 pub fn parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> {
     recursive(|expression| {
@@ -14,6 +15,31 @@ pub fn parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> {
                     name,
                 }
             }),
+            // Pair
+            select! {Token::Name { name } if name == PRELUDE => name}
+                .then_ignore(just(Token::Dot))
+                .or_not()
+                .then_ignore(select! {Token::UpName { name } if name == PAIR => name})
+                .ignore_then(
+                    expression
+                        .clone()
+                        .separated_by(just(Token::Comma))
+                        .exactly(2)
+                        .delimited_by(just(Token::Less), just(Token::Greater)),
+                )
+                .map_with_span(|elems: Vec<ast::Annotation>, span| ast::Annotation::Pair {
+                    location: span,
+                    fst: elems
+                        .first()
+                        .expect("Pair should have exactly 2 elements")
+                        .to_owned()
+                        .into(),
+                    snd: elems
+                        .last()
+                        .expect("Pair should have exactly 2 elements")
+                        .to_owned()
+                        .into(),
+                }),
             // Tuple
             expression
                 .clone()

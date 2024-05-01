@@ -424,7 +424,14 @@ impl<'comments> Formatter<'comments> {
             Annotation::Tuple { elems, .. } => {
                 wrap_args(elems.iter().map(|t| (self.annotation(t), false)))
             }
-            Annotation::Pair { .. } => todo!(),
+            Annotation::Pair { fst, snd, .. } => "Pair"
+                .to_doc()
+                .append("<")
+                .append(self.annotation(fst))
+                .append(break_(",", ", "))
+                .append(self.annotation(snd))
+                .append(">")
+                .group(),
         }
         .group()
     }
