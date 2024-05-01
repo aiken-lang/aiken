@@ -3915,7 +3915,13 @@ impl<'a> CodeGenerator<'a> {
                             &self.data_types,
                             &constructor.tipo,
                         )
-                        .unwrap();
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "could not find data-type definition for {} within known set: {:?}",
+                                constructor.tipo.to_pretty(0),
+                                self.data_types.keys()
+                            )
+                        });
 
                         let (constr_index, constr_type) = data_type
                             .constructors
@@ -4197,8 +4203,11 @@ impl<'a> CodeGenerator<'a> {
                             let eval_program: Program<NamedDeBruijn> =
                                 program.remove_no_inlines().try_into().unwrap();
 
-                            let evaluated_term: Term<NamedDeBruijn> =
-                                eval_program.eval(ExBudget::max()).result().unwrap();
+                            let result = eval_program.eval(ExBudget::max()).result();
+
+                            let evaluated_term: Term<NamedDeBruijn> = result.unwrap_or_else(|e| {
+                                panic!("failed evaluation in interner: {e:#?}")
+                            });
 
                             Some(evaluated_term.try_into().unwrap())
                         } else {

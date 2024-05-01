@@ -120,8 +120,8 @@ impl PartialEq for Type {
 
             Type::Tuple { elems, alias: _ } => {
                 if let Type::Tuple { elems: elems2, .. } = other {
-                    elems.len() == elems2.len() &&
-                    elems.iter().zip(elems2).all(|(left, right)| left == right)
+                    elems.len() == elems2.len()
+                        && elems.iter().zip(elems2).all(|(left, right)| left == right)
                 } else {
                     false
                 }
