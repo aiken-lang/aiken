@@ -23,7 +23,7 @@ pub const BOOL: &str = "Bool";
 pub const INT: &str = "Int";
 pub const DATA: &str = "Data";
 pub const LIST: &str = "List";
-pub const MAP: &str = "Map";
+pub const ALIST: &str = "AList";
 pub const PAIR: &str = "Pair";
 pub const VOID: &str = "Void";
 pub const G1_ELEMENT: &str = "G1Element";
@@ -524,14 +524,14 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     // Map
     //
     // pub type Map<k, v> = List<Pair<k, v>>
-    let map_key = generic_var(id_gen.next());
-    let map_value = generic_var(id_gen.next());
+    let alist_key = generic_var(id_gen.next());
+    let alist_value = generic_var(id_gen.next());
     prelude.types.insert(
-        MAP.to_string(),
+        ALIST.to_string(),
         TypeConstructor {
             location: Span::empty(),
-            parameters: vec![map_key.clone(), map_value.clone()],
-            tipo: map(map_key, map_value),
+            parameters: vec![alist_key.clone(), alist_value.clone()],
+            tipo: map(alist_key, alist_value),
             module: "".to_string(),
             public: true,
         },
@@ -1451,7 +1451,7 @@ pub fn map(k: Rc<Type>, v: Rc<Type>) -> Rc<Type> {
         args: vec![pair(k, v)],
         alias: Some(
             TypeAliasAnnotation {
-                alias: MAP.to_string(),
+                alias: ALIST.to_string(),
                 parameters: vec!["k".to_string(), "v".to_string()],
                 annotation: Annotation::Constructor {
                     location: Span::empty(),

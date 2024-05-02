@@ -13,4 +13,4 @@ requirements = []
 source = "github"
 
 [etags]
-"aiken-lang/stdlib@specialize-dict-key" = [{ secs_since_epoch = 1714055770, nanos_since_epoch = 469989000 }, "4a03ebbbc134cedfe1bf03b59d5ed476f4dd97a769dc259552a9086e786bb108"]
+"aiken-lang/stdlib@specialize-dict-key" = [{ secs_since_epoch = 1714678415, nanos_since_epoch = 599042000 }, "4a471c3bad39d9bd642bb8ae80c5e90585cc4d79315de7d5b4277a2f00994714"]
