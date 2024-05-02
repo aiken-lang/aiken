@@ -885,9 +885,9 @@ fn acceptance_test_7_unzip_tuple() {
 #[test]
 fn acceptance_test_7_unzip_pair() {
     let src = r#"
-      type Map<a,b> = List<Pair<a,b>>
+      type AList<a,b> = List<Pair<a,b>>
 
-      pub fn unzip(xs: Map<a, b>) -> Pair<List<a>, List<b>> {
+      pub fn unzip(xs: AList<a, b>) -> Pair<List<a>, List<b>> {
         when xs is {
           [] -> Pair([], [])
           [Pair(a, b), ..rest] -> {
@@ -1573,16 +1573,16 @@ fn acceptance_test_14_list_creation() {
 #[test]
 fn acceptance_test_15_zero_arg() {
     let src = r#"
-      pub opaque type Map<key, value> {
+      pub opaque type AList<key, value> {
         inner: List<Pair<key, value>>,
       }
 
       pub fn new() {
-        Map { inner: [] }
+        AList { inner: [] }
       }
 
       test new_1() {
-        new() == Map { inner: [] }
+        new() == AList { inner: [] }
       }
     "#;
 
@@ -2116,18 +2116,18 @@ fn acceptance_test_22_filter_map() {
 #[test]
 fn acceptance_test_23_to_list() {
     let src = r#"
-        pub type Map<key, value> =
+        pub type AList<key, value> =
             List<Pair<key, value>>
 
         pub opaque type AssocList<key, value> {
-            inner: Map<key, value>,
+            inner: AList<key, value>,
         }
 
         pub fn new() -> AssocList<key, value> {
             AssocList { inner: [] }
         }
 
-        pub fn to_list(m: AssocList<key, value>) -> Map<key, value> {
+        pub fn to_list(m: AssocList<key, value>) -> AList<key, value> {
             m.inner
         }
 
@@ -2139,7 +2139,7 @@ fn acceptance_test_23_to_list() {
             AssocList { inner: do_insert(m.inner, k, v) }
         }
 
-        fn do_insert(elems: Map<key, value>, k: key, v: value) -> Map<key, value> {
+        fn do_insert(elems: AList<key, value>, k: key, v: value) -> AList<key, value> {
             when elems is {
             [] ->
                 [Pair(k, v)]
@@ -2997,18 +2997,18 @@ fn acceptance_test_28_unique_list() {
 fn acceptance_test_29_union_pair() {
     let src = r#"
       pub opaque type AssocList<key, value> {
-        inner: Map<key, value>,
+        inner: AList<key, value>,
       }
 
       pub fn new() -> AssocList<key, value> {
         AssocList { inner: [] }
       }
 
-      pub fn from_list(xs: Map<key, value>) -> AssocList<key, value> {
+      pub fn from_list(xs: AList<key, value>) -> AssocList<key, value> {
         AssocList { inner: do_from_list(xs) }
       }
 
-      fn do_from_list(xs: Map<key, value>) -> Map<key, value> {
+      fn do_from_list(xs: AList<key, value>) -> AList<key, value> {
         when xs is {
           [] ->
             []
@@ -3025,7 +3025,7 @@ fn acceptance_test_29_union_pair() {
         AssocList { inner: do_insert(m.inner, k, v) }
       }
 
-      fn do_insert(elems: Map<key, value>, k: key, v: value) -> Map<key, value> {
+      fn do_insert(elems: AList<key, value>, k: key, v: value) -> AList<key, value> {
         when elems is {
           [] ->
             [Pair(k, v)]
@@ -3046,9 +3046,9 @@ fn acceptance_test_29_union_pair() {
       }
 
       fn do_union(
-        left: Map<key, value>,
-        right: Map<key, value>,
-      ) -> Map<key, value> {
+        left: AList<key, value>,
+        right: AList<key, value>,
+      ) -> AList<key, value> {
         when left is {
           [] ->
             right
