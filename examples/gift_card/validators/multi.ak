@@ -60,7 +60,7 @@ validator(creator: ByteArray) {
       mint
         |> value.from_minted_value
         |> value.tokens(policy_id)
-        |> dict.to_list()
+        |> dict.to_alist()
 
     when rdmr is {
       Mint(total) -> {
@@ -86,7 +86,7 @@ validator(creator: ByteArray) {
         list.all(
           minted_assets,
           fn(asset) {
-            let (_, amount) = asset
+            let Pair(_, amount) = asset
             amount == -1
           },
         )
@@ -111,14 +111,14 @@ fn insert(self: List<a>, e: a, compare: fn(a, a) -> Ordering) -> List<a> {
 // and has a corresponding ouput with datum containing token name.
 // Otherwise fail
 fn check_mint_and_outputs(
-  minted_assets: List<(ByteArray, Int)>,
+  minted_assets: AList<ByteArray, Int>,
   outputs: List<Output>,
   expected_assets: List<ByteArray>,
   validator_cred: PaymentCredential,
 ) -> Bool {
   when minted_assets is {
     [] -> True
-    [(minted_asset_name, quantity), ..rest_assets] -> {
+    [Pair(minted_asset_name, quantity), ..rest_assets] -> {
       expect
         list.any(
           expected_assets,
