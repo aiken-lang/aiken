@@ -41,16 +41,16 @@ test dict_test1() {
 
   let (ask_map, asize, offer_map, osize) =
     (
-      dict.from_list([(ask_input_ref, transaction.NoDatum)], compare_out_ref),
+      [Pair(ask_input_ref, transaction.NoDatum)],
       1,
-      dict.from_list([(offer_input_ref, transaction.NoDatum)], compare_out_ref),
+      [Pair(offer_input_ref, transaction.NoDatum)],
       1,
     )
 
   (ask_map, asize, offer_map, osize) == (
-    dict.from_list([(ask_input_ref, transaction.NoDatum)], compare_out_ref),
+    [Pair(ask_input_ref, transaction.NoDatum)],
     1,
-    dict.from_list([(offer_input_ref, transaction.NoDatum)], compare_out_ref),
+    [Pair(offer_input_ref, transaction.NoDatum)],
     1,
   )
 }
@@ -62,14 +62,9 @@ test dict_test2() {
     [(ask_input_ref, offer_input_ref)]
 
   let foo =
-    fn(pair: (OutputReference, OutputReference), acc: Dict<Value, Address>) {
+    fn(pair: (OutputReference, OutputReference), acc: Dict<ByteArray, Address>) {
       let new_pay_map =
-        dict.insert(
-          acc,
-          value.zero(),
-          Address(VerificationKeyCredential("00"), None),
-          compare_value("", "", _, _),
-        )
+        dict.insert(acc, "", Address(VerificationKeyCredential("00"), None))
 
       new_pay_map
     }
@@ -87,21 +82,17 @@ test dict_test3() {
 
   let (ask_map, asize, offer_map, osize) =
     (
-      dict.from_list([(ask_input_ref, transaction.NoDatum)], compare_out_ref),
+      [Pair(ask_input_ref, transaction.NoDatum)],
       1,
-      dict.from_list([(offer_input_ref, transaction.NoDatum)], compare_out_ref),
+      [Pair(offer_input_ref, transaction.NoDatum)],
       1,
     )
 
+  // TODO: Maybe passing Value to the key generic of dict shouldn't be possible
   let foo =
     fn(pair: (OutputReference, OutputReference), acc: Dict<Value, Address>) {
       let new_pay_map =
-        dict.insert(
-          acc,
-          value.zero(),
-          Address(VerificationKeyCredential("00"), None),
-          compare_value("", "", _, _),
-        )
+        dict.insert(acc, "", Address(VerificationKeyCredential("00"), None))
 
       new_pay_map
     }

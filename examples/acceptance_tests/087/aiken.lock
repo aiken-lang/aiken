@@ -3,14 +3,14 @@
 
 [[requirements]]
 name = "aiken-lang/stdlib"
-version = "specialize-dict-key"
+version = "main"
 source = "github"
 
 [[packages]]
 name = "aiken-lang/stdlib"
-version = "specialize-dict-key"
+version = "main"
 requirements = []
 source = "github"
 
 [etags]
-"aiken-lang/stdlib@specialize-dict-key" = [{ secs_since_epoch = 1714678415, nanos_since_epoch = 599042000 }, "4a471c3bad39d9bd642bb8ae80c5e90585cc4d79315de7d5b4277a2f00994714"]
+"aiken-lang/stdlib@main" = [{ secs_since_epoch = 1714846153, nanos_since_epoch = 630488000 }, "5ee55dc5ccf269bb493f4cacb32096f0191a6adb2ef39d62a1f79b8c5a8fcc7f"]
