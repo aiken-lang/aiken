@@ -123,7 +123,8 @@ impl Printer {
     fn type_var_doc<'a>(&mut self, typ: &TypeVar) -> Document<'a> {
         match typ {
             TypeVar::Link { tipo: ref typ, .. } => self.print(typ),
-            TypeVar::Unbound { id, .. } | TypeVar::Generic { id, .. } => self.generic_type_var(*id),
+            TypeVar::Generic { id, .. } => self.generic_type_var(*id),
+            TypeVar::Unbound { .. } => "?".to_doc(),
         }
     }
 
@@ -473,7 +474,7 @@ mod tests {
                 tipo: Rc::new(RefCell::new(TypeVar::Unbound { id: 2231 })),
                 alias: None,
             },
-            "a",
+            "?",
         );
         assert_string!(
             function(
@@ -486,7 +487,7 @@ mod tests {
                     alias: None,
                 }),
             ),
-            "fn(a) -> b",
+            "fn(?) -> ?",
         );
         assert_string!(
             function(
