@@ -819,9 +819,12 @@ pub fn find_and_replace_generics(
     mono_types: &IndexMap<u64, Rc<Type>>,
 ) -> Rc<Type> {
     if let Some(id) = tipo.get_generic() {
-        // If a generic does not have a type we know of
-        // like a None in option then just use same type
-        mono_types.get(&id).unwrap_or(tipo).clone()
+        mono_types
+            .get(&id)
+            .unwrap_or_else(|| {
+                panic!("Unknown generic id {id:?} for type {tipo:?} in mono_types {mono_types:#?}");
+            })
+            .clone()
     } else if tipo.is_generic() {
         match &**tipo {
             Type::App {
