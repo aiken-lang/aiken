@@ -394,7 +394,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         TypeConstructor {
             location: Span::empty(),
             parameters: vec![option_value.clone()],
-            tipo: option(option_value),
+            tipo: option(option_value.clone()),
             module: "".to_string(),
             public: true,
         },
@@ -405,12 +405,10 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         vec!["Some".to_string(), "None".to_string()],
     );
 
-    let some = generic_var(id_gen.next());
-
     prelude.values.insert(
         "Some".to_string(),
         ValueConstructor::public(
-            function(vec![some.clone()], option(some)),
+            function(vec![option_value.clone()], option(option_value.clone())),
             ValueConstructorVariant::Record {
                 module: "".into(),
                 name: "Some".to_string(),
@@ -422,12 +420,10 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         ),
     );
 
-    let some = generic_var(id_gen.next());
-
     prelude.values.insert(
         "None".to_string(),
         ValueConstructor::public(
-            option(some),
+            option(option_value),
             ValueConstructorVariant::Record {
                 module: "".into(),
                 name: "None".to_string(),
