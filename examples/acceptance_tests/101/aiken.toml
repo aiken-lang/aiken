@@ -1,0 +1,19 @@
+name = "aiken-lang/acceptance_test_101"
+version = "0.0.0"
+license = "Apache-2.0"
+description = "Aiken contracts for project 'aiken-lang/101'"
+
+[repository]
+user = "aiken-lang"
+project = "101"
+platform = "github"
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "main"
+source = "github"
+
+[[dependencies]]
+name = "aiken-lang/fuzz"
+version = "main"
+source = "github"
