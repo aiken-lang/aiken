@@ -8,8 +8,9 @@ use super::{
 use crate::{
     ast::{
         Annotation, CallArg, DataType, Definition, Function, ModuleConstant, ModuleKind,
-        RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition, TypedPattern,
-        UnqualifiedImport, UntypedArg, UntypedDefinition, Use, Validator, PIPE_VARIABLE,
+        RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition, TypedFunction,
+        TypedPattern, UnqualifiedImport, UntypedArg, UntypedDefinition, UntypedFunction, Use,
+        Validator, PIPE_VARIABLE,
     },
     builtins::{function, generic_var, pair, tuple, unbound_var},
     tipo::{fields::FieldMap, TypeAliasAnnotation},
@@ -53,6 +54,12 @@ pub struct Environment<'a> {
 
     /// Values defined in the current module (or the prelude)
     pub module_values: HashMap<String, ValueConstructor>,
+
+    /// Top-level function definitions from the module
+    pub module_functions: HashMap<String, &'a UntypedFunction>,
+
+    /// Top-level functions that have been inferred
+    pub inferred_functions: HashMap<String, TypedFunction>,
 
     previous_id: u64,
 
@@ -707,9 +714,11 @@ impl<'a> Environment<'a> {
             previous_id: id_gen.next(),
             id_gen,
             ungeneralised_functions: HashSet::new(),
+            inferred_functions: HashMap::new(),
             module_types: prelude.types.clone(),
             module_types_constructors: prelude.types_constructors.clone(),
             module_values: HashMap::new(),
+            module_functions: HashMap::new(),
             imported_modules: HashMap::new(),
             unused_modules: HashMap::new(),
             unqualified_imported_names: HashMap::new(),
@@ -1200,6 +1209,8 @@ impl<'a> Environment<'a> {
                     names,
                     &fun.location,
                 )?;
+
+                self.module_functions.insert(fun.name.clone(), fun);
 
                 if !fun.public {
                     self.init_usage(fun.name.clone(), EntityKind::PrivateFunction, fun.location);
