@@ -9,7 +9,7 @@ validator {
   }
 }
 
-fn find_stuff(context) -> Output {
+fn find_stuff(context: ScriptContext) -> Output {
   expect Some(stuff) = list.find(context.transaction.outputs, fn(_) { True })
   stuff
 }
