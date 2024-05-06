@@ -1,4 +1,4 @@
-test panic_aiken() {
+test panic_aiken() fail {
   and {
     True,
     should_fail(1),
