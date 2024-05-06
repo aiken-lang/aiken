@@ -1128,7 +1128,13 @@ impl Assertion<UntypedExpr> {
                 .to_string()
         };
 
+        // head did not map to a constant
         if self.head.is_err() {
+            return red("program failed");
+        }
+
+        // any value in tail did not map to a constant
+        if self.tail.is_err() {
             return red("program failed");
         }
 
