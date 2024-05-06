@@ -4210,15 +4210,18 @@ impl<'a> CodeGenerator<'a> {
                                 eval_program.eval(ExBudget::default()).result().unwrap();
                             term = evaluated_term.try_into().unwrap();
                         } else {
-                            for (index, arg) in constr_type.arguments.iter().enumerate().rev() {
+                            for (index, arg) in constructor
+                                .tipo
+                                .arg_types()
+                                .unwrap()
+                                .iter()
+                                .enumerate()
+                                .rev()
+                            {
                                 term = Term::mk_cons()
                                     .apply(convert_type_to_data(
-                                        Term::var(
-                                            arg.label
-                                                .clone()
-                                                .unwrap_or_else(|| format!("arg_{index}")),
-                                        ),
-                                        &arg.tipo,
+                                        Term::var(format!("arg_{index}")),
+                                        arg,
                                     ))
                                     .apply(term);
                             }
@@ -4227,10 +4230,8 @@ impl<'a> CodeGenerator<'a> {
                                 .apply(Term::integer(constr_index.into()))
                                 .apply(term);
 
-                            for (index, arg) in constr_type.arguments.iter().enumerate().rev() {
-                                term = term.lambda(
-                                    arg.label.clone().unwrap_or_else(|| format!("arg_{index}")),
-                                )
+                            for (index, _) in constr_type.arguments.iter().enumerate().rev() {
+                                term = term.lambda(format!("arg_{index}"))
                             }
                         }
                         Some(term)
