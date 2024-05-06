@@ -14,6 +14,15 @@
 - **aiken-lang**: formatter should not erase `pub` on validators. @rvcas
 - **aiken-lang**: error on using tuple index when a tuple is returned by a generic function. @rvcas
 - **aiken-lang**: fix a regression in the Type-checker introduced in v1.0.25-alpha regarding types comparison. See #917. @KtorZ
+- **aiken-lang**: Fix incongruous generics after type-checking which caused [] to be treated as a list in cases where it needed to be an empty map primitive. See #922. @KtorZ
+- **aiken-lang**: Fix for generic constrs being used as functions causing type mismatch errors. @Microproofs
+- **aiken-lang**: Fix for error occuring when a field holds Data that is not a constr type when compiler traces are on.  @Microproofs
+
+### Changed 
+- **aiken-lang**: **MAJOR CHANGE** 2-tuples are now treated the same as 3+ tuples. To replace the representation of pairs at the uplc level, we now have a new Prelude type called Pair with 2 generic arguments. The main place you will see its usage is in the script context. For existing contracts you can continue to use 2-tuples, just note the offchain representation is an array of 2 items in CBOR. @KtorZ @Microproofs
+- **aiken-lang**: Some more code gen cleanup. @Microproofs
+- **aiken-lang**: New optimization for wrapped builtins found in the stdlib. @Microproofs
+
 
 ## v1.0.26-alpha - 2024-03-25
 
