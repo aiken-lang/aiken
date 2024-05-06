@@ -4206,8 +4206,11 @@ impl<'a> CodeGenerator<'a> {
                             let eval_program: Program<NamedDeBruijn> =
                                 program.remove_no_inlines().try_into().unwrap();
 
-                            let evaluated_term: Term<NamedDeBruijn> =
-                                eval_program.eval(ExBudget::default()).result().unwrap();
+                            let evaluated_term: Term<NamedDeBruijn> = eval_program
+                                .eval(ExBudget::default())
+                                .result()
+                                .expect("Evaluated a constant record and got an error");
+
                             term = evaluated_term.try_into().unwrap();
                         } else {
                             for (index, arg) in constr_type.arguments.iter().enumerate().rev() {
@@ -4463,7 +4466,7 @@ impl<'a> CodeGenerator<'a> {
                             let result = eval_program.eval(ExBudget::max()).result();
 
                             let evaluated_term: Term<NamedDeBruijn> = result.unwrap_or_else(|e| {
-                                panic!("failed evaluation in interner: {e:#?}")
+                                panic!("Evaluated a zero argument function and received this error: {e:#?}")
                             });
 
                             Some(evaluated_term.try_into().unwrap())
@@ -4788,8 +4791,11 @@ impl<'a> CodeGenerator<'a> {
                     let eval_program: Program<NamedDeBruijn> =
                         program.remove_no_inlines().try_into().unwrap();
 
-                    let evaluated_term: Term<NamedDeBruijn> =
-                        eval_program.eval(ExBudget::default()).result().unwrap();
+                    let evaluated_term: Term<NamedDeBruijn> = eval_program
+                        .eval(ExBudget::default())
+                        .result()
+                        .expect("Evaluated on unwrapping a data constant and got an error");
+
                     term = evaluated_term.try_into().unwrap();
                 }
 
@@ -4813,8 +4819,11 @@ impl<'a> CodeGenerator<'a> {
                     let eval_program: Program<NamedDeBruijn> =
                         program.remove_no_inlines().try_into().unwrap();
 
-                    let evaluated_term: Term<NamedDeBruijn> =
-                        eval_program.eval(ExBudget::default()).result().unwrap();
+                    let evaluated_term: Term<NamedDeBruijn> = eval_program
+                        .eval(ExBudget::default())
+                        .result()
+                        .expect("Evaluated on wrapping a constant into data and got an error");
+
                     term = evaluated_term.try_into().unwrap();
                 } else {
                     term = builder::convert_type_to_data(term, &tipo);
@@ -5262,8 +5271,11 @@ impl<'a> CodeGenerator<'a> {
                     let eval_program: Program<NamedDeBruijn> =
                         program.remove_no_inlines().try_into().unwrap();
 
-                    let evaluated_term: Term<NamedDeBruijn> =
-                        eval_program.eval(ExBudget::default()).result().unwrap();
+                    let evaluated_term: Term<NamedDeBruijn> = eval_program
+                        .eval(ExBudget::default())
+                        .result()
+                        .expect("Evaluated a constant record with args and got an error");
+
                     term = evaluated_term.try_into().unwrap();
                 }
 
