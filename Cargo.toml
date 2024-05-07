@@ -2,12 +2,34 @@
 members = ["crates/*"]
 resolver = "2"
 
-[profile.release]
-strip = true
-
 [workspace.metadata.release]
 shared-version = true
 tag-name = "v{{version}}"
+
+# Config for 'cargo dist'
+[workspace.metadata.dist]
+# The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.13.3"
+# CI backends to support
+ci = ["github"]
+# The installers to generate for each app
+installers = ["shell", "powershell", "npm", "homebrew", "msi"]
+# A GitHub repo to push Homebrew formulas to
+tap = "aiken-lang/homebrew-tap"
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+# The archive format to use for windows builds (defaults .zip)
+windows-archive = ".tar.gz"
+# The archive format to use for non-windows builds (defaults .tar.xz)
+unix-archive = ".tar.gz"
+# A namespace to use when publishing this package to the npm registry
+npm-scope = "@aiken-lang"
+# Publish jobs to run in CI
+publish-jobs = ["homebrew"]
+# Publish jobs to run in CI
+pr-run-mode = "plan"
+# Whether to install an updater program
+install-updater = false
 
 [workspace.dependencies]
 walkdir = "2.3.2"
@@ -19,3 +41,8 @@ opt-level = 3
 
 [profile.dev.package.similar]
 opt-level = 3
+
+# The profile that 'cargo dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
