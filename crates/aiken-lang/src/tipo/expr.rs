@@ -1,5 +1,7 @@
 use super::{
-    environment::{assert_no_labeled_arguments, collapse_links, EntityKind, Environment},
+    environment::{
+        assert_no_labeled_arguments, collapse_links, generalise, EntityKind, Environment,
+    },
     error::{Error, Warning},
     hydrator::Hydrator,
     pattern::PatternTyper,
@@ -9,14 +11,15 @@ use super::{
 use crate::{
     ast::{
         self, Annotation, Arg, ArgName, AssignmentKind, AssignmentPattern, BinOp, Bls12_381Point,
-        ByteArrayFormatPreference, CallArg, ClauseGuard, Constant, Curve, IfBranch,
+        ByteArrayFormatPreference, CallArg, ClauseGuard, Constant, Curve, Function, IfBranch,
         LogicalOpChainKind, Pattern, RecordUpdateSpread, Span, TraceKind, TraceLevel, Tracing,
         TypedArg, TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch, TypedPattern,
         TypedRecordUpdateArg, UnOp, UntypedArg, UntypedAssignmentKind, UntypedClause,
-        UntypedClauseGuard, UntypedIfBranch, UntypedPattern, UntypedRecordUpdateArg,
+        UntypedClauseGuard, UntypedFunction, UntypedIfBranch, UntypedPattern,
+        UntypedRecordUpdateArg,
     },
     builtins::{
-        bool, byte_array, function, g1_element, g2_element, int, list, string, tuple, void,
+        bool, byte_array, function, g1_element, g2_element, int, list, pair, string, tuple, void,
     },
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
@@ -26,11 +29,125 @@ use crate::{
 use std::{cmp::Ordering, collections::HashMap, ops::Deref, rc::Rc};
 use vec1::Vec1;
 
+pub(crate) fn infer_function(
+    fun: &UntypedFunction,
+    module_name: &str,
+    hydrators: &mut HashMap<String, Hydrator>,
+    environment: &mut Environment<'_>,
+    lines: &LineNumbers,
+    tracing: Tracing,
+) -> Result<Function<Rc<Type>, TypedExpr, TypedArg>, Error> {
+    if let Some(typed_fun) = environment.inferred_functions.get(&fun.name) {
+        return Ok(typed_fun.clone());
+    };
+
+    let Function {
+        doc,
+        location,
+        name,
+        public,
+        arguments,
+        body,
+        return_annotation,
+        end_position,
+        can_error,
+        return_type: _,
+    } = fun;
+
+    let preregistered_fn = environment
+        .get_variable(name)
+        .expect("Could not find preregistered type for function");
+
+    let field_map = preregistered_fn.field_map().cloned();
+
+    let preregistered_type = preregistered_fn.tipo.clone();
+
+    let (args_types, return_type) = preregistered_type
+        .function_types()
+        .unwrap_or_else(|| panic!("Preregistered type for fn {name} was not a fn"));
+
+    // Infer the type using the preregistered args + return types as a starting point
+    let (tipo, arguments, body, safe_to_generalise) = environment.in_new_scope(|environment| {
+        let args = arguments
+            .iter()
+            .zip(&args_types)
+            .map(|(arg_name, tipo)| arg_name.to_owned().set_type(tipo.clone()))
+            .collect();
+
+        let hydrator = hydrators
+            .remove(name)
+            .unwrap_or_else(|| panic!("Could not find hydrator for fn {name}"));
+
+        let mut expr_typer = ExprTyper::new(environment, hydrators, lines, tracing);
+
+        expr_typer.hydrator = hydrator;
+
+        let (args, body, return_type) =
+            expr_typer.infer_fn_with_known_types(args, body.to_owned(), Some(return_type))?;
+
+        let args_types = args.iter().map(|a| a.tipo.clone()).collect();
+
+        let tipo = function(args_types, return_type);
+
+        let safe_to_generalise = !expr_typer.ungeneralised_function_used;
+
+        Ok::<_, Error>((tipo, args, body, safe_to_generalise))
+    })?;
+
+    // Assert that the inferred type matches the type of any recursive call
+    environment.unify(preregistered_type, tipo.clone(), *location, false)?;
+
+    // Generalise the function if safe to do so
+    let tipo = if safe_to_generalise {
+        environment.ungeneralised_functions.remove(name);
+
+        let tipo = generalise(tipo, 0);
+
+        let module_fn = ValueConstructorVariant::ModuleFn {
+            name: name.clone(),
+            field_map,
+            module: module_name.to_owned(),
+            arity: arguments.len(),
+            location: *location,
+            builtin: None,
+        };
+
+        environment.insert_variable(name.clone(), module_fn, tipo.clone());
+
+        tipo
+    } else {
+        tipo
+    };
+
+    let inferred_fn = Function {
+        doc: doc.clone(),
+        location: *location,
+        name: name.clone(),
+        public: *public,
+        arguments,
+        return_annotation: return_annotation.clone(),
+        return_type: tipo
+            .return_type()
+            .expect("Could not find return type for fn"),
+        body,
+        can_error: *can_error,
+        end_position: *end_position,
+    };
+
+    environment
+        .inferred_functions
+        .insert(name.to_string(), inferred_fn.clone());
+
+    Ok(inferred_fn)
+}
+
 #[derive(Debug)]
 pub(crate) struct ExprTyper<'a, 'b> {
     pub(crate) lines: &'a LineNumbers,
 
     pub(crate) environment: &'a mut Environment<'b>,
+
+    pub(crate) hydrators: &'a mut HashMap<String, Hydrator>,
 
     // We tweak the tracing behavior during type-check. Traces are either kept or left out of the
     // typed AST depending on this setting.
@@ -46,6 +163,22 @@ pub(crate) struct ExprTyper<'a, 'b> {
 }
 
 impl<'a, 'b> ExprTyper<'a, 'b> {
+    pub fn new(
+        environment: &'a mut Environment<'b>,
+        hydrators: &'a mut HashMap<String, Hydrator>,
+        lines: &'a LineNumbers,
+        tracing: Tracing,
+    ) -> Self {
+        Self {
+            hydrator: Hydrator::new(),
+            environment,
+            hydrators,
+            tracing,
+            ungeneralised_function_used: false,
+            lines,
+        }
+    }
+
     fn check_when_exhaustiveness(
         &mut self,
         typed_clauses: &[TypedClause],
@@ -225,6 +358,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             } => self.infer_seq(location, expressions),
 
             UntypedExpr::Tuple { location, elems } => self.infer_tuple(elems, location),
+
+            UntypedExpr::Pair { location, fst, snd } => self.infer_pair(*fst, *snd, location),
 
             UntypedExpr::String { location, value } => Ok(self.infer_string(value, location)),
 
@@ -837,7 +972,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 .get(module)
                 .and_then(|module| module.accessors.get(name)),
 
-            _something_without_fields => return Err(unknown_field(vec![])),
+            Type::Pair { .. } => self.environment.accessors.get("Pair"),
+
+            _something_without_fields => {
+                return Err(unknown_field(vec![]));
+            }
         }
         .ok_or_else(|| unknown_field(vec![]))?;
 
@@ -2016,6 +2155,26 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         }
     }
 
+    fn infer_pair(
+        &mut self,
+        fst: UntypedExpr,
+        snd: UntypedExpr,
+        location: Span,
+    ) -> Result<TypedExpr, Error> {
+        let typed_fst = self.infer(fst)?;
+        ensure_serialisable(false, typed_fst.tipo(), location)?;
+
+        let typed_snd = self.infer(snd)?;
+        ensure_serialisable(false, typed_snd.tipo(), location)?;
+
+        Ok(TypedExpr::Pair {
+            location,
+            tipo: pair(typed_fst.tipo(), typed_snd.tipo()),
+            fst: typed_fst.into(),
+            snd: typed_snd.into(),
+        })
+    }
+
     fn infer_tuple(&mut self, elems: Vec<UntypedExpr>, location: Span) -> Result<TypedExpr, Error> {
         let mut typed_elems = vec![];
 
@@ -2039,13 +2198,13 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
     fn infer_tuple_index(
         &mut self,
-        tuple: UntypedExpr,
+        tuple_or_pair: UntypedExpr,
         index: usize,
         location: Span,
     ) -> Result<TypedExpr, Error> {
-        let tuple = self.infer(tuple)?;
+        let tuple_or_pair = self.infer(tuple_or_pair)?;
 
-        let tipo = match *collapse_links(tuple.tipo()) {
+        let tipo = match *collapse_links(tuple_or_pair.tipo()) {
             Type::Tuple {
                 ref elems,
                 alias: _,
@@ -2061,9 +2220,22 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     Ok(elems[index].clone())
                 }
             }
-            _ => Err(Error::NotATuple {
+            Type::Pair {
+                ref fst,
+                ref snd,
+                alias: _,
+            } => {
+                if index == 0 {
+                    Ok(fst.clone())
+                } else if index == 1 {
+                    Ok(snd.clone())
+                } else {
+                    Err(Error::PairIndexOutOfBound { location, index })
+                }
+            }
+            _ => Err(Error::NotIndexable {
                 location,
-                tipo: tuple.tipo(),
+                tipo: tuple_or_pair.tipo(),
             }),
         }?;
 
@@ -2071,7 +2243,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             location,
             tipo,
             index,
-            tuple: Box::new(tuple),
+            tuple: Box::new(tuple_or_pair),
         })
     }
 
@@ -2145,17 +2317,40 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                             variables: self.environment.local_value_names(),
                         })?;
 
-                // Note whether we are using an ungeneralised function so that we can
-                // tell if it is safe to generalise this function after inference has
-                // completed.
-                if matches!(
-                    &constructor.variant,
-                    ValueConstructorVariant::ModuleFn { .. }
-                ) {
+                if let ValueConstructorVariant::ModuleFn { name: fn_name, .. } =
+                    &constructor.variant
+                {
+                    // Note whether we are using an ungeneralised function so that we can
+                    // tell if it is safe to generalise this function after inference has
+                    // completed.
                     let is_ungeneralised = self.environment.ungeneralised_functions.contains(name);
 
                     self.ungeneralised_function_used =
                         self.ungeneralised_function_used || is_ungeneralised;
+
+                    // In case we use another function, infer it first before going further.
+                    // This ensures we have as much information possible about the function
+                    // when we start inferring expressions using it (i.e. calls).
+                    //
+                    // In a way, this achieves a cheap topological processing of definitions
+                    // where we infer used definitions first. And as a consequence, it solves
+                    // issues where expressions would be wrongly assigned generic variables
+                    // from other definitions.
+                    if let Some(fun) = self.environment.module_functions.remove(fn_name) {
+                        // NOTE: Recursive functions should not run into this multiple time.
+                        // If we have no hydrator for this function, it means that we have already
+                        // encountered it.
+                        if self.hydrators.get(&fun.name).is_some() {
+                            infer_function(
+                                fun,
+                                self.environment.current_module,
+                                self.hydrators,
+                                self.environment,
+                                self.lines,
+                                self.tracing,
+                            )?;
+                        }
+                    }
                 }
 
                 // Register the value as seen for detection of unused values
@@ -2284,20 +2479,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         self.environment.instantiate(t, ids, &self.hydrator)
     }
 
-    pub fn new(
-        environment: &'a mut Environment<'b>,
-        lines: &'a LineNumbers,
-        tracing: Tracing,
-    ) -> Self {
-        Self {
-            hydrator: Hydrator::new(),
-            environment,
-            tracing,
-            ungeneralised_function_used: false,
-            lines,
-        }
-    }
-
     pub fn new_unbound_var(&mut self) -> Rc<Type> {
         self.environment.new_unbound_var()
     }
@@ -2339,6 +2520,7 @@ fn assert_no_assignment(expr: &UntypedExpr) -> Result<(), Error> {
         | UntypedExpr::Sequence { .. }
         | UntypedExpr::String { .. }
         | UntypedExpr::Tuple { .. }
+        | UntypedExpr::Pair { .. }
         | UntypedExpr::TupleIndex { .. }
         | UntypedExpr::UnOp { .. }
         | UntypedExpr::Var { .. }
@@ -2442,5 +2624,9 @@ pub fn ensure_serialisable(allow_fn: bool, t: Rc<Type>, location: Span) -> Resul
                 location,
             ),
         },
+        Type::Pair { fst, snd, .. } => {
+            ensure_serialisable(false, fst.clone(), location)?;
+            ensure_serialisable(false, snd.clone(), location)
+        }
     }
 }

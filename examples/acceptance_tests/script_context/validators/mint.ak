@@ -1,5 +1,6 @@
 use aiken/dict
-use aiken/transaction.{Mint, ScriptContext}
+use aiken/list
+use aiken/transaction.{Mint, ScriptContext, Transaction}
 use aiken/transaction/value
 
 validator {
@@ -12,7 +13,7 @@ validator {
   }
 }
 
-fn assert_purpose(ctx) {
+fn assert_purpose(ctx: ScriptContext) {
   expect [my_policy_id] =
     ctx.transaction.mint
       |> value.from_minted_value
@@ -24,7 +25,7 @@ fn assert_purpose(ctx) {
   my_policy_id == policy_id
 }
 
-fn assert_mint(purpose, transaction) {
+fn assert_mint(purpose, transaction: Transaction) {
   expect Mint(policy_id) = purpose
   let tokens =
     value.tokens(transaction.mint |> value.from_minted_value, policy_id)
@@ -35,7 +36,8 @@ fn assert_mint(purpose, transaction) {
   }
 }
 
-fn assert_redeemers(ctx, my_redeemer) {
-  expect Some(redeemer) = dict.get(ctx.transaction.redeemers, ctx.purpose)
-  my_redeemer == redeemer && dict.size(ctx.transaction.redeemers) == 1
+fn assert_redeemers(ctx: ScriptContext, my_redeemer) {
+  expect Some(Pair(_, redeemer)) =
+    list.find(ctx.transaction.redeemers, fn(kv) { kv.1st == ctx.purpose })
+  my_redeemer == redeemer && list.length(ctx.transaction.redeemers) == 1
 }

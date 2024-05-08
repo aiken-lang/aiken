@@ -1,5 +1,6 @@
 use aiken/option
-use aiken/transaction.{NoDatum, ScriptContext, Spend, TransactionId}
+use aiken/transaction.{NoDatum,
+  ScriptContext, Spend, Transaction, TransactionId}
 use aiken/transaction/credential.{VerificationKeyCredential}
 use aiken/transaction/value
 
@@ -14,7 +15,7 @@ validator {
   }
 }
 
-fn assert_id(transaction) {
+fn assert_id(transaction: Transaction) {
   transaction.id != TransactionId(
     #"0000000000000000000000000000000000000000000000000000000000000000",
   )
@@ -30,14 +31,13 @@ fn assert_purpose(purpose) {
   }
 }
 
-fn assert_fee(transaction) {
+fn assert_fee(transaction: Transaction) {
   transaction.fee == value.from_lovelace(42)
 }
 
-fn assert_outputs(transaction) {
+fn assert_outputs(transaction: Transaction) {
   when transaction.outputs is {
-    [output] ->
-      and {
+    [output] -> and {
         output.value == value.from_lovelace(1000000000),
         output.address.payment_credential == VerificationKeyCredential(
           #"11111111111111111111111111111111111111111111111111111111",

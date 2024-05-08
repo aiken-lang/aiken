@@ -14,11 +14,11 @@ validator(token_name: ByteArray, utxo_ref: OutputReference) {
     let ScriptContext { transaction, purpose } = ctx
     expect tx.Mint(policy_id) = purpose
     let Transaction { inputs, mint, .. } = transaction
-    expect [(asset_name, amount)] =
+    expect [Pair(asset_name, amount)] =
       mint
         |> value.from_minted_value
         |> value.tokens(policy_id)
-        |> dict.to_list()
+        |> dict.to_alist()
     when rdmr is {
       Mint -> {
         expect

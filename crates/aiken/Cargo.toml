@@ -13,6 +13,12 @@ authors = [
 ]
 rust-version = "1.66.1"
 
+[package.metadata.wix]
+upgrade-guid = "288B160D-418A-4558-91B9-7C38CFD789C7"
+path-guid = "4EB8FCD6-261B-4F6C-B7DB-CFA67B4E6960"
+license = false
+eula = false
+
 [dependencies]
 clap = { version = "4.1.8", features = [
   "derive",

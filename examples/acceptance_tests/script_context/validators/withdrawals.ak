@@ -1,4 +1,4 @@
-use aiken/dict
+use aiken/list
 use aiken/transaction.{ScriptContext}
 use aiken/transaction/credential.{
   Inline, ScriptCredential, VerificationKeyCredential,
@@ -21,15 +21,17 @@ validator {
       )
 
     and {
-      when dict.get(ctx.transaction.withdrawals, alice) is {
+      when
+        list.find(ctx.transaction.withdrawals, fn(kv) { kv.1st == alice })
+      is {
         None -> fail @"alice's withdrawal not found"
-        Some(value) -> value == 42
+        Some(value) -> value.2nd == 42
       },
-      when dict.get(ctx.transaction.withdrawals, bob) is {
+      when list.find(ctx.transaction.withdrawals, fn(kv) { kv.1st == bob }) is {
         None -> fail @"bob's withdrawal not found"
-        Some(value) -> value == 14
+        Some(value) -> value.2nd == 14
       },
-      dict.keys(ctx.transaction.withdrawals) == [alice, bob],
+      list.map(ctx.transaction.withdrawals, fn(kv) { kv.1st }) == [alice, bob],
     }
   }
 }

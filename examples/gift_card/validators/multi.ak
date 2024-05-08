@@ -1,5 +1,5 @@
+use aiken/builtin
 use aiken/bytearray
-use aiken/cbor
 use aiken/dict
 use aiken/hash.{blake2b_256}
 use aiken/list
@@ -60,13 +60,13 @@ validator(creator: ByteArray) {
       mint
         |> value.from_minted_value
         |> value.tokens(policy_id)
-        |> dict.to_list()
+        |> dict.to_alist()
 
     when rdmr is {
       Mint(total) -> {
         expect [input, ..] = inputs
         // Base is created from serializing a utxo ref being spent. Thus this guarantees a unique base
-        let base = cbor.serialise(input.output_reference)
+        let base = builtin.serialise_data(input.output_reference)
         // Create a list of expected token names
         let expected_minted_token_names =
           create_expected_minted_nfts(base, total, [])
@@ -86,7 +86,7 @@ validator(creator: ByteArray) {
         list.all(
           minted_assets,
           fn(asset) {
-            let (_, amount) = asset
+            let Pair(_, amount) = asset
             amount == -1
           },
         )
@@ -111,14 +111,14 @@ fn insert(self: List<a>, e: a, compare: fn(a, a) -> Ordering) -> List<a> {
 // and has a corresponding ouput with datum containing token name.
 // Otherwise fail
 fn check_mint_and_outputs(
-  minted_assets: List<(ByteArray, Int)>,
+  minted_assets: AList<ByteArray, Int>,
   outputs: List<Output>,
   expected_assets: List<ByteArray>,
   validator_cred: PaymentCredential,
 ) -> Bool {
   when minted_assets is {
     [] -> True
-    [(minted_asset_name, quantity), ..rest_assets] -> {
+    [Pair(minted_asset_name, quantity), ..rest_assets] -> {
       expect
         list.any(
           expected_assets,

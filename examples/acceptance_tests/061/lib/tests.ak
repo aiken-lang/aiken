@@ -61,7 +61,7 @@ pub fn tx_1() -> Transaction {
       fee: value.zero(),
       mint: value.from_asset(#"000000", #"00", -1) |> value.to_minted_value,
       certificates: [],
-      withdrawals: dict.new(),
+      withdrawals: [],
       validity_range: Interval {
         lower_bound: IntervalBound {
           bound_type: PositiveInfinity,
@@ -73,7 +73,7 @@ pub fn tx_1() -> Transaction {
         },
       },
       extra_signatories: [keyhash],
-      redeemers: dict.new(),
+      redeemers: [],
       datums: dict.new(),
       id: TransactionId { hash: #"" },
     }

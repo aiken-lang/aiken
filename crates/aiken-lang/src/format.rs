@@ -424,6 +424,14 @@ impl<'comments> Formatter<'comments> {
             Annotation::Tuple { elems, .. } => {
                 wrap_args(elems.iter().map(|t| (self.annotation(t), false)))
             }
+            Annotation::Pair { fst, snd, .. } => "Pair"
+                .to_doc()
+                .append("<")
+                .append(self.annotation(fst))
+                .append(break_(",", ", "))
+                .append(self.annotation(snd))
+                .append(">")
+                .group(),
         }
         .group()
     }
@@ -978,6 +986,15 @@ impl<'comments> Formatter<'comments> {
             UntypedExpr::Tuple { elems, .. } => {
                 wrap_args(elems.iter().map(|e| (self.wrap_expr(e), false))).group()
             }
+
+            UntypedExpr::Pair { fst, snd, .. } => "Pair"
+                .to_doc()
+                .append("(")
+                .append(self.expr(fst, false))
+                .append(break_(",", ", "))
+                .append(self.expr(snd, false))
+                .append(")")
+                .group(),
 
             UntypedExpr::TupleIndex { index, tuple, .. } => {
                 let suffix = Ordinal(*index + 1).suffix().to_doc();
@@ -1777,6 +1794,15 @@ impl<'comments> Formatter<'comments> {
             Pattern::Tuple { elems, .. } => {
                 wrap_args(elems.iter().map(|e| (self.pattern(e), false))).group()
             }
+
+            Pattern::Pair { fst, snd, .. } => "Pair"
+                .to_doc()
+                .append("(")
+                .append(self.pattern(fst))
+                .append(break_(",", ", "))
+                .append(self.pattern(snd))
+                .append(")")
+                .group(),
 
             Pattern::List { elements, tail, .. } => {
                 let elements_document =

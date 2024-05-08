@@ -85,10 +85,10 @@ const bar = #"626172"
 
 fn fixture_1() {
   dict.new()
-    |> dict.insert(fooz, 42, bytearray.compare)
-    |> dict.insert(bar, 14, bytearray.compare)
+    |> dict.insert(fooz, 42)
+    |> dict.insert(bar, 14)
 }
 
 test union_1() {
-  dict.union(fixture_1(), dict.new(), bytearray.compare) == fixture_1()
+  dict.union(fixture_1(), dict.new()) == fixture_1()
 }

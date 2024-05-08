@@ -24,9 +24,9 @@ pub fn from_asset(
 ) -> Value {
   let asset =
     dict.new()
-      |> dict.insert(asset_name, quantity, bytearray.compare)
+      |> dict.insert(asset_name, quantity)
   dict.new()
-    |> dict.insert(policy_id, asset, bytearray.compare)
+    |> dict.insert(policy_id, asset)
     |> Value
 }
 
@@ -47,7 +47,6 @@ pub fn add(left v0: Value, right v1: Value) -> Value {
               Some(q)
             }
           },
-          bytearray.compare,
         )
 
       if dict.is_empty(result) {
@@ -56,7 +55,6 @@ pub fn add(left v0: Value, right v1: Value) -> Value {
         Some(result)
       }
     },
-    bytearray.compare,
   )
     |> Value
 }

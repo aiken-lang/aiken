@@ -680,10 +680,10 @@ fn acceptance_test_6_if_else() {
 }
 
 #[test]
-fn acceptance_test_6_equals() {
+fn acceptance_test_6_equals_pair() {
     let src = r#"
         test foo() {
-          (1, []) == (1, [])
+          Pair(1, []) == Pair(1, [])
         }
     "#;
 
@@ -725,7 +725,46 @@ fn acceptance_test_6_equals() {
 }
 
 #[test]
-fn acceptance_test_7_unzip() {
+fn acceptance_test_6_equals_tuple() {
+    let src = r#"
+        test foo() {
+          (1, []) == (1, [])
+        }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::list_data().apply(Term::Constant(
+                    Constant::ProtoList(
+                        Type::Data,
+                        vec![
+                            Constant::Data(Data::integer(1.into())),
+                            Constant::Data(Data::list(vec![])),
+                        ],
+                    )
+                    .into(),
+                )),
+            )
+            .apply(
+                Term::list_data().apply(Term::Constant(
+                    Constant::ProtoList(
+                        Type::Data,
+                        vec![
+                            Constant::Data(Data::integer(1.into())),
+                            Constant::Data(Data::list(vec![])),
+                        ],
+                    )
+                    .into(),
+                )),
+            ),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_7_unzip_tuple() {
     let src = r#"
       pub fn unzip(xs: List<(a, b)>) -> (List<a>, List<b>) {
         when xs is {
@@ -741,6 +780,127 @@ fn acceptance_test_7_unzip() {
         let x = [(3, #"55"), (4, #"7799")]
 
         unzip(x) == ([3, 4], [#"55", #"7799"])
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::list_data().apply(
+                    Term::var("unzip")
+                        .lambda("unzip")
+                        .apply(Term::var("unzip").apply(Term::var("unzip")))
+                        .lambda("unzip")
+                        .apply(
+                            Term::var("xs")
+                                .delayed_choose_list(
+                                    Term::list_values(vec![
+                                        Constant::Data(Data::list(vec![])),
+                                        Constant::Data(Data::list(vec![])),
+                                    ]),
+                                    Term::mk_cons()
+                                        .apply(
+                                            Term::list_data().apply(
+                                                Term::mk_cons()
+                                                    .apply(Term::i_data().apply(Term::var("a")))
+                                                    .apply(Term::var("a_tail")),
+                                            ),
+                                        )
+                                        .apply(
+                                            Term::mk_cons()
+                                                .apply(
+                                                    Term::list_data().apply(
+                                                        Term::mk_cons()
+                                                            .apply(
+                                                                Term::b_data()
+                                                                    .apply(Term::var("b")),
+                                                            )
+                                                            .apply(Term::var("b_tail")),
+                                                    ),
+                                                )
+                                                .apply(Term::empty_list()),
+                                        )
+                                        .lambda("b_tail")
+                                        .apply(Term::unlist_data().apply(Term::head_list().apply(
+                                            Term::tail_list().apply(Term::var("tail_tuple")),
+                                        )))
+                                        .lambda("a_tail")
+                                        .apply(Term::unlist_data().apply(
+                                            Term::head_list().apply(Term::var("tail_tuple")),
+                                        ))
+                                        .lambda("tail_tuple")
+                                        .apply(
+                                            Term::var("unzip")
+                                                .apply(Term::var("unzip"))
+                                                .apply(Term::var("rest")),
+                                        )
+                                        .lambda("b")
+                                        .apply(Term::un_b_data().apply(Term::head_list().apply(
+                                            Term::tail_list().apply(Term::var("head_tuple")),
+                                        )))
+                                        .lambda("a")
+                                        .apply(Term::un_i_data().apply(
+                                            Term::head_list().apply(Term::var("head_tuple")),
+                                        ))
+                                        .lambda("rest")
+                                        .apply(Term::tail_list().apply(Term::var("xs")))
+                                        .lambda("head_tuple")
+                                        .apply(
+                                            Term::unlist_data()
+                                                .apply(Term::head_list().apply(Term::var("xs"))),
+                                        ),
+                                )
+                                .lambda("xs")
+                                .lambda("unzip"),
+                        )
+                        .apply(Term::var("x")),
+                ),
+            )
+            .apply(Term::list_data().apply(Term::list_values(vec![
+                Constant::Data(Data::list(vec![
+                    Data::integer(3.into()),
+                    Data::integer(4.into()),
+                ])),
+                Constant::Data(Data::list(vec![
+                    Data::bytestring(vec![85]),
+                    Data::bytestring(vec![119, 153]),
+                ])),
+            ])))
+            .lambda("x")
+            .apply(Term::list_values(vec![
+                Constant::Data(Data::list(vec![
+                    Data::integer(3.into()),
+                    Data::bytestring(vec![85]),
+                ])),
+                Constant::Data(Data::list(vec![
+                    Data::integer(4.into()),
+                    Data::bytestring(vec![119, 153]),
+                ])),
+            ])),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_7_unzip_pair() {
+    let src = r#"
+      type AList<a,b> = List<Pair<a,b>>
+
+      pub fn unzip(xs: AList<a, b>) -> Pair<List<a>, List<b>> {
+        when xs is {
+          [] -> Pair([], [])
+          [Pair(a, b), ..rest] -> {
+            let Pair(a_tail, b_tail) = unzip(rest)
+            Pair([a, ..a_tail], [b, ..b_tail])
+          }
+        }
+      }
+
+      test unzip1() {
+        let x = [Pair(3, #"55"), Pair(4, #"7799")]
+
+        unzip(x) == Pair([3, 4], [#"55", #"7799"])
       }
     "#;
 
@@ -1413,16 +1573,16 @@ fn acceptance_test_14_list_creation() {
 #[test]
 fn acceptance_test_15_zero_arg() {
     let src = r#"
-      pub opaque type Map<key, value> {
-        inner: List<(key, value)>,
+      pub opaque type AList<key, value> {
+        inner: List<Pair<key, value>>,
       }
 
       pub fn new() {
-        Map { inner: [] }
+        AList { inner: [] }
       }
 
       test new_1() {
-        new() == Map { inner: [] }
+        new() == AList { inner: [] }
       }
     "#;
 
@@ -1720,9 +1880,9 @@ fn acceptance_test_19_map_wrap_void() {
                                     .apply(
                                         Term::mk_cons()
                                             .apply(
-                                                Term::var("f").apply(Term::var("a")).choose_unit(
-                                                    Term::data(Data::constr(0, vec![])),
-                                                ),
+                                                Term::data(Data::constr(0, vec![]))
+                                                    .lambda("_")
+                                                    .apply(Term::var("f").apply(Term::var("a"))),
                                             )
                                             .apply(Term::empty_list()),
                                     )
@@ -1956,48 +2116,51 @@ fn acceptance_test_22_filter_map() {
 #[test]
 fn acceptance_test_23_to_list() {
     let src = r#"
-      pub opaque type AssocList<key, value> {
-        inner: List<(key, value)>,
-      }
+        pub type AList<key, value> =
+            List<Pair<key, value>>
 
-      pub fn new() -> AssocList<key, value> {
-        AssocList { inner: [] }
-      }
+        pub opaque type AssocList<key, value> {
+            inner: AList<key, value>,
+        }
 
-      pub fn to_list(m: AssocList<key, value>) -> List<(key, value)> {
-        m.inner
-      }
+        pub fn new() -> AssocList<key, value> {
+            AssocList { inner: [] }
+        }
 
-      pub fn insert(
-        in m: AssocList<key, value>,
-        key k: key,
-        value v: value,
-      ) -> AssocList<key, value> {
-        AssocList { inner: do_insert(m.inner, k, v) }
-      }
+        pub fn to_list(m: AssocList<key, value>) -> AList<key, value> {
+            m.inner
+        }
 
-      fn do_insert(elems: List<(key, value)>, k: key, v: value) -> List<(key, value)> {
-        when elems is {
-          [] ->
-            [(k, v)]
-          [(k2, v2), ..rest] ->
-            if k == k2 {
-              [(k, v), ..rest]
-            } else {
-              [(k2, v2), ..do_insert(rest, k, v)]
+        pub fn insert(
+            in m: AssocList<key, value>,
+            key k: key,
+            value v: value,
+        ) -> AssocList<key, value> {
+            AssocList { inner: do_insert(m.inner, k, v) }
+        }
+
+        fn do_insert(elems: AList<key, value>, k: key, v: value) -> AList<key, value> {
+            when elems is {
+            [] ->
+                [Pair(k, v)]
+            [Pair(k2, v2), ..rest] ->
+                if k == k2 {
+                  [Pair(k, v), ..rest]
+                } else {
+                  [Pair(k2, v2), ..do_insert(rest, k, v)]
+                }
             }
         }
-      }
 
-      fn fixture_1() {
-        new()
-          |> insert("foo", 42)
-          |> insert("bar", 14)
-      }
+        fn fixture_1() {
+            new()
+            |> insert("foo", 42)
+            |> insert("bar", 14)
+        }
 
-      test to_list_2() {
-        to_list(fixture_1()) == [("foo", 42), ("bar", 14)]
-      }
+        test to_list_2() {
+            to_list(fixture_1()) == [Pair("foo", 42), Pair("bar", 14)]
+        }
     "#;
 
     assert_uplc(
@@ -2036,7 +2199,7 @@ fn acceptance_test_23_to_list() {
 }
 
 #[test]
-fn acceptance_test_24_map2() {
+fn acceptance_test_24_map_pair() {
     let src = r#"
       pub fn map2(
         opt_a: Option<a>,
@@ -2057,7 +2220,7 @@ fn acceptance_test_24_map2() {
       }
 
       test map2_3() {
-        map2(Some(14), Some(42), fn(a, b) { (a, b) }) == Some((14, 42))
+        map2(Some(14), Some(42), fn(a, b) { Pair(a, b) }) == Some(Pair(14, 42))
       }
     "#;
 
@@ -2158,6 +2321,129 @@ fn acceptance_test_24_map2() {
                         Term::mk_pair_data()
                             .apply(Term::i_data().apply(Term::var("a")))
                             .apply(Term::i_data().apply(Term::var("b")))
+                            .lambda("b")
+                            .lambda("a"),
+                    ),
+            )
+            .apply(Term::Constant(
+                Constant::Data(Data::constr(
+                    0,
+                    vec![Data::list(vec![
+                        Data::integer(14.into()),
+                        Data::integer(42.into()),
+                    ])],
+                ))
+                .into(),
+            ))
+            .constr_fields_exposer()
+            .constr_index_exposer(),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_24_map2() {
+    let src = r#"
+      pub fn map2(
+        opt_a: Option<a>,
+        opt_b: Option<b>,
+        f: fn(a, b) -> result,
+      ) -> Option<result> {
+        when opt_a is {
+          None ->
+            None
+          Some(a) ->
+            when opt_b is {
+              None ->
+                None
+              Some(b) ->
+                Some(f(a, b))
+            }
+        }
+      }
+
+      test map2_3() {
+        map2(Some(14), Some(42), fn(a, b) { (a, b) }) == Some((14, 42))
+      }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::var("map2")
+                    .lambda("map2")
+                    .apply(
+                        Term::equals_integer()
+                            .apply(Term::integer(1.into()))
+                            .apply(Term::var("opt_a_index"))
+                            .delayed_if_then_else(
+                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                                Term::equals_integer()
+                                    .apply(Term::integer(1.into()))
+                                    .apply(Term::var("opt_b_index"))
+                                    .delayed_if_then_else(
+                                        Term::Constant(
+                                            Constant::Data(Data::constr(1, vec![])).into(),
+                                        ),
+                                        Term::constr_data()
+                                            .apply(Term::integer(0.into()))
+                                            .apply(
+                                                Term::mk_cons()
+                                                    .apply(
+                                                        Term::list_data().apply(
+                                                            Term::var("f")
+                                                                .apply(Term::var("a"))
+                                                                .apply(Term::var("b")),
+                                                        ),
+                                                    )
+                                                    .apply(Term::empty_list()),
+                                            )
+                                            .lambda("b")
+                                            .apply(Term::un_i_data().apply(
+                                                Term::head_list().apply(Term::var("opt_b_fields")),
+                                            ))
+                                            .lambda("opt_b_fields")
+                                            .apply(
+                                                Term::var(CONSTR_FIELDS_EXPOSER)
+                                                    .apply(Term::var("opt_b")),
+                                            ),
+                                    )
+                                    .lambda("opt_b_index")
+                                    .apply(
+                                        Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("opt_b")),
+                                    )
+                                    .lambda("a")
+                                    .apply(
+                                        Term::un_i_data().apply(
+                                            Term::head_list().apply(Term::var("opt_a_fields")),
+                                        ),
+                                    )
+                                    .lambda("opt_a_fields")
+                                    .apply(
+                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt_a")),
+                                    ),
+                            )
+                            .lambda("opt_a_index")
+                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("opt_a")))
+                            .lambda("f")
+                            .lambda("opt_b")
+                            .lambda("opt_a"),
+                    )
+                    .apply(Term::Constant(
+                        Constant::Data(Data::constr(0, vec![Data::integer(14.into())])).into(),
+                    ))
+                    .apply(Term::Constant(
+                        Constant::Data(Data::constr(0, vec![Data::integer(42.into())])).into(),
+                    ))
+                    .apply(
+                        Term::mk_cons()
+                            .apply(Term::i_data().apply(Term::var("a")))
+                            .apply(
+                                Term::mk_cons()
+                                    .apply(Term::i_data().apply(Term::var("b")))
+                                    .apply(Term::empty_list()),
+                            )
                             .lambda("b")
                             .lambda("a"),
                     ),
@@ -2708,25 +2994,25 @@ fn acceptance_test_28_unique_list() {
 }
 
 #[test]
-fn acceptance_test_29_union() {
+fn acceptance_test_29_union_pair() {
     let src = r#"
       pub opaque type AssocList<key, value> {
-        inner: List<(key, value)>,
+        inner: AList<key, value>,
       }
 
       pub fn new() -> AssocList<key, value> {
         AssocList { inner: [] }
       }
 
-      pub fn from_list(xs: List<(key, value)>) -> AssocList<key, value> {
+      pub fn from_list(xs: AList<key, value>) -> AssocList<key, value> {
         AssocList { inner: do_from_list(xs) }
       }
 
-      fn do_from_list(xs: List<(key, value)>) -> List<(key, value)> {
+      fn do_from_list(xs: AList<key, value>) -> AList<key, value> {
         when xs is {
           [] ->
             []
-          [(k, v), ..rest] ->
+          [Pair(k, v), ..rest] ->
             do_insert(do_from_list(rest), k, v)
         }
       }
@@ -2739,15 +3025,15 @@ fn acceptance_test_29_union() {
         AssocList { inner: do_insert(m.inner, k, v) }
       }
 
-      fn do_insert(elems: List<(key, value)>, k: key, v: value) -> List<(key, value)> {
+      fn do_insert(elems: AList<key, value>, k: key, v: value) -> AList<key, value> {
         when elems is {
           [] ->
-            [(k, v)]
-          [(k2, v2), ..rest] ->
+            [Pair(k, v)]
+          [Pair(k2, v2), ..rest] ->
             if k == k2 {
-              [(k, v), ..rest]
+              [Pair(k, v), ..rest]
             } else {
-              [(k2, v2), ..do_insert(rest, k, v)]
+              [Pair(k2, v2), ..do_insert(rest, k, v)]
             }
         }
       }
@@ -2760,13 +3046,13 @@ fn acceptance_test_29_union() {
       }
 
       fn do_union(
-        left: List<(key, value)>,
-        right: List<(key, value)>,
-      ) -> List<(key, value)> {
+        left: AList<key, value>,
+        right: AList<key, value>,
+      ) -> AList<key, value> {
         when left is {
           [] ->
             right
-          [(k, v), ..rest] ->
+          [Pair(k, v), ..rest] ->
             do_union(rest, do_insert(right, k, v))
         }
       }
@@ -2931,6 +3217,273 @@ fn acceptance_test_29_union() {
                     Data::bytestring("bar".as_bytes().to_vec()),
                     Data::integer(14.into()),
                 ),
+            ]))),
+        false,
+    );
+}
+
+#[test]
+fn acceptance_test_29_union_tuple() {
+    let src = r#"
+      pub opaque type AssocList<key, value> {
+        inner: List<(key, value)>,
+      }
+
+      pub fn new() -> AssocList<key, value> {
+        AssocList { inner: [] }
+      }
+
+      pub fn from_list(xs: List<(key, value)>) -> AssocList<key, value> {
+        AssocList { inner: do_from_list(xs) }
+      }
+
+      fn do_from_list(xs: List<(key, value)>) -> List<(key, value)> {
+        when xs is {
+          [] ->
+            []
+          [(k, v), ..rest] ->
+            do_insert(do_from_list(rest), k, v)
+        }
+      }
+
+      pub fn insert(
+        in m: AssocList<key, value>,
+        key k: key,
+        value v: value,
+      ) -> AssocList<key, value> {
+        AssocList { inner: do_insert(m.inner, k, v) }
+      }
+
+      fn do_insert(elems: List<(key, value)>, k: key, v: value) -> List<(key, value)> {
+        when elems is {
+          [] ->
+            [(k, v)]
+          [(k2, v2), ..rest] ->
+            if k == k2 {
+              [(k, v), ..rest]
+            } else {
+              [(k2, v2), ..do_insert(rest, k, v)]
+            }
+        }
+      }
+
+      pub fn union(
+        left: AssocList<key, value>,
+        right: AssocList<key, value>,
+      ) -> AssocList<key, value> {
+        AssocList { inner: do_union(left.inner, right.inner) }
+      }
+
+      fn do_union(
+        left: List<(key, value)>,
+        right: List<(key, value)>,
+      ) -> List<(key, value)> {
+        when left is {
+          [] ->
+            right
+          [(k, v), ..rest] ->
+            do_union(rest, do_insert(right, k, v))
+        }
+      }
+
+      fn fixture_1() {
+        new()
+          |> insert("foo", 42)
+          |> insert("bar", 14)
+      }
+
+      test union_1() {
+        union(fixture_1(), new()) == fixture_1()
+      }
+
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::list_data().apply(
+                    Term::var("union")
+                        .lambda("union")
+                        .apply(
+                            Term::var("do_union")
+                                .apply(Term::var("left"))
+                                .apply(Term::var("right"))
+                                .lambda("right")
+                                .lambda("left"),
+                        )
+                        .lambda("do_union")
+                        .apply(Term::var("do_union").apply(Term::var("do_union")))
+                        .lambda("do_union")
+                        .apply(
+                            Term::var("left")
+                                .delayed_choose_list(
+                                    Term::var("right"),
+                                    Term::var("do_union")
+                                        .apply(Term::var("do_union"))
+                                        .apply(Term::var("rest"))
+                                        .apply(
+                                            Term::var("do_insert")
+                                                .apply(Term::var("right"))
+                                                .apply(Term::var("k"))
+                                                .apply(Term::var("v")),
+                                        )
+                                        .lambda("v")
+                                        .apply(
+                                            Term::un_i_data().apply(Term::head_list().apply(
+                                                Term::tail_list().apply(Term::var("tuple")),
+                                            )),
+                                        )
+                                        .lambda("k")
+                                        .apply(
+                                            Term::un_b_data()
+                                                .apply(Term::head_list().apply(Term::var("tuple"))),
+                                        )
+                                        .lambda("rest")
+                                        .apply(Term::tail_list().apply(Term::var("left")))
+                                        .lambda("tuple")
+                                        .apply(
+                                            Term::unlist_data()
+                                                .apply(Term::head_list().apply(Term::var("left"))),
+                                        ),
+                                )
+                                .lambda("right")
+                                .lambda("left")
+                                .lambda("do_union"),
+                        )
+                        .lambda("do_insert")
+                        .apply(
+                            Term::var("do_insert")
+                                .apply(Term::var("do_insert"))
+                                .apply(Term::var("elems"))
+                                .lambda("do_insert")
+                                .apply(
+                                    Term::var("elems")
+                                        .delayed_choose_list(
+                                            Term::mk_cons()
+                                                .apply(
+                                                    Term::list_data().apply(
+                                                        Term::mk_cons()
+                                                            .apply(
+                                                                Term::b_data()
+                                                                    .apply(Term::var("k")),
+                                                            )
+                                                            .apply(
+                                                                Term::mk_cons()
+                                                                    .apply(
+                                                                        Term::i_data()
+                                                                            .apply(Term::var("v")),
+                                                                    )
+                                                                    .apply(Term::empty_list()),
+                                                            ),
+                                                    ),
+                                                )
+                                                .apply(Term::empty_list()),
+                                            Term::equals_bytestring()
+                                                .apply(Term::var("k"))
+                                                .apply(Term::var("k2"))
+                                                .delayed_if_then_else(
+                                                    Term::mk_cons()
+                                                        .apply(
+                                                            Term::list_data().apply(
+                                                                Term::mk_cons()
+                                                                    .apply(
+                                                                        Term::b_data()
+                                                                            .apply(Term::var("k")),
+                                                                    )
+                                                                    .apply(
+                                                                        Term::mk_cons()
+                                                                            .apply(
+                                                                                Term::i_data()
+                                                                                    .apply(
+                                                                                        Term::var(
+                                                                                            "v",
+                                                                                        ),
+                                                                                    ),
+                                                                            )
+                                                                            .apply(
+                                                                                Term::empty_list(),
+                                                                            ),
+                                                                    ),
+                                                            ),
+                                                        )
+                                                        .apply(Term::var("rest")),
+                                                    Term::mk_cons()
+                                                        .apply(
+                                                            Term::list_data().apply(
+                                                                Term::mk_cons()
+                                                                    .apply(
+                                                                        Term::b_data()
+                                                                            .apply(Term::var("k2")),
+                                                                    )
+                                                                    .apply(
+                                                                        Term::mk_cons()
+                                                                            .apply(
+                                                                                Term::i_data()
+                                                                                    .apply(
+                                                                                        Term::var(
+                                                                                            "v2",
+                                                                                        ),
+                                                                                    ),
+                                                                            )
+                                                                            .apply(
+                                                                                Term::empty_list(),
+                                                                            ),
+                                                                    ),
+                                                            ),
+                                                        )
+                                                        .apply(
+                                                            Term::var("do_insert")
+                                                                .apply(Term::var("do_insert"))
+                                                                .apply(Term::var("rest")),
+                                                        ),
+                                                )
+                                                .lambda("v2")
+                                                .apply(Term::un_i_data().apply(
+                                                    Term::head_list().apply(
+                                                        Term::tail_list().apply(Term::var("tuple")),
+                                                    ),
+                                                ))
+                                                .lambda("k2")
+                                                .apply(Term::un_b_data().apply(
+                                                    Term::head_list().apply(Term::var("tuple")),
+                                                ))
+                                                .lambda("rest")
+                                                .apply(Term::tail_list().apply(Term::var("elems")))
+                                                .lambda("tuple")
+                                                .apply(Term::unlist_data().apply(
+                                                    Term::head_list().apply(Term::var("elems")),
+                                                )),
+                                        )
+                                        .lambda("elems")
+                                        .lambda("do_insert"),
+                                )
+                                .lambda("v")
+                                .lambda("k")
+                                .lambda("elems"),
+                        )
+                        .apply(Term::list_values(vec![
+                            Constant::Data(Data::list(vec![
+                                Data::bytestring("foo".as_bytes().to_vec()),
+                                Data::integer(42.into()),
+                            ])),
+                            Constant::Data(Data::list(vec![
+                                Data::bytestring("bar".as_bytes().to_vec()),
+                                Data::integer(14.into()),
+                            ])),
+                        ]))
+                        .apply(Term::empty_list()),
+                ),
+            )
+            .apply(Term::data(Data::list(vec![
+                Data::list(vec![
+                    Data::bytestring("foo".as_bytes().to_vec()),
+                    Data::integer(42.into()),
+                ]),
+                Data::list(vec![
+                    Data::bytestring("bar".as_bytes().to_vec()),
+                    Data::integer(14.into()),
+                ]),
             ]))),
         false,
     );
@@ -3171,14 +3724,16 @@ fn when_tuple_deconstruction() {
             .lambda("other_clauses")
             .apply(Term::bool(true).delay())
             .lambda("dat")
-            .apply(Term::fst_pair().apply(Term::var("pair_subject")))
+            .apply(Term::head_list().apply(Term::var("pair_subject")))
             .lambda("red")
-            .apply(Term::snd_pair().apply(Term::var("pair_subject")))
+            .apply(Term::head_list().apply(Term::tail_list().apply(Term::var("pair_subject"))))
             .lambda("pair_subject")
             .apply(
-                Term::mk_pair_data()
-                    .apply(Term::var("dat"))
-                    .apply(Term::var("red")),
+                Term::mk_cons().apply(Term::var("dat")).apply(
+                    Term::mk_cons()
+                        .apply(Term::var("red"))
+                        .apply(Term::empty_list()),
+                ),
             )
             .delayed_if_then_else(
                 Term::unit(),
@@ -3462,19 +4017,22 @@ fn when_tuple_empty_lists() {
                             .delay(),
                     )
                     .lambda("bucket_tuple_snd")
-                    .apply(
-                        Term::unlist_data()
-                            .apply(Term::snd_pair().apply(Term::var("bucket_tuple"))),
-                    )
+                    .apply(Term::unlist_data().apply(
+                        Term::head_list().apply(Term::tail_list().apply(Term::var("bucket_tuple"))),
+                    ))
                     .delay(),
             )
             .lambda("bucket_tuple_fst")
-            .apply(Term::unlist_data().apply(Term::fst_pair().apply(Term::var("bucket_tuple"))))
+            .apply(Term::unlist_data().apply(Term::head_list().apply(Term::var("bucket_tuple"))))
             .lambda("bucket_tuple")
             .apply(
-                Term::mk_pair_data()
+                Term::mk_cons()
                     .apply(Term::list_data().apply(Term::var("bucket1")))
-                    .apply(Term::list_data().apply(Term::var("bucket2"))),
+                    .apply(
+                        Term::mk_cons()
+                            .apply(Term::list_data().apply(Term::var("bucket2")))
+                            .apply(Term::empty_list()),
+                    ),
             )
             .lambda("bucket2")
             .apply(Term::list_values(vec![
@@ -3832,7 +4390,7 @@ fn record_update_output_2_vals() {
 
       type Output {
         address: Address,
-        value: List<(ByteArray, List<(ByteArray, Int)>)>,
+        value: List<Pair<ByteArray, List<Pair<ByteArray, Int>>>>,
         datum: Datum,
         script_ref: Option<ByteArray>,
       }
@@ -3934,7 +4492,7 @@ fn record_update_output_1_val() {
 
       type Output {
         address: Address,
-        value: List<(ByteArray, List<(ByteArray, Int)>)>,
+        value: List<Pair<ByteArray, List<Pair<ByteArray, Int>>>>,
         datum: Datum,
         script_ref: Option<ByteArray>,
       }
@@ -4035,7 +4593,7 @@ fn record_update_output_first_last_val() {
 
       type Output {
         address: Address,
-        value: List<(ByteArray, List<(ByteArray, Int)>)>,
+        value: List<Pair<ByteArray, List<Pair<ByteArray, Int>>>>,
         datum: Datum,
         script_ref: Option<ByteArray>,
       }
@@ -5618,7 +6176,7 @@ fn opaque_value_in_datum() {
       }
 
       opaque type Dict<v> {
-        inner: List<(ByteArray, v)>
+        inner: List<Pair<ByteArray, v>>
       }
 
       type Dat {
@@ -5631,9 +6189,9 @@ fn opaque_value_in_datum() {
         fn spend(dat: Dat, red: Data, ctx: Data) {
           let val = dat.a
 
-          expect [(_, amount)] = val.inner.inner
+          expect [Pair(_, amount)] = val.inner.inner
 
-          let final_amount = [(#"AA", 4)] |> Dict
+          let final_amount = [Pair(#"AA", 4)] |> Dict
 
           final_amount == amount
 
@@ -5723,7 +6281,7 @@ fn opaque_value_in_datum() {
         src,
         Term::var("val")
             .delayed_choose_list(
-                Term::Error.delayed_trace(Term::var("expect[(_,amount)]=val.inner.inner")),
+                Term::Error.delayed_trace(Term::var("expect[Pair(_,amount)]=val.inner.inner")),
                 Term::tail_list()
                     .apply(Term::var("val"))
                     .delayed_choose_list(
@@ -5742,7 +6300,8 @@ fn opaque_value_in_datum() {
                                 Term::unmap_data()
                                     .apply(Term::snd_pair().apply(Term::var("tuple_item_0"))),
                             ),
-                        Term::Error.delayed_trace(Term::var("expect[(_,amount)]=val.inner.inner")),
+                        Term::Error
+                            .delayed_trace(Term::var("expect[Pair(_,amount)]=val.inner.inner")),
                     )
                     .lambda("tuple_item_0")
                     .apply(Term::head_list().apply(Term::var("val"))),
@@ -5860,8 +6419,8 @@ fn opaque_value_in_datum() {
             )
             .lambda("dat")
             .constr_fields_exposer()
-            .lambda("expect[(_,amount)]=val.inner.inner")
-            .apply(Term::string("expect [(_, amount)] = val.inner.inner"))
+            .lambda("expect[Pair(_,amount)]=val.inner.inner")
+            .apply(Term::string("expect [Pair(_, amount)] = val.inner.inner"))
             .lambda("dat:Dat")
             .apply(Term::string("dat: Dat"))
             .constr_index_exposer(),
@@ -5877,7 +6436,7 @@ fn opaque_value_in_test() {
         }
 
         pub opaque type Dict<v> {
-          inner: List<(ByteArray, v)>
+          inner: List<Pair<ByteArray, v>>
         }
 
         pub type Dat {
@@ -5886,7 +6445,7 @@ fn opaque_value_in_test() {
         }
 
         pub fn dat_new() -> Dat {
-          let v = Value { inner: Dict { inner: [("", [(#"aa", 4)] |> Dict)] } }
+          let v = Value { inner: Dict { inner: [Pair("", [Pair(#"aa", 4)] |> Dict)] } }
           Dat {
             c: 0,
             a: v
@@ -5899,9 +6458,9 @@ fn opaque_value_in_test() {
 
           let val = dat.a
 
-          expect [(_, amount)] = val.inner.inner
+          expect [Pair(_, amount)] = val.inner.inner
 
-          let final_amount = [(#"AA", 4)] |> Dict
+          let final_amount = [Pair(#"AA", 4)] |> Dict
 
           final_amount == amount
         }
@@ -5911,7 +6470,7 @@ fn opaque_value_in_test() {
         src,
         Term::var("val")
             .delayed_choose_list(
-                Term::Error.delayed_trace(Term::var("expect[(_,amount)]=val.inner.inner")),
+                Term::Error.delayed_trace(Term::var("expect[Pair(_,amount)]=val.inner.inner")),
                 Term::tail_list()
                     .apply(Term::var("val"))
                     .delayed_choose_list(
@@ -5930,7 +6489,8 @@ fn opaque_value_in_test() {
                                 Term::unmap_data()
                                     .apply(Term::snd_pair().apply(Term::var("tuple_item_0"))),
                             ),
-                        Term::Error.delayed_trace(Term::var("expect[(_,amount)]=val.inner.inner")),
+                        Term::Error
+                            .delayed_trace(Term::var("expect[Pair(_,amount)]=val.inner.inner")),
                     )
                     .lambda("tuple_item_0")
                     .apply(Term::head_list().apply(Term::var("val"))),
@@ -5964,8 +6524,8 @@ fn opaque_value_in_test() {
                 )]))
                 .into(),
             )]))
-            .lambda("expect[(_,amount)]=val.inner.inner")
-            .apply(Term::string("expect [(_, amount)] = val.inner.inner"))
+            .lambda("expect[Pair(_,amount)]=val.inner.inner")
+            .apply(Term::string("expect [Pair(_, amount)] = val.inner.inner"))
             .constr_fields_exposer(),
         false,
     );
@@ -6006,8 +6566,8 @@ fn head_list_on_map() {
         use aiken/builtin
 
         test exp_none() {
-          let x = [(1, ""), (2, #"aa")]
-          builtin.head_list(x) == (1, "")
+          let x = [Pair(1, ""), Pair(2, #"aa")]
+          builtin.head_list(x) == Pair(1, "")
         }
   "#;
 
@@ -6116,34 +6676,19 @@ fn tuple_2_match() {
                                     .lambda("x2")
                                     .apply(
                                         Term::un_i_data().apply(
-                                            Term::fst_pair().apply(Term::var("field_0_pair")),
+                                            Term::head_list().apply(Term::var("field_0_pair")),
                                         ),
                                     )
                                     .lambda("y2")
-                                    .apply(
-                                        Term::un_i_data().apply(
-                                            Term::snd_pair().apply(Term::var("field_0_pair")),
+                                    .apply(Term::un_i_data().apply(
+                                        Term::head_list().apply(
+                                            Term::tail_list().apply(Term::var("field_0_pair")),
                                         ),
-                                    )
+                                    ))
                                     .lambda("field_0_pair")
-                                    .apply(
-                                        Term::mk_pair_data()
-                                            .apply(
-                                                Term::head_list().apply(Term::var("__list_data")),
-                                            )
-                                            .apply(Term::head_list().apply(Term::var("__tail")))
-                                            .lambda("__tail")
-                                            .apply(
-                                                Term::tail_list().apply(Term::var("__list_data")),
-                                            )
-                                            .lambda("__list_data")
-                                            .apply(
-                                                Term::unlist_data().apply(
-                                                    Term::head_list()
-                                                        .apply(Term::var("tuple_index_1_fields")),
-                                                ),
-                                            ),
-                                    )
+                                    .apply(Term::unlist_data().apply(
+                                        Term::head_list().apply(Term::var("tuple_index_1_fields")),
+                                    ))
                                     .lambda("tuple_index_1_fields")
                                     .apply(
                                         Term::var(CONSTR_FIELDS_EXPOSER)
@@ -6156,24 +6701,20 @@ fn tuple_2_match() {
                             .lambda("x1")
                             .apply(
                                 Term::un_i_data()
-                                    .apply(Term::fst_pair().apply(Term::var("field_0_pair"))),
+                                    .apply(Term::head_list().apply(Term::var("field_0_pair"))),
                             )
                             .lambda("y1")
                             .apply(
-                                Term::un_i_data()
-                                    .apply(Term::snd_pair().apply(Term::var("field_0_pair"))),
+                                Term::un_i_data().apply(
+                                    Term::head_list()
+                                        .apply(Term::tail_list().apply(Term::var("field_0_pair"))),
+                                ),
                             )
                             .lambda("field_0_pair")
                             .apply(
-                                Term::mk_pair_data()
-                                    .apply(Term::head_list().apply(Term::var("__list_data")))
-                                    .apply(Term::head_list().apply(Term::var("__tail")))
-                                    .lambda("__tail")
-                                    .apply(Term::tail_list().apply(Term::var("__list_data")))
-                                    .lambda("__list_data")
-                                    .apply(Term::unlist_data().apply(
-                                        Term::head_list().apply(Term::var("tuple_index_0_fields")),
-                                    )),
+                                Term::unlist_data().apply(
+                                    Term::head_list().apply(Term::var("tuple_index_0_fields")),
+                                ),
                             )
                             .lambda("tuple_index_0_fields")
                             .apply(
@@ -6237,14 +6778,16 @@ fn tuple_2_match() {
                             .delay(),
                     )
                     .lambda("tuple_index_0")
-                    .apply(Term::fst_pair().apply(Term::var("input")))
+                    .apply(Term::head_list().apply(Term::var("input")))
                     .lambda("tuple_index_1")
-                    .apply(Term::snd_pair().apply(Term::var("input")))
+                    .apply(Term::head_list().apply(Term::tail_list().apply(Term::var("input"))))
                     .lambda("input")
                     .apply(
-                        Term::mk_pair_data()
-                            .apply(Term::var("ec1"))
-                            .apply(Term::var("ec2")),
+                        Term::mk_cons().apply(Term::var("ec1")).apply(
+                            Term::mk_cons()
+                                .apply(Term::var("ec2"))
+                                .apply(Term::empty_list()),
+                        ),
                     )
                     .lambda("ec2")
                     .lambda("ec1"),

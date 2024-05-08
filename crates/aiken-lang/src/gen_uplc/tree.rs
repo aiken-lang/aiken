@@ -162,6 +162,13 @@ pub enum AirTree {
         subject_name: String,
         then: Box<AirTree>,
     },
+    PairGuard {
+        subject_tipo: Rc<Type>,
+        subject_name: String,
+        fst_name: Option<String>,
+        snd_name: Option<String>,
+        then: Box<AirTree>,
+    },
     // Field Access
     FieldsExpose {
         indices: Vec<(usize, String, Rc<Type>)>,
@@ -193,6 +200,16 @@ pub enum AirTree {
         tuple: Box<AirTree>,
         is_expect: bool,
         msg: Option<AirMsg>,
+        then: Box<AirTree>,
+    },
+    // Pair Access
+    PairAccessor {
+        fst: Option<String>,
+        snd: Option<String>,
+        tipo: Rc<Type>,
+        is_expect: bool,
+        msg: Option<AirMsg>,
+        pair: Box<AirTree>,
         then: Box<AirTree>,
     },
     // Misc.
@@ -236,6 +253,11 @@ pub enum AirTree {
     Tuple {
         tipo: Rc<Type>,
         items: Vec<AirTree>,
+    },
+    Pair {
+        tipo: Rc<Type>,
+        fst: Box<AirTree>,
+        snd: Box<AirTree>,
     },
     Void,
     Var {
@@ -320,6 +342,16 @@ pub enum AirTree {
         otherwise: Box<AirTree>,
     },
 
+    PairClause {
+        subject_tipo: Rc<Type>,
+        subject_name: String,
+        fst_name: Option<String>,
+        snd_name: Option<String>,
+        complex_clause: bool,
+        then: Box<AirTree>,
+        otherwise: Box<AirTree>,
+    },
+
     Finally {
         pattern: Box<AirTree>,
         then: Box<AirTree>,
@@ -363,20 +395,25 @@ impl AirTree {
             value: value.to_string(),
         }
     }
+
     pub fn string(value: impl ToString) -> AirTree {
         AirTree::String {
             value: value.to_string(),
         }
     }
+
     pub fn byte_array(bytes: Vec<u8>) -> AirTree {
         AirTree::ByteArray { bytes }
     }
+
     pub fn curve(point: Curve) -> AirTree {
         AirTree::CurvePoint { point }
     }
+
     pub fn bool(value: bool) -> AirTree {
         AirTree::Bool { value }
     }
+
     pub fn list(mut items: Vec<AirTree>, tipo: Rc<Type>, tail: Option<AirTree>) -> AirTree {
         if let Some(tail) = tail {
             items.push(tail);
@@ -394,12 +431,23 @@ impl AirTree {
             }
         }
     }
+
     pub fn tuple(items: Vec<AirTree>, tipo: Rc<Type>) -> AirTree {
         AirTree::Tuple { tipo, items }
     }
+
+    pub fn pair(fst: AirTree, snd: AirTree, tipo: Rc<Type>) -> AirTree {
+        AirTree::Pair {
+            tipo,
+            fst: fst.into(),
+            snd: snd.into(),
+        }
+    }
+
     pub fn void() -> AirTree {
         AirTree::Void
     }
+
     pub fn var(
         constructor: ValueConstructor,
         name: impl ToString,
@@ -411,6 +459,7 @@ impl AirTree {
             variant_name: variant_name.to_string(),
         }
     }
+
     pub fn local_var(name: impl ToString, tipo: Rc<Type>) -> AirTree {
         AirTree::Var {
             constructor: ValueConstructor::public(
@@ -423,6 +472,7 @@ impl AirTree {
             variant_name: "".to_string(),
         }
     }
+
     pub fn call(func: AirTree, tipo: Rc<Type>, args: Vec<AirTree>) -> AirTree {
         AirTree::Call {
             tipo,
@@ -453,6 +503,7 @@ impl AirTree {
             then: then.into(),
         }
     }
+
     pub fn define_cyclic_func(
         func_name: impl ToString,
         module_name: impl ToString,
@@ -468,15 +519,18 @@ impl AirTree {
             then: then.into(),
         }
     }
+
     pub fn anon_func(params: Vec<String>, func_body: AirTree) -> AirTree {
         AirTree::Fn {
             params,
             func_body: func_body.into(),
         }
     }
+
     pub fn builtin(func: DefaultFunction, tipo: Rc<Type>, args: Vec<AirTree>) -> AirTree {
         AirTree::Builtin { func, tipo, args }
     }
+
     pub fn binop(
         op: BinOp,
         tipo: Rc<Type>,
@@ -492,12 +546,14 @@ impl AirTree {
             argument_tipo,
         }
     }
+
     pub fn unop(op: UnOp, arg: AirTree) -> AirTree {
         AirTree::UnOp {
             op,
             arg: arg.into(),
         }
     }
+
     pub fn let_assignment(name: impl ToString, value: AirTree, then: AirTree) -> AirTree {
         AirTree::Let {
             name: name.to_string(),
@@ -505,6 +561,7 @@ impl AirTree {
             then: then.into(),
         }
     }
+
     pub fn cast_from_data(value: AirTree, tipo: Rc<Type>, msg: Option<AirMsg>) -> AirTree {
         AirTree::CastFromData {
             tipo,
@@ -512,12 +569,14 @@ impl AirTree {
             msg,
         }
     }
+
     pub fn cast_to_data(value: AirTree, tipo: Rc<Type>) -> AirTree {
         AirTree::CastToData {
             tipo,
             value: value.into(),
         }
     }
+
     pub fn assert_constr_index(
         constr_index: usize,
         constr: AirTree,
@@ -531,6 +590,7 @@ impl AirTree {
             then: then.into(),
         }
     }
+
     pub fn assert_bool(
         is_true: bool,
         value: AirTree,
@@ -544,6 +604,7 @@ impl AirTree {
             then: then.into(),
         }
     }
+
     pub fn when(
         subject_name: impl ToString,
         tipo: Rc<Type>,
@@ -559,6 +620,7 @@ impl AirTree {
             clauses: clauses.into(),
         }
     }
+
     pub fn clause(
         subject_name: impl ToString,
         pattern: AirTree,
@@ -576,6 +638,7 @@ impl AirTree {
             otherwise: otherwise.into(),
         }
     }
+
     pub fn list_clause(
         tail_name: impl ToString,
         subject_tipo: Rc<Type>,
@@ -593,6 +656,7 @@ impl AirTree {
             otherwise: otherwise.into(),
         }
     }
+
     pub fn tuple_clause(
         subject_name: impl ToString,
         subject_tipo: Rc<Type>,
@@ -612,12 +676,34 @@ impl AirTree {
             otherwise: otherwise.into(),
         }
     }
+
+    pub fn pair_clause(
+        subject_name: impl ToString,
+        subject_tipo: Rc<Type>,
+        fst_name: Option<String>,
+        snd_name: Option<String>,
+        then: AirTree,
+        otherwise: AirTree,
+        complex_clause: bool,
+    ) -> AirTree {
+        AirTree::PairClause {
+            subject_tipo,
+            subject_name: subject_name.to_string(),
+            fst_name,
+            snd_name,
+            complex_clause,
+            then: then.into(),
+            otherwise: otherwise.into(),
+        }
+    }
+
     pub fn wrap_clause(then: AirTree, otherwise: AirTree) -> AirTree {
         AirTree::WrapClause {
             then: then.into(),
             otherwise: otherwise.into(),
         }
     }
+
     pub fn clause_guard(
         subject_name: impl ToString,
         pattern: AirTree,
@@ -631,6 +717,7 @@ impl AirTree {
             then: then.into(),
         }
     }
+
     pub fn list_clause_guard(
         tail_name: impl ToString,
         subject_tipo: Rc<Type>,
@@ -646,6 +733,7 @@ impl AirTree {
             then: then.into(),
         }
     }
+
     pub fn tuple_clause_guard(
         subject_name: impl ToString,
         subject_tipo: Rc<Type>,
@@ -659,12 +747,30 @@ impl AirTree {
             then: then.into(),
         }
     }
+
+    pub fn pair_clause_guard(
+        subject_name: impl ToString,
+        subject_tipo: Rc<Type>,
+        fst_name: Option<String>,
+        snd_name: Option<String>,
+        then: AirTree,
+    ) -> AirTree {
+        AirTree::PairGuard {
+            subject_name: subject_name.to_string(),
+            subject_tipo,
+            fst_name,
+            snd_name,
+            then: then.into(),
+        }
+    }
+
     pub fn finally(pattern: AirTree, then: AirTree) -> AirTree {
         AirTree::Finally {
             pattern: pattern.into(),
             then: then.into(),
         }
     }
+
     pub fn if_branches(
         mut branches: Vec<(AirTree, AirTree)>,
         tipo: Rc<Type>,
@@ -691,6 +797,7 @@ impl AirTree {
 
         final_if
     }
+
     pub fn create_constr(tag: usize, tipo: Rc<Type>, args: Vec<AirTree>) -> AirTree {
         AirTree::Constr { tag, tipo, args }
     }
@@ -710,6 +817,7 @@ impl AirTree {
             args,
         }
     }
+
     pub fn index_access(function_name: String, tipo: Rc<Type>, list_of_fields: AirTree) -> AirTree {
         AirTree::cast_from_data(
             AirTree::call(
@@ -740,6 +848,7 @@ impl AirTree {
             None,
         )
     }
+
     pub fn fields_expose(
         indices: Vec<(usize, String, Rc<Type>)>,
         record: AirTree,
@@ -775,6 +884,7 @@ impl AirTree {
             then: then.into(),
         }
     }
+
     pub fn list_expose(
         tail_head_names: Vec<(String, String)>,
         tail: Option<(String, String)>,
@@ -788,6 +898,7 @@ impl AirTree {
             then: then.into(),
         }
     }
+
     pub fn tuple_access(
         names: Vec<String>,
         tipo: Rc<Type>,
@@ -805,6 +916,27 @@ impl AirTree {
             then: then.into(),
         }
     }
+
+    pub fn pair_access(
+        fst: Option<String>,
+        snd: Option<String>,
+        tipo: Rc<Type>,
+        pair: AirTree,
+        msg: Option<AirMsg>,
+        is_expect: bool,
+        then: AirTree,
+    ) -> AirTree {
+        AirTree::PairAccessor {
+            fst,
+            snd,
+            tipo,
+            is_expect,
+            msg,
+            pair: pair.into(),
+            then: then.into(),
+        }
+    }
+
     pub fn pair_index(index: usize, tipo: Rc<Type>, tuple: AirTree) -> AirTree {
         AirTree::cast_from_data(
             AirTree::builtin(
@@ -820,9 +952,11 @@ impl AirTree {
             None,
         )
     }
+
     pub fn error(tipo: Rc<Type>, validator: bool) -> AirTree {
         AirTree::ErrorTerm { tipo, validator }
     }
+
     pub fn trace(msg: AirTree, tipo: Rc<Type>, then: AirTree) -> AirTree {
         AirTree::Trace {
             tipo,
@@ -840,6 +974,7 @@ impl AirTree {
     pub fn no_op(then: AirTree) -> AirTree {
         AirTree::NoOp { then: then.into() }
     }
+
     pub fn fields_empty(constr: AirTree, msg: Option<AirMsg>, then: AirTree) -> AirTree {
         AirTree::FieldsEmpty {
             constr: constr.into(),
@@ -847,6 +982,7 @@ impl AirTree {
             then: then.into(),
         }
     }
+
     pub fn list_empty(list: AirTree, msg: Option<AirMsg>, then: AirTree) -> AirTree {
         AirTree::ListEmpty {
             list: list.into(),
@@ -1058,6 +1194,21 @@ impl AirTree {
                 });
                 then.create_air_vec(air_vec);
             }
+            AirTree::PairGuard {
+                subject_tipo,
+                subject_name,
+                fst_name,
+                snd_name,
+                then,
+            } => {
+                air_vec.push(Air::PairGuard {
+                    subject_tipo: subject_tipo.clone(),
+                    subject_name: subject_name.clone(),
+                    fst_name: fst_name.clone(),
+                    snd_name: snd_name.clone(),
+                });
+                then.create_air_vec(air_vec);
+            }
             AirTree::FieldsExpose {
                 indices,
                 record,
@@ -1134,6 +1285,29 @@ impl AirTree {
                 tuple.create_air_vec(air_vec);
                 then.create_air_vec(air_vec);
             }
+            AirTree::PairAccessor {
+                fst,
+                snd,
+                tipo,
+                is_expect,
+                msg,
+                pair,
+                then,
+            } => {
+                air_vec.push(Air::PairAccessor {
+                    fst: fst.clone(),
+                    snd: snd.clone(),
+                    tipo: tipo.clone(),
+                    is_expect: *is_expect,
+                });
+
+                if let Some(msg) = msg {
+                    msg.to_air_tree().create_air_vec(air_vec);
+                }
+
+                pair.create_air_vec(air_vec);
+                then.create_air_vec(air_vec);
+            }
             AirTree::FieldsEmpty { constr, msg, then } => {
                 air_vec.push(Air::FieldsEmpty);
 
@@ -1188,6 +1362,11 @@ impl AirTree {
                 for item in items {
                     item.create_air_vec(air_vec);
                 }
+            }
+            AirTree::Pair { tipo, fst, snd } => {
+                air_vec.push(Air::Pair { tipo: tipo.clone() });
+                fst.create_air_vec(air_vec);
+                snd.create_air_vec(air_vec);
             }
             AirTree::Void => air_vec.push(Air::Void),
             AirTree::Var {
@@ -1334,6 +1513,25 @@ impl AirTree {
                 then.create_air_vec(air_vec);
                 otherwise.create_air_vec(air_vec);
             }
+            AirTree::PairClause {
+                subject_tipo,
+                subject_name,
+                fst_name,
+                snd_name,
+                complex_clause,
+                then,
+                otherwise,
+            } => {
+                air_vec.push(Air::PairClause {
+                    subject_tipo: subject_tipo.clone(),
+                    subject_name: subject_name.clone(),
+                    fst_name: fst_name.clone(),
+                    snd_name: snd_name.clone(),
+                    complex_clause: *complex_clause,
+                });
+                then.create_air_vec(air_vec);
+                otherwise.create_air_vec(air_vec);
+            }
             AirTree::Finally { pattern, then } => {
                 air_vec.push(Air::Finally);
                 pattern.create_air_vec(air_vec);
@@ -1398,6 +1596,7 @@ impl AirTree {
             AirTree::CurvePoint { point } => point.tipo(),
             AirTree::List { tipo, .. }
             | AirTree::Tuple { tipo, .. }
+            | AirTree::Pair { tipo, .. }
             | AirTree::Call { tipo, .. }
             | AirTree::Builtin { tipo, .. }
             | AirTree::BinOp { tipo, .. }
@@ -1420,6 +1619,7 @@ impl AirTree {
             | AirTree::ListClause { then, .. }
             | AirTree::WrapClause { then, .. }
             | AirTree::TupleClause { then, .. }
+            | AirTree::PairClause { then, .. }
             | AirTree::Finally { then, .. }
             | AirTree::Let { then, .. }
             | AirTree::DefineFunc { then, .. }
@@ -1429,10 +1629,12 @@ impl AirTree {
             | AirTree::ClauseGuard { then, .. }
             | AirTree::ListClauseGuard { then, .. }
             | AirTree::TupleGuard { then, .. }
+            | AirTree::PairGuard { then, .. }
             | AirTree::FieldsExpose { then, .. }
             | AirTree::ListAccessor { then, .. }
             | AirTree::ListExpose { then, .. }
             | AirTree::TupleAccessor { then, .. }
+            | AirTree::PairAccessor { then, .. }
             | AirTree::FieldsEmpty { then, .. }
             | AirTree::ListEmpty { then, .. }
             | AirTree::NoOp { then } => then.return_type(),
@@ -1443,18 +1645,18 @@ impl AirTree {
         match self {
             AirTree::ClauseGuard { subject_tipo, .. }
             | AirTree::ListClauseGuard { subject_tipo, .. }
-            | AirTree::TupleGuard { subject_tipo, .. } => vec![subject_tipo],
+            | AirTree::PairGuard { subject_tipo, .. }
+            | AirTree::TupleGuard { subject_tipo, .. }
+            | AirTree::Clause { subject_tipo, .. }
+            | AirTree::ListClause { subject_tipo, .. }
+            | AirTree::TupleClause { subject_tipo, .. }
+            | AirTree::PairClause { subject_tipo, .. } => vec![subject_tipo],
+
             AirTree::ListAccessor { tipo, .. }
             | AirTree::ListExpose { tipo, .. }
-            | AirTree::TupleAccessor { tipo, .. } => vec![tipo],
-            AirTree::FieldsExpose { indices, .. } => {
-                let mut types = vec![];
-                for (_, _, tipo) in indices {
-                    types.push(tipo);
-                }
-                types
-            }
-            AirTree::List { tipo, .. }
+            | AirTree::TupleAccessor { tipo, .. }
+            | AirTree::PairAccessor { tipo, .. }
+            | AirTree::List { tipo, .. }
             | AirTree::Tuple { tipo, .. }
             | AirTree::Call { tipo, .. }
             | AirTree::Builtin { tipo, .. }
@@ -1463,7 +1665,17 @@ impl AirTree {
             | AirTree::If { tipo, .. }
             | AirTree::Constr { tipo, .. }
             | AirTree::ErrorTerm { tipo, .. }
-            | AirTree::Trace { tipo, .. } => vec![tipo],
+            | AirTree::Trace { tipo, .. }
+            | AirTree::Pair { tipo, .. } => vec![tipo],
+
+            AirTree::FieldsExpose { indices, .. } => {
+                let mut types = vec![];
+                for (_, _, tipo) in indices {
+                    types.push(tipo);
+                }
+                types
+            }
+
             AirTree::Var { constructor, .. } => {
                 vec![constructor.tipo.borrow_mut()]
             }
@@ -1477,9 +1689,7 @@ impl AirTree {
             AirTree::When {
                 tipo, subject_tipo, ..
             } => vec![tipo, subject_tipo],
-            AirTree::Clause { subject_tipo, .. }
-            | AirTree::ListClause { subject_tipo, .. }
-            | AirTree::TupleClause { subject_tipo, .. } => vec![subject_tipo],
+
             AirTree::RecordUpdate { tipo, indices, .. } => {
                 let mut types = vec![tipo];
                 for (_, tipo) in indices {
@@ -1487,9 +1697,24 @@ impl AirTree {
                 }
                 types
             }
-            _ => {
-                vec![]
-            }
+            AirTree::Let { .. }
+            | AirTree::DefineFunc { .. }
+            | AirTree::DefineCyclicFuncs { .. }
+            | AirTree::AssertConstr { .. }
+            | AirTree::AssertBool { .. }
+            | AirTree::FieldsEmpty { .. }
+            | AirTree::ListEmpty { .. }
+            | AirTree::NoOp { .. }
+            | AirTree::Int { .. }
+            | AirTree::String { .. }
+            | AirTree::ByteArray { .. }
+            | AirTree::CurvePoint { .. }
+            | AirTree::Bool { .. }
+            | AirTree::Void
+            | AirTree::Fn { .. }
+            | AirTree::UnOp { .. }
+            | AirTree::WrapClause { .. }
+            | AirTree::Finally { .. } => vec![],
         }
     }
 
@@ -1525,7 +1750,8 @@ impl AirTree {
         tree_path.push(current_depth, depth_index);
         let mut tuple_then_index = None;
 
-        // Assignments/Statements get traversed here
+        // Assignments'/Statements' values get traversed here
+        // Then the body under these assignments/statements get traversed later on
         match self {
             AirTree::Let { value, .. } => {
                 value.do_traverse_tree_with(
@@ -1592,6 +1818,15 @@ impl AirTree {
                     apply_with_func_last,
                 );
             }
+            AirTree::PairAccessor { pair, .. } => {
+                pair.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
             AirTree::FieldsEmpty { constr, .. } => {
                 constr.do_traverse_tree_with(
                     tree_path,
@@ -1629,7 +1864,49 @@ impl AirTree {
                     apply_with_func_last,
                 );
             }
-            _ => {}
+            AirTree::PairClause { otherwise, .. } => {
+                tuple_then_index = Some(index_count.next_number());
+                otherwise.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::DefineFunc { .. }
+            | AirTree::DefineCyclicFuncs { .. }
+            | AirTree::ListClauseGuard { .. }
+            | AirTree::TupleGuard { .. }
+            | AirTree::PairGuard { .. }
+            | AirTree::ListExpose { .. }
+            | AirTree::NoOp { .. }
+            | AirTree::Int { .. }
+            | AirTree::String { .. }
+            | AirTree::ByteArray { .. }
+            | AirTree::CurvePoint { .. }
+            | AirTree::Bool { .. }
+            | AirTree::List { .. }
+            | AirTree::Tuple { .. }
+            | AirTree::Pair { .. }
+            | AirTree::Void
+            | AirTree::Var { .. }
+            | AirTree::Call { .. }
+            | AirTree::Fn { .. }
+            | AirTree::Builtin { .. }
+            | AirTree::BinOp { .. }
+            | AirTree::UnOp { .. }
+            | AirTree::CastFromData { .. }
+            | AirTree::CastToData { .. }
+            | AirTree::Clause { .. }
+            | AirTree::ListClause { .. }
+            | AirTree::WrapClause { .. }
+            | AirTree::Finally { .. }
+            | AirTree::If { .. }
+            | AirTree::Constr { .. }
+            | AirTree::RecordUpdate { .. }
+            | AirTree::ErrorTerm { .. }
+            | AirTree::Trace { .. } => {}
         }
 
         if !apply_with_func_last {
@@ -1645,11 +1922,13 @@ impl AirTree {
             | AirTree::FieldsExpose { then, .. }
             | AirTree::ListAccessor { then, .. }
             | AirTree::TupleAccessor { then, .. }
+            | AirTree::PairAccessor { then, .. }
             | AirTree::FieldsEmpty { then, .. }
             | AirTree::ListEmpty { then, .. }
             | AirTree::ListExpose { then, .. }
             | AirTree::ListClauseGuard { then, .. }
             | AirTree::TupleGuard { then, .. }
+            | AirTree::PairGuard { then, .. }
             | AirTree::NoOp { then } => {
                 then.do_traverse_tree_with(
                     tree_path,
@@ -1669,6 +1948,19 @@ impl AirTree {
                 );
             }
             AirTree::TupleClause { then, .. } => {
+                let Some(index) = tuple_then_index else {
+                    unreachable!()
+                };
+
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index,
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::PairClause { then, .. } => {
                 let Some(index) = tuple_then_index else {
                     unreachable!()
                 };
@@ -1702,6 +1994,23 @@ impl AirTree {
                         apply_with_func_last,
                     );
                 }
+            }
+            AirTree::Pair { fst, snd, .. } => {
+                fst.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
+
+                snd.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    index_count.next_number(),
+                    with,
+                    apply_with_func_last,
+                );
             }
             AirTree::Call { func, args, .. } => {
                 func.do_traverse_tree_with(
@@ -2071,6 +2380,13 @@ impl AirTree {
                         panic!("Tree Path index outside tree children nodes")
                     }
                 }
+                AirTree::PairGuard { then, .. } => {
+                    if *index == 0 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
+                    }
+                }
                 AirTree::FieldsExpose { record, then, .. } => {
                     if *index == 0 {
                         record.as_mut().do_find_air_tree_node(tree_path_iter)
@@ -2105,6 +2421,15 @@ impl AirTree {
                         panic!("Tree Path index outside tree children nodes")
                     }
                 }
+                AirTree::PairAccessor { pair, then, .. } => {
+                    if *index == 0 {
+                        pair.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
+                    }
+                }
                 AirTree::NoOp { then } => {
                     if *index == 0 {
                         then.as_mut().do_find_air_tree_node(tree_path_iter)
@@ -2112,8 +2437,7 @@ impl AirTree {
                         panic!("Tree Path index outside tree children nodes")
                     }
                 }
-                AirTree::DefineFunc { .. } => unreachable!(),
-                AirTree::DefineCyclicFuncs { .. } => unreachable!(),
+                AirTree::DefineFunc { .. } | AirTree::DefineCyclicFuncs { .. } => unreachable!(),
                 AirTree::FieldsEmpty { constr, then, .. } => {
                     if *index == 0 {
                         constr.as_mut().do_find_air_tree_node(tree_path_iter)
@@ -2139,6 +2463,15 @@ impl AirTree {
                         .get_mut(*index)
                         .expect("Tree Path index outside tree children nodes");
                     item.do_find_air_tree_node(tree_path_iter)
+                }
+                AirTree::Pair { fst, snd, .. } => {
+                    if *index == 0 {
+                        fst.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        snd.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
+                    }
                 }
                 AirTree::Call { func, args, .. } => {
                     children_nodes.push(func.as_mut());
@@ -2243,6 +2576,17 @@ impl AirTree {
                         panic!("Tree Path index outside tree children nodes")
                     }
                 }
+                AirTree::PairClause {
+                    then, otherwise, ..
+                } => {
+                    if *index == 0 {
+                        then.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else if *index == 1 {
+                        otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
+                    } else {
+                        panic!("Tree Path index outside tree children nodes")
+                    }
+                }
                 AirTree::Finally { pattern, then } => {
                     if *index == 0 {
                         pattern.as_mut().do_find_air_tree_node(tree_path_iter)
@@ -2291,7 +2635,15 @@ impl AirTree {
                         panic!("Tree Path index outside tree children nodes")
                     }
                 }
-                _ => {
+
+                AirTree::Int { .. }
+                | AirTree::String { .. }
+                | AirTree::ByteArray { .. }
+                | AirTree::CurvePoint { .. }
+                | AirTree::Bool { .. }
+                | AirTree::Void
+                | AirTree::Var { .. }
+                | AirTree::ErrorTerm { .. } => {
                     panic!("A tree node with no children was encountered with a longer tree path.")
                 }
             }

@@ -70,6 +70,7 @@ impl Test {
                     .map(|cst| (cst, side.tipo()))
                 };
 
+                // Assertion at this point is evaluated so it's not just a normal assertion
                 Some(Assertion {
                     bin_op,
                     head: as_constant(generator, head.expect("cannot be Err at this point")),
@@ -1128,7 +1129,13 @@ impl Assertion<UntypedExpr> {
                 .to_string()
         };
 
+        // head did not map to a constant
         if self.head.is_err() {
+            return red("program failed");
+        }
+
+        // any value in tail did not map to a constant
+        if self.tail.is_err() {
             return red("program failed");
         }
 

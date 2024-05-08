@@ -1,5 +1,5 @@
 use super::{
-    environment::{generalise, EntityKind, Environment},
+    environment::{EntityKind, Environment},
     error::{Error, UnifyErrorSituation, Warning},
     expr::ExprTyper,
     hydrator::Hydrator,
@@ -8,15 +8,13 @@ use super::{
 use crate::{
     ast::{
         Annotation, Arg, ArgName, ArgVia, DataType, Definition, Function, ModuleConstant,
-        ModuleKind, RecordConstructor, RecordConstructorArg, Tracing, TypeAlias, TypedArg,
-        TypedDefinition, TypedFunction, TypedModule, UntypedArg, UntypedDefinition, UntypedModule,
-        Use, Validator,
+        ModuleKind, RecordConstructor, RecordConstructorArg, Tracing, TypeAlias, TypedDefinition,
+        TypedFunction, TypedModule, UntypedDefinition, UntypedModule, Use, Validator,
     },
     builtins,
-    builtins::{function, fuzzer, generic_var},
-    expr::{TypedExpr, UntypedExpr},
+    builtins::{fuzzer, generic_var},
     line_numbers::LineNumbers,
-    tipo::{Span, Type, TypeVar},
+    tipo::{expr::infer_function, Span, Type, TypeVar},
     IdGenerator,
 };
 use std::{borrow::Borrow, collections::HashMap, ops::Deref, rc::Rc};
@@ -31,9 +29,10 @@ impl UntypedModule {
         tracing: Tracing,
         warnings: &mut Vec<Warning>,
     ) -> Result<TypedModule, Error> {
-        let name = self.name.clone();
+        let module_name = self.name.clone();
         let docs = std::mem::take(&mut self.docs);
-        let mut environment = Environment::new(id_gen.clone(), &name, &kind, modules, warnings);
+        let mut environment =
+            Environment::new(id_gen.clone(), &module_name, &kind, modules, warnings);
 
         let mut type_names = HashMap::with_capacity(self.definitions.len());
         let mut value_names = HashMap::with_capacity(self.definitions.len());
@@ -50,14 +49,20 @@ impl UntypedModule {
         // earlier in the module.
         environment.register_types(
             self.definitions.iter().collect(),
-            &name,
+            &module_name,
             &mut hydrators,
             &mut type_names,
         )?;
 
         // Register values so they can be used in functions earlier in the module.
         for def in self.definitions() {
-            environment.register_values(def, &name, &mut hydrators, &mut value_names, kind)?;
+            environment.register_values(
+                def,
+                &module_name,
+                &mut hydrators,
+                &mut value_names,
+                kind,
+            )?;
         }
 
         // Infer the types of each definition in the module
@@ -83,7 +88,7 @@ impl UntypedModule {
         for def in consts.into_iter().chain(not_consts) {
             let definition = infer_definition(
                 def,
-                &name,
+                &module_name,
                 &mut hydrators,
                 &mut environment,
                 &self.lines,
@@ -96,7 +101,7 @@ impl UntypedModule {
         // Generalise functions now that the entire module has been inferred
         let definitions = definitions
             .into_iter()
-            .map(|def| environment.generalise_definition(def, &name))
+            .map(|def| environment.generalise_definition(def, &module_name))
             .collect();
 
         // Generate warnings for unused items
@@ -105,7 +110,7 @@ impl UntypedModule {
         // Remove private and imported types and values to create the public interface
         environment
             .module_types
-            .retain(|_, info| info.public && info.module == name);
+            .retain(|_, info| info.public && info.module == module_name);
 
         environment.module_values.retain(|_, info| info.public);
 
@@ -134,12 +139,12 @@ impl UntypedModule {
 
         Ok(TypedModule {
             docs,
-            name: name.clone(),
+            name: module_name.clone(),
             definitions,
             kind,
             lines: self.lines,
             type_info: TypeInfo {
-                name,
+                name: module_name,
                 types,
                 types_constructors,
                 values,
@@ -162,7 +167,7 @@ fn infer_definition(
 ) -> Result<TypedDefinition, Error> {
     match def {
         Definition::Fn(f) => Ok(Definition::Fn(infer_function(
-            f,
+            &f,
             module_name,
             hydrators,
             environment,
@@ -219,19 +224,8 @@ fn infer_definition(
                     };
                 }
 
-                let Definition::Fn(mut typed_fun) = infer_definition(
-                    Definition::Fn(fun),
-                    module_name,
-                    hydrators,
-                    environment,
-                    lines,
-                    tracing,
-                )?
-                else {
-                    unreachable!(
-                        "validator definition inferred as something other than a function?"
-                    )
-                };
+                let mut typed_fun =
+                    infer_function(&fun, module_name, hydrators, environment, lines, tracing)?;
 
                 if !typed_fun.return_type.is_bool() {
                     return Err(Error::ValidatorMustReturnBool {
@@ -270,19 +264,14 @@ fn infer_definition(
                         let params = params.into_iter().chain(other.arguments);
                         other.arguments = params.collect();
 
-                        let Definition::Fn(mut other_typed_fun) = infer_definition(
-                            Definition::Fn(other),
+                        let mut other_typed_fun = infer_function(
+                            &other,
                             module_name,
                             hydrators,
                             environment,
                             lines,
                             tracing,
-                        )?
-                        else {
-                            unreachable!(
-                                "validator definition inferred as something other than a function?"
-                            )
-                        };
+                        )?;
 
                         if !other_typed_fun.return_type.is_bool() {
                             return Err(Error::ValidatorMustReturnBool {
@@ -341,8 +330,8 @@ fn infer_definition(
                         });
                     }
 
-                    let typed_via =
-                        ExprTyper::new(environment, lines, tracing).infer(arg.via.clone())?;
+                    let typed_via = ExprTyper::new(environment, hydrators, lines, tracing)
+                        .infer(arg.via.clone())?;
 
                     let hydrator: &mut Hydrator = hydrators.get_mut(&f.name).unwrap();
 
@@ -406,7 +395,7 @@ fn infer_definition(
             }?;
 
             let typed_f = infer_function(
-                f.into(),
+                &f.into(),
                 module_name,
                 hydrators,
                 environment,
@@ -635,8 +624,8 @@ fn infer_definition(
             value,
             tipo: _,
         }) => {
-            let typed_expr =
-                ExprTyper::new(environment, lines, tracing).infer_const(&annotation, *value)?;
+            let typed_expr = ExprTyper::new(environment, hydrators, lines, tracing)
+                .infer_const(&annotation, *value)?;
 
             let tipo = typed_expr.tipo();
 
@@ -669,106 +658,6 @@ fn infer_definition(
             }))
         }
     }
-}
-
-fn infer_function(
-    f: Function<(), UntypedExpr, UntypedArg>,
-    module_name: &String,
-    hydrators: &mut HashMap<String, Hydrator>,
-    environment: &mut Environment<'_>,
-    lines: &LineNumbers,
-    tracing: Tracing,
-) -> Result<Function<Rc<Type>, TypedExpr, TypedArg>, Error> {
-    let Function {
-        doc,
-        location,
-        name,
-        public,
-        arguments,
-        body,
-        return_annotation,
-        end_position,
-        can_error,
-        return_type: _,
-    } = f;
-
-    let preregistered_fn = environment
-        .get_variable(&name)
-        .expect("Could not find preregistered type for function");
-
-    let field_map = preregistered_fn.field_map().cloned();
-
-    let preregistered_type = preregistered_fn.tipo.clone();
-
-    let (args_types, return_type) = preregistered_type
-        .function_types()
-        .expect("Preregistered type for fn was not a fn");
-
-    // Infer the type using the preregistered args + return types as a starting point
-    let (tipo, arguments, body, safe_to_generalise) = environment.in_new_scope(|environment| {
-        let args = arguments
-            .into_iter()
-            .zip(&args_types)
-            .map(|(arg_name, tipo)| arg_name.set_type(tipo.clone()))
-            .collect();
-
-        let mut expr_typer = ExprTyper::new(environment, lines, tracing);
-
-        expr_typer.hydrator = hydrators
-            .remove(&name)
-            .expect("Could not find hydrator for fn");
-
-        let (args, body, return_type) =
-            expr_typer.infer_fn_with_known_types(args, body, Some(return_type))?;
-
-        let args_types = args.iter().map(|a| a.tipo.clone()).collect();
-
-        let tipo = function(args_types, return_type);
-
-        let safe_to_generalise = !expr_typer.ungeneralised_function_used;
-
-        Ok::<_, Error>((tipo, args, body, safe_to_generalise))
-    })?;
-
-    // Assert that the inferred type matches the type of any recursive call
-    environment.unify(preregistered_type, tipo.clone(), location, false)?;
-
-    // Generalise the function if safe to do so
-    let tipo = if safe_to_generalise {
-        environment.ungeneralised_functions.remove(&name);
-
-        let tipo = generalise(tipo, 0);
-
-        let module_fn = ValueConstructorVariant::ModuleFn {
-            name: name.clone(),
-            field_map,
-            module: module_name.to_owned(),
-            arity: arguments.len(),
-            location,
-            builtin: None,
-        };
-
-        environment.insert_variable(name.clone(), module_fn, tipo.clone());
-
-        tipo
-    } else {
-        tipo
-    };
-
-    Ok(Function {
-        doc,
-        location,
-        name,
-        public,
-        arguments,
-        return_annotation,
-        return_type: tipo
-            .return_type()
-            .expect("Could not find return type for fn"),
-        body,
-        can_error,
-        end_position,
-    })
 }
 
 fn infer_fuzzer(
@@ -843,7 +732,7 @@ fn infer_fuzzer(
             }),
         },
 
-        Type::App { .. } | Type::Tuple { .. } => Err(could_not_unify()),
+        Type::App { .. } | Type::Tuple { .. } | Type::Pair { .. } => Err(could_not_unify()),
     }
 }
 
@@ -894,5 +783,14 @@ fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
             location: *location,
             tipo: Rc::new(tipo.clone()),
         }),
+        Type::Pair { fst, snd, .. } => {
+            let fst = annotate_fuzzer(fst, location)?;
+            let snd = annotate_fuzzer(snd, location)?;
+            Ok(Annotation::Pair {
+                fst: Box::new(fst),
+                snd: Box::new(snd),
+                location: *location,
+            })
+        }
     }
 }

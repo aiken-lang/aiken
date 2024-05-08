@@ -1,0 +1,19 @@
+---
+source: crates/aiken-lang/src/parser/pattern/mod.rs
+description: "Code:\n\n[head, ..]"
+---
+List {
+    location: 0..10,
+    elements: [
+        Var {
+            location: 1..5,
+            name: "head",
+        },
+    ],
+    tail: Some(
+        Discard {
+            name: "_",
+            location: 9..10,
+        },
+    ),
+}

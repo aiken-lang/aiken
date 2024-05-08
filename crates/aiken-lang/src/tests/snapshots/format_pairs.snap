@@ -1,0 +1,7 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\npub fn foo(x: Pair<Int, Int>) {\n    Pair(x.1st, x.2nd)\n}"
+---
+pub fn foo(x: Pair<Int, Int>) {
+  Pair(x.1st, x.2nd)
+}

@@ -1,7 +1,7 @@
 use aiken/builtin
-use aiken/dict
+use aiken/dict.{Dict}
 use aiken/hash.{blake2b_256}
-use aiken/transaction.{DatumHash, InlineDatum, ScriptContext}
+use aiken/transaction.{DatumHash, InlineDatum, Output, ScriptContext}
 use aiken/transaction/credential.{Inline, VerificationKeyCredential}
 
 validator {
@@ -23,7 +23,7 @@ type MyDatum {
   MyDatum(Int)
 }
 
-fn assert_datums(datums) {
+fn assert_datums(datums: Dict<ByteArray, Data>) {
   let my_datum = MyDatum(42)
 
   expect Some(datum) =
@@ -42,7 +42,7 @@ fn assert_outputs(outputs) {
   }
 }
 
-fn assert_first_output(output) {
+fn assert_first_output(output: Output) {
   and {
     output.datum == DatumHash(
       #"fcaa61fb85676101d9e3398a484674e71c45c3fd41b492682f3b0054f4cf3273",
@@ -53,7 +53,7 @@ fn assert_first_output(output) {
   }
 }
 
-fn assert_second_output(output) {
+fn assert_second_output(output: Output) {
   and {
     output.address.stake_credential == Some(
       Inline(

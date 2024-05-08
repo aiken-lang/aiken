@@ -86,6 +86,9 @@ impl Printer {
             Type::Var { tipo: typ, .. } => self.type_var_doc(&typ.borrow()),
 
             Type::Tuple { elems, .. } => self.args_to_aiken_doc(elems).surround("(", ")"),
+            Type::Pair { fst, snd, .. } => self
+                .args_to_aiken_doc(&[fst.clone(), snd.clone()])
+                .surround("Pair<", ">"),
         }
     }
 
@@ -120,7 +123,8 @@ impl Printer {
     fn type_var_doc<'a>(&mut self, typ: &TypeVar) -> Document<'a> {
         match typ {
             TypeVar::Link { tipo: ref typ, .. } => self.print(typ),
-            TypeVar::Unbound { id, .. } | TypeVar::Generic { id, .. } => self.generic_type_var(*id),
+            TypeVar::Generic { id, .. } => self.generic_type_var(*id),
+            TypeVar::Unbound { .. } => "?".to_doc(),
         }
     }
 
@@ -241,6 +245,21 @@ fn resolve_alias(
             (Annotation::Tuple { elems, .. }, Type::Tuple { elems: t_elems, .. }) => {
                 let mut result = None;
                 for (ann, t) in elems.iter().zip(t_elems) {
+                    result = result.or_else(|| resolve_one(parameter, ann, t.clone()));
+                }
+                result
+            }
+
+            (
+                Annotation::Pair { fst, snd, .. },
+                Type::Pair {
+                    fst: t_fst,
+                    snd: t_snd,
+                    ..
+                },
+            ) => {
+                let mut result = None;
+                for (ann, t) in [fst, snd].into_iter().zip([t_fst, t_snd]) {
                     result = result.or_else(|| resolve_one(parameter, ann, t.clone()));
                 }
                 result
@@ -455,7 +474,7 @@ mod tests {
                 tipo: Rc::new(RefCell::new(TypeVar::Unbound { id: 2231 })),
                 alias: None,
             },
-            "a",
+            "?",
         );
         assert_string!(
             function(
@@ -468,7 +487,7 @@ mod tests {
                     alias: None,
                 }),
             ),
-            "fn(a) -> b",
+            "fn(?) -> ?",
         );
         assert_string!(
             function(

@@ -2295,3 +2295,106 @@ fn tuple_access_on_call() {
 
     assert!(check(parse(source_code)).is_ok())
 }
+
+#[test]
+fn partial_eq_call_args() {
+    let source_code = r#"
+        fn foo(a: Int, b: Int, c: Bool) -> Int {
+            todo
+        }
+
+        fn main() -> Int {
+            foo(14, 42)
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::IncorrectFieldsArity { .. }))
+    ));
+}
+
+#[test]
+fn partial_eq_callback_args() {
+    let source_code = r#"
+        fn foo(cb: fn(Int, Int, Bool) -> Int) -> Int {
+            todo
+        }
+
+        fn main() -> Int {
+            foo(fn(a, b) { a + b })
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { .. }))
+    ));
+}
+
+#[test]
+fn partial_eq_callback_return() {
+    let source_code = r#"
+        fn foo(cb: fn(Int, Int) -> (Int, Int, Bool)) -> Int {
+            todo
+        }
+
+        fn main() -> Int {
+            foo(fn(a, b) { (a, b) })
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check(parse(source_code))),
+        Err((_, Error::CouldNotUnify { .. }))
+    ));
+}
+
+#[test]
+fn pair_access_on_call() {
+    let source_code = r#"
+        use aiken/builtin
+
+        pub fn list_at(xs: List<a>, index: Int) -> a {
+          if index == 0 {
+            builtin.head_list(xs)
+          } else {
+            list_at(builtin.tail_list(xs), index - 1)
+          }
+        }
+
+        fn foo() {
+          [list_at([Pair(1, 2)], 0).2nd, ..[1, 2]]
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn pair_index_out_of_bound() {
+    let source_code = r#"
+        pub fn foo() {
+            Pair(1, 2).3rd
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check_validator(parse(source_code))),
+        Err((_, Error::PairIndexOutOfBound { .. }))
+    ))
+}
+
+#[test]
+fn not_indexable() {
+    let source_code = r#"
+        pub fn foo() {
+            "foo".1st
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check_validator(parse(source_code))),
+        Err((_, Error::NotIndexable { .. }))
+    ))
+}

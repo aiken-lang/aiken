@@ -373,7 +373,13 @@ impl<'a> CodeGenerator<'a> {
                         ..
                     } => {
                         let data_type = lookup_data_type_by_tipo(&self.data_types, tipo)
-                            .expect("Creating a record with no record definition.");
+                            .unwrap_or_else(||
+                                panic!(
+                                    "Creating a record of type {:?} with no record definition. Known definitions: {:?}",
+                                    tipo.to_pretty(0),
+                                    self.data_types.keys()
+                                )
+                            );
 
                         let (constr_index, _) = data_type
                             .constructors
@@ -647,6 +653,11 @@ impl<'a> CodeGenerator<'a> {
                     record,
                     ..
                 } => {
+                    assert!(
+                        !record.tipo().is_pair(),
+                        "illegal record access on a Pair. This should have been a tuple-index access."
+                    );
+
                     if check_replaceable_opaque_type(&record.tipo(), &self.data_types) {
                         self.build(record, module_build_name, &[])
                     } else {
@@ -698,23 +709,25 @@ impl<'a> CodeGenerator<'a> {
                         field_map,
                         ..
                     } => {
-                        let data_type = lookup_data_type_by_tipo(&self.data_types, tipo);
+                        let val_constructor = {
+                            let data_type = lookup_data_type_by_tipo(&self.data_types, tipo);
 
-                        let val_constructor = ValueConstructor::public(
-                            tipo.clone(),
-                            ValueConstructorVariant::Record {
-                                name: name.clone(),
-                                arity: *arity,
-                                field_map: field_map.clone(),
-                                location: Span::empty(),
-                                module: module_name.clone(),
-                                constructors_count: data_type
-                                    .expect("Created a module type without a definition?")
-                                    .constructors
-                                    .len()
-                                    as u16,
-                            },
-                        );
+                            ValueConstructor::public(
+                                tipo.clone(),
+                                ValueConstructorVariant::Record {
+                                    name: name.clone(),
+                                    arity: *arity,
+                                    field_map: field_map.clone(),
+                                    location: Span::empty(),
+                                    module: module_name.clone(),
+                                    constructors_count: data_type
+                                        .expect("Created a module type without a definition?")
+                                        .constructors
+                                        .len()
+                                        as u16,
+                                },
+                            )
+                        };
 
                         AirTree::var(val_constructor, name, "")
                     }
@@ -751,6 +764,12 @@ impl<'a> CodeGenerator<'a> {
                     }
                 },
 
+                TypedExpr::Pair { tipo, fst, snd, .. } => AirTree::pair(
+                    self.build(fst, module_build_name, &[]),
+                    self.build(snd, module_build_name, &[]),
+                    tipo.clone(),
+                ),
+
                 TypedExpr::Tuple { tipo, elems, .. } => AirTree::tuple(
                     elems
                         .iter()
@@ -762,7 +781,7 @@ impl<'a> CodeGenerator<'a> {
                 TypedExpr::TupleIndex {
                     index, tuple, tipo, ..
                 } => {
-                    if tuple.tipo().is_2_tuple() {
+                    if tuple.tipo().is_pair() {
                         AirTree::pair_index(
                             *index,
                             tipo.clone(),
@@ -919,6 +938,7 @@ impl<'a> CodeGenerator<'a> {
                     AirTree::let_assignment(name, value, then)
                 }
             }
+
             Pattern::Assign { name, pattern, .. } => {
                 let inner_pattern = self.assignment(
                     pattern,
@@ -929,6 +949,7 @@ impl<'a> CodeGenerator<'a> {
                 );
                 AirTree::let_assignment(name, value, inner_pattern)
             }
+
             Pattern::Discard { name, .. } => {
                 if props.full_check {
                     let name = &format!("__discard_expect_{}", name);
@@ -959,6 +980,7 @@ impl<'a> CodeGenerator<'a> {
                     AirTree::no_op(then)
                 }
             }
+
             Pattern::List { elements, tail, .. } => {
                 assert!(tipo.is_list());
                 assert!(props.kind.is_expect());
@@ -1085,160 +1107,273 @@ impl<'a> CodeGenerator<'a> {
                     )
                 }
             }
+
+            Pattern::Pair {
+                fst,
+                snd,
+                location: _,
+            } => {
+                let mut type_map: IndexMap<usize, Rc<Type>> = IndexMap::new();
+
+                for (index, arg) in tipo.get_inner_types().iter().enumerate() {
+                    let field_type = arg.clone();
+                    type_map.insert(index, field_type);
+                }
+
+                assert!(type_map.len() == 2);
+
+                let mut fields = vec![];
+
+                let then = [fst, snd]
+                    .iter()
+                    .enumerate()
+                    .rfold(then, |then, (field_index, arg)| {
+                        let field_name = match arg.as_ref() {
+                            Pattern::Var { name, .. } => name.to_string(),
+                            Pattern::Assign { name, .. } => name.to_string(),
+                            Pattern::Discard { name, .. } => {
+                                if props.full_check {
+                                    format!("__discard_{}_{}", name, field_index)
+                                } else {
+                                    "_".to_string()
+                                }
+                            }
+                            _ => format!(
+                                "field_{}_span_{}_{}",
+                                field_index,
+                                arg.location().start,
+                                arg.location().end
+                            ),
+                        };
+
+                        let arg_type = type_map.get(&field_index).unwrap_or_else(|| {
+                            unreachable!(
+                                "Missing type for field {} of constr {}",
+                                field_index, field_name
+                            )
+                        });
+
+                        let val = AirTree::local_var(&field_name, arg_type.clone());
+
+                        let then = if field_name != "_" {
+                            self.assignment(
+                                arg,
+                                val,
+                                then,
+                                arg_type,
+                                AssignmentProperties {
+                                    value_type: arg_type.clone(),
+                                    kind: props.kind,
+                                    remove_unused: true,
+                                    full_check: props.full_check,
+                                    msg_func: props.msg_func.clone(),
+                                },
+                            )
+                        } else {
+                            then
+                        };
+
+                        fields.push((field_index, field_name, arg_type.clone()));
+
+                        then
+                    });
+
+                fields.reverse();
+
+                // This `value` is either value param that was passed in or
+                // local var
+                let constructor_name = format!(
+                    "__constructor_{}_span_{}_{}",
+                    "Pair",
+                    pattern.location().start,
+                    pattern.location().end
+                );
+
+                let local_value = AirTree::local_var(&constructor_name, tipo.clone());
+
+                let then = {
+                    let (is_expect, msg) = if props.full_check {
+                        (true, props.msg_func.clone())
+                    } else {
+                        (false, None)
+                    };
+                    assert!(fields.len() == 2);
+
+                    AirTree::pair_access(
+                        fields
+                            .first()
+                            .map(|x| if x.1 == "_" { None } else { Some(x.1.clone()) })
+                            .unwrap(),
+                        fields
+                            .last()
+                            .map(|x| if x.1 == "_" { None } else { Some(x.1.clone()) })
+                            .unwrap(),
+                        tipo.clone(),
+                        local_value,
+                        msg,
+                        is_expect,
+                        then,
+                    )
+                };
+
+                AirTree::let_assignment(constructor_name, value, then)
+            }
+
+            Pattern::Constructor {
+                constructor: PatternConstructor::Record { name, .. },
+                ..
+            } if tipo.is_bool() => {
+                assert!(props.kind.is_expect());
+
+                AirTree::assert_bool(name == "True", value, props.msg_func, then)
+            }
+
+            Pattern::Constructor { .. } if tipo.is_void() => {
+                // Void type is checked when casting from data
+                // So we just assign the value and move on
+                AirTree::let_assignment("_", value, then)
+            }
+
             Pattern::Constructor {
                 arguments,
                 constructor: PatternConstructor::Record { name, field_map },
                 tipo: constr_tipo,
                 ..
             } => {
-                if tipo.is_bool() {
-                    assert!(props.kind.is_expect());
+                // Constr execution branch
+                let field_map = field_map.clone();
 
-                    AirTree::assert_bool(name == "True", value, props.msg_func, then)
-                } else if tipo.is_void() {
-                    AirTree::let_assignment("_", value, then)
-                } else {
-                    let field_map = field_map.clone();
+                let mut type_map: IndexMap<usize, Rc<Type>> = IndexMap::new();
 
-                    let mut type_map: IndexMap<usize, Rc<Type>> = IndexMap::new();
+                for (index, arg) in constr_tipo
+                    .arg_types()
+                    .expect("Mismatched type")
+                    .iter()
+                    .enumerate()
+                {
+                    let field_type = arg.clone();
 
-                    for (index, arg) in constr_tipo
-                        .arg_types()
-                        .expect("Mismatched type")
-                        .iter()
-                        .enumerate()
-                    {
-                        let field_type = arg.clone();
+                    type_map.insert(index, field_type);
+                }
 
-                        type_map.insert(index, field_type);
-                    }
+                assert!(type_map.len() >= arguments.len());
 
-                    assert!(type_map.len() >= arguments.len());
+                let mut fields = vec![];
 
-                    let mut fields = vec![];
+                let then = arguments
+                    .iter()
+                    .enumerate()
+                    .rfold(then, |then, (index, arg)| {
+                        let label = arg.label.clone().unwrap_or_default();
 
-                    let then = arguments
-                        .iter()
-                        .enumerate()
-                        .rfold(then, |then, (index, arg)| {
-                            let label = arg.label.clone().unwrap_or_default();
+                        let field_index = if let Some(field_map) = &field_map {
+                            *field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&index)
+                        } else {
+                            index
+                        };
 
-                            let field_index = if let Some(field_map) = &field_map {
-                                *field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&index)
-                            } else {
-                                index
-                            };
-
-                            let field_name = match &arg.value {
-                                Pattern::Var { name, .. } => name.to_string(),
-                                Pattern::Assign { name, .. } => name.to_string(),
-                                Pattern::Discard { name, .. } => {
-                                    if props.full_check {
-                                        format!("__discard_{}_{}", name, index)
-                                    } else {
-                                        "_".to_string()
-                                    }
+                        let field_name = match &arg.value {
+                            Pattern::Var { name, .. } => name.to_string(),
+                            Pattern::Assign { name, .. } => name.to_string(),
+                            Pattern::Discard { name, .. } => {
+                                if props.full_check {
+                                    format!("__discard_{}_{}", name, index)
+                                } else {
+                                    "_".to_string()
                                 }
-                                _ => format!(
-                                    "field_{}_span_{}_{}",
-                                    field_index,
-                                    arg.value.location().start,
-                                    arg.value.location().end
-                                ),
-                            };
+                            }
+                            _ => format!(
+                                "field_{}_span_{}_{}",
+                                field_index,
+                                arg.value.location().start,
+                                arg.value.location().end
+                            ),
+                        };
 
-                            let arg_type = type_map.get(&field_index).unwrap_or_else(|| {
-                                unreachable!(
-                                    "Missing type for field {} of constr {}",
-                                    field_index, name
-                                )
-                            });
-
-                            let val = AirTree::local_var(&field_name, arg_type.clone());
-
-                            let then = if field_name != "_" {
-                                self.assignment(
-                                    &arg.value,
-                                    val,
-                                    then,
-                                    arg_type,
-                                    AssignmentProperties {
-                                        value_type: arg_type.clone(),
-                                        kind: props.kind,
-                                        remove_unused: true,
-                                        full_check: props.full_check,
-                                        msg_func: props.msg_func.clone(),
-                                    },
-                                )
-                            } else {
-                                then
-                            };
-
-                            fields.push((field_index, field_name, arg_type.clone()));
-
-                            then
+                        let arg_type = type_map.get(&field_index).unwrap_or_else(|| {
+                            unreachable!(
+                                "Missing type for field {} of constr {}",
+                                field_index, name
+                            )
                         });
 
-                    fields.reverse();
+                        let val = AirTree::local_var(&field_name, arg_type.clone());
 
-                    // This `value` is either value param that was passed in or
-                    // local var
-                    let constructor_name = format!(
-                        "__constructor_{}_span_{}_{}",
-                        name,
-                        pattern.location().start,
-                        pattern.location().end
-                    );
-
-                    let local_value = AirTree::local_var(&constructor_name, tipo.clone());
-
-                    let then = if check_replaceable_opaque_type(tipo, &self.data_types) {
-                        AirTree::let_assignment(&fields[0].1, local_value, then)
-                    } else {
-                        let (is_expect, msg) = if props.full_check {
-                            (true, props.msg_func.clone())
-                        } else {
-                            (false, None)
-                        };
-                        AirTree::fields_expose(fields, local_value, msg, is_expect, then)
-                    };
-
-                    // TODO: See if we can combine these two if-conditions;
-                    //
-                    // i.e. can we lift data_type assignment out of the first if?
-
-                    let then = if props.kind.is_expect() {
-                        let data_type = lookup_data_type_by_tipo(&self.data_types, tipo)
-                            .unwrap_or_else(|| {
-                                unreachable!("Failed to find definition for {}", name)
-                            });
-
-                        if data_type.constructors.len() > 1 || props.full_check {
-                            let (index, _) = data_type
-                                .constructors
-                                .iter()
-                                .enumerate()
-                                .find(|(_, constr)| constr.name == *name)
-                                .unwrap_or_else(|| {
-                                    panic!("Found constructor type {} with 0 constructors", name)
-                                });
-
-                            AirTree::assert_constr_index(
-                                index,
-                                AirTree::local_var(&constructor_name, tipo.clone()),
-                                props.msg_func,
+                        let then = if field_name != "_" {
+                            self.assignment(
+                                &arg.value,
+                                val,
                                 then,
+                                arg_type,
+                                AssignmentProperties {
+                                    value_type: arg_type.clone(),
+                                    kind: props.kind,
+                                    remove_unused: true,
+                                    full_check: props.full_check,
+                                    msg_func: props.msg_func.clone(),
+                                },
                             )
                         } else {
                             then
-                        }
-                    } else {
-                        then
-                    };
+                        };
 
-                    AirTree::let_assignment(constructor_name, value, then)
-                }
+                        fields.push((field_index, field_name, arg_type.clone()));
+
+                        then
+                    });
+
+                fields.reverse();
+
+                // This `value` is either value param that was passed in or
+                // local var
+                let constructor_name = format!(
+                    "__constructor_{}_span_{}_{}",
+                    name,
+                    pattern.location().start,
+                    pattern.location().end
+                );
+
+                let local_value = AirTree::local_var(&constructor_name, tipo.clone());
+
+                let then = if check_replaceable_opaque_type(tipo, &self.data_types) {
+                    AirTree::let_assignment(&fields[0].1, local_value, then)
+                } else {
+                    let (is_expect, msg) = if props.full_check {
+                        (true, props.msg_func.clone())
+                    } else {
+                        (false, None)
+                    };
+                    AirTree::fields_expose(fields, local_value, msg, is_expect, then)
+                };
+
+                let data_type = lookup_data_type_by_tipo(&self.data_types, tipo)
+                    .unwrap_or_else(|| unreachable!("Failed to find definition for {}", name));
+
+                let then = if props.kind.is_expect()
+                    && (data_type.constructors.len() > 1 || props.full_check)
+                {
+                    let (index, _) = data_type
+                        .constructors
+                        .iter()
+                        .enumerate()
+                        .find(|(_, constr)| constr.name == *name)
+                        .unwrap_or_else(|| {
+                            panic!("Found constructor type {} with 0 constructors", name)
+                        });
+
+                    AirTree::assert_constr_index(
+                        index,
+                        AirTree::local_var(&constructor_name, tipo.clone()),
+                        props.msg_func,
+                        then,
+                    )
+                } else {
+                    then
+                };
+
+                AirTree::let_assignment(constructor_name, value, then)
             }
+
             Pattern::Tuple {
                 elems, location, ..
             } => {
@@ -1331,116 +1466,64 @@ impl<'a> CodeGenerator<'a> {
         // Shouldn't be needed but still here just in case
         // this function is called from anywhere else besides assignment
         let tipo = &convert_opaque_type(tipo, &self.data_types, true);
+        let uplc_type = tipo.get_uplc_type();
 
-        if tipo.is_primitive() {
-            // Since we would return void anyway and ignore then we can just return value here and ignore
-            value
-        } else if tipo.is_map() {
-            assert!(!tipo.get_inner_types().is_empty());
+        match uplc_type {
+            // primitives
+            Some(
+                UplcType::Integer
+                | UplcType::String
+                | UplcType::Bool
+                | UplcType::ByteString
+                | UplcType::Unit
+                | UplcType::Bls12_381G1Element
+                | UplcType::Bls12_381G2Element
+                | UplcType::Bls12_381MlResult,
+            ) => value,
+            // Untyped Data
+            Some(UplcType::Data) => value,
 
-            let inner_list_type = &tipo.get_inner_types()[0];
-            let inner_pair_types = inner_list_type.get_inner_types();
+            // Map type
+            Some(UplcType::List(_)) if tipo.is_map() => {
+                assert!(!tipo.get_inner_types().is_empty());
 
-            assert!(inner_pair_types.len() == 2);
+                let inner_list_type = &tipo.get_inner_types()[0];
+                let inner_pair_types = inner_list_type.get_inner_types();
 
-            let map_name = format!("__map_span_{}_{}", location.start, location.end);
-            let pair_name = format!("__pair_span_{}_{}", location.start, location.end);
-            let fst_name = format!("__pair_fst_span_{}_{}", location.start, location.end);
-            let snd_name = format!("__pair_snd_span_{}_{}", location.start, location.end);
+                assert!(inner_pair_types.len() == 2);
 
-            let expect_fst = self.expect_type_assign(
-                &inner_pair_types[0],
-                AirTree::local_var(fst_name.clone(), inner_pair_types[0].clone()),
-                defined_data_types,
-                location,
-                msg_func.clone(),
-            );
+                let map_name = format!("__map_span_{}_{}", location.start, location.end);
+                let pair_name = format!("__pair_span_{}_{}", location.start, location.end);
+                let fst_name = format!("__pair_fst_span_{}_{}", location.start, location.end);
+                let snd_name = format!("__pair_snd_span_{}_{}", location.start, location.end);
 
-            let expect_snd = self.expect_type_assign(
-                &inner_pair_types[1],
-                AirTree::local_var(snd_name.clone(), inner_pair_types[1].clone()),
-                defined_data_types,
-                location,
-                msg_func.clone(),
-            );
-
-            let anon_func_body = AirTree::tuple_access(
-                vec![fst_name, snd_name],
-                inner_list_type.clone(),
-                AirTree::local_var(&pair_name, inner_list_type.clone()),
-                msg_func.clone(),
-                msg_func.is_some(),
-                AirTree::let_assignment("_", expect_fst, expect_snd),
-            );
-
-            let unwrap_function = AirTree::anon_func(vec![pair_name], anon_func_body);
-
-            let function = self.code_gen_functions.get(EXPECT_ON_LIST);
-
-            if function.is_none() {
-                let expect_list_func = AirTree::expect_on_list();
-                self.code_gen_functions.insert(
-                    EXPECT_ON_LIST.to_string(),
-                    CodeGenFunction::Function {
-                        body: expect_list_func,
-                        params: vec!["__list_to_check".to_string(), "__check_with".to_string()],
-                    },
-                );
-            }
-
-            if let Some(counter) = defined_data_types.get_mut(EXPECT_ON_LIST) {
-                *counter += 1
-            } else {
-                defined_data_types.insert(EXPECT_ON_LIST.to_string(), 1);
-            }
-
-            let func_call = AirTree::call(
-                AirTree::var(
-                    ValueConstructor::public(
-                        void(),
-                        ValueConstructorVariant::ModuleFn {
-                            name: EXPECT_ON_LIST.to_string(),
-                            field_map: None,
-                            module: "".to_string(),
-                            arity: 1,
-                            location,
-                            builtin: None,
-                        },
-                    ),
-                    EXPECT_ON_LIST,
-                    "",
-                ),
-                void(),
-                vec![AirTree::local_var(&map_name, tipo.clone()), unwrap_function],
-            );
-
-            AirTree::let_assignment(&map_name, value, func_call)
-        } else if tipo.is_list() {
-            assert!(!tipo.get_inner_types().is_empty());
-
-            let inner_list_type = &tipo.get_inner_types()[0];
-
-            if inner_list_type.is_data() {
-                value
-            } else {
-                let list_name = format!("__list_span_{}_{}", location.start, location.end);
-                let item_name = format!("__item_span_{}_{}", location.start, location.end);
-
-                let expect_item = self.expect_type_assign(
-                    inner_list_type,
-                    AirTree::cast_from_data(
-                        AirTree::local_var(&item_name, data()),
-                        inner_list_type.clone(),
-                        msg_func.clone(),
-                    ),
+                let expect_fst = self.expect_type_assign(
+                    &inner_pair_types[0],
+                    AirTree::local_var(fst_name.clone(), inner_pair_types[0].clone()),
                     defined_data_types,
                     location,
-                    msg_func,
+                    msg_func.clone(),
                 );
 
-                let anon_func_body = expect_item;
+                let expect_snd = self.expect_type_assign(
+                    &inner_pair_types[1],
+                    AirTree::local_var(snd_name.clone(), inner_pair_types[1].clone()),
+                    defined_data_types,
+                    location,
+                    msg_func.clone(),
+                );
 
-                let unwrap_function = AirTree::anon_func(vec![item_name], anon_func_body);
+                let anon_func_body = AirTree::pair_access(
+                    Some(fst_name),
+                    Some(snd_name),
+                    inner_list_type.clone(),
+                    AirTree::local_var(&pair_name, inner_list_type.clone()),
+                    msg_func.clone(),
+                    true,
+                    AirTree::let_assignment("_", expect_fst, expect_snd),
+                );
+
+                let unwrap_function = AirTree::anon_func(vec![pair_name], anon_func_body);
 
                 let function = self.code_gen_functions.get(EXPECT_ON_LIST);
 
@@ -1478,285 +1561,367 @@ impl<'a> CodeGenerator<'a> {
                         "",
                     ),
                     void(),
-                    vec![
-                        AirTree::local_var(&list_name, tipo.clone()),
-                        unwrap_function,
-                    ],
+                    vec![AirTree::local_var(&map_name, tipo.clone()), unwrap_function],
                 );
 
-                AirTree::let_assignment(&list_name, value, func_call)
+                AirTree::let_assignment(&map_name, value, func_call)
             }
-        } else if tipo.is_2_tuple() {
-            let tuple_inner_types = tipo.get_inner_types();
+            // Tuple type
+            Some(UplcType::List(_)) if tipo.is_tuple() => {
+                let tuple_inner_types = tipo.get_inner_types();
 
-            assert!(tuple_inner_types.len() == 2);
+                assert!(!tuple_inner_types.is_empty());
 
-            let pair_name = format!("__pair_span_{}_{}", location.start, location.end);
+                let tuple_name = format!("__tuple_span_{}_{}", location.start, location.end);
 
-            let fst_name = format!("__pair_fst_span_{}_{}", location.start, location.end);
-            let snd_name = format!("__pair_snd_span_{}_{}", location.start, location.end);
+                let mut tuple_expect_items = vec![];
 
-            let expect_fst = self.expect_type_assign(
-                &tuple_inner_types[0],
-                AirTree::local_var(fst_name.clone(), tuple_inner_types[0].clone()),
-                defined_data_types,
-                location,
-                msg_func.clone(),
-            );
+                let then = tuple_inner_types.iter().enumerate().rfold(
+                    AirTree::void(),
+                    |then, (index, arg)| {
+                        let tuple_index_name = format!(
+                            "__tuple_index_{}_span_{}_{}",
+                            index, location.start, location.end
+                        );
 
-            let expect_snd = self.expect_type_assign(
-                &tuple_inner_types[1],
-                AirTree::local_var(snd_name.clone(), tuple_inner_types[1].clone()),
-                defined_data_types,
-                location,
-                msg_func.clone(),
-            );
+                        let expect_tuple_item = self.expect_type_assign(
+                            arg,
+                            AirTree::local_var(&tuple_index_name, arg.clone()),
+                            defined_data_types,
+                            location,
+                            msg_func.clone(),
+                        );
 
-            let tuple_access = AirTree::tuple_access(
-                vec![fst_name, snd_name],
-                tipo.clone(),
-                AirTree::local_var(&pair_name, tipo.clone()),
-                msg_func.clone(),
-                msg_func.is_some(),
-                AirTree::let_assignment("_", expect_fst, expect_snd),
-            );
+                        tuple_expect_items.push(tuple_index_name);
 
-            AirTree::let_assignment(&pair_name, value, tuple_access)
-        } else if tipo.is_tuple() {
-            let tuple_inner_types = tipo.get_inner_types();
+                        AirTree::let_assignment("_", expect_tuple_item, then)
+                    },
+                );
 
-            assert!(!tuple_inner_types.is_empty());
+                tuple_expect_items.reverse();
 
-            let tuple_name = format!("__tuple_span_{}_{}", location.start, location.end);
+                let tuple_access = AirTree::tuple_access(
+                    tuple_expect_items,
+                    tipo.clone(),
+                    AirTree::local_var(&tuple_name, tipo.clone()),
+                    msg_func,
+                    true,
+                    then,
+                );
 
-            let mut tuple_expect_items = vec![];
+                AirTree::let_assignment(&tuple_name, value, tuple_access)
+            }
+            // Regular List type
+            Some(UplcType::List(_)) => {
+                assert!(!tipo.get_inner_types().is_empty());
 
-            let then = tuple_inner_types.iter().enumerate().rfold(
-                AirTree::void(),
-                |then, (index, arg)| {
-                    let tuple_index_name = format!(
-                        "__tuple_index_{}_span_{}_{}",
-                        index, location.start, location.end
-                    );
+                let inner_list_type = &tipo.get_inner_types()[0];
 
-                    let expect_tuple_item = self.expect_type_assign(
-                        arg,
-                        AirTree::local_var(&tuple_index_name, arg.clone()),
+                if inner_list_type.is_data() {
+                    value
+                } else {
+                    let list_name = format!("__list_span_{}_{}", location.start, location.end);
+                    let item_name = format!("__item_span_{}_{}", location.start, location.end);
+
+                    let expect_item = self.expect_type_assign(
+                        inner_list_type,
+                        AirTree::cast_from_data(
+                            AirTree::local_var(&item_name, data()),
+                            inner_list_type.clone(),
+                            msg_func.clone(),
+                        ),
                         defined_data_types,
                         location,
-                        msg_func.clone(),
+                        msg_func,
                     );
 
-                    tuple_expect_items.push(tuple_index_name);
+                    let anon_func_body = expect_item;
 
-                    AirTree::let_assignment("_", expect_tuple_item, then)
-                },
-            );
+                    let unwrap_function = AirTree::anon_func(vec![item_name], anon_func_body);
 
-            tuple_expect_items.reverse();
+                    let function = self.code_gen_functions.get(EXPECT_ON_LIST);
 
-            let tuple_access = AirTree::tuple_access(
-                tuple_expect_items,
-                tipo.clone(),
-                AirTree::local_var(&tuple_name, tipo.clone()),
-                msg_func,
-                true,
-                then,
-            );
-
-            AirTree::let_assignment(&tuple_name, value, tuple_access)
-
-        // Constructor
-        } else {
-            let data_type = lookup_data_type_by_tipo(&self.data_types, tipo).unwrap_or_else(|| {
-                unreachable!("We need a data type definition for type {:#?}", tipo)
-            });
-
-            let data_type_variant = tipo
-                .get_inner_types()
-                .iter()
-                .map(|arg| get_arg_type_name(arg))
-                .join("_");
-
-            assert!(data_type.typed_parameters.len() == tipo.arg_types().unwrap().len());
-
-            let mono_types: IndexMap<u64, Rc<Type>> = if !data_type.typed_parameters.is_empty() {
-                data_type
-                    .typed_parameters
-                    .iter()
-                    .zip(tipo.arg_types().unwrap())
-                    .flat_map(|item| get_generic_id_and_type(item.0, &item.1))
-                    .collect()
-            } else {
-                IndexMap::new()
-            };
-
-            let data_type_name = format!("__expect_{}_{}", data_type.name, data_type_variant);
-            let function = self.code_gen_functions.get(&data_type_name);
-
-            // mutate code_gen_funcs and defined_data_types in this if branch
-            if function.is_none() && defined_data_types.get(&data_type_name).is_none() {
-                let (msg_term, error_term) = match self.tracing {
-                    TraceLevel::Silent => (None, AirTree::error(tipo.clone(), false)),
-                    TraceLevel::Compact | TraceLevel::Verbose => {
-                        let msg = AirMsg::LocalVar("__param_msg".to_string());
-                        (
-                            Some(msg.clone()),
-                            AirTree::trace(
-                                msg.to_air_tree(),
-                                tipo.clone(),
-                                AirTree::error(tipo.clone(), false),
-                            ),
-                        )
-                    }
-                };
-
-                defined_data_types.insert(data_type_name.clone(), 1);
-
-                let current_defined = defined_data_types.clone();
-                let mut diff_defined_types = vec![];
-
-                let constr_clauses = data_type.constructors.iter().enumerate().rfold(
-                    error_term,
-                    |acc, (index, constr)| {
-                        let mut constr_args = vec![];
-
-                        let constr_then = constr.arguments.iter().enumerate().rfold(
-                            AirTree::void(),
-                            |then, (index, arg)| {
-                                let arg_name =
-                                    arg.label.clone().unwrap_or(format!("__field_{index}"));
-
-                                let arg_tipo = find_and_replace_generics(&arg.tipo, &mono_types);
-
-                                constr_args.push((index, arg_name.clone(), arg_tipo.clone()));
-
-                                AirTree::let_assignment(
-                                    "_",
-                                    self.expect_type_assign(
-                                        &arg_tipo.clone(),
-                                        AirTree::local_var(arg_name, arg_tipo),
-                                        defined_data_types,
-                                        location,
-                                        msg_term.clone(),
-                                    ),
-                                    then,
-                                )
+                    if function.is_none() {
+                        let expect_list_func = AirTree::expect_on_list();
+                        self.code_gen_functions.insert(
+                            EXPECT_ON_LIST.to_string(),
+                            CodeGenFunction::Function {
+                                body: expect_list_func,
+                                params: vec![
+                                    "__list_to_check".to_string(),
+                                    "__check_with".to_string(),
+                                ],
                             },
                         );
-                        constr_args.reverse();
-
-                        let then = if constr_args.is_empty() {
-                            AirTree::fields_empty(
-                                AirTree::local_var(
-                                    format!(
-                                        "__constr_var_span_{}_{}",
-                                        location.start, location.end
-                                    ),
-                                    tipo.clone(),
-                                ),
-                                msg_term.clone(),
-                                constr_then,
-                            )
-                        } else {
-                            AirTree::fields_expose(
-                                constr_args,
-                                AirTree::local_var(
-                                    format!(
-                                        "__constr_var_span_{}_{}",
-                                        location.start, location.end
-                                    ),
-                                    tipo.clone(),
-                                ),
-                                msg_term.clone(),
-                                true,
-                                constr_then,
-                            )
-                        };
-
-                        AirTree::clause(
-                            format!("__subject_span_{}_{}", location.start, location.end),
-                            AirTree::int(index),
-                            tipo.clone(),
-                            then,
-                            acc,
-                            false,
-                        )
-                    },
-                );
-
-                let when_expr = AirTree::when(
-                    format!("__subject_span_{}_{}", location.start, location.end),
-                    void(),
-                    tipo.clone(),
-                    AirTree::local_var(
-                        format!("__constr_var_span_{}_{}", location.start, location.end),
-                        tipo.clone(),
-                    ),
-                    constr_clauses,
-                );
-
-                let func_body = AirTree::let_assignment(
-                    format!("__constr_var_span_{}_{}", location.start, location.end),
-                    AirTree::local_var("__param_0", tipo.clone()),
-                    when_expr,
-                );
-
-                for (inner_data_type, inner_count) in defined_data_types.iter() {
-                    if let Some(prev_count) = current_defined.get(inner_data_type) {
-                        if inner_count - prev_count > 0 {
-                            diff_defined_types.push(inner_data_type.to_string());
-                        }
-                    } else {
-                        diff_defined_types.push(inner_data_type.to_string());
                     }
+
+                    if let Some(counter) = defined_data_types.get_mut(EXPECT_ON_LIST) {
+                        *counter += 1
+                    } else {
+                        defined_data_types.insert(EXPECT_ON_LIST.to_string(), 1);
+                    }
+
+                    let func_call = AirTree::call(
+                        AirTree::var(
+                            ValueConstructor::public(
+                                void(),
+                                ValueConstructorVariant::ModuleFn {
+                                    name: EXPECT_ON_LIST.to_string(),
+                                    field_map: None,
+                                    module: "".to_string(),
+                                    arity: 1,
+                                    location,
+                                    builtin: None,
+                                },
+                            ),
+                            EXPECT_ON_LIST,
+                            "",
+                        ),
+                        void(),
+                        vec![
+                            AirTree::local_var(&list_name, tipo.clone()),
+                            unwrap_function,
+                        ],
+                    );
+
+                    AirTree::let_assignment(&list_name, value, func_call)
                 }
+            }
+            // Pair type
+            Some(UplcType::Pair(_, _)) => {
+                let tuple_inner_types = tipo.get_inner_types();
 
-                let code_gen_func = match self.tracing {
-                    TraceLevel::Silent => CodeGenFunction::Function {
-                        body: func_body,
-                        params: vec!["__param_0".to_string()],
-                    },
-                    TraceLevel::Compact | TraceLevel::Verbose => CodeGenFunction::Function {
-                        body: func_body,
-                        params: vec!["__param_0".to_string(), "__param_msg".to_string()],
-                    },
-                };
+                assert!(tuple_inner_types.len() == 2);
 
-                self.code_gen_functions
-                    .insert(data_type_name.clone(), code_gen_func);
-            } else if let Some(counter) = defined_data_types.get_mut(&data_type_name) {
-                *counter += 1;
-            } else {
-                defined_data_types.insert(data_type_name.to_string(), 1);
+                let pair_name = format!("__pair_span_{}_{}", location.start, location.end);
+
+                let fst_name = format!("__pair_fst_span_{}_{}", location.start, location.end);
+                let snd_name = format!("__pair_snd_span_{}_{}", location.start, location.end);
+
+                let expect_fst = self.expect_type_assign(
+                    &tuple_inner_types[0],
+                    AirTree::local_var(fst_name.clone(), tuple_inner_types[0].clone()),
+                    defined_data_types,
+                    location,
+                    msg_func.clone(),
+                );
+
+                let expect_snd = self.expect_type_assign(
+                    &tuple_inner_types[1],
+                    AirTree::local_var(snd_name.clone(), tuple_inner_types[1].clone()),
+                    defined_data_types,
+                    location,
+                    msg_func.clone(),
+                );
+
+                let pair_access = AirTree::pair_access(
+                    Some(fst_name.clone()),
+                    Some(snd_name.clone()),
+                    tipo.clone(),
+                    AirTree::local_var(&pair_name, tipo.clone()),
+                    msg_func.clone(),
+                    true,
+                    AirTree::let_assignment("_", expect_fst, expect_snd),
+                );
+
+                AirTree::let_assignment(&pair_name, value, pair_access)
             }
 
-            let args = match self.tracing {
-                TraceLevel::Silent => vec![value],
-                TraceLevel::Compact | TraceLevel::Verbose => vec![
-                    value,
-                    msg_func
-                        .expect("should be unreachable: no msg func with tracing enabled.")
-                        .to_air_tree(),
-                ],
-            };
+            // Constr type
+            None => {
+                let data_type =
+                    lookup_data_type_by_tipo(&self.data_types, tipo).unwrap_or_else(|| {
+                        unreachable!("We need a data type definition for type {:#?}", tipo)
+                    });
 
-            let module_fn = ValueConstructorVariant::ModuleFn {
-                name: data_type_name.to_string(),
-                field_map: None,
-                module: "".to_string(),
-                arity: args.len(),
-                location,
-                builtin: None,
-            };
+                let data_type_variant = tipo
+                    .get_inner_types()
+                    .iter()
+                    .map(|arg| get_arg_type_name(arg))
+                    .join("_");
 
-            let func_var = AirTree::var(
-                ValueConstructor::public(tipo.clone(), module_fn),
-                data_type_name,
-                "",
-            );
+                assert!(data_type.typed_parameters.len() == tipo.arg_types().unwrap().len());
 
-            AirTree::call(func_var, void(), args)
+                let mono_types: IndexMap<u64, Rc<Type>> = if !data_type.typed_parameters.is_empty()
+                {
+                    data_type
+                        .typed_parameters
+                        .iter()
+                        .zip(tipo.arg_types().unwrap())
+                        .flat_map(|item| get_generic_id_and_type(item.0, &item.1))
+                        .collect()
+                } else {
+                    IndexMap::new()
+                };
+
+                let data_type_name = format!("__expect_{}_{}", data_type.name, data_type_variant);
+                let function = self.code_gen_functions.get(&data_type_name);
+
+                // mutate code_gen_funcs and defined_data_types in this if branch
+                if function.is_none() && defined_data_types.get(&data_type_name).is_none() {
+                    let (msg_term, error_term) = match self.tracing {
+                        TraceLevel::Silent => (None, AirTree::error(tipo.clone(), false)),
+                        TraceLevel::Compact | TraceLevel::Verbose => {
+                            let msg = AirMsg::LocalVar("__param_msg".to_string());
+                            (
+                                Some(msg.clone()),
+                                AirTree::trace(
+                                    msg.to_air_tree(),
+                                    tipo.clone(),
+                                    AirTree::error(tipo.clone(), false),
+                                ),
+                            )
+                        }
+                    };
+
+                    defined_data_types.insert(data_type_name.clone(), 1);
+
+                    let current_defined = defined_data_types.clone();
+                    let mut diff_defined_types = vec![];
+
+                    let constr_clauses = data_type.constructors.iter().enumerate().rfold(
+                        error_term,
+                        |acc, (index, constr)| {
+                            let mut constr_args = vec![];
+
+                            let constr_then = constr.arguments.iter().enumerate().rfold(
+                                AirTree::void(),
+                                |then, (index, arg)| {
+                                    let arg_name =
+                                        arg.label.clone().unwrap_or(format!("__field_{index}"));
+
+                                    let arg_tipo =
+                                        find_and_replace_generics(&arg.tipo, &mono_types);
+
+                                    constr_args.push((index, arg_name.clone(), arg_tipo.clone()));
+
+                                    AirTree::let_assignment(
+                                        "_",
+                                        self.expect_type_assign(
+                                            &arg_tipo.clone(),
+                                            AirTree::local_var(arg_name, arg_tipo),
+                                            defined_data_types,
+                                            location,
+                                            msg_term.clone(),
+                                        ),
+                                        then,
+                                    )
+                                },
+                            );
+                            constr_args.reverse();
+
+                            let then = if constr_args.is_empty() {
+                                AirTree::fields_empty(
+                                    AirTree::local_var(
+                                        format!(
+                                            "__constr_var_span_{}_{}",
+                                            location.start, location.end
+                                        ),
+                                        tipo.clone(),
+                                    ),
+                                    msg_term.clone(),
+                                    constr_then,
+                                )
+                            } else {
+                                AirTree::fields_expose(
+                                    constr_args,
+                                    AirTree::local_var(
+                                        format!(
+                                            "__constr_var_span_{}_{}",
+                                            location.start, location.end
+                                        ),
+                                        tipo.clone(),
+                                    ),
+                                    msg_term.clone(),
+                                    true,
+                                    constr_then,
+                                )
+                            };
+
+                            AirTree::clause(
+                                format!("__subject_span_{}_{}", location.start, location.end),
+                                AirTree::int(index),
+                                tipo.clone(),
+                                then,
+                                acc,
+                                false,
+                            )
+                        },
+                    );
+
+                    let when_expr = AirTree::when(
+                        format!("__subject_span_{}_{}", location.start, location.end),
+                        void(),
+                        tipo.clone(),
+                        AirTree::local_var(
+                            format!("__constr_var_span_{}_{}", location.start, location.end),
+                            tipo.clone(),
+                        ),
+                        constr_clauses,
+                    );
+
+                    let func_body = AirTree::let_assignment(
+                        format!("__constr_var_span_{}_{}", location.start, location.end),
+                        AirTree::local_var("__param_0", tipo.clone()),
+                        when_expr,
+                    );
+
+                    for (inner_data_type, inner_count) in defined_data_types.iter() {
+                        if let Some(prev_count) = current_defined.get(inner_data_type) {
+                            if inner_count - prev_count > 0 {
+                                diff_defined_types.push(inner_data_type.to_string());
+                            }
+                        } else {
+                            diff_defined_types.push(inner_data_type.to_string());
+                        }
+                    }
+
+                    let code_gen_func = match self.tracing {
+                        TraceLevel::Silent => CodeGenFunction::Function {
+                            body: func_body,
+                            params: vec!["__param_0".to_string()],
+                        },
+                        TraceLevel::Compact | TraceLevel::Verbose => CodeGenFunction::Function {
+                            body: func_body,
+                            params: vec!["__param_0".to_string(), "__param_msg".to_string()],
+                        },
+                    };
+
+                    self.code_gen_functions
+                        .insert(data_type_name.clone(), code_gen_func);
+                } else if let Some(counter) = defined_data_types.get_mut(&data_type_name) {
+                    *counter += 1;
+                } else {
+                    defined_data_types.insert(data_type_name.to_string(), 1);
+                }
+
+                let args = match self.tracing {
+                    TraceLevel::Silent => vec![value],
+                    TraceLevel::Compact | TraceLevel::Verbose => vec![
+                        value,
+                        msg_func
+                            .expect("should be unreachable: no msg func with tracing enabled.")
+                            .to_air_tree(),
+                    ],
+                };
+
+                let module_fn = ValueConstructorVariant::ModuleFn {
+                    name: data_type_name.to_string(),
+                    field_map: None,
+                    module: "".to_string(),
+                    arity: args.len(),
+                    location,
+                    builtin: None,
+                };
+
+                let func_var = AirTree::var(
+                    ValueConstructor::public(tipo.clone(), module_fn),
+                    data_type_name,
+                    "",
+                );
+
+                AirTree::call(func_var, void(), args)
+            }
         }
     }
 
@@ -1799,6 +1964,7 @@ impl<'a> CodeGenerator<'a> {
             }
 
             match &mut props.specific_clause {
+                // TODO: Implement PairClause and PairClauseGuard
                 SpecificClause::ConstrClause => {
                     let data_type = lookup_data_type_by_tipo(&self.data_types, subject_tipo);
 
@@ -2098,6 +2264,27 @@ impl<'a> CodeGenerator<'a> {
                         )
                     }
                 }
+                SpecificClause::PairClause => {
+                    let (_, pattern_assigns) =
+                        self.clause_pattern(&clause.pattern, subject_tipo, props, clause_then);
+
+                    let mut next_clause_props = ClauseProperties::init(
+                        subject_tipo,
+                        props.clause_var_name.clone(),
+                        props.original_subject_name.clone(),
+                    );
+
+                    AirTree::wrap_clause(
+                        pattern_assigns,
+                        self.handle_each_clause(
+                            rest_clauses,
+                            final_clause,
+                            subject_tipo,
+                            &mut next_clause_props,
+                            module_name,
+                        ),
+                    )
+                }
             }
         } else {
             // handle final_clause
@@ -2270,7 +2457,7 @@ impl<'a> CodeGenerator<'a> {
                         elems,
                         subject_tipo.clone(),
                         tail.is_some(),
-                        AirTree::local_var(&props.original_subject_name, subject_tipo.clone()),
+                        AirTree::local_var(&props.clause_var_name, subject_tipo.clone()),
                         // One special usage of list access here
                         // So for the msg we pass in empty string if tracing is on
                         // Since check_last_item is false this will never get added to the final uplc anyway
@@ -2296,6 +2483,78 @@ impl<'a> CodeGenerator<'a> {
 
                 (AirTree::void(), list_assign)
             }
+
+            Pattern::Pair { fst, snd, .. } => {
+                let items_type = subject_tipo.get_inner_types();
+
+                let mut name_index_assigns = vec![];
+
+                let next_then =
+                    [fst, snd]
+                        .iter()
+                        .enumerate()
+                        .rfold(then, |inner_then, (index, element)| {
+                            let elem_name = match element.as_ref() {
+                                Pattern::Var { name, .. } => Some(name.to_string()),
+                                Pattern::Assign { name, .. } => Some(name.to_string()),
+                                Pattern::Discard { .. } => None,
+                                _ => Some(format!(
+                                    "pair_index_{}_span_{}_{}",
+                                    index,
+                                    element.location().start,
+                                    element.location().end
+                                )),
+                            };
+
+                            let mut pair_props = ClauseProperties::init_inner(
+                                &items_type[index],
+                                elem_name.clone().unwrap_or_else(|| "_".to_string()),
+                                elem_name.clone().unwrap_or_else(|| "_".to_string()),
+                                props.final_clause,
+                            );
+
+                            let elem = if elem_name.is_some() {
+                                self.nested_clause_condition(
+                                    element,
+                                    &items_type[index],
+                                    &mut pair_props,
+                                    inner_then,
+                                )
+                            } else {
+                                inner_then
+                            };
+
+                            props.complex_clause =
+                                props.complex_clause || pair_props.complex_clause;
+
+                            name_index_assigns.push((elem_name, index));
+
+                            elem
+                        });
+
+                name_index_assigns.reverse();
+
+                let field_assign = if name_index_assigns.iter().all(|s| s.0.is_none()) {
+                    next_then
+                } else {
+                    AirTree::pair_access(
+                        name_index_assigns[0].0.clone(),
+                        name_index_assigns[1].0.clone(),
+                        subject_tipo.clone(),
+                        AirTree::local_var(props.clause_var_name.clone(), subject_tipo.clone()),
+                        None,
+                        false,
+                        next_then,
+                    )
+                };
+
+                (AirTree::void(), field_assign)
+            }
+
+            Pattern::Constructor { name, .. } if subject_tipo.is_bool() => {
+                (AirTree::bool(name == "True"), then)
+            }
+
             Pattern::Constructor {
                 name,
                 arguments,
@@ -2303,130 +2562,120 @@ impl<'a> CodeGenerator<'a> {
                 tipo: function_tipo,
                 ..
             } => {
-                if subject_tipo.is_bool() {
-                    (AirTree::bool(name == "True"), then)
-                } else {
-                    assert!(
-                        matches!(function_tipo.as_ref().clone(), Type::Fn { .. })
-                            || matches!(function_tipo.as_ref().clone(), Type::App { .. })
-                    );
-                    let data_type = lookup_data_type_by_tipo(&self.data_types, subject_tipo)
-                        .unwrap_or_else(|| {
-                            unreachable!(
-                                "Code Gen should have the definition for this constructor {}",
-                                name
-                            )
-                        });
+                assert!(
+                    matches!(function_tipo.as_ref().clone(), Type::Fn { .. })
+                        || matches!(function_tipo.as_ref().clone(), Type::App { .. })
+                );
+                let data_type = lookup_data_type_by_tipo(&self.data_types, subject_tipo)
+                    .unwrap_or_else(|| {
+                        unreachable!(
+                            "Code Gen should have the definition for this constructor {}",
+                            name
+                        )
+                    });
 
-                    assert!(!data_type.constructors.is_empty());
+                assert!(!data_type.constructors.is_empty());
 
-                    let (constr_index, _) = data_type
-                        .constructors
+                let (constr_index, _) = data_type
+                    .constructors
+                    .iter()
+                    .enumerate()
+                    .find(|(_, dt)| &dt.name == name)
+                    .unwrap();
+
+                let field_map = match constructor {
+                    PatternConstructor::Record { field_map, .. } => field_map.clone(),
+                };
+
+                let mut type_map: IndexMap<usize, Rc<Type>> = IndexMap::new();
+
+                for (index, arg) in function_tipo.arg_types().unwrap().iter().enumerate() {
+                    let field_type = arg.clone();
+                    type_map.insert(index, field_type);
+                }
+
+                let mut fields = vec![];
+
+                let next_then =
+                    arguments
                         .iter()
                         .enumerate()
-                        .find(|(_, dt)| &dt.name == name)
-                        .unwrap();
+                        .rfold(then, |inner_then, (index, arg)| {
+                            let label = arg.label.clone().unwrap_or_default();
 
-                    let field_map = match constructor {
-                        PatternConstructor::Record { field_map, .. } => field_map.clone(),
-                    };
+                            let field_index = if let Some(field_map) = &field_map {
+                                *field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&index)
+                            } else {
+                                index
+                            };
 
-                    let mut type_map: IndexMap<usize, Rc<Type>> = IndexMap::new();
+                            let field_name = match &arg.value {
+                                Pattern::Var { name, .. } => name.to_string(),
+                                Pattern::Assign { name, .. } => name.to_string(),
+                                Pattern::Discard { .. } => "_".to_string(),
+                                _ => format!(
+                                    "field_{}_span_{}_{}",
+                                    field_index,
+                                    arg.value.location().start,
+                                    arg.value.location().end
+                                ),
+                            };
 
-                    for (index, arg) in function_tipo.arg_types().unwrap().iter().enumerate() {
-                        let field_type = arg.clone();
-                        type_map.insert(index, field_type);
-                    }
-
-                    let mut fields = vec![];
-
-                    let next_then =
-                        arguments
-                            .iter()
-                            .enumerate()
-                            .rfold(then, |inner_then, (index, arg)| {
-                                let label = arg.label.clone().unwrap_or_default();
-
-                                let field_index = if let Some(field_map) = &field_map {
-                                    *field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&index)
-                                } else {
-                                    index
-                                };
-
-                                let field_name = match &arg.value {
-                                    Pattern::Var { name, .. } => name.to_string(),
-                                    Pattern::Assign { name, .. } => name.to_string(),
-                                    Pattern::Discard { .. } => "_".to_string(),
-                                    _ => format!(
-                                        "field_{}_span_{}_{}",
-                                        field_index,
-                                        arg.value.location().start,
-                                        arg.value.location().end
-                                    ),
-                                };
-
-                                let arg_type = type_map.get(&field_index).unwrap_or_else(|| {
-                                    unreachable!(
-                                        "Missing type for field {} of constr {}",
-                                        field_index, name
-                                    )
-                                });
-
-                                let mut field_props = ClauseProperties::init_inner(
-                                    arg_type,
-                                    field_name.clone(),
-                                    field_name.clone(),
-                                    props.final_clause,
-                                );
-
-                                let statement = if field_name != "_" {
-                                    self.nested_clause_condition(
-                                        &arg.value,
-                                        arg_type,
-                                        &mut field_props,
-                                        inner_then,
-                                    )
-                                } else {
-                                    inner_then
-                                };
-
-                                props.complex_clause =
-                                    props.complex_clause || field_props.complex_clause;
-
-                                fields.push((field_index, field_name, arg_type.clone()));
-
-                                statement
+                            let arg_type = type_map.get(&field_index).unwrap_or_else(|| {
+                                unreachable!(
+                                    "Missing type for field {} of constr {}",
+                                    field_index, name
+                                )
                             });
 
-                    fields.reverse();
+                            let mut field_props = ClauseProperties::init_inner(
+                                arg_type,
+                                field_name.clone(),
+                                field_name.clone(),
+                                props.final_clause,
+                            );
 
-                    let field_assign =
-                        if check_replaceable_opaque_type(subject_tipo, &self.data_types) {
-                            AirTree::let_assignment(
-                                &fields[0].1,
-                                AirTree::local_var(
-                                    props.clause_var_name.clone(),
-                                    subject_tipo.clone(),
-                                ),
-                                next_then,
-                            )
-                        } else if fields.iter().all(|s| s.1 == "_") {
-                            next_then
-                        } else {
-                            AirTree::fields_expose(
-                                fields,
-                                AirTree::local_var(
-                                    props.clause_var_name.clone(),
-                                    subject_tipo.clone(),
-                                ),
-                                None,
-                                false,
-                                next_then,
-                            )
-                        };
+                            let statement = if field_name != "_" {
+                                self.nested_clause_condition(
+                                    &arg.value,
+                                    arg_type,
+                                    &mut field_props,
+                                    inner_then,
+                                )
+                            } else {
+                                inner_then
+                            };
 
-                    (AirTree::int(constr_index), field_assign)
-                }
+                            props.complex_clause =
+                                props.complex_clause || field_props.complex_clause;
+
+                            fields.push((field_index, field_name, arg_type.clone()));
+
+                            statement
+                        });
+
+                fields.reverse();
+
+                let field_assign = if check_replaceable_opaque_type(subject_tipo, &self.data_types)
+                {
+                    AirTree::let_assignment(
+                        &fields[0].1,
+                        AirTree::local_var(props.clause_var_name.clone(), subject_tipo.clone()),
+                        next_then,
+                    )
+                } else if fields.iter().all(|s| s.1 == "_") {
+                    next_then
+                } else {
+                    AirTree::fields_expose(
+                        fields,
+                        AirTree::local_var(props.clause_var_name.clone(), subject_tipo.clone()),
+                        None,
+                        false,
+                        next_then,
+                    )
+                };
+
+                (AirTree::int(constr_index), field_assign)
             }
             Pattern::Tuple { elems, .. } => {
                 let items_type = subject_tipo.get_inner_types();
@@ -2548,7 +2797,7 @@ impl<'a> CodeGenerator<'a> {
                         AirTree::tuple_access(
                             names,
                             subject_tipo.clone(),
-                            AirTree::local_var(&props.original_subject_name, subject_tipo.clone()),
+                            AirTree::local_var(&props.clause_var_name, subject_tipo.clone()),
                             None,
                             false,
                             tuple_name_assigns,
@@ -2690,6 +2939,12 @@ impl<'a> CodeGenerator<'a> {
                             })
                     }
                 }
+
+                Pattern::Pair { .. } => {
+                    let (_, assign) = self.clause_pattern(pattern, subject_tipo, props, then);
+                    assign
+                }
+
                 Pattern::Constructor {
                     name: constr_name, ..
                 } => {
@@ -3759,6 +4014,7 @@ impl<'a> CodeGenerator<'a> {
                 arg_stack.push(arg);
             }
         }
+        assert!(arg_stack.len() == 1, "Expected one term on the stack");
         arg_stack.pop().unwrap()
     }
 
@@ -3833,7 +4089,7 @@ impl<'a> CodeGenerator<'a> {
                         }
 
                         DefaultFunction::HeadList
-                            if !constructor.tipo.return_type().unwrap().is_2_tuple() =>
+                            if !constructor.tipo.return_type().unwrap().is_pair() =>
                         {
                             builder::undata_builtin(
                                 builtin,
@@ -3845,7 +4101,7 @@ impl<'a> CodeGenerator<'a> {
 
                         DefaultFunction::MkCons | DefaultFunction::MkPairData => {
                             unimplemented!(
-                                "MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z).\n"
+                                "MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z) or Pair {{fst:a, snd: b}}.\n"
                             )
                         }
                         _ => {
@@ -3906,6 +4162,7 @@ impl<'a> CodeGenerator<'a> {
                 ValueConstructorVariant::Record {
                     name: constr_name, ..
                 } => {
+                    // TODO handle pair
                     if constructor.tipo.is_bool() {
                         Some(Term::bool(constr_name == "True"))
                     } else if constructor.tipo.is_void() {
@@ -3915,7 +4172,13 @@ impl<'a> CodeGenerator<'a> {
                             &self.data_types,
                             &constructor.tipo,
                         )
-                        .unwrap();
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "could not find data-type definition for {} within known set: {:?}",
+                                constructor.tipo.to_pretty(0),
+                                self.data_types.keys()
+                            )
+                        });
 
                         let (constr_index, constr_type) = data_type
                             .constructors
@@ -3943,19 +4206,25 @@ impl<'a> CodeGenerator<'a> {
                             let eval_program: Program<NamedDeBruijn> =
                                 program.remove_no_inlines().try_into().unwrap();
 
-                            let evaluated_term: Term<NamedDeBruijn> =
-                                eval_program.eval(ExBudget::default()).result().unwrap();
+                            let evaluated_term: Term<NamedDeBruijn> = eval_program
+                                .eval(ExBudget::default())
+                                .result()
+                                .expect("Evaluated a constant record and got an error");
+
                             term = evaluated_term.try_into().unwrap();
                         } else {
-                            for (index, arg) in constr_type.arguments.iter().enumerate().rev() {
+                            for (index, arg) in constructor
+                                .tipo
+                                .arg_types()
+                                .unwrap()
+                                .iter()
+                                .enumerate()
+                                .rev()
+                            {
                                 term = Term::mk_cons()
                                     .apply(convert_type_to_data(
-                                        Term::var(
-                                            arg.label
-                                                .clone()
-                                                .unwrap_or_else(|| format!("arg_{index}")),
-                                        ),
-                                        &arg.tipo,
+                                        Term::var(format!("arg_{index}")),
+                                        arg,
                                     ))
                                     .apply(term);
                             }
@@ -3964,10 +4233,8 @@ impl<'a> CodeGenerator<'a> {
                                 .apply(Term::integer(constr_index.into()))
                                 .apply(term);
 
-                            for (index, arg) in constr_type.arguments.iter().enumerate().rev() {
-                                term = term.lambda(
-                                    arg.label.clone().unwrap_or_else(|| format!("arg_{index}")),
-                                )
+                            for (index, _) in constr_type.arguments.iter().enumerate().rev() {
+                                term = term.lambda(format!("arg_{index}"))
                             }
                         }
                         Some(term)
@@ -4197,8 +4464,11 @@ impl<'a> CodeGenerator<'a> {
                             let eval_program: Program<NamedDeBruijn> =
                                 program.remove_no_inlines().try_into().unwrap();
 
-                            let evaluated_term: Term<NamedDeBruijn> =
-                                eval_program.eval(ExBudget::max()).result().unwrap();
+                            let result = eval_program.eval(ExBudget::max()).result();
+
+                            let evaluated_term: Term<NamedDeBruijn> = result.unwrap_or_else(|e| {
+                                panic!("Evaluated a zero argument function and received this error: {e:#?}")
+                            });
 
                             Some(evaluated_term.try_into().unwrap())
                         } else {
@@ -4221,8 +4491,9 @@ impl<'a> CodeGenerator<'a> {
                     arg_vec.push(arg_stack.pop().unwrap());
                 }
 
-                let tipo = match tipo.as_ref() {
+                let ret_tipo = match tipo.as_ref() {
                     Type::Fn { ret, .. } => ret,
+                    // In this case the Air Opcode only holds the return type and not the function type
                     _ => &tipo,
                 };
 
@@ -4237,11 +4508,11 @@ impl<'a> CodeGenerator<'a> {
                     }
 
                     DefaultFunction::FstPair | DefaultFunction::SndPair => {
-                        builder::undata_builtin(&func, count, tipo, arg_vec)
+                        builder::undata_builtin(&func, count, ret_tipo, arg_vec)
                     }
 
-                    DefaultFunction::HeadList if !tipo.is_2_tuple() => {
-                        builder::undata_builtin(&func, count, tipo, arg_vec)
+                    DefaultFunction::HeadList if !tipo.is_pair() => {
+                        builder::undata_builtin(&func, count, ret_tipo, arg_vec)
                     }
 
                     DefaultFunction::MkCons | DefaultFunction::MkPairData => {
@@ -4273,138 +4544,103 @@ impl<'a> CodeGenerator<'a> {
                 let left = arg_stack.pop().unwrap();
                 let right = arg_stack.pop().unwrap();
 
-                let builtin = if tipo.is_int() {
-                    Term::equals_integer()
-                } else if tipo.is_string() {
-                    Term::equals_string()
-                } else if tipo.is_bytearray() {
-                    Term::equals_bytestring()
-                } else if tipo.is_bls381_12_g1() {
-                    Term::bls12_381_g1_equal()
-                } else if tipo.is_bls381_12_g2() {
-                    Term::bls12_381_g2_equal()
-                } else if tipo.is_ml_result() {
-                    panic!("ML Result equality is not supported")
-                } else {
-                    Term::equals_data()
+                let uplc_type = tipo.get_uplc_type();
+
+                let term = match name {
+                    BinOp::And => left.delayed_if_then_else(right, Term::bool(false)),
+                    BinOp::Or => left.delayed_if_then_else(Term::bool(true), right),
+                    BinOp::Eq | BinOp::NotEq => {
+                        let builtin = match &uplc_type {
+                            Some(UplcType::Integer) => Term::equals_integer(),
+                            Some(UplcType::String) => Term::equals_string(),
+                            Some(UplcType::ByteString) => Term::equals_bytestring(),
+                            Some(UplcType::Bls12_381G1Element) => Term::bls12_381_g1_equal(),
+                            Some(UplcType::Bls12_381G2Element) => Term::bls12_381_g2_equal(),
+                            Some(UplcType::Bool | UplcType::Unit) => Term::unit(),
+                            Some(UplcType::List(_) | UplcType::Pair(_, _) | UplcType::Data)
+                            | None => Term::equals_data(),
+                            Some(UplcType::Bls12_381MlResult) => {
+                                panic!("ML Result equality is not supported")
+                            }
+                        };
+
+                        let binop_eq =
+                            match uplc_type {
+                                Some(UplcType::Bool) => {
+                                    if matches!(name, BinOp::Eq) {
+                                        left.delayed_if_then_else(
+                                            right.clone(),
+                                            right.if_then_else(Term::bool(false), Term::bool(true)),
+                                        )
+                                    } else {
+                                        left.delayed_if_then_else(
+                                            right
+                                                .clone()
+                                                .if_then_else(Term::bool(false), Term::bool(true)),
+                                            right,
+                                        )
+                                    }
+                                }
+                                Some(UplcType::List(_)) if tipo.is_map() => builtin
+                                    .apply(Term::map_data().apply(left))
+                                    .apply(Term::map_data().apply(right)),
+                                Some(UplcType::List(_)) => builtin
+                                    .apply(Term::list_data().apply(left))
+                                    .apply(Term::list_data().apply(right)),
+                                Some(UplcType::Pair(_, _)) => builtin
+                                    .apply(Term::map_data().apply(
+                                        Term::mk_cons().apply(left).apply(Term::empty_map()),
+                                    ))
+                                    .apply(Term::map_data().apply(
+                                        Term::mk_cons().apply(right).apply(Term::empty_map()),
+                                    )),
+                                Some(
+                                    UplcType::Data
+                                    | UplcType::Bls12_381G1Element
+                                    | UplcType::Bls12_381G2Element
+                                    | UplcType::Bls12_381MlResult
+                                    | UplcType::Integer
+                                    | UplcType::String
+                                    | UplcType::ByteString,
+                                )
+                                | None => builtin.apply(left).apply(right),
+                                Some(UplcType::Unit) => {
+                                    left.choose_unit(right.choose_unit(Term::bool(true)))
+                                }
+                            };
+
+                        if !tipo.is_bool() && matches!(name, BinOp::NotEq) {
+                            binop_eq.if_then_else(Term::bool(false), Term::bool(true))
+                        } else {
+                            binop_eq
+                        }
+                    }
+                    BinOp::LtInt => Term::Builtin(DefaultFunction::LessThanInteger)
+                        .apply(left)
+                        .apply(right),
+                    BinOp::LtEqInt => Term::Builtin(DefaultFunction::LessThanEqualsInteger)
+                        .apply(left)
+                        .apply(right),
+                    BinOp::GtEqInt => Term::Builtin(DefaultFunction::LessThanEqualsInteger)
+                        .apply(right)
+                        .apply(left),
+                    BinOp::GtInt => Term::Builtin(DefaultFunction::LessThanInteger)
+                        .apply(right)
+                        .apply(left),
+                    BinOp::AddInt => Term::add_integer().apply(left).apply(right),
+                    BinOp::SubInt => Term::Builtin(DefaultFunction::SubtractInteger)
+                        .apply(left)
+                        .apply(right),
+                    BinOp::MultInt => Term::Builtin(DefaultFunction::MultiplyInteger)
+                        .apply(left)
+                        .apply(right),
+                    BinOp::DivInt => Term::Builtin(DefaultFunction::DivideInteger)
+                        .apply(left)
+                        .apply(right),
+                    BinOp::ModInt => Term::Builtin(DefaultFunction::ModInteger)
+                        .apply(left)
+                        .apply(right),
                 };
-
-                let term =
-                    match name {
-                        BinOp::And => left.delayed_if_then_else(right, Term::bool(false)),
-                        BinOp::Or => left.delayed_if_then_else(Term::bool(true), right),
-                        BinOp::Eq => {
-                            if tipo.is_bool() {
-                                let term = left.delayed_if_then_else(
-                                    right.clone(),
-                                    right.if_then_else(Term::bool(false), Term::bool(true)),
-                                );
-
-                                return Some(term);
-                            } else if tipo.is_map() {
-                                let term = builtin
-                                    .apply(Term::map_data().apply(left))
-                                    .apply(Term::map_data().apply(right));
-
-                                return Some(term);
-                            } else if tipo.is_tuple()
-                                && matches!(tipo.get_uplc_type(), UplcType::Pair(_, _))
-                            {
-                                let term = builtin
-                                    .apply(Term::map_data().apply(
-                                        Term::mk_cons().apply(left).apply(Term::empty_map()),
-                                    ))
-                                    .apply(Term::map_data().apply(
-                                        Term::mk_cons().apply(right).apply(Term::empty_map()),
-                                    ));
-
-                                return Some(term);
-                            } else if tipo.is_list() || tipo.is_tuple() {
-                                let term = builtin
-                                    .apply(Term::list_data().apply(left))
-                                    .apply(Term::list_data().apply(right));
-
-                                return Some(term);
-                            } else if tipo.is_void() {
-                                let term = left.choose_unit(right.choose_unit(Term::bool(true)));
-
-                                return Some(term);
-                            }
-
-                            builtin.apply(left).apply(right)
-                        }
-                        BinOp::NotEq => {
-                            if tipo.is_bool() {
-                                let term = left.delayed_if_then_else(
-                                    right
-                                        .clone()
-                                        .if_then_else(Term::bool(false), Term::bool(true)),
-                                    right,
-                                );
-
-                                return Some(term);
-                            } else if tipo.is_map() {
-                                let term = builtin
-                                    .apply(Term::map_data().apply(left))
-                                    .apply(Term::map_data().apply(right))
-                                    .if_then_else(Term::bool(false), Term::bool(true));
-
-                                return Some(term);
-                            } else if tipo.is_tuple()
-                                && matches!(tipo.get_uplc_type(), UplcType::Pair(_, _))
-                            {
-                                let term = builtin
-                                    .apply(Term::map_data().apply(
-                                        Term::mk_cons().apply(left).apply(Term::empty_map()),
-                                    ))
-                                    .apply(Term::map_data().apply(
-                                        Term::mk_cons().apply(right).apply(Term::empty_map()),
-                                    ))
-                                    .if_then_else(Term::bool(false), Term::bool(true));
-
-                                return Some(term);
-                            } else if tipo.is_list() || tipo.is_tuple() {
-                                let term = builtin
-                                    .apply(Term::list_data().apply(left))
-                                    .apply(Term::list_data().apply(right))
-                                    .if_then_else(Term::bool(false), Term::bool(true));
-
-                                return Some(term);
-                            } else if tipo.is_void() {
-                                return Some(Term::bool(false));
-                            }
-
-                            builtin
-                                .apply(left)
-                                .apply(right)
-                                .if_then_else(Term::bool(false), Term::bool(true))
-                        }
-                        BinOp::LtInt => Term::Builtin(DefaultFunction::LessThanInteger)
-                            .apply(left)
-                            .apply(right),
-                        BinOp::LtEqInt => Term::Builtin(DefaultFunction::LessThanEqualsInteger)
-                            .apply(left)
-                            .apply(right),
-                        BinOp::GtEqInt => Term::Builtin(DefaultFunction::LessThanEqualsInteger)
-                            .apply(right)
-                            .apply(left),
-                        BinOp::GtInt => Term::Builtin(DefaultFunction::LessThanInteger)
-                            .apply(right)
-                            .apply(left),
-                        BinOp::AddInt => Term::add_integer().apply(left).apply(right),
-                        BinOp::SubInt => Term::Builtin(DefaultFunction::SubtractInteger)
-                            .apply(left)
-                            .apply(right),
-                        BinOp::MultInt => Term::Builtin(DefaultFunction::MultiplyInteger)
-                            .apply(left)
-                            .apply(right),
-                        BinOp::DivInt => Term::Builtin(DefaultFunction::DivideInteger)
-                            .apply(left)
-                            .apply(right),
-                        BinOp::ModInt => Term::Builtin(DefaultFunction::ModInteger)
-                            .apply(left)
-                            .apply(right),
-                    };
                 Some(term)
             }
             Air::DefineFunc {
@@ -4556,8 +4792,11 @@ impl<'a> CodeGenerator<'a> {
                     let eval_program: Program<NamedDeBruijn> =
                         program.remove_no_inlines().try_into().unwrap();
 
-                    let evaluated_term: Term<NamedDeBruijn> =
-                        eval_program.eval(ExBudget::default()).result().unwrap();
+                    let evaluated_term: Term<NamedDeBruijn> = eval_program
+                        .eval(ExBudget::default())
+                        .result()
+                        .expect("Evaluated on unwrapping a data constant and got an error");
+
                     term = evaluated_term.try_into().unwrap();
                 }
 
@@ -4581,8 +4820,11 @@ impl<'a> CodeGenerator<'a> {
                     let eval_program: Program<NamedDeBruijn> =
                         program.remove_no_inlines().try_into().unwrap();
 
-                    let evaluated_term: Term<NamedDeBruijn> =
-                        eval_program.eval(ExBudget::default()).result().unwrap();
+                    let evaluated_term: Term<NamedDeBruijn> = eval_program
+                        .eval(ExBudget::default())
+                        .result()
+                        .expect("Evaluated on wrapping a constant into data and got an error");
+
                     term = evaluated_term.try_into().unwrap();
                 } else {
                     term = builder::convert_type_to_data(term, &tipo);
@@ -4628,20 +4870,29 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 let subject = arg_stack.pop().unwrap();
 
-                let subject = if tipo.is_int()
-                    || tipo.is_bytearray()
-                    || tipo.is_string()
-                    || tipo.is_list()
-                    || tipo.is_tuple()
-                    || tipo.is_bool()
-                {
-                    subject
-                } else {
-                    Term::var(
+                let uplc_type = tipo.get_uplc_type();
+
+                let subject = match uplc_type {
+                    Some(
+                        UplcType::Bool
+                        | UplcType::Integer
+                        | UplcType::String
+                        | UplcType::ByteString
+                        | UplcType::Unit
+                        | UplcType::List(_)
+                        | UplcType::Pair(_, _)
+                        | UplcType::Bls12_381G1Element
+                        | UplcType::Bls12_381G2Element
+                        | UplcType::Bls12_381MlResult,
+                    ) => subject,
+
+                    Some(UplcType::Data) => subject,
+
+                    None => Term::var(
                         self.special_functions
                             .use_function_uplc(CONSTR_INDEX_EXPOSER.to_string()),
                     )
-                    .apply(subject)
+                    .apply(subject),
                 };
 
                 let mut term = arg_stack.pop().unwrap();
@@ -4659,67 +4910,68 @@ impl<'a> CodeGenerator<'a> {
                 let clause = arg_stack.pop().unwrap();
 
                 // the body to be run if the clause matches
-                let mut body = arg_stack.pop().unwrap();
+                let body = arg_stack.pop().unwrap();
 
                 // the next branch in the when expression
-                let mut term = arg_stack.pop().unwrap();
+                let term = arg_stack.pop().unwrap();
 
-                if tipo.is_bool() {
-                    let other_clauses = if complex_clause {
-                        Term::var("__other_clauses_delayed")
-                    } else {
-                        term.clone().delay()
-                    };
+                let other_clauses = if complex_clause {
+                    Term::var("__other_clauses_delayed")
+                } else {
+                    term.clone().delay()
+                };
 
+                let body = if tipo.is_bool() {
                     if matches!(clause, Term::Constant(boolean) if matches!(boolean.as_ref(), UplcConstant::Bool(true)))
                     {
-                        body = Term::var(subject_name)
+                        Term::var(subject_name)
                             .if_then_else(body.delay(), other_clauses)
-                            .force();
+                            .force()
                     } else {
-                        body = Term::var(subject_name)
+                        Term::var(subject_name)
                             .if_then_else(other_clauses, body.delay())
-                            .force();
-                    }
-
-                    if complex_clause {
-                        term = body.lambda("__other_clauses_delayed").apply(term.delay());
-                    } else {
-                        term = body;
+                            .force()
                     }
                 } else {
-                    let condition = if tipo.is_int() {
-                        Term::equals_integer()
+                    let uplc_type = tipo.get_uplc_type();
+
+                    let condition = match uplc_type {
+                        Some(
+                            UplcType::Bool
+                            | UplcType::Unit
+                            | UplcType::List(_)
+                            | UplcType::Pair(_, _)
+                            | UplcType::Bls12_381MlResult,
+                        ) => unreachable!("{:#?}", tipo),
+                        Some(UplcType::Data) => unimplemented!(),
+                        Some(UplcType::Integer) => Term::equals_integer()
                             .apply(clause)
-                            .apply(Term::var(subject_name))
-                    } else if tipo.is_bytearray() {
-                        Term::equals_bytestring()
+                            .apply(Term::var(subject_name)),
+                        Some(UplcType::String) => Term::equals_string()
                             .apply(clause)
-                            .apply(Term::var(subject_name))
-                    } else if tipo.is_string() {
-                        Term::equals_string()
+                            .apply(Term::var(subject_name)),
+                        Some(UplcType::ByteString) => Term::equals_bytestring()
                             .apply(clause)
-                            .apply(Term::var(subject_name))
-                    } else if tipo.is_list() || tipo.is_tuple() {
-                        unreachable!("{:#?}", tipo)
-                    } else {
-                        Term::equals_integer()
+                            .apply(Term::var(subject_name)),
+                        Some(UplcType::Bls12_381G1Element) => Term::bls12_381_g1_equal()
                             .apply(clause)
-                            .apply(Term::var(subject_name))
+                            .apply(Term::var(subject_name)),
+                        Some(UplcType::Bls12_381G2Element) => Term::bls12_381_g2_equal()
+                            .apply(clause)
+                            .apply(Term::var(subject_name)),
+                        None => Term::equals_integer()
+                            .apply(clause)
+                            .apply(Term::var(subject_name)),
                     };
 
-                    if complex_clause {
-                        term = condition
-                            .if_then_else(body.delay(), Term::var("__other_clauses_delayed"))
-                            .force()
-                            .lambda("__other_clauses_delayed")
-                            .apply(term.delay());
-                    } else {
-                        term = condition.delayed_if_then_else(body, term);
-                    }
-                }
+                    condition.if_then_else(body.delay(), other_clauses).force()
+                };
 
-                Some(term)
+                if complex_clause {
+                    Some(body.lambda("__other_clauses_delayed").apply(term.delay()))
+                } else {
+                    Some(body)
+                }
             }
             Air::ListClause {
                 tail_name,
@@ -4778,31 +5030,49 @@ impl<'a> CodeGenerator<'a> {
                         .apply(next_clause.delay());
                 }
 
-                if tipo.is_2_tuple() {
-                    for (index, name) in indices.iter() {
-                        if name == "_" {
-                            continue;
-                        }
-                        let builtin = if *index == 0 {
-                            Term::fst_pair()
-                        } else {
-                            Term::snd_pair()
-                        };
-
-                        term = term.lambda(name).apply(builder::known_data_to_type(
-                            builtin.apply(Term::var(subject_name.clone())),
-                            &tuple_types[*index].clone(),
-                        ));
-                    }
-                } else {
-                    for (index, name) in indices.iter() {
-                        term = term.lambda(name.clone()).apply(builder::known_data_to_type(
-                            Term::head_list()
-                                .apply(Term::var(subject_name.clone()).repeat_tail_list(*index)),
-                            &tuple_types[*index].clone(),
-                        ));
-                    }
+                for (index, name) in indices.iter() {
+                    term = term.lambda(name.clone()).apply(builder::known_data_to_type(
+                        Term::head_list()
+                            .apply(Term::var(subject_name.clone()).repeat_tail_list(*index)),
+                        &tuple_types[*index].clone(),
+                    ));
                 }
+
+                Some(term)
+            }
+            Air::PairClause {
+                subject_tipo: tipo,
+                complex_clause,
+                subject_name,
+                fst_name,
+                snd_name,
+            } => {
+                let mut term = arg_stack.pop().unwrap();
+
+                let next_clause = arg_stack.pop().unwrap();
+
+                let pair_types = tipo.get_inner_types();
+
+                if complex_clause {
+                    term = term
+                        .lambda("__other_clauses_delayed")
+                        .apply(next_clause.delay());
+                }
+
+                if let Some(fst) = fst_name {
+                    term = term.lambda(fst).apply(builder::known_data_to_type(
+                        Term::fst_pair().apply(Term::var(subject_name.clone())),
+                        &pair_types[0].clone(),
+                    ));
+                }
+
+                if let Some(snd) = snd_name {
+                    term = term.lambda(snd).apply(builder::known_data_to_type(
+                        Term::snd_pair().apply(Term::var(subject_name.clone())),
+                        &pair_types[1].clone(),
+                    ));
+                }
+
                 Some(term)
             }
             Air::ClauseGuard {
@@ -4813,50 +5083,62 @@ impl<'a> CodeGenerator<'a> {
 
                 let then = arg_stack.pop().unwrap();
 
+                let term = Term::var("__other_clauses_delayed");
+
                 if tipo.is_bool() {
-                    let mut term = Term::var("__other_clauses_delayed");
                     if matches!(checker, Term::Constant(boolean) if matches!(boolean.as_ref(), UplcConstant::Bool(true)))
                     {
-                        term = Term::var(subject_name)
-                            .if_then_else(then.delay(), term)
-                            .force();
+                        Some(
+                            Term::var(subject_name)
+                                .if_then_else(then.delay(), term)
+                                .force(),
+                        )
                     } else {
-                        term = Term::var(subject_name)
-                            .if_then_else(term, then.delay())
-                            .force();
+                        Some(
+                            Term::var(subject_name)
+                                .if_then_else(term, then.delay())
+                                .force(),
+                        )
                     }
-                    Some(term)
                 } else if tipo.is_void() {
                     Some(then.lambda("_").apply(Term::var(subject_name)))
                 } else {
-                    let condition = if tipo.is_int() {
-                        Term::equals_integer()
+                    let uplc_type = tipo.get_uplc_type();
+
+                    let condition = match uplc_type {
+                        Some(
+                            UplcType::Bool
+                            | UplcType::Unit
+                            | UplcType::List(_)
+                            | UplcType::Pair(_, _)
+                            | UplcType::Bls12_381MlResult,
+                        ) => unreachable!("{:#?}", tipo),
+                        Some(UplcType::Data) => unimplemented!(),
+                        Some(UplcType::Integer) => Term::equals_integer()
                             .apply(checker)
-                            .apply(Term::var(subject_name))
-                    } else if tipo.is_bytearray() {
-                        Term::equals_bytestring()
+                            .apply(Term::var(subject_name)),
+                        Some(UplcType::String) => Term::equals_string()
                             .apply(checker)
-                            .apply(Term::var(subject_name))
-                    } else if tipo.is_string() {
-                        Term::equals_string()
+                            .apply(Term::var(subject_name)),
+                        Some(UplcType::ByteString) => Term::equals_bytestring()
                             .apply(checker)
-                            .apply(Term::var(subject_name))
-                    } else if tipo.is_list() || tipo.is_tuple() {
-                        unreachable!()
-                    } else {
-                        Term::equals_integer().apply(checker).apply(
+                            .apply(Term::var(subject_name)),
+                        Some(UplcType::Bls12_381G1Element) => Term::bls12_381_g1_equal()
+                            .apply(checker)
+                            .apply(Term::var(subject_name)),
+                        Some(UplcType::Bls12_381G2Element) => Term::bls12_381_g2_equal()
+                            .apply(checker)
+                            .apply(Term::var(subject_name)),
+                        None => Term::equals_integer().apply(checker).apply(
                             Term::var(
                                 self.special_functions
                                     .use_function_uplc(CONSTR_INDEX_EXPOSER.to_string()),
                             )
                             .apply(Term::var(subject_name)),
-                        )
+                        ),
                     };
 
-                    let term = condition
-                        .if_then_else(then.delay(), Term::var("__other_clauses_delayed"))
-                        .force();
-                    Some(term)
+                    Some(condition.if_then_else(then.delay(), term).force())
                 }
             }
             Air::ListClauseGuard {
@@ -4899,31 +5181,40 @@ impl<'a> CodeGenerator<'a> {
 
                 let tuple_types = tipo.get_inner_types();
 
-                if tuple_types.len() == 2 {
-                    for (index, name) in indices.iter() {
-                        if name == "_" {
-                            continue;
-                        }
-                        let builtin = if *index == 0 {
-                            Term::fst_pair()
-                        } else {
-                            Term::snd_pair()
-                        };
-
-                        term = term.lambda(name).apply(builder::known_data_to_type(
-                            builtin.apply(Term::var(subject_name.clone())),
-                            &tuple_types[*index].clone(),
-                        ));
-                    }
-                } else {
-                    for (index, name) in indices.iter() {
-                        term = term.lambda(name.clone()).apply(builder::known_data_to_type(
-                            Term::head_list()
-                                .apply(Term::var(subject_name.clone()).repeat_tail_list(*index)),
-                            &tuple_types[*index].clone(),
-                        ));
-                    }
+                for (index, name) in indices.iter() {
+                    term = term.lambda(name.clone()).apply(builder::known_data_to_type(
+                        Term::head_list()
+                            .apply(Term::var(subject_name.clone()).repeat_tail_list(*index)),
+                        &tuple_types[*index].clone(),
+                    ));
                 }
+
+                Some(term)
+            }
+            Air::PairGuard {
+                subject_tipo: tipo,
+                subject_name,
+                fst_name,
+                snd_name,
+            } => {
+                let mut term = arg_stack.pop().unwrap();
+
+                let tuple_types = tipo.get_inner_types();
+
+                if let Some(fst) = fst_name {
+                    term = term.lambda(fst).apply(builder::known_data_to_type(
+                        Term::fst_pair().apply(Term::var(subject_name.clone())),
+                        &tuple_types[0].clone(),
+                    ));
+                }
+
+                if let Some(snd) = snd_name {
+                    term = term.lambda(snd).apply(builder::known_data_to_type(
+                        Term::snd_pair().apply(Term::var(subject_name.clone())),
+                        &tuple_types[1].clone(),
+                    ));
+                }
+
                 Some(term)
             }
             Air::Finally => {
@@ -4981,8 +5272,11 @@ impl<'a> CodeGenerator<'a> {
                     let eval_program: Program<NamedDeBruijn> =
                         program.remove_no_inlines().try_into().unwrap();
 
-                    let evaluated_term: Term<NamedDeBruijn> =
-                        eval_program.eval(ExBudget::default()).result().unwrap();
+                    let evaluated_term: Term<NamedDeBruijn> = eval_program
+                        .eval(ExBudget::default())
+                        .result()
+                        .expect("Evaluated a constant record with args and got an error");
+
                     term = evaluated_term.try_into().unwrap();
                 }
 
@@ -5080,34 +5374,9 @@ impl<'a> CodeGenerator<'a> {
                 if constants.len() == args.len() {
                     let data_constants = builder::convert_constants_to_data(constants);
 
-                    if count == 2 {
-                        let term = Term::Constant(
-                            UplcConstant::ProtoPair(
-                                UplcType::Data,
-                                UplcType::Data,
-                                data_constants[0].clone().into(),
-                                data_constants[1].clone().into(),
-                            )
-                            .into(),
-                        );
-                        Some(term)
-                    } else {
-                        let term = Term::Constant(
-                            UplcConstant::ProtoList(UplcType::Data, data_constants).into(),
-                        );
-                        Some(term)
-                    }
-                } else if count == 2 {
-                    let term = Term::mk_pair_data()
-                        .apply(builder::convert_type_to_data(
-                            args[0].clone(),
-                            &tuple_sub_types[0],
-                        ))
-                        .apply(builder::convert_type_to_data(
-                            args[1].clone(),
-                            &tuple_sub_types[1],
-                        ));
-
+                    let term = Term::Constant(
+                        UplcConstant::ProtoList(UplcType::Data, data_constants).into(),
+                    );
                     Some(term)
                 } else {
                     let mut term = Term::empty_list();
@@ -5117,6 +5386,39 @@ impl<'a> CodeGenerator<'a> {
                             .apply(term);
                     }
                     Some(term)
+                }
+            }
+            Air::Pair { tipo } => {
+                let fst = arg_stack.pop().unwrap();
+                let snd = arg_stack.pop().unwrap();
+
+                match (extract_constant(&fst), extract_constant(&snd)) {
+                    (Some(fst), Some(snd)) => {
+                        let mut pair_fields = builder::convert_constants_to_data(vec![fst, snd]);
+                        let term = Term::Constant(
+                            UplcConstant::ProtoPair(
+                                UplcType::Data,
+                                UplcType::Data,
+                                pair_fields.remove(0).into(),
+                                pair_fields.remove(0).into(),
+                            )
+                            .into(),
+                        );
+                        Some(term)
+                    }
+                    _ => {
+                        let term = Term::mk_pair_data()
+                            .apply(builder::convert_type_to_data(
+                                fst,
+                                &tipo.get_inner_types()[0],
+                            ))
+                            .apply(builder::convert_type_to_data(
+                                snd,
+                                &tipo.get_inner_types()[1],
+                            ));
+
+                        Some(term)
+                    }
                 }
             }
             Air::RecordUpdate {
@@ -5247,67 +5549,75 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
                 let list_id = self.id_gen.next();
 
-                if tipo.is_2_tuple() {
-                    assert!(names.len() == 2);
+                let mut id_list = vec![];
+                id_list.push(list_id);
 
-                    if names[1] != "_" {
-                        term = term.lambda(names[1].clone()).apply(if is_expect {
-                            convert_data_to_type(
-                                Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                                &inner_types[1],
-                            )
-                        } else {
-                            known_data_to_type(
-                                Term::snd_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                                &inner_types[1],
-                            )
-                        });
-                    }
+                names.iter().for_each(|_| {
+                    id_list.push(self.id_gen.next());
+                });
 
-                    if names[0] != "_" {
-                        term = term.lambda(names[0].clone()).apply(if is_expect {
-                            convert_data_to_type(
-                                Term::fst_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                                &inner_types[0],
-                            )
-                        } else {
-                            known_data_to_type(
-                                Term::fst_pair().apply(Term::var(format!("__tuple_{list_id}"))),
-                                &inner_types[0],
-                            )
-                        })
-                    }
+                let names_types = names
+                    .into_iter()
+                    .zip(inner_types)
+                    .zip(id_list)
+                    .map(|((name, tipo), id)| (name, tipo, id))
+                    .collect_vec();
 
-                    term = term.lambda(format!("__tuple_{list_id}")).apply(value);
+                term = builder::list_access_to_uplc(
+                    &names_types,
+                    false,
+                    term,
+                    false,
+                    is_expect.into(),
+                    error_term,
+                )
+                .apply(value);
 
-                    Some(term)
-                } else {
-                    let mut id_list = vec![];
-                    id_list.push(list_id);
+                Some(term)
+            }
+            Air::PairAccessor {
+                fst,
+                snd,
+                tipo,
+                is_expect,
+            } => {
+                let inner_types = tipo.get_inner_types();
+                let value = arg_stack.pop().unwrap();
 
-                    names.iter().for_each(|_| {
-                        id_list.push(self.id_gen.next());
+                let mut term = arg_stack.pop().unwrap();
+                let list_id = self.id_gen.next();
+
+                if let Some(name) = snd {
+                    term = term.lambda(name).apply(if is_expect {
+                        convert_data_to_type(
+                            Term::snd_pair().apply(Term::var(format!("__pair_{list_id}"))),
+                            &inner_types[1],
+                        )
+                    } else {
+                        known_data_to_type(
+                            Term::snd_pair().apply(Term::var(format!("__pair_{list_id}"))),
+                            &inner_types[1],
+                        )
                     });
-
-                    let names_types = names
-                        .into_iter()
-                        .zip(inner_types)
-                        .zip(id_list)
-                        .map(|((name, tipo), id)| (name, tipo, id))
-                        .collect_vec();
-
-                    term = builder::list_access_to_uplc(
-                        &names_types,
-                        false,
-                        term,
-                        false,
-                        is_expect.into(),
-                        error_term,
-                    )
-                    .apply(value);
-
-                    Some(term)
                 }
+
+                if let Some(name) = fst {
+                    term = term.lambda(name).apply(if is_expect {
+                        convert_data_to_type(
+                            Term::fst_pair().apply(Term::var(format!("__pair_{list_id}"))),
+                            &inner_types[0],
+                        )
+                    } else {
+                        known_data_to_type(
+                            Term::fst_pair().apply(Term::var(format!("__pair_{list_id}"))),
+                            &inner_types[0],
+                        )
+                    })
+                }
+
+                term = term.lambda(format!("__pair_{list_id}")).apply(value);
+
+                Some(term)
             }
             Air::Trace { .. } => {
                 let text = arg_stack.pop().unwrap();

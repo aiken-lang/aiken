@@ -3,6 +3,6 @@ version = "0.0.0"
 description = ""
 
 [[dependencies]]
-name = 'aiken-lang/stdlib'
-version = 'main'
-source = 'github'
+name = "aiken-lang/stdlib"
+version = "main"
+source = "github"

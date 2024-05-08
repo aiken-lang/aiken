@@ -24,6 +24,6 @@ test tuple_when() {
 }
 
 test t() {
-  trace cbor.diagnostic(list.map([(#"", 20)], snd_pair))
+  trace cbor.diagnostic(list.map([Pair(#"", 20)], snd_pair))
   True
 }

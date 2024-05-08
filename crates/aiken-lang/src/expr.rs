@@ -161,6 +161,13 @@ pub enum TypedExpr {
         elems: Vec<Self>,
     },
 
+    Pair {
+        location: Span,
+        tipo: Rc<Type>,
+        fst: Box<Self>,
+        snd: Box<Self>,
+    },
+
     TupleIndex {
         location: Span,
         tipo: Rc<Type>,
@@ -214,6 +221,7 @@ impl TypedExpr {
             | Self::UnOp { tipo, .. }
             | Self::BinOp { tipo, .. }
             | Self::Tuple { tipo, .. }
+            | Self::Pair { tipo, .. }
             | Self::String { tipo, .. }
             | Self::ByteArray { tipo, .. }
             | Self::TupleIndex { tipo, .. }
@@ -256,6 +264,7 @@ impl TypedExpr {
             | TypedExpr::ErrorTerm { .. }
             | TypedExpr::BinOp { .. }
             | TypedExpr::Tuple { .. }
+            | TypedExpr::Pair { .. }
             | TypedExpr::UnOp { .. }
             | TypedExpr::String { .. }
             | TypedExpr::Sequence { .. }
@@ -299,6 +308,7 @@ impl TypedExpr {
             | Self::List { location, .. }
             | Self::BinOp { location, .. }
             | Self::Tuple { location, .. }
+            | Self::Pair { location, .. }
             | Self::String { location, .. }
             | Self::UnOp { location, .. }
             | Self::Pipeline { location, .. }
@@ -337,6 +347,7 @@ impl TypedExpr {
             | Self::List { location, .. }
             | Self::BinOp { location, .. }
             | Self::Tuple { location, .. }
+            | Self::Pair { location, .. }
             | Self::String { location, .. }
             | Self::UnOp { location, .. }
             | Self::Sequence { location, .. }
@@ -388,6 +399,11 @@ impl TypedExpr {
             TypedExpr::Tuple {
                 elems: elements, ..
             } => elements
+                .iter()
+                .find_map(|e| e.find_node(byte_index))
+                .or(Some(Located::Expression(self))),
+
+            TypedExpr::Pair { fst, snd, .. } => [fst, snd]
                 .iter()
                 .find_map(|e| e.find_node(byte_index))
                 .or(Some(Located::Expression(self))),
@@ -576,6 +592,12 @@ pub enum UntypedExpr {
     Tuple {
         location: Span,
         elems: Vec<Self>,
+    },
+
+    Pair {
+        location: Span,
+        fst: Box<Self>,
+        snd: Box<Self>,
     },
 
     TupleIndex {
@@ -771,11 +793,10 @@ impl UntypedExpr {
                 },
 
                 uplc::ast::Constant::ProtoPair(_, _, left, right) => match tipo {
-                    Type::Tuple { elems, .. } => Ok(UntypedExpr::Tuple {
-                        location: Span::empty(),
-                        elems: [left.as_ref(), right.as_ref()]
+                    Type::Pair { fst, snd, .. } => {
+                        let elems = [left.as_ref(), right.as_ref()]
                             .into_iter()
-                            .zip(elems)
+                            .zip([fst, snd])
                             .map(|(arg, arg_type)| {
                                 UntypedExpr::do_reify_constant(
                                     generics,
@@ -784,10 +805,16 @@ impl UntypedExpr {
                                     arg_type,
                                 )
                             })
-                            .collect::<Result<Vec<_>, _>>()?,
-                    }),
+                            .collect::<Result<Vec<_>, _>>()?;
+
+                        Ok(UntypedExpr::Pair {
+                            location: Span::empty(),
+                            fst: elems.first().unwrap().to_owned().into(),
+                            snd: elems.last().unwrap().to_owned().into(),
+                        })
+                    }
                     _ => Err(format!(
-                        "invalid type annotation. expected Tuple but got: {tipo:?}"
+                        "invalid type annotation. expected Pair but got: {tipo:?}"
                     )),
                 },
 
@@ -882,9 +909,10 @@ impl UntypedExpr {
                     location: Span::empty(),
                     elements: kvs
                         .into_iter()
-                        .map(|(k, v)| UntypedExpr::Tuple {
+                        .map(|(k, v)| UntypedExpr::Pair {
                             location: Span::empty(),
-                            elems: vec![UntypedExpr::reify_blind(k), UntypedExpr::reify_blind(v)],
+                            fst: UntypedExpr::reify_blind(k).into(),
+                            snd: UntypedExpr::reify_blind(v).into(),
                         })
                         .collect::<Vec<_>>(),
                     tail: None,
@@ -1000,6 +1028,21 @@ impl UntypedExpr {
                             })
                             .collect::<Result<Vec<_>, _>>()?,
                     }),
+                    Type::Pair { fst, snd, .. } => {
+                        let mut elems = args
+                            .into_iter()
+                            .zip([fst, snd])
+                            .map(|(arg, arg_type)| {
+                                UntypedExpr::do_reify_data(generics, data_types, arg, arg_type)
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+
+                        Ok(UntypedExpr::Pair {
+                            location: Span::empty(),
+                            fst: elems.remove(0).into(),
+                            snd: elems.remove(0).into(),
+                        })
+                    }
                     _ => Err(format!(
                         "invalid type annotation. expected List but got: {tipo:?}"
                     )),
@@ -1272,6 +1315,7 @@ impl UntypedExpr {
             | Self::ByteArray { location, .. }
             | Self::BinOp { location, .. }
             | Self::Tuple { location, .. }
+            | Self::Pair { location, .. }
             | Self::String { location, .. }
             | Self::Assignment { location, .. }
             | Self::TupleIndex { location, .. }

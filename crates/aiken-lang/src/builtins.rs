@@ -15,11 +15,16 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use strum::IntoEnumIterator;
 use uplc::builtins::DefaultFunction;
 
+pub const PRELUDE: &str = "aiken";
+pub const BUILTIN: &str = "aiken/builtin";
+
 pub const BYTE_ARRAY: &str = "ByteArray";
 pub const BOOL: &str = "Bool";
 pub const INT: &str = "Int";
 pub const DATA: &str = "Data";
 pub const LIST: &str = "List";
+pub const ALIST: &str = "AList";
+pub const PAIR: &str = "Pair";
 pub const VOID: &str = "Void";
 pub const G1_ELEMENT: &str = "G1Element";
 pub const G2_ELEMENT: &str = "G2Element";
@@ -35,7 +40,7 @@ pub const FUZZER: &str = "Fuzzer";
 /// into a compiler pipeline
 pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     let mut prelude = TypeInfo {
-        name: "aiken".to_string(),
+        name: PRELUDE.to_string(),
         package: "".to_string(),
         kind: ModuleKind::Lib,
         types: HashMap::new(),
@@ -320,6 +325,24 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         },
     );
 
+    // Pair(a, b)
+    let fst_parameter = generic_var(id_gen.next());
+    let snd_parameter = generic_var(id_gen.next());
+    prelude.types.insert(
+        PAIR.to_string(),
+        TypeConstructor {
+            location: Span::empty(),
+            parameters: vec![fst_parameter.clone(), snd_parameter.clone()],
+            tipo: pair(fst_parameter.clone(), snd_parameter.clone()),
+            module: "".to_string(),
+            public: true,
+        },
+    );
+
+    prelude
+        .types_constructors
+        .insert(PAIR.to_string(), vec![PAIR.to_string()]);
+
     // String
     prelude.types.insert(
         STRING.to_string(),
@@ -371,7 +394,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         TypeConstructor {
             location: Span::empty(),
             parameters: vec![option_value.clone()],
-            tipo: option(option_value),
+            tipo: option(option_value.clone()),
             module: "".to_string(),
             public: true,
         },
@@ -382,12 +405,10 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         vec!["Some".to_string(), "None".to_string()],
     );
 
-    let some = generic_var(id_gen.next());
-
     prelude.values.insert(
         "Some".to_string(),
         ValueConstructor::public(
-            function(vec![some.clone()], option(some)),
+            function(vec![option_value.clone()], option(option_value.clone())),
             ValueConstructorVariant::Record {
                 module: "".into(),
                 name: "Some".to_string(),
@@ -399,12 +420,10 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         ),
     );
 
-    let some = generic_var(id_gen.next());
-
     prelude.values.insert(
         "None".to_string(),
         ValueConstructor::public(
-            option(some),
+            option(option_value),
             ValueConstructorVariant::Record {
                 module: "".into(),
                 name: "None".to_string(),
@@ -422,7 +441,6 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     //   Seeded { seed: ByteArray, choices: ByteArray }
     //   Replayed { cursor: Int, choices: ByteArray }
     // }
-
     prelude.types.insert(
         PRNG.to_string(),
         TypeConstructor {
@@ -487,7 +505,6 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     //
     // pub type Fuzzer<a> =
     //   fn(PRNG) -> Option<(PRNG, a)>
-
     let fuzzer_value = generic_var(id_gen.next());
     prelude.types.insert(
         FUZZER.to_string(),
@@ -500,12 +517,28 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         },
     );
 
+    // Map
+    //
+    // pub type Map<k, v> = List<Pair<k, v>>
+    let alist_key = generic_var(id_gen.next());
+    let alist_value = generic_var(id_gen.next());
+    prelude.types.insert(
+        ALIST.to_string(),
+        TypeConstructor {
+            location: Span::empty(),
+            parameters: vec![alist_key.clone(), alist_value.clone()],
+            tipo: map(alist_key, alist_value),
+            module: "".to_string(),
+            public: true,
+        },
+    );
+
     prelude
 }
 
 pub fn plutus(id_gen: &IdGenerator) -> TypeInfo {
     let mut plutus = TypeInfo {
-        name: "aiken/builtin".to_string(),
+        name: BUILTIN.to_string(),
         package: "".to_string(),
         kind: ModuleKind::Lib,
         types: HashMap::new(),
@@ -658,7 +691,7 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             (tipo, 2)
         }
         DefaultFunction::MapData => {
-            let tipo = function(vec![list(tuple(vec![data(), data()]))], data());
+            let tipo = function(vec![list(pair(data(), data()))], data());
 
             (tipo, 1)
         }
@@ -678,12 +711,12 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             (tipo, 1)
         }
         DefaultFunction::UnConstrData => {
-            let tipo = function(vec![data()], tuple(vec![int(), list(data())]));
+            let tipo = function(vec![data()], pair(int(), list(data())));
 
             (tipo, 1)
         }
         DefaultFunction::UnMapData => {
-            let tipo = function(vec![data()], list(tuple(vec![data(), data()])));
+            let tipo = function(vec![data()], list(pair(data(), data())));
 
             (tipo, 1)
         }
@@ -728,7 +761,7 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             (tipo, 6)
         }
         DefaultFunction::MkPairData => {
-            let tipo = function(vec![data(), data()], tuple(vec![data(), data()]));
+            let tipo = function(vec![data(), data()], pair(data(), data()));
             (tipo, 2)
         }
         DefaultFunction::MkNilData => {
@@ -736,7 +769,7 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             (tipo, 0)
         }
         DefaultFunction::MkNilPairData => {
-            let tipo = function(vec![], list(tuple(vec![data(), data()])));
+            let tipo = function(vec![], list(pair(data(), data())));
             (tipo, 0)
         }
         DefaultFunction::ChooseUnit => {
@@ -752,13 +785,13 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
         DefaultFunction::FstPair => {
             let a = generic_var(id_gen.next());
             let b = generic_var(id_gen.next());
-            let tipo = function(vec![tuple(vec![a.clone(), b])], a);
+            let tipo = function(vec![pair(a.clone(), b)], a);
             (tipo, 1)
         }
         DefaultFunction::SndPair => {
             let a = generic_var(id_gen.next());
             let b = generic_var(id_gen.next());
-            let tipo = function(vec![tuple(vec![a, b.clone()])], b);
+            let tipo = function(vec![pair(a, b.clone())], b);
             (tipo, 1)
         }
         DefaultFunction::ChooseList => {
@@ -1334,6 +1367,14 @@ pub fn tuple(elems: Vec<Rc<Type>>) -> Rc<Type> {
     Rc::new(Type::Tuple { elems, alias: None })
 }
 
+pub fn pair(fst: Rc<Type>, snd: Rc<Type>) -> Rc<Type> {
+    Rc::new(Type::Pair {
+        fst,
+        snd,
+        alias: None,
+    })
+}
+
 pub fn bool() -> Rc<Type> {
     Rc::new(Type::App {
         args: vec![],
@@ -1397,9 +1438,43 @@ pub fn fuzzer(a: Rc<Type>) -> Rc<Type> {
     })
 }
 
+pub fn map(k: Rc<Type>, v: Rc<Type>) -> Rc<Type> {
+    Rc::new(Type::App {
+        public: true,
+        contains_opaque: false,
+        module: "".to_string(),
+        name: LIST.to_string(),
+        args: vec![pair(k, v)],
+        alias: Some(
+            TypeAliasAnnotation {
+                alias: ALIST.to_string(),
+                parameters: vec!["k".to_string(), "v".to_string()],
+                annotation: Annotation::Constructor {
+                    location: Span::empty(),
+                    module: None,
+                    name: LIST.to_string(),
+                    arguments: vec![Annotation::Pair {
+                        location: Span::empty(),
+                        fst: Box::new(Annotation::Var {
+                            location: Span::empty(),
+                            name: "k".to_string(),
+                        }),
+                        snd: Box::new(Annotation::Var {
+                            location: Span::empty(),
+                            name: "v".to_string(),
+                        }),
+                    }],
+                },
+            }
+            .into(),
+        ),
+    })
+}
+
 pub fn list(t: Rc<Type>) -> Rc<Type> {
     Rc::new(Type::App {
         public: true,
+        // FIXME: We should probably have t.contains_opaque here?
         contains_opaque: false,
         name: LIST.to_string(),
         module: "".to_string(),
@@ -1433,6 +1508,7 @@ pub fn void() -> Rc<Type> {
 pub fn option(a: Rc<Type>) -> Rc<Type> {
     Rc::new(Type::App {
         public: true,
+        // FIXME: We should probably have t.contains_opaque here?
         contains_opaque: false,
         name: OPTION.to_string(),
         module: "".to_string(),

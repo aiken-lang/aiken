@@ -8,10 +8,11 @@ use super::{
 use crate::{
     ast::{
         Annotation, CallArg, DataType, Definition, Function, ModuleConstant, ModuleKind,
-        RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition, TypedPattern,
-        UnqualifiedImport, UntypedArg, UntypedDefinition, Use, Validator, PIPE_VARIABLE,
+        RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition, TypedFunction,
+        TypedPattern, UnqualifiedImport, UntypedArg, UntypedDefinition, UntypedFunction, Use,
+        Validator, PIPE_VARIABLE,
     },
-    builtins::{function, generic_var, tuple, unbound_var},
+    builtins::{function, generic_var, pair, tuple, unbound_var},
     tipo::{fields::FieldMap, TypeAliasAnnotation},
     IdGenerator,
 };
@@ -53,6 +54,12 @@ pub struct Environment<'a> {
 
     /// Values defined in the current module (or the prelude)
     pub module_values: HashMap<String, ValueConstructor>,
+
+    /// Top-level function definitions from the module
+    pub module_functions: HashMap<String, &'a UntypedFunction>,
+
+    /// Top-level functions that have been inferred
+    pub inferred_functions: HashMap<String, TypedFunction>,
 
     previous_id: u64,
 
@@ -644,6 +651,13 @@ impl<'a> Environment<'a> {
                 ),
                 alias.clone(),
             ),
+            Type::Pair { fst, snd, alias } => Type::with_alias(
+                pair(
+                    self.instantiate(fst.clone(), ids, hydrator),
+                    self.instantiate(snd.clone(), ids, hydrator),
+                ),
+                alias.clone(),
+            ),
         }
     }
 
@@ -700,9 +714,11 @@ impl<'a> Environment<'a> {
             previous_id: id_gen.next(),
             id_gen,
             ungeneralised_functions: HashSet::new(),
+            inferred_functions: HashMap::new(),
             module_types: prelude.types.clone(),
             module_types_constructors: prelude.types_constructors.clone(),
             module_values: HashMap::new(),
+            module_functions: HashMap::new(),
             imported_modules: HashMap::new(),
             unused_modules: HashMap::new(),
             unqualified_imported_names: HashMap::new(),
@@ -1194,6 +1210,8 @@ impl<'a> Environment<'a> {
                     &fun.location,
                 )?;
 
+                self.module_functions.insert(fun.name.clone(), fun);
+
                 if !fun.public {
                     self.init_usage(fun.name.clone(), EntityKind::PrivateFunction, fun.location);
                 }
@@ -1538,6 +1556,28 @@ impl<'a> Environment<'a> {
             }
 
             (
+                Type::Pair {
+                    fst: lhs_fst,
+                    snd: lhs_snd,
+                    alias: _,
+                },
+                Type::Pair {
+                    fst: rhs_fst,
+                    snd: rhs_snd,
+                    alias: _,
+                },
+            ) => {
+                for (a, b) in [lhs_fst, lhs_snd].into_iter().zip([rhs_fst, rhs_snd]) {
+                    unify_enclosed_type(
+                        lhs.clone(),
+                        rhs.clone(),
+                        self.unify(a.clone(), b.clone(), location, false),
+                    )?;
+                }
+                Ok(())
+            }
+
+            (
                 Type::Fn {
                     args: args1,
                     ret: retrn1,
@@ -1794,6 +1834,12 @@ fn unify_unbound_type(tipo: Rc<Type>, own_id: u64, location: Span) -> Result<(),
 
             Ok(())
         }
+        Type::Pair { fst, snd, alias: _ } => {
+            unify_unbound_type(fst.clone(), own_id, location)?;
+            unify_unbound_type(snd.clone(), own_id, location)?;
+
+            Ok(())
+        }
 
         Type::Var { .. } => unreachable!(),
     }
@@ -1967,6 +2013,13 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
                     .iter()
                     .map(|t| generalise(t.clone(), ctx_level))
                     .collect(),
+            ),
+            alias.clone(),
+        ),
+        Type::Pair { fst, snd, alias } => Type::with_alias(
+            pair(
+                generalise(fst.clone(), ctx_level),
+                generalise(snd.clone(), ctx_level),
             ),
             alias.clone(),
         ),

@@ -792,3 +792,13 @@ fn superfluous_parens_in_binop() {
         "#
     );
 }
+
+#[test]
+fn format_pairs() {
+    assert_format!(
+        r#"
+        pub fn foo(x: Pair<Int, Int>) {
+            Pair(x.1st, x.2nd)
+        }"#
+    );
+}
