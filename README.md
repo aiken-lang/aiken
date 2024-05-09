@@ -16,8 +16,8 @@
 
 ## Installation
 
-- [Linux/MacOS](https://aiken-lang.org/installation-instructions#from-aikup-linux--macos-only)
-- [Windows](https://aiken-lang.org/installation-instructions#from-sources-all-platforms)
+- [Linux/MacOS](https://aiken-lang.org/installation-instructions#linux--macos)
+- [Windows](https://aiken-lang.org/installation-instructions#windows)
 - [nix](https://aiken-lang.org/installation-instructions#from-nix-flakes-linux--macos-only)
 
 ### How to use
