@@ -1,4 +1,4 @@
-pub mod completion;
+pub mod shell;
 
 use clap::Subcommand;
 use clap_complete::Shell;
@@ -6,15 +6,15 @@ use clap_complete::Shell;
 /// Commands for working with transactions
 #[derive(Subcommand)]
 pub enum Cmd {
-    Bash(completion::Args),
-    Zsh(completion::Args),
-    Fish(completion::Args),
+    Bash(shell::Args),
+    Zsh(shell::Args),
+    Fish(shell::Args),
 }
 
 pub fn exec(cmd: Cmd) -> miette::Result<()> {
     match cmd {
-        Cmd::Bash(args) => completion::exec(args, Shell::Bash),
-        Cmd::Zsh(args) => completion::exec(args, Shell::Zsh),
-        Cmd::Fish(args) => completion::exec(args, Shell::Fish),
+        Cmd::Bash(args) => shell::exec(args, Shell::Bash),
+        Cmd::Zsh(args) => shell::exec(args, Shell::Zsh),
+        Cmd::Fish(args) => shell::exec(args, Shell::Fish),
     }
 }
