@@ -18,7 +18,7 @@ validator(token_name: ByteArray, utxo_ref: OutputReference) {
       mint
         |> value.from_minted_value
         |> value.tokens(policy_id)
-        |> dict.to_alist()
+        |> dict.to_list()
     when rdmr is {
       Mint -> {
         expect
