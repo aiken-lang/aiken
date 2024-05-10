@@ -1,4 +1,30 @@
-use std::cmp;
+use owo_colors::{OwoColorize, Stream};
+use std::{self, cmp, fmt::Display};
+
+pub fn say<A>(what: A)
+where
+    A: Display,
+{
+    eprintln!("{}", what)
+}
+
+pub fn fmt_step<A>(
+    f: &mut std::fmt::Formatter,
+    title: &str,
+    payload: &A,
+) -> std::result::Result<(), std::fmt::Error>
+where
+    A: Display,
+{
+    write!(
+        f,
+        "{:>13} {}",
+        title
+            .if_supports_color(Stream::Stderr, |s| s.bold())
+            .if_supports_color(Stream::Stderr, |s| s.purple()),
+        payload.if_supports_color(Stream::Stderr, |s| s.bold())
+    )
+}
 
 pub fn ansi_len(s: &str) -> usize {
     String::from_utf8(strip_ansi_escapes::strip(s).unwrap())

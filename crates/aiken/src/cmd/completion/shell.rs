@@ -1,9 +1,12 @@
-use std::{fs::File, io::Write, path::Path};
-
-use crate::cmd::Cmd as MainCmd;
+use crate::{cmd::Cmd as MainCmd, pretty};
 use clap::{Command, Subcommand};
 use clap_complete::{generate, Shell};
-use std::fs::OpenOptions;
+use std::{
+    fmt::{self, Display},
+    fs::{File, OpenOptions},
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 /// Generates shell completion scripts
 #[derive(clap::Args)]
@@ -37,6 +40,7 @@ fn zsh() -> miette::Result<()> {
     let oh_my_zsh_path = Path::new(&home).join(".oh-my-zsh");
 
     if oh_my_zsh_path.exists() {
+        pretty::say(Log::Detecting("oh-my-zsh!"));
         let completions_path = oh_my_zsh_path.join("completions");
 
         let aiken_completion_path = completions_path.join("_aiken");
@@ -46,7 +50,7 @@ fn zsh() -> miette::Result<()> {
                 "Cannot create directory: {completions_path.into_os_string().into_string()}",
             );
         }
-
+        pretty::say(Log::Installing(&aiken_completion_path));
         completion_file = File::create(aiken_completion_path)
             .expect("Cannot open file at: {aiken_completion_path.into_os_string().into_string()}");
 
@@ -55,31 +59,27 @@ fn zsh() -> miette::Result<()> {
         return Ok(());
     }
 
-    if data_home.exists() {
-        let completion_path = xdg_dirs
-            .place_data_file("_aiken")
-            .expect("cannot create directory");
-
-        completion_file = File::create(completion_path)
-            .expect("Cannot open file at: {completion_path.into_os_string().into_string()}");
-
-        generate_wrapper(Shell::Zsh, &mut completion_file);
-
-        return Ok(());
-    }
+    let home_exists = data_home.exists();
 
     let completion_path = xdg_dirs
         .place_data_file("_aiken")
         .expect("cannot create directory");
-
+    pretty::say(Log::Installing(&completion_path));
     completion_file = File::create(completion_path)
         .expect("Cannot open file at: {completion_path.into_os_string().into_string()}");
+
+    if home_exists {
+        generate_wrapper(Shell::Zsh, &mut completion_file);
+        return Ok(());
+    }
 
     let mut zshrc = OpenOptions::new()
         .write(true)
         .append(true)
         .open(format!("{}/.zshrc", home))
         .expect(".zshrc file not found");
+
+    pretty::say(Log::Adjusting(".zshrc"));
 
     if let Some(home) = data_home.to_str() {
         let fpath: String = format!(r#"fpath=($fpath "{}")"#, home);
@@ -105,6 +105,8 @@ fn fish() -> miette::Result<()> {
         .place_config_file("aiken.fish")
         .expect("Cannot create path");
 
+    pretty::say(Log::Installing(&completion_path));
+
     let mut completion_file = File::create(completion_path)
         .expect("Cannot open file at: {completion_path.into_os_string().into_string()}");
 
@@ -128,6 +130,7 @@ fn bash() -> miette::Result<()> {
     let completion_path = xdg_dirs
         .place_config_file(aiken_bash)
         .expect("Cannot create completion file {aiken_bash} under xdg directories");
+    pretty::say(Log::Installing(&completion_path));
 
     let mut bashrc = OpenOptions::new()
         .write(true)
@@ -137,6 +140,8 @@ fn bash() -> miette::Result<()> {
 
     if let Some(config) = config_home.to_str() {
         let path: String = format!("source {config}");
+
+        pretty::say(Log::Adjusting(".bashrc"));
 
         if let Err(e) = writeln!(bashrc, "{}", path) {
             eprintln!("Couldn't write to file: {}", e);
@@ -171,9 +176,30 @@ fn completions_to_file(shell: Shell) -> miette::Result<()> {
 pub fn exec(cmd_args: Args, shell: Shell) -> miette::Result<()> {
     if cmd_args.install {
         completions_to_file(shell)?;
+        pretty::say(Log::Done(&shell));
     } else {
         generate_wrapper(shell, &mut std::io::stdout());
     }
 
     Ok(())
+}
+
+enum Log<'a> {
+    Detecting(&'a str),
+    Installing(&'a PathBuf),
+    Adjusting(&'a str),
+    Done(&'a Shell),
+}
+
+impl<'a> Display for Log<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> std::result::Result<(), fmt::Error> {
+        match self {
+            Log::Detecting(what) => pretty::fmt_step(f, "Detecting", what),
+            Log::Installing(path) => pretty::fmt_step(f, "Creating", &path.display()),
+            Log::Adjusting(what) => pretty::fmt_step(f, "Adjusting", what),
+            Log::Done(shell) => {
+                pretty::fmt_step(f, "Done", &format!("installing {} auto-completion", shell))
+            }
+        }
+    }
 }
