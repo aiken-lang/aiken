@@ -4,9 +4,9 @@
 
 ### Added
 
+- **aiken**: added export command that exporting of regular function definitons. @rvcas
 - **aiken-lsp**: hover and goto definition support on list tail. @rvcas
 - **aiken-lsp**: hover on prop test via expression. @rvcas
-- **aiken**: added export command that exporting of regular function definitons. @rvcas
 - **aiken-lang**: a new way to emit logs that don't get erased. @micahkendall
 
 ### Fixed
@@ -14,14 +14,29 @@
 - **aiken-lang**: formatter should not erase `pub` on validators. @rvcas
 - **aiken-lang**: error on using tuple index when a tuple is returned by a generic function. @rvcas
 - **aiken-lang**: fix a regression in the Type-checker introduced in v1.0.25-alpha regarding types comparison. See #917. @KtorZ
-- **aiken-lang**: Fix incongruous generics after type-checking which caused [] to be treated as a list in cases where it needed to be an empty map primitive. See #922. @KtorZ
-- **aiken-lang**: Fix for generic constrs being used as functions causing type mismatch errors. @Microproofs
-- **aiken-lang**: Fix for error occuring when a field holds Data that is not a constr type when compiler traces are on.  @Microproofs
+- **aiken-lang**: fix incongruous generics after type-checking which caused [] to be treated as a list in cases where it needed to be an empty map primitive. See #922. @KtorZ
+- **aiken-lang**: fix for generic constrs being used as functions causing type mismatch errors. @Microproofs
+- **aiken-lang**: fix for error occuring when a field holds Data that is not a constr type when compiler traces are on.  @Microproofs
+- **aiken-lang**: fix compiler wrongly requiring MillerLoopResult to be 'serialisable' when manipulated as a top-level value. @KtorZ
 
-### Changed 
-- **aiken-lang**: **MAJOR CHANGE** 2-tuples are now treated the same as 3+ tuples. To replace the representation of pairs at the uplc level, we now have a new Prelude type called Pair with 2 generic arguments. The main place you will see its usage is in the script context. For existing contracts you can continue to use 2-tuples, just note the offchain representation is an array of 2 items in CBOR. @KtorZ @Microproofs
-- **aiken-lang**: Some more code gen cleanup. @Microproofs
-- **aiken-lang**: New optimization for wrapped builtins found in the stdlib. @Microproofs
+### Changed
+
+> [!WARNING]
+>
+> **BREAKING-CHANGE**
+>
+> 2-tuples `(a, b)` are now treated the same as 3+ tuples -- which directly impacts the way that Aiken now deserialise those, especially when nested inside a `List`.
+>
+> To deserialize into a list of 2-tuple (`List<(a, b)>`), one is now expected to provide a CBOR array of arrays (of 2 elements). Previously, this would require to provide a CBOR map! The downside of the latter is that CBOR serialization libraries do not necessarily preserve the order of keys in a map which could cause issues down the line, in particular with Aiken's dictionnaries.
+>
+>
+> To recover the old behavior when desired, Aiken introduces a new type `Pair<a, b>` to the language. So any existing program can be migrated by switching any occurences of `(a, b)` to `Pair<a, b>`.
+>
+> However, it is often preferable to use 2-tuples where possible. The main place you will see usage of `Pair` is in the script context because its form is imposed by the ledger.
+
+- **aiken-lang**: altered internal representation of 2-tuples to distinguish them from pairs. @KtorZ @Microproofs
+- **aiken-lang**: some more code gen cleanup. @Microproofs
+- **aiken-lang**: new optimization for wrapped builtins found in the stdlib. @Microproofs
 
 
 ## v1.0.26-alpha - 2024-03-25

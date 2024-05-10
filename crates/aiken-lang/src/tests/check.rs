@@ -208,6 +208,53 @@ fn illegal_inhabitants_returned() {
 }
 
 #[test]
+fn not_illegal_top_level_unserialisable() {
+    let source_code = r#"
+        fn foo() -> MillerLoopResult {
+            todo
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn illegal_unserialisable_in_generic_fn() {
+    let source_code = r#"
+        type Foo<a> {
+            foo: a
+        }
+
+        fn main() -> Foo<fn(Int) -> Bool> {
+            todo
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::IllegalTypeInData { .. }))
+    ))
+}
+
+#[test]
+fn illegal_unserialisable_in_generic_miller_loop() {
+    let source_code = r#"
+        type Foo<a> {
+            foo: a
+        }
+
+        fn main() -> Foo<MillerLoopResult> {
+            todo
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::IllegalTypeInData { .. }))
+    ))
+}
+
+#[test]
 fn mark_constructors_as_used_via_field_access() {
     let source_code = r#"
       type Datum {

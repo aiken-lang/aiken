@@ -2563,7 +2563,7 @@ fn assert_assignment(expr: TypedExpr) -> Result<TypedExpr, Error> {
     Ok(expr)
 }
 
-pub fn ensure_serialisable(allow_fn: bool, t: Rc<Type>, location: Span) -> Result<(), Error> {
+pub fn ensure_serialisable(is_top_level: bool, t: Rc<Type>, location: Span) -> Result<(), Error> {
     match t.deref() {
         Type::App {
             args,
@@ -2573,7 +2573,7 @@ pub fn ensure_serialisable(allow_fn: bool, t: Rc<Type>, location: Span) -> Resul
             contains_opaque: _,
             alias: _,
         } => {
-            if t.is_ml_result() {
+            if !is_top_level && t.is_ml_result() {
                 return Err(Error::IllegalTypeInData {
                     tipo: t.clone(),
                     location,
@@ -2601,7 +2601,7 @@ pub fn ensure_serialisable(allow_fn: bool, t: Rc<Type>, location: Span) -> Resul
             ret,
             alias: _,
         } => {
-            if !allow_fn {
+            if !is_top_level {
                 return Err(Error::IllegalTypeInData {
                     tipo: t.clone(),
                     location,
@@ -2609,21 +2609,22 @@ pub fn ensure_serialisable(allow_fn: bool, t: Rc<Type>, location: Span) -> Resul
             }
 
             args.iter()
-                .map(|e| ensure_serialisable(allow_fn, e.clone(), location))
+                .map(|e| ensure_serialisable(true, e.clone(), location))
                 .collect::<Result<Vec<_>, _>>()?;
 
-            ensure_serialisable(allow_fn, ret.clone(), location)
+            ensure_serialisable(true, ret.clone(), location)
         }
 
         Type::Var { tipo, alias } => match tipo.borrow().deref() {
             TypeVar::Unbound { .. } => Ok(()),
             TypeVar::Generic { .. } => Ok(()),
             TypeVar::Link { tipo } => ensure_serialisable(
-                allow_fn,
+                is_top_level,
                 Type::with_alias(tipo.clone(), alias.clone()),
                 location,
             ),
         },
+
         Type::Pair { fst, snd, .. } => {
             ensure_serialisable(false, fst.clone(), location)?;
             ensure_serialisable(false, snd.clone(), location)
