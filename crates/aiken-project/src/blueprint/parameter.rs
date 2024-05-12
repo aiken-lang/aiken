@@ -192,6 +192,50 @@ fn validate_data(
             Ok(())
         }
 
+        Data::Pair(fst, snd) => {
+            let fst = fst
+                .schema(definitions)
+                .ok_or_else(|| Error::UnresolvedSchemaReference {
+                    reference: fst.reference().unwrap().clone(),
+                })?;
+
+            let snd = snd
+                .schema(definitions)
+                .ok_or_else(|| Error::UnresolvedSchemaReference {
+                    reference: snd.reference().unwrap().clone(),
+                })?;
+
+            let terms = expect_data_list(term)?;
+
+            if terms.len() != 2 {
+                mismatch(
+                    term,
+                    Schema::Pair(
+                        Declaration::Inline(Box::new(Schema::Data(fst.clone()))),
+                        Declaration::Inline(Box::new(Schema::Data(snd.clone()))),
+                    ),
+                );
+            }
+
+            for item in terms.into_iter().enumerate() {
+                if item.0 == 0 {
+                    validate_data(fst, definitions, &item.1)?;
+                } else if item.0 == 1 {
+                    validate_data(snd, definitions, &item.1)?;
+                } else {
+                    mismatch(
+                        term,
+                        Schema::Pair(
+                            Declaration::Inline(Box::new(Schema::Data(fst.clone()))),
+                            Declaration::Inline(Box::new(Schema::Data(snd.clone()))),
+                        ),
+                    );
+                }
+            }
+
+            Ok(())
+        }
+
         Data::Map(keys, values) => {
             let terms = expect_data_map(term)?;
 

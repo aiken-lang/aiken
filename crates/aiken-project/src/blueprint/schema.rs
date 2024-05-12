@@ -92,6 +92,7 @@ pub enum Data {
     Integer,
     Bytes,
     List(Items<Data>),
+    Pair(Declaration<Data>, Declaration<Data>),
     Map(Declaration<Data>, Declaration<Data>),
     AnyOf(Vec<Annotated<Constructor>>),
     Opaque,
@@ -297,18 +298,11 @@ impl Annotated<Schema> {
                             // make all types abide by this convention.
                             let data = match definitions.try_lookup(&generic).cloned() {
                                 Some(Annotated {
-                                    annotated: Schema::Data(Data::List(Items::Many(xs))),
+                                    annotated: Schema::Data(Data::Pair(left, right)),
                                     ..
-                                }) if xs.len() == 2 => {
+                                }) => {
                                     definitions.remove(&generic);
-                                    Data::Map(
-                                        xs.first()
-                                            .expect("length (== 2) checked in pattern clause")
-                                            .to_owned(),
-                                        xs.last()
-                                            .expect("length (== 2) checked in pattern clause")
-                                            .to_owned(),
-                                    )
+                                    Data::Map(left, right)
                                 }
 
                                 _ => Data::List(Items::One(Declaration::Referenced(generic))),
@@ -384,7 +378,20 @@ impl Annotated<Schema> {
                 }
             },
             Type::Fn { .. } => unreachable!(),
-            Type::Pair { .. } => unreachable!(),
+            Type::Pair { fst, snd, .. } => {
+                definitions.register(type_info, &type_parameters.clone(), |definitions| {
+                    let fst = Annotated::do_from_type(fst, modules, type_parameters, definitions)
+                        .map(Declaration::Referenced)?;
+                    let snd = Annotated::do_from_type(snd, modules, type_parameters, definitions)
+                        .map(Declaration::Referenced)?;
+
+                    Ok(Annotated {
+                        title: Some("Pair".to_owned()),
+                        description: None,
+                        annotated: Schema::Data(Data::Pair(fst, snd)),
+                    })
+                })
+            }
         }
     }
 }
@@ -789,6 +796,12 @@ impl Serialize for Data {
                 let mut s = serializer.serialize_struct("List", 2)?;
                 s.serialize_field("dataType", "list")?;
                 s.serialize_field("items", &items)?;
+                s.end()
+            }
+            Data::Pair(left, right) => {
+                let mut s = serializer.serialize_struct("Pair", 2)?;
+                s.serialize_field("dataType", "list")?;
+                s.serialize_field("items", &[left, right])?;
                 s.end()
             }
             Data::Map(keys, values) => {
