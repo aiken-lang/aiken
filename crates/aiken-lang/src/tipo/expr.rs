@@ -624,6 +624,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
                 self.unify(left.tipo(), right.tipo(), right.location(), false)?;
 
+                for tipo in &[left.tipo(), right.tipo()] {
+                    ensure_serialisable(false, tipo.clone(), location)
+                        .map_err(|_| Error::IllegalComparison { location })?;
+                }
+
                 return Ok(TypedExpr::BinOp {
                     location,
                     name,

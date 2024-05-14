@@ -186,6 +186,24 @@ fn illegal_inhabitants_nested() {
 }
 
 #[test]
+fn illegal_function_comparison() {
+    let source_code = r#"
+    fn not(x: Bool) -> Bool {
+        todo
+    }
+
+    fn foo() -> Bool {
+        not == not
+    }
+    "#;
+
+    assert!(matches!(
+        dbg!(check_validator(parse(source_code))),
+        Err((_, Error::IllegalComparison { .. }))
+    ))
+}
+
+#[test]
 fn illegal_inhabitants_returned() {
     let source_code = r#"
         type Fuzzer<a> = fn(PRNG) -> (a, PRNG)

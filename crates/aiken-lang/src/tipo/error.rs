@@ -292,9 +292,22 @@ You can use '{discard}' and numbers to distinguish between similar names.
         Fuzzer = "Fuzzer".if_supports_color(Stdout, |s| s.cyan()),
     ))]
     IllegalTypeInData {
-        #[label]
+        #[label("non-serialisable inhabitants")]
         location: Span,
         tipo: Rc<Type>,
+    },
+
+    #[error("I noticed an inadequate use of '=='.\n")]
+    #[diagnostic(code("illegal::comparison"))]
+    #[diagnostic(help(
+        r#"I can compare any value that is serializable to {Data}. This excludes values that are functions, {Fuzzer} or {MillerLoopResult} for example."#,
+        Data = "Data".if_supports_color(Stdout, |s| s.cyan()),
+        Fuzzer = "Fuzzer".if_supports_color(Stdout, |s| s.cyan()),
+        MillerLoopResult = "MillerLoopResult".if_supports_color(Stdout, |s| s.cyan()),
+    ))]
+    IllegalComparison {
+        #[label("non-serialisable operands")]
+        location: Span,
     },
 
     #[error("I found a discarded expression not bound to a variable.\n")]
@@ -1033,6 +1046,7 @@ impl ExtraData for Error {
             | Error::ExtraVarInAlternativePattern { .. }
             | Error::FunctionTypeInData { .. }
             | Error::IllegalTypeInData { .. }
+            | Error::IllegalComparison { .. }
             | Error::ImplicitlyDiscardedExpression { .. }
             | Error::IncorrectFieldsArity { .. }
             | Error::IncorrectFunctionCallArity { .. }
