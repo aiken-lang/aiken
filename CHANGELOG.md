@@ -20,6 +20,7 @@
 - **aiken-lang**: fix compiler wrongly requiring MillerLoopResult to be 'serialisable' when manipulated as a top-level value. See #921. @KtorZ
 - **aiken-lang**: fix type-checker oversight regarding serialisation of generics. See #939. @KtorZ
 - **aiken-lang**: fix type-checker not raising error when comparing non-serialisable types. See #940. @KtorZ
+- **aiken-project**: show a warning when ignoring modules in lib/validator because they have an invalid name. See #916. @KtorZ
 
 ### Changed
 
@@ -39,6 +40,7 @@
 - **aiken-lang**: altered internal representation of 2-tuples to distinguish them from pairs. @KtorZ @Microproofs
 - **aiken-lang**: some more code gen cleanup. @Microproofs
 - **aiken-lang**: new optimization for wrapped builtins found in the stdlib. @Microproofs
+- **aiken-project**: slightly restyle warnings to be less noisy. @KtorZ
 
 
 ## v1.0.26-alpha - 2024-03-25

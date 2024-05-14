@@ -8,7 +8,10 @@ use aiken_lang::{
 use miette::{
     Diagnostic, EyreContext, LabeledSpan, MietteHandlerOpts, NamedSource, RgbColors, SourceCode,
 };
-use owo_colors::{OwoColorize, Stream::Stdout};
+use owo_colors::{
+    OwoColorize,
+    Stream::{Stderr, Stdout},
+};
 use std::{
     fmt::{Debug, Display},
     io,
@@ -501,9 +504,9 @@ impl Diagnostic for Error {
 
 #[derive(thiserror::Error)]
 pub enum Warning {
-    #[error("You do not have any validators to build!")]
+    #[error("{}", "You do not have any validators to build!".if_supports_color(Stderr, |s| s.yellow()))]
     NoValidators,
-    #[error("While trying to make sense of your code...")]
+    #[error("{}", "While trying to make sense of your code...".if_supports_color(Stderr, |s| s.yellow()))]
     Type {
         path: PathBuf,
         src: String,
@@ -511,15 +514,18 @@ pub enum Warning {
         #[source]
         warning: tipo::error::Warning,
     },
-    #[error("{name} is already a dependency.")]
+    #[error("{}", format!("{name} is already a dependency.").if_supports_color(Stderr, |s| s.yellow()))]
     DependencyAlreadyExists { name: PackageName },
+    #[error("{}", format!("Ignoring file with invalid module name at: {path:?}").if_supports_color(Stderr, |s| s.yellow()))]
+    InvalidModuleName { path: PathBuf },
 }
 
 impl ExtraData for Warning {
     fn extra_data(&self) -> Option<String> {
         match self {
-            Warning::NoValidators { .. } => None,
-            Warning::DependencyAlreadyExists { .. } => None,
+            Warning::NoValidators { .. }
+            | Warning::DependencyAlreadyExists { .. }
+            | Warning::InvalidModuleName { .. } => None,
             Warning::Type { warning, .. } => warning.extra_data(),
         }
     }
@@ -528,17 +534,17 @@ impl ExtraData for Warning {
 impl GetSource for Warning {
     fn path(&self) -> Option<PathBuf> {
         match self {
-            Warning::NoValidators => None,
-            Warning::Type { path, .. } => Some(path.clone()),
-            Warning::DependencyAlreadyExists { .. } => None,
+            Warning::InvalidModuleName { path } | Warning::Type { path, .. } => Some(path.clone()),
+            Warning::NoValidators | Warning::DependencyAlreadyExists { .. } => None,
         }
     }
 
     fn src(&self) -> Option<String> {
         match self {
-            Warning::NoValidators => None,
             Warning::Type { src, .. } => Some(src.clone()),
-            Warning::DependencyAlreadyExists { .. } => None,
+            Warning::NoValidators
+            | Warning::InvalidModuleName { .. }
+            | Warning::DependencyAlreadyExists { .. } => None,
         }
     }
 }
@@ -551,46 +557,32 @@ impl Diagnostic for Warning {
     fn source_code(&self) -> Option<&dyn SourceCode> {
         match self {
             Warning::Type { named, .. } => Some(named),
-            Warning::NoValidators => None,
-            Warning::DependencyAlreadyExists { .. } => None,
+            Warning::NoValidators
+            | Warning::InvalidModuleName { .. }
+            | Warning::DependencyAlreadyExists { .. } => None,
         }
     }
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
         match self {
             Warning::Type { warning, .. } => warning.labels(),
-            Warning::NoValidators => None,
-            Warning::DependencyAlreadyExists { .. } => None,
+            Warning::InvalidModuleName { .. }
+            | Warning::NoValidators
+            | Warning::DependencyAlreadyExists { .. } => None,
         }
     }
 
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
-        fn boxed<'a>(s: Box<dyn Display + 'a>) -> Box<dyn Display + 'a> {
-            Box::new(format!(
-                "      {} {}",
-                "Warning"
-                    .if_supports_color(Stdout, |s| s.yellow())
-                    .if_supports_color(Stdout, |s| s.bold()),
-                format!("{s}").if_supports_color(Stdout, |s| s.yellow())
-            ))
-        }
-
-        match self {
-            Warning::Type { warning, .. } => Some(boxed(Box::new(format!(
-                "aiken::check{}",
-                warning.code().map(|s| format!("::{s}")).unwrap_or_default()
-            )))),
-            Warning::NoValidators => Some(boxed(Box::new("aiken::check"))),
-            Warning::DependencyAlreadyExists { .. } => {
-                Some(boxed(Box::new("aiken::packages::already_exists")))
-            }
-        }
+        None
     }
 
     fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         match self {
             Warning::Type { warning, .. } => warning.help(),
             Warning::NoValidators => None,
+            Warning::InvalidModuleName { .. } => Some(Box::new(
+                "Module names are lowercase, (ascii) alpha-numeric and may contain dashes or underscores.",
+            )),
             Warning::DependencyAlreadyExists { .. } => Some(Box::new(
                 "If you need to change the version, try 'aiken packages upgrade' instead.",
             )),

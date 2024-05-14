@@ -855,19 +855,27 @@ where
     }
 
     fn aiken_files(&mut self, dir: &Path, kind: ModuleKind) -> Result<(), Error> {
-        let paths = walkdir::WalkDir::new(dir)
+        walkdir::WalkDir::new(dir)
             .follow_links(true)
             .into_iter()
             .filter_map(Result::ok)
             .filter(|e| e.file_type().is_file())
-            .map(|d| d.into_path())
-            .filter(move |d| is_aiken_path(d, dir));
+            .try_for_each(|d| {
+                let path = d.into_path();
+                let keep = is_aiken_path(&path, dir);
+                let ext = path.extension();
 
-        for path in paths {
-            self.add_module(path, dir, kind)?;
-        }
+                if !keep && ext.unwrap_or_default() == "ak" {
+                    self.warnings
+                        .push(Warning::InvalidModuleName { path: path.clone() });
+                }
 
-        Ok(())
+                if keep {
+                    self.add_module(path, dir, kind)
+                } else {
+                    Ok(())
+                }
+            })
     }
 
     fn add_module(&mut self, path: PathBuf, dir: &Path, kind: ModuleKind) -> Result<(), Error> {
