@@ -43,7 +43,7 @@ validator(token_name: ByteArray, policy_id: ByteArray) {
       mint
         |> value.from_minted_value
         |> value.tokens(policy_id)
-        |> dict.to_alist()
+        |> dict.to_list()
 
     amount == -1 && asset_name == token_name
   }
