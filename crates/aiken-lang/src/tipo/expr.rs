@@ -744,7 +744,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         };
 
         let spread = self.infer(*spread.base)?;
-        let return_type = self.instantiate(ret.clone(), &mut HashMap::new());
+        let return_type = self.instantiate(ret.clone(), &mut HashMap::new(), location)?;
 
         // Check that the spread variable unifies with the return type of the constructor
         self.unify(return_type, spread.tipo(), spread.location(), false)?;
@@ -903,7 +903,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             (module.name.clone(), constructor.clone())
         };
 
-        let tipo = self.instantiate(constructor.tipo, &mut HashMap::new());
+        let tipo = self.instantiate(constructor.tipo, &mut HashMap::new(), select_location)?;
 
         let constructor = match &constructor.variant {
             variant @ ValueConstructorVariant::ModuleFn { name, module, .. } => {
@@ -1001,9 +1001,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         let mut type_vars = HashMap::new();
 
-        let accessor_record_type = self.instantiate(accessor_record_type, &mut type_vars);
+        let accessor_record_type =
+            self.instantiate(accessor_record_type, &mut type_vars, record.location())?;
 
-        let tipo = self.instantiate(tipo, &mut type_vars);
+        let tipo = self.instantiate(tipo, &mut type_vars, record.location())?;
 
         self.unify(
             accessor_record_type,
@@ -1078,7 +1079,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let ann_typ = if let Some(ann) = annotation {
             let ann_typ = self
                 .type_from_annotation(ann)
-                .map(|t| self.instantiate(t, &mut HashMap::new()))?;
+                .map(|t| self.instantiate(t, &mut HashMap::new(), location))??;
 
             self.unify(
                 ann_typ.clone(),
@@ -2401,7 +2402,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         } = constructor;
 
         // Instantiate generic variables into unbound variables for this usage
-        let tipo = self.instantiate(tipo, &mut HashMap::new());
+        let tipo = self.instantiate(tipo, &mut HashMap::new(), *location)?;
 
         Ok(ValueConstructor {
             public,
@@ -2480,8 +2481,15 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         })
     }
 
-    fn instantiate(&mut self, t: Rc<Type>, ids: &mut HashMap<u64, Rc<Type>>) -> Rc<Type> {
-        self.environment.instantiate(t, ids, &self.hydrator)
+    fn instantiate(
+        &mut self,
+        t: Rc<Type>,
+        ids: &mut HashMap<u64, Rc<Type>>,
+        location: Span,
+    ) -> Result<Rc<Type>, Error> {
+        let result = self.environment.instantiate(t, ids, &self.hydrator);
+        ensure_serialisable(true, result.clone(), location)?;
+        Ok(result)
     }
 
     pub fn new_unbound_var(&mut self) -> Rc<Type> {

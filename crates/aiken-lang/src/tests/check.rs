@@ -189,11 +189,11 @@ fn illegal_inhabitants_nested() {
 fn illegal_function_comparison() {
     let source_code = r#"
     fn not(x: Bool) -> Bool {
-        todo
+      todo
     }
 
     fn foo() -> Bool {
-        not == not
+      not == not
     }
     "#;
 
@@ -226,10 +226,30 @@ fn illegal_inhabitants_returned() {
 }
 
 #[test]
+fn illegal_generic_instantiation() {
+    let source_code = r#"
+        type Rec<t> {
+             get_t: t,
+        }
+
+
+        fn use_dict(dict: Rec<fn(Bool) -> Bool>, b: Bool) -> Bool {
+           let f = dict.get_t
+           f(b)
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::IllegalTypeInData { .. }))
+    ))
+}
+
+#[test]
 fn not_illegal_top_level_unserialisable() {
     let source_code = r#"
         fn foo() -> MillerLoopResult {
-            todo
+          todo
         }
     "#;
 
@@ -240,11 +260,11 @@ fn not_illegal_top_level_unserialisable() {
 fn illegal_unserialisable_in_generic_fn() {
     let source_code = r#"
         type Foo<a> {
-            foo: a
+          foo: a
         }
 
         fn main() -> Foo<fn(Int) -> Bool> {
-            todo
+          todo
         }
     "#;
 
@@ -258,16 +278,16 @@ fn illegal_unserialisable_in_generic_fn() {
 fn illegal_unserialisable_in_generic_miller_loop() {
     let source_code = r#"
         type Foo<a> {
-            foo: a
+          foo: a
         }
 
         fn main() -> Foo<MillerLoopResult> {
-            todo
+          todo
         }
     "#;
 
     assert!(matches!(
-        check(parse(source_code)),
+        dbg!(check(parse(source_code))),
         Err((_, Error::IllegalTypeInData { .. }))
     ))
 }

@@ -17,7 +17,9 @@
 - **aiken-lang**: fix incongruous generics after type-checking which caused [] to be treated as a list in cases where it needed to be an empty map primitive. See #922. @KtorZ
 - **aiken-lang**: fix for generic constrs being used as functions causing type mismatch errors. @Microproofs
 - **aiken-lang**: fix for error occuring when a field holds Data that is not a constr type when compiler traces are on.  @Microproofs
-- **aiken-lang**: fix compiler wrongly requiring MillerLoopResult to be 'serialisable' when manipulated as a top-level value. @KtorZ
+- **aiken-lang**: fix compiler wrongly requiring MillerLoopResult to be 'serialisable' when manipulated as a top-level value. See #921. @KtorZ
+- **aiken-lang**: fix type-checker oversight regarding serialisation of generics. See #939. @KtorZ
+- **aiken-lang**: fix type-checker not raising error when comparing non-serialisable types. See #940. @KtorZ
 
 ### Changed
 
