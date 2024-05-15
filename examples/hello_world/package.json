@@ -1,0 +1,24 @@
+{
+  "name": "hello_world",
+  "version": "1.0.0",
+  "description": "Aiken hello world tutorial",
+  "type": "module",
+  "scripts": {
+    "generate": "tsx src/generate-credentials.ts",
+    "lock": "tsx src/hello_world-lock.ts",
+    "unlock": "tsx src/hello_world-unlock.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@tsconfig/node20": "^20.1.4",
+    "@types/node": "^20.12.12",
+    "tsx": "^4.10.2"
+  },
+  "dependencies": {
+    "@blaze-cardano/core": "^0.1.1",
+    "@blaze-cardano/sdk": "^0.0.9",
+    "@blaze-cardano/wallet": "^0.0.8"
+  }
+}
