@@ -2483,3 +2483,36 @@ fn not_indexable() {
         Err((_, Error::NotIndexable { .. }))
     ))
 }
+
+#[test]
+fn out_of_scope_access() {
+    let source_code = r#"
+        pub fn a(x: Int) {
+          b(x)
+        }
+
+        fn b(y: Int) {
+          x + y
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check_validator(parse(source_code))),
+        Err((_, Error::UnknownVariable { .. }))
+    ))
+}
+
+#[test]
+fn mutually_recursive_1() {
+    let source_code = r#"
+        pub fn foo(x) {
+            bar(x)
+        }
+
+        pub fn bar(y) {
+            foo(y)
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}

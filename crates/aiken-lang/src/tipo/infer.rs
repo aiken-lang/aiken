@@ -330,8 +330,8 @@ fn infer_definition(
                         });
                     }
 
-                    let typed_via = ExprTyper::new(environment, hydrators, lines, tracing)
-                        .infer(arg.via.clone())?;
+                    let typed_via =
+                        ExprTyper::new(environment, lines, tracing).infer(arg.via.clone())?;
 
                     let hydrator: &mut Hydrator = hydrators.get_mut(&f.name).unwrap();
 
@@ -624,8 +624,8 @@ fn infer_definition(
             value,
             tipo: _,
         }) => {
-            let typed_expr = ExprTyper::new(environment, hydrators, lines, tracing)
-                .infer_const(&annotation, *value)?;
+            let typed_expr =
+                ExprTyper::new(environment, lines, tracing).infer_const(&annotation, *value)?;
 
             let tipo = typed_expr.tipo();
 
