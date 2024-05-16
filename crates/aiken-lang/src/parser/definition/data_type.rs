@@ -1,9 +1,8 @@
-use chumsky::prelude::*;
-
 use crate::{
     ast,
     parser::{annotation, error::ParseError, token::Token, utils},
 };
+use chumsky::prelude::*;
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
     let unlabeled_constructor_type_args = annotation()
@@ -67,7 +66,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                             .into_iter()
                             .map(|mut constructor| {
                                 if constructor.sugar {
-                                    constructor.name = name.clone();
+                                    constructor.name.clone_from(&name);
                                 }
 
                                 constructor

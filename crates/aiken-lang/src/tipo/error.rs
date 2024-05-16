@@ -1150,7 +1150,7 @@ impl Error {
                 rigid_type_names: ref mut annotated_names,
                 ..
             } => {
-                *annotated_names = new_names.clone();
+                annotated_names.clone_from(new_names);
                 self
             }
             _ => self,
