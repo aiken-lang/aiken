@@ -26,7 +26,12 @@ use crate::{
     line_numbers::LineNumbers,
     tipo::{fields::FieldMap, PatternConstructor, TypeVar},
 };
-use std::{cmp::Ordering, collections::HashMap, ops::Deref, rc::Rc};
+use std::{
+    cmp::Ordering,
+    collections::{BTreeSet, HashMap},
+    ops::Deref,
+    rc::Rc,
+};
 use vec1::Vec1;
 
 pub(crate) fn infer_function(
@@ -66,33 +71,72 @@ pub(crate) fn infer_function(
         .function_types()
         .unwrap_or_else(|| panic!("Preregistered type for fn {name} was not a fn"));
 
+    let warnings = environment.warnings.clone();
+
+    // ━━━ open new scope ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    let initial_scope = environment.open_new_scope();
+
+    let arguments = arguments
+        .iter()
+        .zip(&args_types)
+        .map(|(arg_name, tipo)| arg_name.to_owned().set_type(tipo.clone()))
+        .collect();
+
+    let hydrator = hydrators
+        .remove(name)
+        .unwrap_or_else(|| panic!("Could not find hydrator for fn {name}"));
+
+    let mut expr_typer = ExprTyper::new(environment, lines, tracing);
+    expr_typer.hydrator = hydrator;
+    expr_typer.not_yet_inferred = BTreeSet::from_iter(hydrators.keys().cloned());
+
     // Infer the type using the preregistered args + return types as a starting point
-    let (tipo, arguments, body, safe_to_generalise) = environment.in_new_scope(|environment| {
-        let args = arguments
-            .iter()
-            .zip(&args_types)
-            .map(|(arg_name, tipo)| arg_name.to_owned().set_type(tipo.clone()))
-            .collect();
+    let inferred =
+        expr_typer.infer_fn_with_known_types(arguments, body.to_owned(), Some(return_type));
 
-        let hydrator = hydrators
-            .remove(name)
-            .unwrap_or_else(|| panic!("Could not find hydrator for fn {name}"));
+    // We try to always perform a deep-first inferrence. So callee are inferred before callers,
+    // since this provides better -- and necessary -- information in particular with regards to
+    // generics.
+    //
+    // In principle, the compiler requires function definitions to be processed *in order*. So if
+    // A calls B, we must have inferred B before A. This is detected during inferrence, and we
+    // raise an error about it. Here however, we backtrack from that error and infer the caller
+    // first. Then, re-attempt to infer the current function. It may takes multiple attempts, but
+    // should eventually succeed.
+    //
+    // Note that we need to close the scope before backtracking to not mess with the scope of the
+    // callee. Otherwise, identifiers present in the caller's scope may become available to the
+    // callee.
+    if let Err(Error::MustInferFirst { function, .. }) = inferred {
+        // Reset the environment & scope.
+        hydrators.insert(name.to_string(), expr_typer.hydrator);
+        environment.close_scope(initial_scope);
+        *environment.warnings = warnings;
 
-        let mut expr_typer = ExprTyper::new(environment, hydrators, lines, tracing);
+        // Backtrack and infer callee first.
+        infer_function(
+            &function,
+            environment.current_module,
+            hydrators,
+            environment,
+            lines,
+            tracing,
+        )?;
 
-        expr_typer.hydrator = hydrator;
+        // Then, try again the entire function definition.
+        return infer_function(fun, module_name, hydrators, environment, lines, tracing);
+    }
 
-        let (args, body, return_type) =
-            expr_typer.infer_fn_with_known_types(args, body.to_owned(), Some(return_type))?;
+    let (arguments, body, return_type) = inferred?;
 
-        let args_types = args.iter().map(|a| a.tipo.clone()).collect();
+    let args_types = arguments.iter().map(|a| a.tipo.clone()).collect();
 
-        let tipo = function(args_types, return_type);
+    let tipo = function(args_types, return_type);
 
-        let safe_to_generalise = !expr_typer.ungeneralised_function_used;
+    let safe_to_generalise = !expr_typer.ungeneralised_function_used;
 
-        Ok::<_, Error>((tipo, args, body, safe_to_generalise))
-    })?;
+    environment.close_scope(initial_scope);
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
     // Assert that the inferred type matches the type of any recursive call
     environment.unify(preregistered_type, tipo.clone(), *location, false)?;
@@ -147,14 +191,15 @@ pub(crate) struct ExprTyper<'a, 'b> {
 
     pub(crate) environment: &'a mut Environment<'b>,
 
-    pub(crate) hydrators: &'a mut HashMap<String, Hydrator>,
-
     // We tweak the tracing behavior during type-check. Traces are either kept or left out of the
     // typed AST depending on this setting.
     pub(crate) tracing: Tracing,
 
     // Type hydrator for creating types from annotations
     pub(crate) hydrator: Hydrator,
+
+    // A static set of remaining function names that are known but not yet inferred
+    pub(crate) not_yet_inferred: BTreeSet<String>,
 
     // We keep track of whether any ungeneralised functions have been used
     // to determine whether it is safe to generalise this expression after
@@ -165,14 +210,13 @@ pub(crate) struct ExprTyper<'a, 'b> {
 impl<'a, 'b> ExprTyper<'a, 'b> {
     pub fn new(
         environment: &'a mut Environment<'b>,
-        hydrators: &'a mut HashMap<String, Hydrator>,
         lines: &'a LineNumbers,
         tracing: Tracing,
     ) -> Self {
         Self {
             hydrator: Hydrator::new(),
+            not_yet_inferred: BTreeSet::new(),
             environment,
-            hydrators,
             tracing,
             ungeneralised_function_used: false,
             lines,
@@ -2346,15 +2390,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         // NOTE: Recursive functions should not run into this multiple time.
                         // If we have no hydrator for this function, it means that we have already
                         // encountered it.
-                        if self.hydrators.get(&fun.name).is_some() {
-                            infer_function(
-                                fun,
-                                self.environment.current_module,
-                                self.hydrators,
-                                self.environment,
-                                self.lines,
-                                self.tracing,
-                            )?;
+                        if self.not_yet_inferred.contains(&fun.name) {
+                            return Err(Error::MustInferFirst {
+                                function: fun.clone(),
+                                location: *location,
+                            });
                         }
                     }
                 }

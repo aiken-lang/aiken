@@ -3918,7 +3918,7 @@ impl<'a> CodeGenerator<'a> {
                         .map(|(_, tipo)| get_generic_variant_name(tipo))
                         .join("");
 
-                    *variant_name = variant.clone();
+                    variant_name.clone_from(&variant);
 
                     if !dependency_functions
                         .iter()

@@ -1,6 +1,6 @@
 use super::Type;
 use crate::{
-    ast::{Annotation, BinOp, CallArg, LogicalOpChainKind, Span, UntypedPattern},
+    ast::{Annotation, BinOp, CallArg, LogicalOpChainKind, Span, UntypedFunction, UntypedPattern},
     error::ExtraData,
     expr::{self, UntypedExpr},
     format::Formatter,
@@ -1028,6 +1028,12 @@ The best thing to do from here is to remove it."#))]
         #[label("unbound generic at boundary")]
         location: Span,
     },
+
+    #[error("Cannot infer caller without inferring callee first")]
+    MustInferFirst {
+        function: UntypedFunction,
+        location: Span,
+    },
 }
 
 impl ExtraData for Error {
@@ -1085,7 +1091,8 @@ impl ExtraData for Error {
             | Error::GenericLeftAtBoundary { .. }
             | Error::UnexpectedMultiPatternAssignment { .. }
             | Error::ExpectOnOpaqueType { .. }
-            | Error::ValidatorMustReturnBool { .. } => None,
+            | Error::ValidatorMustReturnBool { .. }
+            | Error::MustInferFirst { .. } => None,
 
             Error::UnknownType { name, .. }
             | Error::UnknownTypeConstructor { name, .. }
@@ -1143,7 +1150,7 @@ impl Error {
                 rigid_type_names: ref mut annotated_names,
                 ..
             } => {
-                *annotated_names = new_names.clone();
+                annotated_names.clone_from(new_names);
                 self
             }
             _ => self,
