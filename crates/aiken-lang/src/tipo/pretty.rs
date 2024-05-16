@@ -54,7 +54,7 @@ impl Printer {
         }) = typ.alias().as_deref()
         {
             if let Some(resolved_parameters) = resolve_alias(parameters, annotation, typ) {
-                return self.type_alias_doc(alias.to_string(), resolved_parameters);
+                return self.type_alias_doc(typ, alias.to_string(), resolved_parameters);
             }
         }
 
@@ -92,14 +92,27 @@ impl Printer {
         }
     }
 
-    fn type_alias_doc<'a>(&mut self, alias: String, parameters: Vec<Rc<Type>>) -> Document<'a> {
+    fn type_alias_doc<'a>(
+        &mut self,
+        typ: &Type,
+        alias: String,
+        parameters: Vec<Rc<Type>>,
+    ) -> Document<'a> {
         let doc = Document::String(alias);
 
         if !parameters.is_empty() {
             doc.append(
                 break_("", "")
                     .append(concat(Itertools::intersperse(
-                        parameters.iter().map(|t| self.print(t)),
+                        parameters.iter().map(|t| {
+                            // Avoid infinite recursion for recursive types instantiated to
+                            // themselves. For example: type Identity<t> = t
+                            if t.as_ref() == typ {
+                                self.print(typ.clone().set_alias(None).as_ref())
+                            } else {
+                                self.print(t)
+                            }
+                        }),
                         break_(",", ", "),
                     )))
                     .nest(INDENT)
@@ -645,6 +658,35 @@ mod tests {
                 })),
             },
             "Fuzzer<a>",
+        );
+        assert_string!(
+            Rc::new(Type::Fn {
+                args: vec![Rc::new(Type::App {
+                    public: true,
+                    contains_opaque: false,
+                    module: "".to_string(),
+                    name: "Bool".to_string(),
+                    args: vec![],
+                    alias: None,
+                })],
+                ret: Rc::new(Type::App {
+                    public: true,
+                    contains_opaque: false,
+                    module: "".to_string(),
+                    name: "Bool".to_string(),
+                    args: vec![],
+                    alias: None,
+                }),
+                alias: Some(Rc::new(TypeAliasAnnotation {
+                    alias: "Identity".to_string(),
+                    parameters: vec!["t".to_string()],
+                    annotation: Annotation::Var {
+                        location: Span::empty(),
+                        name: "t".to_string(),
+                    },
+                })),
+            }),
+            "Identity<fn(Bool) -> Bool>",
         );
     }
 
