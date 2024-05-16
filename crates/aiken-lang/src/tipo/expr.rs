@@ -71,6 +71,8 @@ pub(crate) fn infer_function(
         .function_types()
         .unwrap_or_else(|| panic!("Preregistered type for fn {name} was not a fn"));
 
+    let warnings = environment.warnings.clone();
+
     // ━━━ open new scope ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
     let initial_scope = environment.open_new_scope();
 
@@ -106,10 +108,12 @@ pub(crate) fn infer_function(
     // callee. Otherwise, identifiers present in the caller's scope may become available to the
     // callee.
     if let Err(Error::MustInferFirst { function, .. }) = inferred {
+        // Reset the environment & scope.
         hydrators.insert(name.to_string(), expr_typer.hydrator);
-
         environment.close_scope(initial_scope);
+        *environment.warnings = warnings;
 
+        // Backtrack and infer callee first.
         infer_function(
             &function,
             environment.current_module,
@@ -119,6 +123,7 @@ pub(crate) fn infer_function(
             tracing,
         )?;
 
+        // Then, try again the entire function definition.
         return infer_function(fun, module_name, hydrators, environment, lines, tracing);
     }
 
