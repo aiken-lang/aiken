@@ -88,7 +88,7 @@ pub(crate) fn infer_function(
 
     let mut expr_typer = ExprTyper::new(environment, lines, tracing);
     expr_typer.hydrator = hydrator;
-    expr_typer.unseen = BTreeSet::from_iter(hydrators.keys().cloned());
+    expr_typer.not_yet_inferred = BTreeSet::from_iter(hydrators.keys().cloned());
 
     // Infer the type using the preregistered args + return types as a starting point
     let inferred =
@@ -199,7 +199,7 @@ pub(crate) struct ExprTyper<'a, 'b> {
     pub(crate) hydrator: Hydrator,
 
     // A static set of remaining function names that are known but not yet inferred
-    pub(crate) unseen: BTreeSet<String>,
+    pub(crate) not_yet_inferred: BTreeSet<String>,
 
     // We keep track of whether any ungeneralised functions have been used
     // to determine whether it is safe to generalise this expression after
@@ -215,7 +215,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     ) -> Self {
         Self {
             hydrator: Hydrator::new(),
-            unseen: BTreeSet::new(),
+            not_yet_inferred: BTreeSet::new(),
             environment,
             tracing,
             ungeneralised_function_used: false,
@@ -2390,7 +2390,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         // NOTE: Recursive functions should not run into this multiple time.
                         // If we have no hydrator for this function, it means that we have already
                         // encountered it.
-                        if self.unseen.contains(&fun.name) {
+                        if self.not_yet_inferred.contains(&fun.name) {
                             return Err(Error::MustInferFirst {
                                 function: fun.clone(),
                                 location: *location,
