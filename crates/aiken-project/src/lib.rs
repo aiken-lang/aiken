@@ -142,7 +142,7 @@ where
 
     pub fn new_generator(&'_ self, tracing: Tracing) -> CodeGenerator<'_> {
         CodeGenerator::new(
-            self.config.plutus_version,
+            self.config.plutus,
             utils::indexmap::as_ref_values(&self.functions),
             utils::indexmap::as_ref_values(&self.data_types),
             utils::indexmap::as_str_ref_values(&self.module_types),
@@ -437,7 +437,7 @@ where
                 Ok(validator.program.address(
                     network,
                     delegation_part.to_owned(),
-                    &self.config.plutus_version.into(),
+                    &self.config.plutus.into(),
                 ))
             }
         })
@@ -466,7 +466,7 @@ where
             } else {
                 let cbor = validator.program.to_cbor().unwrap();
 
-                let validator_hash = match self.config.plutus_version {
+                let validator_hash = match self.config.plutus {
                     PlutusVersion::V1 => cardano::PlutusV1Script(cbor.into()).compute_hash(),
                     PlutusVersion::V2 => cardano::PlutusV2Script(cbor.into()).compute_hash(),
                     PlutusVersion::V3 => cardano::PlutusV3Script(cbor.into()).compute_hash(),
@@ -853,7 +853,7 @@ where
 
         let data_types = utils::indexmap::as_ref_values(&self.data_types);
 
-        let plutus_version = &self.config.plutus_version;
+        let plutus_version = &self.config.plutus;
 
         tests
             .into_par_iter()

@@ -72,7 +72,7 @@ pub fn exec(
     let opt_config = Config::load(&project_path).ok();
 
     let cardano_cli_type = opt_config
-        .map(|config| config.plutus_version)
+        .map(|config| config.plutus)
         .unwrap_or_default()
         .cardano_cli_type();
 

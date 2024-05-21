@@ -12,7 +12,7 @@ pub use aiken_lang::plutus_version::PlutusVersion;
 pub struct Config {
     pub name: PackageName,
     pub version: String,
-    pub plutus_version: PlutusVersion,
+    pub plutus: PlutusVersion,
     pub license: Option<String>,
     #[serde(default)]
     pub description: String,
@@ -58,7 +58,7 @@ impl Config {
         Config {
             name: name.clone(),
             version: "0.0.0".to_string(),
-            plutus_version: PlutusVersion::default(),
+            plutus: PlutusVersion::default(),
             license: Some("Apache-2.0".to_string()),
             description: format!("Aiken contracts for project '{name}'"),
             repository: Some(Repository {

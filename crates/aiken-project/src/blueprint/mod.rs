@@ -144,7 +144,7 @@ impl From<&Config> for Preamble {
                 name: "Aiken".to_string(),
                 version: config::compiler_version(true),
             }),
-            plutus_version: config.plutus_version,
+            plutus_version: config.plutus,
             version: config.version.clone(),
             license: config.license.clone(),
         }
