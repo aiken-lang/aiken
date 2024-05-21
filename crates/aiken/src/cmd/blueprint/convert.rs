@@ -5,6 +5,7 @@ use std::{env, fs::File, io::BufReader, path::PathBuf, process};
 
 use aiken_project::{
     blueprint::{error::Error as BlueprintError, Blueprint},
+    config::Config,
     error::Error as ProjectError,
 };
 

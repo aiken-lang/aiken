@@ -4,6 +4,7 @@ use aiken_lang::{
     expr::{TypedExpr, UntypedExpr},
     format::Formatter,
     gen_uplc::CodeGenerator,
+    plutus_version::PlutusVersion,
     tipo::{convert_opaque_type, Type},
 };
 use cryptoxide::{blake2b::Blake2b, digest::Digest};
@@ -171,10 +172,10 @@ pub struct UnitTest {
 unsafe impl Send for UnitTest {}
 
 impl UnitTest {
-    pub fn run<T>(self) -> TestResult<(Constant, Rc<Type>), T> {
+    pub fn run<T>(self, plutus_version: &PlutusVersion) -> TestResult<(Constant, Rc<Type>), T> {
         let mut eval_result = Program::<NamedDeBruijn>::try_from(self.program.clone())
             .unwrap()
-            .eval(ExBudget::max());
+            .eval_version(ExBudget::max(), &plutus_version.into());
 
         let success = !eval_result.failed(self.can_error);
 
@@ -226,31 +227,40 @@ impl PropertyTest {
 
     /// Run a property test from a given seed. The property is run at most DEFAULT_MAX_SUCCESS times. It
     /// may stops earlier on failure; in which case a 'counterexample' is returned.
-    pub fn run<U>(self, seed: u32, n: usize) -> TestResult<U, PlutusData> {
+    pub fn run<U>(
+        self,
+        seed: u32,
+        n: usize,
+        plutus_version: &PlutusVersion,
+    ) -> TestResult<U, PlutusData> {
         let mut labels = BTreeMap::new();
         let mut remaining = n;
 
-        let (traces, counterexample, iterations) =
-            match self.run_n_times(&mut remaining, Prng::from_seed(seed), &mut labels) {
-                Ok(None) => (Vec::new(), Ok(None), n),
-                Ok(Some(counterexample)) => (
-                    self.eval(&counterexample.value)
-                        .logs()
-                        .into_iter()
-                        .filter(|s| PropertyTest::extract_label(s).is_none())
-                        .collect(),
-                    Ok(Some(counterexample.value)),
-                    n - remaining + 1,
-                ),
-                Err(FuzzerError { traces, uplc_error }) => (
-                    traces
-                        .into_iter()
-                        .filter(|s| PropertyTest::extract_label(s).is_none())
-                        .collect(),
-                    Err(uplc_error),
-                    0,
-                ),
-            };
+        let (traces, counterexample, iterations) = match self.run_n_times(
+            &mut remaining,
+            Prng::from_seed(seed),
+            &mut labels,
+            plutus_version,
+        ) {
+            Ok(None) => (Vec::new(), Ok(None), n),
+            Ok(Some(counterexample)) => (
+                self.eval(&counterexample.value, plutus_version)
+                    .logs()
+                    .into_iter()
+                    .filter(|s| PropertyTest::extract_label(s).is_none())
+                    .collect(),
+                Ok(Some(counterexample.value)),
+                n - remaining + 1,
+            ),
+            Err(FuzzerError { traces, uplc_error }) => (
+                traces
+                    .into_iter()
+                    .filter(|s| PropertyTest::extract_label(s).is_none())
+                    .collect(),
+                Err(uplc_error),
+                0,
+            ),
+        };
 
         TestResult::PropertyTestResult(PropertyTestResult {
             test: self,
@@ -266,28 +276,30 @@ impl PropertyTest {
         remaining: &mut usize,
         initial_prng: Prng,
         labels: &mut BTreeMap<String, usize>,
+        plutus_version: &'a PlutusVersion,
     ) -> Result<Option<Counterexample<'a>>, FuzzerError> {
         let mut prng = initial_prng;
         let mut counterexample = None;
 
         while *remaining > 0 && counterexample.is_none() {
-            (prng, counterexample) = self.run_once(prng, labels)?;
+            (prng, counterexample) = self.run_once(prng, labels, plutus_version)?;
             *remaining -= 1;
         }
 
         Ok(counterexample)
     }
 
-    fn run_once(
-        &self,
+    fn run_once<'a>(
+        &'a self,
         prng: Prng,
         labels: &mut BTreeMap<String, usize>,
-    ) -> Result<(Prng, Option<Counterexample<'_>>), FuzzerError> {
+        plutus_version: &'a PlutusVersion,
+    ) -> Result<(Prng, Option<Counterexample<'a>>), FuzzerError> {
         let (next_prng, value) = prng
             .sample(&self.fuzzer.program)?
             .expect("A seeded PRNG returned 'None' which indicates a fuzzer is ill-formed and implemented wrongly; please contact library's authors.");
 
-        let mut result = self.eval(&value);
+        let mut result = self.eval(&value, plutus_version);
 
         for s in result.logs() {
             // NOTE: There may be other log outputs that interefere with labels. So *by
@@ -313,7 +325,7 @@ impl PropertyTest {
                         Err(..) => Status::Invalid,
                         Ok(None) => Status::Invalid,
                         Ok(Some((_, value))) => {
-                            let result = self.eval(&value);
+                            let result = self.eval(&value, plutus_version);
 
                             let is_failure = result.failed(self.can_error);
 
@@ -341,12 +353,12 @@ impl PropertyTest {
         }
     }
 
-    pub fn eval(&self, value: &PlutusData) -> EvalResult {
+    pub fn eval(&self, value: &PlutusData, plutus_version: &PlutusVersion) -> EvalResult {
         let program = self.program.apply_data(value.clone());
 
         Program::<NamedDeBruijn>::try_from(program)
             .unwrap()
-            .eval(ExBudget::max())
+            .eval_version(ExBudget::max(), &plutus_version.into())
     }
 
     fn extract_label(s: &str) -> Option<String> {
@@ -1255,8 +1267,8 @@ mod test {
         builtins,
         format::Formatter,
         line_numbers::LineNumbers,
-        parser,
-        parser::extra::ModuleExtra,
+        parser::{self, extra::ModuleExtra},
+        plutus_version::PlutusVersion,
         IdGenerator,
     };
     use indoc::indoc;
@@ -1323,6 +1335,7 @@ mod test {
             );
 
             let mut generator = CodeGenerator::new(
+                PlutusVersion::default(),
                 utils::indexmap::as_ref_values(&functions),
                 utils::indexmap::as_ref_values(&data_types),
                 utils::indexmap::as_str_ref_values(&module_types),
@@ -1454,10 +1467,15 @@ mod test {
     }
 
     impl PropertyTest {
-        fn expect_failure(&self) -> Counterexample {
+        fn expect_failure<'a>(&'a self, plutus_version: &'a PlutusVersion) -> Counterexample<'a> {
             let mut labels = BTreeMap::new();
             let mut remaining = PropertyTest::DEFAULT_MAX_SUCCESS;
-            match self.run_n_times(&mut remaining, Prng::from_seed(42), &mut labels) {
+            match self.run_n_times(
+                &mut remaining,
+                Prng::from_seed(42),
+                &mut labels,
+                plutus_version,
+            ) {
                 Ok(Some(counterexample)) => counterexample,
                 _ => panic!("expected property to fail but it didn't."),
             }
@@ -1473,7 +1491,11 @@ mod test {
         "#});
 
         assert!(prop
-            .run::<()>(42, PropertyTest::DEFAULT_MAX_SUCCESS)
+            .run::<()>(
+                42,
+                PropertyTest::DEFAULT_MAX_SUCCESS,
+                &PlutusVersion::default()
+            )
             .is_success());
     }
 
@@ -1496,7 +1518,11 @@ mod test {
             }
         "#});
 
-        match prop.run::<()>(42, PropertyTest::DEFAULT_MAX_SUCCESS) {
+        match prop.run::<()>(
+            42,
+            PropertyTest::DEFAULT_MAX_SUCCESS,
+            &PlutusVersion::default(),
+        ) {
             TestResult::UnitTestResult(..) => unreachable!("property returned unit-test result ?!"),
             TestResult::PropertyTestResult(result) => {
                 assert!(
@@ -1519,7 +1545,8 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure();
+        let plutus_version = PlutusVersion::default();
+        let mut counterexample = prop.expect_failure(&plutus_version);
 
         counterexample.simplify();
 
@@ -1546,7 +1573,8 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure();
+        let plutus_version = PlutusVersion::default();
+        let mut counterexample = prop.expect_failure(&plutus_version);
 
         counterexample.simplify();
 
@@ -1562,7 +1590,8 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure();
+        let plutus_version = PlutusVersion::default();
+        let mut counterexample = prop.expect_failure(&plutus_version);
 
         counterexample.simplify();
 
@@ -1589,7 +1618,8 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure();
+        let plutus_version = PlutusVersion::default();
+        let mut counterexample = prop.expect_failure(&plutus_version);
 
         counterexample.simplify();
 
@@ -1616,7 +1646,8 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure();
+        let plutus_version = PlutusVersion::default();
+        let mut counterexample = prop.expect_failure(&plutus_version);
 
         counterexample.simplify();
 
@@ -1646,7 +1677,8 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure();
+        let plutus_version = PlutusVersion::default();
+        let mut counterexample = prop.expect_failure(&plutus_version);
 
         counterexample.simplify();
 
@@ -1680,7 +1712,9 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure();
+        let plutus_version = PlutusVersion::default();
+
+        let mut counterexample = prop.expect_failure(&plutus_version);
 
         counterexample.simplify();
 
@@ -1714,7 +1748,8 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure();
+        let plutus_version = PlutusVersion::default();
+        let mut counterexample = prop.expect_failure(&plutus_version);
 
         counterexample.simplify();
 
@@ -1748,7 +1783,8 @@ mod test {
             }
         "#});
 
-        let mut counterexample = prop.expect_failure();
+        let plutus_version = PlutusVersion::default();
+        let mut counterexample = prop.expect_failure(&plutus_version);
 
         counterexample.simplify();
 

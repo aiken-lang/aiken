@@ -29,6 +29,7 @@ use crate::{
         },
     },
     line_numbers::LineNumbers,
+    plutus_version::PlutusVersion,
     tipo::{
         check_replaceable_opaque_type, convert_opaque_type, find_and_replace_generics,
         get_arg_type_name, get_generic_id_and_type, lookup_data_type_by_tipo,
@@ -51,6 +52,8 @@ use uplc::{
 
 #[derive(Clone)]
 pub struct CodeGenerator<'a> {
+    #[allow(dead_code)]
+    plutus_version: PlutusVersion,
     /// immutable index maps
     functions: IndexMap<&'a FunctionAccessKey, &'a TypedFunction>,
     data_types: IndexMap<&'a DataTypeKey, &'a TypedDataType>,
@@ -75,6 +78,7 @@ impl<'a> CodeGenerator<'a> {
     }
 
     pub fn new(
+        plutus_version: PlutusVersion,
         functions: IndexMap<&'a FunctionAccessKey, &'a TypedFunction>,
         data_types: IndexMap<&'a DataTypeKey, &'a TypedDataType>,
         module_types: IndexMap<&'a str, &'a TypeInfo>,
@@ -82,6 +86,7 @@ impl<'a> CodeGenerator<'a> {
         tracing: Tracing,
     ) -> Self {
         CodeGenerator {
+            plutus_version,
             functions,
             data_types,
             module_types,

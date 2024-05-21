@@ -11,7 +11,7 @@ pub mod value;
 
 use cost_model::{ExBudget, StepKind};
 pub use error::Error;
-use pallas::ledger::primitives::babbage::Language;
+use pallas::ledger::primitives::conway::Language;
 
 use self::{
     cost_model::CostModel,

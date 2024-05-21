@@ -15,7 +15,7 @@ use pallas::ledger::{
     addresses::{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart},
     primitives::{
         alonzo::{self, Constr, PlutusData},
-        babbage::{self, Language},
+        conway::{self, Language},
     },
     traverse::ComputeHash,
 };
@@ -118,7 +118,7 @@ impl Serialize for Program<DeBruijn> {
         let cbor = self.to_cbor().unwrap();
         let mut s = serializer.serialize_struct("Program<DeBruijn>", 2)?;
         s.serialize_field("compiledCode", &hex::encode(&cbor))?;
-        s.serialize_field("hash", &babbage::PlutusV2Script(cbor.into()).compute_hash())?;
+        s.serialize_field("hash", &conway::PlutusV2Script(cbor.into()).compute_hash())?;
         s.end()
     }
 }
@@ -749,14 +749,9 @@ impl Program<NamedDeBruijn> {
         EvalResult::new(term, machine.ex_budget, initial_budget, machine.logs)
     }
 
-    /// Evaluate a Program as PlutusV1
-    pub fn eval_version(self, version: &Language) -> EvalResult {
-        let mut machine = Machine::new(
-            version.clone(),
-            CostModel::default(),
-            ExBudget::default(),
-            200,
-        );
+    /// Evaluate a Program as a specific PlutusVersion
+    pub fn eval_version(self, initial_budget: ExBudget, version: &Language) -> EvalResult {
+        let mut machine = Machine::new(version.clone(), CostModel::default(), initial_budget, 200);
 
         let term = machine.run(self.term);
 

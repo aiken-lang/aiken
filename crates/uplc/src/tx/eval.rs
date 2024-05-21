@@ -9,14 +9,16 @@ use pallas::{
     ledger::{
         addresses::{Address, ScriptHash, StakePayload},
         primitives::babbage::{
-            Certificate, CostMdls, DatumHash, DatumOption, ExUnits, Language, Mint, MintedTx,
-            NativeScript, PlutusV1Script, PlutusV2Script, PolicyId, PseudoScript, Redeemer,
-            RedeemerTag, RewardAccount, StakeCredential, TransactionInput, TransactionOutput,
-            Value, Withdrawals,
+            Certificate, CostMdls, DatumHash, DatumOption, ExUnits, Mint, MintedTx, NativeScript,
+            PlutusV1Script, PlutusV2Script, PolicyId, PseudoScript, Redeemer, RedeemerTag,
+            RewardAccount, StakeCredential, TransactionInput, TransactionOutput, Value,
+            Withdrawals,
         },
         traverse::{ComputeHash, OriginalHash},
     },
 };
+
+use pallas::ledger::primitives::conway::Language;
 
 use std::{cmp::Ordering, collections::HashMap, convert::TryInto, ops::Deref, vec};
 
@@ -761,7 +763,7 @@ pub fn eval_redeemer(
 
                         program.eval_as(&Language::PlutusV1, costs, Some(initial_budget))
                     } else {
-                        program.eval_version(&Language::PlutusV1)
+                        program.eval_version(ExBudget::default(), &Language::PlutusV1)
                     };
 
                     let cost = eval_result.cost();
@@ -861,7 +863,7 @@ pub fn eval_redeemer(
 
                         program.eval_as(&Language::PlutusV1, costs, Some(initial_budget))
                     } else {
-                        program.eval_version(&Language::PlutusV1)
+                        program.eval_version(ExBudget::default(), &Language::PlutusV1)
                     };
 
                     let cost = eval_result.cost();

@@ -12,6 +12,7 @@ use aiken_lang::{
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
     parser,
+    plutus_version::PlutusVersion,
     tipo::TypeInfo,
     IdGenerator,
 };
@@ -60,6 +61,7 @@ impl TestProject {
 
     pub fn new_generator(&'_ self, tracing: Tracing) -> CodeGenerator<'_> {
         CodeGenerator::new(
+            PlutusVersion::default(),
             utils::indexmap::as_ref_values(&self.functions),
             utils::indexmap::as_ref_values(&self.data_types),
             utils::indexmap::as_str_ref_values(&self.module_types),

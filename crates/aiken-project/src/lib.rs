@@ -35,10 +35,11 @@ use aiken_lang::{
         DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Tracing, TypedDataType,
         TypedFunction,
     },
-    builtins::{self},
+    builtins,
     expr::UntypedExpr,
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
+    plutus_version::PlutusVersion,
     tipo::{Type, TypeInfo},
     IdGenerator,
 };
@@ -49,7 +50,7 @@ use options::{CodeGenMode, Options};
 use package_name::PackageName;
 use pallas::ledger::{
     addresses::{Address, Network, ShelleyAddress, ShelleyDelegationPart, StakePayload},
-    primitives::babbage::{self as cardano, PolicyId},
+    primitives::conway::{self as cardano, PolicyId},
     traverse::ComputeHash,
 };
 use std::{
@@ -141,6 +142,7 @@ where
 
     pub fn new_generator(&'_ self, tracing: Tracing) -> CodeGenerator<'_> {
         CodeGenerator::new(
+            self.config.plutus_version,
             utils::indexmap::as_ref_values(&self.functions),
             utils::indexmap::as_ref_values(&self.data_types),
             utils::indexmap::as_str_ref_values(&self.module_types),
@@ -422,6 +424,7 @@ where
             }
 
             let n = validator.parameters.len();
+
             if n > 0 {
                 Err(blueprint::error::Error::ParameterizedValidator { n }.into())
             } else {
@@ -460,7 +463,13 @@ where
                 Err(blueprint::error::Error::ParameterizedValidator { n }.into())
             } else {
                 let cbor = validator.program.to_cbor().unwrap();
-                let validator_hash = cardano::PlutusV2Script(cbor.into()).compute_hash();
+
+                let validator_hash = match self.config.plutus_version {
+                    PlutusVersion::V1 => cardano::PlutusV1Script(cbor.into()).compute_hash(),
+                    PlutusVersion::V2 => cardano::PlutusV2Script(cbor.into()).compute_hash(),
+                    PlutusVersion::V3 => cardano::PlutusV3Script(cbor.into()).compute_hash(),
+                };
+
                 Ok(validator_hash)
             }
         })
@@ -842,11 +851,15 @@ where
 
         let data_types = utils::indexmap::as_ref_values(&self.data_types);
 
+        let plutus_version = &self.config.plutus_version;
+
         tests
             .into_par_iter()
             .map(|test| match test {
-                Test::UnitTest(unit_test) => unit_test.run(),
-                Test::PropertyTest(property_test) => property_test.run(seed, property_max_success),
+                Test::UnitTest(unit_test) => unit_test.run(plutus_version),
+                Test::PropertyTest(property_test) => {
+                    property_test.run(seed, property_max_success, plutus_version)
+                }
             })
             .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
             .into_iter()

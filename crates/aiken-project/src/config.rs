@@ -1,13 +1,18 @@
+use std::{fmt::Display, fs, io, path::Path};
+
 use crate::{github::repo::LatestRelease, package_name::PackageName, paths, Error};
 use aiken_lang::ast::Span;
+
 use miette::NamedSource;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Display, fs, io, path::Path};
+
+pub use aiken_lang::plutus_version::PlutusVersion;
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Config {
     pub name: PackageName,
     pub version: String,
+    pub plutus_version: PlutusVersion,
     pub license: Option<String>,
     #[serde(default)]
     pub description: String,
@@ -53,6 +58,7 @@ impl Config {
         Config {
             name: name.clone(),
             version: "0.0.0".to_string(),
+            plutus_version: PlutusVersion::default(),
             license: Some("Apache-2.0".to_string()),
             description: format!("Aiken contracts for project '{name}'"),
             repository: Some(Repository {
