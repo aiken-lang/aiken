@@ -72,7 +72,7 @@ impl TestProject {
         let kind = ModuleKind::Validator;
         let name = "test_module".to_owned();
         let (mut ast, extra) = parser::module(source_code, kind).expect("Failed to parse module");
-        ast.name = name.clone();
+        ast.name.clone_from(&name);
 
         ParsedModule {
             kind,

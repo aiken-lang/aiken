@@ -105,7 +105,7 @@ impl Config {
         for existing in self.dependencies.iter_mut() {
             if existing.name == dependency.name {
                 return if and_replace {
-                    existing.version = dependency.version.clone();
+                    existing.version.clone_from(&dependency.version);
                     Some(self)
                 } else {
                     None

@@ -625,7 +625,7 @@ where
                     match aiken_lang::parser::module(&code, kind) {
                         Ok((mut ast, extra)) => {
                             // Store the name
-                            ast.name = name.clone();
+                            ast.name.clone_from(&name);
 
                             let module = ParsedModule {
                                 kind,

@@ -11,7 +11,7 @@ authors = [
   "Kasey White <kwhitemsg@gmail.com>",
   "KtorZ <matthias.benkort@gmail.com>",
 ]
-rust-version = "1.66.1"
+rust-version = "1.70.0"
 
 [package.metadata.wix]
 upgrade-guid = "288B160D-418A-4558-91B9-7C38CFD789C7"
