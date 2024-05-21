@@ -1992,6 +1992,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         is_validator_param: false,
                     };
 
+                    let pattern_is_var = pattern.is_var();
+
                     continuation.insert(
                         0,
                         UntypedExpr::Assignment {
@@ -2010,6 +2012,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                             // erase backpassing while preserving assignment kind.
                             kind: match kind {
                                 AssignmentKind::Let { .. } => AssignmentKind::let_(),
+                                AssignmentKind::Expect { .. }
+                                    if pattern_is_var && annotation.is_none() =>
+                                {
+                                    AssignmentKind::let_()
+                                }
                                 AssignmentKind::Expect { .. } => AssignmentKind::expect(),
                             },
                         },

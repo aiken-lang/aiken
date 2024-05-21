@@ -324,6 +324,29 @@ fn mark_constructors_as_used_via_field_access() {
 }
 
 #[test]
+fn expect_multi_patterns() {
+    let source_code = r#"
+      fn fold(list: List<a>, initial: b, apply: fn(a, b) -> b) {
+        when list is {
+          [] -> initial
+
+          [x, ..xs] -> fold(xs, apply(x, initial), apply)
+        }
+      }
+
+      pub fn foo() {
+        expect Some(x), acc  <- fold([Some(1), None], 0)
+
+        x + acc
+      }
+    "#;
+
+    let (warnings, _) = check(parse(source_code)).unwrap();
+
+    assert_eq!(warnings.len(), 0)
+}
+
+#[test]
 fn validator_correct_form() {
     let source_code = r#"
       validator {
