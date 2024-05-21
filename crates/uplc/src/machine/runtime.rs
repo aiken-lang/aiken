@@ -52,6 +52,7 @@ impl From<&Language> for BuiltinSemantics {
         match language {
             Language::PlutusV1 => BuiltinSemantics::V1,
             Language::PlutusV2 => BuiltinSemantics::V1,
+            Language::PlutusV3 => BuiltinSemantics::V2,
         }
     }
 }
