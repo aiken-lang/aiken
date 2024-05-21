@@ -177,10 +177,19 @@ impl<'a> Deserialize<'a> for Program<DeBruijn> {
 }
 
 impl Program<DeBruijn> {
-    pub fn address(&self, network: Network, delegation: ShelleyDelegationPart) -> ShelleyAddress {
+    pub fn address(
+        &self,
+        network: Network,
+        delegation: ShelleyDelegationPart,
+        plutus_version: &Language,
+    ) -> ShelleyAddress {
         let cbor = self.to_cbor().unwrap();
 
-        let validator_hash = babbage::PlutusV2Script(cbor.into()).compute_hash();
+        let validator_hash = match plutus_version {
+            Language::PlutusV1 => conway::PlutusV1Script(cbor.into()).compute_hash(),
+            Language::PlutusV2 => conway::PlutusV2Script(cbor.into()).compute_hash(),
+            Language::PlutusV3 => conway::PlutusV3Script(cbor.into()).compute_hash(),
+        };
 
         ShelleyAddress::new(
             network,

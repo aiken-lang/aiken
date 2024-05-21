@@ -434,9 +434,11 @@ where
                     Network::Testnet
                 };
 
-                Ok(validator
-                    .program
-                    .address(network, delegation_part.to_owned()))
+                Ok(validator.program.address(
+                    network,
+                    delegation_part.to_owned(),
+                    &self.config.plutus_version.into(),
+                ))
             }
         })
     }
