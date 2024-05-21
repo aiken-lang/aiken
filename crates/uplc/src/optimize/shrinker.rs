@@ -854,7 +854,7 @@ impl Program<Name> {
     pub fn lambda_reducer(self) -> Self {
         let mut lambda_applied_ids = vec![];
 
-        self.traverse_uplc_with(true, &mut |id, term, mut arg_stack, _scope| {
+        self.traverse_uplc_with(false, &mut |id, term, mut arg_stack, _scope| {
             match term {
                 Term::Apply { function, .. } => {
                     // We are applying some arg so now we unwrap the id of the applied arg
@@ -904,7 +904,7 @@ impl Program<Name> {
     pub fn builtin_force_reducer(self) -> Self {
         let mut builtin_map = IndexMap::new();
 
-        let program = self.traverse_uplc_with(true, &mut |_id, term, _arg_stack, _scope| {
+        let program = self.traverse_uplc_with(false, &mut |_id, term, _arg_stack, _scope| {
             if let Term::Force(f) = term {
                 let f = Rc::make_mut(f);
                 match f {
@@ -964,7 +964,7 @@ impl Program<Name> {
 
     pub fn identity_reducer(self) -> Self {
         let mut identity_applied_ids = vec![];
-        self.traverse_uplc_with(true, &mut |id, term, mut arg_stack, _scope| {
+        self.traverse_uplc_with(false, &mut |id, term, mut arg_stack, _scope| {
             match term {
                 Term::Apply { function, .. } => {
                     // We are applying some arg so now we unwrap the id of the applied arg
@@ -1073,7 +1073,7 @@ impl Program<Name> {
     pub fn inline_reducer(self) -> Self {
         let mut lambda_applied_ids = vec![];
 
-        self.traverse_uplc_with(true, &mut |id, term, mut arg_stack, _scope| match term {
+        self.traverse_uplc_with(false, &mut |id, term, mut arg_stack, _scope| match term {
             Term::Apply { function, .. } => {
                 // We are applying some arg so now we unwrap the id of the applied arg
                 let id = id.unwrap();
@@ -1139,7 +1139,7 @@ impl Program<Name> {
     }
 
     pub fn force_delay_reducer(self) -> Self {
-        self.traverse_uplc_with(true, &mut |_id, term, _arg_stack, _scope| {
+        self.traverse_uplc_with(false, &mut |_id, term, _arg_stack, _scope| {
             if let Term::Force(f) = term {
                 let f = f.as_ref();
 
@@ -1151,7 +1151,7 @@ impl Program<Name> {
     }
 
     pub fn remove_no_inlines(self) -> Self {
-        self.traverse_uplc_with(true, &mut |_, term, _, _| match term {
+        self.traverse_uplc_with(false, &mut |_, term, _, _| match term {
             Term::Lambda {
                 parameter_name,
                 body,
@@ -1161,7 +1161,7 @@ impl Program<Name> {
     }
 
     pub fn inline_constr_ops(self) -> Self {
-        self.traverse_uplc_with(true, &mut |_, term, _, _| {
+        self.traverse_uplc_with(false, &mut |_, term, _, _| {
             if let Term::Apply { function, argument } = term {
                 if let Term::Var(name) = function.as_ref() {
                     if name.text == CONSTR_FIELDS_EXPOSER {
@@ -1183,7 +1183,7 @@ impl Program<Name> {
     pub fn cast_data_reducer(self) -> Self {
         let mut applied_ids = vec![];
 
-        self.traverse_uplc_with(true, &mut |id, term, mut arg_stack, _scope| {
+        self.traverse_uplc_with(false, &mut |id, term, mut arg_stack, _scope| {
             match term {
                 Term::Apply { function, .. } => {
                     // We are apply some arg so now we unwrap the id of the applied arg
@@ -1311,7 +1311,7 @@ impl Program<Name> {
     pub fn convert_arithmetic_ops(self) -> Self {
         let mut constants_to_flip = vec![];
 
-        self.traverse_uplc_with(true, &mut |id, term, arg_stack, _scope| match term {
+        self.traverse_uplc_with(false, &mut |id, term, arg_stack, _scope| match term {
             Term::Apply { argument, .. } => {
                 let id = id.unwrap();
 
