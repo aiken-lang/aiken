@@ -803,7 +803,8 @@ impl Term<Name> {
                         with,
                         inline_lambda,
                     );
-                    with(None, self, vec![], scope);
+
+                    with(None, self, args, scope);
                 }
             }
 
