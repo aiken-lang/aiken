@@ -244,7 +244,7 @@ impl DefaultFunction {
                     if let (Constant::Integer(i), Constant::ByteString(_)) =
                         (c.as_ref(), c2.as_ref())
                     {
-                        i >= &0.into() && i < &255.into()
+                        i >= &0.into() && i < &256.into()
                     } else {
                         false
                     }
@@ -2813,6 +2813,81 @@ mod tests {
                 )
                 .constr_index_exposer()
                 .constr_fields_exposer(),
+        };
+
+        compare_optimization(expected, program, |p| p.builtin_curry_reducer());
+    }
+
+    #[test]
+    fn curry_reducer_test_4() {
+        let program: Program<Name> = Program {
+            version: (1, 0, 0),
+            term: Term::bool(true)
+                .delayed_if_then_else(
+                    Term::integer(2.into()),
+                    Term::add_integer()
+                        .apply(
+                            Term::add_integer()
+                                .apply(Term::var("x"))
+                                .apply(Term::var("y")),
+                        )
+                        .apply(Term::var("z"))
+                        .lambda("z")
+                        .apply(
+                            Term::index_bytearray()
+                                .apply(Term::byte_string(vec![
+                                    1, 2, 4, 8, 16, 32, 64, 128, 255, 255,
+                                ]))
+                                .apply(Term::integer(35.into())),
+                        )
+                        .lambda("y")
+                        .apply(
+                            Term::index_bytearray()
+                                .apply(Term::byte_string(vec![
+                                    1, 2, 4, 8, 16, 32, 64, 128, 255, 255,
+                                ]))
+                                .apply(Term::integer(35.into())),
+                        ),
+                )
+                .lambda("x")
+                .apply(
+                    Term::bool(true).delayed_if_then_else(
+                        Term::integer(1.into()),
+                        Term::index_bytearray()
+                            .apply(Term::byte_string(vec![
+                                1, 2, 4, 8, 16, 32, 64, 128, 255, 255,
+                            ]))
+                            .apply(Term::integer(35.into())),
+                    ),
+                ),
+        };
+
+        let expected = Program {
+            version: (1, 0, 0),
+            term: Term::bool(true)
+                .delayed_if_then_else(
+                    Term::integer(2.into()),
+                    Term::add_integer()
+                        .apply(
+                            Term::add_integer()
+                                .apply(Term::var("x"))
+                                .apply(Term::var("y")),
+                        )
+                        .apply(Term::var("z"))
+                        .lambda("z")
+                        .apply(Term::var("good_curry").apply(Term::integer(35.into())))
+                        .lambda("y")
+                        .apply(Term::var("good_curry").apply(Term::integer(35.into()))),
+                )
+                .lambda("x")
+                .apply(Term::bool(true).delayed_if_then_else(
+                    Term::integer(1.into()),
+                    Term::var("good_curry").apply(Term::integer(35.into())),
+                ))
+                .lambda("good_curry")
+                .apply(Term::index_bytearray().apply(Term::byte_string(vec![
+                    1, 2, 4, 8, 16, 32, 64, 128, 255, 255,
+                ]))),
         };
 
         compare_optimization(expected, program, |p| p.builtin_curry_reducer());
