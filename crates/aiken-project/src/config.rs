@@ -12,6 +12,7 @@ pub use aiken_lang::plutus_version::PlutusVersion;
 pub struct Config {
     pub name: PackageName,
     pub version: String,
+    #[serde(default)]
     pub plutus: PlutusVersion,
     pub license: Option<String>,
     #[serde(default)]
