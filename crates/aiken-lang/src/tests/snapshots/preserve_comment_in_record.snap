@@ -1,0 +1,14 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n  let Output {\n    // something\n    address: own_address,\n    // value: own_value,\n    ..\n  } = own_output\n\n  own_address\n}\n"
+---
+fn foo() {
+  let Output {
+    // something
+    address: own_address,
+    // value: own_value,
+    ..
+  } = own_output
+
+  own_address
+}

@@ -1068,7 +1068,7 @@ impl<'comments> Formatter<'comments> {
         name: &'a str,
         args: &'a [CallArg<UntypedPattern>],
         module: &'a Option<String>,
-        with_spread: bool,
+        spread_location: Option<Span>,
         is_record: bool,
     ) -> Document<'a> {
         fn is_breakable(expr: &UntypedPattern) -> bool {
@@ -1086,7 +1086,7 @@ impl<'comments> Formatter<'comments> {
             None => name.to_doc(),
         };
 
-        if args.is_empty() && with_spread {
+        if args.is_empty() && spread_location.is_some() {
             if is_record {
                 name.append(" { .. }")
             // TODO: not possible
@@ -1095,11 +1095,16 @@ impl<'comments> Formatter<'comments> {
             }
         } else if args.is_empty() {
             name
-        } else if with_spread {
+        } else if let Some(spread_location) = spread_location {
+            let args = args
+                .iter()
+                .map(|a| self.pattern_call_arg(a))
+                .collect::<Vec<_>>();
+
             let wrapped_args = if is_record {
-                wrap_fields_with_spread(args.iter().map(|a| self.pattern_call_arg(a)))
+                self.wrap_fields_with_spread(args, spread_location)
             } else {
-                wrap_args_with_spread(args.iter().map(|a| self.pattern_call_arg(a)))
+                self.wrap_args_with_spread(args, spread_location)
             };
 
             name.append(wrapped_args)
@@ -1118,6 +1123,48 @@ impl<'comments> Formatter<'comments> {
                     .group(),
             }
         }
+    }
+
+    pub fn wrap_fields_with_spread<'a, I>(&mut self, args: I, spread_location: Span) -> Document<'a>
+    where
+        I: IntoIterator<Item = Document<'a>>,
+    {
+        let mut args = args.into_iter().peekable();
+        if args.peek().is_none() {
+            return "()".to_doc();
+        }
+
+        let comments = self.pop_comments(spread_location.start);
+
+        break_(" {", " { ")
+            .append(join(args, break_(",", ", ")))
+            .append(break_(",", ", "))
+            .append(commented("..".to_doc(), comments))
+            .nest(INDENT)
+            .append(break_("", " "))
+            .append("}")
+            .group()
+    }
+
+    pub fn wrap_args_with_spread<'a, I>(&mut self, args: I, spread_location: Span) -> Document<'a>
+    where
+        I: IntoIterator<Item = Document<'a>>,
+    {
+        let mut args = args.into_iter().peekable();
+        if args.peek().is_none() {
+            return "()".to_doc();
+        }
+
+        let comments = self.pop_comments(spread_location.start);
+
+        break_("(", "(")
+            .append(join(args, break_(",", ", ")))
+            .append(break_(",", ", "))
+            .append(commented("..".to_doc(), comments))
+            .nest(INDENT)
+            .append(break_(",", ""))
+            .append(")")
+            .group()
     }
 
     fn call<'a>(&mut self, fun: &'a UntypedExpr, args: &'a [CallArg<UntypedExpr>]) -> Document<'a> {
@@ -1821,26 +1868,31 @@ impl<'comments> Formatter<'comments> {
                 name,
                 arguments: args,
                 module,
-                with_spread,
+                spread_location,
                 is_record,
                 ..
-            } => self.pattern_constructor(name, args, module, *with_spread, *is_record),
+            } => self.pattern_constructor(name, args, module, *spread_location, *is_record),
         };
         commented(doc, comments)
     }
 
     fn pattern_call_arg<'a>(&mut self, arg: &'a CallArg<UntypedPattern>) -> Document<'a> {
+        let comments = self.pop_comments(arg.location.start);
+
         if let (UntypedPattern::Var { name, .. }, Some(label)) = (&arg.value, &arg.label) {
             if name == label {
                 return self.pattern(&arg.value);
             }
         }
 
-        arg.label
+        let doc = arg
+            .label
             .as_ref()
             .map(|s| s.to_doc().append(": "))
             .unwrap_or_else(nil)
-            .append(self.pattern(&arg.value))
+            .append(self.pattern(&arg.value));
+
+        commented(doc, comments)
     }
 
     pub fn clause_guard_bin_op<'a>(
@@ -2027,44 +2079,6 @@ where
         .nest(INDENT)
         .append(",")
         .append(line())
-}
-
-pub fn wrap_args_with_spread<'a, I>(args: I) -> Document<'a>
-where
-    I: IntoIterator<Item = Document<'a>>,
-{
-    let mut args = args.into_iter().peekable();
-    if args.peek().is_none() {
-        return "()".to_doc();
-    }
-
-    break_("(", "(")
-        .append(join(args, break_(",", ", ")))
-        .append(break_(",", ", "))
-        .append("..")
-        .nest(INDENT)
-        .append(break_(",", ""))
-        .append(")")
-        .group()
-}
-
-pub fn wrap_fields_with_spread<'a, I>(args: I) -> Document<'a>
-where
-    I: IntoIterator<Item = Document<'a>>,
-{
-    let mut args = args.into_iter().peekable();
-    if args.peek().is_none() {
-        return "()".to_doc();
-    }
-
-    break_(" {", " { ")
-        .append(join(args, break_(",", ", ")))
-        .append(break_(",", ", "))
-        .append("..")
-        .nest(INDENT)
-        .append(break_("", " "))
-        .append("}")
-        .group()
 }
 
 fn list<'a>(elements: Document<'a>, length: usize, tail: Option<Document<'a>>) -> Document<'a> {

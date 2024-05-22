@@ -750,6 +750,24 @@ fn format_int_uint() {
 }
 
 #[test]
+fn preserve_comment_in_record() {
+    assert_format!(
+        r#"
+        fn foo() {
+          let Output {
+            // something
+            address: own_address,
+            // value: own_value,
+            ..
+          } = own_output
+
+          own_address
+        }
+        "#
+    );
+}
+
+#[test]
 fn fail_expr() {
     assert_format!(
         r#"

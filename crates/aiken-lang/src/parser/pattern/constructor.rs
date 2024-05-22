@@ -1,7 +1,7 @@
 use chumsky::prelude::*;
 
 use crate::{
-    ast::{CallArg, UntypedPattern},
+    ast::{CallArg, Span, UntypedPattern},
     parser::{error::ParseError, token::Token},
 };
 
@@ -10,23 +10,26 @@ pub fn parser(
 ) -> impl Parser<Token, UntypedPattern, Error = ParseError> + '_ {
     select! {Token::UpName { name } => name}
         .then(args(expression))
-        .map_with_span(|(name, (arguments, with_spread, is_record)), location| {
-            UntypedPattern::Constructor {
-                is_record,
-                location,
-                name,
-                arguments,
-                module: None,
-                constructor: (),
-                with_spread,
-                tipo: (),
-            }
-        })
+        .map_with_span(
+            |(name, (arguments, spread_location, is_record)), location| {
+                UntypedPattern::Constructor {
+                    is_record,
+                    location,
+                    name,
+                    arguments,
+                    module: None,
+                    constructor: (),
+                    spread_location,
+                    tipo: (),
+                }
+            },
+        )
 }
 
 pub(crate) fn args(
     expression: Recursive<'_, Token, UntypedPattern, ParseError>,
-) -> impl Parser<Token, (Vec<CallArg<UntypedPattern>>, bool, bool), Error = ParseError> + '_ {
+) -> impl Parser<Token, (Vec<CallArg<UntypedPattern>>, Option<Span>, bool), Error = ParseError> + '_
+{
     let record_constructor_pattern_arg_parser = choice((
         select! {Token::Name {name} => name}
             .then_ignore(just(Token::Colon))
@@ -49,8 +52,9 @@ pub(crate) fn args(
     .allow_trailing()
     .then(
         just(Token::DotDot)
-            .then_ignore(just(Token::Comma).or_not())
             .ignored()
+            .map_with_span(|_spread, span| span)
+            .then_ignore(just(Token::Comma).or_not())
             .or_not(),
     )
     .delimited_by(just(Token::LeftBrace), just(Token::RightBrace));
@@ -66,8 +70,9 @@ pub(crate) fn args(
         .allow_trailing()
         .then(
             just(Token::DotDot)
-                .then_ignore(just(Token::Comma).or_not())
                 .ignored()
+                .map_with_span(|_spread, span| span)
+                .then_ignore(just(Token::Comma).or_not())
                 .or_not(),
         )
         .delimited_by(just(Token::LeftParen), just(Token::RightParen));
@@ -79,8 +84,8 @@ pub(crate) fn args(
     .or_not()
     .map(|opt_args| {
         opt_args
-            .map(|((a, b), c)| (a, b.is_some(), c))
-            .unwrap_or_else(|| (vec![], false, false))
+            .map(|((a, b), c)| (a, b, c))
+            .unwrap_or_else(|| (vec![], None, false))
     })
 }
 

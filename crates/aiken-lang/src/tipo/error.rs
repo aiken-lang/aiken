@@ -732,7 +732,7 @@ Perhaps, try the following:
         , constructor = name
             .if_supports_color(Stdout, |s| s.bright_blue())
             .if_supports_color(Stdout, |s| s.bold())
-        , suggestion = suggest_constructor_pattern(name, args, module, *with_spread)
+        , suggestion = suggest_constructor_pattern(name, args, module, *spread_location)
     ))]
     UnexpectedLabeledArgInPattern {
         #[label]
@@ -741,7 +741,7 @@ Perhaps, try the following:
         name: String,
         args: Vec<CallArg<UntypedPattern>>,
         module: Option<String>,
-        with_spread: bool,
+        spread_location: Option<Span>,
     },
 
     #[error("I discovered a regular let assignment with multiple patterns.\n")]
@@ -1210,7 +1210,7 @@ fn suggest_pattern(
         Some(format!(
             "Try instead: {}",
             Formatter::new()
-                .pattern_constructor(name, given, module, true, is_record)
+                .pattern_constructor(name, given, module, Some(Span::empty()), is_record)
                 .to_pretty_string(70),
         ))
     } else {
@@ -1239,7 +1239,7 @@ fn suggest_constructor_pattern(
     name: &str,
     args: &[CallArg<UntypedPattern>],
     module: &Option<String>,
-    with_spread: bool,
+    spread_location: Option<Span>,
 ) -> String {
     let fixed_args = args
         .iter()
@@ -1251,7 +1251,7 @@ fn suggest_constructor_pattern(
         .collect::<Vec<_>>();
 
     Formatter::new()
-        .pattern_constructor(name, &fixed_args, module, with_spread, false)
+        .pattern_constructor(name, &fixed_args, module, spread_location, false)
         .to_pretty_string(70)
 }
 

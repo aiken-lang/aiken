@@ -558,7 +558,7 @@ pub(super) fn simplify(
             arguments,
             location,
             tipo,
-            with_spread,
+            spread_location,
             constructor: super::PatternConstructor::Record { name, .. },
             ..
         } => {
@@ -589,7 +589,7 @@ pub(super) fn simplify(
                 args.push(simplify(environment, &argument.value)?);
             }
 
-            if *with_spread {
+            if spread_location.is_some() {
                 for _ in 0..(arity - arguments.len()) {
                     args.push(Pattern::Wildcard)
                 }

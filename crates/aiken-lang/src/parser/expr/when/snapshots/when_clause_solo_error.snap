@@ -19,7 +19,9 @@ When {
                     arguments: [],
                     module: None,
                     constructor: (),
-                    with_spread: true,
+                    spread_location: Some(
+                        21..23,
+                    ),
                     tipo: (),
                 },
             ],

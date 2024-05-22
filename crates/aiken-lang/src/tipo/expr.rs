@@ -2608,7 +2608,7 @@ fn assert_assignment(expr: TypedExpr) -> Result<TypedExpr, Error> {
                     },
                     arguments: vec![],
                     module: None,
-                    with_spread: false,
+                    spread_location: None,
                     tipo: void(),
                 },
                 kind: AssignmentKind::let_(),

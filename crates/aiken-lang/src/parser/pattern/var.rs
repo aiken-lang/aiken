@@ -18,7 +18,7 @@ pub fn parser(
                 .or_not(),
         )
         .map_with_span(|(name, opt_pattern), span| {
-            if let Some((c_name, (arguments, with_spread, is_record))) = opt_pattern {
+            if let Some((c_name, (arguments, spread_location, is_record))) = opt_pattern {
                 UntypedPattern::Constructor {
                     is_record,
                     location: span,
@@ -26,7 +26,7 @@ pub fn parser(
                     arguments,
                     module: Some(name),
                     constructor: (),
-                    with_spread,
+                    spread_location,
                     tipo: (),
                 }
             } else {

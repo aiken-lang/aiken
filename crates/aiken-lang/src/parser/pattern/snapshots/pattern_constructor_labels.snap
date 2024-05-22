@@ -30,6 +30,6 @@ Constructor {
     ],
     module: None,
     constructor: (),
-    with_spread: false,
+    spread_location: None,
     tipo: (),
 }

@@ -11,6 +11,6 @@ Constructor {
         "module",
     ),
     constructor: (),
-    with_spread: false,
+    spread_location: None,
     tipo: (),
 }

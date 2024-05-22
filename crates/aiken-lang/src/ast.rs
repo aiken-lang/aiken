@@ -1243,7 +1243,7 @@ pub enum Pattern<Constructor, Type> {
         arguments: Vec<CallArg<Self>>,
         module: Option<String>,
         constructor: Constructor,
-        with_spread: bool,
+        spread_location: Option<Span>,
         tipo: Type,
     },
 
@@ -1273,6 +1273,15 @@ impl<A, B> Pattern<A, B> {
         }
     }
 
+    pub fn with_spread(&self) -> bool {
+        match self {
+            Pattern::Constructor {
+                spread_location, ..
+            } => spread_location.is_some(),
+            _ => false,
+        }
+    }
+
     /// Returns `true` if the pattern is [`Discard`].
     ///
     /// [`Discard`]: Pattern::Discard
@@ -1295,7 +1304,7 @@ impl UntypedPattern {
             name: "True".to_string(),
             arguments: vec![],
             constructor: (),
-            with_spread: false,
+            spread_location: None,
             tipo: (),
             module: None,
             is_record: false,
