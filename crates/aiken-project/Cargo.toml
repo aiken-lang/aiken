@@ -48,6 +48,7 @@ cryptoxide = "0.4.4"
 vec1 = "1.10.1"
 patricia_tree = "0.8.0"
 ciborium = "0.2.2"
+semver = { version = "1.0.23", features = ["serde"] }
 
 [dev-dependencies]
 blst = "0.3.11"

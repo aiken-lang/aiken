@@ -153,6 +153,7 @@ dependencies = [
  "rayon",
  "regex",
  "reqwest",
+ "semver",
  "serde",
  "serde_json",
  "strip-ansi-escapes",
@@ -2806,6 +2807,15 @@ checksum = "41f3cc463c0ef97e11c3461a9d3787412d30e8e7eb907c79180c4a57bf7c04ef"
 dependencies = [
  "core-foundation-sys",
  "libc",
+]
+
+[[package]]
+name = "semver"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61697e0a1c7e512e84a621326239844a24d8207b4669b41bc18b32ea5cbf988b"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
