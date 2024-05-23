@@ -495,7 +495,7 @@ mod tests {
     }
 
     #[test]
-    fn list_2_tuples_as_map() {
+    fn list_2_tuples_as_list() {
         assert_validator!(
             r#"
             type Dict<key, value> {
@@ -505,7 +505,26 @@ mod tests {
             type UUID { UUID }
 
             validator {
-              fn list_2_tuples_as_map(redeemer: Dict<UUID, Int>, ctx: Void) {
+              fn list_2_tuples_as_list(redeemer: Dict<UUID, Int>, ctx: Void) {
+                True
+              }
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn list_pairs_as_map() {
+        assert_validator!(
+            r#"
+            type Dict<key, value> {
+                inner: List<Pair<ByteArray, value>>
+            }
+
+            type UUID { UUID }
+
+            validator {
+              fn list_pairs_as_map(redeemer: Dict<UUID, Int>, ctx: Void) {
                 True
               }
             }

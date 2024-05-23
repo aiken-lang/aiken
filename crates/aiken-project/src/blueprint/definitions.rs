@@ -147,7 +147,7 @@ impl Reference {
             },
             Type::Pair { fst, snd, .. } => Self {
                 inner: format!(
-                    "Pair{fst}{snd}",
+                    "Pair${fst}_{snd}",
                     fst = Self::from_type(fst, type_parameters),
                     snd = Self::from_type(snd, type_parameters)
                 ),

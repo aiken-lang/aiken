@@ -36,6 +36,18 @@ pub enum Declaration<T> {
     Inline(Box<T>),
 }
 
+impl<A> Declaration<A> {
+    pub fn map<F, B>(self, transform: F) -> Declaration<B>
+    where
+        F: FnOnce(A) -> B,
+    {
+        match self {
+            Declaration::Referenced(reference) => Declaration::Referenced(reference),
+            Declaration::Inline(inner) => Declaration::Inline(transform(*inner).into()),
+        }
+    }
+}
+
 impl<'a, T> Declaration<T> {
     pub fn reference(&'a self) -> Option<&'a Reference> {
         match self {
@@ -297,18 +309,22 @@ impl Annotated<Schema> {
                             // make all types abide by this convention.
                             let data = match definitions.try_lookup(&generic).cloned() {
                                 Some(Annotated {
-                                    annotated: Schema::Data(Data::List(Items::Many(xs))),
+                                    annotated: Schema::Pair(left, right),
                                     ..
-                                }) if xs.len() == 2 => {
+                                }) => {
                                     definitions.remove(&generic);
-                                    Data::Map(
-                                        xs.first()
-                                            .expect("length (== 2) checked in pattern clause")
-                                            .to_owned(),
-                                        xs.last()
-                                            .expect("length (== 2) checked in pattern clause")
-                                            .to_owned(),
-                                    )
+
+                                    let left = left.map(|inner| match inner {
+                                        Schema::Data(data) => data,
+                                        _ => panic!("impossible: left inhabitant of pair isn't Data but: {inner:#?}"),
+                                    });
+
+                                    let right = right.map(|inner| match inner {
+                                        Schema::Data(data) => data,
+                                        _ => panic!("impossible: right inhabitant of pair isn't Data but: {inner:#?}"),
+                                    });
+
+                                    Data::Map(left, right)
                                 }
 
                                 _ => Data::List(Items::One(Declaration::Referenced(generic))),
@@ -350,6 +366,25 @@ impl Annotated<Schema> {
                     annotated,
                 })
             }),
+
+            Type::Pair { fst, snd, .. } => {
+                definitions.register(type_info, &type_parameters.clone(), |definitions| {
+                    let left = Annotated::do_from_type(fst, modules, type_parameters, definitions)
+                        .map(Declaration::Referenced)
+                        .map_err(|e| e.backtrack(type_info))?;
+
+                    let right = Annotated::do_from_type(snd, modules, type_parameters, definitions)
+                        .map(Declaration::Referenced)
+                        .map_err(|e| e.backtrack(type_info))?;
+
+                    Ok(Annotated {
+                        title: Some("Pair".to_owned()),
+                        description: None,
+                        annotated: Schema::Pair(left, right),
+                    })
+                })
+            }
+
             Type::Tuple { elems, .. } => {
                 definitions.register(type_info, &type_parameters.clone(), |definitions| {
                     let elems = elems
@@ -368,6 +403,7 @@ impl Annotated<Schema> {
                     })
                 })
             }
+
             Type::Var { tipo, .. } => match tipo.borrow().deref() {
                 TypeVar::Link { tipo } => {
                     Annotated::do_from_type(tipo, modules, type_parameters, definitions)
@@ -383,8 +419,8 @@ impl Annotated<Schema> {
                     Err(Error::new(ErrorContext::UnboundTypeVariable, type_info))
                 }
             },
+
             Type::Fn { .. } => unreachable!(),
-            Type::Pair { .. } => unreachable!(),
         }
     }
 }
@@ -922,9 +958,6 @@ pub enum ErrorContext {
     #[error("I caught a free variable in the contract's interface boundary.")]
     FreeTypeVariable,
 
-    #[error("I had the misfortune to find an invalid type in an interface boundary.")]
-    ExpectedData,
-
     #[error("I figured you tried to export a function in your contract's binary interface.")]
     UnexpectedFunction,
 
@@ -1000,18 +1033,6 @@ If your contract doesn't need datum or redeemer, you can always give them the ty
                 type_Void = "Void"
                     .if_supports_color(Stdout, |s| s.bright_blue())
                     .if_supports_color(Stdout, |s| s.bold())
-            ),
-
-            ErrorContext::ExpectedData => format!(
-                r#"While figuring out the outward-facing specification for your contract, I found a type that cannot actually be represented as valid Untyped Plutus Core (the low-level language Cardano uses to execute smart-contracts. For example, it isn't possible to have a list or a tuple of {type_String} because the underlying execution engine doesn't allow it.
-
-There are few restrictions like this one. In this instance, here's the types I followed and that led me to this problem:
-
-╰─▶ {breadcrumbs}"#,
-                type_String = "String"
-                    .if_supports_color(Stdout, |s| s.bright_blue())
-                    .if_supports_color(Stdout, |s| s.bold()),
-                breadcrumbs = Error::fmt_breadcrumbs(&self.breadcrumbs)
             ),
 
             ErrorContext::UnexpectedFunction => format!(
