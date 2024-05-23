@@ -1,7 +1,7 @@
 [package]
 name = "aiken-project"
 description = "Aiken project utilities"
-version = "1.0.27-alpha"
+version = "1.0.28-alpha"
 edition = "2021"
 repository = "https://github.com/aiken-lang/aiken"
 homepage = "https://github.com/aiken-lang/aiken"
@@ -41,8 +41,8 @@ toml = "0.7.2"
 walkdir.workspace = true
 zip = "0.6.4"
 
-aiken-lang = { path = "../aiken-lang", version = "1.0.27-alpha" }
-uplc = { path = '../uplc', version = "1.0.27-alpha" }
+aiken-lang = { path = "../aiken-lang", version = "1.0.28-alpha" }
+uplc = { path = '../uplc', version = "1.0.28-alpha" }
 num-bigint = "0.4.4"
 cryptoxide = "0.4.4"
 vec1 = "1.10.1"
