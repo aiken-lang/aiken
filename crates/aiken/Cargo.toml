@@ -7,9 +7,9 @@ repository = "https://github.com/aiken-lang/aiken"
 homepage = "https://github.com/aiken-lang/aiken"
 license = "Apache-2.0"
 authors = [
-  "Lucas Rosa <x@rvcas.dev>",
-  "Kasey White <kwhitemsg@gmail.com>",
-  "KtorZ <matthias.benkort@gmail.com>",
+    "Lucas Rosa <x@rvcas.dev>",
+    "Kasey White <kwhitemsg@gmail.com>",
+    "KtorZ <matthias.benkort@gmail.com>",
 ]
 rust-version = "1.70.0"
 
@@ -21,10 +21,10 @@ eula = false
 
 [dependencies]
 clap = { version = "4.1.8", features = [
-  "derive",
-  "wrap_help",
-  "unicode",
-  "string",
+    "derive",
+    "wrap_help",
+    "unicode",
+    "string",
 ] }
 hex = "0.4.3"
 ignore = "0.4.20"
@@ -45,4 +45,6 @@ inquire = "0.6.2"
 num-bigint = "0.4.3"
 ordinal = "0.3.2"
 rand = "0.8.5"
+
+[target.'cfg(not(windows))'.dependencies]
 xdg = "2.5.2"

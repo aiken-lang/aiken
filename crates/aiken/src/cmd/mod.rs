@@ -4,6 +4,8 @@ use clap::Parser;
 pub mod blueprint;
 pub mod build;
 pub mod check;
+// only windows
+#[cfg(not(target_os = "windows"))]
 pub mod completion;
 pub mod docs;
 pub mod export;
@@ -45,6 +47,7 @@ pub enum Cmd {
     #[clap(subcommand)]
     Uplc(uplc::Cmd),
 
+    #[cfg(not(target_os = "windows"))]
     #[clap(subcommand)]
     Completion(completion::Cmd),
 

@@ -1,10 +1,14 @@
 use aiken_project::{config, pretty};
 use cmd::{
     blueprint::{self, address},
-    build, check, completion, docs, export, fmt, lsp, new,
+    build, check, docs, export, fmt, lsp, new,
     packages::{self, add},
     tx, uplc, Cmd,
 };
+
+#[cfg(not(target_os = "windows"))]
+use cmd::completion;
+
 use owo_colors::OwoColorize;
 
 mod cmd;
@@ -25,6 +29,7 @@ fn main() -> miette::Result<()> {
         Cmd::Lsp(args) => lsp::exec(args),
         Cmd::Tx(sub_cmd) => tx::exec(sub_cmd),
         Cmd::Uplc(sub_cmd) => uplc::exec(sub_cmd),
+        #[cfg(not(target_os = "windows"))]
         Cmd::Completion(sub_cmd) => completion::exec(sub_cmd),
         Cmd::Export(args) => export::exec(args),
     }
