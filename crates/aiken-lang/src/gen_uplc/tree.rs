@@ -964,13 +964,6 @@ impl AirTree {
             then: then.into(),
         }
     }
-    pub fn emit(msg: AirTree, tipo: Rc<Type>, then: AirTree) -> AirTree {
-        AirTree::Trace {
-            tipo,
-            msg: msg.into(),
-            then: then.into(),
-        }
-    }
     pub fn no_op(then: AirTree) -> AirTree {
         AirTree::NoOp { then: then.into() }
     }

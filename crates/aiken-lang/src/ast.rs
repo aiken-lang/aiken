@@ -205,7 +205,6 @@ fn str_to_keyword(word: &str) -> Option<Token> {
         "todo" => Some(Token::Todo),
         "type" => Some(Token::Type),
         "trace" => Some(Token::Trace),
-        "emit" => Some(Token::Emit),
         "test" => Some(Token::Test),
         // TODO: remove this in a future release
         "error" => Some(Token::Fail),
@@ -1866,7 +1865,6 @@ pub enum TraceKind {
     Trace,
     Todo,
     Error,
-    Emit,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2063,7 +2061,7 @@ pub enum Error {
     #[diagnostic(code("illegal::module_name"))]
     #[diagnostic(help(r#"You cannot use keywords as part of a module path name. As a quick reminder, here's a list of all the keywords (and thus, of invalid module path names):
 
-    as, expect, check, const, else, fn, if, is, let, opaque, pub, test, todo, trace, emit, type, use, when"#))]
+    as, expect, check, const, else, fn, if, is, let, opaque, pub, test, todo, trace, type, use, when"#))]
     KeywordInModuleName { name: String, keyword: String },
 
     #[error("I realized you used '{}' as a module name, which is reserved (and not available).\n",

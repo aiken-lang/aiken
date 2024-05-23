@@ -220,7 +220,6 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
 
     let keyword = text::ident().map(|s: String| match s.as_str() {
         "trace" => Token::Trace,
-        "emit" => Token::Emit,
         // TODO: remove this in a future release
         "error" => Token::Fail,
         "fail" => Token::Fail,

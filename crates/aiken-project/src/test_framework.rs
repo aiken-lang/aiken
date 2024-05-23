@@ -1098,7 +1098,6 @@ impl TryFrom<TypedExpr> for Assertion<TypedExpr> {
             }
 
             TypedExpr::Trace { then, .. } => (*then).try_into(),
-            TypedExpr::Emit { then, .. } => (*then).try_into(),
 
             TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
                 if let Ok(Assertion {

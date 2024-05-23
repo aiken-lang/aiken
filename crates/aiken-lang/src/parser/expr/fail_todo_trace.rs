@@ -1,5 +1,3 @@
-use chumsky::prelude::*;
-
 use crate::{
     ast::TraceKind,
     expr::UntypedExpr,
@@ -9,6 +7,7 @@ use crate::{
         token::Token,
     },
 };
+use chumsky::prelude::*;
 
 pub fn parser<'a>(
     expression: Recursive<'a, Token, UntypedExpr, ParseError>,
@@ -32,15 +31,6 @@ pub fn parser<'a>(
             .then(sequence.clone().or_not())
             .map_with_span(|(text, then_), span| UntypedExpr::Trace {
                 kind: TraceKind::Trace,
-                location: span,
-                then: Box::new(then_.unwrap_or_else(|| UntypedExpr::todo(None, span))),
-                text: Box::new(text),
-            }),
-        just(Token::Emit)
-            .ignore_then(choice((string::hybrid(), expression.clone())))
-            .then(sequence.clone().or_not())
-            .map_with_span(|(text, then_), span| UntypedExpr::Trace {
-                kind: TraceKind::Emit,
                 location: span,
                 then: Box::new(then_.unwrap_or_else(|| UntypedExpr::todo(None, span))),
                 text: Box::new(text),
@@ -138,7 +128,7 @@ mod tests {
     fn trace_expr_todo() {
         assert_expr!(
             r#"
-            trace some_var 
+            trace some_var
             "#
         );
     }

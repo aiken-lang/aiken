@@ -1037,7 +1037,6 @@ impl<'comments> Formatter<'comments> {
             TraceKind::Trace => ("trace", None),
             TraceKind::Error => ("fail", Some(DEFAULT_ERROR_STR.to_string())),
             TraceKind::Todo => ("todo", Some(DEFAULT_TODO_STR.to_string())),
-            TraceKind::Emit => ("emit", None),
         };
 
         let body = match text {
@@ -1053,7 +1052,7 @@ impl<'comments> Formatter<'comments> {
 
         match kind {
             TraceKind::Error | TraceKind::Todo => body,
-            TraceKind::Trace | TraceKind::Emit => body
+            TraceKind::Trace => body
                 .append(if self.pop_empty_lines(then.start_byte_index()) {
                     lines(2)
                 } else {

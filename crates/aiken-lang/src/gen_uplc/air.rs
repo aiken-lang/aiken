@@ -1,11 +1,10 @@
-use indexmap::IndexSet;
-use std::rc::Rc;
-use uplc::builtins::DefaultFunction;
-
 use crate::{
     ast::{BinOp, Curve, UnOp},
     tipo::{Type, ValueConstructor},
 };
+use indexmap::IndexSet;
+use std::rc::Rc;
+use uplc::builtins::DefaultFunction;
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum ExpectLevel {
@@ -219,9 +218,6 @@ pub enum Air {
         validator: bool,
     },
     Trace {
-        tipo: Rc<Type>,
-    },
-    Emit {
         tipo: Rc<Type>,
     },
     NoOp,

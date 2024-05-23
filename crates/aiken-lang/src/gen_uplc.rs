@@ -541,14 +541,6 @@ impl<'a> CodeGenerator<'a> {
                     self.build(then, module_build_name, &[]),
                 ),
 
-                TypedExpr::Emit {
-                    tipo, then, text, ..
-                } => AirTree::emit(
-                    self.build(text, module_build_name, &[]),
-                    tipo.clone(),
-                    self.build(then, module_build_name, &[]),
-                ),
-
                 TypedExpr::When {
                     tipo,
                     subject,
@@ -5625,15 +5617,6 @@ impl<'a> CodeGenerator<'a> {
                 Some(term)
             }
             Air::Trace { .. } => {
-                let text = arg_stack.pop().unwrap();
-
-                let term = arg_stack.pop().unwrap();
-
-                let term = term.delayed_trace(text);
-
-                Some(term)
-            }
-            Air::Emit { .. } => {
                 let text = arg_stack.pop().unwrap();
 
                 let term = arg_stack.pop().unwrap();
