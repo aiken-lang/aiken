@@ -1,7 +1,7 @@
 [package]
 name = "uplc"
 description = "Utilities for working with Untyped Plutus Core"
-version = "1.0.26-alpha"
+version = "1.0.27-alpha"
 edition = "2021"
 repository = "https://github.com/aiken-lang/aiken"
 homepage = "https://github.com/aiken-lang/aiken"
