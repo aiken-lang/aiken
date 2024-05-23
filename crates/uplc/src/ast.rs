@@ -764,7 +764,7 @@ impl Program<NamedDeBruijn> {
 
         let term = machine.run(self.term);
 
-        EvalResult::new(term, machine.ex_budget, ExBudget::default(), machine.logs)
+        EvalResult::new(term, machine.ex_budget, initial_budget, machine.logs)
     }
 
     pub fn eval_as(
