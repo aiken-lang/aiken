@@ -60,7 +60,7 @@ validator(creator: ByteArray) {
       mint
         |> value.from_minted_value
         |> value.tokens(policy_id)
-        |> dict.to_list()
+        |> dict.to_pairs()
 
     when rdmr is {
       Mint(total) -> {

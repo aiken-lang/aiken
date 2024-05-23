@@ -23,8 +23,8 @@ pub const BOOL: &str = "Bool";
 pub const INT: &str = "Int";
 pub const DATA: &str = "Data";
 pub const LIST: &str = "List";
-pub const ALIST: &str = "AList";
 pub const PAIR: &str = "Pair";
+pub const PAIRS: &str = "Pairs";
 pub const VOID: &str = "Void";
 pub const G1_ELEMENT: &str = "G1Element";
 pub const G2_ELEMENT: &str = "G2Element";
@@ -523,7 +523,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     let alist_key = generic_var(id_gen.next());
     let alist_value = generic_var(id_gen.next());
     prelude.types.insert(
-        ALIST.to_string(),
+        PAIRS.to_string(),
         TypeConstructor {
             location: Span::empty(),
             parameters: vec![alist_key.clone(), alist_value.clone()],
@@ -1447,7 +1447,7 @@ pub fn map(k: Rc<Type>, v: Rc<Type>) -> Rc<Type> {
         args: vec![pair(k, v)],
         alias: Some(
             TypeAliasAnnotation {
-                alias: ALIST.to_string(),
+                alias: PAIRS.to_string(),
                 parameters: vec!["k".to_string(), "v".to_string()],
                 annotation: Annotation::Constructor {
                     location: Span::empty(),

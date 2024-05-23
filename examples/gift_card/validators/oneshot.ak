@@ -20,7 +20,7 @@ validator(token_name: ByteArray, utxo_ref: OutputReference) {
       mint
         |> value.from_minted_value
         |> value.tokens(policy_id)
-        |> dict.to_list()
+        |> dict.to_pairs()
 
     when rdmr is {
       Mint -> {
@@ -43,7 +43,7 @@ validator(token_name: ByteArray, policy_id: ByteArray) {
       mint
         |> value.from_minted_value
         |> value.tokens(policy_id)
-        |> dict.to_list()
+        |> dict.to_pairs()
 
     amount == -1 && asset_name == token_name
   }
