@@ -111,7 +111,7 @@ fn insert(self: List<a>, e: a, compare: fn(a, a) -> Ordering) -> List<a> {
 // and has a corresponding ouput with datum containing token name.
 // Otherwise fail
 fn check_mint_and_outputs(
-  minted_assets: AList<ByteArray, Int>,
+  minted_assets: Pairs<ByteArray, Int>,
   outputs: List<Output>,
   expected_assets: List<ByteArray>,
   validator_cred: PaymentCredential,
