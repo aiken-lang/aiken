@@ -1,0 +1,19 @@
+name: npm
+
+on:
+  release:
+    types: [released]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "latest"
+
+      - name: 🚀 Publish
+        run: npm publish https://github.com/aiken-lang/aiken/releases/latest/download/aiken-npm-package.tar.gz --access public
+        env:
+          NPM_TOKEN: ${{secrets.NPM_TOKEN}}
