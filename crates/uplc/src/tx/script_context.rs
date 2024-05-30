@@ -1,13 +1,9 @@
-use pallas::{
-    codec::utils::KeyValuePairs,
-    crypto::hash::Hash,
-    ledger::{
-        addresses::Address,
-        primitives::babbage::{
-            AddrKeyhash, Certificate, Coin, DatumHash, PlutusData, PolicyId, Redeemer,
-            StakeCredential, TransactionInput, TransactionOutput, Value,
-        },
-    },
+use pallas_addresses::Address;
+use pallas_codec::utils::KeyValuePairs;
+use pallas_crypto::hash::Hash;
+use pallas_primitives::babbage::{
+    AddrKeyhash, Certificate, Coin, DatumHash, PlutusData, PolicyId, Redeemer, StakeCredential,
+    TransactionInput, TransactionOutput, Value,
 };
 
 use super::to_plutus_data::MintValue;

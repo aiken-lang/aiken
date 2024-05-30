@@ -3,13 +3,13 @@ use crate::machine::{self, cost_model::ExBudget};
 #[derive(thiserror::Error, Debug, miette::Diagnostic)]
 pub enum Error {
     #[error("{0}")]
-    Address(#[from] pallas::ledger::addresses::Error),
+    Address(#[from] pallas_addresses::Error),
     #[error("Only shelley reward addresses can be a part of withdrawals")]
     BadWithdrawalAddress,
     #[error("{0}")]
-    FlatDecode(#[from] pallas::codec::flat::de::Error),
+    FlatDecode(#[from] pallas_codec::flat::de::Error),
     #[error("{0}")]
-    FragmentDecode(#[from] pallas::ledger::primitives::Error),
+    FragmentDecode(#[from] pallas_primitives::Error),
     #[error("{}\n\n{:#?}\n\n{}", .0, .1, .2.join("\n"))]
     Machine(machine::Error, ExBudget, Vec<String>),
     #[error("Native script can't be executed in phase-two")]
@@ -32,7 +32,7 @@ pub enum Error {
     #[error("PlutusV2 cost model not found.")]
     V2CostModelNotFound,
     #[error("Wrong era, Please use Babbage or Alonzo: {0}")]
-    WrongEra(#[from] pallas::codec::minicbor::decode::Error),
+    WrongEra(#[from] pallas_codec::minicbor::decode::Error),
     #[error("Byron address not allowed in Plutus.")]
     ByronAddressNotAllowed,
     #[error("Inline datum not allowed in PlutusV1.")]

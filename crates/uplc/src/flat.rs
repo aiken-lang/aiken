@@ -1,12 +1,10 @@
 use num_bigint::BigInt;
-use pallas::{
-    codec::flat::{
-        de::{self, Decode, Decoder},
-        en::{self, Encode, Encoder},
-        Flat,
-    },
-    ledger::primitives::{babbage::PlutusData, Fragment},
+use pallas_codec::flat::{
+    de::{self, Decode, Decoder},
+    en::{self, Encode, Encoder},
+    Flat,
 };
+use pallas_primitives::{babbage::PlutusData, Fragment};
 
 use std::{collections::VecDeque, fmt::Debug, rc::Rc};
 
@@ -35,7 +33,7 @@ where
     T: Binder<'b> + Debug,
 {
     pub fn from_cbor(bytes: &'b [u8], buffer: &'b mut Vec<u8>) -> Result<Self, de::Error> {
-        let mut cbor_decoder = pallas::codec::minicbor::Decoder::new(bytes);
+        let mut cbor_decoder = pallas_codec::minicbor::Decoder::new(bytes);
 
         let flat_bytes = cbor_decoder
             .bytes()
@@ -88,7 +86,7 @@ where
 
         let mut bytes = Vec::new();
 
-        let mut cbor_encoder = pallas::codec::minicbor::Encoder::new(&mut bytes);
+        let mut cbor_encoder = pallas_codec::minicbor::Encoder::new(&mut bytes);
 
         cbor_encoder
             .bytes(&flat_bytes)
@@ -1006,7 +1004,7 @@ mod tests {
         parser,
     };
     use indoc::indoc;
-    use pallas::codec::flat::Flat;
+    use pallas_codec::flat::Flat;
 
     #[test]
     fn flat_encode_integer() {

@@ -3,22 +3,17 @@ use crate::{
     machine::cost_model::ExBudget,
     PlutusData,
 };
-use pallas::{
-    codec::utils::{KeyValuePairs, MaybeIndefArray},
-    crypto::hash::Hash,
-    ledger::{
-        addresses::{Address, ScriptHash, StakePayload},
-        primitives::babbage::{
-            Certificate, CostMdls, DatumHash, DatumOption, ExUnits, Mint, MintedTx, NativeScript,
-            PlutusV1Script, PlutusV2Script, PolicyId, PseudoScript, Redeemer, RedeemerTag,
-            RewardAccount, StakeCredential, TransactionInput, TransactionOutput, Value,
-            Withdrawals,
-        },
-        traverse::{ComputeHash, OriginalHash},
-    },
+use pallas_addresses::{Address, ScriptHash, StakePayload};
+use pallas_codec::utils::{KeyValuePairs, MaybeIndefArray};
+use pallas_crypto::hash::Hash;
+use pallas_primitives::babbage::{
+    Certificate, CostMdls, DatumHash, DatumOption, ExUnits, Mint, MintedTx, NativeScript,
+    PlutusV1Script, PlutusV2Script, PolicyId, PseudoScript, Redeemer, RedeemerTag, RewardAccount,
+    StakeCredential, TransactionInput, TransactionOutput, Value, Withdrawals,
 };
+use pallas_traverse::{ComputeHash, OriginalHash};
 
-use pallas::ledger::primitives::conway::Language;
+use pallas_primitives::conway::Language;
 
 use std::{cmp::Ordering, collections::HashMap, convert::TryInto, ops::Deref, vec};
 

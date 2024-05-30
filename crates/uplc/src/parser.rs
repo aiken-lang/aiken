@@ -9,7 +9,7 @@ use crate::{
 
 use interner::Interner;
 use num_bigint::BigInt;
-use pallas::ledger::primitives::alonzo::PlutusData;
+use pallas_primitives::alonzo::PlutusData;
 use peg::{error::ParseError, str::LineCol};
 
 pub mod interner;
@@ -248,7 +248,7 @@ peg::parser! {
             ))
           }
           / _* "Map" _+ kvps:plutus_key_value_pairs() {
-            PlutusData::Map(pallas::codec::utils::KeyValuePairs::Def(kvps))
+            PlutusData::Map(pallas_codec::utils::KeyValuePairs::Def(kvps))
           }
           / _* "List" _+ ls:plutus_list() { PlutusData::Array(ls) }
           / _* "I" _+ n:big_number() { PlutusData::BigInt(to_pallas_bigint(&n)) }

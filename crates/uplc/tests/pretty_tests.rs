@@ -111,9 +111,9 @@ fn constant_data_constr() {
             Constant::Data(PlutusData::Constr(Constr::<PlutusData> {
                 tag: 122,
                 any_constructor: None,
-                fields: vec![PlutusData::BigInt(
-                    pallas::ledger::primitives::alonzo::BigInt::Int(2.into()),
-                )],
+                fields: vec![PlutusData::BigInt(pallas_primitives::alonzo::BigInt::Int(
+                    2.into(),
+                ))],
             }))
             .into(),
         ),
@@ -127,11 +127,11 @@ fn constant_data_map() {
         Term::<Name>::Constant(
             Constant::Data(PlutusData::Map(uplc::KeyValuePairs::Def(vec![
                 (
-                    PlutusData::BigInt(pallas::ledger::primitives::alonzo::BigInt::Int(0.into())),
+                    PlutusData::BigInt(pallas_primitives::alonzo::BigInt::Int(0.into())),
                     PlutusData::BoundedBytes(vec![0x00].into()),
                 ),
                 (
-                    PlutusData::BigInt(pallas::ledger::primitives::alonzo::BigInt::Int(1.into())),
+                    PlutusData::BigInt(pallas_primitives::alonzo::BigInt::Int(1.into())),
                     PlutusData::BoundedBytes(vec![0x0f].into()),
                 ),
             ])))
@@ -146,8 +146,8 @@ fn constant_data_list() {
     round_trip(
         Term::<Name>::Constant(
             Constant::Data(PlutusData::Array(vec![
-                PlutusData::BigInt(pallas::ledger::primitives::alonzo::BigInt::Int(0.into())),
-                PlutusData::BigInt(pallas::ledger::primitives::alonzo::BigInt::Int(1.into())),
+                PlutusData::BigInt(pallas_primitives::alonzo::BigInt::Int(0.into())),
+                PlutusData::BigInt(pallas_primitives::alonzo::BigInt::Int(1.into())),
             ]))
             .into(),
         ),
@@ -159,9 +159,9 @@ fn constant_data_list() {
 fn constant_data_int() {
     round_trip(
         Term::<Name>::Constant(
-            Constant::Data(PlutusData::BigInt(
-                pallas::ledger::primitives::alonzo::BigInt::Int(2.into()),
-            ))
+            Constant::Data(PlutusData::BigInt(pallas_primitives::alonzo::BigInt::Int(
+                2.into(),
+            )))
             .into(),
         ),
         "(con data (I 2))",
@@ -169,14 +169,14 @@ fn constant_data_int() {
 
     let term = Term::<Name>::Constant(
         Constant::Data(PlutusData::BigInt(
-            pallas::ledger::primitives::alonzo::BigInt::BigUInt(vec![2, 3, 4].into()),
+            pallas_primitives::alonzo::BigInt::BigUInt(vec![2, 3, 4].into()),
         ))
         .into(),
     );
     assert_eq!(term.to_pretty(), "(con data (I 131844))");
     let term = Term::<Name>::Constant(
         Constant::Data(PlutusData::BigInt(
-            pallas::ledger::primitives::alonzo::BigInt::BigNInt(vec![2, 3, 3].into()),
+            pallas_primitives::alonzo::BigInt::BigNInt(vec![2, 3, 3].into()),
         ))
         .into(),
     );

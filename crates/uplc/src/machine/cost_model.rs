@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use pallas::ledger::primitives::conway::Language;
+use pallas_primitives::conway::Language;
 
 use crate::builtins::DefaultFunction;
 

@@ -3,7 +3,7 @@ use std::{cmp::Ordering, iter, ops::Neg, rc::Rc, vec};
 use indexmap::IndexMap;
 use itertools::Itertools;
 
-use pallas::ledger::primitives::babbage::{BigInt, PlutusData};
+use pallas_primitives::babbage::{BigInt, PlutusData};
 
 use crate::{
     ast::{Constant, Data, Name, NamedDeBruijn, Program, Term, Type},
@@ -1907,7 +1907,7 @@ fn pop_lambdas_and_get_names(term: &Term<Name>) -> (Vec<Rc<Name>>, &Term<Name>) 
 #[cfg(test)]
 mod tests {
 
-    use pallas::ledger::primitives::babbage::{BigInt, PlutusData};
+    use pallas_primitives::babbage::{BigInt, PlutusData};
     use pretty_assertions::assert_eq;
 
     use crate::{

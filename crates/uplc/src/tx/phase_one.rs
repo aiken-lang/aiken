@@ -1,14 +1,9 @@
 use std::collections::HashMap;
 
-use pallas::{
-    codec::utils::{KeyValuePairs, MaybeIndefArray},
-    ledger::{
-        addresses::{Address, ScriptHash, ShelleyPaymentPart, StakePayload},
-        primitives::babbage::{
-            Certificate, MintedTx, PolicyId, RedeemerTag, RewardAccount, StakeCredential,
-            TransactionOutput,
-        },
-    },
+use pallas_addresses::{Address, ScriptHash, ShelleyPaymentPart, StakePayload};
+use pallas_codec::utils::{KeyValuePairs, MaybeIndefArray};
+use pallas_primitives::babbage::{
+    Certificate, MintedTx, PolicyId, RedeemerTag, RewardAccount, StakeCredential, TransactionOutput,
 };
 
 use super::{
