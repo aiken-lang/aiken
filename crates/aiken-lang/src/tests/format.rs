@@ -12,6 +12,18 @@ fn format_comment_at_end_of_file() {
 }
 
 #[test]
+fn format_single_hex_digit() {
+    assert_format!(
+        r#"
+        const a = 0xa
+        const b = 0x0f
+        const c = 0x0000000f
+        const d = 0x123
+    "#
+    );
+}
+
+#[test]
 fn format_simple_module() {
     assert_format!(
         r#"

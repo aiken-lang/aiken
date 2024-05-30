@@ -1,0 +1,11 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nconst a = 0xa\nconst b = 0x0f\nconst c = 0x0000000f\nconst d = 0x123\n"
+---
+const a = 0xa
+
+const b = 0xf
+
+const c = 0xf
+
+const d = 0x123
