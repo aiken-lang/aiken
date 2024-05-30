@@ -9,9 +9,9 @@ pub mod parser;
 mod pretty;
 pub mod tx;
 
-pub use pallas::codec::utils::KeyValuePairs;
-pub use pallas::crypto::hash::Hash;
-pub use pallas::ledger::primitives::{
+pub use pallas_codec::utils::KeyValuePairs;
+pub use pallas_crypto::hash::Hash;
+pub use pallas_primitives::{
     alonzo::{BigInt, Constr, PlutusData},
     babbage::{PostAlonzoTransactionOutput, TransactionInput, TransactionOutput, Value},
     Error, Fragment,

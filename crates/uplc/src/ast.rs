@@ -11,14 +11,12 @@ use crate::{
 };
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
-use pallas::ledger::{
-    addresses::{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart},
-    primitives::{
-        alonzo::{self, Constr, PlutusData},
-        conway::{self, Language},
-    },
-    traverse::ComputeHash,
+use pallas_addresses::{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart};
+use pallas_primitives::{
+    alonzo::{self, Constr, PlutusData},
+    conway::{self, Language},
 };
+use pallas_traverse::ComputeHash;
 use serde::{
     self,
     de::{self, Deserialize, Deserializer, MapAccess, Visitor},
@@ -304,7 +302,7 @@ pub struct Data;
 impl Data {
     pub fn to_hex(data: PlutusData) -> String {
         let mut bytes = Vec::new();
-        pallas::codec::minicbor::Encoder::new(&mut bytes)
+        pallas_codec::minicbor::Encoder::new(&mut bytes)
             .encode(data)
             .expect("failed to encode Plutus Data as cbor?");
         hex::encode(bytes)

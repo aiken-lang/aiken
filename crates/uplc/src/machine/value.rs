@@ -6,7 +6,7 @@ use crate::{
 };
 use num_bigint::BigInt;
 use num_traits::{Signed, ToPrimitive, Zero};
-use pallas::ledger::primitives::babbage::{self, PlutusData};
+use pallas_primitives::babbage::{self, PlutusData};
 
 use super::{runtime::BuiltinRuntime, Error};
 
@@ -411,7 +411,7 @@ pub fn from_pallas_bigint(n: &babbage::BigInt) -> BigInt {
 pub fn to_pallas_bigint(n: &BigInt) -> babbage::BigInt {
     if let Some(i) = n.to_i128() {
         if let Ok(i) = i.try_into() {
-            let pallas_int: pallas::codec::utils::Int = i;
+            let pallas_int: pallas_codec::utils::Int = i;
             return babbage::BigInt::Int(pallas_int);
         }
     }

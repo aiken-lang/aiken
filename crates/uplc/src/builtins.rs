@@ -1,6 +1,6 @@
 use std::{fmt::Display, rc::Rc, str::FromStr};
 
-use pallas::codec::flat::de;
+use pallas_codec::flat::de;
 use strum_macros::EnumIter;
 
 use crate::ast::Term;

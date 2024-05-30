@@ -2,7 +2,7 @@ use crate::{
     ast::{Constant, Name, Term, Type},
     builtins::DefaultFunction,
 };
-use pallas::ledger::primitives::alonzo::PlutusData;
+use pallas_primitives::alonzo::PlutusData;
 
 pub const CONSTR_FIELDS_EXPOSER: &str = "__constr_fields_exposer";
 pub const CONSTR_INDEX_EXPOSER: &str = "__constr_index_exposer";

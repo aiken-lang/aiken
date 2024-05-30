@@ -72,6 +72,16 @@ pub enum Error {
     #[error(transparent)]
     Secp256k1(#[from] secp256k1::Error),
     #[cfg(target_family = "wasm")]
-    #[error(transparent)]
-    Secp256k1(#[from] k256::ecdsa::Error),
+    #[error("{0}")]
+    K256Error(String),
+    // #[cfg(target_family = "wasm")]
+    // #[error("k256 error")]
+    // Secp256k1(#[from] k256::ecdsa::Error),
+}
+
+#[cfg(target_family = "wasm")]
+impl From<k256::ecdsa::Error> for Error {
+    fn from(error: k256::ecdsa::Error) -> Error {
+        Error::K256Error(format!("k256 error: {}", error))
+    }
 }
