@@ -1475,31 +1475,29 @@ fn suggest_import_constructor() -> String {
 
 #[derive(Debug, PartialEq, Clone, thiserror::Error, Diagnostic)]
 pub enum Warning {
-    #[error("I found a record update using all fields; thus redundant.\n")]
+    #[error("I found a record update using all fields; thus redundant.")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#record-updates"))]
     #[diagnostic(code("record_update::all_fields"))]
     AllFieldsRecordUpdate {
-        #[label]
+        #[label("redundant record update")]
         location: Span,
     },
 
-    #[error(
-        "I realized the following expression returned a result that is implicitly discarded.\n"
-    )]
+    #[error("I realized the following expression returned a result that is implicitly discarded.")]
     #[diagnostic(help(
         "You can use the '_' symbol should you want to explicitly discard a result."
     ))]
     #[diagnostic(code("implicit_discard"))]
     ImplicitlyDiscardedResult {
-        #[label]
+        #[label("implicitly discarded result")]
         location: Span,
     },
 
-    #[error("I found a record update with no fields; effectively updating nothing.\n")]
+    #[error("I found a record update with no fields; effectively updating nothing.")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#record-updates"))]
     #[diagnostic(code("record_update::no_fields"))]
     NoFieldsRecordUpdate {
-        #[label]
+        #[label("useless record update")]
         location: Span,
     },
 
@@ -1519,17 +1517,20 @@ pub enum Warning {
     },
 
     #[error(
-        "I found an {} trying to match a type with one constructor",
-        "expect".if_supports_color(Stderr, |s| s.purple())
+        "I found an {} {}",
+        "expect".if_supports_color(Stderr, |s| s.purple()),
+        "trying to match a type with one constructor".if_supports_color(Stderr, |s| s.yellow())
     )]
     #[diagnostic(
         code("single_constructor_expect"),
         help(
             "If your type has one constructor, unless you are casting {} {}, you can\nprefer using a {} binding like so...\n\n{}",
             "from".if_supports_color(Stderr, |s| s.bold()),
-            "Data".if_supports_color(Stderr, |s| s.bright_blue()),
+            "Data"
+                .if_supports_color(Stderr, |s| s.bold())
+                .if_supports_color(Stderr, |s| s.bright_blue()),
             "let".if_supports_color(Stderr, |s| s.purple()),
-            format_suggestion(sample)
+            format_suggestion(sample),
         )
     )]
     SingleConstructorExpect {
@@ -1542,7 +1543,7 @@ pub enum Warning {
         sample: UntypedExpr,
     },
 
-    #[error("I found a todo left in the code.\n")]
+    #[error("I found a todo left in the code.")]
     #[diagnostic(help("You probably want to replace that with actual code... eventually."))]
     #[diagnostic(code("todo"))]
     Todo {
@@ -1551,7 +1552,7 @@ pub enum Warning {
         tipo: Rc<Type>,
     },
 
-    #[error("I found a type hole in an annotation.\n")]
+    #[error("I found a type hole in an annotation.")]
     #[diagnostic(code("unexpected::type_hole"))]
     UnexpectedTypeHole {
         #[label("{}", tipo.to_pretty(0))]
@@ -1560,93 +1561,95 @@ pub enum Warning {
     },
 
     #[error(
-        "I discovered an unused constructor: '{}'.\n",
-        name.if_supports_color(Stderr, |s| s.purple())
+        "I discovered an unused constructor: {}",
+        name.if_supports_color(Stderr, |s| s.default_color())
     )]
     #[diagnostic(help(
         "No big deal, but you might want to remove it to get rid of that warning."
     ))]
     #[diagnostic(code("unused::constructor"))]
     UnusedConstructor {
-        #[label]
+        #[label("unused constructor")]
         location: Span,
         name: String,
     },
 
     #[error(
-        "I discovered an unused imported module: '{}'.\n",
-        name.if_supports_color(Stderr, |s| s.purple())
+        "I discovered an unused imported module: {}",
+        name.if_supports_color(Stderr, |s| s.default_color()),
     )]
     #[diagnostic(help(
         "No big deal, but you might want to remove it to get rid of that warning."
     ))]
     #[diagnostic(code("unused::import::module"))]
     UnusedImportedModule {
-        #[label]
+        #[label("unused module")]
         location: Span,
         name: String,
     },
 
     #[error(
-        "I discovered an unused imported value: '{}'.\n",
-        name.if_supports_color(Stderr, |s| s.purple()),
+        "I discovered an unused imported value: {}",
+        name.if_supports_color(Stderr, |s| s.default_color()),
     )]
     #[diagnostic(help(
         "No big deal, but you might want to remove it to get rid of that warning."
     ))]
     #[diagnostic(code("unused:import::value"))]
     UnusedImportedValueOrType {
-        #[label]
+        #[label("unused import")]
         location: Span,
         name: String,
     },
 
     #[error(
-        "I found an unused private function: '{}'.\n",
-        name.if_supports_color(Stderr, |s| s.purple()),
+        "I found an unused private function: {}",
+        name.if_supports_color(Stderr, |s| s.default_color()),
     )]
     #[diagnostic(help(
-        "Perhaps your forgot to make it public using the '{keyword_pub}' keyword?\n\
+        "Perhaps your forgot to make it public using the {keyword_pub} keyword?\n\
          Otherwise, you might want to get rid of it altogether.",
          keyword_pub = "pub".if_supports_color(Stderr, |s| s.bright_blue())
     ))]
     #[diagnostic(code("unused::function"))]
     UnusedPrivateFunction {
-        #[label]
+        #[label("unused (private) function")]
         location: Span,
         name: String,
     },
 
     #[error(
-        "I found an unused (private) module constant: '{}'.\n",
-        name.if_supports_color(Stderr, |s| s.purple())
+        "I found an unused (private) module constant: {}",
+        name.if_supports_color(Stderr, |s| s.default_color()),
     )]
     #[diagnostic(help(
-        "Perhaps your forgot to make it public using the '{keyword_pub}' keyword?\n\
+        "Perhaps your forgot to make it public using the {keyword_pub} keyword?\n\
          Otherwise, you might want to get rid of it altogether.",
          keyword_pub = "pub".if_supports_color(Stderr, |s| s.bright_blue())
     ))]
     #[diagnostic(code("unused::constant"))]
     UnusedPrivateModuleConstant {
-        #[label]
+        #[label("unused (private) constant")]
         location: Span,
         name: String,
     },
 
     #[error(
-        "I discovered an unused type: '{}'.\n",
-        name.if_supports_color(Stderr, |s| s.purple())
+        "I discovered an unused type: {}",
+        name
+            .if_supports_color(Stderr, |s| s.bright_blue())
+            .if_supports_color(Stderr, |s| s.bold())
     )]
     #[diagnostic(code("unused::type"))]
     UnusedType {
-        #[label]
+        #[label("unused (private) type")]
         location: Span,
         name: String,
     },
 
     #[error(
-        "I came across an unused variable: {}.\n",
-        name.if_supports_color(Stderr, |s| s.purple())
+        "I came across an unused variable: {}",
+        name.if_supports_color(Stderr, |s| s.default_color()),
     )]
     #[diagnostic(help("{}", formatdoc! {
         r#"No big deal, but you might want to remove it or use a discard {name} to get rid of that warning.
@@ -1663,14 +1666,14 @@ pub enum Warning {
     }))]
     #[diagnostic(code("unused::variable"))]
     UnusedVariable {
-        #[label("unused")]
+        #[label("unused identifier")]
         location: Span,
         name: String,
     },
 
     #[error(
-        "I came across a discarded variable in a let assignment: {}.\n",
-        name.if_supports_color(Stderr, |s| s.purple())
+        "I came across a discarded variable in a let assignment: {}",
+        name.if_supports_color(Stderr, |s| s.default_color())
     )]
     #[diagnostic(help("{}", formatdoc! {
         r#"If you do want to enforce some side-effects, use {keyword_expect} with {name} instead of {keyword_let}.
@@ -1685,14 +1688,15 @@ pub enum Warning {
     }))]
     #[diagnostic(code("unused::discarded_let_assignment"))]
     DiscardedLetAssignment {
-        #[label("discarded")]
+        #[label("discarded result")]
         location: Span,
         name: String,
     },
 
     #[error(
-        "I came across a validator in a {} module which means\nI'm going to ignore it.\n",
-        "lib/".if_supports_color(Stderr, |s| s.purple())
+        "I came across a validator in a {} {}",
+        "lib/".if_supports_color(Stderr, |s| s.purple()),
+        "module which means\nI'm going to ignore it.\n".if_supports_color(Stderr, |s| s.yellow()),
     )]
     #[diagnostic(help(
         "No big deal, but you might want to move it to a {} module\nor remove it to get rid of that warning.",
@@ -1700,15 +1704,16 @@ pub enum Warning {
     ))]
     #[diagnostic(code("unused::validator"))]
     ValidatorInLibraryModule {
-        #[label("unused")]
+        #[label("unused validator")]
         location: Span,
     },
 
     #[error(
-        "I noticed a suspicious {type_ByteArray} UTF-8 literal which resembles a hash digest.",
+        "I noticed a suspicious {type_ByteArray} {tail}",
         type_ByteArray = "ByteArray"
             .if_supports_color(Stderr, |s| s.bright_blue())
-            .if_supports_color(Stderr, |s| s.bold())
+            .if_supports_color(Stderr, |s| s.bold()),
+        tail = "UTF-8 literal which resembles a hash digest.".if_supports_color(Stderr, |s| s.yellow()),
     )]
     #[diagnostic(help("{}", formatdoc! {
         r#"When you specify a {type_ByteArray} literal using plain double-quotes, it's interpreted as an array of UTF-8 bytes. For example, the literal {literal_foo} is interpreted as the byte sequence {foo_bytes}.
@@ -1793,11 +1798,9 @@ fn format_suggestion(sample: &UntypedExpr) -> String {
         .enumerate()
         .map(|(ix, line)| {
             if ix == 0 {
-                format!("╰─▶ {}", line.if_supports_color(Stdout, |s| s.yellow()))
+                format!("╰─▶ {line}")
             } else {
                 format!("    {line}")
-                    .if_supports_color(Stdout, |s| s.yellow())
-                    .to_string()
             }
         })
         .collect::<Vec<_>>()

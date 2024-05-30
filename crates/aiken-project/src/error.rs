@@ -1,4 +1,4 @@
-use crate::{blueprint::error as blueprint, deps::manifest::Package, package_name::PackageName};
+use crate::{blueprint, deps::manifest::Package, package_name::PackageName};
 use aiken_lang::{
     ast::{self, Span},
     error::ExtraData,
@@ -6,7 +6,8 @@ use aiken_lang::{
     tipo,
 };
 use miette::{
-    Diagnostic, EyreContext, LabeledSpan, MietteHandlerOpts, NamedSource, RgbColors, SourceCode,
+    Diagnostic, EyreContext, LabeledSpan, MietteHandler, MietteHandlerOpts, NamedSource, RgbColors,
+    SourceCode,
 };
 use owo_colors::{
     OwoColorize,
@@ -157,20 +158,11 @@ impl Error {
 
 impl Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let miette_handler = MietteHandlerOpts::new()
-            // For better support of terminal themes use the ANSI coloring
-            .rgb_colors(RgbColors::Never)
-            // If ansi support is disabled in the config disable the eye-candy
-            .color(true)
-            .unicode(true)
-            .terminal_links(true)
-            .build();
-
-        // Ignore error to prevent format! panics. This can happen if span points at some
-        // inaccessible location, for example by calling `report_error()` with wrong working set.
-        let _ = miette_handler.debug(self, f);
-
-        Ok(())
+        default_miette_handler(2)
+            .debug(self, f)
+            // Ignore error to prevent format! panics. This can happen if span points at some
+            // inaccessible location, for example by calling `report_error()` with wrong working set.
+            .or(Ok(()))
     }
 }
 
@@ -504,9 +496,9 @@ impl Diagnostic for Error {
 
 #[derive(thiserror::Error)]
 pub enum Warning {
-    #[error("{}", "You do not have any validators to build!".if_supports_color(Stderr, |s| s.yellow()))]
+    #[error("You do not have any validators to build!")]
     NoValidators,
-    #[error("{}", "While trying to make sense of your code...".if_supports_color(Stderr, |s| s.yellow()))]
+    #[error("{}", warning)]
     Type {
         path: PathBuf,
         src: String,
@@ -514,9 +506,9 @@ pub enum Warning {
         #[source]
         warning: tipo::error::Warning,
     },
-    #[error("{}", format!("{name} is already a dependency.").if_supports_color(Stderr, |s| s.yellow()))]
+    #[error("{name} is already a dependency.")]
     DependencyAlreadyExists { name: PackageName },
-    #[error("{}", format!("Ignoring file with invalid module name at: {path:?}").if_supports_color(Stderr, |s| s.yellow()))]
+    #[error("Ignoring file with invalid module name at: {path:?}")]
     InvalidModuleName { path: PathBuf },
 }
 
@@ -573,7 +565,17 @@ impl Diagnostic for Warning {
     }
 
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
-        None
+        match self {
+            Warning::Type { warning, .. } => Some(Box::new(format!(
+                "aiken::check{}",
+                warning.code().map(|s| format!("::{s}")).unwrap_or_default()
+            ))),
+            Warning::NoValidators => Some(Box::new("aiken::check")),
+            Warning::InvalidModuleName { .. } => Some(Box::new("aiken::project::module_name")),
+            Warning::DependencyAlreadyExists { .. } => {
+                Some(Box::new("aiken::packages::already_exists"))
+            }
+        }
     }
 
     fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
@@ -607,20 +609,63 @@ impl Warning {
 
 impl Debug for Warning {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let miette_handler = MietteHandlerOpts::new()
-            // For better support of terminal themes use the ANSI coloring
-            .rgb_colors(RgbColors::Never)
-            // If ansi support is disabled in the config disable the eye-candy
-            .color(true)
-            .unicode(true)
-            .terminal_links(true)
-            .build();
+        default_miette_handler(0)
+            .debug(
+                &DisplayWarning {
+                    title: &self.to_string(),
+                    source_code: self.source_code(),
+                    labels: self.labels().map(|ls| ls.collect()),
+                    help: self.help().map(|s| s.to_string()),
+                },
+                f,
+            )
+            // Ignore error to prevent format! panics. This can happen if span points at some
+            // inaccessible location, for example by calling `report_error()` with wrong working set.
+            .or(Ok(()))
+    }
+}
 
-        // Ignore error to prevent format! panics. This can happen if span points at some
-        // inaccessible location, for example by calling `report_error()` with wrong working set.
-        let _ = miette_handler.debug(self, f);
+#[derive(thiserror::Error)]
+#[error("{}", title.if_supports_color(Stderr, |s| s.yellow()))]
+struct DisplayWarning<'a> {
+    title: &'a str,
+    source_code: Option<&'a dyn miette::SourceCode>,
+    labels: Option<Vec<LabeledSpan>>,
+    help: Option<String>,
+}
 
-        Ok(())
+impl<'a> Diagnostic for DisplayWarning<'a> {
+    fn severity(&self) -> Option<miette::Severity> {
+        Some(miette::Severity::Warning)
+    }
+
+    fn source_code(&self) -> Option<&dyn SourceCode> {
+        self.source_code
+    }
+
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
+        self.labels
+            .as_ref()
+            .map(|ls| ls.iter().cloned())
+            .map(Box::new)
+            .map(|b| b as Box<dyn Iterator<Item = LabeledSpan>>)
+    }
+
+    fn code<'b>(&'b self) -> Option<Box<dyn Display + 'b>> {
+        None
+    }
+
+    fn help<'b>(&'b self) -> Option<Box<dyn Display + 'b>> {
+        self.help
+            .as_ref()
+            .map(Box::new)
+            .map(|b| b as Box<dyn Display + 'b>)
+    }
+}
+
+impl<'a> Debug for DisplayWarning<'a> {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        unreachable!("Display warning are never shown directly.");
     }
 }
 
@@ -630,4 +675,15 @@ pub struct Unformatted {
     pub destination: PathBuf,
     pub input: String,
     pub output: String,
+}
+
+fn default_miette_handler(context_lines: usize) -> MietteHandler {
+    MietteHandlerOpts::new()
+        // For better support of terminal themes use the ANSI coloring
+        .rgb_colors(RgbColors::Never)
+        // If ansi support is disabled in the config disable the eye-candy
+        .unicode(true)
+        .terminal_links(true)
+        .context_lines(context_lines)
+        .build()
 }
