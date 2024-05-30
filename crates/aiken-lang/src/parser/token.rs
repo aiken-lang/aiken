@@ -78,6 +78,7 @@ pub enum Token {
     If,
     Else,
     Fail,
+    Once,
     Expect,
     Is,
     Let,
@@ -178,6 +179,7 @@ impl fmt::Display for Token {
             Token::Type => "type",
             Token::Test => "test",
             Token::Fail => "fail",
+            Token::Once => "once",
             Token::Validator => "validator",
             Token::Via => "via",
         };

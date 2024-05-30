@@ -1,4 +1,5 @@
-use aiken_lang::{
+use aiken_lang::ast::OnTestFailure;
+pub(crate) use aiken_lang::{
     ast::{Arg, BinOp, DataTypeKey, IfBranch, Span, TypedDataType, TypedTest},
     builtins::bool,
     expr::{TypedExpr, UntypedExpr},
@@ -88,7 +89,7 @@ impl Test {
             name: test.name,
             program,
             assertion,
-            can_error: test.can_error,
+            on_test_failure: test.on_test_failure,
         })
     }
 
@@ -96,7 +97,7 @@ impl Test {
         input_path: PathBuf,
         module: String,
         name: String,
-        can_error: bool,
+        on_test_failure: OnTestFailure,
         program: Program<Name>,
         fuzzer: Fuzzer<Name>,
     ) -> Test {
@@ -105,7 +106,7 @@ impl Test {
             module,
             name,
             program,
-            can_error,
+            on_test_failure,
             fuzzer,
         })
     }
@@ -145,7 +146,7 @@ impl Test {
                 input_path,
                 module_name,
                 test.name,
-                test.can_error,
+                test.on_test_failure,
                 program,
                 Fuzzer {
                     program: fuzzer,
@@ -164,7 +165,7 @@ pub struct UnitTest {
     pub input_path: PathBuf,
     pub module: String,
     pub name: String,
-    pub can_error: bool,
+    pub on_test_failure: OnTestFailure,
     pub program: Program<Name>,
     pub assertion: Option<Assertion<(Constant, Rc<Type>)>>,
 }
@@ -177,7 +178,10 @@ impl UnitTest {
             .unwrap()
             .eval_version(ExBudget::max(), &plutus_version.into());
 
-        let success = !eval_result.failed(self.can_error);
+        let success = !eval_result.failed(match self.on_test_failure {
+            OnTestFailure::SucceedEventually | OnTestFailure::SucceedImmediately => true,
+            OnTestFailure::FailImmediately => false,
+        });
 
         TestResult::UnitTestResult(UnitTestResult {
             success,
@@ -196,7 +200,7 @@ pub struct PropertyTest {
     pub input_path: PathBuf,
     pub module: String,
     pub name: String,
-    pub can_error: bool,
+    pub on_test_failure: OnTestFailure,
     pub program: Program<Name>,
     pub fuzzer: Fuzzer<Name>,
 }
@@ -250,7 +254,7 @@ impl PropertyTest {
                     .filter(|s| PropertyTest::extract_label(s).is_none())
                     .collect(),
                 Ok(Some(counterexample.value)),
-                n - remaining + 1,
+                n - remaining,
             ),
             Err(FuzzerError { traces, uplc_error }) => (
                 traces
@@ -258,7 +262,7 @@ impl PropertyTest {
                     .filter(|s| PropertyTest::extract_label(s).is_none())
                     .collect(),
                 Err(uplc_error),
-                0,
+                n - remaining + 1,
             ),
         };
 
@@ -295,6 +299,8 @@ impl PropertyTest {
         labels: &mut BTreeMap<String, usize>,
         plutus_version: &'a PlutusVersion,
     ) -> Result<(Prng, Option<Counterexample<'a>>), FuzzerError> {
+        use OnTestFailure::*;
+
         let (next_prng, value) = prng
             .sample(&self.fuzzer.program)?
             .expect("A seeded PRNG returned 'None' which indicates a fuzzer is ill-formed and implemented wrongly; please contact library's authors.");
@@ -313,10 +319,16 @@ impl PropertyTest {
             }
         }
 
-        // NOTE: We do NOT pass self.can_error here, because when searching for
-        // failing properties, we do want to _keep running_ until we find a
-        // a failing case. It may not occur on the first run.
-        if result.failed(false) {
+        let is_failure = result.failed(false);
+
+        let is_success = !is_failure;
+
+        let keep_counterexample = match self.on_test_failure {
+            FailImmediately | SucceedImmediately => is_failure,
+            SucceedEventually => is_success,
+        };
+
+        if keep_counterexample {
             let mut counterexample = Counterexample {
                 value,
                 choices: next_prng.choices(),
@@ -327,16 +339,24 @@ impl PropertyTest {
                         Ok(Some((_, value))) => {
                             let result = self.eval(&value, plutus_version);
 
-                            let is_failure = result.failed(self.can_error);
+                            let is_failure = result.failed(false);
 
-                            let expect_failure = self.can_error;
+                            match self.on_test_failure {
+                                FailImmediately | SucceedImmediately => {
+                                    if is_failure {
+                                        Status::Keep(value)
+                                    } else {
+                                        Status::Ignore
+                                    }
+                                }
 
-                            // If the test no longer fails, it isn't better as we're only
-                            // interested in counterexamples.
-                            if (expect_failure && is_failure) || (!expect_failure && !is_failure) {
-                                Status::Ignore
-                            } else {
-                                Status::Keep(value)
+                                SucceedEventually => {
+                                    if is_failure {
+                                        Status::Ignore
+                                    } else {
+                                        Status::Keep(value)
+                                    }
+                                }
                             }
                         }
                     }
@@ -883,13 +903,12 @@ impl<U, T> TestResult<U, T> {
                 counterexample: Ok(counterexample),
                 test,
                 ..
-            }) => {
-                if test.can_error {
-                    counterexample.is_some()
-                } else {
+            }) => match test.on_test_failure {
+                OnTestFailure::FailImmediately | OnTestFailure::SucceedEventually => {
                     counterexample.is_none()
                 }
-            }
+                OnTestFailure::SucceedImmediately => counterexample.is_some(),
+            },
         }
     }
 

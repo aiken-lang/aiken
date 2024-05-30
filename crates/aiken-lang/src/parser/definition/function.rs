@@ -1,10 +1,9 @@
-use chumsky::prelude::*;
-
 use crate::{
     ast,
     expr::UntypedExpr,
     parser::{annotation, error::ParseError, expr, token::Token, utils},
 };
+use chumsky::prelude::*;
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
     utils::optional_flag(Token::Pub)
@@ -41,7 +40,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                     public,
                     return_annotation,
                     return_type: (),
-                    can_error: true,
+                    on_test_failure: ast::OnTestFailure::FailImmediately,
                 })
             },
         )

@@ -2,7 +2,7 @@ use crate::{
     pretty,
     test_framework::{PropertyTestResult, TestResult, UnitTestResult},
 };
-use aiken_lang::{expr::UntypedExpr, format::Formatter};
+use aiken_lang::{ast::OnTestFailure, expr::UntypedExpr, format::Formatter};
 use owo_colors::{OwoColorize, Stream::Stderr};
 use std::{collections::BTreeMap, fmt::Display, path::PathBuf};
 use uplc::machine::cost_model::ExBudget;
@@ -338,7 +338,14 @@ fn fmt_test(
         }) if !result.is_success() => {
             test = format!(
                 "{test}\n{}",
-                assertion.to_string(Stderr, unit_test.can_error),
+                assertion.to_string(
+                    Stderr,
+                    match unit_test.on_test_failure {
+                        OnTestFailure::FailImmediately => false,
+                        OnTestFailure::SucceedEventually | OnTestFailure::SucceedImmediately =>
+                            true,
+                    }
+                ),
             );
         }
         _ => (),

@@ -49,7 +49,7 @@ Module {
                 return_annotation: None,
                 return_type: (),
                 end_position: 29,
-                can_error: true,
+                on_test_failure: FailImmediately,
             },
         ),
     ],

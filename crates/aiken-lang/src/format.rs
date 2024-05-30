@@ -2,11 +2,11 @@ use crate::{
     ast::{
         Annotation, Arg, ArgName, ArgVia, AssignmentKind, AssignmentPattern, BinOp,
         ByteArrayFormatPreference, CallArg, ClauseGuard, Constant, CurveType, DataType, Definition,
-        Function, IfBranch, LogicalOpChainKind, ModuleConstant, Pattern, RecordConstructor,
-        RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg, UnOp,
-        UnqualifiedImport, UntypedArg, UntypedArgVia, UntypedAssignmentKind, UntypedClause,
-        UntypedClauseGuard, UntypedDefinition, UntypedFunction, UntypedModule, UntypedPattern,
-        UntypedRecordUpdateArg, Use, Validator, CAPTURE_VARIABLE,
+        Function, IfBranch, LogicalOpChainKind, ModuleConstant, OnTestFailure, Pattern,
+        RecordConstructor, RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias,
+        TypedArg, UnOp, UnqualifiedImport, UntypedArg, UntypedArgVia, UntypedAssignmentKind,
+        UntypedClause, UntypedClauseGuard, UntypedDefinition, UntypedFunction, UntypedModule,
+        UntypedPattern, UntypedRecordUpdateArg, Use, Validator, CAPTURE_VARIABLE,
     },
     docvec,
     expr::{FnStyle, UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
@@ -247,9 +247,9 @@ impl<'comments> Formatter<'comments> {
                 arguments: args,
                 body,
                 end_position,
-                can_error,
+                on_test_failure,
                 ..
-            }) => self.definition_test(name, args, body, *end_position, *can_error),
+            }) => self.definition_test(name, args, body, *end_position, on_test_failure),
 
             Definition::TypeAlias(TypeAlias {
                 alias,
@@ -547,14 +547,18 @@ impl<'comments> Formatter<'comments> {
         args: &'a [UntypedArgVia],
         body: &'a UntypedExpr,
         end_location: usize,
-        can_error: bool,
+        on_test_failure: &'a OnTestFailure,
     ) -> Document<'a> {
         // Fn name and args
         let head = "test "
             .to_doc()
             .append(name)
             .append(wrap_args(args.iter().map(|e| (self.fn_arg_via(e), false))))
-            .append(if can_error { " fail" } else { "" })
+            .append(match on_test_failure {
+                OnTestFailure::FailImmediately => "",
+                OnTestFailure::SucceedEventually => " fail",
+                OnTestFailure::SucceedImmediately => " fail once",
+            })
             .group();
 
         // Format body

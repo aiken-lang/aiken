@@ -442,7 +442,7 @@ fn infer_definition(
                 return_annotation: typed_f.return_annotation,
                 return_type: typed_f.return_type,
                 body: typed_f.body,
-                can_error: typed_f.can_error,
+                on_test_failure: typed_f.on_test_failure,
                 end_position: typed_f.end_position,
             }))
         }

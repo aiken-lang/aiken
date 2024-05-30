@@ -224,6 +224,13 @@ pub type TypedTest = Function<Rc<Type>, TypedExpr, TypedArgVia>;
 pub type UntypedTest = Function<(), UntypedExpr, UntypedArgVia>;
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum OnTestFailure {
+    FailImmediately,
+    SucceedImmediately,
+    SucceedEventually,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Function<T, Expr, Arg> {
     pub arguments: Vec<Arg>,
     pub body: Expr,
@@ -234,7 +241,7 @@ pub struct Function<T, Expr, Arg> {
     pub return_annotation: Option<Annotation>,
     pub return_type: T,
     pub end_position: usize,
-    pub can_error: bool,
+    pub on_test_failure: OnTestFailure,
 }
 
 impl TypedFunction {
@@ -279,7 +286,7 @@ impl From<UntypedTest> for UntypedFunction {
             return_annotation: f.return_annotation,
             return_type: f.return_type,
             body: f.body,
-            can_error: f.can_error,
+            on_test_failure: f.on_test_failure,
             end_position: f.end_position,
         }
     }
@@ -296,7 +303,7 @@ impl From<TypedTest> for TypedFunction {
             return_annotation: f.return_annotation,
             return_type: f.return_type,
             body: f.body,
-            can_error: f.can_error,
+            on_test_failure: f.on_test_failure,
             end_position: f.end_position,
         }
     }

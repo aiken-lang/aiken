@@ -1,7 +1,7 @@
 use crate::{
     ast::{
         Annotation, Arg, ArgName, CallArg, DataTypeKey, Function, FunctionAccessKey, ModuleKind,
-        Span, TypedDataType, TypedFunction, UnOp,
+        OnTestFailure, Span, TypedDataType, TypedFunction, UnOp,
     },
     expr::TypedExpr,
     tipo::{
@@ -944,7 +944,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
                 annotation: None,
                 tipo: bool(),
             }],
-            can_error: false,
+            on_test_failure: OnTestFailure::FailImmediately,
             doc: Some(
                 indoc::indoc! {
                     r#"
@@ -1001,7 +1001,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
                 doc: None,
                 tipo: a_var.clone(),
             }],
-            can_error: false,
+            on_test_failure: OnTestFailure::FailImmediately,
             body: TypedExpr::Var {
                 location: Span::empty(),
                 constructor: ValueConstructor {
@@ -1043,7 +1043,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
             function_name: "always".to_string(),
         },
         Function {
-            can_error: false,
+            on_test_failure: OnTestFailure::FailImmediately,
             arguments: vec![
                 Arg {
                     arg_name: ArgName::Named {
@@ -1121,7 +1121,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
             function_name: "flip".to_string(),
         },
         Function {
-            can_error: false,
+            on_test_failure: OnTestFailure::FailImmediately,
             arguments: vec![Arg {
                 arg_name: ArgName::Named {
                     name: "f".to_string(),

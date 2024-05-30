@@ -54,6 +54,6 @@ Test(
         ),
         return_type: (),
         end_position: 60,
-        can_error: true,
+        on_test_failure: SucceedEventually,
     },
 )

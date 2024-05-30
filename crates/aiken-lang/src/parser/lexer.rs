@@ -223,6 +223,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         // TODO: remove this in a future release
         "error" => Token::Fail,
         "fail" => Token::Fail,
+        "once" => Token::Once,
         "as" => Token::As,
         "and" => Token::And,
         "or" => Token::Or,

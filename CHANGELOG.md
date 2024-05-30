@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.29-alpha - UNRELEASED
+
+### Changed
+
+- **aiken-lang**: the keyword `fail` on property-based test semantic has changed and now consider a test to succeed only if **every** execution of the test failed (instead of just one). The previous behavior can be recovered by adding the keyword `once` after `fail`. @KtorZ
+
 ## v1.0.28-alpha - 2024-05-23
 
 ### Added

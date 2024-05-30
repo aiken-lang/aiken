@@ -23,6 +23,6 @@ Test(
         ),
         return_type: (),
         end_position: 22,
-        can_error: false,
+        on_test_failure: FailImmediately,
     },
 )

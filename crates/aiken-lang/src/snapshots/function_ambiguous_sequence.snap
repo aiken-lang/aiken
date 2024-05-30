@@ -49,7 +49,7 @@ Module {
                 return_annotation: None,
                 return_type: (),
                 end_position: 34,
-                can_error: true,
+                on_test_failure: FailImmediately,
             },
         ),
         Fn(
@@ -94,7 +94,7 @@ Module {
                 return_annotation: None,
                 return_type: (),
                 end_position: 71,
-                can_error: true,
+                on_test_failure: FailImmediately,
             },
         ),
         Fn(
@@ -141,7 +141,7 @@ Module {
                 return_annotation: None,
                 return_type: (),
                 end_position: 104,
-                can_error: true,
+                on_test_failure: FailImmediately,
             },
         ),
         Fn(
@@ -221,7 +221,7 @@ Module {
                 return_annotation: None,
                 return_type: (),
                 end_position: 154,
-                can_error: true,
+                on_test_failure: FailImmediately,
             },
         ),
     ],

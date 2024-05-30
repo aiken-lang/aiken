@@ -55,7 +55,7 @@ pub(crate) fn infer_function(
         body,
         return_annotation,
         end_position,
-        can_error,
+        on_test_failure,
         return_type: _,
     } = fun;
 
@@ -174,7 +174,7 @@ pub(crate) fn infer_function(
             .return_type()
             .expect("Could not find return type for fn"),
         body,
-        can_error: *can_error,
+        on_test_failure: on_test_failure.clone(),
         end_position: *end_position,
     };
 

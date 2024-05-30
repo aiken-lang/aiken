@@ -46,6 +46,6 @@ Fn(
         return_annotation: None,
         return_type: (),
         end_position: 27,
-        can_error: true,
+        on_test_failure: FailImmediately,
     },
 )

@@ -43,6 +43,6 @@ Test(
         ),
         return_type: (),
         end_position: 40,
-        can_error: false,
+        on_test_failure: FailImmediately,
     },
 )
