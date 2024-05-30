@@ -2,6 +2,10 @@
 
 ## v1.0.29-alpha - UNRELEASED
 
+### Added
+
+- **aiken-lang**: new LSP quickfix for 'use let' warning. @KtorZ
+
 ### Changed
 
 - **aiken-lang**: the keyword `fail` on property-based test semantic has changed and now consider a test to succeed only if **every** execution of the test failed (instead of just one). The previous behavior can be recovered by adding the keyword `once` after `fail`. @KtorZ

@@ -10,6 +10,7 @@ const UNKNOWN_CONSTRUCTOR: &str = "aiken::check::unknown::type_constructor";
 const UNKNOWN_MODULE: &str = "aiken::check::unknown::module";
 const UNUSED_IMPORT_VALUE: &str = "aiken::check::unused:import::value";
 const UNUSED_IMPORT_MODULE: &str = "aiken::check::unused::import::module";
+const USE_LET: &str = "aiken::check::single_constructor_expect";
 const UTF8_BYTE_ARRAY_IS_VALID_HEX_STRING: &str =
     "aiken::check::syntax::bytearray_literal_is_hex_string";
 
@@ -21,6 +22,7 @@ pub enum Quickfix {
     UnknownConstructor(lsp_types::Diagnostic),
     UnusedImports(Vec<lsp_types::Diagnostic>),
     Utf8ByteArrayIsValidHexString(lsp_types::Diagnostic),
+    UseLet(lsp_types::Diagnostic),
 }
 
 fn match_code(
@@ -63,6 +65,10 @@ pub fn assert(diagnostic: lsp_types::Diagnostic) -> Option<Quickfix> {
         UTF8_BYTE_ARRAY_IS_VALID_HEX_STRING,
     ) {
         return Some(Quickfix::Utf8ByteArrayIsValidHexString(diagnostic));
+    }
+
+    if match_code(&diagnostic, Severity::WARNING, USE_LET) {
+        return Some(Quickfix::UseLet(diagnostic));
     }
 
     None
@@ -115,6 +121,12 @@ pub fn quickfix(
                 text_document,
                 diagnostic,
                 utf8_byte_array_is_hex_string(diagnostic),
+            ),
+            Quickfix::UseLet(diagnostic) => each_as_distinct_action(
+                &mut actions,
+                text_document,
+                diagnostic,
+                use_let(diagnostic),
             ),
         };
     }
@@ -284,4 +296,14 @@ fn utf8_byte_array_is_hex_string(diagnostic: &lsp_types::Diagnostic) -> Vec<Anno
     }
 
     edits
+}
+
+fn use_let(diagnostic: &lsp_types::Diagnostic) -> Vec<AnnotatedEdit> {
+    vec![(
+        "Use 'let' instead of 'expect'".to_string(),
+        lsp_types::TextEdit {
+            range: diagnostic.range,
+            new_text: "let".to_string(),
+        },
+    )]
 }
