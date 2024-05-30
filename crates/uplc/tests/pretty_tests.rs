@@ -111,9 +111,9 @@ fn constant_data_constr() {
             Constant::Data(PlutusData::Constr(Constr::<PlutusData> {
                 tag: 122,
                 any_constructor: None,
-                fields: vec![PlutusData::BigInt(
-                    pallas_primitives::alonzo::BigInt::Int(2.into()),
-                )],
+                fields: vec![PlutusData::BigInt(pallas_primitives::alonzo::BigInt::Int(
+                    2.into(),
+                ))],
             }))
             .into(),
         ),
@@ -159,9 +159,9 @@ fn constant_data_list() {
 fn constant_data_int() {
     round_trip(
         Term::<Name>::Constant(
-            Constant::Data(PlutusData::BigInt(
-                pallas_primitives::alonzo::BigInt::Int(2.into()),
-            ))
+            Constant::Data(PlutusData::BigInt(pallas_primitives::alonzo::BigInt::Int(
+                2.into(),
+            )))
             .into(),
         ),
         "(con data (I 2))",
