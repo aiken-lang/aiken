@@ -7,26 +7,35 @@
   <hr />
     <h2 align="center" style="border-bottom: none">A modern smart contract platform for Cardano</h2>
 
-[![Licence](https://img.shields.io/github/license/aiken-lang/aiken)](https://github.com/aiken-lang/aiken/blob/main/LICENSE)
-[![Crates.io](https://img.shields.io/crates/v/aiken)](https://crates.io/crates/aiken)
-[![Tests](https://github.com/aiken-lang/aiken/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/aiken-lang/aiken/actions/workflows/tests.yml)
+[![Licence](https://img.shields.io/github/license/aiken-lang/aiken?style=for-the-badge)](https://github.com/aiken-lang/aiken/blob/main/LICENSE)
+[![Tests](https://img.shields.io/github/actions/workflow/status/aiken-lang/aiken/tests.yml?style=for-the-badge)](https://github.com/aiken-lang/aiken/actions/workflows/tests.yml)
+[![Twitter/X](https://img.shields.io/badge/Follow%20us-@aiken__eng-blue?logo=x&style=for-the-badge)](https://x.com/aiken_eng)
+
+[![Crates.io](https://img.shields.io/crates/v/aiken?style=for-the-badge)](https://crates.io/crates/aiken)
+[![NPM](https://img.shields.io/npm/v/%40aiken-lang%2Faiken?style=for-the-badge)](https://www.npmjs.com/package/@aiken-lang/aiken)
 
   <hr/>
 </div>
 
-## Installation
+## Getting Started
 
-- [Linux/MacOS](https://aiken-lang.org/installation-instructions#linux--macos)
-- [Windows](https://aiken-lang.org/installation-instructions#windows)
-- [nix](https://aiken-lang.org/installation-instructions#from-nix-flakes-linux--macos-only)
+- [Installation instructions](https://aiken-lang.org/installation-instructions)
 
-### How to use
+- [Online playground](https://play.aiken-lang.org/)
 
-For more information please see the [user manual](https://aiken-lang.org).
+- [Beginner checklist](https://aiken-lang.org/fundamentals/getting-started#checklist)
+
+### Hello, World!
+
+Wanna get started right-away? Complete the [_Hello, World!_ tutorial](https://aiken-lang.org/example--hello-world/basics)!
 
 ## Contributing
 
 Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md) to know how.
+
+## Changelog
+
+Be on top of any updates using the [CHANGELOG](https://github.com/aiken-lang/aiken/blob/main/CHANGELOG.md) and the [Project Tracking](https://github.com/orgs/aiken-lang/projects/2/views/1).
 
 ## Stats
 
