@@ -28,9 +28,7 @@ For more information please see the [user manual](https://aiken-lang.org).
 
 Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md) to know how.
 
----
-
-> **Note**
+> [!NOTE]
 >
 > The name comes from [Howard Aiken](https://en.wikipedia.org/wiki/Howard_H._Aiken), an American physicist and a pioneer in computing.
 
