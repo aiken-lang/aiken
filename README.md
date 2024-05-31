@@ -28,10 +28,10 @@ For more information please see the [user manual](https://aiken-lang.org).
 
 Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md) to know how.
 
-> [!NOTE]
->
-> The name comes from [Howard Aiken](https://en.wikipedia.org/wiki/Howard_H._Aiken), an American physicist and a pioneer in computing.
-
 ## Stats
 
 ![Alt](https://repobeats.axiom.co/api/embed/c93f72d2f0dd8cac82fc230ea97fa23787b32978.svg "Repobeats analytics image")
+
+> [!NOTE]
+>
+> The name comes from [Howard Aiken](https://en.wikipedia.org/wiki/Howard_H._Aiken), an American physicist and a pioneer in computing.
