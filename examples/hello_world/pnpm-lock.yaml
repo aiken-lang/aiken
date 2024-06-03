@@ -9,14 +9,17 @@ importers:
   .:
     dependencies:
       '@blaze-cardano/core':
-        specifier: ^0.1.1
-        version: 0.1.1
+        specifier: ^0.1.2
+        version: 0.1.2
       '@blaze-cardano/sdk':
+        specifier: ^0.0.10
+        version: 0.0.10
+      '@blaze-cardano/wallet':
         specifier: ^0.0.9
         version: 0.0.9
-      '@blaze-cardano/wallet':
-        specifier: ^0.0.8
-        version: 0.0.8
+      '@cardano-sdk/crypto':
+        specifier: ^0.1.23
+        version: 0.1.23
     devDependencies:
       '@tsconfig/node20':
         specifier: ^20.1.4
@@ -33,20 +36,20 @@ packages:
   '@blaze-cardano/blueprint@0.0.1':
     resolution: {integrity: sha512-wmxRpaS+Qh7kYJMCmallyfrgSSONtCNfH1xXP12icUTZvj2jDFSV5Z7A+3og+JEymP87YdmBTRXoLcBRoPBExw==}
 
-  '@blaze-cardano/core@0.1.1':
-    resolution: {integrity: sha512-NfCJ3r85rSrNLo7+X+sfvUYGnJhfBqCStJZKdph3RdVdVw3JXqX+10tAV6HYPOD9wFLOVN34QhfTG3hzaEVBFw==}
+  '@blaze-cardano/core@0.1.2':
+    resolution: {integrity: sha512-bqWx+FUpxpWG4iLCuodb5U6gw23YzMxLVRHANR07HGGqqvdwhYoK0urkp1Wr7McPp578f0gDfFar5Lm5eo4AHQ==}
 
-  '@blaze-cardano/query@0.0.4':
-    resolution: {integrity: sha512-EH1E8UaxgyA6nGo4fM4q1cvEBe8qCESVVlykb+Slixxl6+V3dLbofv64UU0hMlmy44AEn1iyKWd0nW7pKz6iiQ==}
+  '@blaze-cardano/query@0.0.5':
+    resolution: {integrity: sha512-Hw+Dq/ssYOgQVUH3n3Pw2gnOB8yx8nEpaytG6VFebUJPDvK1g60t5sYihD/VsZBKw60jBUN1youGClj4nvbn/Q==}
 
-  '@blaze-cardano/sdk@0.0.9':
-    resolution: {integrity: sha512-x8nn56EV+6rQ9Av7fc2hj1FUoghhy4zLctWju8ZswKlxANdiWypm4wzB/OaFwz0PHwbnEyRE6yaYPopNnal5/g==}
+  '@blaze-cardano/sdk@0.0.10':
+    resolution: {integrity: sha512-S+VAxudyWm/7XNTnlce4R2gnAPh0Vf/h8FhGWtSgdISj/Ae9DKqzK57+rC9o/oFR2s2+9wGEULCRxHXFmLsqPg==}
 
-  '@blaze-cardano/tx@0.0.7':
-    resolution: {integrity: sha512-LS+22EDRh1TZRW3TvdoHaiup8N+sa544cMVDz9zoHpqYDu7WHIfJqA57StTYuvU+h5u9wN2alP4I01yMdGeqPQ==}
+  '@blaze-cardano/tx@0.0.8':
+    resolution: {integrity: sha512-6UkqDp8DDUyJSn+3N+S1iq1rNZiEpWLFhGjw5JLkR/bYyqUAjXAAAYiI3/Mo0e4+IcVZVCi28CLy5SvztMCfXQ==}
 
-  '@blaze-cardano/wallet@0.0.8':
-    resolution: {integrity: sha512-WyiF2OT5LGXT558TPX+kT9SFZChoq8QuEOV/Qm9HAbSneOKGlZjItwrepPq3a4+NlNAEkFhu2iUAOBnyr7S+BA==}
+  '@blaze-cardano/wallet@0.0.9':
+    resolution: {integrity: sha512-InE6b2/7KVTn4LsQOd0fUVaYHVs6NmPXSfSn0xw+NNOWRIUIKjbwohpWhJyjDCMXg0QK/8/0mXqSpXWgT8XsKw==}
 
   '@cardano-ogmios/client@5.6.0':
     resolution: {integrity: sha512-F0kWQ+TTc3OvSsp9CmxAPqo7fpB9yjrK+Lp52IqGG2YJVwyIynvHwlOW0cZNsRLO+KXwJrSoKdj9rHI0Vix4iw==}
@@ -614,7 +617,7 @@ snapshots:
 
   '@blaze-cardano/blueprint@0.0.1': {}
 
-  '@blaze-cardano/core@0.1.1':
+  '@blaze-cardano/core@0.1.2':
     dependencies:
       '@cardano-sdk/core': 0.30.2(rxjs@7.8.1)
       '@cardano-sdk/crypto': 0.1.23
@@ -633,9 +636,9 @@ snapshots:
       - encoding
       - utf-8-validate
 
-  '@blaze-cardano/query@0.0.4':
+  '@blaze-cardano/query@0.0.5':
     dependencies:
-      '@blaze-cardano/core': 0.1.1
+      '@blaze-cardano/core': 0.1.2
     transitivePeerDependencies:
       - '@dcspark/cardano-multiplatform-lib-asmjs'
       - '@dcspark/cardano-multiplatform-lib-browser'
@@ -644,13 +647,13 @@ snapshots:
       - encoding
       - utf-8-validate
 
-  '@blaze-cardano/sdk@0.0.9':
+  '@blaze-cardano/sdk@0.0.10':
     dependencies:
       '@blaze-cardano/blueprint': 0.0.1
-      '@blaze-cardano/core': 0.1.1
-      '@blaze-cardano/query': 0.0.4
-      '@blaze-cardano/tx': 0.0.7
-      '@blaze-cardano/wallet': 0.0.8
+      '@blaze-cardano/core': 0.1.2
+      '@blaze-cardano/query': 0.0.5
+      '@blaze-cardano/tx': 0.0.8
+      '@blaze-cardano/wallet': 0.0.9
     transitivePeerDependencies:
       - '@dcspark/cardano-multiplatform-lib-asmjs'
       - '@dcspark/cardano-multiplatform-lib-browser'
@@ -659,9 +662,9 @@ snapshots:
       - encoding
       - utf-8-validate
 
-  '@blaze-cardano/tx@0.0.7':
+  '@blaze-cardano/tx@0.0.8':
     dependencies:
-      '@blaze-cardano/core': 0.1.1
+      '@blaze-cardano/core': 0.1.2
       uplc-node: 0.0.3
     transitivePeerDependencies:
       - '@dcspark/cardano-multiplatform-lib-asmjs'
@@ -671,11 +674,11 @@ snapshots:
       - encoding
       - utf-8-validate
 
-  '@blaze-cardano/wallet@0.0.8':
+  '@blaze-cardano/wallet@0.0.9':
     dependencies:
-      '@blaze-cardano/core': 0.1.1
-      '@blaze-cardano/query': 0.0.4
-      '@blaze-cardano/tx': 0.0.7
+      '@blaze-cardano/core': 0.1.2
+      '@blaze-cardano/query': 0.0.5
+      '@blaze-cardano/tx': 0.0.8
     transitivePeerDependencies:
       - '@dcspark/cardano-multiplatform-lib-asmjs'
       - '@dcspark/cardano-multiplatform-lib-browser'

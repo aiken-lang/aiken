@@ -17,8 +17,9 @@
     "tsx": "^4.10.2"
   },
   "dependencies": {
-    "@blaze-cardano/core": "^0.1.1",
-    "@blaze-cardano/sdk": "^0.0.9",
-    "@blaze-cardano/wallet": "^0.0.8"
+    "@blaze-cardano/core": "^0.1.2",
+    "@blaze-cardano/sdk": "^0.0.10",
+    "@blaze-cardano/wallet": "^0.0.9",
+    "@cardano-sdk/crypto": "^0.1.23"
   }
 }

@@ -1,32 +1,36 @@
+import { Blockfrost, Blaze } from "@blaze-cardano/sdk";
 import {
-  Blockfrost,
-  Constr,
-  Data,
-  fromHex,
-  Blaze,
-  SpendingValidator,
-  toHex,
-} from "@blaze-cardano/sdk";
-import { TransactionId } from "@blaze-cardano/core";
-import * as cbor from "https://deno.land/x/cbor@v1.4.1/index.js";
+  NetworkId,
+  TransactionId,
+  Ed25519PrivateNormalKeyHex,
+  PlutusData,
+} from "@blaze-cardano/core";
+import { HotWallet } from "@blaze-cardano/wallet";
+import * as fs from "node:fs";
 
-const blaze = new Blaze(
-  new Blockfrost({
-    network: "cardano-preview",
-    projectId: process.env.BLOCKFROST_API_KEY ?? "",
-  }),
-  "Preview",
+const privateKey = fs.readFileSync("./key.sk", { encoding: "utf8" });
+
+const provider = new Blockfrost({
+  network: "cardano-preview",
+  projectId: process.env.BLOCKFROST_API_KEY ?? "",
+});
+
+const wallet = new HotWallet(
+  Ed25519PrivateNormalKeyHex(privateKey),
+  NetworkId.Preview,
+  provider,
 );
 
-blaze.selectWalletFromPrivateKey(await Deno.readTextFile("./key.sk"));
+const blaze = new Blaze(provider, wallet);
 
 const validator = await readValidator();
 
 // --- Supporting functions
 
 async function readValidator(): Promise<SpendingValidator> {
-  const validator = JSON.parse(await Deno.readTextFile("plutus.json"))
-    .validators[0];
+  const validator = JSON.parse(
+    fs.readFileSync("plutus.json", { encoding: "utf8" }),
+  ).validators[0];
 
   return {
     type: "PlutusV2",
@@ -34,9 +38,10 @@ async function readValidator(): Promise<SpendingValidator> {
   };
 }
 
-const publicKeyHash = blaze.utils.getAddressDetails(
-  await blaze.wallet.address(),
-).paymentCredential?.hash;
+const addresses = await wallet.getUnusedAddresses();
+const publicKeyHash = addresses[0].getProps().paymentPart!;
+
+PlutusData.Constr(0, [publicKeyHash]);
 
 const datum = Data.to(new Constr(0, [publicKeyHash]));
 
