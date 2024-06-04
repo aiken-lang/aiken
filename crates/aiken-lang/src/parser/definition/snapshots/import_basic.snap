@@ -2,15 +2,13 @@
 source: crates/aiken-lang/src/parser/definition/import.rs
 description: "Code:\n\nuse aiken/list"
 ---
-Use(
-    Use {
-        as_name: None,
-        location: 0..14,
-        module: [
-            "aiken",
-            "list",
-        ],
-        package: (),
-        unqualified: [],
-    },
-)
+Use {
+    as_name: None,
+    location: 0..14,
+    module: [
+        "aiken",
+        "list",
+    ],
+    package: (),
+    unqualified: [],
+}

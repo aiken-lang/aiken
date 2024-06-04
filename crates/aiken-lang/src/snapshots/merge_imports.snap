@@ -1,0 +1,51 @@
+---
+source: crates/aiken-lang/src/parser.rs
+description: "Code:\n\nuse aiken/list.{bar, foo}\nuse aiken/list.{baz}\n"
+---
+Module {
+    name: "",
+    docs: [],
+    type_info: (),
+    definitions: [
+        Use(
+            Use {
+                as_name: None,
+                location: 0..25,
+                module: [
+                    "aiken",
+                    "list",
+                ],
+                package: (),
+                unqualified: [
+                    UnqualifiedImport {
+                        location: 16..19,
+                        name: "bar",
+                        as_name: None,
+                    },
+                    UnqualifiedImport {
+                        location: 21..24,
+                        name: "foo",
+                        as_name: None,
+                    },
+                    UnqualifiedImport {
+                        location: 42..45,
+                        name: "baz",
+                        as_name: None,
+                    },
+                ],
+            },
+        ),
+    ],
+    lines: LineNumbers {
+        line_starts: [
+            0,
+            26,
+            47,
+        ],
+        length: 47,
+        last: Some(
+            47,
+        ),
+    },
+    kind: Validator,
+}

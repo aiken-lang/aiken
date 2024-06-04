@@ -10,6 +10,8 @@
 
 - **aiken-lang**: the keyword `fail` on property-based test semantic has changed and now consider a test to succeed only if **every** execution of the test failed (instead of just one). The previous behavior can be recovered by adding the keyword `once` after `fail`. @KtorZ
 
+- **aiken-lang**: duplicate import lines are now automatically merged instead of raising a warning. However, imports can no longer appear anywhere in the file and must come as the first definitions. @KtorZ
+
 ### Fixed
 
 - **aiken-lang**: fixed the number of 'after x tests' number reported on property test failure, which was off by one. @KtorZ

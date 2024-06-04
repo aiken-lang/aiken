@@ -1,6 +1,5 @@
-use chumsky::prelude::*;
-
 use super::{error::ParseError, token::Token};
+use chumsky::prelude::*;
 
 pub fn optional_flag(token: Token) -> impl Parser<Token, bool, Error = ParseError> {
     just(token).ignored().or_not().map(|v| v.is_some())
@@ -121,6 +120,27 @@ macro_rules! assert_definition {
         let stream = chumsky::Stream::from_iter($crate::ast::Span::create(tokens.len(), 1), tokens.into_iter());
 
         let result = $crate::parser::definition().parse(stream).unwrap();
+
+        insta::with_settings!({
+            description => concat!("Code:\n\n", indoc::indoc! { $code }),
+            prepend_module_to_snapshot => false,
+            omit_expression => true
+        }, {
+            insta::assert_debug_snapshot!(result);
+        });
+    };
+}
+
+#[macro_export]
+macro_rules! assert_import {
+    ($code:expr) => {
+        use chumsky::Parser;
+
+        let $crate::parser::lexer::LexInfo { tokens, .. } = $crate::parser::lexer::run(indoc::indoc! { $code }).unwrap();
+
+        let stream = chumsky::Stream::from_iter($crate::ast::Span::create(tokens.len(), 1), tokens.into_iter());
+
+        let result = $crate::parser::import().parse(stream).unwrap();
 
         insta::with_settings!({
             description => concat!("Code:\n\n", indoc::indoc! { $code }),
