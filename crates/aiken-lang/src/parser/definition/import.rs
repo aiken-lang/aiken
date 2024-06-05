@@ -4,7 +4,7 @@ use crate::{
 };
 use chumsky::prelude::*;
 
-pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
+pub fn parser() -> impl Parser<Token, ast::UntypedUse, Error = ParseError> {
     let unqualified_import = choice((
         select! {Token::Name { name } => name}.then(
             just(Token::As)
@@ -42,30 +42,28 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
         .then(as_name);
 
     just(Token::Use).ignore_then(module_path).map_with_span(
-        |((module, unqualified), as_name), span| {
-            ast::UntypedDefinition::Use(ast::Use {
-                module,
-                as_name,
-                unqualified: unqualified.unwrap_or_default(),
-                package: (),
-                location: span,
-            })
+        |((module, unqualified), as_name), span| ast::Use {
+            module,
+            as_name,
+            unqualified: unqualified.unwrap_or_default(),
+            package: (),
+            location: span,
         },
     )
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::assert_definition;
+    use crate::assert_import;
 
     #[test]
     fn import_basic() {
-        assert_definition!("use aiken/list");
+        assert_import!("use aiken/list");
     }
 
     #[test]
     fn import_unqualified() {
-        assert_definition!(
+        assert_import!(
             r#"
             use std/address.{Address as A, thing as w}
             "#
@@ -74,6 +72,6 @@ mod tests {
 
     #[test]
     fn import_alias() {
-        assert_definition!("use aiken/list as foo");
+        assert_import!("use aiken/list as foo");
     }
 }

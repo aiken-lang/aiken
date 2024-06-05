@@ -13,10 +13,11 @@ mod utils;
 use crate::{ast, line_numbers::LineNumbers};
 pub use annotation::parser as annotation;
 use chumsky::prelude::*;
-pub use definition::parser as definition;
+pub use definition::{import::parser as import, parser as definition};
 use error::ParseError;
 pub use expr::parser as expression;
 use extra::ModuleExtra;
+use indexmap::IndexMap;
 pub use pattern::parser as pattern;
 
 pub fn module(
@@ -27,7 +28,48 @@ pub fn module(
 
     let stream = chumsky::Stream::from_iter(ast::Span::create(tokens.len(), 1), tokens.into_iter());
 
-    let definitions = definition().repeated().then_ignore(end()).parse(stream)?;
+    let definitions = import()
+        .repeated()
+        .map(|imports| {
+            let mut store = IndexMap::new();
+
+            for import in imports.into_iter() {
+                let key = (import.module, import.as_name);
+                match store.remove(&key) {
+                    None => {
+                        store.insert(key, (import.location, import.unqualified));
+                    }
+                    Some((location, unqualified)) => {
+                        let mut merged_unqualified = Vec::new();
+                        merged_unqualified.extend(unqualified);
+                        merged_unqualified.extend(import.unqualified);
+                        store.insert(key, (location, merged_unqualified));
+                    }
+                }
+            }
+
+            store
+                .into_iter()
+                .map(|((module, as_name), (location, unqualified))| {
+                    ast::Definition::Use(ast::Use {
+                        module,
+                        as_name,
+                        location,
+                        unqualified,
+                        package: (),
+                    })
+                })
+                .collect::<Vec<ast::UntypedDefinition>>()
+        })
+        .then(definition().repeated())
+        .map(|(imports, others)| {
+            let mut defs = Vec::new();
+            defs.extend(imports);
+            defs.extend(others);
+            defs
+        })
+        .then_ignore(end())
+        .parse(stream)?;
 
     let lines = LineNumbers::new(src);
 
@@ -46,6 +88,16 @@ pub fn module(
 #[cfg(test)]
 mod tests {
     use crate::assert_module;
+
+    #[test]
+    fn merge_imports() {
+        assert_module!(
+            r#"
+            use aiken/list.{bar, foo}
+            use aiken/list.{baz}
+            "#
+        );
+    }
 
     #[test]
     fn windows_newline() {

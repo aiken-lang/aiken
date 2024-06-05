@@ -1,0 +1,5 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nuse aiken/list.{bar, foo} as vector\nuse aiken/list.{baz} as vector\n"
+---
+use aiken/list.{bar, baz, foo} as vector

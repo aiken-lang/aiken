@@ -2,30 +2,28 @@
 source: crates/aiken-lang/src/parser/definition/import.rs
 description: "Code:\n\nuse std/address.{Address as A, thing as w}\n"
 ---
-Use(
-    Use {
-        as_name: None,
-        location: 0..42,
-        module: [
-            "std",
-            "address",
-        ],
-        package: (),
-        unqualified: [
-            UnqualifiedImport {
-                location: 17..29,
-                name: "Address",
-                as_name: Some(
-                    "A",
-                ),
-            },
-            UnqualifiedImport {
-                location: 31..41,
-                name: "thing",
-                as_name: Some(
-                    "w",
-                ),
-            },
-        ],
-    },
-)
+Use {
+    as_name: None,
+    location: 0..42,
+    module: [
+        "std",
+        "address",
+    ],
+    package: (),
+    unqualified: [
+        UnqualifiedImport {
+            location: 17..29,
+            name: "Address",
+            as_name: Some(
+                "A",
+            ),
+        },
+        UnqualifiedImport {
+            location: 31..41,
+            name: "thing",
+            as_name: Some(
+                "w",
+            ),
+        },
+    ],
+}

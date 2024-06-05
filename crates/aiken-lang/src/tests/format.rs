@@ -309,8 +309,6 @@ fn format_else_if() {
 
 #[test]
 fn format_imports() {
-    // TODO: Fix this case, this is behaving weirdly, not keeping the order for the comments and
-    // imports.
     assert_format!(
         r#"
         use aiken/list
@@ -320,6 +318,59 @@ fn format_imports() {
         // bar
         use aiken/transaction
         use aiken/transaction/value
+    "#
+    );
+}
+
+#[test]
+fn format_merge_imports() {
+    assert_format!(
+        r#"
+        use aiken/list.{bar, foo}
+        use aiken/list.{baz}
+    "#
+    );
+}
+
+#[test]
+fn format_merge_imports_2() {
+    assert_format!(
+        r#"
+        use aiken/list.{bar, foo}
+        use aiken/dict
+        use aiken/list
+    "#
+    );
+}
+
+#[test]
+fn format_merge_imports_alias() {
+    assert_format!(
+        r#"
+        use aiken/list.{bar, foo}
+        use aiken/list.{baz} as vector
+    "#
+    );
+}
+
+#[test]
+fn format_merge_imports_alias_2() {
+    assert_format!(
+        r#"
+        use aiken/list.{bar, foo} as vector
+        use aiken/list.{baz} as vector
+    "#
+    );
+}
+
+#[test]
+fn format_merge_imports_comments() {
+    assert_format!(
+        r#"
+        // foo
+        use aiken/list.{bar, foo}
+        // bar
+        use aiken/list.{baz}
     "#
     );
 }

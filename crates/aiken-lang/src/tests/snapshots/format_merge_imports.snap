@@ -1,0 +1,5 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nuse aiken/list.{bar, foo}\nuse aiken/list.{baz}\n"
+---
+use aiken/list.{bar, baz, foo}
