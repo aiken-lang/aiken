@@ -20,6 +20,7 @@
     "@blaze-cardano/core": "^0.1.2",
     "@blaze-cardano/sdk": "^0.0.10",
     "@blaze-cardano/wallet": "^0.0.9",
-    "@cardano-sdk/crypto": "^0.1.23"
+    "@cardano-sdk/core": "^0.32.0",
+    "cbor": "^9.0.2"
   }
 }

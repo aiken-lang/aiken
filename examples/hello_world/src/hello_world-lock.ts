@@ -4,8 +4,12 @@ import {
   TransactionId,
   Ed25519PrivateNormalKeyHex,
   PlutusData,
+  fromHex,
+  toHex,
 } from "@blaze-cardano/core";
 import { HotWallet } from "@blaze-cardano/wallet";
+import * as C from "@cardano-sdk/core";
+import * as cbor from "cbor";
 import * as fs from "node:fs";
 
 const privateKey = fs.readFileSync("./key.sk", { encoding: "utf8" });
@@ -38,19 +42,27 @@ async function readValidator(): Promise<SpendingValidator> {
   };
 }
 
-const addresses = await wallet.getUnusedAddresses();
-const publicKeyHash = addresses[0].getProps().paymentPart!;
+const publicKeyHash = wallet.address.getProps().paymentPart!;
 
-PlutusData.Constr(0, [publicKeyHash]);
+const list = new C.Serialization.PlutusList();
 
-const datum = Data.to(new Constr(0, [publicKeyHash]));
+const bytes = PlutusData.newBytes(publicKeyHash.hash);
 
-const txId = await lock(1000000n, { into: validator, owner: datum });
+list.add(bytes);
+
+const datum = PlutusData.newConstrPlutusData(
+  new C.Serialization.ConstrPlutusData(0n, list),
+);
+
+const txId = await lock(1000000n, {
+  into: validator,
+  owner: Buffer.from(datum.toCbor(), "hex").toString("hex"),
+});
 
 await blaze.provider.awaitTransactionConfirmation(txId);
 
 console.log(`1 tADA locked into the contract at:
-    Tx ID: ${txHash}
+    Tx ID: ${txId}
     Datum: ${datum}
 `);
 

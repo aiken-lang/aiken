@@ -17,9 +17,15 @@ importers:
       '@blaze-cardano/wallet':
         specifier: ^0.0.9
         version: 0.0.9
+      '@cardano-sdk/core':
+        specifier: ^0.32.0
+        version: 0.32.0(rxjs@7.8.1)
       '@cardano-sdk/crypto':
         specifier: ^0.1.23
         version: 0.1.23
+      cbor:
+        specifier: ^9.0.2
+        version: 9.0.2
     devDependencies:
       '@tsconfig/node20':
         specifier: ^20.1.4
@@ -61,6 +67,15 @@ packages:
 
   '@cardano-sdk/core@0.30.2':
     resolution: {integrity: sha512-aFlLfM0pqjhjAE5oMyUcnhl+mhpzXva9bAOuTGvOUDQbIRPZtvr2UVv3rXpqFy6FvtNr8WIA7moSrePRPm9aCA==}
+    engines: {node: '>=16.20.2'}
+    peerDependencies:
+      rxjs: ^7.4.0
+    peerDependenciesMeta:
+      rxjs:
+        optional: true
+
+  '@cardano-sdk/core@0.32.0':
+    resolution: {integrity: sha512-w7yt1XcCueNAUIQ9Z9F8tjoqe/KeNcz2p950DKeDU1OJ8Y3mU/Rem1JAfLwyJpn8ogSWf3lVY7fZqUabdiEcqw==}
     engines: {node: '>=16.20.2'}
     peerDependencies:
       rxjs: ^7.4.0
@@ -285,6 +300,10 @@ packages:
     resolution: {integrity: sha512-GHTSNSYICQ7scH7sZ+M2rFopRoLh8t2bLSW6BbgrtLsahOIB5iyAVJf9GjWK3cYTDaMj4XdBpM1cA6pIS0Kv2w==}
     engines: {node: '>= 0.4'}
 
+  cbor@9.0.2:
+    resolution: {integrity: sha512-JPypkxsB10s9QOWwa6zwPzqE1Md3vqpPc+cai4sAecuCsRyAtAl/pMyhPlMbT/xtPnm2dznJZYRLui57qiRhaQ==}
+    engines: {node: '>=16'}
+
   cipher-base@1.0.4:
     resolution: {integrity: sha512-Kkht5ye6ZGmwv40uUDZztayT2ThLQGfnj/T71N/XzeZeo3nf8foyW7zGTsPYkEya3m5f3cAypH+qe7YOrM1U2Q==}
 
@@ -427,6 +446,10 @@ packages:
     peerDependenciesMeta:
       encoding:
         optional: true
+
+  nofilter@3.1.0:
+    resolution: {integrity: sha512-l2NNj07e9afPnhAhvgVrCD/oy2Ai1yfLpuo3EpiO1jFTsB4sFz6oIfAfSZyQzVpkZQ9xS8ZS5g1jCBgq4Hwo0g==}
+    engines: {node: '>=12.19'}
 
   npm@9.9.3:
     resolution: {integrity: sha512-Z1l+rcQ5kYb17F3hHtO601arEpvdRYnCLtg8xo3AGtyj3IthwaraEOexI9903uANkifFbqHC8hT53KIrozWg8A==}
@@ -729,6 +752,30 @@ snapshots:
       - encoding
       - utf-8-validate
 
+  '@cardano-sdk/core@0.32.0(rxjs@7.8.1)':
+    dependencies:
+      '@cardano-ogmios/client': 5.6.0
+      '@cardano-ogmios/schema': 5.6.0
+      '@cardano-sdk/crypto': 0.1.23
+      '@cardano-sdk/util': 0.15.1
+      '@foxglove/crc': 0.0.3
+      '@scure/base': 1.1.6
+      fraction.js: 4.0.1
+      ip-address: 8.1.0
+      lodash: 4.17.21
+      ts-custom-error: 3.3.1
+      ts-log: 2.2.5
+      web-encoding: 1.1.5
+    optionalDependencies:
+      rxjs: 7.8.1
+    transitivePeerDependencies:
+      - '@dcspark/cardano-multiplatform-lib-asmjs'
+      - '@dcspark/cardano-multiplatform-lib-browser'
+      - '@dcspark/cardano-multiplatform-lib-nodejs'
+      - bufferutil
+      - encoding
+      - utf-8-validate
+
   '@cardano-sdk/crypto@0.1.23':
     dependencies:
       '@cardano-sdk/util': 0.15.1
@@ -880,6 +927,10 @@ snapshots:
       function-bind: 1.1.2
       get-intrinsic: 1.2.4
       set-function-length: 1.2.2
+
+  cbor@9.0.2:
+    dependencies:
+      nofilter: 3.1.0
 
   cipher-base@1.0.4:
     dependencies:
@@ -1051,6 +1102,8 @@ snapshots:
   node-fetch@2.7.0:
     dependencies:
       whatwg-url: 5.0.0
+
+  nofilter@3.1.0: {}
 
   npm@9.9.3: {}
 
