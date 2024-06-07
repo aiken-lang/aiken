@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     ast::{
-        self, Annotation, Arg, ArgName, AssignmentKind, AssignmentPattern, BinOp, Bls12_381Point,
+        self, Annotation, ArgName, AssignmentKind, AssignmentPattern, BinOp, Bls12_381Point,
         ByteArrayFormatPreference, CallArg, ClauseGuard, Constant, Curve, Function, IfBranch,
         LogicalOpChainKind, Pattern, RecordUpdateSpread, Span, TraceKind, TraceLevel, Tracing,
         TypedArg, TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch, TypedPattern,
@@ -59,6 +59,39 @@ pub(crate) fn infer_function(
         return_type: _,
     } = fun;
 
+    let mut extra_let_assignments = Vec::new();
+    for (i, arg) in arguments.iter().enumerate() {
+        let let_assignment = arg.by.clone().into_extra_assignment(
+            &arg.arg_name(i),
+            arg.annotation.as_ref(),
+            arg.location,
+        );
+        match let_assignment {
+            None => {}
+            Some(expr) => extra_let_assignments.push(expr),
+        }
+    }
+
+    let sequence;
+
+    let body = if extra_let_assignments.is_empty() {
+        body
+    } else if let UntypedExpr::Sequence { expressions, .. } = body {
+        extra_let_assignments.extend(expressions.clone());
+        sequence = UntypedExpr::Sequence {
+            expressions: extra_let_assignments,
+            location: *location,
+        };
+        &sequence
+    } else {
+        extra_let_assignments.extend([body.clone()]);
+        sequence = UntypedExpr::Sequence {
+            expressions: extra_let_assignments,
+            location: body.location(),
+        };
+        &sequence
+    };
+
     let preregistered_fn = environment
         .get_variable(name)
         .expect("Could not find preregistered type for function");
@@ -79,7 +112,8 @@ pub(crate) fn infer_function(
     let arguments = arguments
         .iter()
         .zip(&args_types)
-        .map(|(arg_name, tipo)| arg_name.to_owned().set_type(tipo.clone()))
+        .enumerate()
+        .map(|(ix, (arg_name, tipo))| arg_name.to_owned().set_type(tipo.clone(), ix))
         .collect();
 
     let hydrator = hydrators
@@ -330,15 +364,41 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         let mut arguments = Vec::new();
 
+        let mut extra_let_assignments = Vec::new();
         for (i, arg) in args.into_iter().enumerate() {
-            let arg = self.infer_param(arg, expected_args.get(i).cloned())?;
-
+            let (arg, extra_let_assignment) =
+                self.infer_param(arg, expected_args.get(i).cloned(), i)?;
+            if let Some(expr) = extra_let_assignment {
+                extra_let_assignments.push(expr);
+            }
             arguments.push(arg);
         }
 
         let return_type = match return_annotation {
             Some(ann) => Some(self.type_from_annotation(ann)?),
             None => None,
+        };
+
+        let body_location = body.location();
+
+        let body = if extra_let_assignments.is_empty() {
+            body
+        } else if let UntypedExpr::Sequence {
+            location,
+            expressions,
+        } = body
+        {
+            extra_let_assignments.extend(expressions);
+            UntypedExpr::Sequence {
+                expressions: extra_let_assignments,
+                location,
+            }
+        } else {
+            extra_let_assignments.extend([body]);
+            UntypedExpr::Sequence {
+                expressions: extra_let_assignments,
+                location: body_location,
+            }
         };
 
         self.infer_fn_with_known_types(arguments, body, return_type)
@@ -1072,16 +1132,19 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
     fn infer_param(
         &mut self,
-        arg: UntypedArg,
+        untyped_arg: UntypedArg,
         expected: Option<Rc<Type>>,
-    ) -> Result<TypedArg, Error> {
-        let Arg {
-            arg_name,
+        ix: usize,
+    ) -> Result<(TypedArg, Option<UntypedExpr>), Error> {
+        let arg_name = untyped_arg.arg_name(ix);
+
+        let UntypedArg {
+            by,
             annotation,
             location,
             doc,
-            tipo: _,
-        } = arg;
+            is_validator_param,
+        } = untyped_arg;
 
         let tipo = annotation
             .clone()
@@ -1097,13 +1160,18 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             self.unify(expected, tipo.clone(), location, false)?;
         }
 
-        Ok(Arg {
+        let extra_assignment = by.into_extra_assignment(&arg_name, annotation.as_ref(), location);
+
+        let typed_arg = TypedArg {
             arg_name,
             location,
             annotation,
             tipo,
+            is_validator_param,
             doc,
-        })
+        };
+
+        Ok((typed_arg, extra_assignment))
     }
 
     fn infer_assignment(
@@ -1733,12 +1801,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             for arg in &args {
                 match &arg.arg_name {
-                    ArgName::Named {
-                        name,
-                        is_validator_param,
-                        location,
-                        ..
-                    } if !is_validator_param => {
+                    ArgName::Named { name, location, .. } if !arg.is_validator_param => {
                         if let Some(duplicate_location) = argument_names.insert(name, location) {
                             return Err(Error::DuplicateArgument {
                                 location: *location,
@@ -1965,7 +2028,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         label: name.clone(),
                         name,
                         location: var_location,
-                        is_validator_param: false,
                     };
 
                     names.push((name, assignment_pattern_location, annotation));
@@ -1989,7 +2051,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         label: name.clone(),
                         name: name.clone(),
                         location: pattern.location(),
-                        is_validator_param: false,
                     };
 
                     let pattern_is_var = pattern.is_var();

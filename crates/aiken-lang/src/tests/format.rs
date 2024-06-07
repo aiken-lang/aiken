@@ -883,3 +883,68 @@ fn format_pairs() {
         }"#
     );
 }
+
+#[test]
+fn format_fn_pattern() {
+    assert_format!(
+        r#"
+        pub fn foo(Foo { a, b, .. }) {
+            todo
+        }
+
+        pub fn bar([Bar] : List<Bar>) {
+            todo
+        }
+
+        pub fn baz((Baz, Baz) as x) {
+            todo
+        }
+
+        pub fn fiz(Pair(fst, snd) as x: Pair<Int, Int>) {
+            todo
+        }
+
+        test buz((a, b) via some_fuzzer()) {
+            todo
+        }
+        "#
+    );
+}
+
+#[test]
+fn format_anon_fn_pattern() {
+    assert_format!(
+        r#"
+        pub fn main() {
+            let foo = fn (Foo { a, b, .. }) { todo }
+            let bar = fn ([Bar] : List<Bar>) { todo }
+            let baz = fn ((Baz, Baz) as x) { todo }
+            let fiz = fn (Pair(fst, snd) as x: Pair<Int, Int>) { todo }
+            todo
+        }
+        "#
+    );
+}
+
+#[test]
+fn format_validator_pattern() {
+    assert_format!(
+        r#"
+        validator(Foo { a, b, .. }) {
+            fn foo() { todo }
+        }
+
+        validator([Bar] : List<Bar>) {
+            fn bar() { todo }
+        }
+
+        validator((Baz, Baz) as x) {
+            fn baz() { todo }
+        }
+
+        validator((fst, snd) as x: Pair<Int, Int>) {
+            fn fiz() { todo }
+        }
+        "#
+    );
+}

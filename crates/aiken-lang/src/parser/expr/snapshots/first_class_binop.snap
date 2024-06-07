@@ -24,13 +24,14 @@ Sequence {
                             GtInt,
                         ),
                         arguments: [
-                            Arg {
-                                arg_name: Named {
-                                    name: "left",
-                                    label: "left",
-                                    location: 16..17,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "left",
+                                        label: "left",
+                                        location: 16..17,
+                                    },
+                                ),
                                 location: 16..17,
                                 annotation: Some(
                                     Constructor {
@@ -41,15 +42,16 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
-                            Arg {
-                                arg_name: Named {
-                                    name: "right",
-                                    label: "right",
-                                    location: 16..17,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "right",
+                                        label: "right",
+                                        location: 16..17,
+                                    },
+                                ),
                                 location: 16..17,
                                 annotation: Some(
                                     Constructor {
@@ -60,7 +62,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -119,13 +121,14 @@ Sequence {
                             GtEqInt,
                         ),
                         arguments: [
-                            Arg {
-                                arg_name: Named {
-                                    name: "left",
-                                    label: "left",
-                                    location: 38..40,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "left",
+                                        label: "left",
+                                        location: 38..40,
+                                    },
+                                ),
                                 location: 38..40,
                                 annotation: Some(
                                     Constructor {
@@ -136,15 +139,16 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
-                            Arg {
-                                arg_name: Named {
-                                    name: "right",
-                                    label: "right",
-                                    location: 38..40,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "right",
+                                        label: "right",
+                                        location: 38..40,
+                                    },
+                                ),
                                 location: 38..40,
                                 annotation: Some(
                                     Constructor {
@@ -155,7 +159,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -214,13 +218,14 @@ Sequence {
                             LtInt,
                         ),
                         arguments: [
-                            Arg {
-                                arg_name: Named {
-                                    name: "left",
-                                    label: "left",
-                                    location: 61..62,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "left",
+                                        label: "left",
+                                        location: 61..62,
+                                    },
+                                ),
                                 location: 61..62,
                                 annotation: Some(
                                     Constructor {
@@ -231,15 +236,16 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
-                            Arg {
-                                arg_name: Named {
-                                    name: "right",
-                                    label: "right",
-                                    location: 61..62,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "right",
+                                        label: "right",
+                                        location: 61..62,
+                                    },
+                                ),
                                 location: 61..62,
                                 annotation: Some(
                                     Constructor {
@@ -250,7 +256,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -309,13 +315,14 @@ Sequence {
                             LtEqInt,
                         ),
                         arguments: [
-                            Arg {
-                                arg_name: Named {
-                                    name: "left",
-                                    label: "left",
-                                    location: 83..85,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "left",
+                                        label: "left",
+                                        location: 83..85,
+                                    },
+                                ),
                                 location: 83..85,
                                 annotation: Some(
                                     Constructor {
@@ -326,15 +333,16 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
-                            Arg {
-                                arg_name: Named {
-                                    name: "right",
-                                    label: "right",
-                                    location: 83..85,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "right",
+                                        label: "right",
+                                        location: 83..85,
+                                    },
+                                ),
                                 location: 83..85,
                                 annotation: Some(
                                     Constructor {
@@ -345,7 +353,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -404,29 +412,31 @@ Sequence {
                             Eq,
                         ),
                         arguments: [
-                            Arg {
-                                arg_name: Named {
-                                    name: "left",
-                                    label: "left",
-                                    location: 106..108,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "left",
+                                        label: "left",
+                                        location: 106..108,
+                                    },
+                                ),
                                 location: 106..108,
                                 annotation: None,
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
-                            Arg {
-                                arg_name: Named {
-                                    name: "right",
-                                    label: "right",
-                                    location: 106..108,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "right",
+                                        label: "right",
+                                        location: 106..108,
+                                    },
+                                ),
                                 location: 106..108,
                                 annotation: None,
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -485,29 +495,31 @@ Sequence {
                             NotEq,
                         ),
                         arguments: [
-                            Arg {
-                                arg_name: Named {
-                                    name: "left",
-                                    label: "left",
-                                    location: 129..131,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "left",
+                                        label: "left",
+                                        location: 129..131,
+                                    },
+                                ),
                                 location: 129..131,
                                 annotation: None,
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
-                            Arg {
-                                arg_name: Named {
-                                    name: "right",
-                                    label: "right",
-                                    location: 129..131,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "right",
+                                        label: "right",
+                                        location: 129..131,
+                                    },
+                                ),
                                 location: 129..131,
                                 annotation: None,
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -566,13 +578,14 @@ Sequence {
                             And,
                         ),
                         arguments: [
-                            Arg {
-                                arg_name: Named {
-                                    name: "left",
-                                    label: "left",
-                                    location: 152..154,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "left",
+                                        label: "left",
+                                        location: 152..154,
+                                    },
+                                ),
                                 location: 152..154,
                                 annotation: Some(
                                     Constructor {
@@ -583,15 +596,16 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
-                            Arg {
-                                arg_name: Named {
-                                    name: "right",
-                                    label: "right",
-                                    location: 152..154,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "right",
+                                        label: "right",
+                                        location: 152..154,
+                                    },
+                                ),
                                 location: 152..154,
                                 annotation: Some(
                                     Constructor {
@@ -602,7 +616,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -661,13 +675,14 @@ Sequence {
                             Or,
                         ),
                         arguments: [
-                            Arg {
-                                arg_name: Named {
-                                    name: "left",
-                                    label: "left",
-                                    location: 175..177,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "left",
+                                        label: "left",
+                                        location: 175..177,
+                                    },
+                                ),
                                 location: 175..177,
                                 annotation: Some(
                                     Constructor {
@@ -678,15 +693,16 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
-                            Arg {
-                                arg_name: Named {
-                                    name: "right",
-                                    label: "right",
-                                    location: 175..177,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "right",
+                                        label: "right",
+                                        location: 175..177,
+                                    },
+                                ),
                                 location: 175..177,
                                 annotation: Some(
                                     Constructor {
@@ -697,7 +713,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -756,13 +772,14 @@ Sequence {
                             AddInt,
                         ),
                         arguments: [
-                            Arg {
-                                arg_name: Named {
-                                    name: "left",
-                                    label: "left",
-                                    location: 198..199,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "left",
+                                        label: "left",
+                                        location: 198..199,
+                                    },
+                                ),
                                 location: 198..199,
                                 annotation: Some(
                                     Constructor {
@@ -773,15 +790,16 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
-                            Arg {
-                                arg_name: Named {
-                                    name: "right",
-                                    label: "right",
-                                    location: 198..199,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "right",
+                                        label: "right",
+                                        location: 198..199,
+                                    },
+                                ),
                                 location: 198..199,
                                 annotation: Some(
                                     Constructor {
@@ -792,7 +810,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -851,13 +869,14 @@ Sequence {
                             SubInt,
                         ),
                         arguments: [
-                            Arg {
-                                arg_name: Named {
-                                    name: "left",
-                                    label: "left",
-                                    location: 220..221,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "left",
+                                        label: "left",
+                                        location: 220..221,
+                                    },
+                                ),
                                 location: 220..221,
                                 annotation: Some(
                                     Constructor {
@@ -868,15 +887,16 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
-                            Arg {
-                                arg_name: Named {
-                                    name: "right",
-                                    label: "right",
-                                    location: 220..221,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "right",
+                                        label: "right",
+                                        location: 220..221,
+                                    },
+                                ),
                                 location: 220..221,
                                 annotation: Some(
                                     Constructor {
@@ -887,7 +907,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -946,13 +966,14 @@ Sequence {
                             DivInt,
                         ),
                         arguments: [
-                            Arg {
-                                arg_name: Named {
-                                    name: "left",
-                                    label: "left",
-                                    location: 242..243,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "left",
+                                        label: "left",
+                                        location: 242..243,
+                                    },
+                                ),
                                 location: 242..243,
                                 annotation: Some(
                                     Constructor {
@@ -963,15 +984,16 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
-                            Arg {
-                                arg_name: Named {
-                                    name: "right",
-                                    label: "right",
-                                    location: 242..243,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "right",
+                                        label: "right",
+                                        location: 242..243,
+                                    },
+                                ),
                                 location: 242..243,
                                 annotation: Some(
                                     Constructor {
@@ -982,7 +1004,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -1041,13 +1063,14 @@ Sequence {
                             MultInt,
                         ),
                         arguments: [
-                            Arg {
-                                arg_name: Named {
-                                    name: "left",
-                                    label: "left",
-                                    location: 264..265,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "left",
+                                        label: "left",
+                                        location: 264..265,
+                                    },
+                                ),
                                 location: 264..265,
                                 annotation: Some(
                                     Constructor {
@@ -1058,15 +1081,16 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
-                            Arg {
-                                arg_name: Named {
-                                    name: "right",
-                                    label: "right",
-                                    location: 264..265,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "right",
+                                        label: "right",
+                                        location: 264..265,
+                                    },
+                                ),
                                 location: 264..265,
                                 annotation: Some(
                                     Constructor {
@@ -1077,7 +1101,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -1136,13 +1160,14 @@ Sequence {
                             ModInt,
                         ),
                         arguments: [
-                            Arg {
-                                arg_name: Named {
-                                    name: "left",
-                                    label: "left",
-                                    location: 286..287,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "left",
+                                        label: "left",
+                                        location: 286..287,
+                                    },
+                                ),
                                 location: 286..287,
                                 annotation: Some(
                                     Constructor {
@@ -1153,15 +1178,16 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
-                            Arg {
-                                arg_name: Named {
-                                    name: "right",
-                                    label: "right",
-                                    location: 286..287,
-                                    is_validator_param: false,
-                                },
+                            UntypedArg {
+                                by: ByName(
+                                    Named {
+                                        name: "right",
+                                        label: "right",
+                                        location: 286..287,
+                                    },
+                                ),
                                 location: 286..287,
                                 annotation: Some(
                                     Constructor {
@@ -1172,7 +1198,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
-                                tipo: (),
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {

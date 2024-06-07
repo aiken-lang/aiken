@@ -1,6 +1,6 @@
 use crate::{
     ast::{
-        Annotation, Arg, ArgName, ArgVia, AssignmentKind, AssignmentPattern, BinOp,
+        Annotation, ArgBy, ArgName, ArgVia, AssignmentKind, AssignmentPattern, BinOp,
         ByteArrayFormatPreference, CallArg, ClauseGuard, Constant, CurveType, DataType, Definition,
         Function, IfBranch, LogicalOpChainKind, ModuleConstant, OnTestFailure, Pattern,
         RecordConstructor, RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias,
@@ -459,18 +459,19 @@ impl<'comments> Formatter<'comments> {
             .append(line().append(self.annotation(typ)).group().nest(INDENT))
     }
 
-    fn fn_arg<'a, A>(&mut self, arg: &'a Arg<A>) -> Document<'a> {
+    fn fn_arg<'a>(&mut self, arg: &'a UntypedArg) -> Document<'a> {
         let comments = self.pop_comments(arg.location.start);
 
         let doc_comments = self.doc_comments(arg.location.start);
 
-        let doc = match &arg.annotation {
-            None => arg.arg_name.to_doc(),
-            Some(a) => arg
-                .arg_name
-                .to_doc()
-                .append(": ")
-                .append(self.annotation(a)),
+        let mut doc = match arg.by {
+            ArgBy::ByName(ref arg_name) => arg_name.to_doc(),
+            ArgBy::ByPattern(ref pattern) => self.pattern(pattern),
+        };
+
+        doc = match &arg.annotation {
+            None => doc,
+            Some(a) => doc.append(": ").append(self.annotation(a)),
         }
         .group();
 
@@ -479,21 +480,22 @@ impl<'comments> Formatter<'comments> {
         commented(doc, comments)
     }
 
-    fn fn_arg_via<'a, A>(&mut self, arg: &'a ArgVia<A, UntypedExpr>) -> Document<'a> {
-        let comments = self.pop_comments(arg.location.start);
+    fn fn_arg_via<'a>(&mut self, arg_via: &'a ArgVia<UntypedArg, UntypedExpr>) -> Document<'a> {
+        let comments = self.pop_comments(arg_via.arg.location.start);
 
-        let doc_comments = self.doc_comments(arg.location.start);
+        let doc_comments = self.doc_comments(arg_via.arg.location.start);
 
-        let doc = match &arg.annotation {
-            None => arg.arg_name.to_doc(),
-            Some(a) => arg
-                .arg_name
-                .to_doc()
-                .append(": ")
-                .append(self.annotation(a)),
+        let mut doc = match arg_via.arg.by {
+            ArgBy::ByName(ref arg_name) => arg_name.to_doc(),
+            ArgBy::ByPattern(ref pattern) => self.pattern(pattern),
+        };
+
+        doc = match &arg_via.arg.annotation {
+            None => doc,
+            Some(a) => doc.append(": ").append(self.annotation(a)),
         }
         .append(" via ")
-        .append(self.expr(&arg.via, false))
+        .append(self.expr(&arg_via.via, false))
         .group();
 
         let doc = doc_comments.append(doc.group()).group();

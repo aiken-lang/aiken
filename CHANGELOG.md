@@ -2,6 +2,10 @@
 
 ## v1.0.30-alpha - UNRELEASED
 
+### Added
+
+- **aiken-lang**: also authorize (complete) patterns in function arguments list instead of only variable names. @KtorZ
+
 ### Changed
 
 - **aiken-lang**: duplicate import lines are now automatically merged instead of raising a warning. However, imports can no longer appear anywhere in the file and must come as the first definitions. @KtorZ

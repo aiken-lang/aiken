@@ -1,0 +1,80 @@
+{
+  "preamble": {
+    "title": "aiken-lang/104",
+    "description": "Aiken contracts for project 'aiken-lang/104'",
+    "version": "0.0.0",
+    "plutusVersion": "v2",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.0.29-alpha+257bd23"
+    },
+    "license": "Apache-2.0"
+  },
+  "validators": [
+    {
+      "title": "tests.foo_3",
+      "redeemer": {
+        "title": "_data",
+        "schema": {
+          "$ref": "#/definitions/Data"
+        }
+      },
+      "parameters": [
+        {
+          "title": "th_arg",
+          "schema": {
+            "$ref": "#/definitions/tests~1Foo"
+          }
+        }
+      ],
+      "compiledCode": "582401000032323222253330043370e6eb4c018c014dd5001a400429309b2b2b9a5573cae841",
+      "hash": "047dafbc61fb4a550a28398bde3680c48ff2000cf1022efc883124cd"
+    }
+  ],
+  "definitions": {
+    "Bool": {
+      "title": "Bool",
+      "anyOf": [
+        {
+          "title": "False",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "True",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "tests/Foo": {
+      "title": "Foo",
+      "anyOf": [
+        {
+          "title": "Foo",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "a0",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "a1",
+              "$ref": "#/definitions/Bool"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

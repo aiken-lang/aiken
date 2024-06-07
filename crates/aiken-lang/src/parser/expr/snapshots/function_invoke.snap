@@ -47,17 +47,18 @@ Sequence {
                 location: 36..65,
                 fn_style: Capture,
                 arguments: [
-                    Arg {
-                        arg_name: Named {
-                            name: "_capture__0",
-                            label: "_capture__0",
-                            location: 0..0,
-                            is_validator_param: false,
-                        },
+                    UntypedArg {
+                        by: ByName(
+                            Named {
+                                name: "_capture__0",
+                                label: "_capture__0",
+                                location: 0..0,
+                            },
+                        ),
                         location: 0..0,
                         annotation: None,
                         doc: None,
-                        tipo: (),
+                        is_validator_param: false,
                     },
                 ],
                 body: Call {
@@ -77,17 +78,18 @@ Sequence {
                                 location: 48..64,
                                 fn_style: Plain,
                                 arguments: [
-                                    Arg {
-                                        arg_name: Named {
-                                            name: "y",
-                                            label: "y",
-                                            location: 52..53,
-                                            is_validator_param: false,
-                                        },
+                                    UntypedArg {
+                                        by: ByName(
+                                            Named {
+                                                name: "y",
+                                                label: "y",
+                                                location: 52..53,
+                                            },
+                                        ),
                                         location: 52..53,
                                         annotation: None,
                                         doc: None,
-                                        tipo: (),
+                                        is_validator_param: false,
                                     },
                                 ],
                                 body: BinOp {

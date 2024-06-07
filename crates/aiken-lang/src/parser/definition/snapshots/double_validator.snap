@@ -8,41 +8,44 @@ Validator(
         end_position: 90,
         fun: Function {
             arguments: [
-                Arg {
-                    arg_name: Named {
-                        name: "datum",
-                        label: "datum",
-                        location: 21..26,
-                        is_validator_param: false,
-                    },
+                UntypedArg {
+                    by: ByName(
+                        Named {
+                            name: "datum",
+                            label: "datum",
+                            location: 21..26,
+                        },
+                    ),
                     location: 21..26,
                     annotation: None,
                     doc: None,
-                    tipo: (),
+                    is_validator_param: false,
                 },
-                Arg {
-                    arg_name: Named {
-                        name: "rdmr",
-                        label: "rdmr",
-                        location: 28..32,
-                        is_validator_param: false,
-                    },
+                UntypedArg {
+                    by: ByName(
+                        Named {
+                            name: "rdmr",
+                            label: "rdmr",
+                            location: 28..32,
+                        },
+                    ),
                     location: 28..32,
                     annotation: None,
                     doc: None,
-                    tipo: (),
+                    is_validator_param: false,
                 },
-                Arg {
-                    arg_name: Named {
-                        name: "ctx",
-                        label: "ctx",
-                        location: 34..37,
-                        is_validator_param: false,
-                    },
+                UntypedArg {
+                    by: ByName(
+                        Named {
+                            name: "ctx",
+                            label: "ctx",
+                            location: 34..37,
+                        },
+                    ),
                     location: 34..37,
                     annotation: None,
                     doc: None,
-                    tipo: (),
+                    is_validator_param: false,
                 },
             ],
             body: Var {
@@ -61,29 +64,31 @@ Validator(
         other_fun: Some(
             Function {
                 arguments: [
-                    Arg {
-                        arg_name: Named {
-                            name: "rdmr",
-                            label: "rdmr",
-                            location: 64..68,
-                            is_validator_param: false,
-                        },
+                    UntypedArg {
+                        by: ByName(
+                            Named {
+                                name: "rdmr",
+                                label: "rdmr",
+                                location: 64..68,
+                            },
+                        ),
                         location: 64..68,
                         annotation: None,
                         doc: None,
-                        tipo: (),
+                        is_validator_param: false,
                     },
-                    Arg {
-                        arg_name: Named {
-                            name: "ctx",
-                            label: "ctx",
-                            location: 70..73,
-                            is_validator_param: false,
-                        },
+                    UntypedArg {
+                        by: ByName(
+                            Named {
+                                name: "ctx",
+                                label: "ctx",
+                                location: 70..73,
+                            },
+                        ),
                         location: 70..73,
                         annotation: None,
                         doc: None,
-                        tipo: (),
+                        is_validator_param: false,
                     },
                 ],
                 body: Var {

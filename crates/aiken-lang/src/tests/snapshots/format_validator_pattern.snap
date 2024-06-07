@@ -1,0 +1,27 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nvalidator(Foo { a, b, .. }) {\n    fn foo() { todo }\n}\n\nvalidator([Bar] : List<Bar>) {\n    fn bar() { todo }\n}\n\nvalidator((Baz, Baz) as x) {\n    fn baz() { todo }\n}\n\nvalidator((fst, snd) as x: Pair<Int, Int>) {\n    fn fiz() { todo }\n}\n"
+---
+validator(Foo { a, b, .. }) {
+  fn foo() {
+    todo
+  }
+}
+
+validator([Bar]: List<Bar>) {
+  fn bar() {
+    todo
+  }
+}
+
+validator((Baz, Baz) as x) {
+  fn baz() {
+    todo
+  }
+}
+
+validator((fst, snd) as x: Pair<Int, Int>) {
+  fn fiz() {
+    todo
+  }
+}

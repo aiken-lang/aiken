@@ -2539,3 +2539,37 @@ fn mutually_recursive_1() {
 
     assert!(check(parse(source_code)).is_ok());
 }
+
+#[test]
+fn fn_single_variant_pattern() {
+    let source_code = r#"
+        pub type Foo {
+            a: Int
+        }
+
+        pub fn foo(Foo { a }) {
+            a + 1
+        }
+    "#;
+
+    assert!(dbg!(check(parse(source_code))).is_ok());
+}
+
+#[test]
+fn fn_multi_variant_pattern() {
+    let source_code = r#"
+        type Foo {
+            A { a: Int }
+            B { b: Int }
+        }
+
+        pub fn foo(A { a }) {
+            a + 1
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check_validator(parse(source_code))),
+        Err((_, Error::NotExhaustivePatternMatch { .. }))
+    ))
+}

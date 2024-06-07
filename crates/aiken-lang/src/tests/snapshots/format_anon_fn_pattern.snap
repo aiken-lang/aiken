@@ -1,0 +1,23 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\npub fn main() {\n    let foo = fn (Foo { a, b, .. }) { todo }\n    let bar = fn ([Bar] : List<Bar>) { todo }\n    let baz = fn ((Baz, Baz) as x) { todo }\n    let fiz = fn (Pair(fst, snd) as x: Pair<Int, Int>) { todo }\n    todo\n}\n"
+---
+pub fn main() {
+  let foo =
+    fn(Foo { a, b, .. }) {
+      todo
+    }
+  let bar =
+    fn([Bar]: List<Bar>) {
+      todo
+    }
+  let baz =
+    fn((Baz, Baz) as x) {
+      todo
+    }
+  let fiz =
+    fn(Pair(fst, snd) as x: Pair<Int, Int>) {
+      todo
+    }
+  todo
+}

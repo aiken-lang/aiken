@@ -1,0 +1,69 @@
+---
+source: crates/aiken-lang/src/parser/definition/function.rs
+description: "Code:\n\nfn foo(Foo { my_field, .. } as x) {\n    my_field * x.my_other_field\n}\n"
+---
+Fn(
+    Function {
+        arguments: [
+            UntypedArg {
+                by: ByPattern(
+                    Assign {
+                        name: "x",
+                        location: 7..32,
+                        pattern: Constructor {
+                            is_record: true,
+                            location: 7..27,
+                            name: "Foo",
+                            arguments: [
+                                CallArg {
+                                    label: Some(
+                                        "my_field",
+                                    ),
+                                    location: 13..21,
+                                    value: Var {
+                                        location: 13..21,
+                                        name: "my_field",
+                                    },
+                                },
+                            ],
+                            module: None,
+                            constructor: (),
+                            spread_location: Some(
+                                23..25,
+                            ),
+                            tipo: (),
+                        },
+                    },
+                ),
+                location: 7..32,
+                annotation: None,
+                doc: None,
+                is_validator_param: false,
+            },
+        ],
+        body: BinOp {
+            location: 40..67,
+            name: MultInt,
+            left: Var {
+                location: 40..48,
+                name: "my_field",
+            },
+            right: FieldAccess {
+                location: 51..67,
+                label: "my_other_field",
+                container: Var {
+                    location: 51..52,
+                    name: "x",
+                },
+            },
+        },
+        doc: None,
+        location: 0..33,
+        name: "foo",
+        public: false,
+        return_annotation: None,
+        return_type: (),
+        end_position: 68,
+        on_test_failure: FailImmediately,
+    },
+)

@@ -6,34 +6,42 @@ Test(
     Function {
         arguments: [
             ArgVia {
-                arg_name: Named {
-                    name: "x",
-                    label: "x",
+                arg: UntypedArg {
+                    by: ByName(
+                        Named {
+                            name: "x",
+                            label: "x",
+                            location: 9..10,
+                        },
+                    ),
                     location: 9..10,
+                    annotation: None,
+                    doc: None,
                     is_validator_param: false,
                 },
-                location: 9..10,
                 via: Var {
                     location: 15..16,
                     name: "f",
                 },
-                tipo: (),
-                annotation: None,
             },
             ArgVia {
-                arg_name: Named {
-                    name: "y",
-                    label: "y",
+                arg: UntypedArg {
+                    by: ByName(
+                        Named {
+                            name: "y",
+                            label: "y",
+                            location: 18..19,
+                        },
+                    ),
                     location: 18..19,
+                    annotation: None,
+                    doc: None,
                     is_validator_param: false,
                 },
-                location: 18..19,
                 via: Var {
                     location: 24..25,
                     name: "g",
                 },
-                tipo: (),
-                annotation: None,
             },
         ],
         body: Var {

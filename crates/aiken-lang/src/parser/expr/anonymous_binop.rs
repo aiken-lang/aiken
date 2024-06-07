@@ -1,10 +1,9 @@
-use chumsky::prelude::*;
-
 use crate::{
     ast,
     expr::{FnStyle, UntypedExpr},
     parser::{error::ParseError, token::Token},
 };
+use chumsky::prelude::*;
 
 pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
     select! {
@@ -41,29 +40,27 @@ pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
         };
 
         let arguments = vec![
-            ast::Arg {
-                arg_name: ast::ArgName::Named {
+            ast::UntypedArg {
+                by: ast::ArgBy::ByName(ast::ArgName::Named {
                     name: "left".to_string(),
                     label: "left".to_string(),
                     location,
-                    is_validator_param: false,
-                },
+                }),
+                is_validator_param: false,
                 annotation: arg_annotation.clone(),
                 doc: None,
                 location,
-                tipo: (),
             },
-            ast::Arg {
-                arg_name: ast::ArgName::Named {
+            ast::UntypedArg {
+                by: ast::ArgBy::ByName(ast::ArgName::Named {
                     name: "right".to_string(),
                     label: "right".to_string(),
                     location,
-                    is_validator_param: false,
-                },
+                }),
+                is_validator_param: false,
                 annotation: arg_annotation,
                 doc: None,
                 location,
-                tipo: (),
             },
         ];
 

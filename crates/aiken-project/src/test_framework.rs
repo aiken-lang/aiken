@@ -1,6 +1,6 @@
 use aiken_lang::ast::OnTestFailure;
 pub(crate) use aiken_lang::{
-    ast::{Arg, BinOp, DataTypeKey, IfBranch, Span, TypedDataType, TypedTest},
+    ast::{BinOp, DataTypeKey, IfBranch, Span, TypedArg, TypedDataType, TypedTest},
     builtins::bool,
     expr::{TypedExpr, UntypedExpr},
     format::Formatter,
@@ -124,13 +124,13 @@ impl Test {
 
             let via = parameter.via.clone();
 
-            let type_info = parameter.tipo.clone();
+            let type_info = parameter.arg.tipo.clone();
 
             let stripped_type_info = convert_opaque_type(&type_info, generator.data_types(), true);
 
             let program = generator.clone().generate_raw(
                 &test.body,
-                &[Arg {
+                &[TypedArg {
                     tipo: stripped_type_info.clone(),
                     ..parameter.clone().into()
                 }],
