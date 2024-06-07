@@ -42,11 +42,11 @@ pub fn params() -> impl Parser<Token, ast::UntypedArg, Error = ParseError> {
             label: name.clone(),
             name,
             location: span,
-            is_validator_param: false,
         }),
     ))
     .then(just(Token::Colon).ignore_then(annotation()).or_not())
     .map_with_span(|(arg_name, annotation), span| ast::UntypedArg {
+        is_validator_param: false,
         location: span,
         annotation,
         doc: None,

@@ -1085,6 +1085,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             annotation,
             location,
             doc,
+            is_validator_param,
         } = untyped_arg;
 
         let tipo = annotation
@@ -1106,6 +1107,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             location,
             annotation,
             tipo,
+            is_validator_param,
             doc,
         })
     }
@@ -1737,12 +1739,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             for arg in &args {
                 match &arg.arg_name {
-                    ArgName::Named {
-                        name,
-                        is_validator_param,
-                        location,
-                        ..
-                    } if !is_validator_param => {
+                    ArgName::Named { name, location, .. } if !arg.is_validator_param => {
                         if let Some(duplicate_location) = argument_names.insert(name, location) {
                             return Err(Error::DuplicateArgument {
                                 location: *location,
@@ -1969,7 +1966,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         label: name.clone(),
                         name,
                         location: var_location,
-                        is_validator_param: false,
                     };
 
                     names.push((name, assignment_pattern_location, annotation));
@@ -1993,7 +1989,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         label: name.clone(),
                         name: name.clone(),
                         location: pattern.location(),
-                        is_validator_param: false,
                     };
 
                     let pattern_is_var = pattern.is_var();

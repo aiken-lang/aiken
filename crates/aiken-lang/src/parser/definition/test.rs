@@ -60,13 +60,10 @@ pub fn via() -> impl Parser<Token, ast::UntypedArgVia, Error = ParseError> {
                 location: span,
             }
         }),
-        select! {Token::Name {name} => name}.map_with_span(move |name, location| {
-            ast::ArgName::Named {
-                label: name.clone(),
-                name,
-                location,
-                is_validator_param: false,
-            }
+        select! {Token::Name {name} => name}.map_with_span(|name, location| ast::ArgName::Named {
+            label: name.clone(),
+            name,
+            location,
         }),
     ))
     .then(just(Token::Colon).ignore_then(annotation()).or_not())
@@ -79,6 +76,7 @@ pub fn via() -> impl Parser<Token, ast::UntypedArgVia, Error = ParseError> {
             annotation,
             location,
             doc: None,
+            is_validator_param: false,
         },
         via,
     })

@@ -30,7 +30,6 @@ Sequence {
                                         name: "left",
                                         label: "left",
                                         location: 16..17,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 16..17,
@@ -43,6 +42,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                             UntypedArg {
                                 by: ByName(
@@ -50,7 +50,6 @@ Sequence {
                                         name: "right",
                                         label: "right",
                                         location: 16..17,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 16..17,
@@ -63,6 +62,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -127,7 +127,6 @@ Sequence {
                                         name: "left",
                                         label: "left",
                                         location: 38..40,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 38..40,
@@ -140,6 +139,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                             UntypedArg {
                                 by: ByName(
@@ -147,7 +147,6 @@ Sequence {
                                         name: "right",
                                         label: "right",
                                         location: 38..40,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 38..40,
@@ -160,6 +159,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -224,7 +224,6 @@ Sequence {
                                         name: "left",
                                         label: "left",
                                         location: 61..62,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 61..62,
@@ -237,6 +236,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                             UntypedArg {
                                 by: ByName(
@@ -244,7 +244,6 @@ Sequence {
                                         name: "right",
                                         label: "right",
                                         location: 61..62,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 61..62,
@@ -257,6 +256,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -321,7 +321,6 @@ Sequence {
                                         name: "left",
                                         label: "left",
                                         location: 83..85,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 83..85,
@@ -334,6 +333,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                             UntypedArg {
                                 by: ByName(
@@ -341,7 +341,6 @@ Sequence {
                                         name: "right",
                                         label: "right",
                                         location: 83..85,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 83..85,
@@ -354,6 +353,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -418,12 +418,12 @@ Sequence {
                                         name: "left",
                                         label: "left",
                                         location: 106..108,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 106..108,
                                 annotation: None,
                                 doc: None,
+                                is_validator_param: false,
                             },
                             UntypedArg {
                                 by: ByName(
@@ -431,12 +431,12 @@ Sequence {
                                         name: "right",
                                         label: "right",
                                         location: 106..108,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 106..108,
                                 annotation: None,
                                 doc: None,
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -501,12 +501,12 @@ Sequence {
                                         name: "left",
                                         label: "left",
                                         location: 129..131,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 129..131,
                                 annotation: None,
                                 doc: None,
+                                is_validator_param: false,
                             },
                             UntypedArg {
                                 by: ByName(
@@ -514,12 +514,12 @@ Sequence {
                                         name: "right",
                                         label: "right",
                                         location: 129..131,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 129..131,
                                 annotation: None,
                                 doc: None,
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -584,7 +584,6 @@ Sequence {
                                         name: "left",
                                         label: "left",
                                         location: 152..154,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 152..154,
@@ -597,6 +596,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                             UntypedArg {
                                 by: ByName(
@@ -604,7 +604,6 @@ Sequence {
                                         name: "right",
                                         label: "right",
                                         location: 152..154,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 152..154,
@@ -617,6 +616,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -681,7 +681,6 @@ Sequence {
                                         name: "left",
                                         label: "left",
                                         location: 175..177,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 175..177,
@@ -694,6 +693,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                             UntypedArg {
                                 by: ByName(
@@ -701,7 +701,6 @@ Sequence {
                                         name: "right",
                                         label: "right",
                                         location: 175..177,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 175..177,
@@ -714,6 +713,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -778,7 +778,6 @@ Sequence {
                                         name: "left",
                                         label: "left",
                                         location: 198..199,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 198..199,
@@ -791,6 +790,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                             UntypedArg {
                                 by: ByName(
@@ -798,7 +798,6 @@ Sequence {
                                         name: "right",
                                         label: "right",
                                         location: 198..199,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 198..199,
@@ -811,6 +810,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -875,7 +875,6 @@ Sequence {
                                         name: "left",
                                         label: "left",
                                         location: 220..221,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 220..221,
@@ -888,6 +887,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                             UntypedArg {
                                 by: ByName(
@@ -895,7 +895,6 @@ Sequence {
                                         name: "right",
                                         label: "right",
                                         location: 220..221,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 220..221,
@@ -908,6 +907,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -972,7 +972,6 @@ Sequence {
                                         name: "left",
                                         label: "left",
                                         location: 242..243,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 242..243,
@@ -985,6 +984,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                             UntypedArg {
                                 by: ByName(
@@ -992,7 +992,6 @@ Sequence {
                                         name: "right",
                                         label: "right",
                                         location: 242..243,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 242..243,
@@ -1005,6 +1004,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -1069,7 +1069,6 @@ Sequence {
                                         name: "left",
                                         label: "left",
                                         location: 264..265,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 264..265,
@@ -1082,6 +1081,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                             UntypedArg {
                                 by: ByName(
@@ -1089,7 +1089,6 @@ Sequence {
                                         name: "right",
                                         label: "right",
                                         location: 264..265,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 264..265,
@@ -1102,6 +1101,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {
@@ -1166,7 +1166,6 @@ Sequence {
                                         name: "left",
                                         label: "left",
                                         location: 286..287,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 286..287,
@@ -1179,6 +1178,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                             UntypedArg {
                                 by: ByName(
@@ -1186,7 +1186,6 @@ Sequence {
                                         name: "right",
                                         label: "right",
                                         location: 286..287,
-                                        is_validator_param: false,
                                     },
                                 ),
                                 location: 286..287,
@@ -1199,6 +1198,7 @@ Sequence {
                                     },
                                 ),
                                 doc: None,
+                                is_validator_param: false,
                             },
                         ],
                         body: BinOp {

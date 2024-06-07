@@ -65,24 +65,23 @@ pub fn param(is_validator_param: bool) -> impl Parser<Token, ast::UntypedArg, Er
         }),
         select! {Token::Name {name} => name}
             .then(select! {Token::Name {name} => name})
-            .map_with_span(move |(label, name), span| ast::ArgName::Named {
+            .map_with_span(|(label, name), span| ast::ArgName::Named {
                 label,
                 name,
                 location: span,
-                is_validator_param,
             }),
-        select! {Token::Name {name} => name}.map_with_span(move |name, span| ast::ArgName::Named {
+        select! {Token::Name {name} => name}.map_with_span(|name, span| ast::ArgName::Named {
             label: name.clone(),
             name,
             location: span,
-            is_validator_param,
         }),
     ))
     .then(just(Token::Colon).ignore_then(annotation()).or_not())
-    .map_with_span(|(arg_name, annotation), span| ast::UntypedArg {
+    .map_with_span(move |(arg_name, annotation), span| ast::UntypedArg {
         location: span,
         annotation,
         doc: None,
+        is_validator_param,
         by: ByName(arg_name),
     })
 }

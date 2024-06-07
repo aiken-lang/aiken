@@ -12,7 +12,6 @@ Fn {
                     name: "a",
                     label: "a",
                     location: 4..5,
-                    is_validator_param: false,
                 },
             ),
             location: 4..10,
@@ -25,6 +24,7 @@ Fn {
                 },
             ),
             doc: None,
+            is_validator_param: false,
         },
     ],
     body: BinOp {

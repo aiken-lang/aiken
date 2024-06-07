@@ -803,6 +803,7 @@ pub struct UntypedArg {
     pub location: Span,
     pub annotation: Option<Annotation>,
     pub doc: Option<String>,
+    pub is_validator_param: bool,
 }
 
 impl UntypedArg {
@@ -818,8 +819,6 @@ impl UntypedArg {
                     label: name.clone(),
                     name,
                     location: self.location,
-                    // TODO: This should likely be moved up inside 'UntypedArg'.
-                    is_validator_param: false,
                 }
             }
         }
@@ -831,6 +830,7 @@ impl UntypedArg {
             arg_name: self.arg_name(ix),
             location: self.location,
             annotation: self.annotation,
+            is_validator_param: self.is_validator_param,
             doc: self.doc,
         }
     }
@@ -842,6 +842,7 @@ pub struct TypedArg {
     pub location: Span,
     pub annotation: Option<Annotation>,
     pub doc: Option<String>,
+    pub is_validator_param: bool,
     pub tipo: Rc<Type>,
 }
 
@@ -928,7 +929,6 @@ pub enum ArgName {
         name: String,
         label: String,
         location: Span,
-        is_validator_param: bool,
     },
 }
 

@@ -206,10 +206,9 @@ fn infer_definition(
                     match &arg.arg_name(ix) {
                         ArgName::Named {
                             name,
-                            is_validator_param,
                             label: _,
                             location: _,
-                        } if *is_validator_param => {
+                        } if arg.is_validator_param => {
                             environment.insert_variable(
                                 name.to_string(),
                                 ValueConstructorVariant::LocalVariable {

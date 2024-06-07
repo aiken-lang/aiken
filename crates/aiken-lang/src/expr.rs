@@ -1201,8 +1201,8 @@ impl UntypedExpr {
                             label: name.clone(),
                             name,
                             location: Span::empty(),
-                            is_validator_param: false,
                         }),
+                        is_validator_param: false,
                     });
 
                     ast::CallArg {
@@ -1362,6 +1362,7 @@ impl UntypedExpr {
                     location,
                     doc: None,
                     annotation,
+                    is_validator_param: false,
                     by: ArgBy::ByName(arg_name),
                 })
                 .collect(),
