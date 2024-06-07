@@ -7,6 +7,7 @@ use crate::{
         chain::{call::parser as call, field_access, tuple_index::parser as tuple_index, Chain},
         error::ParseError,
         expr::{self, bytearray, int as uint, list, string, tuple, var},
+        pattern,
         token::Token,
     },
 };
@@ -54,25 +55,28 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
 pub fn via() -> impl Parser<Token, ast::UntypedArgVia, Error = ParseError> {
     choice((
         select! {Token::DiscardName {name} => name}.map_with_span(|name, span| {
-            ast::ArgName::Discarded {
+            ast::ArgBy::ByName(ast::ArgName::Discarded {
                 label: name.clone(),
                 name,
                 location: span,
-            }
+            })
         }),
-        select! {Token::Name {name} => name}.map_with_span(|name, location| ast::ArgName::Named {
-            label: name.clone(),
-            name,
-            location,
+        select! {Token::Name {name} => name}.map_with_span(|name, location| {
+            ast::ArgBy::ByName(ast::ArgName::Named {
+                label: name.clone(),
+                name,
+                location,
+            })
         }),
+        pattern().map(ast::ArgBy::ByPattern),
     ))
     .then(just(Token::Colon).ignore_then(annotation()).or_not())
     .map_with_span(|(arg_name, annotation), location| (arg_name, annotation, location))
     .then_ignore(just(Token::Via))
     .then(fuzzer())
-    .map(|((arg_name, annotation, location), via)| ast::ArgVia {
+    .map(|((by, annotation, location), via)| ast::ArgVia {
         arg: ast::UntypedArg {
-            by: ast::ArgBy::ByName(arg_name),
+            by,
             annotation,
             location,
             doc: None,

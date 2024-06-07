@@ -59,6 +59,39 @@ pub(crate) fn infer_function(
         return_type: _,
     } = fun;
 
+    let mut extra_let_assignments = Vec::new();
+    for (i, arg) in arguments.iter().enumerate() {
+        let let_assignment = arg.by.clone().into_extra_assignment(
+            &arg.arg_name(i),
+            arg.annotation.as_ref(),
+            arg.location,
+        );
+        match let_assignment {
+            None => {}
+            Some(expr) => extra_let_assignments.push(expr),
+        }
+    }
+
+    let sequence;
+
+    let body = if extra_let_assignments.is_empty() {
+        body
+    } else if let UntypedExpr::Sequence { expressions, .. } = body {
+        extra_let_assignments.extend(expressions.clone());
+        sequence = UntypedExpr::Sequence {
+            expressions: extra_let_assignments,
+            location: *location,
+        };
+        &sequence
+    } else {
+        extra_let_assignments.extend([body.clone()]);
+        sequence = UntypedExpr::Sequence {
+            expressions: extra_let_assignments,
+            location: body.location(),
+        };
+        &sequence
+    };
+
     let preregistered_fn = environment
         .get_variable(name)
         .expect("Could not find preregistered type for function");
@@ -331,15 +364,41 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         let mut arguments = Vec::new();
 
+        let mut extra_let_assignments = Vec::new();
         for (i, arg) in args.into_iter().enumerate() {
-            let arg = self.infer_param(arg, expected_args.get(i).cloned(), i)?;
-
+            let (arg, extra_let_assignment) =
+                self.infer_param(arg, expected_args.get(i).cloned(), i)?;
+            if let Some(expr) = extra_let_assignment {
+                extra_let_assignments.push(expr);
+            }
             arguments.push(arg);
         }
 
         let return_type = match return_annotation {
             Some(ann) => Some(self.type_from_annotation(ann)?),
             None => None,
+        };
+
+        let body_location = body.location();
+
+        let body = if extra_let_assignments.is_empty() {
+            body
+        } else if let UntypedExpr::Sequence {
+            location,
+            expressions,
+        } = body
+        {
+            extra_let_assignments.extend(expressions);
+            UntypedExpr::Sequence {
+                expressions: extra_let_assignments,
+                location,
+            }
+        } else {
+            extra_let_assignments.extend([body]);
+            UntypedExpr::Sequence {
+                expressions: extra_let_assignments,
+                location: body_location,
+            }
         };
 
         self.infer_fn_with_known_types(arguments, body, return_type)
@@ -1071,13 +1130,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         })
     }
 
-    // TODO: Handle arg pattern
     fn infer_param(
         &mut self,
         untyped_arg: UntypedArg,
         expected: Option<Rc<Type>>,
         ix: usize,
-    ) -> Result<TypedArg, Error> {
+    ) -> Result<(TypedArg, Option<UntypedExpr>), Error> {
         let arg_name = untyped_arg.arg_name(ix);
 
         let UntypedArg {
@@ -1102,14 +1160,18 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             self.unify(expected, tipo.clone(), location, false)?;
         }
 
-        Ok(TypedArg {
+        let extra_assignment = by.into_extra_assignment(&arg_name, annotation.as_ref(), location);
+
+        let typed_arg = TypedArg {
             arg_name,
             location,
             annotation,
             tipo,
             is_validator_param,
             doc,
-        })
+        };
+
+        Ok((typed_arg, extra_assignment))
     }
 
     fn infer_assignment(

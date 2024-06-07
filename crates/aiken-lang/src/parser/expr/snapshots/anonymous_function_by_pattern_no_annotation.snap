@@ -1,0 +1,55 @@
+---
+source: crates/aiken-lang/src/parser/expr/anonymous_function.rs
+description: "Code:\n\nfn (Foo { my_field }) { my_field * 2 }"
+---
+Fn {
+    location: 0..38,
+    fn_style: Plain,
+    arguments: [
+        UntypedArg {
+            by: ByPattern(
+                Constructor {
+                    is_record: true,
+                    location: 4..20,
+                    name: "Foo",
+                    arguments: [
+                        CallArg {
+                            label: Some(
+                                "my_field",
+                            ),
+                            location: 10..18,
+                            value: Var {
+                                location: 10..18,
+                                name: "my_field",
+                            },
+                        },
+                    ],
+                    module: None,
+                    constructor: (),
+                    spread_location: None,
+                    tipo: (),
+                },
+            ),
+            location: 4..20,
+            annotation: None,
+            doc: None,
+            is_validator_param: false,
+        },
+    ],
+    body: BinOp {
+        location: 24..36,
+        name: MultInt,
+        left: Var {
+            location: 24..32,
+            name: "my_field",
+        },
+        right: UInt {
+            location: 35..36,
+            value: "2",
+            base: Decimal {
+                numeric_underscore: false,
+            },
+        },
+    },
+    return_annotation: None,
+}

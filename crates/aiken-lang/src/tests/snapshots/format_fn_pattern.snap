@@ -1,0 +1,23 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\npub fn foo(Foo { a, b, .. }) {\n    todo\n}\n\npub fn bar([Bar] : List<Bar>) {\n    todo\n}\n\npub fn baz((Baz, Baz) as x) {\n    todo\n}\n\npub fn fiz(Pair(fst, snd) as x: Pair<Int, Int>) {\n    todo\n}\n\ntest buz((a, b) via some_fuzzer()) {\n    todo\n}\n"
+---
+pub fn foo(Foo { a, b, .. }) {
+  todo
+}
+
+pub fn bar([Bar]: List<Bar>) {
+  todo
+}
+
+pub fn baz((Baz, Baz) as x) {
+  todo
+}
+
+pub fn fiz(Pair(fst, snd) as x: Pair<Int, Int>) {
+  todo
+}
+
+test buz((a, b) via some_fuzzer()) {
+  todo
+}

@@ -1,0 +1,62 @@
+---
+source: crates/aiken-lang/src/parser/definition/function.rs
+description: "Code:\n\nfn foo(Foo { my_field }) {\n    my_field * 2\n}\n"
+---
+Fn(
+    Function {
+        arguments: [
+            UntypedArg {
+                by: ByPattern(
+                    Constructor {
+                        is_record: true,
+                        location: 7..23,
+                        name: "Foo",
+                        arguments: [
+                            CallArg {
+                                label: Some(
+                                    "my_field",
+                                ),
+                                location: 13..21,
+                                value: Var {
+                                    location: 13..21,
+                                    name: "my_field",
+                                },
+                            },
+                        ],
+                        module: None,
+                        constructor: (),
+                        spread_location: None,
+                        tipo: (),
+                    },
+                ),
+                location: 7..23,
+                annotation: None,
+                doc: None,
+                is_validator_param: false,
+            },
+        ],
+        body: BinOp {
+            location: 31..43,
+            name: MultInt,
+            left: Var {
+                location: 31..39,
+                name: "my_field",
+            },
+            right: UInt {
+                location: 42..43,
+                value: "2",
+                base: Decimal {
+                    numeric_underscore: false,
+                },
+            },
+        },
+        doc: None,
+        location: 0..24,
+        name: "foo",
+        public: false,
+        return_annotation: None,
+        return_type: (),
+        end_position: 44,
+        on_test_failure: FailImmediately,
+    },
+)

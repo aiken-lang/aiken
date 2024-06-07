@@ -464,14 +464,16 @@ impl<'comments> Formatter<'comments> {
 
         let doc_comments = self.doc_comments(arg.location.start);
 
-        let doc = match arg.by {
-            ArgBy::ByName(ref arg_name) => match &arg.annotation {
-                None => arg_name.to_doc(),
-                Some(a) => arg_name.to_doc().append(": ").append(self.annotation(a)),
-            }
-            .group(),
-            ArgBy::ByPattern(..) => todo!(),
+        let mut doc = match arg.by {
+            ArgBy::ByName(ref arg_name) => arg_name.to_doc(),
+            ArgBy::ByPattern(ref pattern) => self.pattern(pattern),
         };
+
+        doc = match &arg.annotation {
+            None => doc,
+            Some(a) => doc.append(": ").append(self.annotation(a)),
+        }
+        .group();
 
         let doc = doc_comments.append(doc.group()).group();
 
@@ -483,12 +485,14 @@ impl<'comments> Formatter<'comments> {
 
         let doc_comments = self.doc_comments(arg_via.arg.location.start);
 
-        let doc = match arg_via.arg.by {
-            ArgBy::ByName(ref arg_name) => match &arg_via.arg.annotation {
-                None => arg_name.to_doc(),
-                Some(a) => arg_name.to_doc().append(": ").append(self.annotation(a)),
-            },
-            ArgBy::ByPattern(..) => todo!(),
+        let mut doc = match arg_via.arg.by {
+            ArgBy::ByName(ref arg_name) => arg_name.to_doc(),
+            ArgBy::ByPattern(ref pattern) => self.pattern(pattern),
+        };
+
+        doc = match &arg_via.arg.annotation {
+            None => doc,
+            Some(a) => doc.append(": ").append(self.annotation(a)),
         }
         .append(" via ")
         .append(self.expr(&arg_via.via, false))
@@ -1981,7 +1985,11 @@ impl<'a> Documentable<'a> for &'a ArgName {
 }
 
 fn pub_(public: bool) -> Document<'static> {
-    if public { "pub ".to_doc() } else { nil() }
+    if public {
+        "pub ".to_doc()
+    } else {
+        nil()
+    }
 }
 
 impl<'a> Documentable<'a> for &'a UnqualifiedImport {

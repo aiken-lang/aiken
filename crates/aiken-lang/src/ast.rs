@@ -15,7 +15,7 @@ use std::{
     rc::Rc,
 };
 use uplc::machine::runtime::Compressable;
-use vec1::Vec1;
+use vec1::{vec1, Vec1};
 
 pub const BACKPASS_VARIABLE: &str = "_backpass";
 pub const CAPTURE_VARIABLE: &str = "_capture";
@@ -795,6 +795,32 @@ impl<T: PartialEq> RecordConstructorArg<T> {
 pub enum ArgBy {
     ByName(ArgName),
     ByPattern(UntypedPattern),
+}
+
+impl ArgBy {
+    pub fn into_extra_assignment(
+        self,
+        name: &ArgName,
+        annotation: Option<&Annotation>,
+        location: Span,
+    ) -> Option<UntypedExpr> {
+        match self {
+            ArgBy::ByName(..) => None,
+            ArgBy::ByPattern(pattern) => Some(UntypedExpr::Assignment {
+                location,
+                value: Box::new(UntypedExpr::Var {
+                    location,
+                    name: name.get_name(),
+                }),
+                patterns: vec1![AssignmentPattern {
+                    pattern,
+                    location,
+                    annotation: annotation.cloned(),
+                }],
+                kind: AssignmentKind::Let { backpassing: false },
+            }),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
