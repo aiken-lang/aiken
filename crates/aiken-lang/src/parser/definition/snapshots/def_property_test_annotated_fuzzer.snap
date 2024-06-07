@@ -6,13 +6,26 @@ Test(
     Function {
         arguments: [
             ArgVia {
-                arg_name: Named {
-                    name: "x",
-                    label: "x",
-                    location: 9..10,
-                    is_validator_param: false,
+                arg: UntypedArg {
+                    by: ByName(
+                        Named {
+                            name: "x",
+                            label: "x",
+                            location: 9..10,
+                            is_validator_param: false,
+                        },
+                    ),
+                    location: 9..15,
+                    annotation: Some(
+                        Constructor {
+                            location: 12..15,
+                            module: None,
+                            name: "Int",
+                            arguments: [],
+                        },
+                    ),
+                    doc: None,
                 },
-                location: 9..15,
                 via: Call {
                     arguments: [],
                     fun: Var {
@@ -21,15 +34,6 @@ Test(
                     },
                     location: 20..25,
                 },
-                tipo: (),
-                annotation: Some(
-                    Constructor {
-                        location: 12..15,
-                        module: None,
-                        name: "Int",
-                        arguments: [],
-                    },
-                ),
             },
         ],
         body: Var {

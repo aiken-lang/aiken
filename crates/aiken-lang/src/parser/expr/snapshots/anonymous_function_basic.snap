@@ -6,13 +6,15 @@ Fn {
     location: 0..28,
     fn_style: Plain,
     arguments: [
-        Arg {
-            arg_name: Named {
-                name: "a",
-                label: "a",
-                location: 4..5,
-                is_validator_param: false,
-            },
+        UntypedArg {
+            by: ByName(
+                Named {
+                    name: "a",
+                    label: "a",
+                    location: 4..5,
+                    is_validator_param: false,
+                },
+            ),
             location: 4..10,
             annotation: Some(
                 Constructor {
@@ -23,7 +25,6 @@ Fn {
                 },
             ),
             doc: None,
-            tipo: (),
         },
     ],
     body: BinOp {

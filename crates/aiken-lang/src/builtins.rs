@@ -1,7 +1,7 @@
 use crate::{
     ast::{
-        Annotation, Arg, ArgName, CallArg, DataTypeKey, Function, FunctionAccessKey, ModuleKind,
-        OnTestFailure, Span, TypedDataType, TypedFunction, UnOp,
+        Annotation, ArgName, CallArg, DataTypeKey, Function, FunctionAccessKey, ModuleKind,
+        OnTestFailure, Span, TypedArg, TypedDataType, TypedFunction, UnOp,
     },
     expr::TypedExpr,
     tipo::{
@@ -932,7 +932,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
             function_name: "not".to_string(),
         },
         Function {
-            arguments: vec![Arg {
+            arguments: vec![TypedArg {
                 arg_name: ArgName::Named {
                     name: "self".to_string(),
                     label: "self".to_string(),
@@ -989,7 +989,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
             function_name: "identity".to_string(),
         },
         Function {
-            arguments: vec![Arg {
+            arguments: vec![TypedArg {
                 arg_name: ArgName::Named {
                     name: "a".to_string(),
                     label: "a".to_string(),
@@ -1045,7 +1045,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
         Function {
             on_test_failure: OnTestFailure::FailImmediately,
             arguments: vec![
-                Arg {
+                TypedArg {
                     arg_name: ArgName::Named {
                         name: "a".to_string(),
                         label: "a".to_string(),
@@ -1057,7 +1057,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
                     doc: None,
                     tipo: a_var.clone(),
                 },
-                Arg {
+                TypedArg {
                     arg_name: ArgName::Discarded {
                         name: "_b".to_string(),
                         label: "_b".to_string(),
@@ -1122,7 +1122,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
         },
         Function {
             on_test_failure: OnTestFailure::FailImmediately,
-            arguments: vec![Arg {
+            arguments: vec![TypedArg {
                 arg_name: ArgName::Named {
                     name: "f".to_string(),
                     label: "f".to_string(),
@@ -1139,7 +1139,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
                 tipo: return_type.clone(),
                 is_capture: false,
                 args: vec![
-                    Arg {
+                    TypedArg {
                         arg_name: ArgName::Named {
                             name: "b".to_string(),
                             label: "b".to_string(),
@@ -1151,7 +1151,7 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
                         doc: None,
                         tipo: b_var.clone(),
                     },
-                    Arg {
+                    TypedArg {
                         arg_name: ArgName::Named {
                             name: "a".to_string(),
                             label: "a".to_string(),

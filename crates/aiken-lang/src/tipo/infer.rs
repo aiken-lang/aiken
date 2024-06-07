@@ -7,8 +7,8 @@ use super::{
 };
 use crate::{
     ast::{
-        Annotation, Arg, ArgName, ArgVia, DataType, Definition, Function, ModuleConstant,
-        ModuleKind, RecordConstructor, RecordConstructorArg, Tracing, TypeAlias, TypedDefinition,
+        Annotation, ArgName, ArgVia, DataType, Definition, Function, ModuleConstant, ModuleKind,
+        RecordConstructor, RecordConstructorArg, Tracing, TypeAlias, TypedArg, TypedDefinition,
         TypedFunction, TypedModule, UntypedDefinition, UntypedModule, Use, Validator,
     },
     builtins,
@@ -198,8 +198,12 @@ fn infer_definition(
                     .function_types()
                     .expect("Preregistered type for fn was not a fn");
 
-                for (arg, t) in params.iter().zip(args_types[0..params.len()].iter()) {
-                    match &arg.arg_name {
+                for (ix, (arg, t)) in params
+                    .iter()
+                    .zip(args_types[0..params.len()].iter())
+                    .enumerate()
+                {
+                    match &arg.arg_name(ix) {
                         ArgName::Named {
                             name,
                             is_validator_param,
@@ -326,7 +330,12 @@ fn infer_definition(
                     if f.arguments.len() > 1 {
                         return Err(Error::IncorrectTestArity {
                             count: f.arguments.len(),
-                            location: f.arguments.get(1).expect("arguments.len() > 1").location,
+                            location: f
+                                .arguments
+                                .get(1)
+                                .expect("arguments.len() > 1")
+                                .arg
+                                .location,
                         });
                     }
 
@@ -336,6 +345,7 @@ fn infer_definition(
                     let hydrator: &mut Hydrator = hydrators.get_mut(&f.name).unwrap();
 
                     let provided_inner_type = arg
+                        .arg
                         .annotation
                         .as_ref()
                         .map(|ann| hydrator.type_from_annotation(ann, environment))
@@ -352,13 +362,14 @@ fn infer_definition(
                     // Fuzzer.
                     if let Some(provided_inner_type) = provided_inner_type {
                         if !arg
+                            .arg
                             .annotation
                             .as_ref()
                             .unwrap()
                             .is_logically_equal(&inferred_annotation)
                         {
                             return Err(Error::CouldNotUnify {
-                                location: arg.location,
+                                location: arg.arg.location,
                                 expected: inferred_inner_type.clone(),
                                 given: provided_inner_type.clone(),
                                 situation: Some(UnifyErrorSituation::FuzzerAnnotationMismatch),
@@ -417,23 +428,17 @@ fn infer_definition(
                 public: typed_f.public,
                 arguments: match typed_via {
                     Some((via, tipo)) => {
-                        let Arg {
-                            arg_name,
-                            location,
-                            annotation: _,
-                            doc: _,
-                            tipo: _,
-                        } = typed_f
+                        let arg = typed_f
                             .arguments
                             .first()
                             .expect("has exactly one argument")
                             .to_owned();
-
                         vec![ArgVia {
-                            annotation,
-                            arg_name,
-                            location,
-                            tipo,
+                            arg: TypedArg {
+                                tipo,
+                                annotation,
+                                ..arg
+                            },
                             via,
                         }]
                     }

@@ -1,5 +1,6 @@
 use crate::{
     ast,
+    ast::ArgBy::ByName,
     expr::UntypedExpr,
     parser::{annotation, error::ParseError, expr, token::Token, utils},
 };
@@ -78,12 +79,11 @@ pub fn param(is_validator_param: bool) -> impl Parser<Token, ast::UntypedArg, Er
         }),
     ))
     .then(just(Token::Colon).ignore_then(annotation()).or_not())
-    .map_with_span(|(arg_name, annotation), span| ast::Arg {
+    .map_with_span(|(arg_name, annotation), span| ast::UntypedArg {
         location: span,
         annotation,
         doc: None,
-        tipo: (),
-        arg_name,
+        by: ByName(arg_name),
     })
 }
 

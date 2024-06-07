@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     ast::{
-        self, Annotation, Arg, ArgName, AssignmentKind, AssignmentPattern, BinOp, Bls12_381Point,
+        self, Annotation, ArgName, AssignmentKind, AssignmentPattern, BinOp, Bls12_381Point,
         ByteArrayFormatPreference, CallArg, ClauseGuard, Constant, Curve, Function, IfBranch,
         LogicalOpChainKind, Pattern, RecordUpdateSpread, Span, TraceKind, TraceLevel, Tracing,
         TypedArg, TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch, TypedPattern,
@@ -79,7 +79,8 @@ pub(crate) fn infer_function(
     let arguments = arguments
         .iter()
         .zip(&args_types)
-        .map(|(arg_name, tipo)| arg_name.to_owned().set_type(tipo.clone()))
+        .enumerate()
+        .map(|(ix, (arg_name, tipo))| arg_name.to_owned().set_type(tipo.clone(), ix))
         .collect();
 
     let hydrator = hydrators
@@ -331,7 +332,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let mut arguments = Vec::new();
 
         for (i, arg) in args.into_iter().enumerate() {
-            let arg = self.infer_param(arg, expected_args.get(i).cloned())?;
+            let arg = self.infer_param(arg, expected_args.get(i).cloned(), i)?;
 
             arguments.push(arg);
         }
@@ -1070,18 +1071,21 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         })
     }
 
+    // TODO: Handle arg pattern
     fn infer_param(
         &mut self,
-        arg: UntypedArg,
+        untyped_arg: UntypedArg,
         expected: Option<Rc<Type>>,
+        ix: usize,
     ) -> Result<TypedArg, Error> {
-        let Arg {
-            arg_name,
+        let arg_name = untyped_arg.arg_name(ix);
+
+        let UntypedArg {
+            by,
             annotation,
             location,
             doc,
-            tipo: _,
-        } = arg;
+        } = untyped_arg;
 
         let tipo = annotation
             .clone()
@@ -1097,7 +1101,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             self.unify(expected, tipo.clone(), location, false)?;
         }
 
-        Ok(Arg {
+        Ok(TypedArg {
             arg_name,
             location,
             annotation,

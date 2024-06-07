@@ -1,6 +1,6 @@
 use crate::{
     ast::{
-        Annotation, Arg, ArgName, ArgVia, AssignmentKind, AssignmentPattern, BinOp,
+        Annotation, ArgBy, ArgName, ArgVia, AssignmentKind, AssignmentPattern, BinOp,
         ByteArrayFormatPreference, CallArg, ClauseGuard, Constant, CurveType, DataType, Definition,
         Function, IfBranch, LogicalOpChainKind, ModuleConstant, OnTestFailure, Pattern,
         RecordConstructor, RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias,
@@ -459,41 +459,39 @@ impl<'comments> Formatter<'comments> {
             .append(line().append(self.annotation(typ)).group().nest(INDENT))
     }
 
-    fn fn_arg<'a, A>(&mut self, arg: &'a Arg<A>) -> Document<'a> {
+    fn fn_arg<'a>(&mut self, arg: &'a UntypedArg) -> Document<'a> {
         let comments = self.pop_comments(arg.location.start);
 
         let doc_comments = self.doc_comments(arg.location.start);
 
-        let doc = match &arg.annotation {
-            None => arg.arg_name.to_doc(),
-            Some(a) => arg
-                .arg_name
-                .to_doc()
-                .append(": ")
-                .append(self.annotation(a)),
-        }
-        .group();
+        let doc = match arg.by {
+            ArgBy::ByName(ref arg_name) => match &arg.annotation {
+                None => arg_name.to_doc(),
+                Some(a) => arg_name.to_doc().append(": ").append(self.annotation(a)),
+            }
+            .group(),
+            ArgBy::ByPattern(..) => todo!(),
+        };
 
         let doc = doc_comments.append(doc.group()).group();
 
         commented(doc, comments)
     }
 
-    fn fn_arg_via<'a, A>(&mut self, arg: &'a ArgVia<A, UntypedExpr>) -> Document<'a> {
-        let comments = self.pop_comments(arg.location.start);
+    fn fn_arg_via<'a>(&mut self, arg_via: &'a ArgVia<UntypedArg, UntypedExpr>) -> Document<'a> {
+        let comments = self.pop_comments(arg_via.arg.location.start);
 
-        let doc_comments = self.doc_comments(arg.location.start);
+        let doc_comments = self.doc_comments(arg_via.arg.location.start);
 
-        let doc = match &arg.annotation {
-            None => arg.arg_name.to_doc(),
-            Some(a) => arg
-                .arg_name
-                .to_doc()
-                .append(": ")
-                .append(self.annotation(a)),
+        let doc = match arg_via.arg.by {
+            ArgBy::ByName(ref arg_name) => match &arg_via.arg.annotation {
+                None => arg_name.to_doc(),
+                Some(a) => arg_name.to_doc().append(": ").append(self.annotation(a)),
+            },
+            ArgBy::ByPattern(..) => todo!(),
         }
         .append(" via ")
-        .append(self.expr(&arg.via, false))
+        .append(self.expr(&arg_via.via, false))
         .group();
 
         let doc = doc_comments.append(doc.group()).group();
@@ -1983,11 +1981,7 @@ impl<'a> Documentable<'a> for &'a ArgName {
 }
 
 fn pub_(public: bool) -> Document<'static> {
-    if public {
-        "pub ".to_doc()
-    } else {
-        nil()
-    }
+    if public { "pub ".to_doc() } else { nil() }
 }
 
 impl<'a> Documentable<'a> for &'a UnqualifiedImport {

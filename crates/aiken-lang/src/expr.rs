@@ -1,10 +1,11 @@
 use crate::{
     ast::{
-        self, Annotation, Arg, ArgName, AssignmentPattern, BinOp, Bls12_381Point,
+        self, Annotation, ArgBy, ArgName, AssignmentPattern, BinOp, Bls12_381Point,
         ByteArrayFormatPreference, CallArg, Curve, DataType, DataTypeKey, DefinitionLocation,
         IfBranch, Located, LogicalOpChainKind, ParsedCallArg, Pattern, RecordConstructorArg,
-        RecordUpdateSpread, Span, TraceKind, TypedAssignmentKind, TypedClause, TypedDataType,
-        TypedRecordUpdateArg, UnOp, UntypedAssignmentKind, UntypedClause, UntypedRecordUpdateArg,
+        RecordUpdateSpread, Span, TraceKind, TypedArg, TypedAssignmentKind, TypedClause,
+        TypedDataType, TypedRecordUpdateArg, UnOp, UntypedArg, UntypedAssignmentKind,
+        UntypedClause, UntypedRecordUpdateArg,
     },
     builtins::void,
     parser::token::Base,
@@ -74,7 +75,7 @@ pub enum TypedExpr {
         location: Span,
         tipo: Rc<Type>,
         is_capture: bool,
-        args: Vec<Arg<Rc<Type>>>,
+        args: Vec<TypedArg>,
         body: Box<Self>,
         return_annotation: Option<Annotation>,
     },
@@ -495,7 +496,7 @@ pub enum UntypedExpr {
     Fn {
         location: Span,
         fn_style: FnStyle,
-        arguments: Vec<Arg<()>>,
+        arguments: Vec<UntypedArg>,
         body: Box<Self>,
         return_annotation: Option<Annotation>,
     },
@@ -1192,17 +1193,16 @@ impl UntypedExpr {
                 } => {
                     let name = format!("{}__{index}", ast::CAPTURE_VARIABLE);
 
-                    holes.push(ast::Arg {
+                    holes.push(ast::UntypedArg {
                         location: Span::empty(),
                         annotation: None,
                         doc: None,
-                        arg_name: ast::ArgName::Named {
+                        by: ArgBy::ByName(ast::ArgName::Named {
                             label: name.clone(),
                             name,
                             location: Span::empty(),
                             is_validator_param: false,
-                        },
-                        tipo: (),
+                        }),
                     });
 
                     ast::CallArg {
@@ -1358,12 +1358,11 @@ impl UntypedExpr {
             fn_style: FnStyle::Plain,
             arguments: names
                 .into_iter()
-                .map(|(arg_name, location, annotation)| Arg {
+                .map(|(arg_name, location, annotation)| UntypedArg {
                     location,
                     doc: None,
                     annotation,
-                    tipo: (),
-                    arg_name,
+                    by: ArgBy::ByName(arg_name),
                 })
                 .collect(),
             body: Self::Sequence {

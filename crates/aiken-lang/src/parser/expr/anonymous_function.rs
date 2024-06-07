@@ -1,10 +1,9 @@
-use chumsky::prelude::*;
-
 use crate::{
     ast,
     expr::{FnStyle, UntypedExpr},
     parser::{annotation, error::ParseError, token::Token},
 };
+use chumsky::prelude::*;
 
 pub fn parser(
     sequence: Recursive<'_, Token, UntypedExpr, ParseError>,
@@ -47,12 +46,11 @@ pub fn params() -> impl Parser<Token, ast::UntypedArg, Error = ParseError> {
         }),
     ))
     .then(just(Token::Colon).ignore_then(annotation()).or_not())
-    .map_with_span(|(arg_name, annotation), span| ast::Arg {
+    .map_with_span(|(arg_name, annotation), span| ast::UntypedArg {
         location: span,
         annotation,
         doc: None,
-        tipo: (),
-        arg_name,
+        by: ast::ArgBy::ByName(arg_name),
     })
 }
 
