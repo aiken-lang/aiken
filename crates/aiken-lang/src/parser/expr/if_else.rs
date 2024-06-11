@@ -13,29 +13,11 @@ pub fn parser<'a>(
     expression: Recursive<'a, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + 'a {
     just(Token::If)
-        .ignore_then(
-            expression
-                .clone()
-                .then(block(sequence.clone()))
-                .map_with_span(|(condition, body), span| ast::IfBranch {
-                    condition,
-                    body,
-                    location: span,
-                }),
-        )
+        .ignore_then(if_branch(sequence.clone(), expression.clone()))
         .then(
             just(Token::Else)
                 .ignore_then(just(Token::If))
-                .ignore_then(
-                    expression
-                        .clone()
-                        .then(block(sequence.clone()))
-                        .map_with_span(|(condition, body), span| ast::IfBranch {
-                            condition,
-                            body,
-                            location: span,
-                        }),
-                )
+                .ignore_then(if_branch(sequence.clone(), expression))
                 .repeated(),
         )
         .then_ignore(just(Token::Else))
@@ -50,6 +32,19 @@ pub fn parser<'a>(
                 branches,
                 final_else: Box::new(final_else),
             }
+        })
+}
+
+fn if_branch<'a>(
+    sequence: Recursive<'a, Token, UntypedExpr, ParseError>,
+    expression: Recursive<'a, Token, UntypedExpr, ParseError>,
+) -> impl Parser<Token, ast::UntypedIfBranch, Error = ParseError> + 'a {
+    expression
+        .then(block(sequence))
+        .map_with_span(|(condition, body), span| ast::IfBranch {
+            condition,
+            body,
+            location: span,
         })
 }
 
