@@ -22,6 +22,7 @@ If {
                 location: 23..26,
                 name: "ec2",
             },
+            is: None,
             location: 3..28,
         },
         IfBranch {
@@ -56,6 +57,7 @@ If {
                 location: 60..63,
                 name: "ec1",
             },
+            is: None,
             location: 37..65,
         },
     ],

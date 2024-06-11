@@ -1,0 +1,183 @@
+---
+source: crates/aiken-lang/src/parser/expr/if_else.rs
+description: "Code:\n\nif ec1 is Some(x): Option<Int> {\n  ec2\n} else if ec1 is Foo { foo }: Foo {\n  ec1\n} else if ec1 is Option<Int> {\n  let Some(x) = ec1\n\n  x\n} else {\n  Infinity\n}\n"
+---
+If {
+    location: 0..158,
+    branches: [
+        IfBranch {
+            condition: Var {
+                location: 3..6,
+                name: "ec1",
+            },
+            body: Var {
+                location: 35..38,
+                name: "ec2",
+            },
+            is: Some(
+                AssignmentPattern {
+                    pattern: Constructor {
+                        is_record: false,
+                        location: 10..17,
+                        name: "Some",
+                        arguments: [
+                            CallArg {
+                                label: None,
+                                location: 15..16,
+                                value: Var {
+                                    location: 15..16,
+                                    name: "x",
+                                },
+                            },
+                        ],
+                        module: None,
+                        constructor: (),
+                        spread_location: None,
+                        tipo: (),
+                    },
+                    annotation: Some(
+                        Constructor {
+                            location: 19..30,
+                            module: None,
+                            name: "Option",
+                            arguments: [
+                                Constructor {
+                                    location: 26..29,
+                                    module: None,
+                                    name: "Int",
+                                    arguments: [],
+                                },
+                            ],
+                        },
+                    ),
+                    location: 10..30,
+                },
+            ),
+            location: 3..40,
+        },
+        IfBranch {
+            condition: Var {
+                location: 49..52,
+                name: "ec1",
+            },
+            body: Var {
+                location: 77..80,
+                name: "ec1",
+            },
+            is: Some(
+                AssignmentPattern {
+                    pattern: Constructor {
+                        is_record: true,
+                        location: 56..67,
+                        name: "Foo",
+                        arguments: [
+                            CallArg {
+                                label: Some(
+                                    "foo",
+                                ),
+                                location: 62..65,
+                                value: Var {
+                                    location: 62..65,
+                                    name: "foo",
+                                },
+                            },
+                        ],
+                        module: None,
+                        constructor: (),
+                        spread_location: None,
+                        tipo: (),
+                    },
+                    annotation: Some(
+                        Constructor {
+                            location: 69..72,
+                            module: None,
+                            name: "Foo",
+                            arguments: [],
+                        },
+                    ),
+                    location: 56..72,
+                },
+            ),
+            location: 49..82,
+        },
+        IfBranch {
+            condition: Var {
+                location: 91..94,
+                name: "ec1",
+            },
+            body: Sequence {
+                location: 114..136,
+                expressions: [
+                    Assignment {
+                        location: 114..131,
+                        value: Var {
+                            location: 128..131,
+                            name: "ec1",
+                        },
+                        patterns: [
+                            AssignmentPattern {
+                                pattern: Constructor {
+                                    is_record: false,
+                                    location: 118..125,
+                                    name: "Some",
+                                    arguments: [
+                                        CallArg {
+                                            label: None,
+                                            location: 123..124,
+                                            value: Var {
+                                                location: 123..124,
+                                                name: "x",
+                                            },
+                                        },
+                                    ],
+                                    module: None,
+                                    constructor: (),
+                                    spread_location: None,
+                                    tipo: (),
+                                },
+                                annotation: None,
+                                location: 118..125,
+                            },
+                        ],
+                        kind: Let {
+                            backpassing: false,
+                        },
+                    },
+                    Var {
+                        location: 135..136,
+                        name: "x",
+                    },
+                ],
+            },
+            is: Some(
+                AssignmentPattern {
+                    pattern: Var {
+                        location: 91..94,
+                        name: "ec1",
+                    },
+                    annotation: Some(
+                        Constructor {
+                            location: 98..109,
+                            module: None,
+                            name: "Option",
+                            arguments: [
+                                Constructor {
+                                    location: 105..108,
+                                    module: None,
+                                    name: "Int",
+                                    arguments: [],
+                                },
+                            ],
+                        },
+                    ),
+                    location: 98..109,
+                },
+            ),
+            location: 91..138,
+        },
+    ],
+    final_else: Var {
+        location: 148..156,
+        name: "Infinity",
+    },
+}

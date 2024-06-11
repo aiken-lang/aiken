@@ -2,10 +2,10 @@ use crate::{
     ast::{
         Annotation, ArgBy, ArgName, ArgVia, AssignmentKind, AssignmentPattern, BinOp,
         ByteArrayFormatPreference, CallArg, ClauseGuard, Constant, CurveType, DataType, Definition,
-        Function, IfBranch, LogicalOpChainKind, ModuleConstant, OnTestFailure, Pattern,
-        RecordConstructor, RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias,
-        TypedArg, UnOp, UnqualifiedImport, UntypedArg, UntypedArgVia, UntypedAssignmentKind,
-        UntypedClause, UntypedClauseGuard, UntypedDefinition, UntypedFunction, UntypedModule,
+        Function, LogicalOpChainKind, ModuleConstant, OnTestFailure, Pattern, RecordConstructor,
+        RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg, UnOp,
+        UnqualifiedImport, UntypedArg, UntypedArgVia, UntypedAssignmentKind, UntypedClause,
+        UntypedClauseGuard, UntypedDefinition, UntypedFunction, UntypedIfBranch, UntypedModule,
         UntypedPattern, UntypedRecordUpdateArg, Use, Validator, CAPTURE_VARIABLE,
     },
     docvec,
@@ -1195,7 +1195,7 @@ impl<'comments> Formatter<'comments> {
 
     pub fn if_expr<'a>(
         &mut self,
-        branches: &'a Vec1<IfBranch<UntypedExpr>>,
+        branches: &'a Vec1<UntypedIfBranch>,
         final_else: &'a UntypedExpr,
     ) -> Document<'a> {
         let if_branches = self
@@ -1223,10 +1223,44 @@ impl<'comments> Formatter<'comments> {
     pub fn if_branch<'a>(
         &mut self,
         if_keyword: Document<'a>,
-        branch: &'a IfBranch<UntypedExpr>,
+        branch: &'a UntypedIfBranch,
     ) -> Document<'a> {
         let if_begin = if_keyword
             .append(self.wrap_expr(&branch.condition))
+            .append(match &branch.is {
+                Some(AssignmentPattern {
+                    pattern,
+                    annotation,
+                    ..
+                }) => {
+                    let is_sugar = matches!(
+                        (&pattern, &branch.condition),
+                        (
+                            Pattern::Var { name, .. },
+                            UntypedExpr::Var { name: var_name, .. }
+                        ) if name == var_name
+                    );
+
+                    let Some(annotation) = &annotation else {
+                        unreachable!()
+                    };
+
+                    let is = if is_sugar {
+                        self.annotation(annotation)
+                    } else {
+                        self.pattern(pattern)
+                            .append(": ")
+                            .append(self.annotation(annotation))
+                            .group()
+                    };
+
+                    break_("", " ")
+                        .append("is")
+                        .append(break_("", " "))
+                        .append(is)
+                }
+                None => nil(),
+            })
             .append(break_("{", " {"))
             .group();
 

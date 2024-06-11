@@ -87,6 +87,43 @@ fn format_if() {
 }
 
 #[test]
+fn format_if_soft_cast() {
+    assert_format!(
+        r#"
+        pub fn foo(a) {
+          if a is Option<Int> { 14 } else { 42 }
+          }
+    "#
+    );
+}
+
+#[test]
+fn format_if_soft_cast_pattern() {
+    assert_format!(
+        r#"
+        pub fn foo(a) {
+          if a is Some(x): Option<Int> { 14 } else if b is Foo { b } else { 42 }
+          }
+    "#
+    );
+}
+
+#[test]
+fn format_if_soft_cast_record() {
+    assert_format!(
+        r#"
+        pub fn foo(foo: Data) -> Int {
+          if foo is Foo { a }: Foo {
+            a
+          } else {
+            0
+          }
+        }
+        "#
+    );
+}
+
+#[test]
 fn format_logic_op_with_code_block() {
     assert_format!(
         r#"

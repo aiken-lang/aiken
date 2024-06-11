@@ -700,6 +700,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 branches: vec1::vec1![IfBranch {
                     condition: typed_value,
                     body: var_true,
+                    is: None,
                     location,
                 }],
                 final_else: Box::new(TypedExpr::Trace {
@@ -1191,7 +1192,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let ann_typ = if let Some(ann) = annotation {
             let ann_typ = self
                 .type_from_annotation(ann)
-                .map(|t| self.instantiate(t, &mut HashMap::new(), location))??;
+                .and_then(|t| self.instantiate(t, &mut HashMap::new(), location))?;
 
             self.unify(
                 ann_typ.clone(),
@@ -1695,60 +1696,33 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         final_else: UntypedExpr,
         location: Span,
     ) -> Result<TypedExpr, Error> {
-        let first = branches.first();
+        let mut branches = branches.into_iter();
+        let first = branches.next().unwrap();
 
-        let condition = self.infer(first.condition.clone())?;
+        let first_typed_if_branch = self.infer_if_branch(first)?;
 
-        self.unify(
-            bool(),
-            condition.tipo(),
-            condition.type_defining_location(),
-            false,
-        )?;
+        let first_body_type = first_typed_if_branch.body.tipo();
 
-        assert_no_assignment(&first.body)?;
-        let body = self.infer(first.body.clone())?;
+        let mut typed_branches = vec1::vec1![first_typed_if_branch];
 
-        let tipo = body.tipo();
-
-        let mut typed_branches = vec1::vec1![TypedIfBranch {
-            body,
-            condition,
-            location: first.location,
-        }];
-
-        for branch in &branches[1..] {
-            let condition = self.infer(branch.condition.clone())?;
+        for branch in branches {
+            let typed_branch = self.infer_if_branch(branch)?;
 
             self.unify(
-                bool(),
-                condition.tipo(),
-                condition.type_defining_location(),
+                first_body_type.clone(),
+                typed_branch.body.tipo(),
+                typed_branch.body.type_defining_location(),
                 false,
             )?;
 
-            assert_no_assignment(&branch.body)?;
-            let body = self.infer(branch.body.clone())?;
-
-            self.unify(
-                tipo.clone(),
-                body.tipo(),
-                body.type_defining_location(),
-                false,
-            )?;
-
-            typed_branches.push(TypedIfBranch {
-                body,
-                condition,
-                location: branch.location,
-            });
+            typed_branches.push(typed_branch);
         }
 
         assert_no_assignment(&final_else)?;
         let typed_final_else = self.infer(final_else)?;
 
         self.unify(
-            tipo.clone(),
+            first_body_type.clone(),
             typed_final_else.tipo(),
             typed_final_else.type_defining_location(),
             false,
@@ -1758,7 +1732,63 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             location,
             branches: typed_branches,
             final_else: Box::new(typed_final_else),
-            tipo,
+            tipo: first_body_type,
+        })
+    }
+
+    fn infer_if_branch(&mut self, branch: UntypedIfBranch) -> Result<TypedIfBranch, Error> {
+        let (condition, body, is) = match branch.is {
+            Some(is) => self.in_new_scope(|typer| {
+                let AssignmentPattern {
+                    pattern,
+                    annotation,
+                    location,
+                } = is;
+
+                let TypedExpr::Assignment { value, pattern, .. } = typer.infer_assignment(
+                    pattern,
+                    branch.condition.clone(),
+                    AssignmentKind::expect(),
+                    &annotation,
+                    location,
+                )?
+                else {
+                    unreachable!()
+                };
+
+                if !value.tipo().is_data() {
+                    typer.environment.warnings.push(Warning::UseWhenInstead {
+                        location: branch.location,
+                    })
+                }
+
+                assert_no_assignment(&branch.body)?;
+                let body = typer.infer(branch.body.clone())?;
+
+                Ok((*value, body, Some(pattern)))
+            })?,
+            None => {
+                let condition = self.infer(branch.condition.clone())?;
+
+                self.unify(
+                    bool(),
+                    condition.tipo(),
+                    condition.type_defining_location(),
+                    false,
+                )?;
+
+                assert_no_assignment(&branch.body)?;
+                let body = self.infer(branch.body.clone())?;
+
+                (condition, body, None)
+            }
+        };
+
+        Ok(TypedIfBranch {
+            body,
+            condition,
+            is,
+            location: branch.location,
         })
     }
 

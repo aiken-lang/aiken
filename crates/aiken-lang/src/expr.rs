@@ -2,10 +2,10 @@ use crate::{
     ast::{
         self, Annotation, ArgBy, ArgName, AssignmentPattern, BinOp, Bls12_381Point,
         ByteArrayFormatPreference, CallArg, Curve, DataType, DataTypeKey, DefinitionLocation,
-        IfBranch, Located, LogicalOpChainKind, ParsedCallArg, Pattern, RecordConstructorArg,
+        Located, LogicalOpChainKind, ParsedCallArg, Pattern, RecordConstructorArg,
         RecordUpdateSpread, Span, TraceKind, TypedArg, TypedAssignmentKind, TypedClause,
-        TypedDataType, TypedRecordUpdateArg, UnOp, UntypedArg, UntypedAssignmentKind,
-        UntypedClause, UntypedRecordUpdateArg,
+        TypedDataType, TypedIfBranch, TypedRecordUpdateArg, UnOp, UntypedArg,
+        UntypedAssignmentKind, UntypedClause, UntypedIfBranch, UntypedRecordUpdateArg,
     },
     builtins::void,
     parser::token::Base,
@@ -127,7 +127,7 @@ pub enum TypedExpr {
     If {
         location: Span,
         #[serde(with = "Vec1Ref")]
-        branches: Vec1<IfBranch<Self>>,
+        branches: Vec1<TypedIfBranch>,
         final_else: Box<Self>,
         tipo: Rc<Type>,
     },
@@ -564,7 +564,7 @@ pub enum UntypedExpr {
 
     If {
         location: Span,
-        branches: Vec1<IfBranch<Self>>,
+        branches: Vec1<UntypedIfBranch>,
         final_else: Box<Self>,
     },
 
