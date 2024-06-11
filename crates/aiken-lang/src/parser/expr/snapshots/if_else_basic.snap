@@ -28,6 +28,7 @@ If {
                     },
                 },
             },
+            is: None,
             location: 3..19,
         },
         IfBranch {
@@ -53,6 +54,7 @@ If {
                     numeric_underscore: false,
                 },
             },
+            is: None,
             location: 28..41,
         },
     ],

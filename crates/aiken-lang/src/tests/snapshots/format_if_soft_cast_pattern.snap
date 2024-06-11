@@ -1,0 +1,13 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\npub fn foo(a) {\n  if a is Some(x): Option<Int> { 14 } else if b is Foo { b } else { 42 }\n  }\n"
+---
+pub fn foo(a) {
+  if a is Some(x): Option<Int> {
+    14
+  } else if b is Foo {
+    b
+  } else {
+    42
+  }
+}

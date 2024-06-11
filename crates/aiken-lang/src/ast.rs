@@ -1885,13 +1885,14 @@ impl TypedClauseGuard {
     }
 }
 
-pub type TypedIfBranch = IfBranch<TypedExpr>;
-pub type UntypedIfBranch = IfBranch<UntypedExpr>;
+pub type TypedIfBranch = IfBranch<TypedExpr, TypedPattern>;
+pub type UntypedIfBranch = IfBranch<UntypedExpr, AssignmentPattern>;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct IfBranch<Expr> {
+pub struct IfBranch<Expr, Is> {
     pub condition: Expr,
     pub body: Expr,
+    pub is: Option<Is>,
     pub location: Span,
 }
 

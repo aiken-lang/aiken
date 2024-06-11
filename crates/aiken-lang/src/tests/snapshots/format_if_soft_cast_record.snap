@@ -1,0 +1,11 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\npub fn foo(foo: Data) -> Int {\n  if foo is Foo { a }: Foo {\n    a\n  } else {\n    0\n  }\n}\n"
+---
+pub fn foo(foo: Data) -> Int {
+  if foo is Foo { a }: Foo {
+    a
+  } else {
+    0
+  }
+}

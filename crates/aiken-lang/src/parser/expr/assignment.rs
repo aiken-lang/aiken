@@ -33,6 +33,13 @@ pub fn let_(
 }
 
 fn assignment_patterns() -> impl Parser<Token, Vec<ast::AssignmentPattern>, Error = ParseError> {
+    assignment_pattern()
+        .separated_by(just(Token::Comma))
+        .allow_trailing()
+        .at_least(1)
+}
+
+pub fn assignment_pattern() -> impl Parser<Token, ast::AssignmentPattern, Error = ParseError> {
     pattern()
         .then(just(Token::Colon).ignore_then(annotation()).or_not())
         .map_with_span(|(pattern, annotation), span| ast::AssignmentPattern {
@@ -40,9 +47,6 @@ fn assignment_patterns() -> impl Parser<Token, Vec<ast::AssignmentPattern>, Erro
             annotation,
             location: span,
         })
-        .separated_by(just(Token::Comma))
-        .allow_trailing()
-        .at_least(1)
 }
 
 pub fn expect(

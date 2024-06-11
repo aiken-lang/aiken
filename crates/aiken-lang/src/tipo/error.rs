@@ -1672,6 +1672,25 @@ pub enum Warning {
     },
 
     #[error(
+        "I found an {} that checks an expression with a known type.",
+        "if/is".if_supports_color(Stderr, |s| s.purple())
+    )]
+    #[diagnostic(
+        code("if_is_on_non_data"),
+        help(
+            "Prefer using a {} to match on all known constructors.",
+            "when/is".if_supports_color(Stderr, |s| s.purple())
+        )
+    )]
+    UseWhenInstead {
+        #[label(
+            "use {} instead",
+            "when/is".if_supports_color(Stderr, |s| s.purple())
+        )]
+        location: Span,
+    },
+
+    #[error(
         "I came across a discarded variable in a let assignment: {}",
         name.if_supports_color(Stderr, |s| s.default_color())
     )]
@@ -1755,7 +1774,8 @@ impl ExtraData for Warning {
             | Warning::UnusedType { .. }
             | Warning::UnusedVariable { .. }
             | Warning::DiscardedLetAssignment { .. }
-            | Warning::ValidatorInLibraryModule { .. } => None,
+            | Warning::ValidatorInLibraryModule { .. }
+            | Warning::UseWhenInstead { .. } => None,
             Warning::Utf8ByteArrayIsValidHexString { value, .. } => Some(value.clone()),
             Warning::UnusedImportedModule { location, .. } => {
                 Some(format!("{},{}", false, location.start))

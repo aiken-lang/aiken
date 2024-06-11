@@ -198,7 +198,7 @@ fn illegal_function_comparison() {
     "#;
 
     assert!(matches!(
-        dbg!(check_validator(parse(source_code))),
+        check_validator(parse(source_code)),
         Err((_, Error::IllegalComparison { .. }))
     ))
 }
@@ -287,7 +287,7 @@ fn illegal_unserialisable_in_generic_miller_loop() {
     "#;
 
     assert!(matches!(
-        dbg!(check(parse(source_code))),
+        check(parse(source_code)),
         Err((_, Error::IllegalTypeInData { .. }))
     ))
 }
@@ -2417,7 +2417,7 @@ fn partial_eq_call_args() {
     "#;
 
     assert!(matches!(
-        dbg!(check(parse(source_code))),
+        check(parse(source_code)),
         Err((_, Error::IncorrectFieldsArity { .. }))
     ));
 }
@@ -2435,7 +2435,7 @@ fn partial_eq_callback_args() {
     "#;
 
     assert!(matches!(
-        dbg!(check(parse(source_code))),
+        check(parse(source_code)),
         Err((_, Error::CouldNotUnify { .. }))
     ));
 }
@@ -2453,7 +2453,7 @@ fn partial_eq_callback_return() {
     "#;
 
     assert!(matches!(
-        dbg!(check(parse(source_code))),
+        check(parse(source_code)),
         Err((_, Error::CouldNotUnify { .. }))
     ));
 }
@@ -2488,7 +2488,7 @@ fn pair_index_out_of_bound() {
     "#;
 
     assert!(matches!(
-        dbg!(check_validator(parse(source_code))),
+        check_validator(parse(source_code)),
         Err((_, Error::PairIndexOutOfBound { .. }))
     ))
 }
@@ -2502,7 +2502,7 @@ fn not_indexable() {
     "#;
 
     assert!(matches!(
-        dbg!(check_validator(parse(source_code))),
+        check_validator(parse(source_code)),
         Err((_, Error::NotIndexable { .. }))
     ))
 }
@@ -2520,7 +2520,7 @@ fn out_of_scope_access() {
     "#;
 
     assert!(matches!(
-        dbg!(check_validator(parse(source_code))),
+        check_validator(parse(source_code)),
         Err((_, Error::UnknownVariable { .. }))
     ))
 }
@@ -2552,7 +2552,7 @@ fn fn_single_variant_pattern() {
         }
     "#;
 
-    assert!(dbg!(check(parse(source_code))).is_ok());
+    assert!(check(parse(source_code)).is_ok());
 }
 
 #[test]
@@ -2569,7 +2569,132 @@ fn fn_multi_variant_pattern() {
     "#;
 
     assert!(matches!(
-        dbg!(check_validator(parse(source_code))),
+        check_validator(parse(source_code)),
         Err((_, Error::NotExhaustivePatternMatch { .. }))
     ))
+}
+
+#[test]
+fn if_soft_cast() {
+    let source_code = r#"
+        pub type Foo {
+            a: Int
+        }
+
+        pub fn foo(foo: Data) -> Int {
+          if foo is bar: Foo {
+            bar.a
+          } else {
+            0
+          }
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn if_soft_cast_sugar() {
+    let source_code = r#"
+        pub type Foo {
+            a: Int
+        }
+
+        pub fn foo(foo: Data) -> Int {
+          if foo is Foo {
+            foo.a
+          } else {
+            0
+          }
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn if_soft_cast_record() {
+    let source_code = r#"
+        pub type Foo {
+            a: Int
+        }
+
+        pub fn foo(foo: Data) -> Int {
+          if foo is Foo { a }: Foo {
+            a
+          } else {
+            0
+          }
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn if_soft_cast_no_scope_leak() {
+    let source_code = r#"
+        pub type Foo {
+            a: Int
+        }
+
+        pub fn foo(foo: Data) -> Int {
+          if foo is bar: Foo {
+            bar.a
+          } else {
+            bar
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::UnknownVariable { name, ..  })) if name == "bar"
+    ))
+}
+
+#[test]
+fn if_soft_cast_not_data_single_constr() {
+    let source_code = r#"
+        pub type Foo {
+            a: Int
+        }
+
+        pub fn foo(foo: Foo) -> Int {
+          if foo is Foo { a }: Foo {
+            a
+          } else {
+            0
+          }
+        }
+    "#;
+
+    let (warnings, _ast) = check(parse(source_code)).unwrap();
+
+    assert!(matches!(
+        warnings[0],
+        Warning::SingleConstructorExpect { .. }
+    ))
+}
+
+#[test]
+fn if_soft_cast_not_data_multi_constr() {
+    let source_code = r#"
+        pub type Foo {
+            Bar { a: Int }
+            Buzz { b: Int }
+        }
+
+        pub fn foo(foo: Foo) -> Int {
+          if foo is Bar { a }: Foo {
+            a
+          } else {
+            0
+          }
+        }
+    "#;
+
+    let (warnings, _ast) = dbg!(check(parse(source_code))).unwrap();
+
+    assert!(matches!(warnings[0], Warning::UseWhenInstead { .. }))
 }
