@@ -133,14 +133,14 @@ pub enum AirTree {
     AssertConstr {
         constr_index: usize,
         constr: Box<AirTree>,
-        msg: Option<AirMsg>,
         then: Box<AirTree>,
+        otherwise: Box<AirTree>,
     },
     AssertBool {
         is_true: bool,
         value: Box<AirTree>,
-        msg: Option<AirMsg>,
         then: Box<AirTree>,
+        otherwise: Box<AirTree>,
     },
     // Clause Guards
     ClauseGuard {
@@ -174,8 +174,8 @@ pub enum AirTree {
         indices: Vec<(usize, String, Rc<Type>)>,
         record: Box<AirTree>,
         is_expect: bool,
-        msg: Option<AirMsg>,
         then: Box<AirTree>,
+        otherwise: Box<AirTree>,
     },
     // List Access
     ListAccessor {
@@ -184,8 +184,8 @@ pub enum AirTree {
         tail: bool,
         list: Box<AirTree>,
         expect_level: ExpectLevel,
-        msg: Option<AirMsg>,
         then: Box<AirTree>,
+        otherwise: Box<AirTree>,
     },
     ListExpose {
         tipo: Rc<Type>,
@@ -199,8 +199,8 @@ pub enum AirTree {
         tipo: Rc<Type>,
         tuple: Box<AirTree>,
         is_expect: bool,
-        msg: Option<AirMsg>,
         then: Box<AirTree>,
+        otherwise: Box<AirTree>,
     },
     // Pair Access
     PairAccessor {
@@ -208,9 +208,9 @@ pub enum AirTree {
         snd: Option<String>,
         tipo: Rc<Type>,
         is_expect: bool,
-        msg: Option<AirMsg>,
         pair: Box<AirTree>,
         then: Box<AirTree>,
+        otherwise: Box<AirTree>,
     },
     // Misc.
     FieldsEmpty {
@@ -220,8 +220,8 @@ pub enum AirTree {
     },
     ListEmpty {
         list: Box<AirTree>,
-        msg: Option<AirMsg>,
         then: Box<AirTree>,
+        otherwise: Box<AirTree>,
     },
     NoOp {
         then: Box<AirTree>,
@@ -297,7 +297,7 @@ pub enum AirTree {
     CastFromData {
         tipo: Rc<Type>,
         value: Box<AirTree>,
-        msg: Option<AirMsg>,
+        otherwise: Box<AirTree>,
     },
     CastToData {
         tipo: Rc<Type>,
@@ -359,7 +359,7 @@ pub enum AirTree {
     // If
     If {
         tipo: Rc<Type>,
-        pattern: Box<AirTree>,
+        condition: Box<AirTree>,
         then: Box<AirTree>,
         otherwise: Box<AirTree>,
     },
@@ -390,6 +390,10 @@ pub enum AirTree {
 }
 
 impl AirTree {
+    pub fn is_error(&self) -> bool {
+        matches!(self, AirTree::ErrorTerm { .. })
+    }
+
     pub fn int(value: impl ToString) -> AirTree {
         AirTree::Int {
             value: value.to_string(),
@@ -562,11 +566,11 @@ impl AirTree {
         }
     }
 
-    pub fn cast_from_data(value: AirTree, tipo: Rc<Type>, msg: Option<AirMsg>) -> AirTree {
+    pub fn cast_from_data(value: AirTree, tipo: Rc<Type>, otherwise: AirTree) -> AirTree {
         AirTree::CastFromData {
             tipo,
             value: value.into(),
-            msg,
+            otherwise: otherwise.into(),
         }
     }
 
@@ -580,28 +584,28 @@ impl AirTree {
     pub fn assert_constr_index(
         constr_index: usize,
         constr: AirTree,
-        msg: Option<AirMsg>,
         then: AirTree,
+        otherwise: AirTree,
     ) -> AirTree {
         AirTree::AssertConstr {
             constr_index,
             constr: constr.into(),
-            msg,
             then: then.into(),
+            otherwise: otherwise.into(),
         }
     }
 
     pub fn assert_bool(
         is_true: bool,
         value: AirTree,
-        msg: Option<AirMsg>,
         then: AirTree,
+        otherwise: AirTree,
     ) -> AirTree {
         AirTree::AssertBool {
             is_true,
             value: value.into(),
-            msg,
             then: then.into(),
+            otherwise: otherwise.into(),
         }
     }
 
@@ -771,31 +775,18 @@ impl AirTree {
         }
     }
 
-    pub fn if_branches(
-        mut branches: Vec<(AirTree, AirTree)>,
+    pub fn if_branch(
         tipo: Rc<Type>,
+        condition: AirTree,
+        branch: AirTree,
         otherwise: AirTree,
     ) -> AirTree {
-        assert!(!branches.is_empty());
-        let last_if = branches.pop().unwrap();
-
-        let mut final_if = AirTree::If {
-            tipo: tipo.clone(),
-            pattern: Box::new(last_if.0),
-            then: Box::new(last_if.1),
+        AirTree::If {
+            tipo,
+            condition: condition.into(),
+            then: branch.into(),
             otherwise: otherwise.into(),
-        };
-
-        while let Some(branch) = branches.pop() {
-            final_if = AirTree::If {
-                tipo: tipo.clone(),
-                pattern: Box::new(branch.0),
-                then: Box::new(branch.1),
-                otherwise: final_if.into(),
-            };
         }
-
-        final_if
     }
 
     pub fn create_constr(tag: usize, tipo: Rc<Type>, args: Vec<AirTree>) -> AirTree {
@@ -845,23 +836,23 @@ impl AirTree {
                 vec![list_of_fields],
             ),
             tipo.clone(),
-            None,
+            AirTree::error(void(), false),
         )
     }
 
     pub fn fields_expose(
         indices: Vec<(usize, String, Rc<Type>)>,
         record: AirTree,
-        msg: Option<AirMsg>,
         is_expect: bool,
         then: AirTree,
+        otherwise: AirTree,
     ) -> AirTree {
         AirTree::FieldsExpose {
             indices,
             record: record.into(),
-            msg,
             is_expect,
             then: then.into(),
+            otherwise: otherwise.into(),
         }
     }
 
@@ -870,9 +861,10 @@ impl AirTree {
         tipo: Rc<Type>,
         tail: bool,
         list: AirTree,
-        msg: Option<AirMsg>,
+
         expect_level: ExpectLevel,
         then: AirTree,
+        otherwise: AirTree,
     ) -> AirTree {
         AirTree::ListAccessor {
             tipo,
@@ -880,8 +872,8 @@ impl AirTree {
             tail,
             list: list.into(),
             expect_level,
-            msg,
             then: then.into(),
+            otherwise: otherwise.into(),
         }
     }
 
@@ -903,17 +895,17 @@ impl AirTree {
         names: Vec<String>,
         tipo: Rc<Type>,
         tuple: AirTree,
-        msg: Option<AirMsg>,
         is_expect: bool,
         then: AirTree,
+        otherwise: AirTree,
     ) -> AirTree {
         AirTree::TupleAccessor {
             names,
             tipo,
             tuple: tuple.into(),
-            msg,
             is_expect,
             then: then.into(),
+            otherwise: otherwise.into(),
         }
     }
 
@@ -922,18 +914,18 @@ impl AirTree {
         snd: Option<String>,
         tipo: Rc<Type>,
         pair: AirTree,
-        msg: Option<AirMsg>,
         is_expect: bool,
         then: AirTree,
+        otherwise: AirTree,
     ) -> AirTree {
         AirTree::PairAccessor {
             fst,
             snd,
             tipo,
             is_expect,
-            msg,
             pair: pair.into(),
             then: then.into(),
+            otherwise: otherwise.into(),
         }
     }
 
@@ -949,7 +941,7 @@ impl AirTree {
                 vec![tuple],
             ),
             tipo.clone(),
-            None,
+            AirTree::error(void(), false),
         )
     }
 
@@ -976,11 +968,12 @@ impl AirTree {
         }
     }
 
-    pub fn list_empty(list: AirTree, msg: Option<AirMsg>, then: AirTree) -> AirTree {
+    pub fn list_empty(list: AirTree, then: AirTree, otherwise: AirTree) -> AirTree {
         AirTree::ListEmpty {
             list: list.into(),
-            msg,
+
             then: then.into(),
+            otherwise: otherwise.into(),
         }
     }
 
@@ -1114,8 +1107,8 @@ impl AirTree {
             AirTree::AssertConstr {
                 constr,
                 constr_index,
-                msg,
                 then,
+                otherwise,
             } => {
                 air_vec.push(Air::AssertConstr {
                     constr_index: *constr_index,
@@ -1123,27 +1116,21 @@ impl AirTree {
                 // msg is first so we can pop it off first in uplc_gen
                 // if traces are on
 
-                if let Some(msg) = msg {
-                    msg.to_air_tree().create_air_vec(air_vec);
-                }
-
                 constr.create_air_vec(air_vec);
                 then.create_air_vec(air_vec);
+                otherwise.create_air_vec(air_vec);
             }
             AirTree::AssertBool {
                 is_true,
                 value,
-                msg,
                 then,
+                otherwise,
             } => {
                 air_vec.push(Air::AssertBool { is_true: *is_true });
 
-                if let Some(msg) = msg {
-                    msg.to_air_tree().create_air_vec(air_vec);
-                }
-
                 value.create_air_vec(air_vec);
                 then.create_air_vec(air_vec);
+                otherwise.create_air_vec(air_vec);
             }
             AirTree::ClauseGuard {
                 subject_name,
@@ -1205,30 +1192,29 @@ impl AirTree {
             AirTree::FieldsExpose {
                 indices,
                 record,
-                msg,
                 is_expect,
                 then,
+                otherwise,
             } => {
                 air_vec.push(Air::FieldsExpose {
                     indices: indices.clone(),
                     is_expect: *is_expect,
                 });
 
-                if let Some(msg) = msg {
-                    msg.to_air_tree().create_air_vec(air_vec);
-                }
-
                 record.create_air_vec(air_vec);
                 then.create_air_vec(air_vec);
+                if *is_expect {
+                    otherwise.create_air_vec(air_vec);
+                }
             }
             AirTree::ListAccessor {
                 tipo,
                 names,
                 tail,
                 list,
-                msg,
                 expect_level,
                 then,
+                otherwise,
             } => {
                 air_vec.push(Air::ListAccessor {
                     tipo: tipo.clone(),
@@ -1237,12 +1223,11 @@ impl AirTree {
                     expect_level: *expect_level,
                 });
 
-                if let Some(msg) = msg {
-                    msg.to_air_tree().create_air_vec(air_vec);
-                }
-
                 list.create_air_vec(air_vec);
                 then.create_air_vec(air_vec);
+                if matches!(expect_level, ExpectLevel::Full | ExpectLevel::Items) {
+                    otherwise.create_air_vec(air_vec);
+                }
             }
             AirTree::ListExpose {
                 tipo,
@@ -1261,9 +1246,9 @@ impl AirTree {
                 names,
                 tipo,
                 tuple,
-                msg,
                 is_expect,
                 then,
+                otherwise,
             } => {
                 air_vec.push(Air::TupleAccessor {
                     names: names.clone(),
@@ -1271,21 +1256,20 @@ impl AirTree {
                     is_expect: *is_expect,
                 });
 
-                if let Some(msg) = msg {
-                    msg.to_air_tree().create_air_vec(air_vec);
-                }
-
                 tuple.create_air_vec(air_vec);
                 then.create_air_vec(air_vec);
+                if *is_expect {
+                    otherwise.create_air_vec(air_vec);
+                }
             }
             AirTree::PairAccessor {
                 fst,
                 snd,
                 tipo,
                 is_expect,
-                msg,
                 pair,
                 then,
+                otherwise,
             } => {
                 air_vec.push(Air::PairAccessor {
                     fst: fst.clone(),
@@ -1294,12 +1278,11 @@ impl AirTree {
                     is_expect: *is_expect,
                 });
 
-                if let Some(msg) = msg {
-                    msg.to_air_tree().create_air_vec(air_vec);
-                }
-
                 pair.create_air_vec(air_vec);
                 then.create_air_vec(air_vec);
+                if *is_expect {
+                    otherwise.create_air_vec(air_vec);
+                }
             }
             AirTree::FieldsEmpty { constr, msg, then } => {
                 air_vec.push(Air::FieldsEmpty);
@@ -1311,15 +1294,16 @@ impl AirTree {
                 constr.create_air_vec(air_vec);
                 then.create_air_vec(air_vec);
             }
-            AirTree::ListEmpty { list, msg, then } => {
+            AirTree::ListEmpty {
+                list,
+                then,
+                otherwise,
+            } => {
                 air_vec.push(Air::ListEmpty);
-
-                if let Some(msg) = msg {
-                    msg.to_air_tree().create_air_vec(air_vec);
-                }
 
                 list.create_air_vec(air_vec);
                 then.create_air_vec(air_vec);
+                otherwise.create_air_vec(air_vec);
             }
             AirTree::NoOp { then } => {
                 air_vec.push(Air::NoOp);
@@ -1417,17 +1401,15 @@ impl AirTree {
                 air_vec.push(Air::UnOp { op: *op });
                 arg.create_air_vec(air_vec);
             }
-            AirTree::CastFromData { tipo, value, msg } => {
-                air_vec.push(Air::CastFromData {
-                    tipo: tipo.clone(),
-                    is_expect: msg.is_some(),
-                });
-
-                if let Some(msg) = msg {
-                    msg.to_air_tree().create_air_vec(air_vec);
-                }
+            AirTree::CastFromData {
+                tipo,
+                value,
+                otherwise,
+            } => {
+                air_vec.push(Air::CastFromData { tipo: tipo.clone() });
 
                 value.create_air_vec(air_vec);
+                otherwise.create_air_vec(air_vec);
             }
             AirTree::CastToData { tipo, value } => {
                 air_vec.push(Air::CastToData { tipo: tipo.clone() });
@@ -1532,7 +1514,7 @@ impl AirTree {
             }
             AirTree::If {
                 tipo,
-                pattern,
+                condition: pattern,
                 then,
                 otherwise,
             } => {
@@ -2174,7 +2156,7 @@ impl AirTree {
                 );
             }
             AirTree::If {
-                pattern,
+                condition: pattern,
                 then,
                 otherwise,
                 ..
@@ -2590,7 +2572,7 @@ impl AirTree {
                     }
                 }
                 AirTree::If {
-                    pattern,
+                    condition: pattern,
                     then,
                     otherwise,
                     ..

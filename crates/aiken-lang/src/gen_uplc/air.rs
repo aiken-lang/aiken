@@ -102,7 +102,6 @@ pub enum Air {
     },
     CastFromData {
         tipo: Rc<Type>,
-        is_expect: bool,
     },
     CastToData {
         tipo: Rc<Type>,
