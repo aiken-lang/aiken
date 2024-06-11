@@ -1,5 +1,5 @@
 use super::{
-    air::{Air, ExpectLevel},
+    air::ExpectLevel,
     tree::{AirMsg, AirTree, TreePath},
 };
 use crate::{
@@ -71,7 +71,7 @@ pub struct AssignmentProperties {
     pub kind: TypedAssignmentKind,
     pub remove_unused: bool,
     pub full_check: bool,
-    pub msg_func: Option<AirMsg>,
+    pub otherwise: AirTree,
 }
 
 #[derive(Clone, Debug)]
@@ -231,6 +231,14 @@ impl CodeGenSpecialFuncs {
             used_funcs: vec![],
             key_to_func,
         }
+    }
+
+    pub fn use_function_string(&mut self, func_name: String) -> String {
+        if !self.used_funcs.contains(&func_name) {
+            self.used_funcs.push(func_name.to_string());
+        }
+
+        func_name
     }
 
     pub fn use_function_tree(&mut self, func_name: String) -> AirTree {
@@ -1035,7 +1043,7 @@ pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
 /// Due to the nature of the types BLS12_381_G1Element and BLS12_381_G2Element and String coming from bytearray
 /// We don't have error handling if the bytearray is not properly aligned to the type. Oh well lol
 /// For BLS12_381_G1Element and BLS12_381_G2Element, hash to group exists so just adopt that.
-pub fn unknown_data_to_type_debug(
+pub fn unknown_data_to_type_otherwise(
     term: Term<Name>,
     field_type: &Type,
     error_term: Term<Name>,
@@ -1362,7 +1370,7 @@ pub fn list_access_to_uplc(
     term: Term<Name>,
     is_list_accessor: bool,
     expect_level: ExpectLevel,
-    error_term: Term<Name>,
+    otherwise: Term<Name>,
 ) -> Term<Name> {
     let names_len = names_types_ids.len();
 
@@ -1393,7 +1401,7 @@ pub fn list_access_to_uplc(
         }
 
         return Term::var("empty_list")
-            .delayed_choose_list(term, error_term)
+            .delayed_choose_list(term, otherwise)
             .lambda("empty_list");
     }
 
@@ -1412,16 +1420,16 @@ pub fn list_access_to_uplc(
             Term::head_list().apply(Term::var(tail_name.to_string()))
         } else if matches!(expect_level, ExpectLevel::Full) {
             // Expect level is full so we have an unknown piece of data to cast
-            if error_term == Term::Error {
+            if otherwise == Term::Error {
                 unknown_data_to_type(
                     Term::head_list().apply(Term::var(tail_name.to_string())),
                     &tipo.to_owned(),
                 )
             } else {
-                unknown_data_to_type_debug(
+                unknown_data_to_type_otherwise(
                     Term::head_list().apply(Term::var(tail_name.to_string())),
                     &tipo.to_owned(),
-                    error_term.clone(),
+                    otherwise.clone(),
                 )
             }
         } else {
@@ -1456,22 +1464,22 @@ pub fn list_access_to_uplc(
                         ExpectLevel::None => acc.lambda(name).apply(head_item).lambda(tail_name),
 
                         ExpectLevel::Full | ExpectLevel::Items => {
-                            if error_term == Term::Error && tail_present {
+                            if otherwise == Term::Error && tail_present {
                                 // No need to check last item if tail was present
                                 acc.lambda(name).apply(head_item).lambda(tail_name)
                             } else if tail_present {
                                 // Custom error instead of trying to do head_item on a possibly empty list.
                                 Term::var(tail_name.to_string())
                                     .delayed_choose_list(
-                                        error_term.clone(),
+                                        otherwise.clone(),
                                         acc.lambda(name).apply(head_item),
                                     )
                                     .lambda(tail_name)
-                            } else if error_term == Term::Error {
+                            } else if otherwise == Term::Error {
                                 // Check head is last item in this list
                                 Term::tail_list()
                                     .apply(Term::var(tail_name.to_string()))
-                                    .delayed_choose_list(acc, error_term.clone())
+                                    .delayed_choose_list(acc, otherwise.clone())
                                     .lambda(name)
                                     .apply(head_item)
                                     .lambda(tail_name)
@@ -1479,10 +1487,10 @@ pub fn list_access_to_uplc(
                                 // Custom error if list is not empty after this head
                                 Term::var(tail_name.to_string())
                                     .delayed_choose_list(
-                                        error_term.clone(),
+                                        otherwise.clone(),
                                         Term::tail_list()
                                             .apply(Term::var(tail_name.to_string()))
-                                            .delayed_choose_list(acc, error_term.clone())
+                                            .delayed_choose_list(acc, otherwise.clone())
                                             .lambda(name)
                                             .apply(head_item),
                                     )
@@ -1498,7 +1506,7 @@ pub fn list_access_to_uplc(
 
                     let head_item = head_item(name, tipo, &tail_name);
 
-                    if matches!(expect_level, ExpectLevel::None) || error_term == Term::Error {
+                    if matches!(expect_level, ExpectLevel::None) || otherwise == Term::Error {
                         acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
                             .lambda(name)
                             .apply(head_item)
@@ -1507,7 +1515,7 @@ pub fn list_access_to_uplc(
                         // case for a custom error if the list is empty at this point
                         Term::var(tail_name.to_string())
                             .delayed_choose_list(
-                                error_term.clone(),
+                                otherwise.clone(),
                                 acc.apply(
                                     Term::tail_list().apply(Term::var(tail_name.to_string())),
                                 )
@@ -1778,7 +1786,6 @@ pub fn cast_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Nam
 }
 
 pub fn wrap_validator_condition(air_tree: AirTree, trace: TraceLevel) -> AirTree {
-    let success_branch = vec![(air_tree, AirTree::void())];
     let otherwise = match trace {
         TraceLevel::Silent | TraceLevel::Compact => AirTree::error(void(), true),
         TraceLevel::Verbose => AirTree::trace(
@@ -1788,7 +1795,7 @@ pub fn wrap_validator_condition(air_tree: AirTree, trace: TraceLevel) -> AirTree
         ),
     };
 
-    AirTree::if_branches(success_branch, void(), otherwise)
+    AirTree::if_branch(void(), air_tree, AirTree::void(), otherwise)
 }
 
 pub fn extract_constant(term: &Term<Name>) -> Option<Rc<UplcConstant>> {
@@ -1840,23 +1847,4 @@ pub fn get_line_columns_by_span(
     lines
         .line_and_column_number(span.start)
         .expect("Out of bounds span")
-}
-
-pub fn air_holds_msg(air: &Air) -> bool {
-    match air {
-        Air::AssertConstr { .. } | Air::AssertBool { .. } | Air::FieldsEmpty | Air::ListEmpty => {
-            true
-        }
-
-        Air::FieldsExpose { is_expect, .. }
-        | Air::TupleAccessor { is_expect, .. }
-        | Air::PairAccessor { is_expect, .. }
-        | Air::CastFromData { is_expect, .. } => *is_expect,
-
-        Air::ListAccessor { expect_level, .. } => {
-            matches!(expect_level, ExpectLevel::Full | ExpectLevel::Items)
-        }
-
-        _ => false,
-    }
 }
