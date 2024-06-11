@@ -1672,8 +1672,9 @@ pub enum Warning {
     },
 
     #[error(
-        "I found an {} that checks an expression with a known type.",
-        "if/is".if_supports_color(Stderr, |s| s.purple())
+        "I found an {} {}",
+        "if/is".if_supports_color(Stderr, |s| s.purple()),
+        "that checks an expression with a known type.".if_supports_color(Stderr, |s| s.yellow())
     )]
     #[diagnostic(
         code("if_is_on_non_data"),
@@ -1684,7 +1685,7 @@ pub enum Warning {
     )]
     UseWhenInstead {
         #[label(
-            "use {} instead",
+            "use {}",
             "when/is".if_supports_color(Stderr, |s| s.purple())
         )]
         location: Span,
