@@ -1038,117 +1038,138 @@ pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
 pub fn unknown_data_to_type_otherwise(
     term: Term<Name>,
     field_type: &Type,
-    error_term: Term<Name>,
+    otherwise_delayed: Term<Name>,
 ) -> Term<Name> {
     let uplc_type = field_type.get_uplc_type();
 
     match uplc_type {
         Some(UplcType::Integer) => Term::var("__val")
-            .delayed_choose_data(
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                Term::un_i_data().apply(Term::var("__val")),
-                error_term.clone(),
+            .choose_data(
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                Term::un_i_data().apply(Term::var("__val")).delay(),
+                otherwise_delayed.clone(),
             )
+            .force()
             .lambda("__val")
             .apply(term),
         Some(UplcType::ByteString) => Term::var("__val")
-            .delayed_choose_data(
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                Term::un_b_data().apply(Term::var("__val")),
+            .choose_data(
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                Term::un_b_data().apply(Term::var("__val")).delay(),
             )
+            .force()
             .lambda("__val")
             .apply(term),
         Some(UplcType::String) => Term::var("__val")
-            .delayed_choose_data(
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                Term::decode_utf8().apply(Term::un_b_data().apply(Term::var("__val"))),
+            .choose_data(
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                Term::decode_utf8()
+                    .apply(Term::un_b_data().apply(Term::var("__val")))
+                    .delay(),
             )
+            .force()
             .lambda("__val")
             .apply(term),
 
         Some(UplcType::List(_)) if field_type.is_map() => Term::var("__val")
-            .delayed_choose_data(
-                error_term.clone(),
-                Term::unmap_data().apply(Term::var("__val")),
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
+            .choose_data(
+                otherwise_delayed.clone(),
+                Term::unmap_data().apply(Term::var("__val")).delay(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
             )
+            .force()
             .lambda("__val")
             .apply(term),
         Some(UplcType::List(_)) => Term::var("__val")
-            .delayed_choose_data(
-                error_term.clone(),
-                error_term.clone(),
-                Term::unlist_data().apply(Term::var("__val")),
-                error_term.clone(),
-                error_term.clone(),
+            .choose_data(
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                Term::unlist_data().apply(Term::var("__val")).delay(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
             )
+            .force()
             .lambda("__val")
             .apply(term),
 
         Some(UplcType::Bls12_381G1Element) => Term::var("__val")
-            .delayed_choose_data(
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                Term::bls12_381_g1_uncompress().apply(Term::un_b_data().apply(Term::var("__val"))),
+            .choose_data(
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                Term::bls12_381_g1_uncompress()
+                    .apply(Term::un_b_data().apply(Term::var("__val")))
+                    .delay(),
             )
+            .force()
             .lambda("__val")
             .apply(term),
         Some(UplcType::Bls12_381G2Element) => Term::var("__val")
-            .delayed_choose_data(
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(Term::var("__val"))),
+            .choose_data(
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                Term::bls12_381_g2_uncompress()
+                    .apply(Term::un_b_data().apply(Term::var("__val")))
+                    .delay(),
             )
+            .force()
             .lambda("__val")
             .apply(term),
         Some(UplcType::Bls12_381MlResult) => panic!("ML Result not supported"),
         Some(UplcType::Pair(_, _)) => Term::var("__val")
-            .delayed_choose_data(
-                error_term.clone(),
-                error_term.clone(),
+            .choose_data(
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
                 Term::var("__list_data")
-                    .delayed_choose_list(
-                        error_term.clone(),
+                    .choose_list(
+                        otherwise_delayed.clone(),
                         Term::var("__tail")
-                            .delayed_choose_list(
-                                error_term.clone(),
+                            .choose_list(
+                                otherwise_delayed.clone(),
                                 Term::tail_list()
                                     .apply(Term::var("__tail"))
-                                    .delayed_choose_list(
+                                    .choose_list(
                                         Term::mk_pair_data()
                                             .apply(
                                                 Term::head_list().apply(Term::var("__list_data")),
                                             )
-                                            .apply(Term::head_list().apply(Term::var("__tail"))),
-                                        error_term.clone(),
-                                    ),
+                                            .apply(Term::head_list().apply(Term::var("__tail")))
+                                            .delay(),
+                                        otherwise_delayed.clone(),
+                                    )
+                                    .force()
+                                    .delay(),
                             )
+                            .force()
                             .lambda("__tail")
-                            .apply(Term::tail_list().apply(Term::var("__list_data"))),
+                            .apply(Term::tail_list().apply(Term::var("__list_data")))
+                            .delay(),
                     )
+                    .force()
                     .lambda("__list_data")
-                    .apply(Term::unlist_data().apply(Term::var("__val"))),
-                error_term.clone(),
-                error_term.clone(),
+                    .apply(Term::unlist_data().apply(Term::var("__val")))
+                    .delay(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
             )
+            .force()
             .lambda("__val")
             .apply(term),
         Some(UplcType::Bool) => Term::var("__val")
-            .delayed_choose_data(
+            .choose_data(
                 Term::snd_pair()
                     .apply(Term::var("__pair__"))
                     .delayed_choose_list(
@@ -1160,48 +1181,56 @@ pub fn unknown_data_to_type_otherwise(
                                 Term::equals_integer()
                                     .apply(Term::integer(0.into()))
                                     .apply(Term::fst_pair().apply(Term::var("__pair__")))
-                                    .delayed_if_then_else(Term::bool(false), error_term.clone()),
+                                    .delayed_if_then_else(
+                                        Term::bool(false),
+                                        otherwise_delayed.clone(),
+                                    ),
                             ),
-                        error_term.clone(),
+                        otherwise_delayed.clone(),
                     )
                     .lambda("__pair__")
-                    .apply(Term::unconstr_data().apply(Term::var("__val"))),
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
+                    .apply(Term::unconstr_data().apply(Term::var("__val")))
+                    .delay(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
             )
+            .force()
             .lambda("__val")
             .apply(term),
         Some(UplcType::Unit) => Term::var("__val")
-            .delayed_choose_data(
+            .choose_data(
                 Term::equals_integer()
                     .apply(Term::integer(0.into()))
                     .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("__val"))))
                     .delayed_if_then_else(
                         Term::snd_pair()
                             .apply(Term::unconstr_data().apply(Term::var("__val")))
-                            .delayed_choose_list(Term::unit(), error_term.clone()),
-                        error_term.clone(),
-                    ),
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
+                            .delayed_choose_list(Term::unit(), otherwise_delayed.clone()),
+                        otherwise_delayed.clone(),
+                    )
+                    .delay(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
             )
+            .force()
             .lambda("__val")
             .apply(term),
 
         Some(UplcType::Data) => term,
         // constr type
         None => Term::var("__val")
-            .delayed_choose_data(
-                Term::var("__val"),
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
-                error_term.clone(),
+            .choose_data(
+                Term::var("__val").delay(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
+                otherwise_delayed.clone(),
             )
+            .force()
             .lambda("__val")
             .apply(term),
     }
@@ -1362,7 +1391,7 @@ pub fn list_access_to_uplc(
     term: Term<Name>,
     is_list_accessor: bool,
     expect_level: ExpectLevel,
-    otherwise: Term<Name>,
+    otherwise_delayed: Term<Name>,
 ) -> Term<Name> {
     let names_len = names_types_ids.len();
 
@@ -1393,7 +1422,8 @@ pub fn list_access_to_uplc(
         }
 
         return Term::var("empty_list")
-            .delayed_choose_list(term, otherwise)
+            .choose_list(term.delay(), otherwise_delayed)
+            .force()
             .lambda("empty_list");
     }
 
@@ -1412,7 +1442,7 @@ pub fn list_access_to_uplc(
             Term::head_list().apply(Term::var(tail_name.to_string()))
         } else if matches!(expect_level, ExpectLevel::Full) {
             // Expect level is full so we have an unknown piece of data to cast
-            if otherwise == Term::Error {
+            if otherwise_delayed == Term::Error {
                 unknown_data_to_type(
                     Term::head_list().apply(Term::var(tail_name.to_string())),
                     &tipo.to_owned(),
@@ -1421,7 +1451,7 @@ pub fn list_access_to_uplc(
                 unknown_data_to_type_otherwise(
                     Term::head_list().apply(Term::var(tail_name.to_string())),
                     &tipo.to_owned(),
-                    otherwise.clone(),
+                    otherwise_delayed.clone(),
                 )
             }
         } else {
@@ -1456,36 +1486,40 @@ pub fn list_access_to_uplc(
                         ExpectLevel::None => acc.lambda(name).apply(head_item).lambda(tail_name),
 
                         ExpectLevel::Full | ExpectLevel::Items => {
-                            if otherwise == Term::Error && tail_present {
+                            if otherwise_delayed == Term::Error && tail_present {
                                 // No need to check last item if tail was present
                                 acc.lambda(name).apply(head_item).lambda(tail_name)
                             } else if tail_present {
                                 // Custom error instead of trying to do head_item on a possibly empty list.
                                 Term::var(tail_name.to_string())
-                                    .delayed_choose_list(
-                                        otherwise.clone(),
-                                        acc.lambda(name).apply(head_item),
+                                    .choose_list(
+                                        otherwise_delayed.clone(),
+                                        acc.lambda(name).apply(head_item).delay(),
                                     )
+                                    .force()
                                     .lambda(tail_name)
-                            } else if otherwise == Term::Error {
+                            } else if otherwise_delayed == Term::Error {
                                 // Check head is last item in this list
                                 Term::tail_list()
                                     .apply(Term::var(tail_name.to_string()))
-                                    .delayed_choose_list(acc, otherwise.clone())
+                                    .choose_list(acc.delay(), otherwise_delayed.clone())
+                                    .force()
                                     .lambda(name)
                                     .apply(head_item)
                                     .lambda(tail_name)
                             } else {
                                 // Custom error if list is not empty after this head
                                 Term::var(tail_name.to_string())
-                                    .delayed_choose_list(
-                                        otherwise.clone(),
+                                    .choose_list(
+                                        otherwise_delayed.clone(),
                                         Term::tail_list()
                                             .apply(Term::var(tail_name.to_string()))
-                                            .delayed_choose_list(acc, otherwise.clone())
+                                            .choose_list(acc.delay(), otherwise_delayed.clone())
+                                            .force()
                                             .lambda(name)
                                             .apply(head_item),
                                     )
+                                    .force()
                                     .lambda(tail_name)
                             }
                         }
@@ -1498,7 +1532,8 @@ pub fn list_access_to_uplc(
 
                     let head_item = head_item(name, tipo, &tail_name);
 
-                    if matches!(expect_level, ExpectLevel::None) || otherwise == Term::Error {
+                    if matches!(expect_level, ExpectLevel::None) || otherwise_delayed == Term::Error
+                    {
                         acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
                             .lambda(name)
                             .apply(head_item)
@@ -1506,14 +1541,16 @@ pub fn list_access_to_uplc(
                     } else {
                         // case for a custom error if the list is empty at this point
                         Term::var(tail_name.to_string())
-                            .delayed_choose_list(
-                                otherwise.clone(),
+                            .choose_list(
+                                otherwise_delayed.clone(),
                                 acc.apply(
                                     Term::tail_list().apply(Term::var(tail_name.to_string())),
                                 )
                                 .lambda(name)
-                                .apply(head_item),
+                                .apply(head_item)
+                                .delay(),
                             )
+                            .force()
                             .lambda(tail_name)
                     }
                 }
