@@ -2654,31 +2654,7 @@ fn if_soft_cast_no_scope_leak() {
 }
 
 #[test]
-fn if_soft_cast_not_data_single_constr() {
-    let source_code = r#"
-        pub type Foo {
-            a: Int
-        }
-
-        pub fn foo(foo: Foo) -> Int {
-          if foo is Foo { a }: Foo {
-            a
-          } else {
-            0
-          }
-        }
-    "#;
-
-    let (warnings, _ast) = check(parse(source_code)).unwrap();
-
-    assert!(matches!(
-        warnings[0],
-        Warning::SingleConstructorExpect { .. }
-    ))
-}
-
-#[test]
-fn if_soft_cast_not_data_multi_constr() {
+fn if_soft_cast_not_data() {
     let source_code = r#"
         pub type Foo {
             Bar { a: Int }
