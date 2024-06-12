@@ -233,14 +233,6 @@ impl CodeGenSpecialFuncs {
         }
     }
 
-    pub fn use_function_string(&mut self, func_name: String) -> String {
-        if !self.used_funcs.contains(&func_name) {
-            self.used_funcs.push(func_name.to_string());
-        }
-
-        func_name
-    }
-
     pub fn use_function_tree(&mut self, func_name: String) -> AirTree {
         if !self.used_funcs.contains(&func_name) {
             self.used_funcs.push(func_name.to_string());

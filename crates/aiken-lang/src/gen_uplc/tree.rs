@@ -215,8 +215,8 @@ pub enum AirTree {
     // Misc.
     FieldsEmpty {
         constr: Box<AirTree>,
-        msg: Option<AirMsg>,
         then: Box<AirTree>,
+        otherwise: Box<AirTree>,
     },
     ListEmpty {
         list: Box<AirTree>,
@@ -960,11 +960,11 @@ impl AirTree {
         AirTree::NoOp { then: then.into() }
     }
 
-    pub fn fields_empty(constr: AirTree, msg: Option<AirMsg>, then: AirTree) -> AirTree {
+    pub fn fields_empty(constr: AirTree, then: AirTree, otherwise: AirTree) -> AirTree {
         AirTree::FieldsEmpty {
             constr: constr.into(),
-            msg,
             then: then.into(),
+            otherwise: otherwise.into(),
         }
     }
 
@@ -1284,15 +1284,16 @@ impl AirTree {
                     otherwise.create_air_vec(air_vec);
                 }
             }
-            AirTree::FieldsEmpty { constr, msg, then } => {
+            AirTree::FieldsEmpty {
+                constr,
+                then,
+                otherwise,
+            } => {
                 air_vec.push(Air::FieldsEmpty);
-
-                if let Some(msg) = msg {
-                    msg.to_air_tree().create_air_vec(air_vec);
-                }
 
                 constr.create_air_vec(air_vec);
                 then.create_air_vec(air_vec);
+                otherwise.create_air_vec(air_vec);
             }
             AirTree::ListEmpty {
                 list,

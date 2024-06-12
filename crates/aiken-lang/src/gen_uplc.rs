@@ -9,7 +9,7 @@ use self::{
         modify_cyclic_calls, modify_self_calls, rearrange_list_clauses, AssignmentProperties,
         ClauseProperties, CodeGenSpecialFuncs, CycleFunctionNames, HoistableFunction, Variant,
     },
-    tree::{AirMsg, AirTree, TreePath},
+    tree::{AirTree, TreePath},
 };
 use crate::{
     ast::{
@@ -17,7 +17,7 @@ use crate::{
         Span, TraceLevel, Tracing, TypedArg, TypedClause, TypedDataType, TypedFunction,
         TypedPattern, TypedValidator, UnOp,
     },
-    builtins::{bool, data, int, list, string, void},
+    builtins::{bool, data, int, list, void},
     expr::TypedExpr,
     gen_uplc::{
         air::ExpectLevel,
@@ -285,14 +285,11 @@ impl<'a> CodeGenerator<'a> {
 
                     self.special_functions.insert_new_function(
                         msg_func_name.clone(),
-                        Term::string(msg),
-                        string(),
+                        Term::Error.delayed_trace(Term::string(msg)),
+                        void(),
                     );
 
-                    let msg_string =
-                        AirTree::string(self.special_functions.use_function_string(msg_func_name));
-
-                    AirTree::trace(msg_string, void(), AirTree::error(void(), false))
+                    self.special_functions.use_function_tree(msg_func_name)
                 }
             };
 
@@ -1776,28 +1773,13 @@ impl<'a> CodeGenerator<'a> {
 
                 // mutate code_gen_funcs and defined_data_types in this if branch
                 if function.is_none() && defined_data_types.get(&data_type_name).is_none() {
-                    let (msg_term, error_term) = match self.tracing {
-                        TraceLevel::Silent => (None, AirTree::error(tipo.clone(), false)),
-                        TraceLevel::Compact | TraceLevel::Verbose => {
-                            let msg = AirMsg::LocalVar("__param_msg".to_string());
-                            (
-                                Some(msg.clone()),
-                                AirTree::trace(
-                                    msg.to_air_tree(),
-                                    tipo.clone(),
-                                    AirTree::error(tipo.clone(), false),
-                                ),
-                            )
-                        }
-                    };
-
                     defined_data_types.insert(data_type_name.clone(), 1);
 
                     let current_defined = defined_data_types.clone();
                     let mut diff_defined_types = vec![];
 
                     let constr_clauses = data_type.constructors.iter().enumerate().rfold(
-                        error_term,
+                        otherwise.clone(),
                         |acc, (index, constr)| {
                             let mut constr_args = vec![];
 
@@ -1836,8 +1818,8 @@ impl<'a> CodeGenerator<'a> {
                                         ),
                                         tipo.clone(),
                                     ),
-                                    msg_term.clone(),
                                     constr_then,
+                                    otherwise.clone(),
                                 )
                             } else {
                                 AirTree::fields_expose(
@@ -3069,15 +3051,11 @@ impl<'a> CodeGenerator<'a> {
 
                             self.special_functions.insert_new_function(
                                 msg_func_name.to_string(),
-                                Term::string(msg),
-                                string(),
+                                Term::Error.delayed_trace(Term::string(msg)),
+                                void(),
                             );
 
-                            let msg_string = AirTree::string(
-                                self.special_functions.use_function_string(msg_func_name),
-                            );
-
-                            AirTree::trace(msg_string, void(), AirTree::error(void(), false))
+                            self.special_functions.use_function_tree(msg_func_name)
                         }
                     };
 
