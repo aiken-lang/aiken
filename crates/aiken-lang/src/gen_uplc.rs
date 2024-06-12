@@ -259,7 +259,7 @@ impl<'a> CodeGenerator<'a> {
 
             let air_value = self.build(value, module_build_name, &[]);
 
-            let otherwise = match (self.tracing, kind) {
+            let otherwise_delayed = match (self.tracing, kind) {
                 (
                     TraceLevel::Silent,
                     AssignmentKind::Let { .. } | AssignmentKind::Expect { .. },
@@ -285,7 +285,7 @@ impl<'a> CodeGenerator<'a> {
 
                     self.special_functions.insert_new_function(
                         msg_func_name.clone(),
-                        Term::Error.delayed_trace(Term::string(msg)),
+                        Term::Error.delayed_trace(Term::string(msg)).delay(),
                         void(),
                     );
 
@@ -307,7 +307,7 @@ impl<'a> CodeGenerator<'a> {
                     kind: *kind,
                     remove_unused: kind.is_let(),
                     full_check: !tipo.is_data() && value.tipo().is_data() && kind.is_expect(),
-                    otherwise,
+                    otherwise: otherwise_delayed,
                 },
             )
         } else {
@@ -645,18 +645,23 @@ impl<'a> CodeGenerator<'a> {
                         let body = self.build(&branch.body, module_build_name, &[]);
 
                         match &branch.is {
-                            Some(pattern) => self.assignment(
-                                pattern,
-                                condition,
-                                body,
-                                &pattern.tipo(&branch.condition).unwrap(),
-                                AssignmentProperties {
-                                    value_type: branch.condition.tipo(),
-                                    kind: AssignmentKind::Expect { backpassing: () },
-                                    remove_unused: false,
-                                    full_check: true,
-                                    otherwise: acc,
-                                },
+                            Some(pattern) => AirTree::let_assignment(
+                                "acc_var",
+                                // use anon function as a delay to avoid evaluating the acc
+                                AirTree::anon_func(vec![], acc),
+                                self.assignment(
+                                    pattern,
+                                    condition,
+                                    body,
+                                    &pattern.tipo(&branch.condition).unwrap(),
+                                    AssignmentProperties {
+                                        value_type: branch.condition.tipo(),
+                                        kind: AssignmentKind::Expect { backpassing: () },
+                                        remove_unused: false,
+                                        full_check: true,
+                                        otherwise: AirTree::local_var("acc_var", void()),
+                                    },
+                                ),
                             ),
                             None => AirTree::if_branch(tipo.clone(), condition, body, acc),
                         }
@@ -3030,7 +3035,7 @@ impl<'a> CodeGenerator<'a> {
 
                     let actual_type = convert_opaque_type(&arg.tipo, &self.data_types, true);
 
-                    let otherwise = match self.tracing {
+                    let otherwise_delayed = match self.tracing {
                         TraceLevel::Silent => AirTree::error(void(), false),
                         TraceLevel::Compact | TraceLevel::Verbose => {
                             let msg = match self.tracing {
@@ -3051,7 +3056,7 @@ impl<'a> CodeGenerator<'a> {
 
                             self.special_functions.insert_new_function(
                                 msg_func_name.to_string(),
-                                Term::Error.delayed_trace(Term::string(msg)),
+                                Term::Error.delayed_trace(Term::string(msg)).delay(),
                                 void(),
                             );
 
@@ -3072,7 +3077,7 @@ impl<'a> CodeGenerator<'a> {
                             kind: AssignmentKind::expect(),
                             remove_unused: false,
                             full_check: true,
-                            otherwise,
+                            otherwise: otherwise_delayed,
                         },
                     );
 
@@ -4835,7 +4840,8 @@ impl<'a> CodeGenerator<'a> {
                         )
                         .apply(constr),
                     )
-                    .delayed_if_then_else(term, otherwise);
+                    .if_then_else(term.delay(), otherwise)
+                    .force();
 
                 Some(term)
             }
@@ -4846,9 +4852,9 @@ impl<'a> CodeGenerator<'a> {
                 let otherwise = arg_stack.pop().unwrap();
 
                 if is_true {
-                    term = value.delayed_if_then_else(term, otherwise)
+                    term = value.if_then_else(term.delay(), otherwise).force()
                 } else {
-                    term = value.delayed_if_then_else(otherwise, term)
+                    term = value.if_then_else(otherwise, term.delay()).force()
                 }
                 Some(term)
             }
@@ -5339,7 +5345,8 @@ impl<'a> CodeGenerator<'a> {
                         .use_function_uplc(CONSTR_FIELDS_EXPOSER.to_string()),
                 )
                 .apply(value)
-                .delayed_choose_list(term, otherwise);
+                .choose_list(term.delay(), otherwise)
+                .force();
 
                 Some(term)
             }
@@ -5349,7 +5356,7 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
                 let otherwise = arg_stack.pop().unwrap();
 
-                term = value.delayed_choose_list(term, otherwise);
+                term = value.choose_list(term.delay(), otherwise).force();
 
                 Some(term)
             }
