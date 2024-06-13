@@ -2654,6 +2654,52 @@ fn if_soft_cast_no_scope_leak() {
 }
 
 #[test]
+fn if_soft_cast_no_scope_leak_2() {
+    let source_code = r#"
+        pub type Foo {
+            a: Int
+        }
+
+        pub fn foo(foo: Data) -> Int {
+          if foo is Foo { a }: Foo {
+            a
+          } else {
+            a
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::UnknownVariable { name, ..  })) if name == "a"
+    ))
+}
+
+#[test]
+fn if_soft_cast_unused_pattern() {
+    let source_code = r#"
+        pub type Foo {
+            a: Int
+        }
+
+        pub fn foo(foo: Data) -> Int {
+          if foo is Foo { a }: Foo {
+            1
+          } else {
+            0
+          }
+        }
+    "#;
+
+    let (warnings, _ast) = dbg!(check(parse(source_code))).unwrap();
+
+    assert!(matches!(
+        warnings[0],
+        Warning::UnusedVariable { ref name, ..  } if name == "a"
+    ))
+}
+
+#[test]
 fn if_soft_cast_not_data() {
     let source_code = r#"
         pub type Foo {

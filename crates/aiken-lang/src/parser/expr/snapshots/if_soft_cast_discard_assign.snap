@@ -1,0 +1,59 @@
+---
+source: crates/aiken-lang/src/parser/expr/if_else.rs
+description: "Code:\n\nif foo() is Foo {\n  todo\n} else {\n  todo\n}\n"
+---
+If {
+    location: 0..42,
+    branches: [
+        IfBranch {
+            condition: Call {
+                arguments: [],
+                fun: Var {
+                    location: 3..6,
+                    name: "foo",
+                },
+                location: 3..8,
+            },
+            body: Trace {
+                kind: Todo,
+                location: 20..24,
+                then: ErrorTerm {
+                    location: 20..24,
+                },
+                text: String {
+                    location: 20..24,
+                    value: "aiken::todo",
+                },
+            },
+            is: Some(
+                AssignmentPattern {
+                    pattern: Discard {
+                        name: "_",
+                        location: 12..15,
+                    },
+                    annotation: Some(
+                        Constructor {
+                            location: 12..15,
+                            module: None,
+                            name: "Foo",
+                            arguments: [],
+                        },
+                    ),
+                    location: 12..15,
+                },
+            ),
+            location: 3..26,
+        },
+    ],
+    final_else: Trace {
+        kind: Todo,
+        location: 36..40,
+        then: ErrorTerm {
+            location: 36..40,
+        },
+        text: String {
+            location: 36..40,
+            value: "aiken::todo",
+        },
+    },
+}

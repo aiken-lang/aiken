@@ -1,0 +1,76 @@
+---
+source: crates/aiken-lang/src/parser/expr/if_else.rs
+description: "Code:\n\nif foo() is Foo { a }: Foo {\n  todo\n} else {\n  todo\n}\n"
+---
+If {
+    location: 0..53,
+    branches: [
+        IfBranch {
+            condition: Call {
+                arguments: [],
+                fun: Var {
+                    location: 3..6,
+                    name: "foo",
+                },
+                location: 3..8,
+            },
+            body: Trace {
+                kind: Todo,
+                location: 31..35,
+                then: ErrorTerm {
+                    location: 31..35,
+                },
+                text: String {
+                    location: 31..35,
+                    value: "aiken::todo",
+                },
+            },
+            is: Some(
+                AssignmentPattern {
+                    pattern: Constructor {
+                        is_record: true,
+                        location: 12..21,
+                        name: "Foo",
+                        arguments: [
+                            CallArg {
+                                label: Some(
+                                    "a",
+                                ),
+                                location: 18..19,
+                                value: Var {
+                                    location: 18..19,
+                                    name: "a",
+                                },
+                            },
+                        ],
+                        module: None,
+                        constructor: (),
+                        spread_location: None,
+                        tipo: (),
+                    },
+                    annotation: Some(
+                        Constructor {
+                            location: 23..26,
+                            module: None,
+                            name: "Foo",
+                            arguments: [],
+                        },
+                    ),
+                    location: 12..26,
+                },
+            ),
+            location: 3..37,
+        },
+    ],
+    final_else: Trace {
+        kind: Todo,
+        location: 47..51,
+        then: ErrorTerm {
+            location: 47..51,
+        },
+        text: String {
+            location: 47..51,
+            value: "aiken::todo",
+        },
+    },
+}
