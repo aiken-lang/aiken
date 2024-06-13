@@ -1517,7 +1517,8 @@ pub fn list_access_to_uplc(
                                             .choose_list(acc.delay(), otherwise_delayed.clone())
                                             .force()
                                             .lambda(name)
-                                            .apply(head_item),
+                                            .apply(head_item)
+                                            .delay(),
                                     )
                                     .force()
                                     .lambda(tail_name)
