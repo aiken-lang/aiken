@@ -537,7 +537,7 @@ If you really meant to return that last expression, try to replace it with the f
     },
 
     #[error("{}\n", if *is_let {
-          "I noticed a let assignment matching a value with more than one pattern.".to_string()
+          "I noticed an incomplete single-pattern matching a value with more than one pattern.".to_string()
       } else {
           format!(
               "I realized that a given '{keyword_when}/{keyword_is}' expression is non-exhaustive.",
@@ -1696,15 +1696,15 @@ pub enum Warning {
     #[error(
         "I came across a validator in a {} {}",
         "lib/".if_supports_color(Stderr, |s| s.purple()),
-        "module which means\nI'm going to ignore it.\n".if_supports_color(Stderr, |s| s.yellow()),
+        "module which means I'm going to ignore it.".if_supports_color(Stderr, |s| s.yellow()),
     )]
     #[diagnostic(help(
-        "No big deal, but you might want to move it to a {} module\nor remove it to get rid of that warning.",
-        "validators/".if_supports_color(Stderr, |s| s.purple())
+        "No big deal, but you might want to move it to the {} folder or remove it to get rid of that warning.",
+        "validators".if_supports_color(Stderr, |s| s.purple()),
     ))]
     #[diagnostic(code("unused::validator"))]
     ValidatorInLibraryModule {
-        #[label("unused validator")]
+        #[label("ignored")]
         location: Span,
     },
 
