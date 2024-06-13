@@ -901,7 +901,7 @@ impl<'a> CodeGenerator<'a> {
 
         // Cast value to or from data so we don't have to worry from this point onward
         if props.value_type.is_data() && props.kind.is_expect() && !tipo.is_data() {
-            value = AirTree::cast_from_data(value, tipo.clone(), props.otherwise.clone());
+            value = AirTree::cast_from_data(value, tipo.clone(), props.otherwise.clone(), true);
         } else if !props.value_type.is_data() && tipo.is_data() {
             value = AirTree::cast_to_data(value, props.value_type.clone());
         }
@@ -1648,6 +1648,7 @@ impl<'a> CodeGenerator<'a> {
                             AirTree::local_var(&item_name, data()),
                             inner_list_type.clone(),
                             otherwise.clone(),
+                            true,
                         ),
                         defined_data_types,
                         location,
@@ -4766,11 +4767,20 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(term)
             }
-            Air::CastFromData { tipo, .. } => {
+            Air::CastFromData { tipo, full_cast } => {
                 let mut term = arg_stack.pop().unwrap();
-                let otherwise = arg_stack.pop().unwrap();
 
-                term = convert_data_to_type(term, &tipo, otherwise);
+                let otherwise = if full_cast {
+                    arg_stack.pop().unwrap()
+                } else {
+                    Term::Error
+                };
+
+                term = if full_cast {
+                    convert_data_to_type(term, &tipo, otherwise)
+                } else {
+                    known_data_to_type(term, &tipo)
+                };
 
                 if extract_constant(&term).is_some() {
                     let mut program: Program<Name> = Program {

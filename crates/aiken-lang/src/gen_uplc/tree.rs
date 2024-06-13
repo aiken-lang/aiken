@@ -298,6 +298,7 @@ pub enum AirTree {
         tipo: Rc<Type>,
         value: Box<AirTree>,
         otherwise: Box<AirTree>,
+        full_cast: bool,
     },
     CastToData {
         tipo: Rc<Type>,
@@ -566,11 +567,17 @@ impl AirTree {
         }
     }
 
-    pub fn cast_from_data(value: AirTree, tipo: Rc<Type>, otherwise: AirTree) -> AirTree {
+    pub fn cast_from_data(
+        value: AirTree,
+        tipo: Rc<Type>,
+        otherwise: AirTree,
+        full_cast: bool,
+    ) -> AirTree {
         AirTree::CastFromData {
             tipo,
             value: value.into(),
             otherwise: otherwise.into(),
+            full_cast,
         }
     }
 
@@ -837,6 +844,7 @@ impl AirTree {
             ),
             tipo.clone(),
             AirTree::error(void(), false),
+            false,
         )
     }
 
@@ -942,6 +950,7 @@ impl AirTree {
             ),
             tipo.clone(),
             AirTree::error(void(), false),
+            false,
         )
     }
 
@@ -1406,11 +1415,17 @@ impl AirTree {
                 tipo,
                 value,
                 otherwise,
+                full_cast,
             } => {
-                air_vec.push(Air::CastFromData { tipo: tipo.clone() });
+                air_vec.push(Air::CastFromData {
+                    tipo: tipo.clone(),
+                    full_cast: *full_cast,
+                });
 
                 value.create_air_vec(air_vec);
-                otherwise.create_air_vec(air_vec);
+                if *full_cast {
+                    otherwise.create_air_vec(air_vec);
+                }
             }
             AirTree::CastToData { tipo, value } => {
                 air_vec.push(Air::CastToData { tipo: tipo.clone() });
