@@ -1,12 +1,10 @@
-use chumsky::prelude::*;
-
+use super::block;
 use crate::{
     ast,
     expr::UntypedExpr,
     parser::{annotation, error::ParseError, pattern, token::Token},
 };
-
-use super::block;
+use chumsky::prelude::*;
 
 pub fn parser<'a>(
     sequence: Recursive<'a, Token, UntypedExpr, ParseError>,
@@ -129,6 +127,32 @@ mod tests {
               x
             } else {
               Infinity
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn if_soft_cast_discard_assign() {
+        assert_expr!(
+            r#"
+            if foo() is Foo {
+              todo
+            } else {
+              todo
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn if_soft_cast_not_var_condition() {
+        assert_expr!(
+            r#"
+            if foo() is Foo { a }: Foo {
+              todo
+            } else {
+              todo
             }
             "#
         );
