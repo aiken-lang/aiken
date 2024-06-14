@@ -106,7 +106,18 @@ where
     pub fn new(root: PathBuf, event_listener: T) -> Result<Project<T>, Error> {
         let config = Config::load(&root)?;
 
-        let project = Project::new_with_config(config, root, event_listener);
+        let demanded_compiler_version = format!("v{}", config.compiler);
+
+        let mut project = Project::new_with_config(config, root, event_listener);
+
+        let current_compiler_version = config::compiler_version(false);
+
+        if demanded_compiler_version != current_compiler_version {
+            project.warnings.push(Warning::CompilerVersionMismatch {
+                demanded: demanded_compiler_version,
+                current: current_compiler_version,
+            })
+        }
 
         Ok(project)
     }

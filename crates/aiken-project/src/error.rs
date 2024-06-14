@@ -510,6 +510,8 @@ pub enum Warning {
     DependencyAlreadyExists { name: PackageName },
     #[error("Ignoring file with invalid module name at: {path:?}")]
     InvalidModuleName { path: PathBuf },
+    #[error("aiken.toml demands compiler version {demanded}, but you are using {current}.")]
+    CompilerVersionMismatch { demanded: String, current: String },
 }
 
 impl ExtraData for Warning {
@@ -517,7 +519,8 @@ impl ExtraData for Warning {
         match self {
             Warning::NoValidators { .. }
             | Warning::DependencyAlreadyExists { .. }
-            | Warning::InvalidModuleName { .. } => None,
+            | Warning::InvalidModuleName { .. }
+            | Warning::CompilerVersionMismatch { .. } => None,
             Warning::Type { warning, .. } => warning.extra_data(),
         }
     }
@@ -527,7 +530,9 @@ impl GetSource for Warning {
     fn path(&self) -> Option<PathBuf> {
         match self {
             Warning::InvalidModuleName { path } | Warning::Type { path, .. } => Some(path.clone()),
-            Warning::NoValidators | Warning::DependencyAlreadyExists { .. } => None,
+            Warning::NoValidators
+            | Warning::DependencyAlreadyExists { .. }
+            | Warning::CompilerVersionMismatch { .. } => None,
         }
     }
 
@@ -536,7 +541,8 @@ impl GetSource for Warning {
             Warning::Type { src, .. } => Some(src.clone()),
             Warning::NoValidators
             | Warning::InvalidModuleName { .. }
-            | Warning::DependencyAlreadyExists { .. } => None,
+            | Warning::DependencyAlreadyExists { .. }
+            | Warning::CompilerVersionMismatch { .. } => None,
         }
     }
 }
@@ -551,7 +557,8 @@ impl Diagnostic for Warning {
             Warning::Type { named, .. } => Some(named),
             Warning::NoValidators
             | Warning::InvalidModuleName { .. }
-            | Warning::DependencyAlreadyExists { .. } => None,
+            | Warning::DependencyAlreadyExists { .. }
+            | Warning::CompilerVersionMismatch { .. } => None,
         }
     }
 
@@ -560,7 +567,8 @@ impl Diagnostic for Warning {
             Warning::Type { warning, .. } => warning.labels(),
             Warning::InvalidModuleName { .. }
             | Warning::NoValidators
-            | Warning::DependencyAlreadyExists { .. } => None,
+            | Warning::DependencyAlreadyExists { .. }
+            | Warning::CompilerVersionMismatch { .. } => None,
         }
     }
 
@@ -572,6 +580,9 @@ impl Diagnostic for Warning {
             ))),
             Warning::NoValidators => Some(Box::new("aiken::check")),
             Warning::InvalidModuleName { .. } => Some(Box::new("aiken::project::module_name")),
+            Warning::CompilerVersionMismatch { .. } => {
+                Some(Box::new("aiken::project::compiler_version_mismatch"))
+            }
             Warning::DependencyAlreadyExists { .. } => {
                 Some(Box::new("aiken::packages::already_exists"))
             }
@@ -582,6 +593,10 @@ impl Diagnostic for Warning {
         match self {
             Warning::Type { warning, .. } => warning.help(),
             Warning::NoValidators => None,
+            Warning::CompilerVersionMismatch { demanded, .. } => Some(Box::new(format!(
+                "You may want to switch to {}",
+                demanded.if_supports_color(Stdout, |s| s.purple())
+            ))),
             Warning::InvalidModuleName { .. } => Some(Box::new(
                 "Module names are lowercase, (ascii) alpha-numeric and may contain dashes or underscores.",
             )),
