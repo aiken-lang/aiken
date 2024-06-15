@@ -1843,13 +1843,20 @@ impl<'a> CodeGenerator<'a> {
                                 )
                             };
 
-                            AirTree::clause(
-                                format!("__subject_span_{}_{}", location.start, location.end),
-                                AirTree::int(index),
-                                tipo.clone(),
-                                then,
-                                acc,
-                                false,
+                            AirTree::anon_func(
+                                vec![],
+                                AirTree::assert_constr_index(
+                                    index,
+                                    AirTree::local_var(
+                                        format!(
+                                            "__subject_span_{}_{}",
+                                            location.start, location.end
+                                        ),
+                                        tipo.clone(),
+                                    ),
+                                    then,
+                                    acc,
+                                ),
                             )
                         },
                     );
