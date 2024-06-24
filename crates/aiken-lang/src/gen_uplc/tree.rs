@@ -9,9 +9,22 @@ use itertools::Itertools;
 use std::{borrow::BorrowMut, rc::Rc, slice::Iter};
 use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
 
+#[derive(Clone, Debug, PartialEq, Copy)]
+pub enum Fields {
+    FirstField,
+    SecondField,
+    ThirdField,
+    FourthField,
+    FifthField,
+    SixthField,
+    SeventhField,
+    EighthField,
+    ArgsField(usize),
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct TreePath {
-    path: Vec<(usize, usize)>,
+    path: Vec<(usize, Fields)>,
 }
 
 impl TreePath {
@@ -23,11 +36,11 @@ impl TreePath {
         self.path.is_empty()
     }
 
-    pub fn push(&mut self, depth: usize, index: usize) {
+    pub fn push(&mut self, depth: usize, index: Fields) {
         self.path.push((depth, index));
     }
 
-    pub fn pop(&mut self) -> Option<(usize, usize)> {
+    pub fn pop(&mut self) -> Option<(usize, Fields)> {
         self.path.pop()
     }
 
@@ -1715,14 +1728,20 @@ impl AirTree {
         apply_with_func_last: bool,
     ) {
         let mut tree_path = TreePath::new();
-        self.do_traverse_tree_with(&mut tree_path, 0, 0, with, apply_with_func_last);
+        self.do_traverse_tree_with(
+            &mut tree_path,
+            0,
+            Fields::FirstField,
+            with,
+            apply_with_func_last,
+        );
     }
 
     pub fn traverse_tree_with_path(
         &mut self,
         path: &mut TreePath,
         current_depth: usize,
-        depth_index: usize,
+        depth_index: Fields,
         with: &mut impl FnMut(&mut AirTree, &TreePath),
         apply_with_func_last: bool,
     ) {
@@ -1733,138 +1752,270 @@ impl AirTree {
         &mut self,
         tree_path: &mut TreePath,
         current_depth: usize,
-        depth_index: usize,
+        field_index: Fields,
         with: &mut impl FnMut(&mut AirTree, &TreePath),
         apply_with_func_last: bool,
     ) {
-        let mut index_count = IndexCounter::new();
-        tree_path.push(current_depth, depth_index);
-        let mut tuple_then_index = None;
+        tree_path.push(current_depth, field_index);
 
         // Assignments'/Statements' values get traversed here
         // Then the body under these assignments/statements get traversed later on
         match self {
-            AirTree::Let { value, .. } => {
+            AirTree::Let {
+                name: _,
+                value,
+                then: _,
+            } => {
                 value.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::SecondField,
                     with,
                     apply_with_func_last,
                 );
             }
 
-            AirTree::AssertConstr { constr, .. } => {
+            AirTree::AssertConstr {
+                constr,
+                constr_index: _,
+                then: _,
+                otherwise,
+            } => {
                 constr.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FirstField,
                     with,
                     apply_with_func_last,
                 );
+                otherwise.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::FourthField,
+                    with,
+                    apply_with_func_last,
+                )
             }
-            AirTree::AssertBool { value, .. } => {
+            AirTree::AssertBool {
+                value,
+                is_true: _,
+                then: _,
+                otherwise,
+            } => {
                 value.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FirstField,
                     with,
                     apply_with_func_last,
                 );
+                otherwise.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::FourthField,
+                    with,
+                    apply_with_func_last,
+                )
             }
-            AirTree::ClauseGuard { pattern, .. } => {
+            AirTree::ClauseGuard {
+                pattern,
+                subject_name: _,
+                subject_tipo: _,
+                then: _,
+            } => {
                 pattern.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FirstField,
                     with,
                     apply_with_func_last,
                 );
             }
 
-            AirTree::FieldsExpose { record, .. } => {
+            AirTree::FieldsExpose {
+                indices: _,
+                record,
+                is_expect: _,
+                then: _,
+                otherwise,
+            } => {
                 record.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::SecondField,
                     with,
                     apply_with_func_last,
                 );
+                otherwise.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::FifthField,
+                    with,
+                    apply_with_func_last,
+                )
             }
-            AirTree::ListAccessor { list, .. } => {
+            AirTree::ListAccessor {
+                tipo: _,
+                names: _,
+                tail: _,
+                list,
+                expect_level: _,
+                then: _,
+                otherwise,
+            } => {
                 list.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FourthField,
                     with,
                     apply_with_func_last,
                 );
+                otherwise.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::SeventhField,
+                    with,
+                    apply_with_func_last,
+                )
             }
-            AirTree::TupleAccessor { tuple, .. } => {
+            AirTree::TupleAccessor {
+                names: _,
+                tipo: _,
+                tuple,
+                is_expect: _,
+                then: _,
+                otherwise,
+            } => {
                 tuple.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::ThirdField,
                     with,
                     apply_with_func_last,
                 );
+                otherwise.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::SixthField,
+                    with,
+                    apply_with_func_last,
+                )
             }
-            AirTree::PairAccessor { pair, .. } => {
+            AirTree::PairAccessor {
+                fst: _,
+                snd: _,
+                tipo: _,
+                is_expect: _,
+                pair,
+                then: _,
+                otherwise,
+            } => {
                 pair.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FifthField,
                     with,
                     apply_with_func_last,
                 );
+                otherwise.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::SeventhField,
+                    with,
+                    apply_with_func_last,
+                )
             }
-            AirTree::FieldsEmpty { constr, .. } => {
+            AirTree::FieldsEmpty {
+                constr,
+                then: _,
+                otherwise,
+            } => {
                 constr.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FirstField,
+                    with,
+                    apply_with_func_last,
+                );
+
+                otherwise.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::ThirdField,
                     with,
                     apply_with_func_last,
                 );
             }
-            AirTree::ListEmpty { list, .. } => {
+            AirTree::ListEmpty {
+                list,
+                then: _,
+                otherwise,
+            } => {
                 list.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FirstField,
                     with,
                     apply_with_func_last,
                 );
+                otherwise.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::ThirdField,
+                    with,
+                    apply_with_func_last,
+                )
             }
 
-            AirTree::When { subject, .. } => subject.do_traverse_tree_with(
+            AirTree::When {
+                tipo: _,
+                subject_name: _,
+                subject,
+                subject_tipo: _,
+                clauses: _,
+            } => subject.do_traverse_tree_with(
                 tree_path,
                 current_depth + 1,
-                index_count.next_number(),
+                Fields::ThirdField,
                 with,
                 apply_with_func_last,
             ),
 
-            AirTree::TupleClause { otherwise, .. } => {
-                tuple_then_index = Some(index_count.next_number());
+            AirTree::TupleClause {
+                subject_tipo: _,
+                indices: _,
+                predefined_indices: _,
+                subject_name: _,
+                complex_clause: _,
+                then: _,
+                otherwise,
+            } => {
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::SeventhField,
                     with,
                     apply_with_func_last,
                 );
             }
-            AirTree::PairClause { otherwise, .. } => {
-                tuple_then_index = Some(index_count.next_number());
+            AirTree::PairClause {
+                subject_tipo: _,
+                subject_name: _,
+                fst_name: _,
+                snd_name: _,
+                complex_clause: _,
+                then: _,
+                otherwise,
+            } => {
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::SeventhField,
                     with,
                     apply_with_func_last,
                 );
             }
+
             AirTree::DefineFunc { .. }
             | AirTree::DefineCyclicFuncs { .. }
             | AirTree::ListClauseGuard { .. }
@@ -1906,91 +2057,95 @@ impl AirTree {
 
         // Expressions or an assignment that hoist over a expression are traversed here
         match self {
-            AirTree::Let { then, .. }
-            | AirTree::AssertConstr { then, .. }
-            | AirTree::AssertBool { then, .. }
-            | AirTree::ClauseGuard { then, .. }
-            | AirTree::FieldsExpose { then, .. }
-            | AirTree::ListAccessor { then, .. }
-            | AirTree::TupleAccessor { then, .. }
-            | AirTree::PairAccessor { then, .. }
-            | AirTree::FieldsEmpty { then, .. }
-            | AirTree::ListEmpty { then, .. }
-            | AirTree::ListExpose { then, .. }
-            | AirTree::ListClauseGuard { then, .. }
-            | AirTree::TupleGuard { then, .. }
-            | AirTree::PairGuard { then, .. }
-            | AirTree::NoOp { then } => {
+            AirTree::NoOp { then } => {
                 then.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FirstField,
                     with,
                     apply_with_func_last,
                 );
             }
-            AirTree::When { clauses, .. } => {
+            AirTree::When {
+                tipo: _,
+                subject_name: _,
+                subject: _,
+                subject_tipo: _,
+                clauses,
+            } => {
                 clauses.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FifthField,
                     with,
                     apply_with_func_last,
                 );
             }
-            AirTree::TupleClause { then, .. } => {
-                let Some(index) = tuple_then_index else {
-                    unreachable!()
-                };
-
+            AirTree::TupleClause {
+                subject_tipo: _,
+                indices: _,
+                predefined_indices: _,
+                subject_name: _,
+                complex_clause: _,
+                then,
+                otherwise: _,
+            } => {
                 then.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index,
+                    Fields::SixthField,
                     with,
                     apply_with_func_last,
                 );
             }
-            AirTree::PairClause { then, .. } => {
-                let Some(index) = tuple_then_index else {
-                    unreachable!()
-                };
-
+            AirTree::PairClause {
+                subject_tipo: _,
+                subject_name: _,
+                fst_name: _,
+                snd_name: _,
+                complex_clause: _,
+                then,
+                otherwise: _,
+            } => {
                 then.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index,
+                    Fields::SixthField,
                     with,
                     apply_with_func_last,
                 );
             }
-            AirTree::List { items, .. } => {
-                for item in items {
+            AirTree::List {
+                tipo: _,
+                tail: _,
+                items,
+            } => {
+                for (index, item) in items.iter_mut().enumerate() {
                     item.do_traverse_tree_with(
                         tree_path,
                         current_depth + 1,
-                        index_count.next_number(),
+                        Fields::ArgsField(index),
                         with,
                         apply_with_func_last,
                     );
                 }
             }
-            AirTree::Tuple { items, .. } => {
-                for item in items {
+            AirTree::Tuple { tipo: _, items } => {
+                for (index, item) in items.iter_mut().enumerate() {
                     item.do_traverse_tree_with(
                         tree_path,
                         current_depth + 1,
-                        index_count.next_number(),
+                        Fields::ArgsField(index),
                         with,
                         apply_with_func_last,
                     );
                 }
             }
-            AirTree::Pair { fst, snd, .. } => {
+            AirTree::Pair { tipo: _, fst, snd } => {
                 fst.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::SecondField,
                     with,
                     apply_with_func_last,
                 );
@@ -1998,55 +2153,72 @@ impl AirTree {
                 snd.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::ThirdField,
                     with,
                     apply_with_func_last,
                 );
             }
-            AirTree::Call { func, args, .. } => {
+            AirTree::Call {
+                tipo: _,
+                func,
+                args,
+            } => {
                 func.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FirstField,
                     with,
                     apply_with_func_last,
                 );
 
-                for arg in args {
+                for (index, arg) in args.iter_mut().enumerate() {
                     arg.do_traverse_tree_with(
                         tree_path,
                         current_depth + 1,
-                        index_count.next_number(),
+                        Fields::ArgsField(index),
                         with,
                         apply_with_func_last,
                     );
                 }
             }
-            AirTree::Fn { func_body, .. } => {
+            AirTree::Fn {
+                params: _,
+                func_body,
+            } => {
                 func_body.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::SecondField,
                     with,
                     apply_with_func_last,
                 );
             }
-            AirTree::Builtin { args, .. } => {
-                for arg in args {
+            AirTree::Builtin {
+                func: _,
+                tipo: _,
+                args,
+            } => {
+                for (index, arg) in args.iter_mut().enumerate() {
                     arg.do_traverse_tree_with(
                         tree_path,
                         current_depth + 1,
-                        index_count.next_number(),
+                        Fields::ArgsField(index),
                         with,
                         apply_with_func_last,
                     );
                 }
             }
-            AirTree::BinOp { left, right, .. } => {
+            AirTree::BinOp {
+                name: _,
+                tipo: _,
+                left,
+                right,
+                argument_tipo: _,
+            } => {
                 left.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::ThirdField,
                     with,
                     apply_with_func_last,
                 );
@@ -2054,49 +2226,56 @@ impl AirTree {
                 right.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FourthField,
                     with,
                     apply_with_func_last,
                 );
             }
-            AirTree::UnOp { arg, .. } => {
+            AirTree::UnOp { op: _, arg } => {
                 arg.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::SecondField,
                     with,
                     apply_with_func_last,
                 );
             }
-            AirTree::CastFromData { value, .. } => {
+            AirTree::CastFromData {
+                tipo: _,
+                value,
+                otherwise: _,
+                full_cast: _,
+            } => {
                 value.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::SecondField,
                     with,
                     apply_with_func_last,
                 );
             }
-            AirTree::CastToData { value, .. } => {
+            AirTree::CastToData { tipo: _, value } => {
                 value.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::SecondField,
                     with,
                     apply_with_func_last,
                 );
             }
 
             AirTree::Clause {
+                subject_tipo: _,
+                subject_name: _,
+                complex_clause: _,
                 pattern,
                 then,
                 otherwise,
-                ..
             } => {
                 pattern.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FourthField,
                     with,
                     apply_with_func_last,
                 );
@@ -2104,7 +2283,7 @@ impl AirTree {
                 then.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FifthField,
                     with,
                     apply_with_func_last,
                 );
@@ -2112,18 +2291,23 @@ impl AirTree {
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::SixthField,
                     with,
                     apply_with_func_last,
                 );
             }
             AirTree::ListClause {
-                then, otherwise, ..
+                subject_tipo: _,
+                tail_name: _,
+                next_tail_name: _,
+                complex_clause: _,
+                then,
+                otherwise,
             } => {
                 then.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FifthField,
                     with,
                     apply_with_func_last,
                 );
@@ -2131,7 +2315,7 @@ impl AirTree {
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::SixthField,
                     with,
                     apply_with_func_last,
                 );
@@ -2140,7 +2324,7 @@ impl AirTree {
                 then.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FirstField,
                     with,
                     apply_with_func_last,
                 );
@@ -2148,7 +2332,7 @@ impl AirTree {
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::SecondField,
                     with,
                     apply_with_func_last,
                 );
@@ -2158,7 +2342,7 @@ impl AirTree {
                 pattern.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FirstField,
                     with,
                     apply_with_func_last,
                 );
@@ -2166,21 +2350,21 @@ impl AirTree {
                 then.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::SecondField,
                     with,
                     apply_with_func_last,
                 );
             }
             AirTree::If {
+                tipo: _,
                 condition: pattern,
                 then,
                 otherwise,
-                ..
             } => {
                 pattern.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::SecondField,
                     with,
                     apply_with_func_last,
                 );
@@ -2188,7 +2372,7 @@ impl AirTree {
                 then.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::ThirdField,
                     with,
                     apply_with_func_last,
                 );
@@ -2196,45 +2380,56 @@ impl AirTree {
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FourthField,
                     with,
                     apply_with_func_last,
                 );
             }
-            AirTree::Constr { args, .. } => {
-                for arg in args {
+            AirTree::Constr {
+                tag: _,
+                tipo: _,
+                args,
+            } => {
+                for (index, arg) in args.iter_mut().enumerate() {
                     arg.do_traverse_tree_with(
                         tree_path,
                         current_depth + 1,
-                        index_count.next_number(),
+                        Fields::ArgsField(index),
                         with,
                         apply_with_func_last,
                     );
                 }
             }
-            AirTree::RecordUpdate { record, args, .. } => {
+            AirTree::RecordUpdate {
+                highest_index: _,
+                indices: _,
+                tipo: _,
+                record,
+                args,
+            } => {
                 record.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FourthField,
                     with,
                     apply_with_func_last,
                 );
-                for arg in args {
+
+                for (index, arg) in args.iter_mut().enumerate() {
                     arg.do_traverse_tree_with(
                         tree_path,
                         current_depth + 1,
-                        index_count.next_number(),
+                        Fields::ArgsField(index),
                         with,
                         apply_with_func_last,
                     );
                 }
             }
-            AirTree::Trace { msg, then, .. } => {
+            AirTree::Trace { tipo: _, msg, then } => {
                 msg.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::SecondField,
                     with,
                     apply_with_func_last,
                 );
@@ -2242,39 +2437,48 @@ impl AirTree {
                 then.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::ThirdField,
                     with,
                     apply_with_func_last,
                 );
             }
             AirTree::DefineFunc {
-                func_body, then, ..
+                func_name: _,
+                module_name: _,
+                params: _,
+                recursive: _,
+                recursive_nonstatic_params: _,
+                variant_name: _,
+                func_body,
+                then,
             } => {
                 func_body.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::SeventhField,
                     with,
                     apply_with_func_last,
                 );
                 then.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::EighthField,
                     with,
                     apply_with_func_last,
                 )
             }
             AirTree::DefineCyclicFuncs {
+                func_name: _,
+                module_name: _,
+                variant_name: _,
                 contained_functions,
                 then,
-                ..
             } => {
                 for (_, func_body) in contained_functions {
                     func_body.do_traverse_tree_with(
                         tree_path,
                         current_depth + 1,
-                        index_count.next_number(),
+                        Fields::FourthField,
                         with,
                         apply_with_func_last,
                     );
@@ -2282,7 +2486,7 @@ impl AirTree {
                 then.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    index_count.next_number(),
+                    Fields::FifthField,
                     with,
                     apply_with_func_last,
                 );
@@ -2295,6 +2499,210 @@ impl AirTree {
             | AirTree::Void
             | AirTree::Var { .. }
             | AirTree::ErrorTerm { .. } => {}
+            AirTree::Let {
+                name: _,
+                value: _,
+                then,
+            } => {
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::ThirdField,
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::AssertConstr {
+                constr_index: _,
+                constr: _,
+                then,
+                otherwise: _,
+            } => {
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::ThirdField,
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::AssertBool {
+                is_true: _,
+                value: _,
+                then,
+                otherwise: _,
+            } => {
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::ThirdField,
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::ClauseGuard {
+                subject_name: _,
+                subject_tipo: _,
+                pattern: _,
+                then,
+            } => {
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::FourthField,
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::ListClauseGuard {
+                subject_tipo: _,
+                tail_name: _,
+                next_tail_name: _,
+                inverse: _,
+                then,
+            } => {
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::FifthField,
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::TupleGuard {
+                subject_tipo: _,
+                indices: _,
+                subject_name: _,
+                then,
+            } => {
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::FourthField,
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::PairGuard {
+                subject_tipo: _,
+                subject_name: _,
+                fst_name: _,
+                snd_name: _,
+                then,
+            } => {
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::FifthField,
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::FieldsExpose {
+                indices: _,
+                record: _,
+                is_expect: _,
+                then,
+                otherwise: _,
+            } => {
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::FourthField,
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::ListAccessor {
+                tipo: _,
+                names: _,
+                tail: _,
+                list: _,
+                expect_level: _,
+                then,
+                otherwise: _,
+            } => {
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::SixthField,
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::ListExpose {
+                tipo: _,
+                tail_head_names: _,
+                tail: _,
+                then,
+            } => {
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::FourthField,
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::TupleAccessor {
+                names: _,
+                tipo: _,
+                tuple: _,
+                is_expect: _,
+                then,
+                otherwise: _,
+            } => {
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::FifthField,
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::PairAccessor {
+                fst: _,
+                snd: _,
+                tipo: _,
+                is_expect: _,
+                pair: _,
+                then,
+                otherwise: _,
+            } => {
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::SixthField,
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::FieldsEmpty {
+                constr: _,
+                then,
+                otherwise: _,
+            } => {
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::SecondField,
+                    with,
+                    apply_with_func_last,
+                );
+            }
+            AirTree::ListEmpty {
+                list: _,
+                then,
+                otherwise: _,
+            } => {
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::SecondField,
+                    with,
+                    apply_with_func_last,
+                );
+            }
         }
 
         if apply_with_func_last {
@@ -2313,320 +2721,344 @@ impl AirTree {
 
     fn do_find_air_tree_node<'a>(
         &'a mut self,
-        tree_path_iter: &mut Iter<(usize, usize)>,
+        tree_path_iter: &mut Iter<(usize, Fields)>,
     ) -> &'a mut AirTree {
         // For finding the air node we skip over the define func ops since those are added later on.
         if let AirTree::DefineFunc { then, .. } | AirTree::DefineCyclicFuncs { then, .. } = self {
             then.as_mut().do_find_air_tree_node(tree_path_iter)
-        } else if let Some((_depth, index)) = tree_path_iter.next() {
-            let mut children_nodes = vec![];
+        } else if let Some((_depth, field)) = tree_path_iter.next() {
             match self {
-                AirTree::Let { value, then, .. } => {
-                    if *index == 0 {
-                        value.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
+                AirTree::Let {
+                    name: _,
+                    value,
+                    then,
+                } => match field {
+                    Fields::SecondField => value.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::ThirdField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::AssertConstr {
+                    constr_index: _,
+                    constr,
+                    then,
+                    otherwise,
+                } => match field {
+                    Fields::SecondField => constr.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::ThirdField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::FourthField => otherwise.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::AssertBool {
+                    is_true: _,
+                    value,
+                    then,
+                    otherwise,
+                } => match field {
+                    Fields::SecondField => value.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::ThirdField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::FourthField => otherwise.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::ClauseGuard {
+                    subject_name: _,
+                    subject_tipo: _,
+                    pattern,
+                    then,
+                } => match field {
+                    Fields::ThirdField => pattern.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::FourthField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::ListClauseGuard {
+                    subject_tipo: _,
+                    tail_name: _,
+                    next_tail_name: _,
+                    inverse: _,
+                    then,
+                } => match field {
+                    Fields::FifthField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::TupleGuard {
+                    subject_tipo: _,
+                    indices: _,
+                    subject_name: _,
+                    then,
+                } => match field {
+                    Fields::FourthField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::PairGuard {
+                    subject_tipo: _,
+                    subject_name: _,
+                    fst_name: _,
+                    snd_name: _,
+
+                    then,
+                } => match field {
+                    Fields::FifthField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::FieldsExpose {
+                    indices: _,
+                    record,
+                    is_expect: _,
+                    then,
+                    otherwise,
+                } => match field {
+                    Fields::FirstField => record.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::FourthField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::FifthField => otherwise.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::ListAccessor {
+                    tipo: _,
+                    names: _,
+                    tail: _,
+                    list,
+                    expect_level: _,
+                    then,
+                    otherwise,
+                } => match field {
+                    Fields::FourthField => list.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::SixthField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::SeventhField => {
+                        otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
                     }
-                }
-                AirTree::AssertConstr { constr, then, .. } => {
-                    if *index == 0 {
-                        constr.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::ListExpose {
+                    tipo: _,
+                    tail_head_names: _,
+                    tail: _,
+                    then,
+                } => match field {
+                    Fields::FourthField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::TupleAccessor {
+                    names: _,
+                    tipo: _,
+                    tuple,
+                    is_expect: _,
+                    then,
+                    otherwise,
+                } => match field {
+                    Fields::ThirdField => tuple.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::FifthField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::SixthField => otherwise.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::PairAccessor {
+                    fst: _,
+                    snd: _,
+                    tipo: _,
+                    is_expect: _,
+                    pair,
+                    then,
+                    otherwise,
+                } => match field {
+                    Fields::FifthField => pair.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::SixthField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::SeventhField => {
+                        otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
                     }
-                }
-                AirTree::AssertBool { value, then, .. } => {
-                    if *index == 0 {
-                        value.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::ClauseGuard { pattern, then, .. } => {
-                    if *index == 0 {
-                        pattern.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::ListClauseGuard { then, .. } => {
-                    if *index == 0 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::TupleGuard { then, .. } => {
-                    if *index == 0 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::PairGuard { then, .. } => {
-                    if *index == 0 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::FieldsExpose { record, then, .. } => {
-                    if *index == 0 {
-                        record.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::ListAccessor { list, then, .. } => {
-                    if *index == 0 {
-                        list.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::ListExpose { then, .. } => {
-                    if *index == 0 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::TupleAccessor { tuple, then, .. } => {
-                    if *index == 0 {
-                        tuple.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::PairAccessor { pair, then, .. } => {
-                    if *index == 0 {
-                        pair.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::NoOp { then } => {
-                    if *index == 0 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::NoOp { then } => match field {
+                    Fields::FirstField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
                 AirTree::DefineFunc { .. } | AirTree::DefineCyclicFuncs { .. } => unreachable!(),
-                AirTree::FieldsEmpty { constr, then, .. } => {
-                    if *index == 0 {
-                        constr.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::ListEmpty { list, then, .. } => {
-                    if *index == 0 {
-                        list.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
+                AirTree::FieldsEmpty {
+                    constr,
+                    then,
+                    otherwise,
+                } => match field {
+                    Fields::FirstField => constr.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::SecondField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::ThirdField => otherwise.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::ListEmpty {
+                    list,
+                    then,
+                    otherwise,
+                } => match field {
+                    Fields::FirstField => list.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::SecondField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::ThirdField => otherwise.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
                 AirTree::List { items, .. }
                 | AirTree::Tuple { items, .. }
-                | AirTree::Builtin { args: items, .. } => {
-                    let item = items
+                | AirTree::Builtin { args: items, .. }
+                | AirTree::Constr { args: items, .. } => match field {
+                    Fields::ArgsField(index) => items
                         .get_mut(*index)
-                        .expect("Tree Path index outside tree children nodes");
-                    item.do_find_air_tree_node(tree_path_iter)
-                }
-                AirTree::Pair { fst, snd, .. } => {
-                    if *index == 0 {
-                        fst.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        snd.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::Call { func, args, .. } => {
-                    children_nodes.push(func.as_mut());
-                    children_nodes.extend(args.iter_mut());
-
-                    let item = children_nodes.swap_remove(*index);
-
-                    item.do_find_air_tree_node(tree_path_iter)
-                }
-                AirTree::Fn { func_body, .. } => {
-                    if *index == 0 {
-                        func_body.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::BinOp { left, right, .. } => {
-                    if *index == 0 {
-                        left.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        right.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::UnOp { arg, .. } => {
-                    if *index == 0 {
-                        arg.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::CastFromData { value, .. } => {
-                    if *index == 0 {
-                        value.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::CastToData { value, .. } => {
-                    if *index == 0 {
-                        value.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
+                        .expect("Tree Path index outside tree children nodes")
+                        .do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::Pair { tipo: _, fst, snd } => match field {
+                    Fields::SecondField => fst.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::ThirdField => snd.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::Call {
+                    tipo: _,
+                    func,
+                    args,
+                } => match field {
+                    Fields::FirstField => func.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::ArgsField(index) => args
+                        .get_mut(*index)
+                        .expect("Tree Path index outside tree children nodes")
+                        .do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::Fn {
+                    params: _,
+                    func_body,
+                } => match field {
+                    Fields::SecondField => func_body.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::BinOp {
+                    name: _,
+                    tipo: _,
+                    left,
+                    right,
+                    argument_tipo: _,
+                } => match field {
+                    Fields::ThirdField => left.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::FourthField => right.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::UnOp { op: _, arg } => match field {
+                    Fields::SecondField => arg.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::CastFromData {
+                    tipo: _,
+                    value,
+                    otherwise,
+                    full_cast: _,
+                } => match field {
+                    Fields::SecondField => value.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::ThirdField => otherwise.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::CastToData { tipo: _, value } => match field {
+                    Fields::SecondField => value.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
                 AirTree::When {
-                    subject, clauses, ..
-                } => {
-                    if *index == 0 {
-                        subject.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        clauses.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
+                    tipo: _,
+                    subject_name: _,
+                    subject,
+                    subject_tipo: _,
+                    clauses,
+                } => match field {
+                    Fields::ThirdField => subject.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::FifthField => clauses.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
                 AirTree::Clause {
+                    subject_tipo: _,
+                    subject_name: _,
+                    complex_clause: _,
                     pattern,
                     then,
                     otherwise,
-                    ..
-                } => {
-                    if *index == 0 {
-                        pattern.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 2 {
-                        otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
+                } => match field {
+                    Fields::FourthField => pattern.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::FifthField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::SixthField => otherwise.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
                 AirTree::ListClause {
-                    then, otherwise, ..
-                } => {
-                    if *index == 0 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::WrapClause { then, otherwise } => {
-                    if *index == 0 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
+                    subject_tipo: _,
+                    tail_name: _,
+                    next_tail_name: _,
+                    complex_clause: _,
+                    then,
+                    otherwise,
+                } => match field {
+                    Fields::FifthField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::SixthField => otherwise.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::WrapClause { then, otherwise } => match field {
+                    Fields::FirstField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::SecondField => otherwise.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
                 AirTree::TupleClause {
-                    then, otherwise, ..
-                } => {
-                    if *index == 0 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
+                    subject_tipo: _,
+                    indices: _,
+                    predefined_indices: _,
+                    subject_name: _,
+                    complex_clause: _,
+                    then,
+                    otherwise,
+                } => match field {
+                    Fields::SixthField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::SeventhField => {
                         otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
                     }
-                }
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
                 AirTree::PairClause {
-                    then, otherwise, ..
-                } => {
-                    if *index == 0 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
+                    subject_tipo: _,
+                    subject_name: _,
+                    fst_name: _,
+                    snd_name: _,
+                    complex_clause: _,
+                    then,
+                    otherwise,
+                } => match field {
+                    Fields::SixthField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::SeventhField => {
                         otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
                     }
-                }
-                AirTree::Finally { pattern, then } => {
-                    if *index == 0 {
-                        pattern.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::Finally { pattern, then } => match field {
+                    Fields::FirstField => pattern.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::SecondField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
                 AirTree::If {
+                    tipo: _,
                     condition: pattern,
                     then,
                     otherwise,
-                    ..
-                } => {
-                    if *index == 0 {
-                        pattern.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 2 {
-                        otherwise.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-                AirTree::Constr { args, .. } => {
-                    let item = args
+                } => match field {
+                    Fields::SecondField => pattern.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::ThirdField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::FourthField => otherwise.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::RecordUpdate {
+                    highest_index: _,
+                    indices: _,
+                    tipo: _,
+                    record,
+                    args,
+                } => match field {
+                    Fields::FourthField => record.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::ArgsField(index) => args
                         .get_mut(*index)
-                        .expect("Tree Path index outside tree children nodes");
-                    item.do_find_air_tree_node(tree_path_iter)
-                }
-                AirTree::RecordUpdate { record, args, .. } => {
-                    children_nodes.push(record.as_mut());
-                    children_nodes.extend(args.iter_mut());
-
-                    let item = children_nodes.swap_remove(*index);
-
-                    item.do_find_air_tree_node(tree_path_iter)
-                }
-                AirTree::Trace { msg, then, .. } => {
-                    if *index == 0 {
-                        msg.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else if *index == 1 {
-                        then.as_mut().do_find_air_tree_node(tree_path_iter)
-                    } else {
-                        panic!("Tree Path index outside tree children nodes")
-                    }
-                }
-
+                        .expect("Tree Path index outside tree children nodes")
+                        .do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::Trace { tipo: _, msg, then } => match field {
+                    Fields::SecondField => msg.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::ThirdField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
                 AirTree::Int { .. }
                 | AirTree::String { .. }
                 | AirTree::ByteArray { .. }

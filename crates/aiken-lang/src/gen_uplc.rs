@@ -42,6 +42,7 @@ use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use petgraph::{algo, Graph};
 use std::{collections::HashMap, rc::Rc};
+use tree::Fields;
 
 use uplc::{
     ast::{Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType},
@@ -3116,7 +3117,7 @@ impl<'a> CodeGenerator<'a> {
             &mut used_functions,
             &mut TreePath::new(),
             0,
-            0,
+            Fields::FirstField,
         );
 
         validator_hoistable = used_functions.clone();
@@ -3770,7 +3771,7 @@ impl<'a> CodeGenerator<'a> {
             current_function_deps,
             &mut function_tree_path,
             depth + 1,
-            0,
+            Fields::FirstField,
         );
 
         for (generic_function_key, variant_name) in current_function_deps.iter() {
@@ -3796,7 +3797,7 @@ impl<'a> CodeGenerator<'a> {
         dependency_functions: &mut Vec<(FunctionAccessKey, String)>,
         path: &mut TreePath,
         current_depth: usize,
-        depth_index: usize,
+        depth_index: Fields,
     ) {
         air_tree.traverse_tree_with_path(
             path,
@@ -3946,11 +3947,11 @@ impl<'a> CodeGenerator<'a> {
                                 })
                                 .collect_vec();
 
-                            let mut function_air_tree_body = self.build(
+                            let mut function_air_tree_body = AirTree::no_op(self.build(
                                 &function_def.body,
                                 &generic_function_key.module_name,
                                 &[],
-                            );
+                            ));
 
                             function_air_tree_body.traverse_tree_with(
                                 &mut |air_tree, _| {
@@ -3979,8 +3980,11 @@ impl<'a> CodeGenerator<'a> {
                             .map(|arg| arg.arg_name.get_variable_name().unwrap_or("_").to_string())
                             .collect_vec();
 
-                        let mut function_air_tree_body =
-                            self.build(&function_def.body, &generic_function_key.module_name, &[]);
+                        let mut function_air_tree_body = AirTree::no_op(self.build(
+                            &function_def.body,
+                            &generic_function_key.module_name,
+                            &[],
+                        ));
 
                         function_air_tree_body.traverse_tree_with(
                             &mut |air_tree, _| {
