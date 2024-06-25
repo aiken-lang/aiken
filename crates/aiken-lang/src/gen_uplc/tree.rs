@@ -1783,15 +1783,15 @@ impl AirTree {
             }
 
             AirTree::AssertConstr {
-                constr,
                 constr_index: _,
+                constr,
                 then: _,
                 otherwise,
             } => {
                 constr.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    Fields::FirstField,
+                    Fields::SecondField,
                     with,
                     apply_with_func_last,
                 );
@@ -1804,15 +1804,15 @@ impl AirTree {
                 )
             }
             AirTree::AssertBool {
-                value,
                 is_true: _,
+                value,
                 then: _,
                 otherwise,
             } => {
                 value.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    Fields::FirstField,
+                    Fields::SecondField,
                     with,
                     apply_with_func_last,
                 );
@@ -1825,15 +1825,15 @@ impl AirTree {
                 )
             }
             AirTree::ClauseGuard {
-                pattern,
                 subject_name: _,
                 subject_tipo: _,
+                pattern,
                 then: _,
             } => {
                 pattern.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    Fields::FirstField,
+                    Fields::ThirdField,
                     with,
                     apply_with_func_last,
                 );
@@ -2173,7 +2173,7 @@ impl AirTree {
                 func.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    Fields::FirstField,
+                    Fields::SecondField,
                     with,
                     apply_with_func_last,
                 );
@@ -2482,11 +2482,11 @@ impl AirTree {
                 contained_functions,
                 then,
             } => {
-                for (_, func_body) in contained_functions {
+                for (index, (_, func_body)) in contained_functions.iter_mut().enumerate() {
                     func_body.do_traverse_tree_with(
                         tree_path,
                         current_depth + 1,
-                        Fields::FourthField,
+                        Fields::ArgsField(index),
                         with,
                         apply_with_func_last,
                     );
@@ -2801,7 +2801,6 @@ impl AirTree {
                     subject_name: _,
                     fst_name: _,
                     snd_name: _,
-
                     then,
                 } => match field {
                     Fields::FifthField => then.as_mut().do_find_air_tree_node(tree_path_iter),
@@ -2814,7 +2813,7 @@ impl AirTree {
                     then,
                     otherwise,
                 } => match field {
-                    Fields::FirstField => record.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::SecondField => record.as_mut().do_find_air_tree_node(tree_path_iter),
                     Fields::FourthField => then.as_mut().do_find_air_tree_node(tree_path_iter),
                     Fields::FifthField => otherwise.as_mut().do_find_air_tree_node(tree_path_iter),
                     _ => panic!("Tree Path index outside tree children nodes"),
@@ -2918,7 +2917,7 @@ impl AirTree {
                     func,
                     args,
                 } => match field {
-                    Fields::FirstField => func.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::SecondField => func.as_mut().do_find_air_tree_node(tree_path_iter),
                     Fields::ArgsField(index) => args
                         .get_mut(*index)
                         .expect("Tree Path index outside tree children nodes")
