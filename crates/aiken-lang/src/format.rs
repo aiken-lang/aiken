@@ -703,6 +703,7 @@ impl<'comments> Formatter<'comments> {
         kind: UntypedAssignmentKind,
     ) -> Document<'a> {
         let keyword = match kind {
+            AssignmentKind::Is => unreachable!(),
             AssignmentKind::Let { .. } => "let",
             AssignmentKind::Expect { .. } => "expect",
         };

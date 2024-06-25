@@ -1679,6 +1679,7 @@ pub type TypedAssignmentKind = AssignmentKind<()>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy, serde::Serialize, serde::Deserialize)]
 pub enum AssignmentKind<T> {
+    Is,
     Let { backpassing: T },
     Expect { backpassing: T },
 }
@@ -1686,6 +1687,7 @@ pub enum AssignmentKind<T> {
 impl From<UntypedAssignmentKind> for TypedAssignmentKind {
     fn from(kind: UntypedAssignmentKind) -> TypedAssignmentKind {
         match kind {
+            AssignmentKind::Is => AssignmentKind::Is,
             AssignmentKind::Let { .. } => AssignmentKind::Let { backpassing: () },
             AssignmentKind::Expect { .. } => AssignmentKind::Expect { backpassing: () },
         }
@@ -1701,8 +1703,13 @@ impl<T> AssignmentKind<T> {
         matches!(self, AssignmentKind::Expect { .. })
     }
 
+    pub fn if_is(&self) -> bool {
+        matches!(self, AssignmentKind::Is)
+    }
+
     pub fn location_offset(&self) -> usize {
         match self {
+            AssignmentKind::Is => 2,
             AssignmentKind::Let { .. } => 3,
             AssignmentKind::Expect { .. } => 6,
         }
@@ -1712,6 +1719,7 @@ impl<T> AssignmentKind<T> {
 impl AssignmentKind<bool> {
     pub fn is_backpassing(&self) -> bool {
         match self {
+            Self::Is => unreachable!(),
             Self::Let { backpassing } | Self::Expect { backpassing } => *backpassing,
         }
     }
@@ -1722,6 +1730,10 @@ impl<T: Default> AssignmentKind<T> {
         AssignmentKind::Let {
             backpassing: Default::default(),
         }
+    }
+
+    pub fn is() -> Self {
+        AssignmentKind::Is
     }
 
     pub fn expect() -> Self {

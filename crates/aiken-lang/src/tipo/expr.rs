@@ -510,7 +510,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     location: _,
                 } = patterns.into_vec().swap_remove(0);
 
-                self.infer_assignment(pattern, *value, kind, &annotation, location, true)
+                self.infer_assignment(pattern, *value, kind, &annotation, location)
             }
 
             UntypedExpr::Trace {
@@ -1182,7 +1182,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         kind: UntypedAssignmentKind,
         annotation: &Option<Annotation>,
         location: Span,
-        check_exhaustiveness: bool,
     ) -> Result<TypedExpr, Error> {
         let typed_value = self.infer(untyped_value.clone())?;
         let mut value_typ = typed_value.tipo();
@@ -1199,7 +1198,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 ann_typ.clone(),
                 value_typ.clone(),
                 typed_value.type_defining_location(),
-                (kind.is_let() && ann_typ.is_data()) || kind.is_expect(),
+                (kind.is_let() && ann_typ.is_data()) || kind.is_expect() || kind.if_is(),
             )?;
 
             value_typ = ann_typ.clone();
@@ -1240,11 +1239,13 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         // If `expect` is explicitly used, we still check exhaustiveness but instead of returning an
         // error we emit a warning which explains that using `expect` is unnecessary.
         match kind {
-            AssignmentKind::Let { .. } if check_exhaustiveness => self
-                .environment
-                .check_exhaustiveness(&[&pattern], location, true)?,
+            AssignmentKind::Is => (),
+            AssignmentKind::Let { .. } => {
+                self.environment
+                    .check_exhaustiveness(&[&pattern], location, true)?
+            }
 
-            AssignmentKind::Expect { .. } if check_exhaustiveness => {
+            AssignmentKind::Expect { .. } => {
                 let is_exaustive_pattern = self
                     .environment
                     .check_exhaustiveness(&[&pattern], location, false)
@@ -1292,7 +1293,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         });
                 }
             }
-            _ => (),
         }
 
         Ok(TypedExpr::Assignment {
@@ -1749,10 +1749,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 let TypedExpr::Assignment { value, pattern, .. } = typer.infer_assignment(
                     pattern,
                     branch.condition.clone(),
-                    AssignmentKind::expect(),
+                    AssignmentKind::is(),
                     &annotation,
                     location,
-                    false,
                 )?
                 else {
                     unreachable!()
@@ -2104,6 +2103,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                             .into(),
                             // erase backpassing while preserving assignment kind.
                             kind: match kind {
+                                AssignmentKind::Is => unreachable!(),
                                 AssignmentKind::Let { .. } => AssignmentKind::let_(),
                                 AssignmentKind::Expect { .. }
                                     if pattern_is_var && annotation.is_none() =>

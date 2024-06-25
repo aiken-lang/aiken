@@ -2691,7 +2691,7 @@ fn if_soft_cast_unused_pattern() {
         }
     "#;
 
-    let (warnings, _ast) = dbg!(check(parse(source_code))).unwrap();
+    let (warnings, _ast) = check(parse(source_code)).unwrap();
 
     assert!(matches!(
         warnings[0],
@@ -2716,7 +2716,7 @@ fn if_soft_cast_not_data() {
         }
     "#;
 
-    let (warnings, _ast) = dbg!(check(parse(source_code))).unwrap();
+    let (warnings, _ast) = check(parse(source_code)).unwrap();
 
     assert!(matches!(warnings[0], Warning::UseWhenInstead { .. }))
 }
