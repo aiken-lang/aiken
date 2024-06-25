@@ -731,7 +731,7 @@ impl<'a> Counterexample<'a> {
                         let jv = self.choices[j];
 
                         // Replace
-                        if iv > 0 && jv <= u8::max_value() - iv {
+                        if iv > 0 && jv <= u8::MAX - iv {
                             self.binary_search_replace(0, iv, |v| vec![(i, v), (j, jv + (iv - v))]);
                         }
 
