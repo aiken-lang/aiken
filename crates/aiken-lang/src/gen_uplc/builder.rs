@@ -659,6 +659,7 @@ pub fn modify_cyclic_calls(
                                 AirTree::anon_func(
                                     names.clone(),
                                     AirTree::local_var(index_name, tipo),
+                                    false,
                                 ),
                             ],
                         );
@@ -1172,7 +1173,7 @@ pub fn unknown_data_to_type_otherwise(
             .choose_data(
                 Term::snd_pair()
                     .apply(Term::var("__pair__"))
-                    .delayed_choose_list(
+                    .choose_list(
                         Term::equals_integer()
                             .apply(Term::integer(1.into()))
                             .apply(Term::fst_pair().apply(Term::var("__pair__")))
@@ -1181,13 +1182,16 @@ pub fn unknown_data_to_type_otherwise(
                                 Term::equals_integer()
                                     .apply(Term::integer(0.into()))
                                     .apply(Term::fst_pair().apply(Term::var("__pair__")))
-                                    .delayed_if_then_else(
-                                        Term::bool(false),
+                                    .if_then_else(
+                                        Term::bool(false).delay(),
                                         otherwise_delayed.clone(),
-                                    ),
-                            ),
+                                    )
+                                    .force(),
+                            )
+                            .delay(),
                         otherwise_delayed.clone(),
                     )
+                    .force()
                     .lambda("__pair__")
                     .apply(Term::unconstr_data().apply(Term::var("__val")))
                     .delay(),
@@ -1204,12 +1208,15 @@ pub fn unknown_data_to_type_otherwise(
                 Term::equals_integer()
                     .apply(Term::integer(0.into()))
                     .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("__val"))))
-                    .delayed_if_then_else(
+                    .if_then_else(
                         Term::snd_pair()
                             .apply(Term::unconstr_data().apply(Term::var("__val")))
-                            .delayed_choose_list(Term::unit(), otherwise_delayed.clone()),
+                            .choose_list(Term::unit().delay(), otherwise_delayed.clone())
+                            .force()
+                            .delay(),
                         otherwise_delayed.clone(),
                     )
+                    .force()
                     .delay(),
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
@@ -1442,7 +1449,7 @@ pub fn list_access_to_uplc(
             Term::head_list().apply(Term::var(tail_name.to_string()))
         } else if matches!(expect_level, ExpectLevel::Full) {
             // Expect level is full so we have an unknown piece of data to cast
-            if otherwise_delayed == Term::Error {
+            if otherwise_delayed == Term::Error.delay() {
                 unknown_data_to_type(
                     Term::head_list().apply(Term::var(tail_name.to_string())),
                     &tipo.to_owned(),
@@ -1486,7 +1493,7 @@ pub fn list_access_to_uplc(
                         ExpectLevel::None => acc.lambda(name).apply(head_item).lambda(tail_name),
 
                         ExpectLevel::Full | ExpectLevel::Items => {
-                            if otherwise_delayed == Term::Error && tail_present {
+                            if otherwise_delayed == Term::Error.delay() && tail_present {
                                 // No need to check last item if tail was present
                                 acc.lambda(name).apply(head_item).lambda(tail_name)
                             } else if tail_present {
@@ -1498,11 +1505,11 @@ pub fn list_access_to_uplc(
                                     )
                                     .force()
                                     .lambda(tail_name)
-                            } else if otherwise_delayed == Term::Error {
+                            } else if otherwise_delayed == Term::Error.delay() {
                                 // Check head is last item in this list
                                 Term::tail_list()
                                     .apply(Term::var(tail_name.to_string()))
-                                    .choose_list(acc.delay(), otherwise_delayed.clone())
+                                    .choose_list(acc.delay(), Term::Error.delay())
                                     .force()
                                     .lambda(name)
                                     .apply(head_item)
@@ -1533,7 +1540,8 @@ pub fn list_access_to_uplc(
 
                     let head_item = head_item(name, tipo, &tail_name);
 
-                    if matches!(expect_level, ExpectLevel::None) || otherwise_delayed == Term::Error
+                    if matches!(expect_level, ExpectLevel::None)
+                        || otherwise_delayed == Term::Error.delay()
                     {
                         acc.apply(Term::tail_list().apply(Term::var(tail_name.to_string())))
                             .lambda(name)

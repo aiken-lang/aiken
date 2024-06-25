@@ -288,6 +288,7 @@ pub enum AirTree {
     Fn {
         params: Vec<String>,
         func_body: Box<AirTree>,
+        allow_inline: bool,
     },
     Builtin {
         func: DefaultFunction,
@@ -538,10 +539,11 @@ impl AirTree {
         }
     }
 
-    pub fn anon_func(params: Vec<String>, func_body: AirTree) -> AirTree {
+    pub fn anon_func(params: Vec<String>, func_body: AirTree, allow_inline: bool) -> AirTree {
         AirTree::Fn {
             params,
             func_body: func_body.into(),
+            allow_inline,
         }
     }
 
@@ -1388,9 +1390,14 @@ impl AirTree {
                     arg.create_air_vec(air_vec);
                 }
             }
-            AirTree::Fn { params, func_body } => {
+            AirTree::Fn {
+                params,
+                func_body,
+                allow_inline,
+            } => {
                 air_vec.push(Air::Fn {
                     params: params.clone(),
+                    allow_inline: *allow_inline,
                 });
                 func_body.create_air_vec(air_vec);
             }
@@ -2184,6 +2191,7 @@ impl AirTree {
             AirTree::Fn {
                 params: _,
                 func_body,
+                allow_inline: _,
             } => {
                 func_body.do_traverse_tree_with(
                     tree_path,
@@ -2920,6 +2928,7 @@ impl AirTree {
                 AirTree::Fn {
                     params: _,
                     func_body,
+                    allow_inline: _,
                 } => match field {
                     Fields::SecondField => func_body.as_mut().do_find_air_tree_node(tree_path_iter),
                     _ => panic!("Tree Path index outside tree children nodes"),
