@@ -6,7 +6,7 @@
     "plutusVersion": "v2",
     "compiler": {
       "name": "Aiken",
-      "version": "v1.0.26-alpha+c3ad52b"
+      "version": "v1.0.29-alpha+e856fc6"
     },
     "license": "Apache-2.0"
   },
@@ -25,8 +25,8 @@
           "$ref": "#/definitions/Data"
         }
       },
-      "compiledCode": "583c01000032222533300453330043375e004006266e3d22010b68656c6c6f20776f726c640048810b68656c6c6f20776f726c640014a029309b2b2b9a01",
-      "hash": "d1a4ef5efcf38bdca9dc8eec2684d3c2004390fa6fd1b5bed6faa488"
+      "compiledCode": "585e0100003232222533300453330043375e004006266e3d22010b68656c6c6f20776f726c640048810b68656c6c6f20776f726c640014a02930a99802a4811856616c696461746f722072657475726e65642066616c736500136565734ae701",
+      "hash": "7dfcec1b2545d65c610e85bc608458efc30b94ebb6171bb5f2759a45"
     }
   ],
   "definitions": {

@@ -5,7 +5,7 @@
     "plutusVersion": "v2",
     "compiler": {
       "name": "Aiken",
-      "version": "v1.0.26-alpha+c3ad52b"
+      "version": "v1.0.29-alpha+e856fc6"
     }
   },
   "validators": [
@@ -23,8 +23,8 @@
           "$ref": "#/definitions/Data"
         }
       },
-      "compiledCode": "583f010000322322253330053370e00690487777c9cfdde5c8f27bf4c1637fc55b5eeef7d8c4d9e0d4454967ff7d6e7ee6e242eb60c6318a4c26cac6eb40055cd1",
-      "hash": "6c5f960b7a078766778eef14cef347f3b5cd3c5fc4a7797f031aad70"
+      "compiledCode": "5884010000323232322322253330063370e00690487777c9cfdde5c8f27bf4c1637fc55b5eeef7d8c4d9e0d4454967ff7d6e7ee6e242eb60c6318a4c2a6600e9211856616c696461746f722072657475726e65642066616c7365001365653333330050010020020021375a0020042a660049210a646174756d3a20496e7400165734ae715d21",
+      "hash": "7fb7ba29b94d55ef2cb11efc85ec3e85ce32f092c41743b2cb8a6e08"
     }
   ],
   "definitions": {
