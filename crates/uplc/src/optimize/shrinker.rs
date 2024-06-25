@@ -1029,6 +1029,12 @@ impl Program<Name> {
                     if let Some((arg_id, arg_term)) = arg_stack.pop() {
                         match &arg_term {
                             Term::Constant(c) if matches!(c.as_ref(), Constant::String(_)) => {}
+                            Term::Delay(e) if matches!(e.as_ref(), Term::Error) => {
+                                let body = Rc::make_mut(body);
+                                lambda_applied_ids.push(arg_id);
+                                // creates new body that replaces all var occurrences with the arg
+                                *term = substitute_var(body, parameter_name.clone(), &arg_term);
+                            }
                             Term::Constant(_) | Term::Var(_) | Term::Builtin(_) => {
                                 let body = Rc::make_mut(body);
                                 lambda_applied_ids.push(arg_id);

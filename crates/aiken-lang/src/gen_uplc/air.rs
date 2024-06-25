@@ -81,6 +81,7 @@ pub enum Air {
     },
     Fn {
         params: Vec<String>,
+        allow_inline: bool,
     },
     Builtin {
         count: usize,
