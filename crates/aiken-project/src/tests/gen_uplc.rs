@@ -3752,35 +3752,37 @@ fn when_tuple_deconstruction() {
                             .apply(Term::var("subject"))
                             .delayed_if_then_else(
                                 Term::var("red_constr_fields")
-                                    .delayed_choose_list(
-                                        Term::Error.delayed_trace(Term::var("param_msg")),
+                                    .choose_list(
+                                        Term::var("param_msg"),
                                         Term::tail_list()
                                             .apply(Term::var("red_constr_fields"))
-                                            .delayed_choose_list(
-                                                Term::unit(),
-                                                Term::Error.delayed_trace(Term::var("param_msg")),
+                                            .choose_list(
+                                                Term::unit().delay(),
+                                                Term::var("param_msg"),
                                             )
+                                            .force()
                                             .lambda("field_1")
                                             .apply(
                                                 Term::var("__val")
-                                                    .delayed_choose_data(
-                                                        Term::Error
-                                                            .delayed_trace(Term::var("param_msg")),
-                                                        Term::Error
-                                                            .delayed_trace(Term::var("param_msg")),
-                                                        Term::Error
-                                                            .delayed_trace(Term::var("param_msg")),
-                                                        Term::un_i_data().apply(Term::var("__val")),
-                                                        Term::Error
-                                                            .delayed_trace(Term::var("param_msg")),
+                                                    .choose_data(
+                                                        Term::var("param_msg"),
+                                                        Term::var("param_msg"),
+                                                        Term::var("param_msg"),
+                                                        Term::un_i_data()
+                                                            .apply(Term::var("__val"))
+                                                            .delay(),
+                                                        Term::var("param_msg"),
                                                     )
+                                                    .force()
                                                     .lambda("__val")
                                                     .apply(
                                                         Term::head_list()
                                                             .apply(Term::var("red_constr_fields")),
                                                     ),
-                                            ),
+                                            )
+                                            .delay(),
                                     )
+                                    .force()
                                     .lambda("red_constr_fields")
                                     .apply(
                                         Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("red")),
@@ -3788,15 +3790,18 @@ fn when_tuple_deconstruction() {
                                 Term::equals_integer()
                                     .apply(Term::integer(1.into()))
                                     .apply(Term::var("subject"))
-                                    .delayed_if_then_else(
+                                    .if_then_else(
                                         Term::var(CONSTR_FIELDS_EXPOSER)
                                             .apply(Term::var("red"))
-                                            .delayed_choose_list(
-                                                Term::unit(),
-                                                Term::Error.delayed_trace(Term::var("param_msg")),
-                                            ),
-                                        Term::Error.delayed_trace(Term::var("param_msg")),
-                                    ),
+                                            .choose_list(
+                                                Term::unit().delay(),
+                                                Term::var("param_msg"),
+                                            )
+                                            .force()
+                                            .delay(),
+                                        Term::var("param_msg"),
+                                    )
+                                    .force(),
                             )
                             .lambda("subject")
                             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("red")))
@@ -3809,13 +3814,14 @@ fn when_tuple_deconstruction() {
             .lambda("red")
             .apply(
                 Term::var("__val")
-                    .delayed_choose_data(
-                        Term::var("__val"),
-                        Term::Error.delayed_trace(Term::var("red:RedSpend")),
-                        Term::Error.delayed_trace(Term::var("red:RedSpend")),
-                        Term::Error.delayed_trace(Term::var("red:RedSpend")),
-                        Term::Error.delayed_trace(Term::var("red:RedSpend")),
+                    .choose_data(
+                        Term::var("__val").delay(),
+                        Term::var("red:RedSpend"),
+                        Term::var("red:RedSpend"),
+                        Term::var("red:RedSpend"),
+                        Term::var("red:RedSpend"),
                     )
+                    .force()
                     .lambda("__val")
                     .apply(Term::var("red")),
             )
@@ -3830,39 +3836,42 @@ fn when_tuple_deconstruction() {
                             .apply(Term::var("subject"))
                             .delayed_if_then_else(
                                 Term::var("dat_constr_fields")
-                                    .delayed_choose_list(
-                                        Term::Error.delayed_trace(Term::var("param_msg")),
+                                    .choose_list(
+                                        Term::var("param_msg"),
                                         Term::tail_list()
                                             .apply(Term::var("dat_constr_fields"))
-                                            .delayed_choose_list(
-                                                Term::unit().lambda("_").apply(
-                                                    Term::var("expect_Thing")
-                                                        .apply(Term::var("field_1"))
-                                                        .apply(Term::var("param_msg")),
-                                                ),
-                                                Term::Error.delayed_trace(Term::var("param_msg")),
+                                            .choose_list(
+                                                Term::unit()
+                                                    .lambda("_")
+                                                    .apply(
+                                                        Term::var("expect_Thing")
+                                                            .apply(Term::var("field_1"))
+                                                            .apply(Term::var("param_msg")),
+                                                    )
+                                                    .delay(),
+                                                Term::var("param_msg"),
                                             )
+                                            .force()
                                             .lambda("field_1")
                                             .apply(
                                                 Term::var("__val")
-                                                    .delayed_choose_data(
-                                                        Term::var("__val"),
-                                                        Term::Error
-                                                            .delayed_trace(Term::var("param_msg")),
-                                                        Term::Error
-                                                            .delayed_trace(Term::var("param_msg")),
-                                                        Term::Error
-                                                            .delayed_trace(Term::var("param_msg")),
-                                                        Term::Error
-                                                            .delayed_trace(Term::var("param_msg")),
+                                                    .choose_data(
+                                                        Term::var("__val").delay(),
+                                                        Term::var("param_msg"),
+                                                        Term::var("param_msg"),
+                                                        Term::var("param_msg"),
+                                                        Term::var("param_msg"),
                                                     )
+                                                    .force()
                                                     .lambda("__val")
                                                     .apply(
                                                         Term::head_list()
                                                             .apply(Term::var("dat_constr_fields")),
                                                     ),
-                                            ),
+                                            )
+                                            .delay(),
                                     )
+                                    .force()
                                     .lambda("dat_constr_fields")
                                     .apply(
                                         Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("dat")),
@@ -3870,15 +3879,18 @@ fn when_tuple_deconstruction() {
                                 Term::equals_integer()
                                     .apply(Term::integer(1.into()))
                                     .apply(Term::var("subject"))
-                                    .delayed_if_then_else(
+                                    .if_then_else(
                                         Term::var(CONSTR_FIELDS_EXPOSER)
                                             .apply(Term::var("dat"))
-                                            .delayed_choose_list(
-                                                Term::unit(),
-                                                Term::Error.delayed_trace(Term::var("param_msg")),
-                                            ),
-                                        Term::Error.delayed_trace(Term::var("param_msg")),
-                                    ),
+                                            .choose_list(
+                                                Term::unit().delay(),
+                                                Term::var("param_msg"),
+                                            )
+                                            .force()
+                                            .delay(),
+                                        Term::var("param_msg"),
+                                    )
+                                    .force(),
                             )
                             .lambda("subject")
                             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("dat")))
@@ -3890,45 +3902,49 @@ fn when_tuple_deconstruction() {
                         Term::equals_integer()
                             .apply(Term::integer(0.into()))
                             .apply(Term::var("subject"))
-                            .delayed_if_then_else(
+                            .if_then_else(
                                 Term::var("field_1_constr_fields")
-                                    .delayed_choose_list(
-                                        Term::Error.delayed_trace(Term::var("param_msg")),
+                                    .choose_list(
+                                        Term::var("param_msg"),
                                         Term::tail_list()
                                             .apply(Term::var("field_1_constr_fields"))
-                                            .delayed_choose_list(
-                                                Term::unit(),
-                                                Term::Error.delayed_trace(Term::var("param_msg")),
+                                            .choose_list(
+                                                Term::unit().delay(),
+                                                Term::var("param_msg"),
                                             )
+                                            .force()
                                             .lambda("idx")
                                             .apply(
                                                 Term::var("__val")
-                                                    .delayed_choose_data(
-                                                        Term::Error
-                                                            .delayed_trace(Term::var("param_msg")),
-                                                        Term::Error
-                                                            .delayed_trace(Term::var("param_msg")),
-                                                        Term::Error
-                                                            .delayed_trace(Term::var("param_msg")),
-                                                        Term::un_i_data().apply(Term::var("__val")),
-                                                        Term::Error
-                                                            .delayed_trace(Term::var("param_msg")),
+                                                    .choose_data(
+                                                        Term::var("param_msg"),
+                                                        Term::var("param_msg"),
+                                                        Term::var("param_msg"),
+                                                        Term::un_i_data()
+                                                            .apply(Term::var("__val"))
+                                                            .delay(),
+                                                        Term::var("param_msg"),
                                                     )
+                                                    .force()
                                                     .lambda("__val")
                                                     .apply(
                                                         Term::head_list().apply(Term::var(
                                                             "field_1_constr_fields",
                                                         )),
                                                     ),
-                                            ),
+                                            )
+                                            .delay(),
                                     )
+                                    .force()
                                     .lambda("field_1_constr_fields")
                                     .apply(
                                         Term::var(CONSTR_FIELDS_EXPOSER)
                                             .apply(Term::var("field_1")),
-                                    ),
-                                Term::Error.delayed_trace(Term::var("param_msg")),
+                                    )
+                                    .delay(),
+                                Term::var("param_msg"),
                             )
+                            .force()
                             .lambda("subject")
                             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("field_1")))
                             .lambda("param_msg")
@@ -3940,13 +3956,14 @@ fn when_tuple_deconstruction() {
             .lambda("dat")
             .apply(
                 Term::var("__val")
-                    .delayed_choose_data(
-                        Term::var("__val"),
-                        Term::Error.delayed_trace(Term::var("dat:Datum")),
-                        Term::Error.delayed_trace(Term::var("dat:Datum")),
-                        Term::Error.delayed_trace(Term::var("dat:Datum")),
-                        Term::Error.delayed_trace(Term::var("dat:Datum")),
+                    .choose_data(
+                        Term::var("__val").delay(),
+                        Term::var("dat:Datum"),
+                        Term::var("dat:Datum"),
+                        Term::var("dat:Datum"),
+                        Term::var("dat:Datum"),
                     )
+                    .force()
                     .lambda("__val")
                     .apply(Term::var("dat")),
             )
@@ -3960,9 +3977,17 @@ fn when_tuple_deconstruction() {
                     .lambda("x"),
             )
             .lambda("red:RedSpend")
-            .apply(Term::string("red: RedSpend"))
+            .apply(
+                Term::Error
+                    .delayed_trace(Term::string("red: RedSpend"))
+                    .delay(),
+            )
             .lambda("dat:Datum")
-            .apply(Term::string("dat: Datum"))
+            .apply(
+                Term::Error
+                    .delayed_trace(Term::string("dat: Datum"))
+                    .delay(),
+            )
             .lambda(CONSTR_INDEX_EXPOSER)
             .apply(
                 Term::fst_pair()
@@ -6232,78 +6257,87 @@ fn opaque_value_in_datum() {
 
     let expect_on_tail = Term::tail_list()
         .apply(Term::var("tail_1"))
-        .delayed_choose_list(
-            Term::unit().lambda("_").apply(
-                Term::var("expect_on_list").apply(Term::var("a")).apply(
-                    Term::var("expect_on_list")
-                        .apply(Term::var("pair_snd_outer"))
-                        .apply(
-                            Term::var("__val")
-                                .delayed_choose_data(
-                                    Term::Error.delayed_trace(Term::var("param_msg")),
-                                    Term::Error.delayed_trace(Term::var("param_msg")),
-                                    Term::Error.delayed_trace(Term::var("param_msg")),
-                                    Term::un_i_data().apply(Term::var("__val")),
-                                    Term::Error.delayed_trace(Term::var("param_msg")),
-                                )
-                                .lambda("__val")
-                                .apply(Term::snd_pair().apply(Term::var("pair")))
-                                .lambda("pair_fst")
-                                .apply(
-                                    Term::var("__val")
-                                        .delayed_choose_data(
-                                            Term::Error.delayed_trace(Term::var("param_msg")),
-                                            Term::Error.delayed_trace(Term::var("param_msg")),
-                                            Term::Error.delayed_trace(Term::var("param_msg")),
-                                            Term::Error.delayed_trace(Term::var("param_msg")),
-                                            Term::un_b_data().apply(Term::var("__val")),
-                                        )
-                                        .lambda("__val")
-                                        .apply(Term::fst_pair().apply(Term::var("pair"))),
-                                )
-                                .lambda("pair"),
-                        )
-                        .lambda("pair_snd_outer")
-                        .apply(
-                            Term::var("__val")
-                                .delayed_choose_data(
-                                    Term::Error.delayed_trace(Term::var("param_msg")),
-                                    Term::unmap_data().apply(Term::var("__val")),
-                                    Term::Error.delayed_trace(Term::var("param_msg")),
-                                    Term::Error.delayed_trace(Term::var("param_msg")),
-                                    Term::Error.delayed_trace(Term::var("param_msg")),
-                                )
-                                .lambda("__val")
-                                .apply(Term::snd_pair().apply(Term::var("pair_outer"))),
-                        )
-                        .lambda("pair_fst_outer")
-                        .apply(
-                            Term::var("__val")
-                                .delayed_choose_data(
-                                    Term::Error.delayed_trace(Term::var("param_msg")),
-                                    Term::Error.delayed_trace(Term::var("param_msg")),
-                                    Term::Error.delayed_trace(Term::var("param_msg")),
-                                    Term::Error.delayed_trace(Term::var("param_msg")),
-                                    Term::un_b_data().apply(Term::var("__val")),
-                                )
-                                .lambda("__val")
-                                .apply(Term::fst_pair().apply(Term::var("pair_outer"))),
-                        )
-                        .lambda("pair_outer"),
-                ),
-            ),
-            Term::Error.delayed_trace(Term::var("param_msg")),
+        .choose_list(
+            Term::unit()
+                .lambda("_")
+                .apply(
+                    Term::var("expect_on_list").apply(Term::var("a")).apply(
+                        Term::var("expect_on_list")
+                            .apply(Term::var("pair_snd_outer"))
+                            .apply(
+                                Term::var("__val")
+                                    .choose_data(
+                                        Term::var("param_msg"),
+                                        Term::var("param_msg"),
+                                        Term::var("param_msg"),
+                                        Term::un_i_data().apply(Term::var("__val")).delay(),
+                                        Term::var("param_msg"),
+                                    )
+                                    .force()
+                                    .lambda("__val")
+                                    .apply(Term::snd_pair().apply(Term::var("pair")))
+                                    .lambda("pair_fst")
+                                    .apply(
+                                        Term::var("__val")
+                                            .choose_data(
+                                                Term::var("param_msg"),
+                                                Term::var("param_msg"),
+                                                Term::var("param_msg"),
+                                                Term::var("param_msg"),
+                                                Term::un_b_data().apply(Term::var("__val")).delay(),
+                                            )
+                                            .force()
+                                            .lambda("__val")
+                                            .apply(Term::fst_pair().apply(Term::var("pair"))),
+                                    )
+                                    .lambda("pair"),
+                            )
+                            .lambda("pair_snd_outer")
+                            .apply(
+                                Term::var("__val")
+                                    .choose_data(
+                                        Term::var("param_msg"),
+                                        Term::unmap_data().apply(Term::var("__val")).delay(),
+                                        Term::var("param_msg"),
+                                        Term::var("param_msg"),
+                                        Term::var("param_msg"),
+                                    )
+                                    .force()
+                                    .lambda("__val")
+                                    .apply(Term::snd_pair().apply(Term::var("pair_outer"))),
+                            )
+                            .lambda("pair_fst_outer")
+                            .apply(
+                                Term::var("__val")
+                                    .choose_data(
+                                        Term::var("param_msg"),
+                                        Term::var("param_msg"),
+                                        Term::var("param_msg"),
+                                        Term::var("param_msg"),
+                                        Term::un_b_data().apply(Term::var("__val")).delay(),
+                                    )
+                                    .force()
+                                    .lambda("__val")
+                                    .apply(Term::fst_pair().apply(Term::var("pair_outer"))),
+                            )
+                            .lambda("pair_outer"),
+                    ),
+                )
+                .delay(),
+            Term::var("param_msg"),
         )
+        .force()
         .lambda("a")
         .apply(
             Term::var("__val")
-                .delayed_choose_data(
-                    Term::Error.delayed_trace(Term::var("param_msg")),
-                    Term::unmap_data().apply(Term::var("__val")),
-                    Term::Error.delayed_trace(Term::var("param_msg")),
-                    Term::Error.delayed_trace(Term::var("param_msg")),
-                    Term::Error.delayed_trace(Term::var("param_msg")),
+                .choose_data(
+                    Term::var("param_msg"),
+                    Term::unmap_data().apply(Term::var("__val")).delay(),
+                    Term::var("param_msg"),
+                    Term::var("param_msg"),
+                    Term::var("param_msg"),
                 )
+                .force()
                 .lambda("__val")
                 .apply(Term::head_list().apply(Term::var("tail_1"))),
         );
@@ -6311,11 +6345,11 @@ fn opaque_value_in_datum() {
     assert_uplc(
         src,
         Term::var("val")
-            .delayed_choose_list(
-                Term::Error.delayed_trace(Term::var("expect[Pair(_,amount)]=val.inner.inner")),
+            .choose_list(
+                Term::var("expect[Pair(_,amount)]=val.inner.inner"),
                 Term::tail_list()
                     .apply(Term::var("val"))
-                    .delayed_choose_list(
+                    .choose_list(
                         Term::equals_data()
                             .apply(Term::map_data().apply(Term::var("final_amount")))
                             .apply(Term::map_data().apply(Term::var("amount")))
@@ -6330,13 +6364,16 @@ fn opaque_value_in_datum() {
                             .apply(
                                 Term::unmap_data()
                                     .apply(Term::snd_pair().apply(Term::var("tuple_item_0"))),
-                            ),
-                        Term::Error
-                            .delayed_trace(Term::var("expect[Pair(_,amount)]=val.inner.inner")),
+                            )
+                            .delay(),
+                        Term::var("expect[Pair(_,amount)]=val.inner.inner"),
                     )
+                    .force()
                     .lambda("tuple_item_0")
-                    .apply(Term::head_list().apply(Term::var("val"))),
+                    .apply(Term::head_list().apply(Term::var("val")))
+                    .delay(),
             )
+            .force()
             .lambda("val")
             .apply(
                 Term::unmap_data().apply(
@@ -6362,45 +6399,49 @@ fn opaque_value_in_datum() {
                         Term::equals_integer()
                             .apply(Term::integer(0.into()))
                             .apply(Term::var("subject"))
-                            .delayed_if_then_else(
+                            .if_then_else(
                                 Term::var("dat_fields")
-                                    .delayed_choose_list(
-                                        Term::Error.delayed_trace(Term::var("param_msg")),
+                                    .choose_list(
+                                        Term::var("param_msg"),
                                         Term::var("tail_1")
-                                            .delayed_choose_list(
-                                                Term::Error.delayed_trace(Term::var("param_msg")),
-                                                expect_on_tail,
+                                            .choose_list(
+                                                Term::var("param_msg"),
+                                                expect_on_tail.delay(),
                                             )
+                                            .force()
                                             .lambda("tail_1")
                                             .apply(Term::tail_list().apply(Term::var("dat_fields")))
                                             .lambda("c")
                                             .apply(
                                                 Term::var("__val")
-                                                    .delayed_choose_data(
-                                                        Term::Error
-                                                            .delayed_trace(Term::var("param_msg")),
-                                                        Term::Error
-                                                            .delayed_trace(Term::var("param_msg")),
-                                                        Term::Error
-                                                            .delayed_trace(Term::var("param_msg")),
-                                                        Term::un_i_data().apply(Term::var("__val")),
-                                                        Term::Error
-                                                            .delayed_trace(Term::var("param_msg")),
+                                                    .choose_data(
+                                                        Term::var("param_msg"),
+                                                        Term::var("param_msg"),
+                                                        Term::var("param_msg"),
+                                                        Term::un_i_data()
+                                                            .apply(Term::var("__val"))
+                                                            .delay(),
+                                                        Term::var("param_msg"),
                                                     )
+                                                    .force()
                                                     .lambda("__val")
                                                     .apply(
                                                         Term::head_list()
                                                             .apply(Term::var("dat_fields")),
                                                     ),
-                                            ),
+                                            )
+                                            .delay(),
                                     )
+                                    .force()
                                     .lambda("dat_fields")
                                     .apply(
                                         Term::var(CONSTR_FIELDS_EXPOSER)
                                             .apply(Term::var("param_0")),
-                                    ),
-                                Term::Error.delayed_trace(Term::var("param_msg")),
+                                    )
+                                    .delay(),
+                                Term::var("param_msg"),
                             )
+                            .force()
                             .lambda("subject")
                             .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("param_0")))
                             .lambda("param_msg")
@@ -6438,22 +6479,27 @@ fn opaque_value_in_datum() {
             .lambda("dat")
             .apply(
                 Term::var("__val")
-                    .delayed_choose_data(
-                        Term::var("__val"),
-                        Term::Error.delayed_trace(Term::var("dat:Dat")),
-                        Term::Error.delayed_trace(Term::var("dat:Dat")),
-                        Term::Error.delayed_trace(Term::var("dat:Dat")),
-                        Term::Error.delayed_trace(Term::var("dat:Dat")),
+                    .choose_data(
+                        Term::var("__val").delay(),
+                        Term::var("dat:Dat"),
+                        Term::var("dat:Dat"),
+                        Term::var("dat:Dat"),
+                        Term::var("dat:Dat"),
                     )
+                    .force()
                     .lambda("__val")
                     .apply(Term::var("dat")),
             )
             .lambda("dat")
             .constr_fields_exposer()
             .lambda("expect[Pair(_,amount)]=val.inner.inner")
-            .apply(Term::string("expect [Pair(_, amount)] = val.inner.inner"))
+            .apply(
+                Term::Error
+                    .delayed_trace(Term::string("expect [Pair(_, amount)] = val.inner.inner"))
+                    .delay(),
+            )
             .lambda("dat:Dat")
-            .apply(Term::string("dat: Dat"))
+            .apply(Term::Error.delayed_trace(Term::string("dat: Dat")).delay())
             .constr_index_exposer(),
         false,
     );
@@ -6500,11 +6546,11 @@ fn opaque_value_in_test() {
     assert_uplc(
         src,
         Term::var("val")
-            .delayed_choose_list(
-                Term::Error.delayed_trace(Term::var("expect[Pair(_,amount)]=val.inner.inner")),
+            .choose_list(
+                Term::var("expect[Pair(_,amount)]=val.inner.inner"),
                 Term::tail_list()
                     .apply(Term::var("val"))
-                    .delayed_choose_list(
+                    .choose_list(
                         Term::equals_data()
                             .apply(Term::map_data().apply(Term::var("final_amount")))
                             .apply(Term::map_data().apply(Term::var("amount")))
@@ -6519,13 +6565,16 @@ fn opaque_value_in_test() {
                             .apply(
                                 Term::unmap_data()
                                     .apply(Term::snd_pair().apply(Term::var("tuple_item_0"))),
-                            ),
-                        Term::Error
-                            .delayed_trace(Term::var("expect[Pair(_,amount)]=val.inner.inner")),
+                            )
+                            .delay(),
+                        Term::var("expect[Pair(_,amount)]=val.inner.inner"),
                     )
+                    .force()
                     .lambda("tuple_item_0")
-                    .apply(Term::head_list().apply(Term::var("val"))),
+                    .apply(Term::head_list().apply(Term::var("val")))
+                    .delay(),
             )
+            .force()
             .lambda("val")
             .apply(Term::unmap_data().apply(Term::head_list().apply(
                 Term::tail_list().apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("dat"))),
@@ -6556,7 +6605,11 @@ fn opaque_value_in_test() {
                 .into(),
             )]))
             .lambda("expect[Pair(_,amount)]=val.inner.inner")
-            .apply(Term::string("expect [Pair(_, amount)] = val.inner.inner"))
+            .apply(
+                Term::Error
+                    .delayed_trace(Term::string("expect [Pair(_, amount)] = val.inner.inner"))
+                    .delay(),
+            )
             .constr_fields_exposer(),
         false,
     );
