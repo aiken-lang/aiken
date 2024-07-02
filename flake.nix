@@ -22,6 +22,7 @@
         [
           darwin.apple_sdk.frameworks.Security
           darwin.apple_sdk.frameworks.CoreServices
+          darwin.apple_sdk.frameworks.SystemConfiguration
         ];
 
       cargoTomlContents = builtins.readFile ./crates/aiken/Cargo.toml;
