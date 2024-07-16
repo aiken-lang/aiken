@@ -44,14 +44,20 @@ fn root(size: Int) -> Queue<(Int, ChessSet)> {
   queue.append_all_front(queue.new(), mk_starts(size))
 }
 
-fn mk_starts(sze: Int) -> List<(Int, ChessSet)> {
-  let x_list = interval(1, sze)
-  let y_list = interval(1, sze)
+fn mk_starts(size: Int) -> List<(Int, ChessSet)> {
+  let it = interval(1, size)
 
-  let l = x_list |> list.map2(y_list, fn(a, b) { start_tour((a, b), sze) })
+  let l =
+    list.flat_map(
+      it,
+      fn(x) { list.map(it, fn(y) { start_tour((x, y), size) }) },
+    )
+
   let length = list.length(l)
 
-  list.repeat(1 - length, length) |> list.zip(l)
+  expect length == size * size
+
+  list.zip(list.repeat(1 - length, length), l)
 }
 
 fn interval(a: Int, b: Int) -> List<Int> {

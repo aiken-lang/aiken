@@ -33,32 +33,21 @@ pub fn last_piece(board: ChessSet) -> Tile {
 pub fn delete_first(board: ChessSet) -> ChessSet {
   let ChessSet { move_number, visited, .. } = board
 
-  expect Some(deleted_first) = list.init(visited)
+  expect Some(new_visited) = list.init(visited)
 
   ChessSet {
     ..board,
     move_number: move_number - 1,
     start: second_last(visited),
-    visited: deleted_first,
+    visited: new_visited,
   }
 }
 
 fn second_last(visited: List<a>) -> Option<a> {
-  when visited is {
-    [] -> None
-    [_, ..rest] -> {
-      let value = second_last(rest)
-
-      if value == None {
-        if builtin.null_list(rest) {
-          None
-        } else {
-          Some(builtin.head_list(visited))
-        }
-      } else {
-        value
-      }
-    }
+  when list.reverse(visited) is {
+    [] -> fail
+    [_] -> None
+    [_, a, ..] -> Some(a)
   }
 }
 
