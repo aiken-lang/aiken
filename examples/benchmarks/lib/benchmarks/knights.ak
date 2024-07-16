@@ -1,42 +1,47 @@
 use aiken/list
-use benchmarks/knights/heuristic.{descendants, finished_tour, start_tour}
+use benchmarks/knights/heuristic.{descendants, start_tour, tour_finished}
 use benchmarks/knights/types.{ChessSet, Solution}
-use benchmarks/queue.{
-  Queue, append_all_front, append_front, create_queue, head, is_empty,
-  remove_front, to_list,
+use benchmarks/queue.{Queue}
+
+// ------------------------------------------------------------------ Benchmarks
+
+test bench_knights_100_4x4() {
+  run_knights(100, 4) == []
 }
 
-test run_knights0() {
-  run_knights(100, 0) == []
+test bench_knights_100_6x6() {
+  run_knights(100, 6) == solution_100_6x6()
 }
 
-test run_knights1() {
-  run_knights(100, 2) == []
+test bench_knights_100_8x8() {
+  run_knights(100, 8) == solution_100_8x8()
 }
+
+// ----------------------------------------------------------------------- Setup
 
 fn run_knights(depth: Int, board_size: Int) -> Solution {
-  depth_search(depth, root(board_size), grow, is_fin) |> to_list
+  depth_search(depth, root(board_size), grow, done) |> queue.to_list
 }
 
 fn depth_search(
   depth: Int,
-  queue: Queue<a>,
-  grow_fn: fn(a) -> List<a>,
-  fin_fn: fn(a) -> Bool,
+  xs: Queue<a>,
+  grow: fn(a) -> List<a>,
+  done: fn(a) -> Bool,
 ) -> Queue<a> {
-  if depth == 0 || is_empty(queue) {
-    create_queue()
-  } else if fin_fn(head(queue)) {
-    depth_search(depth - 1, remove_front(queue), grow_fn, fin_fn)
-      |> append_front(head(queue))
+  if depth == 0 || queue.is_empty(xs) {
+    queue.new()
+  } else if done(queue.head(xs)) {
+    depth_search(depth - 1, queue.remove_front(xs), grow, done)
+      |> queue.append_front(queue.head(xs))
   } else {
-    append_all_front(remove_front(queue), grow_fn(head(queue)))
-      |> depth_search(depth - 1, _, grow_fn, fin_fn)
+    queue.append_all_front(queue.remove_front(xs), grow(queue.head(xs)))
+      |> depth_search(depth - 1, _, grow, done)
   }
 }
 
-fn root(sze: Int) -> Queue<(Int, ChessSet)> {
-  append_all_front(create_queue(), mk_starts(sze))
+fn root(size: Int) -> Queue<(Int, ChessSet)> {
+  queue.append_all_front(queue.new(), mk_starts(size))
 }
 
 fn mk_starts(sze: Int) -> List<(Int, ChessSet)> {
@@ -59,13 +64,506 @@ fn interval(a: Int, b: Int) -> List<Int> {
 
 fn grow(item: (Int, ChessSet)) -> List<(Int, ChessSet)> {
   let (x, y) = item
-
-  let const_item = x + 1
-  descendants(y) |> list.map(fn(list_item) { (const_item, list_item) })
+  descendants(y) |> list.map(fn(list_item) { (x + 1, list_item) })
 }
 
-fn is_fin(item: (Int, ChessSet)) -> Bool {
-  let (_, y) = item
+fn done(item: (Int, ChessSet)) -> Bool {
+  tour_finished(item.2nd)
+}
 
-  finished_tour(y)
+// ------------------------------------------------------------------ Fixtures
+
+fn solution_100_6x6() {
+  [
+    (
+      0,
+      ChessSet {
+        size: 6,
+        move_number: 36,
+        start: Some((1, 1)),
+        visited: [
+          (3, 2),
+          (5, 3),
+          (6, 1),
+          (4, 2),
+          (3, 4),
+          (2, 6),
+          (4, 5),
+          (6, 6),
+          (5, 4),
+          (6, 2),
+          (4, 1),
+          (2, 2),
+          (1, 4),
+          (3, 3),
+          (2, 1),
+          (1, 3),
+          (2, 5),
+          (4, 6),
+          (6, 5),
+          (4, 4),
+          (5, 2),
+          (6, 4),
+          (5, 6),
+          (3, 5),
+          (1, 6),
+          (2, 4),
+          (1, 2),
+          (3, 1),
+          (4, 3),
+          (5, 1),
+          (6, 3),
+          (5, 5),
+          (3, 6),
+          (1, 5),
+          (2, 3),
+          (1, 1),
+        ],
+      },
+    ),
+    (
+      0,
+      ChessSet {
+        size: 6,
+        move_number: 36,
+        start: Some((1, 1)),
+        visited: [
+          (3, 2),
+          (5, 3),
+          (6, 1),
+          (4, 2),
+          (3, 4),
+          (2, 2),
+          (4, 1),
+          (6, 2),
+          (5, 4),
+          (6, 6),
+          (4, 5),
+          (2, 6),
+          (1, 4),
+          (3, 3),
+          (2, 1),
+          (1, 3),
+          (2, 5),
+          (4, 6),
+          (6, 5),
+          (4, 4),
+          (5, 2),
+          (6, 4),
+          (5, 6),
+          (3, 5),
+          (1, 6),
+          (2, 4),
+          (1, 2),
+          (3, 1),
+          (4, 3),
+          (5, 1),
+          (6, 3),
+          (5, 5),
+          (3, 6),
+          (1, 5),
+          (2, 3),
+          (1, 1),
+        ],
+      },
+    ),
+    (
+      0,
+      ChessSet {
+        size: 6,
+        move_number: 36,
+        start: Some((1, 1)),
+        visited: [
+          (3, 2),
+          (5, 3),
+          (6, 1),
+          (4, 2),
+          (3, 4),
+          (2, 2),
+          (1, 4),
+          (2, 6),
+          (4, 5),
+          (6, 6),
+          (5, 4),
+          (6, 2),
+          (4, 1),
+          (3, 3),
+          (2, 1),
+          (1, 3),
+          (2, 5),
+          (4, 6),
+          (6, 5),
+          (4, 4),
+          (5, 2),
+          (6, 4),
+          (5, 6),
+          (3, 5),
+          (1, 6),
+          (2, 4),
+          (1, 2),
+          (3, 1),
+          (4, 3),
+          (5, 1),
+          (6, 3),
+          (5, 5),
+          (3, 6),
+          (1, 5),
+          (2, 3),
+          (1, 1),
+        ],
+      },
+    ),
+    (
+      0,
+      ChessSet {
+        size: 6,
+        move_number: 36,
+        start: Some((1, 1)),
+        visited: [
+          (3, 2),
+          (5, 3),
+          (6, 1),
+          (4, 2),
+          (3, 4),
+          (2, 6),
+          (1, 4),
+          (2, 2),
+          (4, 1),
+          (6, 2),
+          (5, 4),
+          (6, 6),
+          (4, 5),
+          (3, 3),
+          (2, 1),
+          (1, 3),
+          (2, 5),
+          (4, 6),
+          (6, 5),
+          (4, 4),
+          (5, 2),
+          (6, 4),
+          (5, 6),
+          (3, 5),
+          (1, 6),
+          (2, 4),
+          (1, 2),
+          (3, 1),
+          (4, 3),
+          (5, 1),
+          (6, 3),
+          (5, 5),
+          (3, 6),
+          (1, 5),
+          (2, 3),
+          (1, 1),
+        ],
+      },
+    ),
+  ]
+}
+
+fn solution_100_8x8() {
+  [
+    (
+      0,
+      ChessSet {
+        size: 8,
+        move_number: 64,
+        start: Some((1, 1)),
+        visited: [
+          (3, 2),
+          (5, 3),
+          (4, 5),
+          (5, 7),
+          (7, 6),
+          (8, 8),
+          (6, 7),
+          (5, 5),
+          (3, 4),
+          (1, 5),
+          (2, 7),
+          (4, 8),
+          (3, 6),
+          (1, 7),
+          (3, 8),
+          (4, 6),
+          (6, 5),
+          (4, 4),
+          (5, 6),
+          (6, 4),
+          (7, 2),
+          (8, 4),
+          (6, 3),
+          (5, 1),
+          (4, 3),
+          (3, 5),
+          (5, 4),
+          (3, 3),
+          (2, 5),
+          (1, 3),
+          (2, 1),
+          (4, 2),
+          (6, 1),
+          (8, 2),
+          (7, 4),
+          (8, 6),
+          (7, 8),
+          (6, 6),
+          (8, 5),
+          (7, 7),
+          (5, 8),
+          (3, 7),
+          (1, 8),
+          (2, 6),
+          (1, 4),
+          (2, 2),
+          (4, 1),
+          (6, 2),
+          (8, 1),
+          (7, 3),
+          (5, 2),
+          (7, 1),
+          (8, 3),
+          (7, 5),
+          (8, 7),
+          (6, 8),
+          (4, 7),
+          (2, 8),
+          (1, 6),
+          (2, 4),
+          (1, 2),
+          (3, 1),
+          (2, 3),
+          (1, 1),
+        ],
+      },
+    ),
+    (
+      0,
+      ChessSet {
+        size: 8,
+        move_number: 64,
+        start: Some((1, 1)),
+        visited: [
+          (3, 2),
+          (5, 3),
+          (4, 5),
+          (5, 7),
+          (7, 6),
+          (8, 8),
+          (6, 7),
+          (4, 8),
+          (2, 7),
+          (1, 5),
+          (3, 4),
+          (5, 5),
+          (3, 6),
+          (1, 7),
+          (3, 8),
+          (4, 6),
+          (6, 5),
+          (4, 4),
+          (5, 6),
+          (6, 4),
+          (7, 2),
+          (8, 4),
+          (6, 3),
+          (5, 1),
+          (4, 3),
+          (3, 5),
+          (5, 4),
+          (3, 3),
+          (2, 5),
+          (1, 3),
+          (2, 1),
+          (4, 2),
+          (6, 1),
+          (8, 2),
+          (7, 4),
+          (8, 6),
+          (7, 8),
+          (6, 6),
+          (8, 5),
+          (7, 7),
+          (5, 8),
+          (3, 7),
+          (1, 8),
+          (2, 6),
+          (1, 4),
+          (2, 2),
+          (4, 1),
+          (6, 2),
+          (8, 1),
+          (7, 3),
+          (5, 2),
+          (7, 1),
+          (8, 3),
+          (7, 5),
+          (8, 7),
+          (6, 8),
+          (4, 7),
+          (2, 8),
+          (1, 6),
+          (2, 4),
+          (1, 2),
+          (3, 1),
+          (2, 3),
+          (1, 1),
+        ],
+      },
+    ),
+  ]
+}
+
+fn solution_80_8x8() {
+  [
+    (
+      0,
+      ChessSet {
+        size: 8,
+        move_number: 64,
+        start: Some((1, 1)),
+        visited: [
+          (3, 2),
+          (5, 3),
+          (4, 5),
+          (5, 7),
+          (7, 6),
+          (8, 8),
+          (6, 7),
+          (5, 5),
+          (3, 4),
+          (1, 5),
+          (2, 7),
+          (4, 8),
+          (3, 6),
+          (1, 7),
+          (3, 8),
+          (4, 6),
+          (6, 5),
+          (4, 4),
+          (5, 6),
+          (6, 4),
+          (7, 2),
+          (8, 4),
+          (6, 3),
+          (5, 1),
+          (4, 3),
+          (3, 5),
+          (5, 4),
+          (3, 3),
+          (2, 5),
+          (1, 3),
+          (2, 1),
+          (4, 2),
+          (6, 1),
+          (8, 2),
+          (7, 4),
+          (8, 6),
+          (7, 8),
+          (6, 6),
+          (8, 5),
+          (7, 7),
+          (5, 8),
+          (3, 7),
+          (1, 8),
+          (2, 6),
+          (1, 4),
+          (2, 2),
+          (4, 1),
+          (6, 2),
+          (8, 1),
+          (7, 3),
+          (5, 2),
+          (7, 1),
+          (8, 3),
+          (7, 5),
+          (8, 7),
+          (6, 8),
+          (4, 7),
+          (2, 8),
+          (1, 6),
+          (2, 4),
+          (1, 2),
+          (3, 1),
+          (2, 3),
+          (1, 1),
+        ],
+      },
+    ),
+    (
+      0,
+      ChessSet {
+        size: 8,
+        move_number: 64,
+        start: Some((1, 1)),
+        visited: [
+          (3, 2),
+          (5, 3),
+          (4, 5),
+          (5, 7),
+          (7, 6),
+          (8, 8),
+          (6, 7),
+          (4, 8),
+          (2, 7),
+          (1, 5),
+          (3, 4),
+          (5, 5),
+          (3, 6),
+          (1, 7),
+          (3, 8),
+          (4, 6),
+          (6, 5),
+          (4, 4),
+          (5, 6),
+          (6, 4),
+          (7, 2),
+          (8, 4),
+          (6, 3),
+          (5, 1),
+          (4, 3),
+          (3, 5),
+          (5, 4),
+          (3, 3),
+          (2, 5),
+          (1, 3),
+          (2, 1),
+          (4, 2),
+          (6, 1),
+          (8, 2),
+          (7, 4),
+          (8, 6),
+          (7, 8),
+          (6, 6),
+          (8, 5),
+          (7, 7),
+          (5, 8),
+          (3, 7),
+          (1, 8),
+          (2, 6),
+          (1, 4),
+          (2, 2),
+          (4, 1),
+          (6, 2),
+          (8, 1),
+          (7, 3),
+          (5, 2),
+          (7, 1),
+          (8, 3),
+          (7, 5),
+          (8, 7),
+          (6, 8),
+          (4, 7),
+          (2, 8),
+          (1, 6),
+          (2, 4),
+          (1, 2),
+          (3, 1),
+          (2, 3),
+          (1, 1),
+        ],
+      },
+    ),
+  ]
 }

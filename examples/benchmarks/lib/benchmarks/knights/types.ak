@@ -4,8 +4,8 @@ pub type Tile =
 pub type ChessSet {
   size: Int,
   move_number: Int,
-  visited: List<Tile>,
   start: Option<Tile>,
+  visited: List<Tile>,
 }
 
 pub type Solution =

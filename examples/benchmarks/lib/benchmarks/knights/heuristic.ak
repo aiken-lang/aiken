@@ -1,9 +1,10 @@
 use aiken/builtin
+use aiken/int
 use aiken/list
 use benchmarks/knights/chess_set.{
   add_piece, create_board, delete_first, first_piece, is_square_free, last_piece,
 }
-use benchmarks/knights/sort.{quick_sort}
+use benchmarks/knights/sort.{quicksort}
 use benchmarks/knights/types.{ChessSet, Tile}
 
 type Direction {
@@ -23,7 +24,6 @@ fn direction_list() {
 
 fn move(direction: Direction, tile: Tile) -> Tile {
   let (x, y) = tile
-
   when direction is {
     UL -> (x - 1, y - 2)
     UR -> (x + 1, y - 2)
@@ -38,13 +38,11 @@ fn move(direction: Direction, tile: Tile) -> Tile {
 
 pub fn start_tour(st: Tile, size: Int) -> ChessSet {
   expect 0 = builtin.remainder_integer(size, 2)
-
   create_board(size, st)
 }
 
-pub fn finished_tour(board: ChessSet) -> Bool {
+pub fn tour_finished(board: ChessSet) -> Bool {
   let ChessSet { move_number, size, .. } = board
-
   move_number == size * size && can_jump_first(board)
 }
 
@@ -78,9 +76,8 @@ pub fn dead_end(board: ChessSet) -> Bool {
 }
 
 pub fn single_descend(board: ChessSet) -> List<ChessSet> {
-  let descendants_and_moves = desc_and_no(board)
   list.filter_map(
-    descendants_and_moves,
+    desc_and_no(board),
     fn(item) {
       let (moves, board) = item
       if moves == 1 {
@@ -96,16 +93,15 @@ pub fn desc_and_no(board: ChessSet) -> List<(Int, ChessSet)> {
   board
     |> all_descend
     |> list.map(
-         fn(item) {
-           (item |> delete_first |> possible_moves |> list.length, item)
-         },
-       )
+        fn(item) {
+          (item |> delete_first |> possible_moves |> list.length, item)
+        },
+      )
 }
 
 pub fn can_move_to(board: ChessSet, tile: Tile) -> Bool {
   let (x, y) = tile
   let size = board.size
-
   and {
     x >= 1,
     x <= size,
@@ -122,7 +118,7 @@ fn can_move(board: ChessSet, direction: Direction) -> Bool {
 pub fn all_descend(board: ChessSet) -> List<ChessSet> {
   board
     |> possible_moves
-    |> list.map(fn(direction) { move_knight(board, direction) })
+    |> list.map(move_knight(board, _))
 }
 
 fn move_knight(board: ChessSet, direction: Direction) -> ChessSet {
