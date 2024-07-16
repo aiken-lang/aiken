@@ -10,29 +10,33 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  acceptance_tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build
-        run: cargo build --verbose --workspace --target x86_64-unknown-linux-gnu
-        env:
-          RUSTFLAGS: -C target-feature=+crt-static
-      - name: Run unit tests
-        run: cargo test --verbose --workspace
       - name: Run examples
         run: |
-          cargo run -- check examples/hello_world
-          cargo run -- check examples/gift_card
+          cargo run -r -- check examples/hello_world
+          cargo run -r -- check examples/gift_card
       - name: Run acceptance tests
         working-directory: examples/acceptance_tests
         run: |
           cargo install cbor-diag-cli
           bash ci
         shell: bash
+
+  unit_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run unit tests
+        run: cargo test --verbose --workspace
+
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: Format
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
-      # - name: Audit
-        # run: cargo audit

@@ -15,7 +15,7 @@ WORKDIR="$(dirname -- "${BASH_SOURCE[0]}")"
 TARGET="$WORKDIR/$(basename $1)"
 
 TMP=$(mktemp)
-RESULT=$(cargo run --quiet -- fmt $TARGET 2>$TMP)
+RESULT=$(cargo run -r --quiet -- fmt $TARGET 2>$TMP)
 
 if [ "$?" -eq "0" ]; then
   echo "✅ $(basename $TARGET)"
