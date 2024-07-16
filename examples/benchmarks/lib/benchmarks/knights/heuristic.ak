@@ -133,11 +133,11 @@ fn possible_moves(board: ChessSet) -> List<Direction> {
   direction_list() |> list.filter(can_move(board, _))
 }
 
-fn compare_tile(a: Tile, b: Tile) -> Ordering {
-  if a.1st == b.1st {
-    int.compare(a.2nd, b.2nd)
-  } else {
+fn compare_chess_set(a: (Int, ChessSet), b: (Int, ChessSet)) -> Ordering {
+  if a.1st != b.1st {
     int.compare(a.1st, b.1st)
+  } else {
+    compare_list(a.2nd.visited, b.2nd.visited)
   }
 }
 
@@ -163,37 +163,10 @@ fn compare_list(xs: List<Tile>, ys: List<Tile>) -> Ordering {
   }
 }
 
-fn compare_chess_set(a: (Int, ChessSet), b: (Int, ChessSet)) -> Ordering {
-  if a.1st != b.1st {
-    int.compare(a.1st, b.1st)
+fn compare_tile(a: Tile, b: Tile) -> Ordering {
+  if a.1st == b.1st {
+    int.compare(a.2nd, b.2nd)
   } else {
-    let ChessSet {
-      size: size_a,
-      move_number: move_a,
-      start: start_a,
-      visited: visited_a,
-    } = a.2nd
-    let ChessSet {
-      size: size_b,
-      move_number: move_b,
-      start: start_b,
-      visited: visited_b,
-    } = b.2nd
-    if size_a != size_b {
-      int.compare(size_a, size_b)
-    } else if move_a != move_b {
-      int.compare(move_a, move_b)
-    } else if start_a != start_b {
-      when start_a is {
-        Some(a) ->
-          when start_b is {
-            Some(b) -> compare_tile(a, b)
-            None -> Greater
-          }
-        None -> Less
-      }
-    } else {
-      compare_list(visited_a, visited_b)
-    }
+    int.compare(a.1st, b.1st)
   }
 }
