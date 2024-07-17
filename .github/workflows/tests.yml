@@ -14,6 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          key: ${{ runner.os }}-cache-build-v${{ inputs.cache-version }}
       - name: Run examples
         run: |
           cargo run -r -- check examples/hello_world
@@ -29,13 +33,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          key: ${{ runner.os }}-cache-tests-v${{ inputs.cache-version }}
       - name: Run unit tests
         run: cargo test --verbose --workspace
+
+  benchmarks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          key: ${{ runner.os }}-cache-build-v${{ inputs.cache-version }}
+      - name: Run benchmarks
+        run: |
+          cargo run -r -- check benchmarks
 
   checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          key: ${{ runner.os }}-cache-unit-v${{ inputs.cache-version }}
       - name: Format
         run: cargo fmt --all -- --check
       - name: Clippy
