@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Definition, ModuleKind, TraceLevel, Tracing, TypedModule, UntypedModule},
+    ast::{Definition, ModuleKind, Pattern, TraceLevel, Tracing, TypedModule, UntypedModule},
     builtins,
     expr::TypedExpr,
     parser,
@@ -2719,4 +2719,45 @@ fn if_soft_cast_not_data() {
     let (warnings, _ast) = check(parse(source_code)).unwrap();
 
     assert!(matches!(warnings[0], Warning::UseWhenInstead { .. }))
+}
+
+#[test]
+fn side_effects() {
+    let source_code = r#"
+        pub fn side_effects() {
+            trace "Aiken, rocks!"
+            Void
+        }
+
+        pub fn foo() {
+            expect _ = side_effects()
+            True
+        }
+    "#;
+
+    let (warnings, ast) = check(parse(source_code)).unwrap();
+
+    assert!(warnings.is_empty(), "no warnings: {warnings:#?}");
+
+    if let Some(Definition::Fn(ref foo)) = ast.definitions().last() {
+        if let TypedExpr::Sequence {
+            ref expressions, ..
+        } = foo.body
+        {
+            matches!(
+                expressions[..],
+                [
+                    TypedExpr::Assignment {
+                        pattern: Pattern::Discard { .. },
+                        ..
+                    },
+                    TypedExpr::Var { .. },
+                ],
+            );
+        } else {
+            unreachable!();
+        }
+    } else {
+        unreachable!();
+    }
 }

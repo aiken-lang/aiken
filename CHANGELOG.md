@@ -10,6 +10,8 @@
 
 - **aiken-lang**: duplicate import lines are now automatically merged instead of raising a warning. However, imports can no longer appear anywhere in the file and must come as the first definitions. @KtorZ
 
+- **aiken-lang**: remove warning on discarded expect, allowing to keep 'side-effects' when necessary. See #967. @KtorZ
+
 ## v1.0.29-alpha - 2024-06-06
 
 ### Added

@@ -1251,7 +1251,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     .check_exhaustiveness(&[&pattern], location, false)
                     .is_ok();
 
-                if !value_is_data && is_exaustive_pattern {
+                if !value_is_data && is_exaustive_pattern && !pattern.is_discard() {
                     self.environment
                         .warnings
                         .push(Warning::SingleConstructorExpect {
