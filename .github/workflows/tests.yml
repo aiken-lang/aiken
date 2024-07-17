@@ -14,16 +14,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-          key: ${{ runner.os }}-cache-acceptance-v${{ inputs.cache-version }}
+          key: ${{ runner.os }}-cache-build-v${{ inputs.cache-version }}
       - name: Run examples
         run: |
           cargo run -r -- check examples/hello_world
           cargo run -r -- check examples/gift_card
-          cargo run -r -- check examples/benchmarks
       - name: Run acceptance tests
         working-directory: examples/acceptance_tests
         run: |
@@ -35,20 +33,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-          key: ${{ runner.os }}-cache-unit-v${{ inputs.cache-version }}
+          key: ${{ runner.os }}-cache-tests-v${{ inputs.cache-version }}
       - name: Run unit tests
         run: cargo test --verbose --workspace
+
+  benchmarks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          key: ${{ runner.os }}-cache-build-v${{ inputs.cache-version }}
+      - name: Run benchmarks
+        run: |
+          cargo run -r -- check benchmarks
 
   checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           key: ${{ runner.os }}-cache-unit-v${{ inputs.cache-version }}
