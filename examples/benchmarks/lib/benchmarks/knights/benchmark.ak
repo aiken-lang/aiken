@@ -1,7 +1,7 @@
 use aiken/list
 use benchmarks/knights/heuristic.{descendants, start_tour, tour_finished}
+use benchmarks/knights/queue.{Queue}
 use benchmarks/knights/types.{ChessSet, Solution}
-use benchmarks/queue.{Queue}
 
 // ------------------------------------------------------------------ Benchmarks
 
