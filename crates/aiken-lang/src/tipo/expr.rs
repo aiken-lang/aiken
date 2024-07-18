@@ -19,8 +19,8 @@ use crate::{
         UntypedRecordUpdateArg,
     },
     builtins::{
-        bool, byte_array, from_default_function, function, g1_element, g2_element, int, list, pair,
-        string, tuple, void, BUILTIN,
+        bool, byte_array, data, from_default_function, function, g1_element, g2_element, int, list,
+        pair, string, tuple, void, BUILTIN, PRELUDE,
     },
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
@@ -2407,6 +2407,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         TypedExpr::ErrorTerm { location, tipo }
     }
 
+    fn infer_trace_arg(&mut self, arg: UntypedExpr) -> Result<TypedExpr, Error> {
+        let typed_arg = self.infer(arg)?;
+        match self.unify(string(), typed_arg.tipo(), typed_arg.location(), false) {
+            Err(_) => {
+                self.unify(data(), typed_arg.tipo(), typed_arg.location(), true)?;
+                Ok(diagnose_expr(typed_arg))
+            }
+            Ok(()) => Ok(typed_arg),
+        }
+    }
+
     fn infer_trace(
         &mut self,
         kind: TraceKind,
@@ -2415,16 +2426,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         label: UntypedExpr,
         arguments: Vec<UntypedExpr>,
     ) -> Result<TypedExpr, Error> {
-        let label = self.infer(label)?;
-        self.unify(string(), label.tipo(), label.location(), false)?;
+        let label = self.infer_trace_arg(label)?;
 
         let typed_arguments = arguments
             .into_iter()
-            .map(|arg| {
-                let arg = self.infer(arg)?;
-                self.unify(string(), arg.tipo(), arg.location(), false)?;
-                Ok(arg)
-            })
+            .map(|arg| self.infer_trace_arg(arg))
             .collect::<Result<Vec<_>, Error>>()?;
 
         let text = if typed_arguments.is_empty() {
@@ -2815,24 +2821,102 @@ pub fn ensure_serialisable(is_top_level: bool, t: Rc<Type>, location: Span) -> R
     }
 }
 
-pub fn append_string_expr(left: TypedExpr, right: TypedExpr) -> TypedExpr {
+fn diagnose_expr(expr: TypedExpr) -> TypedExpr {
+    // NOTE: The IdGenerator is unused. See similar note in 'append_string_expr'
+    let decode_utf8_constructor =
+        from_default_function(DefaultFunction::DecodeUtf8, &IdGenerator::new());
+
+    let decode_utf8 = TypedExpr::ModuleSelect {
+        location: Span::empty(),
+        tipo: decode_utf8_constructor.tipo.clone(),
+        label: DefaultFunction::DecodeUtf8.aiken_name(),
+        module_name: BUILTIN.to_string(),
+        module_alias: BUILTIN.to_string(),
+        constructor: decode_utf8_constructor.variant.to_module_value_constructor(
+            decode_utf8_constructor.tipo,
+            BUILTIN,
+            &DefaultFunction::AppendString.aiken_name(),
+        ),
+    };
+
+    let diagnostic_constructor = ValueConstructor::public(
+        function(vec![data(), byte_array()], byte_array()),
+        ValueConstructorVariant::ModuleFn {
+            name: "diagnostic".to_string(),
+            field_map: None,
+            module: PRELUDE.to_string(),
+            arity: 2,
+            location: Span::empty(),
+            builtin: None,
+        },
+    );
+
+    let diagnostic = TypedExpr::ModuleSelect {
+        location: Span::empty(),
+        tipo: diagnostic_constructor.tipo.clone(),
+        label: "diagnostic".to_string(),
+        module_name: PRELUDE.to_string(),
+        module_alias: "".to_string(),
+        constructor: diagnostic_constructor.variant.to_module_value_constructor(
+            diagnostic_constructor.tipo,
+            "",
+            "diagnostic",
+        ),
+    };
+
+    let location = expr.location();
+
+    TypedExpr::Call {
+        tipo: string(),
+        fun: Box::new(decode_utf8.clone()),
+        args: vec![CallArg {
+            label: None,
+            location: expr.location(),
+            value: TypedExpr::Call {
+                tipo: string(),
+                fun: Box::new(diagnostic.clone()),
+                args: vec![
+                    CallArg {
+                        label: None,
+                        value: expr,
+                        location,
+                    },
+                    CallArg {
+                        label: None,
+                        location,
+                        value: TypedExpr::ByteArray {
+                            tipo: byte_array(),
+                            bytes: vec![],
+                            location,
+                        },
+                    },
+                ],
+                location,
+            },
+        }],
+        location,
+    }
+}
+
+fn append_string_expr(left: TypedExpr, right: TypedExpr) -> TypedExpr {
+    // NOTE: The IdGenerator is unused here, as it's only necessary for generic builtin
+    // functions such as if_then_else or head_list. However, if such functions were needed,
+    // passing a brand new IdGenerator here would be WRONG and cause issues down the line.
+    //
+    // So this is merely a small work-around for convenience. The proper way here would be to
+    // pull the function definition for append_string from the pre-registered builtins
+    // functions somewhere in the environment.
     let value_constructor =
         from_default_function(DefaultFunction::AppendString, &IdGenerator::new());
+
     let append_string = TypedExpr::ModuleSelect {
         location: Span::empty(),
-        tipo: value_constructor.tipo,
+        tipo: value_constructor.tipo.clone(),
         label: DefaultFunction::AppendString.aiken_name(),
         module_name: BUILTIN.to_string(),
         module_alias: BUILTIN.to_string(),
-        // NOTE: The IdGenerator is unused here, as it's only necessary for generic builtin
-        // functions such as if_then_else or head_list. However, if such functions were needed,
-        // passing a brand new IdGenerator here would be WRONG and cause issues down the line.
-        //
-        // So this is merely a small work-around for convenience. The proper way here would be to
-        // pull the function definition for append_string from the pre-registered builtins
-        // functions somewhere in the environment.
         constructor: value_constructor.variant.to_module_value_constructor(
-            string(),
+            value_constructor.tipo,
             BUILTIN,
             &DefaultFunction::AppendString.aiken_name(),
         ),

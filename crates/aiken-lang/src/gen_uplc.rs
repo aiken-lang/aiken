@@ -43,7 +43,6 @@ use itertools::Itertools;
 use petgraph::{algo, Graph};
 use std::{collections::HashMap, rc::Rc};
 use tree::Fields;
-
 use uplc::{
     ast::{Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
@@ -749,7 +748,11 @@ impl<'a> CodeGenerator<'a> {
                     }
                     ModuleValueConstructor::Fn { name, module, .. } => {
                         let func = self.functions.get(&FunctionAccessKey {
-                            module_name: module_name.clone(),
+                            module_name: if module_name == "aiken" {
+                                "".to_string()
+                            } else {
+                                module_name.clone()
+                            },
                             function_name: name.clone(),
                         });
 
