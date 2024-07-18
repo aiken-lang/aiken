@@ -307,32 +307,37 @@ impl<'a> Environment<'a> {
             Definition::Validator(Validator {
                 doc,
                 end_position,
-                fun,
-                other_fun,
+                handlers,
+                name,
+                fallback,
                 location,
                 params,
             }) => {
-                let Definition::Fn(fun) =
-                    self.generalise_definition(Definition::Fn(fun), module_name)
+                let handlers = handlers
+                    .into_iter()
+                    .map(|fun| {
+                        let Definition::Fn(fun) =
+                            self.generalise_definition(Definition::Fn(fun), module_name)
+                        else {
+                            unreachable!()
+                        };
+
+                        fun
+                    })
+                    .collect();
+
+                let Definition::Fn(fallback) =
+                    self.generalise_definition(Definition::Fn(fallback), module_name)
                 else {
                     unreachable!()
                 };
 
-                let other_fun = other_fun.map(|other_fun| {
-                    let Definition::Fn(other_fun) =
-                        self.generalise_definition(Definition::Fn(other_fun), module_name)
-                    else {
-                        unreachable!()
-                    };
-
-                    other_fun
-                });
-
                 Definition::Validator(Validator {
                     doc,
+                    name,
                     end_position,
-                    fun,
-                    other_fun,
+                    handlers,
+                    fallback,
                     location,
                     params,
                 })
@@ -1247,9 +1252,10 @@ impl<'a> Environment<'a> {
             }
 
             Definition::Validator(Validator {
-                fun,
-                other_fun,
+                handlers,
+                fallback,
                 params,
+                name,
                 doc: _,
                 location: _,
                 end_position: _,
@@ -1264,41 +1270,41 @@ impl<'a> Environment<'a> {
                     }
                 };
 
-                let temp_params: Vec<UntypedArg> = params
-                    .iter()
-                    .cloned()
-                    .chain(fun.arguments.clone())
-                    .map(default_annotation)
-                    .collect();
-
-                self.register_function(
-                    &fun.name,
-                    &temp_params,
-                    &fun.return_annotation,
-                    module_name,
-                    hydrators,
-                    names,
-                    &fun.location,
-                )?;
-
-                if let Some(other) = other_fun {
+                for handler in handlers {
                     let temp_params: Vec<UntypedArg> = params
                         .iter()
                         .cloned()
-                        .chain(other.arguments.clone())
+                        .chain(handler.arguments.clone())
                         .map(default_annotation)
                         .collect();
 
                     self.register_function(
-                        &other.name,
+                        &handler.name,
                         &temp_params,
-                        &other.return_annotation,
+                        &handler.return_annotation,
                         module_name,
                         hydrators,
                         names,
-                        &other.location,
+                        &handler.location,
                     )?;
                 }
+
+                let temp_params: Vec<UntypedArg> = params
+                    .iter()
+                    .cloned()
+                    .chain(fallback.arguments.clone())
+                    .map(default_annotation)
+                    .collect();
+
+                self.register_function(
+                    &fallback.name,
+                    &temp_params,
+                    &fallback.return_annotation,
+                    module_name,
+                    hydrators,
+                    names,
+                    &fallback.location,
+                )?;
             }
 
             Definition::Validator(Validator { location, .. }) => {

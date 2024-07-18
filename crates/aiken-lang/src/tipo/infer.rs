@@ -172,13 +172,12 @@ fn infer_definition(
             doc,
             location,
             end_position,
-            mut fun,
-            other_fun,
+            mut handlers,
+            fallback,
             params,
+            name,
         }) => {
             let params_length = params.len();
-            let temp_params = params.iter().cloned().chain(fun.arguments);
-            fun.arguments = temp_params.collect();
 
             environment.in_new_scope(|environment| {
                 let preregistered_fn = environment
@@ -220,19 +219,74 @@ fn infer_definition(
                     };
                 }
 
-                let mut typed_fun =
-                    infer_function(&fun, module_name, hydrators, environment, tracing)?;
+                let typed_handlers = vec![];
 
-                if !typed_fun.return_type.is_bool() {
+                for handler in handlers {
+                    let temp_params = params.iter().cloned().chain(fun.arguments);
+                    fun.arguments = temp_params.collect();
+
+                    let mut typed_fun =
+                        infer_function(&fun, module_name, hydrators, environment, lines, tracing)?;
+
+                    if !typed_fun.return_type.is_bool() {
+                        return Err(Error::ValidatorMustReturnBool {
+                            return_type: typed_fun.return_type.clone(),
+                            location: typed_fun.location,
+                        });
+                    }
+
+                    if typed_fun.arguments.len() < 2 || typed_fun.arguments.len() > 3 {
+                        return Err(Error::IncorrectValidatorArity {
+                            count: typed_fun.arguments.len() as u32,
+                            location: typed_fun.location,
+                        });
+                    }
+
+                    for arg in typed_fun.arguments.iter_mut() {
+                        if arg.tipo.is_unbound() {
+                            arg.tipo = builtins::data();
+                        }
+                    }
+                }
+
+                let params = params.into_iter().chain(other.arguments);
+                other.arguments = params.collect();
+
+                let mut typed_fallback =
+                    infer_function(&other, module_name, hydrators, environment, lines, tracing)?;
+
+                if !typed_fallback.return_type.is_bool() {
                     return Err(Error::ValidatorMustReturnBool {
-                        return_type: typed_fun.return_type.clone(),
-                        location: typed_fun.location,
+                        return_type: typed_fallback.return_type.clone(),
+                        location: typed_fallback.location,
                     });
                 }
 
-                let typed_params = typed_fun
-                    .arguments
-                    .drain(0..params_length)
+                typed_fallback.arguments.drain(0..params_length);
+
+                if typed_fallback.arguments.len() < 2 || typed_fallback.arguments.len() > 3 {
+                    return Err(Error::IncorrectValidatorArity {
+                        count: typed_fallback.arguments.len() as u32,
+                        location: typed_fallback.location,
+                    });
+                }
+
+                if typed_fun.arguments.len() == typed_fallback.arguments.len() {
+                    return Err(Error::MultiValidatorEqualArgs {
+                        location: typed_fun.location,
+                        other_location: typed_fallback.location,
+                        count: typed_fallback.arguments.len(),
+                    });
+                }
+
+                for arg in typed_fallback.arguments.iter_mut() {
+                    if arg.tipo.is_unbound() {
+                        arg.tipo = builtins::data();
+                    }
+                }
+
+                let typed_params = params
+                    .into_iter()
                     .map(|mut arg| {
                         if arg.tipo.is_unbound() {
                             arg.tipo = builtins::data();
@@ -242,68 +296,12 @@ fn infer_definition(
                     })
                     .collect();
 
-                if typed_fun.arguments.len() < 2 || typed_fun.arguments.len() > 3 {
-                    return Err(Error::IncorrectValidatorArity {
-                        count: typed_fun.arguments.len() as u32,
-                        location: typed_fun.location,
-                    });
-                }
-
-                for arg in typed_fun.arguments.iter_mut() {
-                    if arg.tipo.is_unbound() {
-                        arg.tipo = builtins::data();
-                    }
-                }
-
-                let typed_other_fun = other_fun
-                    .map(|mut other| -> Result<TypedFunction, Error> {
-                        let params = params.into_iter().chain(other.arguments);
-                        other.arguments = params.collect();
-
-                        let mut other_typed_fun =
-                            infer_function(&other, module_name, hydrators, environment, tracing)?;
-
-                        if !other_typed_fun.return_type.is_bool() {
-                            return Err(Error::ValidatorMustReturnBool {
-                                return_type: other_typed_fun.return_type.clone(),
-                                location: other_typed_fun.location,
-                            });
-                        }
-
-                        other_typed_fun.arguments.drain(0..params_length);
-
-                        if other_typed_fun.arguments.len() < 2
-                            || other_typed_fun.arguments.len() > 3
-                        {
-                            return Err(Error::IncorrectValidatorArity {
-                                count: other_typed_fun.arguments.len() as u32,
-                                location: other_typed_fun.location,
-                            });
-                        }
-
-                        if typed_fun.arguments.len() == other_typed_fun.arguments.len() {
-                            return Err(Error::MultiValidatorEqualArgs {
-                                location: typed_fun.location,
-                                other_location: other_typed_fun.location,
-                                count: other_typed_fun.arguments.len(),
-                            });
-                        }
-
-                        for arg in other_typed_fun.arguments.iter_mut() {
-                            if arg.tipo.is_unbound() {
-                                arg.tipo = builtins::data();
-                            }
-                        }
-
-                        Ok(other_typed_fun)
-                    })
-                    .transpose()?;
-
                 Ok(Definition::Validator(Validator {
                     doc,
                     end_position,
-                    fun: typed_fun,
-                    other_fun: typed_other_fun,
+                    handlers: typed_handlers,
+                    fallback: typed_fallback,
+                    name,
                     location,
                     params: typed_params,
                 }))
