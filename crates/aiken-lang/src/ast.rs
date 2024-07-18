@@ -541,10 +541,11 @@ pub type UntypedValidator = Validator<(), UntypedArg, UntypedExpr>;
 pub struct Validator<T, Arg, Expr> {
     pub doc: Option<String>,
     pub end_position: usize,
-    pub fun: Function<T, Expr, Arg>,
-    pub other_fun: Option<Function<T, Expr, Arg>>,
+    pub handlers: Vec<Function<T, Expr, Arg>>,
     pub location: Span,
+    pub name: String,
     pub params: Vec<Arg>,
+    pub fallback: Function<T, Expr, Arg>,
 }
 
 impl TypedValidator {
@@ -552,12 +553,12 @@ impl TypedValidator {
         self.params
             .iter()
             .find_map(|arg| arg.find_node(byte_index))
-            .or_else(|| self.fun.find_node(byte_index))
             .or_else(|| {
-                self.other_fun
-                    .as_ref()
-                    .and_then(|f| f.find_node(byte_index))
+                self.handlers
+                    .iter()
+                    .find_map(|func| func.find_node(byte_index))
             })
+            .or_else(|| self.fallback.find_node(byte_index))
     }
 
     pub fn into_function_definition<'a, F>(
@@ -568,27 +569,28 @@ impl TypedValidator {
     where
         F: Fn(&'a TypedFunction, Option<&'a TypedFunction>) -> Option<&'a TypedFunction> + 'a,
     {
-        match select(&self.fun, self.other_fun.as_ref()) {
-            None => None,
-            Some(fun) => {
-                let mut fun = fun.clone();
+        // match select(&self.fun, self.other_fun.as_ref()) {
+        //     None => None,
+        //     Some(fun) => {
+        //         let mut fun = fun.clone();
 
-                fun.arguments = self
-                    .params
-                    .clone()
-                    .into_iter()
-                    .chain(fun.arguments)
-                    .collect();
+        //         fun.arguments = self
+        //             .params
+        //             .clone()
+        //             .into_iter()
+        //             .chain(fun.arguments)
+        //             .collect();
 
-                Some((
-                    FunctionAccessKey {
-                        module_name: module_name.to_string(),
-                        function_name: fun.name.clone(),
-                    },
-                    fun,
-                ))
-            }
-        }
+        //         Some((
+        //             FunctionAccessKey {
+        //                 module_name: module_name.to_string(),
+        //                 function_name: fun.name.clone(),
+        //             },
+        //             fun,
+        //         ))
+        //     }
+        // }
+        todo!()
     }
 }
 
