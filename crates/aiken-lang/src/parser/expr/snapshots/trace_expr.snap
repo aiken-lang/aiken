@@ -9,7 +9,7 @@ Trace {
         location: 34..35,
         name: "a",
     },
-    text: Call {
+    label: Call {
         arguments: [
             CallArg {
                 label: None,
@@ -50,4 +50,5 @@ Trace {
         },
         location: 6..33,
     },
+    arguments: [],
 }

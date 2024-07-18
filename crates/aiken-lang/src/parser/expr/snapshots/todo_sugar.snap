@@ -8,8 +8,9 @@ Trace {
     then: ErrorTerm {
         location: 0..10,
     },
-    text: String {
+    label: String {
         location: 5..10,
         value: "foo",
     },
+    arguments: [],
 }

@@ -1,0 +1,11 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n    trace @\"foo\": @\"bar\"\n    trace \"foo\": \"bar\"\n    trace @\"foo\": \"bar\", @\"baz\"\n    trace bar: @\"baz\"\n    Void\n}\n"
+---
+fn foo() {
+  trace @"foo": @"bar"
+  trace @"foo": @"bar"
+  trace @"foo": @"bar", @"baz"
+  trace bar: @"baz"
+  Void
+}

@@ -28,13 +28,25 @@ pub fn parser<'a>(
             .map_with_span(UntypedExpr::fail),
         just(Token::Trace)
             .ignore_then(choice((string::hybrid(), expression.clone())))
+            .then(
+                just(Token::Colon)
+                    .ignore_then(
+                        choice((string::hybrid(), expression.clone()))
+                            .separated_by(just(Token::Comma)),
+                    )
+                    .or_not()
+                    .map(|opt| opt.unwrap_or_default()),
+            )
             .then(sequence.clone().or_not())
-            .map_with_span(|(text, then_), span| UntypedExpr::Trace {
-                kind: TraceKind::Trace,
-                location: span,
-                then: Box::new(then_.unwrap_or_else(|| UntypedExpr::todo(None, span))),
-                text: Box::new(text),
-            }),
+            .map_with_span(
+                |((label, arguments), continuation), span| UntypedExpr::Trace {
+                    kind: TraceKind::Trace,
+                    location: span,
+                    then: Box::new(continuation.unwrap_or_else(|| UntypedExpr::todo(None, span))),
+                    label: Box::new(label),
+                    arguments,
+                },
+            ),
     ))
 }
 
@@ -115,6 +127,26 @@ mod tests {
     }
 
     #[test]
+    fn trace_string() {
+        assert_expr!(
+            r#"
+            trace @"foo"
+            a
+            "#
+        );
+    }
+
+    #[test]
+    fn trace_bytearray() {
+        assert_expr!(
+            r#"
+            trace "foo"
+            a
+            "#
+        );
+    }
+
+    #[test]
     fn trace_expr() {
         assert_expr!(
             r#"
@@ -129,6 +161,24 @@ mod tests {
         assert_expr!(
             r#"
             trace some_var
+            "#
+        );
+    }
+
+    #[test]
+    fn trace_labelled() {
+        assert_expr!(
+            r#"
+            trace foo: "bar"
+            "#
+        );
+    }
+
+    #[test]
+    fn trace_variadic() {
+        assert_expr!(
+            r#"
+            trace "foo": @"bar", baz
             "#
         );
     }

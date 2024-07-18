@@ -20,10 +20,11 @@ If {
                 then: ErrorTerm {
                     location: 20..24,
                 },
-                text: String {
+                label: String {
                     location: 20..24,
                     value: "aiken::todo",
                 },
+                arguments: [],
             },
             is: Some(
                 AssignmentPattern {
@@ -51,9 +52,10 @@ If {
         then: ErrorTerm {
             location: 36..40,
         },
-        text: String {
+        label: String {
             location: 36..40,
             value: "aiken::todo",
         },
+        arguments: [],
     },
 }

@@ -513,12 +513,14 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 self.infer_assignment(pattern, *value, kind, &annotation, location)
             }
 
+            // TODO: Trace.arguments
             UntypedExpr::Trace {
                 location,
                 then,
-                text,
+                label,
                 kind,
-            } => self.infer_trace(kind, *then, location, *text),
+                ..
+            } => self.infer_trace(kind, *then, location, *label),
 
             UntypedExpr::When {
                 location,

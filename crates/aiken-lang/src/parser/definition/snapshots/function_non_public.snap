@@ -11,10 +11,11 @@ Fn(
             then: ErrorTerm {
                 location: 0..11,
             },
-            text: String {
+            label: String {
                 location: 0..11,
                 value: "aiken::todo",
             },
+            arguments: [],
         },
         doc: None,
         location: 0..8,

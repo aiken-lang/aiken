@@ -1,0 +1,17 @@
+---
+source: crates/aiken-lang/src/parser/expr/fail_todo_trace.rs
+description: "Code:\n\ntrace \"foo\"\na\n"
+---
+Trace {
+    kind: Trace,
+    location: 0..13,
+    then: Var {
+        location: 12..13,
+        name: "a",
+    },
+    label: String {
+        location: 6..11,
+        value: "foo",
+    },
+    arguments: [],
+}

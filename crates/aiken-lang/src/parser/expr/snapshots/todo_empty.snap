@@ -8,8 +8,9 @@ Trace {
     then: ErrorTerm {
         location: 0..4,
     },
-    text: String {
+    label: String {
         location: 0..4,
         value: "aiken::todo",
     },
+    arguments: [],
 }

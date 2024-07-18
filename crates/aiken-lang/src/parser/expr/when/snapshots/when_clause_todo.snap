@@ -54,10 +54,11 @@ When {
                 then: ErrorTerm {
                     location: 47..68,
                 },
-                text: String {
+                label: String {
                     location: 52..68,
                     value: "unimplemented",
                 },
+                arguments: [],
             },
         },
     ],
