@@ -31,5 +31,36 @@ impl IdGenerator {
     }
 }
 
+#[macro_export]
+macro_rules! aiken_fn {
+    ($module_types:expr, $id_gen:expr, $src:expr) => {{
+        let (untyped_module, _) = $crate::parser::module($src, $crate::ast::ModuleKind::Lib)
+            .expect("failed to parse module.");
+
+        let module_name = "";
+
+        let mut warnings = vec![];
+
+        let typed_module = untyped_module
+            .infer(
+                $id_gen,
+                $crate::ast::ModuleKind::Lib,
+                module_name,
+                $module_types,
+                $crate::ast::Tracing::silent(),
+                &mut warnings,
+            )
+            .unwrap();
+
+        if let Some($crate::ast::Definition::Fn(typed_fn)) =
+            typed_module.definitions.into_iter().last()
+        {
+            typed_fn
+        } else {
+            unreachable!()
+        }
+    }};
+}
+
 #[cfg(test)]
 mod tests;

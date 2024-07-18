@@ -1328,7 +1328,7 @@ mod test {
                 .last()
                 .expect("No test found in declared src?");
 
-            let mut functions = builtins::prelude_functions(&id_gen);
+            let mut functions = builtins::prelude_functions(&id_gen, &module_types);
             let mut data_types = builtins::prelude_data_types(&id_gen);
             ast.register_definitions(&mut functions, &mut data_types);
 

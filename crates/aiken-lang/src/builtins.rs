@@ -1,4 +1,5 @@
 use crate::{
+    aiken_fn,
     ast::{
         Annotation, ArgName, CallArg, DataTypeKey, Function, FunctionAccessKey, ModuleKind,
         OnTestFailure, Span, TypedArg, TypedDataType, TypedFunction, UnOp,
@@ -262,6 +263,102 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
                 field_map: None,
                 module: "".to_string(),
                 arity: 1,
+                location: Span::empty(),
+                builtin: None,
+            },
+        ),
+    );
+
+    // enumerate
+    let enumerate_a = generic_var(id_gen.next());
+    let enumerate_b = generic_var(id_gen.next());
+    prelude.values.insert(
+        "enumerate".to_string(),
+        ValueConstructor::public(
+            function(
+                vec![
+                    list(enumerate_a.clone()),
+                    enumerate_b.clone(),
+                    function(
+                        vec![enumerate_a.clone(), enumerate_b.clone()],
+                        enumerate_b.clone(),
+                    ),
+                    function(
+                        vec![enumerate_a.clone(), enumerate_b.clone()],
+                        enumerate_b.clone(),
+                    ),
+                ],
+                enumerate_b,
+            ),
+            ValueConstructorVariant::ModuleFn {
+                name: "enumerate".to_string(),
+                field_map: None,
+                module: "".to_string(),
+                arity: 4,
+                location: Span::empty(),
+                builtin: None,
+            },
+        ),
+    );
+
+    // encode_base16
+    prelude.values.insert(
+        "encode_base16".to_string(),
+        ValueConstructor::public(
+            function(vec![byte_array(), int(), byte_array()], byte_array()),
+            ValueConstructorVariant::ModuleFn {
+                name: "encode_base16".to_string(),
+                field_map: None,
+                module: "".to_string(),
+                arity: 3,
+                location: Span::empty(),
+                builtin: None,
+            },
+        ),
+    );
+
+    // from_int
+    prelude.values.insert(
+        "from_int".to_string(),
+        ValueConstructor::public(
+            function(vec![int(), byte_array()], byte_array()),
+            ValueConstructorVariant::ModuleFn {
+                name: "from_int".to_string(),
+                field_map: None,
+                module: "".to_string(),
+                arity: 2,
+                location: Span::empty(),
+                builtin: None,
+            },
+        ),
+    );
+
+    // do_from_int
+    prelude.values.insert(
+        "do_from_int".to_string(),
+        ValueConstructor::public(
+            function(vec![int(), byte_array()], byte_array()),
+            ValueConstructorVariant::ModuleFn {
+                name: "do_from_int".to_string(),
+                field_map: None,
+                module: "".to_string(),
+                arity: 2,
+                location: Span::empty(),
+                builtin: None,
+            },
+        ),
+    );
+
+    // diagnostic
+    prelude.values.insert(
+        "diagnostic".to_string(),
+        ValueConstructor::public(
+            function(vec![data(), byte_array()], byte_array()),
+            ValueConstructorVariant::ModuleFn {
+                name: "diagnostic".to_string(),
+                field_map: None,
+                module: "".to_string(),
+                arity: 2,
                 location: Span::empty(),
                 builtin: None,
             },
@@ -919,7 +1016,10 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
     )
 }
 
-pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, TypedFunction> {
+pub fn prelude_functions(
+    id_gen: &IdGenerator,
+    module_types: &HashMap<String, TypeInfo>,
+) -> IndexMap<FunctionAccessKey, TypedFunction> {
     let mut functions = IndexMap::new();
 
     // /// Negate the argument. Useful for map/fold and pipelines.
@@ -1237,6 +1337,230 @@ pub fn prelude_functions(id_gen: &IdGenerator) -> IndexMap<FunctionAccessKey, Ty
             return_type,
             end_position: 0,
         },
+    );
+
+    functions.insert(
+        FunctionAccessKey {
+            module_name: "".to_string(),
+            function_name: "enumerate".to_string(),
+        },
+        aiken_fn!(
+            &module_types,
+            &id_gen,
+            r#"
+                fn enumerate(
+                  self: List<a>,
+                  zero: b,
+                  with: fn(a, b) -> b,
+                  last: fn(a, b) -> b,
+                ) -> b {
+                  when self is {
+                    [] -> zero
+                    [x] -> last(x, zero)
+                    [x, ..xs] -> with(x, enumerate(xs, zero, with, last))
+                  }
+                }
+            "#
+        ),
+    );
+
+    functions.insert(
+        FunctionAccessKey {
+            module_name: "".to_string(),
+            function_name: "encode_base16".to_string(),
+        },
+        aiken_fn!(
+            &module_types,
+            &id_gen,
+            r#"
+                use aiken/builtin
+
+                fn encode_base16(bytes: ByteArray, ix: Int, builder: ByteArray) -> ByteArray {
+                  if ix < 0 {
+                    builder
+                  } else {
+                    let byte = builtin.index_bytearray(bytes, ix)
+                    let msb = byte / 16
+                    let lsb = byte % 16
+                    let builder =
+                      builtin.cons_bytearray(
+                        msb + if msb < 10 {
+                          48
+                        } else {
+                          55
+                        },
+                        builtin.cons_bytearray(
+                          lsb + if lsb < 10 {
+                            48
+                          } else {
+                            55
+                          },
+                          builder,
+                        ),
+                      )
+                    encode_base16(bytes, ix - 1, builder)
+                  }
+                }
+            "#
+        ),
+    );
+
+    functions.insert(
+        FunctionAccessKey {
+            module_name: "".to_string(),
+            function_name: "do_from_int".to_string(),
+        },
+        aiken_fn!(
+            &module_types,
+            &id_gen,
+            r#"
+                use aiken/builtin
+
+                fn do_from_int(i: Int, digits: ByteArray) -> ByteArray {
+                  if i <= 0 {
+                    digits
+                  } else {
+                    do_from_int(
+                      builtin.quotient_integer(i, 10),
+                      builtin.cons_bytearray(builtin.remainder_integer(i, 10) + 48, digits),
+                    )
+                  }
+                }
+            "#
+        ),
+    );
+
+    functions.insert(
+        FunctionAccessKey {
+            module_name: "".to_string(),
+            function_name: "from_int".to_string(),
+        },
+        aiken_fn!(
+            &module_types,
+            &id_gen,
+            r#"
+                use aiken/builtin
+
+                /// Encode an integer into UTF-8.
+                fn from_int(i: Int, digits: ByteArray) -> ByteArray {
+                  if i == 0 {
+                    builtin.append_bytearray(#"30", digits)
+                  } else if i < 0 {
+                    builtin.append_bytearray(#"2d", from_int(-i, digits))
+                  } else {
+                    do_from_int(
+                      builtin.quotient_integer(i, 10),
+                      builtin.cons_bytearray(builtin.remainder_integer(i, 10) + 48, digits),
+                    )
+                  }
+                }
+            "#
+        ),
+    );
+
+    functions.insert(
+        FunctionAccessKey {
+            module_name: "".to_string(),
+            function_name: "diagnostic".to_string(),
+        },
+        aiken_fn!(
+            &module_types,
+            &id_gen,
+            r#"
+              use aiken/builtin
+
+              fn diagnostic(self: Data, builder: ByteArray) -> ByteArray {
+                builtin.choose_data(
+                  self,
+                  {
+                    let Pair(constr, fields) = builtin.un_constr_data(self)
+
+                    let builder =
+                      when fields is {
+                        [] -> builtin.append_bytearray(#"5b5d29", builder)
+                        _ -> {
+                          let bytes =
+                            enumerate(
+                              fields,
+                              builtin.append_bytearray(#"5d29", builder),
+                              fn(e: Data, st: ByteArray) {
+                                diagnostic(e, builtin.append_bytearray(#"2c20", st))
+                              },
+                              fn(e: Data, st: ByteArray) { diagnostic(e, st) },
+                            )
+                          builtin.append_bytearray(#"5b5f20", bytes)
+                        }
+                      }
+
+                    let constr_tag =
+                      if constr < 7 {
+                        121 + constr
+                      } else if constr < 128 {
+                        1280 + constr - 7
+                      } else {
+                        fail @"What are you doing? No I mean, seriously."
+                      }
+
+                    builder
+                      |> builtin.append_bytearray(#"28", _)
+                      |> from_int(constr_tag, _)
+                  },
+                  {
+                    let elems = builtin.un_map_data(self)
+                    when elems is {
+                      [] -> builtin.append_bytearray(#"7b7d", builder)
+                      _ -> {
+                        let bytes =
+                          enumerate(
+                            elems,
+                            builtin.append_bytearray(#"207d", builder),
+                            fn(e: Pair<Data, Data>, st: ByteArray) {
+                              let value = diagnostic(e.2nd, builtin.append_bytearray(#"2c20", st))
+                              diagnostic(e.1st, builtin.append_bytearray(#"3a20", value))
+                            },
+                            fn(e: Pair<Data, Data>, st: ByteArray) {
+                              let value = diagnostic(e.2nd, st)
+                              diagnostic(e.1st, builtin.append_bytearray(#"3a20", value))
+                            },
+                          )
+                        builtin.append_bytearray(#"7b5f20", bytes)
+                      }
+                    }
+                  },
+                  {
+                    let elems = builtin.un_list_data(self)
+                    when elems is {
+                      [] -> builtin.append_bytearray(#"5b5d", builder)
+                      _ -> {
+                        let bytes =
+                          enumerate(
+                            elems,
+                            builtin.append_bytearray(#"5d", builder),
+                            fn(e: Data, st: ByteArray) {
+                              diagnostic(e, builtin.append_bytearray(#"2c20", st))
+                            },
+                            fn(e: Data, st: ByteArray) { diagnostic(e, st) },
+                          )
+                        builtin.append_bytearray(#"5b5f20", bytes)
+                      }
+                    }
+                  },
+                  self
+                    |> builtin.un_i_data
+                    |> from_int(builder),
+                  {
+                    let bytes = builtin.un_b_data(self)
+                    bytes
+                      |> encode_base16(
+                          builtin.length_of_bytearray(bytes) - 1,
+                          builtin.append_bytearray(#"27", builder),
+                        )
+                      |> builtin.append_bytearray(#"6827", _)
+                  },
+                )
+              }
+            "#
+        ),
     );
 
     functions

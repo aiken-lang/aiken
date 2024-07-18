@@ -12,10 +12,10 @@ use itertools::Itertools;
 use std::{cell::RefCell, collections::HashMap, ops::Deref, rc::Rc};
 use uplc::{ast::Type as UplcType, builtins::DefaultFunction};
 
-mod environment;
+pub(crate) mod environment;
 pub mod error;
 mod exhaustive;
-mod expr;
+pub(crate) mod expr;
 pub mod fields;
 mod hydrator;
 mod infer;

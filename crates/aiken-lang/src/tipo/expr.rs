@@ -96,7 +96,7 @@ pub(crate) fn infer_function(
 
     let preregistered_fn = environment
         .get_variable(name)
-        .expect("Could not find preregistered type for function");
+        .unwrap_or_else(|| panic!("Could not find preregistered type for function: {name}"));
 
     let field_map = preregistered_fn.field_map().cloned();
 
@@ -1797,7 +1797,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         })
     }
 
-    fn infer_fn(
+    pub fn infer_fn(
         &mut self,
         args: Vec<UntypedArg>,
         expected_args: &[Rc<Type>],
@@ -2435,9 +2435,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 tipo: string(),
                 value: if ix == 0 { ": " } else { ", " }.to_string(),
             };
-            typed_arguments.into_iter().enumerate().fold(label, |text, (ix, arg)| {
-                append_string_expr(append_string_expr(text, delimiter(ix)), arg)
-            })
+            typed_arguments
+                .into_iter()
+                .enumerate()
+                .fold(label, |text, (ix, arg)| {
+                    append_string_expr(append_string_expr(text, delimiter(ix)), arg)
+                })
         };
 
         let then = self.infer(then)?;
@@ -2813,7 +2816,8 @@ pub fn ensure_serialisable(is_top_level: bool, t: Rc<Type>, location: Span) -> R
 }
 
 pub fn append_string_expr(left: TypedExpr, right: TypedExpr) -> TypedExpr {
-    let value_constructor = from_default_function(DefaultFunction::AppendString, &IdGenerator::new());
+    let value_constructor =
+        from_default_function(DefaultFunction::AppendString, &IdGenerator::new());
     let append_string = TypedExpr::ModuleSelect {
         location: Span::empty(),
         tipo: value_constructor.tipo,
@@ -2827,13 +2831,11 @@ pub fn append_string_expr(left: TypedExpr, right: TypedExpr) -> TypedExpr {
         // So this is merely a small work-around for convenience. The proper way here would be to
         // pull the function definition for append_string from the pre-registered builtins
         // functions somewhere in the environment.
-        constructor: value_constructor
-            .variant
-            .to_module_value_constructor(
-                string(),
-                BUILTIN,
-                &DefaultFunction::AppendString.aiken_name(),
-            ),
+        constructor: value_constructor.variant.to_module_value_constructor(
+            string(),
+            BUILTIN,
+            &DefaultFunction::AppendString.aiken_name(),
+        ),
     };
 
     TypedExpr::Call {
