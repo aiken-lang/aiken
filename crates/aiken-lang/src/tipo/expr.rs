@@ -19,12 +19,14 @@ use crate::{
         UntypedRecordUpdateArg,
     },
     builtins::{
-        bool, byte_array, function, g1_element, g2_element, int, list, pair, string, tuple, void,
+        bool, byte_array, from_default_function, function, g1_element, g2_element, int, list, pair,
+        string, tuple, void, BUILTIN,
     },
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
     line_numbers::LineNumbers,
-    tipo::{fields::FieldMap, PatternConstructor, TypeVar},
+    tipo::{fields::FieldMap, DefaultFunction, PatternConstructor, TypeVar},
+    IdGenerator,
 };
 use std::{
     cmp::Ordering,
@@ -513,14 +515,14 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 self.infer_assignment(pattern, *value, kind, &annotation, location)
             }
 
-            // TODO: Trace.arguments
             UntypedExpr::Trace {
                 location,
                 then,
                 label,
+                arguments,
                 kind,
                 ..
-            } => self.infer_trace(kind, *then, location, *label),
+            } => self.infer_trace(kind, *then, location, *label, arguments),
 
             UntypedExpr::When {
                 location,
@@ -2410,10 +2412,33 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         kind: TraceKind,
         then: UntypedExpr,
         location: Span,
-        text: UntypedExpr,
+        label: UntypedExpr,
+        arguments: Vec<UntypedExpr>,
     ) -> Result<TypedExpr, Error> {
-        let text = self.infer(text)?;
-        self.unify(string(), text.tipo(), text.location(), false)?;
+        let label = self.infer(label)?;
+        self.unify(string(), label.tipo(), label.location(), false)?;
+
+        let typed_arguments = arguments
+            .into_iter()
+            .map(|arg| {
+                let arg = self.infer(arg)?;
+                self.unify(string(), arg.tipo(), arg.location(), false)?;
+                Ok(arg)
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+
+        let text = if typed_arguments.is_empty() {
+            label
+        } else {
+            let delimiter = |ix| TypedExpr::String {
+                location: Span::empty(),
+                tipo: string(),
+                value: if ix == 0 { ": " } else { ", " }.to_string(),
+            };
+            typed_arguments.into_iter().enumerate().fold(label, |text, (ix, arg)| {
+                append_string_expr(append_string_expr(text, delimiter(ix)), arg)
+            })
+        };
 
         let then = self.infer(then)?;
         let tipo = then.tipo();
@@ -2784,5 +2809,48 @@ pub fn ensure_serialisable(is_top_level: bool, t: Rc<Type>, location: Span) -> R
             ensure_serialisable(false, fst.clone(), location)?;
             ensure_serialisable(false, snd.clone(), location)
         }
+    }
+}
+
+pub fn append_string_expr(left: TypedExpr, right: TypedExpr) -> TypedExpr {
+    let value_constructor = from_default_function(DefaultFunction::AppendString, &IdGenerator::new());
+    let append_string = TypedExpr::ModuleSelect {
+        location: Span::empty(),
+        tipo: value_constructor.tipo,
+        label: DefaultFunction::AppendString.aiken_name(),
+        module_name: BUILTIN.to_string(),
+        module_alias: BUILTIN.to_string(),
+        // NOTE: The IdGenerator is unused here, as it's only necessary for generic builtin
+        // functions such as if_then_else or head_list. However, if such functions were needed,
+        // passing a brand new IdGenerator here would be WRONG and cause issues down the line.
+        //
+        // So this is merely a small work-around for convenience. The proper way here would be to
+        // pull the function definition for append_string from the pre-registered builtins
+        // functions somewhere in the environment.
+        constructor: value_constructor
+            .variant
+            .to_module_value_constructor(
+                string(),
+                BUILTIN,
+                &DefaultFunction::AppendString.aiken_name(),
+            ),
+    };
+
+    TypedExpr::Call {
+        location: Span::empty(),
+        tipo: string(),
+        fun: Box::new(append_string.clone()),
+        args: vec![
+            CallArg {
+                label: None,
+                location: left.location(),
+                value: left,
+            },
+            CallArg {
+                label: None,
+                location: right.location(),
+                value: right,
+            },
+        ],
     }
 }
