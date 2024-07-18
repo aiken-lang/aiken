@@ -236,11 +236,11 @@ impl<'comments> Formatter<'comments> {
 
             Definition::Validator(Validator {
                 end_position,
-                fun,
-                other_fun,
+                handlers,
+                fallback,
                 params,
                 ..
-            }) => self.definition_validator(params, fun, other_fun, *end_position),
+            }) => self.definition_validator(params, handlers, fallback, *end_position),
 
             Definition::Test(Function {
                 name,
@@ -582,8 +582,8 @@ impl<'comments> Formatter<'comments> {
     fn definition_validator<'a>(
         &mut self,
         params: &'a [UntypedArg],
-        fun: &'a UntypedFunction,
-        other_fun: &'a Option<UntypedFunction>,
+        handlers: &'a [UntypedFunction],
+        fallback: &'a UntypedFunction,
         end_position: usize,
     ) -> Document<'a> {
         // validator(params)
