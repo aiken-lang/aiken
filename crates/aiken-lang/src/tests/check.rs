@@ -459,8 +459,8 @@ fn exhaustiveness_simple() {
 #[test]
 fn validator_args_no_annotation() {
     let source_code = r#"
-      validator(d) {
-        fn foo(a, b, c) {
+      validator hello(d) {
+        foo (a, b, c) {
           True
         }
       }
@@ -477,7 +477,7 @@ fn validator_args_no_annotation() {
             assert!(param.tipo.is_data());
         });
 
-        validator.fun.arguments.iter().for_each(|arg| {
+        validator.handlers[0].arguments.iter().for_each(|arg| {
             assert!(arg.tipo.is_data());
         })
     })
