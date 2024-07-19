@@ -12,6 +12,41 @@
 
 - **aiken-lang**: remove warning on discarded expect, allowing to keep 'side-effects' when necessary. See #967. @KtorZ
 
+- **aiken-lang**: rework traces to be (1) variadic, (2) generic in its arguments and (3) structured. @KtorZ
+
+  In more details:
+  1. Enables the `trace` keyword to take one, two or any argument really separated by comma after the first. For example:
+
+     ```ak
+     trace @"a classic trace"
+
+     // ..
+
+     trace @"condition_1": @"foo"
+
+     // ...
+
+     trace @"condition_2": @"foo", @"bar"
+     ```
+
+  2. Enables the `trace` keyword to not only take strings as arguments; but any
+     data-type that is serialisable (i.e. that can be cast to Data). It is fundamentally identical to calling the [`cbor.diagnostic`](https://aiken-lang.github.io/stdlib/aiken/cbor.html#diagnostic) function from the standard lib; except that this is done and glued with the rest of the trace automatically.
+
+     ```ak
+     trace @"condition_1": [1, 2, 3]
+
+     // ...
+
+     let my_var = Some("foo")
+     trace my_var
+     ```
+
+  3. Changes the behavior of the `--trace-level compact` mode to now:
+    - remove trace-if-false (`?` operator) traces entirely in this mode;
+    - only keep the label (first trace argument) and error when it isn't a string.
+
+  See also [#978](https://github.com/aiken-lang/aiken/pull/978).
+
 ## v1.0.29-alpha - 2024-06-06
 
 ### Added
