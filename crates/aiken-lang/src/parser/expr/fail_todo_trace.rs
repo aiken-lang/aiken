@@ -2,7 +2,7 @@ use crate::{
     ast::TraceKind,
     expr::UntypedExpr,
     parser::{
-        error::ParseError,
+        error::{ParseError, Pattern},
         expr::{string, when::clause},
         token::Token,
     },
