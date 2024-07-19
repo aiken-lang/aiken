@@ -29,11 +29,22 @@ pub fn parser<'a>(
         just(Token::Trace)
             .ignore_then(choice((string::hybrid(), expression.clone())))
             .then(
-                just(Token::Colon)
-                    .ignore_then(
+                choice((just(Token::Colon), just(Token::Comma)))
+                    .then(
                         choice((string::hybrid(), expression.clone()))
                             .separated_by(just(Token::Comma)),
                     )
+                    .validate(|(token, arguments), span, emit| {
+                        if token != Token::Colon {
+                            emit(ParseError::expected_but_got(
+                                Pattern::Token(Token::Colon),
+                                Pattern::Token(token),
+                                span.map(|start, _end| (start, start + 1)),
+                            ))
+                        }
+
+                        arguments
+                    })
                     .or_not()
                     .map(|opt| opt.unwrap_or_default()),
             )
