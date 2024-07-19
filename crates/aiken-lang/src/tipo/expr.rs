@@ -20,7 +20,7 @@ use crate::{
     },
     builtins::{
         bool, byte_array, data, from_default_function, function, g1_element, g2_element, int, list,
-        pair, string, tuple, void, BUILTIN, PRELUDE,
+        pair, string, tuple, void, BUILTIN,
     },
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
@@ -2827,7 +2827,7 @@ fn diagnose_expr(expr: TypedExpr) -> TypedExpr {
         from_default_function(DefaultFunction::DecodeUtf8, &IdGenerator::new());
 
     let decode_utf8 = TypedExpr::ModuleSelect {
-        location: Span::empty(),
+        location: expr.location(),
         tipo: decode_utf8_constructor.tipo.clone(),
         label: DefaultFunction::DecodeUtf8.aiken_name(),
         module_name: BUILTIN.to_string(),
@@ -2839,29 +2839,21 @@ fn diagnose_expr(expr: TypedExpr) -> TypedExpr {
         ),
     };
 
-    let diagnostic_constructor = ValueConstructor::public(
-        function(vec![data(), byte_array()], byte_array()),
-        ValueConstructorVariant::ModuleFn {
-            name: "diagnostic".to_string(),
-            field_map: None,
-            module: PRELUDE.to_string(),
-            arity: 2,
-            location: Span::empty(),
-            builtin: None,
+    let diagnostic = TypedExpr::Var {
+        location: expr.location(),
+        name: "diagnostic".to_string(),
+        constructor: ValueConstructor {
+            public: true,
+            tipo: function(vec![data(), byte_array()], byte_array()),
+            variant: ValueConstructorVariant::ModuleFn {
+                name: "diagnostic".to_string(),
+                field_map: None,
+                module: "".to_string(),
+                arity: 2,
+                location: Span::empty(),
+                builtin: None,
+            },
         },
-    );
-
-    let diagnostic = TypedExpr::ModuleSelect {
-        location: Span::empty(),
-        tipo: diagnostic_constructor.tipo.clone(),
-        label: "diagnostic".to_string(),
-        module_name: PRELUDE.to_string(),
-        module_alias: "".to_string(),
-        constructor: diagnostic_constructor.variant.to_module_value_constructor(
-            diagnostic_constructor.tipo,
-            "",
-            "diagnostic",
-        ),
     };
 
     let location = expr.location();
@@ -2873,7 +2865,7 @@ fn diagnose_expr(expr: TypedExpr) -> TypedExpr {
             label: None,
             location: expr.location(),
             value: TypedExpr::Call {
-                tipo: string(),
+                tipo: byte_array(),
                 fun: Box::new(diagnostic.clone()),
                 args: vec![
                     CallArg {

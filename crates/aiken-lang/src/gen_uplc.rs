@@ -748,11 +748,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                     ModuleValueConstructor::Fn { name, module, .. } => {
                         let func = self.functions.get(&FunctionAccessKey {
-                            module_name: if module_name == "aiken" {
-                                "".to_string()
-                            } else {
-                                module_name.clone()
-                            },
+                            module_name: module_name.clone(),
                             function_name: name.clone(),
                         });
 
