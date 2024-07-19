@@ -7003,3 +7003,25 @@ fn bls12_381_elements_from_data_conversion() {
         false,
     )
 }
+
+#[test]
+fn qualified_prelude_functions() {
+    let src = r#"
+        use aiken
+
+        test foo() {
+            aiken.identity(True) && identity(True)
+        }
+    "#;
+
+    let constant_true = Term::Constant(Constant::Bool(true).into());
+    let constant_false = Term::Constant(Constant::Bool(false).into());
+
+    assert_uplc(
+        src,
+        constant_true
+            .clone()
+            .delayed_if_then_else(constant_true, constant_false),
+        false,
+    )
+}

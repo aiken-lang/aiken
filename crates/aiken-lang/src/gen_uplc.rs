@@ -17,7 +17,7 @@ use crate::{
         Span, TraceLevel, Tracing, TypedArg, TypedClause, TypedDataType, TypedFunction,
         TypedPattern, TypedValidator, UnOp,
     },
-    builtins::{bool, data, int, list, void},
+    builtins::{bool, data, int, list, void, PRELUDE},
     expr::TypedExpr,
     gen_uplc::{
         air::ExpectLevel,
@@ -748,7 +748,19 @@ impl<'a> CodeGenerator<'a> {
                     }
                     ModuleValueConstructor::Fn { name, module, .. } => {
                         let func = self.functions.get(&FunctionAccessKey {
-                            module_name: module_name.clone(),
+                            // NOTE: This is needed because we register prelude functions under an
+                            // empty module name. This is to facilitate their access when used
+                            // directly. Note that, if we weren't doing this particular
+                            // transformation, we would need to do the other direction anyway:
+                            //
+                            //     if module_name.is_empty() { PRELUDE.to_string() } else { module_name.clone() }
+                            //
+                            // So either way, we need to take care of this.
+                            module_name: if module_name == PRELUDE {
+                                String::new()
+                            } else {
+                                module_name.clone()
+                            },
                             function_name: name.clone(),
                         });
 
