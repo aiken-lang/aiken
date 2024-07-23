@@ -8,7 +8,7 @@ Trace {
     then: ErrorTerm {
         location: 0..32,
     },
-    text: Call {
+    label: Call {
         arguments: [
             CallArg {
                 label: None,
@@ -49,4 +49,5 @@ Trace {
         },
         location: 5..32,
     },
+    arguments: [],
 }

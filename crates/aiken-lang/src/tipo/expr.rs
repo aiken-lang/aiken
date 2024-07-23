@@ -19,12 +19,13 @@ use crate::{
         UntypedRecordUpdateArg,
     },
     builtins::{
-        bool, byte_array, function, g1_element, g2_element, int, list, pair, string, tuple, void,
+        bool, byte_array, data, from_default_function, function, g1_element, g2_element, int, list,
+        pair, string, tuple, void, BUILTIN,
     },
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
-    line_numbers::LineNumbers,
-    tipo::{fields::FieldMap, PatternConstructor, TypeVar},
+    tipo::{fields::FieldMap, DefaultFunction, PatternConstructor, TypeVar},
+    IdGenerator,
 };
 use std::{
     cmp::Ordering,
@@ -39,7 +40,6 @@ pub(crate) fn infer_function(
     module_name: &str,
     hydrators: &mut HashMap<String, Hydrator>,
     environment: &mut Environment<'_>,
-    lines: &LineNumbers,
     tracing: Tracing,
 ) -> Result<Function<Rc<Type>, TypedExpr, TypedArg>, Error> {
     if let Some(typed_fun) = environment.inferred_functions.get(&fun.name) {
@@ -94,7 +94,7 @@ pub(crate) fn infer_function(
 
     let preregistered_fn = environment
         .get_variable(name)
-        .expect("Could not find preregistered type for function");
+        .unwrap_or_else(|| panic!("Could not find preregistered type for function: {name}"));
 
     let field_map = preregistered_fn.field_map().cloned();
 
@@ -120,7 +120,7 @@ pub(crate) fn infer_function(
         .remove(name)
         .unwrap_or_else(|| panic!("Could not find hydrator for fn {name}"));
 
-    let mut expr_typer = ExprTyper::new(environment, lines, tracing);
+    let mut expr_typer = ExprTyper::new(environment, tracing);
     expr_typer.hydrator = hydrator;
     expr_typer.not_yet_inferred = BTreeSet::from_iter(hydrators.keys().cloned());
 
@@ -153,12 +153,11 @@ pub(crate) fn infer_function(
             environment.current_module,
             hydrators,
             environment,
-            lines,
             tracing,
         )?;
 
         // Then, try again the entire function definition.
-        return infer_function(fun, module_name, hydrators, environment, lines, tracing);
+        return infer_function(fun, module_name, hydrators, environment, tracing);
     }
 
     let (arguments, body, return_type) = inferred?;
@@ -221,8 +220,6 @@ pub(crate) fn infer_function(
 
 #[derive(Debug)]
 pub(crate) struct ExprTyper<'a, 'b> {
-    pub(crate) lines: &'a LineNumbers,
-
     pub(crate) environment: &'a mut Environment<'b>,
 
     // We tweak the tracing behavior during type-check. Traces are either kept or left out of the
@@ -242,18 +239,13 @@ pub(crate) struct ExprTyper<'a, 'b> {
 }
 
 impl<'a, 'b> ExprTyper<'a, 'b> {
-    pub fn new(
-        environment: &'a mut Environment<'b>,
-        lines: &'a LineNumbers,
-        tracing: Tracing,
-    ) -> Self {
+    pub fn new(environment: &'a mut Environment<'b>, tracing: Tracing) -> Self {
         Self {
             hydrator: Hydrator::new(),
             not_yet_inferred: BTreeSet::new(),
             environment,
             tracing,
             ungeneralised_function_used: false,
-            lines,
         }
     }
 
@@ -516,9 +508,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             UntypedExpr::Trace {
                 location,
                 then,
-                text,
+                label,
+                arguments,
                 kind,
-            } => self.infer_trace(kind, *then, location, *text),
+                ..
+            } => self.infer_trace(kind, *then, location, *label, arguments),
 
             UntypedExpr::When {
                 location,
@@ -677,25 +671,16 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         .to_pretty_string(999)
                 ),
             }),
-            TraceLevel::Compact => Some(TypedExpr::String {
-                location,
-                tipo: string(),
-                value: self
-                    .lines
-                    .line_and_column_number(location.start)
-                    .expect("Spans are within bounds.")
-                    .to_string(),
-            }),
-            TraceLevel::Silent => None,
+            TraceLevel::Compact | TraceLevel::Silent => None,
         };
 
         let typed_value = self.infer(value)?;
 
         self.unify(bool(), typed_value.tipo(), typed_value.location(), false)?;
 
-        match self.tracing.trace_level(false) {
-            TraceLevel::Silent => Ok(typed_value),
-            TraceLevel::Verbose | TraceLevel::Compact => Ok(TypedExpr::If {
+        match text {
+            None => Ok(typed_value),
+            Some(text) => Ok(TypedExpr::If {
                 location,
                 branches: vec1::vec1![IfBranch {
                     condition: typed_value,
@@ -706,7 +691,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 final_else: Box::new(TypedExpr::Trace {
                     location,
                     tipo: bool(),
-                    text: Box::new(text.expect("TraceLevel::Silent excluded from pattern-guard")),
+                    text: Box::new(text),
                     then: Box::new(var_false),
                 }),
                 tipo: bool(),
@@ -1793,7 +1778,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         })
     }
 
-    fn infer_fn(
+    pub fn infer_fn(
         &mut self,
         args: Vec<UntypedArg>,
         expected_args: &[Rc<Type>],
@@ -2403,15 +2388,29 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         TypedExpr::ErrorTerm { location, tipo }
     }
 
+    fn infer_trace_arg(&mut self, arg: UntypedExpr) -> Result<TypedExpr, Error> {
+        let typed_arg = self.infer(arg)?;
+        match self.unify(string(), typed_arg.tipo(), typed_arg.location(), false) {
+            Err(_) => {
+                self.unify(data(), typed_arg.tipo(), typed_arg.location(), true)?;
+                Ok(diagnose_expr(typed_arg))
+            }
+            Ok(()) => Ok(typed_arg),
+        }
+    }
+
     fn infer_trace(
         &mut self,
         kind: TraceKind,
         then: UntypedExpr,
         location: Span,
-        text: UntypedExpr,
+        label: UntypedExpr,
+        arguments: Vec<UntypedExpr>,
     ) -> Result<TypedExpr, Error> {
-        let text = self.infer(text)?;
-        self.unify(string(), text.tipo(), text.location(), false)?;
+        let typed_arguments = arguments
+            .into_iter()
+            .map(|arg| self.infer_trace_arg(arg))
+            .collect::<Result<Vec<_>, Error>>()?;
 
         let then = self.infer(then)?;
         let tipo = then.tipo();
@@ -2425,26 +2424,42 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         match self.tracing.trace_level(false) {
             TraceLevel::Silent => Ok(then),
-            TraceLevel::Compact => Ok(TypedExpr::Trace {
-                location,
-                tipo,
-                then: Box::new(then),
-                text: Box::new(TypedExpr::String {
+            TraceLevel::Compact => {
+                let text = self.infer(label)?;
+                self.unify(string(), text.tipo(), text.location(), false)?;
+                Ok(TypedExpr::Trace {
                     location,
-                    tipo: string(),
-                    value: self
-                        .lines
-                        .line_and_column_number(location.start)
-                        .expect("Spans are within bounds.")
-                        .to_string(),
-                }),
-            }),
-            TraceLevel::Verbose => Ok(TypedExpr::Trace {
-                location,
-                tipo,
-                then: Box::new(then),
-                text: Box::new(text),
-            }),
+                    tipo,
+                    then: Box::new(then),
+                    text: Box::new(text),
+                })
+            }
+            TraceLevel::Verbose => {
+                let label = self.infer_trace_arg(label)?;
+
+                let text = if typed_arguments.is_empty() {
+                    label
+                } else {
+                    let delimiter = |ix| TypedExpr::String {
+                        location: Span::empty(),
+                        tipo: string(),
+                        value: if ix == 0 { ": " } else { ", " }.to_string(),
+                    };
+                    typed_arguments
+                        .into_iter()
+                        .enumerate()
+                        .fold(label, |text, (ix, arg)| {
+                            append_string_expr(append_string_expr(text, delimiter(ix)), arg)
+                        })
+                };
+
+                Ok(TypedExpr::Trace {
+                    location,
+                    tipo,
+                    then: Box::new(then),
+                    text: Box::new(text),
+                })
+            }
         }
     }
 
@@ -2782,5 +2797,117 @@ pub fn ensure_serialisable(is_top_level: bool, t: Rc<Type>, location: Span) -> R
             ensure_serialisable(false, fst.clone(), location)?;
             ensure_serialisable(false, snd.clone(), location)
         }
+    }
+}
+
+fn diagnose_expr(expr: TypedExpr) -> TypedExpr {
+    // NOTE: The IdGenerator is unused. See similar note in 'append_string_expr'
+    let decode_utf8_constructor =
+        from_default_function(DefaultFunction::DecodeUtf8, &IdGenerator::new());
+
+    let decode_utf8 = TypedExpr::ModuleSelect {
+        location: expr.location(),
+        tipo: decode_utf8_constructor.tipo.clone(),
+        label: DefaultFunction::DecodeUtf8.aiken_name(),
+        module_name: BUILTIN.to_string(),
+        module_alias: BUILTIN.to_string(),
+        constructor: decode_utf8_constructor.variant.to_module_value_constructor(
+            decode_utf8_constructor.tipo,
+            BUILTIN,
+            &DefaultFunction::AppendString.aiken_name(),
+        ),
+    };
+
+    let diagnostic = TypedExpr::Var {
+        location: expr.location(),
+        name: "diagnostic".to_string(),
+        constructor: ValueConstructor {
+            public: true,
+            tipo: function(vec![data(), byte_array()], byte_array()),
+            variant: ValueConstructorVariant::ModuleFn {
+                name: "diagnostic".to_string(),
+                field_map: None,
+                module: "".to_string(),
+                arity: 2,
+                location: Span::empty(),
+                builtin: None,
+            },
+        },
+    };
+
+    let location = expr.location();
+
+    TypedExpr::Call {
+        tipo: string(),
+        fun: Box::new(decode_utf8.clone()),
+        args: vec![CallArg {
+            label: None,
+            location: expr.location(),
+            value: TypedExpr::Call {
+                tipo: byte_array(),
+                fun: Box::new(diagnostic.clone()),
+                args: vec![
+                    CallArg {
+                        label: None,
+                        value: expr,
+                        location,
+                    },
+                    CallArg {
+                        label: None,
+                        location,
+                        value: TypedExpr::ByteArray {
+                            tipo: byte_array(),
+                            bytes: vec![],
+                            location,
+                        },
+                    },
+                ],
+                location,
+            },
+        }],
+        location,
+    }
+}
+
+fn append_string_expr(left: TypedExpr, right: TypedExpr) -> TypedExpr {
+    // NOTE: The IdGenerator is unused here, as it's only necessary for generic builtin
+    // functions such as if_then_else or head_list. However, if such functions were needed,
+    // passing a brand new IdGenerator here would be WRONG and cause issues down the line.
+    //
+    // So this is merely a small work-around for convenience. The proper way here would be to
+    // pull the function definition for append_string from the pre-registered builtins
+    // functions somewhere in the environment.
+    let value_constructor =
+        from_default_function(DefaultFunction::AppendString, &IdGenerator::new());
+
+    let append_string = TypedExpr::ModuleSelect {
+        location: Span::empty(),
+        tipo: value_constructor.tipo.clone(),
+        label: DefaultFunction::AppendString.aiken_name(),
+        module_name: BUILTIN.to_string(),
+        module_alias: BUILTIN.to_string(),
+        constructor: value_constructor.variant.to_module_value_constructor(
+            value_constructor.tipo,
+            BUILTIN,
+            &DefaultFunction::AppendString.aiken_name(),
+        ),
+    };
+
+    TypedExpr::Call {
+        location: Span::empty(),
+        tipo: string(),
+        fun: Box::new(append_string.clone()),
+        args: vec![
+            CallArg {
+                label: None,
+                location: left.location(),
+                value: left,
+            },
+            CallArg {
+                label: None,
+                location: right.location(),
+                value: right,
+            },
+        ],
     }
 }

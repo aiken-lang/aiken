@@ -18,6 +18,7 @@ fn check_module(
     ast: UntypedModule,
     extra: Vec<(String, UntypedModule)>,
     kind: ModuleKind,
+    tracing: Tracing,
 ) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
     let id_gen = IdGenerator::new();
 
@@ -47,7 +48,7 @@ fn check_module(
         kind,
         "test/project",
         &module_types,
-        Tracing::All(TraceLevel::Verbose),
+        tracing,
         &mut warnings,
     );
 
@@ -57,20 +58,27 @@ fn check_module(
 }
 
 fn check(ast: UntypedModule) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
-    check_module(ast, Vec::new(), ModuleKind::Lib)
+    check_module(ast, Vec::new(), ModuleKind::Lib, Tracing::verbose())
+}
+
+fn check_with_verbosity(
+    ast: UntypedModule,
+    level: TraceLevel,
+) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
+    check_module(ast, Vec::new(), ModuleKind::Lib, Tracing::All(level))
 }
 
 fn check_with_deps(
     ast: UntypedModule,
     extra: Vec<(String, UntypedModule)>,
 ) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
-    check_module(ast, extra, ModuleKind::Lib)
+    check_module(ast, extra, ModuleKind::Lib, Tracing::verbose())
 }
 
 fn check_validator(
     ast: UntypedModule,
 ) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
-    check_module(ast, Vec::new(), ModuleKind::Validator)
+    check_module(ast, Vec::new(), ModuleKind::Validator, Tracing::verbose())
 }
 
 #[test]
@@ -1288,8 +1296,32 @@ fn trace_non_strings() {
             True
         }
     "#;
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn trace_string_label_compact() {
+    let source_code = r#"
+        test foo() {
+            trace @"foo": [1,2,3]
+            True
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn trace_non_string_label_compact() {
+    let source_code = r#"
+        test foo() {
+            trace(14 + 42)
+            True
+        }
+    "#;
+
     assert!(matches!(
-        check(parse(source_code)),
+        check_with_verbosity(parse(source_code), TraceLevel::Compact),
         Err((_, Error::CouldNotUnify { .. }))
     ))
 }

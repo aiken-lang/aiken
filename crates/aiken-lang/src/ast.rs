@@ -1957,6 +1957,10 @@ pub enum TraceLevel {
 }
 
 impl Tracing {
+    pub fn verbose() -> Self {
+        Tracing::All(TraceLevel::Verbose)
+    }
+
     pub fn silent() -> Self {
         Tracing::All(TraceLevel::Silent)
     }

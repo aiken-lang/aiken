@@ -969,8 +969,12 @@ impl<'comments> Formatter<'comments> {
             } => self.assignment(patterns, value, *kind),
 
             UntypedExpr::Trace {
-                kind, text, then, ..
-            } => self.trace(kind, text, then),
+                kind,
+                label,
+                then,
+                arguments,
+                ..
+            } => self.trace(kind, label, arguments, then),
 
             UntypedExpr::When {
                 subject, clauses, ..
@@ -1037,25 +1041,33 @@ impl<'comments> Formatter<'comments> {
     pub fn trace<'a>(
         &mut self,
         kind: &'a TraceKind,
-        text: &'a UntypedExpr,
+        label: &'a UntypedExpr,
+        arguments: &'a [UntypedExpr],
         then: &'a UntypedExpr,
     ) -> Document<'a> {
-        let (keyword, default_text) = match kind {
+        let (keyword, default_label) = match kind {
             TraceKind::Trace => ("trace", None),
             TraceKind::Error => ("fail", Some(DEFAULT_ERROR_STR.to_string())),
             TraceKind::Todo => ("todo", Some(DEFAULT_TODO_STR.to_string())),
         };
 
-        let body = match text {
-            UntypedExpr::String { value, .. } if Some(value) == default_text.as_ref() => {
+        let mut body = match label {
+            UntypedExpr::String { value, .. } if Some(value) == default_label.as_ref() => {
                 keyword.to_doc()
             }
             _ => keyword
                 .to_doc()
                 .append(" ")
-                .append(self.wrap_expr(text))
+                .append(self.wrap_expr(label))
                 .group(),
         };
+
+        for (ix, arg) in arguments.iter().enumerate() {
+            body = body
+                .append(if ix == 0 { ": " } else { ", " })
+                .append(self.wrap_expr(arg))
+                .group();
+        }
 
         match kind {
             TraceKind::Error | TraceKind::Todo => body,
@@ -1095,7 +1107,6 @@ impl<'comments> Formatter<'comments> {
         if args.is_empty() && spread_location.is_some() {
             if is_record {
                 name.append(" { .. }")
-            // TODO: not possible
             } else {
                 name.append("(..)")
             }

@@ -985,3 +985,18 @@ fn format_validator_pattern() {
         "#
     );
 }
+
+#[test]
+fn format_variadic_trace() {
+    assert_format!(
+        r#"
+        fn foo() {
+            trace @"foo": @"bar"
+            trace "foo": "bar"
+            trace @"foo": "bar", @"baz"
+            trace bar: @"baz"
+            Void
+        }
+        "#
+    );
+}

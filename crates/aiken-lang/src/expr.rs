@@ -548,7 +548,8 @@ pub enum UntypedExpr {
         kind: TraceKind,
         location: Span,
         then: Box<Self>,
-        text: Box<Self>,
+        label: Box<Self>,
+        arguments: Vec<Self>,
     },
 
     TraceIfFalse {
@@ -1134,10 +1135,11 @@ impl UntypedExpr {
             location,
             kind: TraceKind::Todo,
             then: Box::new(UntypedExpr::ErrorTerm { location }),
-            text: Box::new(reason.unwrap_or_else(|| UntypedExpr::String {
+            label: Box::new(reason.unwrap_or_else(|| UntypedExpr::String {
                 location,
                 value: DEFAULT_TODO_STR.to_string(),
             })),
+            arguments: Vec::new(),
         }
     }
 
@@ -1147,7 +1149,8 @@ impl UntypedExpr {
                 location,
                 kind: TraceKind::Error,
                 then: Box::new(UntypedExpr::ErrorTerm { location }),
-                text: Box::new(reason),
+                label: Box::new(reason),
+                arguments: Vec::new(),
             }
         } else {
             UntypedExpr::ErrorTerm { location }

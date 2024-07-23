@@ -324,7 +324,7 @@ impl Diagnostic for Error {
                 "Try moving the shared code to a separate module that the others can depend on\n- {}",
                 modules.join("\n- ")
             ))),
-            Error::Parse { error, .. } => error.kind.help(),
+            Error::Parse { error, .. } => error.help(),
             Error::Type { error, .. } => error.help(),
             Error::StandardIo(_) => None,
             Error::MissingManifest { .. } => Some(Box::new(

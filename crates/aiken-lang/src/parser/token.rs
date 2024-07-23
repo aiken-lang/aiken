@@ -183,6 +183,6 @@ impl fmt::Display for Token {
             Token::Validator => "validator",
             Token::Via => "via",
         };
-        write!(f, "\"{s}\"")
+        write!(f, "{s}")
     }
 }

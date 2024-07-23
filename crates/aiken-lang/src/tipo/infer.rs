@@ -13,7 +13,6 @@ use crate::{
     },
     builtins,
     builtins::{fuzzer, generic_var},
-    line_numbers::LineNumbers,
     tipo::{expr::infer_function, Span, Type, TypeVar},
     IdGenerator,
 };
@@ -86,14 +85,8 @@ impl UntypedModule {
         }
 
         for def in consts.into_iter().chain(not_consts) {
-            let definition = infer_definition(
-                def,
-                &module_name,
-                &mut hydrators,
-                &mut environment,
-                &self.lines,
-                tracing,
-            )?;
+            let definition =
+                infer_definition(def, &module_name, &mut hydrators, &mut environment, tracing)?;
 
             definitions.push(definition);
         }
@@ -162,7 +155,6 @@ fn infer_definition(
     module_name: &String,
     hydrators: &mut HashMap<String, Hydrator>,
     environment: &mut Environment<'_>,
-    lines: &LineNumbers,
     tracing: Tracing,
 ) -> Result<TypedDefinition, Error> {
     match def {
@@ -171,7 +163,6 @@ fn infer_definition(
             module_name,
             hydrators,
             environment,
-            lines,
             tracing,
         )?)),
 
@@ -228,7 +219,7 @@ fn infer_definition(
                 }
 
                 let mut typed_fun =
-                    infer_function(&fun, module_name, hydrators, environment, lines, tracing)?;
+                    infer_function(&fun, module_name, hydrators, environment, tracing)?;
 
                 if !typed_fun.return_type.is_bool() {
                     return Err(Error::ValidatorMustReturnBool {
@@ -267,14 +258,8 @@ fn infer_definition(
                         let params = params.into_iter().chain(other.arguments);
                         other.arguments = params.collect();
 
-                        let mut other_typed_fun = infer_function(
-                            &other,
-                            module_name,
-                            hydrators,
-                            environment,
-                            lines,
-                            tracing,
-                        )?;
+                        let mut other_typed_fun =
+                            infer_function(&other, module_name, hydrators, environment, tracing)?;
 
                         if !other_typed_fun.return_type.is_bool() {
                             return Err(Error::ValidatorMustReturnBool {
@@ -338,8 +323,7 @@ fn infer_definition(
                         });
                     }
 
-                    let typed_via =
-                        ExprTyper::new(environment, lines, tracing).infer(arg.via.clone())?;
+                    let typed_via = ExprTyper::new(environment, tracing).infer(arg.via.clone())?;
 
                     let hydrator: &mut Hydrator = hydrators.get_mut(&f.name).unwrap();
 
@@ -404,14 +388,7 @@ fn infer_definition(
                 None => Ok((None, None)),
             }?;
 
-            let typed_f = infer_function(
-                &f.into(),
-                module_name,
-                hydrators,
-                environment,
-                lines,
-                tracing,
-            )?;
+            let typed_f = infer_function(&f.into(), module_name, hydrators, environment, tracing)?;
 
             environment.unify(
                 typed_f.return_type.clone(),
@@ -629,7 +606,7 @@ fn infer_definition(
             tipo: _,
         }) => {
             let typed_expr =
-                ExprTyper::new(environment, lines, tracing).infer_const(&annotation, *value)?;
+                ExprTyper::new(environment, tracing).infer_const(&annotation, *value)?;
 
             let tipo = typed_expr.tipo();
 
