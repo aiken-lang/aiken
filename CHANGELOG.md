@@ -6,6 +6,11 @@
 
 - **aiken-lang**: also authorize (complete) patterns in function arguments list instead of only variable names. @KtorZ
 
+- **aiken-lang**: new syntax for soft casting otherwise known as `if/is`
+  see [this pull request](https://github.com/aiken-lang/aiken/pull/959) for more details. @rvcas
+
+- **aiken-project**: warning on compiler version mismatch [de870e2](https://github.com/aiken-lang/aiken/commit/de870e2529eb2336957e228cd30d4850ec2619a2). @rvcas
+
 ### Changed
 
 - **aiken-lang**: duplicate import lines are now automatically merged instead of raising a warning. However, imports can no longer appear anywhere in the file and must come as the first definitions. @KtorZ
@@ -15,6 +20,7 @@
 - **aiken-lang**: rework traces to be (1) variadic, (2) generic in its arguments and (3) structured. @KtorZ
 
   In more details:
+
   1. Enables the `trace` keyword to take one, two or any argument really separated by comma after the first. For example:
 
      ```ak
@@ -42,8 +48,9 @@
      ```
 
   3. Changes the behavior of the `--trace-level compact` mode to now:
-    - remove trace-if-false (`?` operator) traces entirely in this mode;
-    - only keep the label (first trace argument) and error when it isn't a string.
+
+  - remove trace-if-false (`?` operator) traces entirely in this mode;
+  - only keep the label (first trace argument) and error when it isn't a string.
 
   See also [#978](https://github.com/aiken-lang/aiken/pull/978).
 
