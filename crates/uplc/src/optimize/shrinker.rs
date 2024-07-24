@@ -988,21 +988,18 @@ impl Term<Name> {
         }
     }
 
-    fn pierce_no_inlines<'a>(&'a self) -> &'a Self {
+    fn pierce_no_inlines(&self) -> &Self {
         let mut term = self;
-        loop {
-            match term {
-                Term::Lambda {
-                    parameter_name,
-                    body,
-                } => {
-                    if parameter_name.as_ref().text == NO_INLINE {
-                        term = body;
-                    } else {
-                        break;
-                    }
-                }
-                _ => break,
+
+        while let Term::Lambda {
+            parameter_name,
+            body,
+        } = term
+        {
+            if parameter_name.as_ref().text == NO_INLINE {
+                term = body;
+            } else {
+                break;
             }
         }
 
