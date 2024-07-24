@@ -1404,7 +1404,10 @@ impl<'a> CodeGenerator<'a> {
                         ),
                     )
                 } else {
-                    assert!(data_type.constructors.len() == 1);
+                    assert!(
+                        data_type.constructors.len() == 1,
+                        "data_type={data_type:#?}"
+                    );
                     then
                 };
 

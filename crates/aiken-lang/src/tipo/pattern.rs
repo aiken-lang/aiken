@@ -141,11 +141,11 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
         pattern: UntypedPattern,
         tipo: Rc<Type>,
         ann_type: Option<Rc<Type>>,
-        is_let: bool,
+        warn_on_discard: bool,
     ) -> Result<TypedPattern, Error> {
         match pattern {
             Pattern::Discard { name, location } => {
-                if is_let {
+                if warn_on_discard {
                     // Register declaration for the unused variable detection
                     self.environment
                         .warnings

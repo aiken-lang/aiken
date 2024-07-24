@@ -406,6 +406,21 @@ impl Type {
         }
     }
 
+    ///  Check whether a given type is fully specialized and has only one possible
+    ///  form. Said differently, this recursively checks if the type still contains
+    ///  unbound or generic variables.
+    pub fn is_monomorphic(&self) -> bool {
+        match self {
+            Self::App { args, .. } => args.iter().all(|arg| arg.is_monomorphic()),
+            Self::Fn { args, ret, .. } => {
+                args.iter().all(|arg| arg.is_monomorphic()) && ret.is_monomorphic()
+            }
+            Self::Tuple { elems, .. } => elems.iter().all(|arg| arg.is_monomorphic()),
+            Self::Pair { fst, snd, .. } => [fst, snd].iter().all(|arg| arg.is_monomorphic()),
+            Self::Var { tipo, .. } => tipo.borrow().is_monomorphic(),
+        }
+    }
+
     pub fn is_generic(&self) -> bool {
         match self {
             Self::App { args, .. } => {
@@ -931,6 +946,16 @@ pub enum TypeVar {
 }
 
 impl TypeVar {
+    ///  Check whether a given type is fully specialized and has only one possible
+    ///  form. Said differently, this recursively checks if the type still contains
+    ///  unbound or generic variables.
+    pub fn is_monomorphic(&self) -> bool {
+        match self {
+            Self::Link { tipo } => tipo.is_monomorphic(),
+            Self::Unbound { .. } | Self::Generic { .. } => false,
+        }
+    }
+
     pub fn is_unbound(&self) -> bool {
         matches!(self, Self::Unbound { .. })
     }

@@ -1169,12 +1169,13 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         location: Span,
     ) -> Result<TypedExpr, Error> {
         let typed_value = self.infer(untyped_value.clone())?;
+
         let mut value_typ = typed_value.tipo();
 
         let value_is_data = value_typ.is_data();
 
         // Check that any type annotation is accurate.
-        let ann_typ = if let Some(ann) = annotation {
+        let pattern = if let Some(ann) = annotation {
             let ann_typ = self
                 .type_from_annotation(ann)
                 .and_then(|t| self.instantiate(t, &mut HashMap::new(), location))?;
@@ -1188,9 +1189,15 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
             value_typ = ann_typ.clone();
 
-            Some(ann_typ)
-        } else {
-            if value_is_data && !untyped_pattern.is_var() && !untyped_pattern.is_discard() {
+            // Ensure the pattern matches the type of the value
+            PatternTyper::new(self.environment, &self.hydrator).unify(
+                untyped_pattern.clone(),
+                value_typ.clone(),
+                Some(ann_typ),
+                kind.is_let(),
+            )
+        } else if value_is_data && !kind.is_let() {
+            let cast_data_no_ann = || {
                 let ann = Annotation::Constructor {
                     location: Span::empty(),
                     module: None,
@@ -1198,28 +1205,57 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     arguments: vec![],
                 };
 
-                return Err(Error::CastDataNoAnn {
+                Err(Error::CastDataNoAnn {
                     location,
                     value: UntypedExpr::Assignment {
                         location,
-                        value: untyped_value.into(),
-                        patterns: AssignmentPattern::new(untyped_pattern, Some(ann), Span::empty())
-                            .into(),
+                        value: untyped_value.clone().into(),
+                        patterns: AssignmentPattern::new(
+                            untyped_pattern.clone(),
+                            Some(ann),
+                            Span::empty(),
+                        )
+                        .into(),
                         kind,
                     },
-                });
+                })
+            };
+
+            if !untyped_pattern.is_var() && !untyped_pattern.is_discard() {
+                let ann_typ = self.new_unbound_var();
+
+                match PatternTyper::new(self.environment, &self.hydrator).unify(
+                    untyped_pattern.clone(),
+                    ann_typ.clone(),
+                    None,
+                    false,
+                ) {
+                    Ok(pattern) if ann_typ.is_monomorphic() => {
+                        self.unify(
+                            ann_typ.clone(),
+                            value_typ.clone(),
+                            typed_value.type_defining_location(),
+                            true,
+                        )?;
+
+                        value_typ = ann_typ.clone();
+
+                        Ok(pattern)
+                    }
+                    Ok(..) | Err(..) => cast_data_no_ann(),
+                }
+            } else {
+                cast_data_no_ann()
             }
-
-            None
-        };
-
-        // Ensure the pattern matches the type of the value
-        let pattern = PatternTyper::new(self.environment, &self.hydrator).unify(
-            untyped_pattern.clone(),
-            value_typ.clone(),
-            ann_typ,
-            kind.is_let(),
-        )?;
+        } else {
+            // Ensure the pattern matches the type of the value
+            PatternTyper::new(self.environment, &self.hydrator).unify(
+                untyped_pattern.clone(),
+                value_typ.clone(),
+                None,
+                kind.is_let(),
+            )
+        }?;
 
         // If `expect` is explicitly used, we still check exhaustiveness but instead of returning an
         // error we emit a warning which explains that using `expect` is unnecessary.
