@@ -1,21 +1,20 @@
 # Changelog
 
-## v1.0.30-alpha - UNRELEASED
+## v1.0.30-alpha - 2024-07-24
 
 ### Added
 
 - **aiken-lang**: also authorize (complete) patterns in function arguments list instead of only variable names. @KtorZ
 
-- **aiken-lang**: new syntax for soft casting otherwise known as `if/is`
-  see [this pull request](https://github.com/aiken-lang/aiken/pull/959) for more details. @rvcas
+- **aiken-lang**: new syntax for soft casting otherwise known as `if/is`. See [#959](https://github.com/aiken-lang/aiken/pull/959) for more details. @rvcas
 
-- **aiken-project**: warning on compiler version mismatch [de870e2](https://github.com/aiken-lang/aiken/commit/de870e2529eb2336957e228cd30d4850ec2619a2). @rvcas
+- **aiken-project**: warning on compiler version mismatch. See [de870e2](https://github.com/aiken-lang/aiken/commit/de870e2529eb2336957e228cd30d4850ec2619a2). @rvcas
 
 ### Changed
 
 - **aiken-lang**: duplicate import lines are now automatically merged instead of raising a warning. However, imports can no longer appear anywhere in the file and must come as the first definitions. @KtorZ
 
-- **aiken-lang**: remove warning on discarded expect, allowing to keep 'side-effects' when necessary. See #967. @KtorZ
+- **aiken-lang**: remove warning on discarded expect, allowing to keep 'side-effects' when necessary. See [#967](https://github.com/aiken-lang/aiken/pull/967). @KtorZ
 
 - **aiken-lang**: rework traces to be (1) variadic, (2) generic in its arguments and (3) structured. @KtorZ
 
