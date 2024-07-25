@@ -65,7 +65,7 @@
         Manufacturer='Lucas Rosa; Kasey White; KtorZ'
         Language='1033'
         Codepage='1252'
-        Version='$(var.Version)'>
+        Version='1.0.30'>
 
         <Package Id='*'
             Keywords='Installer'
