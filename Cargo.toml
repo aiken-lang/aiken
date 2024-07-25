@@ -41,6 +41,9 @@ publish-prereleases = true
 x86_64-unknown-linux-gnu = "ubuntu-22.04"
 x86_64-unknown-linux-musl = "ubuntu-22.04"
 
+[workspace.metadata.dist.dependencies.apt]
+libssl-dev = { targets = [ "x86_64-unknown-linux-musl" ] }
+
 [workspace.dependencies]
 walkdir = "2.3.2"
 pallas = "0.22.0"
