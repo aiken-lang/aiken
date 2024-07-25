@@ -637,24 +637,26 @@ impl<'a> CodeGenerator<'a> {
                         let body = self.build(&branch.body, module_build_name, &[]);
 
                         match &branch.is {
-                            Some(pattern) => AirTree::let_assignment(
-                                "acc_var",
-                                // use anon function as a delay to avoid evaluating the acc
-                                AirTree::anon_func(vec![], acc, true),
-                                self.assignment(
-                                    pattern,
-                                    condition,
-                                    body,
-                                    &pattern.tipo(&branch.condition).unwrap(),
-                                    AssignmentProperties {
-                                        value_type: branch.condition.tipo(),
-                                        kind: AssignmentKind::Expect { backpassing: () },
-                                        remove_unused: false,
-                                        full_check: true,
-                                        otherwise: AirTree::local_var("acc_var", void()),
-                                    },
-                                ),
-                            ),
+                            Some((pattern, tipo)) => {
+                                AirTree::let_assignment(
+                                    "acc_var",
+                                    // use anon function as a delay to avoid evaluating the acc
+                                    AirTree::anon_func(vec![], acc, true),
+                                    self.assignment(
+                                        pattern,
+                                        condition,
+                                        body,
+                                        tipo,
+                                        AssignmentProperties {
+                                            value_type: branch.condition.tipo(),
+                                            kind: AssignmentKind::Expect { backpassing: () },
+                                            remove_unused: false,
+                                            full_check: true,
+                                            otherwise: AirTree::local_var("acc_var", void()),
+                                        },
+                                    ),
+                                )
+                            }
                             None => AirTree::if_branch(tipo.clone(), condition, body, acc),
                         }
                     },
