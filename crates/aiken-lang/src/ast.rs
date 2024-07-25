@@ -1833,7 +1833,7 @@ impl TypedClause {
 
 pub struct UntypedClauseGuard {}
 
-pub type TypedIfBranch = IfBranch<TypedExpr, TypedPattern>;
+pub type TypedIfBranch = IfBranch<TypedExpr, (TypedPattern, Rc<Type>)>;
 pub type UntypedIfBranch = IfBranch<UntypedExpr, AssignmentPattern>;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

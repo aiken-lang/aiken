@@ -1548,7 +1548,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     location,
                 } = is;
 
-                let TypedExpr::Assignment { value, pattern, .. } = typer.infer_assignment(
+                let TypedExpr::Assignment {
+                    value,
+                    pattern,
+                    tipo,
+                    ..
+                } = typer.infer_assignment(
                     pattern,
                     branch.condition.clone(),
                     AssignmentKind::is(),
@@ -1564,11 +1569,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         location: branch.condition.location().union(location),
                     })
                 }
-
                 assert_no_assignment(&branch.body)?;
                 let body = typer.infer(branch.body.clone())?;
 
-                Ok((*value, body, Some(pattern)))
+                Ok((*value, body, Some((pattern, tipo))))
             })?,
             None => {
                 let condition = self.infer(branch.condition.clone())?;
