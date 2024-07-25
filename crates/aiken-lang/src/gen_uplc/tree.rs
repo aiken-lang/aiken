@@ -402,6 +402,12 @@ pub enum AirTree {
         then: Box<AirTree>,
     },
     // End Expressions
+    MultiValidator {
+        two_arg_name: String,
+        two_arg: Box<AirTree>,
+        three_arg_name: String,
+        three_arg: Box<AirTree>,
+    },
 }
 
 impl AirTree {
@@ -1001,26 +1007,19 @@ impl AirTree {
         }
     }
 
-    // pub fn hoist_over(mut self, next_exp: AirTree) -> AirTree {
-    //     match &mut self {
-    //         AirTree::Statement { hoisted_over, .. } => {
-    //             assert!(hoisted_over.is_none());
-    //             *hoisted_over = Some(next_exp.into());
-    //             self
-    //         }
-
-    //         AirTree::Expression(_) => {
-    //             unreachable!("Trying to hoist an expression onto an expression.")
-    //         }
-    //         AirTree::UnhoistedSequence(seq) => {
-    //             let mut final_exp = next_exp;
-    //             while let Some(assign) = seq.pop() {
-    //                 final_exp = assign.hoist_over(final_exp);
-    //             }
-    //             final_exp
-    //         }
-    //     }
-    // }
+    pub fn multi_validator(
+        two_arg_name: String,
+        two_arg: AirTree,
+        three_arg_name: String,
+        three_arg: AirTree,
+    ) -> AirTree {
+        AirTree::MultiValidator {
+            two_arg_name,
+            two_arg: two_arg.into(),
+            three_arg_name,
+            three_arg: three_arg.into(),
+        }
+    }
 
     pub fn expect_on_list() -> AirTree {
         let list_var = AirTree::local_var("__list_to_check", list(data()));
@@ -1595,6 +1594,20 @@ impl AirTree {
                 msg.create_air_vec(air_vec);
                 then.create_air_vec(air_vec);
             }
+            AirTree::MultiValidator {
+                two_arg,
+                three_arg,
+                two_arg_name,
+                three_arg_name,
+            } => {
+                air_vec.push(Air::MultiValidator {
+                    two_arg_name: two_arg_name.clone(),
+                    three_arg_name: three_arg_name.clone(),
+                });
+
+                two_arg.create_air_vec(air_vec);
+                three_arg.create_air_vec(air_vec);
+            }
         }
     }
 
@@ -1649,6 +1662,7 @@ impl AirTree {
             | AirTree::FieldsEmpty { then, .. }
             | AirTree::ListEmpty { then, .. }
             | AirTree::NoOp { then } => then.return_type(),
+            AirTree::MultiValidator { .. } => void(),
         }
     }
 
@@ -1725,7 +1739,8 @@ impl AirTree {
             | AirTree::Fn { .. }
             | AirTree::UnOp { .. }
             | AirTree::WrapClause { .. }
-            | AirTree::Finally { .. } => vec![],
+            | AirTree::Finally { .. }
+            | AirTree::MultiValidator { .. } => vec![],
         }
     }
 
@@ -2055,7 +2070,8 @@ impl AirTree {
             | AirTree::Constr { .. }
             | AirTree::RecordUpdate { .. }
             | AirTree::ErrorTerm { .. }
-            | AirTree::Trace { .. } => {}
+            | AirTree::Trace { .. }
+            | AirTree::MultiValidator { .. } => {}
         }
 
         if !apply_with_func_last {
@@ -2711,6 +2727,27 @@ impl AirTree {
                     apply_with_func_last,
                 );
             }
+            AirTree::MultiValidator {
+                two_arg_name: _,
+                two_arg,
+                three_arg_name: _,
+                three_arg,
+            } => {
+                two_arg.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::SecondField,
+                    with,
+                    apply_with_func_last,
+                );
+                three_arg.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::FourthField,
+                    with,
+                    apply_with_func_last,
+                )
+            }
         }
 
         if apply_with_func_last {
@@ -3077,6 +3114,16 @@ impl AirTree {
                 | AirTree::ErrorTerm { .. } => {
                     panic!("A tree node with no children was encountered with a longer tree path.")
                 }
+                AirTree::MultiValidator {
+                    two_arg_name: _,
+                    two_arg,
+                    three_arg_name: _,
+                    three_arg,
+                } => match field {
+                    Fields::SecondField => two_arg.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::FourthField => three_arg.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
             }
         } else {
             self

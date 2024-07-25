@@ -224,4 +224,8 @@ pub enum Air {
     NoOp,
     FieldsEmpty,
     ListEmpty,
+    MultiValidator {
+        two_arg_name: String,
+        three_arg_name: String,
+    },
 }

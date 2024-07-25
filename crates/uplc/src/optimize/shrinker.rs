@@ -9,6 +9,7 @@ use crate::{
     ast::{Constant, Data, Name, NamedDeBruijn, Program, Term, Type},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
     builtins::DefaultFunction,
+    machine::cost_model::ExBudget,
 };
 
 use super::interner::CodeGenInterner;
@@ -360,7 +361,7 @@ pub enum BuiltinArgs {
 
 impl BuiltinArgs {
     fn args_from_arg_stack(stack: Vec<(usize, Term<Name>)>, func: DefaultFunction) -> Self {
-        let error_safe = func.is_error_safe(&stack.iter().map(|(_, term)| term).collect_vec());
+        let error_safe = false;
 
         let mut ordered_arg_stack = stack.into_iter().sorted_by(|(_, arg1), (_, arg2)| {
             // sort by constant first if the builtin is order agnostic
@@ -985,6 +986,24 @@ impl Term<Name> {
                 with(None, term, vec![], scope);
             }
         }
+    }
+
+    fn pierce_no_inlines(&self) -> &Self {
+        let mut term = self;
+
+        while let Term::Lambda {
+            parameter_name,
+            body,
+        } = term
+        {
+            if parameter_name.as_ref().text == NO_INLINE {
+                term = body;
+            } else {
+                break;
+            }
+        }
+
+        term
     }
 }
 
@@ -1707,6 +1726,56 @@ impl Program<Name> {
         interner.program(&mut step_b);
 
         step_b
+    }
+
+    pub fn builtin_eval_reducer(self) -> Self {
+        let mut applied_ids = vec![];
+
+        self.traverse_uplc_with(false, &mut |id, term, arg_stack, _scope| match term {
+            Term::Builtin(func) => {
+                let args = arg_stack
+                    .iter()
+                    .map(|(_, term)| term.pierce_no_inlines())
+                    .collect_vec();
+                if func.can_curry_builtin()
+                    && arg_stack.len() == func.arity()
+                    && func.is_error_safe(&args)
+                {
+                    let applied_term =
+                        arg_stack
+                            .into_iter()
+                            .fold(Term::Builtin(*func), |acc, item| {
+                                applied_ids.push(item.0);
+                                acc.apply(item.1.pierce_no_inlines().clone())
+                            });
+
+                    // Check above for is error safe
+                    let eval_term: Term<Name> = Program {
+                        version: (1, 0, 0),
+                        term: applied_term,
+                    }
+                    .to_named_debruijn()
+                    .unwrap()
+                    .eval(ExBudget::max())
+                    .result()
+                    .unwrap()
+                    .try_into()
+                    .unwrap();
+
+                    *term = eval_term;
+                }
+            }
+            Term::Apply { function, .. } => {
+                let id = id.unwrap();
+
+                if applied_ids.contains(&id) {
+                    *term = function.as_ref().clone();
+                }
+            }
+            Term::Constr { .. } => todo!(),
+            Term::Case { .. } => todo!(),
+            _ => {}
+        })
     }
 }
 

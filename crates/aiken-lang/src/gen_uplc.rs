@@ -132,6 +132,46 @@ impl<'a> CodeGenerator<'a> {
         let mut validator_args_tree =
             self.check_validator_args(&fun.arguments, true, air_tree_fun, src_code, lines);
 
+        if let Some(other) = other_fun {
+            let mut air_tree_fun_other = self.build(&other.body, module_name, &[]);
+
+            air_tree_fun_other = wrap_validator_condition(air_tree_fun_other, self.tracing);
+
+            let validator_args_tree_other = self.check_validator_args(
+                &other.arguments,
+                true,
+                air_tree_fun_other,
+                src_code,
+                lines,
+            );
+
+            let (spend, spend_name, mint, mint_name) =
+                if other.arguments.len() > fun.arguments.len() {
+                    (
+                        validator_args_tree_other,
+                        other.name.clone(),
+                        validator_args_tree,
+                        fun.name.clone(),
+                    )
+                } else {
+                    (
+                        validator_args_tree,
+                        fun.name.clone(),
+                        validator_args_tree_other,
+                        other.name.clone(),
+                    )
+                };
+
+            validator_args_tree = AirTree::multi_validator(mint_name, mint, spend_name, spend);
+
+            // Special Case with multi_validators
+            self.special_functions
+                .use_function_uplc(CONSTR_FIELDS_EXPOSER.to_string());
+
+            self.special_functions
+                .use_function_uplc(CONSTR_INDEX_EXPOSER.to_string());
+        }
+
         validator_args_tree = AirTree::no_op(validator_args_tree);
 
         let full_tree = self.hoist_functions_to_validator(validator_args_tree);
@@ -141,48 +181,6 @@ impl<'a> CodeGenerator<'a> {
         let full_vec = full_tree.to_vec();
 
         let mut term = self.uplc_code_gen(full_vec);
-
-        if let Some(other) = other_fun {
-            self.reset(false);
-
-            let mut air_tree_fun_other = self.build(&other.body, module_name, &[]);
-
-            air_tree_fun_other = wrap_validator_condition(air_tree_fun_other, self.tracing);
-
-            let mut validator_args_tree_other = self.check_validator_args(
-                &other.arguments,
-                true,
-                air_tree_fun_other,
-                src_code,
-                lines,
-            );
-
-            validator_args_tree_other = AirTree::no_op(validator_args_tree_other);
-
-            let full_tree_other = self.hoist_functions_to_validator(validator_args_tree_other);
-
-            // optimizations on air tree
-
-            let full_vec_other = full_tree_other.to_vec();
-
-            let other_term = self.uplc_code_gen(full_vec_other);
-
-            let (spend, spend_name, mint, mint_name) =
-                if other.arguments.len() > fun.arguments.len() {
-                    (other_term, other.name.clone(), term, fun.name.clone())
-                } else {
-                    (term, fun.name.clone(), other_term, other.name.clone())
-                };
-
-            // Special Case with multi_validators
-            self.special_functions
-                .use_function_uplc(CONSTR_FIELDS_EXPOSER.to_string());
-
-            self.special_functions
-                .use_function_uplc(CONSTR_INDEX_EXPOSER.to_string());
-
-            term = wrap_as_multi_validator(spend, mint, self.tracing, spend_name, mint_name);
-        }
 
         term = cast_validator_args(term, params);
 
@@ -5703,6 +5701,24 @@ impl<'a> CodeGenerator<'a> {
             }
 
             Air::NoOp => None,
+            Air::MultiValidator {
+                two_arg_name,
+                three_arg_name,
+            } => {
+                let two_arg = arg_stack.pop().unwrap();
+
+                let three_arg = arg_stack.pop().unwrap();
+
+                let term = wrap_as_multi_validator(
+                    three_arg,
+                    two_arg,
+                    self.tracing,
+                    three_arg_name,
+                    two_arg_name,
+                );
+
+                Some(term)
+            }
         }
     }
 }
