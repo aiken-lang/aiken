@@ -17,7 +17,7 @@ installers = ["shell", "powershell", "npm", "homebrew", "msi"]
 # A GitHub repo to push Homebrew formulas to
 tap = "aiken-lang/homebrew-tap"
 # Target platforms to build apps for (Rust target-triple syntax)
-targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]
 # The archive format to use for windows builds (defaults .zip)
 windows-archive = ".tar.gz"
 # The archive format to use for non-windows builds (defaults .tar.xz)
@@ -34,14 +34,6 @@ install-updater = false
 install-path = "~/.aiken/bin"
 # Whether to publish prereleases to package managers
 publish-prereleases = true
-# Temporary allowing the msi template to be dirty. cargo-dist==0.19.1 doesn't
-# like our tag format as it's unable to convert it for a Windows-suitable format.
-#
-# However, we cannot rollback to a previous version as we need some of the recent
-# fixes. So it's slightly annoying but we'll have to modify the wix template by
-# hand and likely drop this once we move to a different version scheme at the end of
-# alpha.
-allow-dirty = ["msi"]
 
 # Cargo-dist uses ubuntu-20.04 by default, causing issues in various cases
 # because it links with openssl-1.1 whereas recent distro ships with 3.x
