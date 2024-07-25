@@ -1,12 +1,16 @@
 # Changelog
 
-## v1.0.30-alpha - 2024-07-24
+## v1.0.30-alpha - 2024-07-25
 
 ### Added
 
 - **aiken-lang**: also authorize (complete) patterns in function arguments list instead of only variable names. @KtorZ
 
-- **aiken-lang**: new syntax for soft casting otherwise known as `if/is`. See [#959](https://github.com/aiken-lang/aiken/pull/959) for more details. @rvcas
+- **aiken-lang**: new syntax for soft casting otherwise known as `if/is`. See [#959](https://github.com/aiken-lang/aiken/pull/959) or [Control Flow - soft casting](https://aiken-lang.org/language-tour/control-flow#soft-casting-with-ifis) for more details. @rvcas
+
+- **aiken-lang**: optimization: pre-evaluate constant arguments to lambdas when safe to do so. @MicroProofs
+
+- **aiken-lang**: infer type when immediately possible during a patterned type-cast. See [#969](https://github.com/aiken-lang/aiken/pull/979). @KtorZ
 
 - **aiken-project**: warning on compiler version mismatch. See [de870e2](https://github.com/aiken-lang/aiken/commit/de870e2529eb2336957e228cd30d4850ec2619a2). @rvcas
 
@@ -48,8 +52,8 @@
 
   3. Changes the behavior of the `--trace-level compact` mode to now:
 
-  - remove trace-if-false (`?` operator) traces entirely in this mode;
-  - only keep the label (first trace argument) and error when it isn't a string.
+   - remove trace-if-false (`?` operator) traces entirely in this mode;
+   - only keep the label (first trace argument) and error when it isn't a string.
 
   See also [#978](https://github.com/aiken-lang/aiken/pull/978).
 
