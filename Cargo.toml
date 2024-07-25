@@ -43,6 +43,7 @@ x86_64-unknown-linux-musl = "ubuntu-22.04"
 
 [workspace.metadata.dist.dependencies.apt]
 libssl-dev = { targets = [ "x86_64-unknown-linux-musl" ] }
+pkg-config = { targets = [ "x86_64-unknown-linux-musl" ] }
 
 [workspace.dependencies]
 walkdir = "2.3.2"
