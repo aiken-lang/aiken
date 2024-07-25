@@ -17,7 +17,7 @@ installers = ["shell", "powershell", "npm", "homebrew", "msi"]
 # A GitHub repo to push Homebrew formulas to
 tap = "aiken-lang/homebrew-tap"
 # Target platforms to build apps for (Rust target-triple syntax)
-targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl", "x86_64-pc-windows-msvc"]
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
 # The archive format to use for windows builds (defaults .zip)
 windows-archive = ".tar.gz"
 # The archive format to use for non-windows builds (defaults .tar.xz)
@@ -39,11 +39,6 @@ publish-prereleases = true
 # because it links with openssl-1.1 whereas recent distro ships with 3.x
 [workspace.metadata.dist.github-custom-runners]
 x86_64-unknown-linux-gnu = "ubuntu-22.04"
-x86_64-unknown-linux-musl = "ubuntu-22.04"
-
-[workspace.metadata.dist.dependencies.apt]
-libssl-dev = { targets = [ "x86_64-unknown-linux-musl" ] }
-pkg-config = { targets = [ "x86_64-unknown-linux-musl" ] }
 
 [workspace.dependencies]
 walkdir = "2.3.2"
