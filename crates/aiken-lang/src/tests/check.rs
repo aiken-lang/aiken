@@ -2025,18 +2025,6 @@ fn forbid_expect_into_opaque_type_from_data() {
 }
 
 #[test]
-fn allow_expect_into_type_from_data() {
-    let source_code = r#"
-        fn bar(n: Data) {
-          expect a: Option<Int> = n
-          a
-        }
-    "#;
-
-    assert!(check(parse(source_code)).is_ok())
-}
-
-#[test]
 fn forbid_partial_down_casting() {
     let source_code = r#"
         type Foo {
@@ -2075,12 +2063,157 @@ fn forbid_partial_up_casting() {
 }
 
 #[test]
-fn allow_expect_into_type_from_data_2() {
+fn allow_expect_into_type_from_data() {
+    let source_code = r#"
+        fn bar(n: Data) {
+          expect a: Option<Int> = n
+          a
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn forbid_casting_into_type_from_data() {
+    let source_code = r#"
+        fn bar(n: Data) {
+          let a: Option<Int> = n
+          a
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CouldNotUnify { .. }))
+    ))
+}
+
+#[test]
+fn forbid_casting_into_var_from_data_with_ann() {
+    let source_code = r#"
+        fn bar(n: Data) {
+          let a: Option<Int> = n
+          a
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CouldNotUnify { .. }))
+    ))
+}
+
+#[test]
+fn allow_let_rebinding() {
+    let source_code = r#"
+        fn bar(n: Data) {
+          let a = n
+          a
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn expect_rebinding_requires_annotation() {
+    let source_code = r#"
+        fn bar(n: Data) -> Option<Int> {
+          expect a = n
+          a
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CastDataNoAnn { .. }))
+    ))
+}
+
+#[test]
+fn forbid_casting_into_var_from_data_with_ann_indirect() {
+    let source_code = r#"
+        fn bar(n: Data) -> Option<Int> {
+          let a = n
+          a
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CouldNotUnify { .. }))
+    ))
+}
+
+#[test]
+fn forbid_casting_into_pattern_from_data() {
+    let source_code = r#"
+        fn bar(n: Data) {
+          let Some(a) = n
+          a
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CouldNotUnify { .. }))
+    ))
+}
+
+#[test]
+fn allow_expect_into_monomorphic_type_from_data_with_pattern() {
     let source_code = r#"
         fn bar(n: Data) {
           expect Some(a): Option<Int> = n
           a
         }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn forbid_expect_into_generic_type_from_data_with_pattern() {
+    let source_code = r#"
+        fn bar(n: Data) {
+          expect Some(a) = n
+          a
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CastDataNoAnn { .. }))
+    ))
+}
+
+#[test]
+fn allow_generic_expect_without_typecast() {
+    let source_code = r#"
+        pub fn unwrap(opt: Option<a>) -> a {
+          expect Some(a) = opt
+          a
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok())
+}
+
+#[test]
+fn allow_expect_into_custom_type_from_data_no_annotation() {
+    let source_code = r#"
+        type OrderDatum {
+            requested_handle: ByteArray,
+            amount: Int,
+            other: Bool,
+        }
+
+        fn foo(datum: Data) {
+            expect OrderDatum { requested_handle, .. } = datum
+            requested_handle
+        }
+
     "#;
 
     assert!(check(parse(source_code)).is_ok())
@@ -2110,7 +2243,7 @@ fn forbid_expect_from_arbitrary_type() {
 }
 
 #[test]
-fn forbid_expect_into_opaque_type_constructor_without_typecasting_in_module() {
+fn allow_expect_into_opaque_type_constructor_without_typecasting_in_module() {
     let source_code = r#"
         opaque type Thing {
           Foo(Int)
