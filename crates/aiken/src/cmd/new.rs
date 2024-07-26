@@ -176,10 +176,10 @@ fn create_github_action(root: &Path) -> miette::Result<()> {
     fs::create_dir_all(&workflows).into_diagnostic()?;
 
     fs::write(
-        workflows.join("tests.yml"),
+        workflows.join("continuous-integration.yml"),
         formatdoc! {
             r#"
-            name: Tests
+            name: Continuous Integration
 
             on:
               push:
@@ -191,11 +191,9 @@ fn create_github_action(root: &Path) -> miette::Result<()> {
                 runs-on: ubuntu-latest
                 steps:
                   - uses: actions/checkout@v3
-
-                  - uses: aiken-lang/setup-aiken@v0.1.0
+                  - uses: aiken-lang/setup-aiken@v1
                     with:
                       version: {version}
-
                   - run: aiken fmt --check
                   - run: aiken check -D
                   - run: aiken build
