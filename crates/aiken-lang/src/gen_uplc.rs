@@ -4486,11 +4486,6 @@ impl<'a> CodeGenerator<'a> {
                     DefaultFunction::HeadList if !tipo.is_pair() => {
                         builder::undata_builtin(&func, count, ret_tipo, arg_vec)
                     }
-                    DefaultFunction::MkPairData => {
-                        unimplemented!(
-                            "MkPairData should be handled by an anon function ( a, b, .., z).\n"
-                        )
-                    }
                     _ => {
                         let mut term: Term<Name> = func.into();
 

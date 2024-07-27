@@ -6600,3 +6600,34 @@ fn mk_nil_list_data() {
         false,
     )
 }
+
+#[test]
+fn mk_pair_data() {
+    let src = r#"
+        use aiken/builtin.{i_data}
+
+        test nil_equals() {
+            builtin.mk_pair_data(i_data(1), i_data(2)).1st == i_data(1)
+        }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::fst_pair().apply(
+                    Term::mk_pair_data()
+                        .apply(Term::Constant(
+                            Constant::Data(Data::integer(1.into())).into(),
+                        ))
+                        .apply(Term::Constant(
+                            Constant::Data(Data::integer(2.into())).into(),
+                        )),
+                ),
+            )
+            .apply(Term::Constant(
+                Constant::Data(Data::integer(1.into())).into(),
+            )),
+        false,
+    )
+}
