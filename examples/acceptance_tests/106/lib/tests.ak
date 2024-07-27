@@ -60,3 +60,20 @@ test soft_casting_6() {
     True
   }
 }
+
+type A {
+  A(Bool)
+}
+
+type B {
+  B(Int)
+}
+
+test soft_casting_7() {
+  let data: Data = A(True)
+  if data is B(_): B {
+    False
+  } else {
+    True
+  }
+}
