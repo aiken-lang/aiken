@@ -4083,61 +4083,17 @@ impl<'a> CodeGenerator<'a> {
                 ValueConstructorVariant::ModuleConstant { .. } => {
                     unreachable!("{:#?}, {}", constructor, name)
                 }
-
-                ValueConstructorVariant::ModuleFn {
-                    builtin: Some(builtin),
-                    ..
-                } => {
-                    let term = match builtin {
-                        DefaultFunction::IfThenElse
-                        | DefaultFunction::ChooseUnit
-                        | DefaultFunction::Trace
-                        | DefaultFunction::ChooseList
-                        | DefaultFunction::ChooseData
-                        | DefaultFunction::UnConstrData => {
-                            builder::special_case_builtin(builtin, 0, vec![])
-                        }
-
-                        DefaultFunction::FstPair | DefaultFunction::SndPair => {
-                            builder::undata_builtin(
-                                builtin,
-                                0,
-                                &constructor.tipo.return_type().unwrap(),
-                                vec![],
-                            )
-                        }
-
-                        DefaultFunction::HeadList
-                            if !constructor.tipo.return_type().unwrap().is_pair() =>
-                        {
-                            builder::undata_builtin(
-                                builtin,
-                                0,
-                                &constructor.tipo.return_type().unwrap(),
-                                vec![],
-                            )
-                        }
-
-                        DefaultFunction::MkCons | DefaultFunction::MkPairData => {
-                            unimplemented!(
-                                "MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z) or Pair {{fst:a, snd: b}}.\n"
-                            )
-                        }
-                        _ => {
-                            let mut term: Term<Name> = (*builtin).into();
-
-                            term = builder::apply_builtin_forces(term, builtin.force_count());
-
-                            term
-                        }
-                    };
-                    Some(term)
-                }
                 ValueConstructorVariant::ModuleFn {
                     name: func_name,
                     module,
+                    builtin,
                     ..
                 } => {
+                    assert!(
+                        builtin.is_none(),
+                        "found remaining builtin function {func_name:?} ({builtin:?} declared as a module function in {module:?}"
+                    );
+
                     if let Some((names, index, cyclic_name)) = self.cyclic_functions.get(&(
                         FunctionAccessKey {
                             module_name: module.clone(),
@@ -4537,21 +4493,19 @@ impl<'a> CodeGenerator<'a> {
                     | DefaultFunction::Trace
                     | DefaultFunction::ChooseList
                     | DefaultFunction::ChooseData
+                    | DefaultFunction::MkCons
                     | DefaultFunction::UnConstrData => {
-                        builder::special_case_builtin(&func, count, arg_vec)
+                        builder::special_case_builtin(&func, tipo, count, arg_vec)
                     }
-
                     DefaultFunction::FstPair | DefaultFunction::SndPair => {
                         builder::undata_builtin(&func, count, ret_tipo, arg_vec)
                     }
-
                     DefaultFunction::HeadList if !tipo.is_pair() => {
                         builder::undata_builtin(&func, count, ret_tipo, arg_vec)
                     }
-
-                    DefaultFunction::MkCons | DefaultFunction::MkPairData => {
+                    DefaultFunction::MkPairData => {
                         unimplemented!(
-                            "MkCons and MkPairData should be handled by an anon function or using [] or ( a, b, .., z).\n"
+                            "MkPairData should be handled by an anon function ( a, b, .., z).\n"
                         )
                     }
                     _ => {
