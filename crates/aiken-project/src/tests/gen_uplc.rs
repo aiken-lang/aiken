@@ -6562,3 +6562,41 @@ fn mk_cons_direct_invoke_3() {
         false,
     )
 }
+
+#[test]
+fn mk_nil_pair_data() {
+    let src = r#"
+        use aiken/builtin.{mk_nil_pair_data}
+
+        test nil_equals() {
+            mk_nil_pair_data() == mk_nil_pair_data()
+        }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(Term::map_data().apply(Term::mk_nil_pair_data().apply(Term::unit())))
+            .apply(Term::map_data().apply(Term::mk_nil_pair_data().apply(Term::unit()))),
+        false,
+    )
+}
+
+#[test]
+fn mk_nil_list_data() {
+    let src = r#"
+        use aiken/builtin.{mk_nil_data}
+
+        test nil_equals() {
+            mk_nil_data() == mk_nil_data()
+        }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(Term::list_data().apply(Term::mk_nil_data().apply(Term::unit())))
+            .apply(Term::list_data().apply(Term::mk_nil_data().apply(Term::unit()))),
+        false,
+    )
+}
