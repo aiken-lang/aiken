@@ -1554,6 +1554,7 @@ pub fn to_data_builtin(
 
 pub fn special_case_builtin(
     func: &DefaultFunction,
+    tipo: Rc<Type>,
     count: usize,
     mut args: Vec<Term<Name>>,
 ) -> Term<Name> {
@@ -1564,6 +1565,26 @@ pub fn special_case_builtin(
 
             term.lambda("_").apply(unit)
         }
+
+        DefaultFunction::MkCons => {
+            let arg_type = tipo
+                .arg_types()
+                .and_then(|generics| generics.first().cloned())
+                .expect("mk_cons should have (exactly) one type parameter");
+
+            if let [head, tail] = &args[..] {
+                Term::mk_cons()
+                    .apply(if arg_type.is_pair() {
+                        head.clone()
+                    } else {
+                        convert_type_to_data(head.clone(), &arg_type)
+                    })
+                    .apply(tail.clone())
+            } else {
+                unreachable!("mk_cons has two arguments.");
+            }
+        }
+
         DefaultFunction::ChooseUnit
         | DefaultFunction::IfThenElse
         | DefaultFunction::ChooseList

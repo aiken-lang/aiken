@@ -6471,3 +6471,94 @@ fn qualified_prelude_functions() {
         false,
     )
 }
+
+#[test]
+fn mk_cons_direct_invoke_1() {
+    let src = r#"
+        use aiken/builtin
+
+        test mk_cons_1() {
+            builtin.cons_list(1, []) == [1]
+        }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::list_data().apply(
+                    Term::mk_cons()
+                        .apply(Term::data(Data::integer(1.into())))
+                        .apply(Term::empty_list()),
+                ),
+            )
+            .apply(Term::data(Data::list(vec![Data::integer(1.into())]))),
+        false,
+    )
+}
+
+#[test]
+fn mk_cons_direct_invoke_2() {
+    let src = r#"
+        use aiken/builtin.{cons_list}
+
+        test mk_cons_2() {
+            cons_list(Some(42), [None]) == [Some(42), None]
+        }
+    "#;
+
+    let none = Data::constr(1, Vec::new());
+    let some = Data::constr(0, vec![Data::integer(42.into())]);
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::list_data().apply(Term::mk_cons().apply(Term::data(some.clone())).apply(
+                    Term::Constant(
+                        Constant::ProtoList(Type::Data, vec![Constant::Data(none.clone())]).into(),
+                    ),
+                )),
+            )
+            .apply(Term::data(Data::list(vec![some, none]))),
+        false,
+    )
+}
+
+#[test]
+fn mk_cons_direct_invoke_3() {
+    let src = r#"
+        use aiken/builtin.{cons_list, i_data, mk_nil_pair_data}
+
+        test mk_cons_3() {
+          cons_list(Pair(i_data(1), i_data(1)), mk_nil_pair_data()) == [
+            Pair(i_data(1), i_data(1)),
+          ]
+        }
+    "#;
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::map_data().apply(
+                    Term::mk_cons()
+                        .apply(Term::Constant(
+                            Constant::ProtoPair(
+                                Type::Data,
+                                Type::Data,
+                                Constant::Data(Data::integer(1.into())).into(),
+                                Constant::Data(Data::integer(1.into())).into(),
+                            )
+                            .into(),
+                        ))
+                        .apply(Term::mk_nil_pair_data().apply(Term::unit())),
+                ),
+            )
+            .apply(Term::data(Data::map(vec![(
+                Data::integer(1.into()),
+                Data::integer(1.into()),
+            )]))),
+        false,
+    )
+}
