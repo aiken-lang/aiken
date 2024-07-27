@@ -4089,10 +4089,16 @@ impl<'a> CodeGenerator<'a> {
                     builtin,
                     ..
                 } => {
-                    assert!(
-                        builtin.is_none(),
-                        "found remaining builtin function {func_name:?} ({builtin:?} declared as a module function in {module:?}"
-                    );
+                    if let Some(func) = builtin {
+                        return self.gen_uplc(
+                            Air::Builtin {
+                                count: 0,
+                                func: *func,
+                                tipo: constructor.tipo,
+                            },
+                            arg_stack,
+                        );
+                    }
 
                     if let Some((names, index, cyclic_name)) = self.cyclic_functions.get(&(
                         FunctionAccessKey {
@@ -4513,8 +4519,12 @@ impl<'a> CodeGenerator<'a> {
 
                         term = builder::apply_builtin_forces(term, func.force_count());
 
-                        for arg in arg_vec {
-                            term = term.apply(arg.clone());
+                        if func.arg_is_unit() {
+                            term = term.apply(Term::unit())
+                        } else {
+                            for arg in arg_vec {
+                                term = term.apply(arg.clone());
+                            }
                         }
 
                         term

@@ -1,23 +1,20 @@
-use std::{mem::size_of, ops::Deref, rc::Rc};
-
-use num_bigint::BigInt;
-use num_integer::Integer;
-use num_traits::{Signed, Zero};
-use once_cell::sync::Lazy;
-use pallas_primitives::conway::{Language, PlutusData};
-
+use super::{
+    cost_model::{BuiltinCosts, ExBudget},
+    value::{from_pallas_bigint, to_pallas_bigint},
+    Error, Value,
+};
 use crate::{
     ast::{Constant, Data, Type},
     builtins::DefaultFunction,
     machine::value::integer_log2,
     plutus_data_to_bytes,
 };
-
-use super::{
-    cost_model::{BuiltinCosts, ExBudget},
-    value::{from_pallas_bigint, to_pallas_bigint},
-    Error, Value,
-};
+use num_bigint::BigInt;
+use num_integer::Integer;
+use num_traits::{Signed, Zero};
+use once_cell::sync::Lazy;
+use pallas_primitives::conway::{Language, PlutusData};
+use std::{mem::size_of, ops::Deref, rc::Rc};
 
 static SCALAR_PERIOD: Lazy<BigInt> = Lazy::new(|| {
     BigInt::from_bytes_be(
@@ -111,6 +108,85 @@ impl From<DefaultFunction> for BuiltinRuntime {
 }
 
 impl DefaultFunction {
+    pub fn arg_is_unit(&self) -> bool {
+        match self {
+            DefaultFunction::MkNilData | DefaultFunction::MkNilPairData => true,
+            DefaultFunction::AddInteger
+            | DefaultFunction::SubtractInteger
+            | DefaultFunction::MultiplyInteger
+            | DefaultFunction::DivideInteger
+            | DefaultFunction::QuotientInteger
+            | DefaultFunction::RemainderInteger
+            | DefaultFunction::ModInteger
+            | DefaultFunction::EqualsInteger
+            | DefaultFunction::LessThanInteger
+            | DefaultFunction::LessThanEqualsInteger
+            | DefaultFunction::AppendByteString
+            | DefaultFunction::ConsByteString
+            | DefaultFunction::SliceByteString
+            | DefaultFunction::LengthOfByteString
+            | DefaultFunction::IndexByteString
+            | DefaultFunction::EqualsByteString
+            | DefaultFunction::LessThanByteString
+            | DefaultFunction::LessThanEqualsByteString
+            | DefaultFunction::Sha2_256
+            | DefaultFunction::Sha3_256
+            | DefaultFunction::Blake2b_224
+            | DefaultFunction::Blake2b_256
+            | DefaultFunction::Keccak_256
+            | DefaultFunction::VerifyEd25519Signature
+            | DefaultFunction::VerifyEcdsaSecp256k1Signature
+            | DefaultFunction::VerifySchnorrSecp256k1Signature
+            | DefaultFunction::AppendString
+            | DefaultFunction::EqualsString
+            | DefaultFunction::EncodeUtf8
+            | DefaultFunction::DecodeUtf8
+            | DefaultFunction::IfThenElse
+            | DefaultFunction::ChooseUnit
+            | DefaultFunction::Trace
+            | DefaultFunction::FstPair
+            | DefaultFunction::SndPair
+            | DefaultFunction::ChooseList
+            | DefaultFunction::MkCons
+            | DefaultFunction::HeadList
+            | DefaultFunction::TailList
+            | DefaultFunction::NullList
+            | DefaultFunction::ChooseData
+            | DefaultFunction::ConstrData
+            | DefaultFunction::MapData
+            | DefaultFunction::ListData
+            | DefaultFunction::IData
+            | DefaultFunction::BData
+            | DefaultFunction::UnConstrData
+            | DefaultFunction::UnMapData
+            | DefaultFunction::UnListData
+            | DefaultFunction::UnIData
+            | DefaultFunction::UnBData
+            | DefaultFunction::EqualsData
+            | DefaultFunction::SerialiseData
+            | DefaultFunction::MkPairData
+            | DefaultFunction::Bls12_381_G1_Add
+            | DefaultFunction::Bls12_381_G1_Neg
+            | DefaultFunction::Bls12_381_G1_ScalarMul
+            | DefaultFunction::Bls12_381_G1_Equal
+            | DefaultFunction::Bls12_381_G1_Compress
+            | DefaultFunction::Bls12_381_G1_Uncompress
+            | DefaultFunction::Bls12_381_G1_HashToGroup
+            | DefaultFunction::Bls12_381_G2_Add
+            | DefaultFunction::Bls12_381_G2_Neg
+            | DefaultFunction::Bls12_381_G2_ScalarMul
+            | DefaultFunction::Bls12_381_G2_Equal
+            | DefaultFunction::Bls12_381_G2_Compress
+            | DefaultFunction::Bls12_381_G2_Uncompress
+            | DefaultFunction::Bls12_381_G2_HashToGroup
+            | DefaultFunction::Bls12_381_MillerLoop
+            | DefaultFunction::Bls12_381_MulMlResult
+            | DefaultFunction::Bls12_381_FinalVerify
+            | DefaultFunction::IntegerToByteString
+            | DefaultFunction::ByteStringToInteger => false,
+        }
+    }
+
     pub fn arity(&self) -> usize {
         match self {
             DefaultFunction::AddInteger => 2,
