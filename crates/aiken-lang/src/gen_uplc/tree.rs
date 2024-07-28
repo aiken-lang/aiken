@@ -125,6 +125,13 @@ pub enum AirTree {
         value: Box<AirTree>,
         then: Box<AirTree>,
     },
+    SoftCastLet {
+        name: String,
+        tipo: Rc<Type>,
+        value: Box<AirTree>,
+        then: Box<AirTree>,
+        otherwise: Box<AirTree>,
+    },
     DefineFunc {
         func_name: String,
         module_name: String,
@@ -312,7 +319,6 @@ pub enum AirTree {
     CastFromData {
         tipo: Rc<Type>,
         value: Box<AirTree>,
-        otherwise: Box<AirTree>,
         full_cast: bool,
     },
     CastToData {
@@ -589,39 +595,26 @@ impl AirTree {
         }
     }
 
-    pub fn assign_literal_pattern(
-        name: String,
-        pattern: AirTree,
-        rhs: AirTree,
+    pub fn soft_cast_assignment(
+        name: impl ToString,
         tipo: Rc<Type>,
-        props: AssignmentProperties,
+        value: AirTree,
         then: AirTree,
+        otherwise: AirTree,
     ) -> AirTree {
-        assert!(props.kind.is_expect());
-
-        let expect = AirTree::binop(
-            BinOp::Eq,
-            bool(),
-            pattern,
-            AirTree::local_var(&name, tipo.clone()),
+        AirTree::SoftCastLet {
+            name: name.to_string(),
             tipo,
-        );
-
-        let expr = AirTree::let_assignment(name, rhs, expect);
-
-        AirTree::assert_bool(true, expr, then, props.otherwise.clone())
+            value: value.into(),
+            then: then.into(),
+            otherwise: otherwise.into(),
+        }
     }
 
-    pub fn cast_from_data(
-        value: AirTree,
-        tipo: Rc<Type>,
-        otherwise: AirTree,
-        full_cast: bool,
-    ) -> AirTree {
+    pub fn cast_from_data(value: AirTree, tipo: Rc<Type>, full_cast: bool) -> AirTree {
         AirTree::CastFromData {
             tipo,
             value: value.into(),
-            otherwise: otherwise.into(),
             full_cast,
         }
     }
@@ -888,7 +881,6 @@ impl AirTree {
                 vec![list_of_fields],
             ),
             tipo.clone(),
-            AirTree::error(void(), false),
             false,
         )
     }
@@ -994,7 +986,6 @@ impl AirTree {
                 vec![tuple],
             ),
             tipo.clone(),
-            AirTree::error(void(), false),
             false,
         )
     }
@@ -1043,6 +1034,32 @@ impl AirTree {
             three_arg_name,
             three_arg: three_arg.into(),
         }
+    }
+
+    pub fn expect_on_list2() -> AirTree {
+        let expect_on_list = AirTree::var(
+            ValueConstructor::public(
+                void(),
+                ValueConstructorVariant::ModuleFn {
+                    name: EXPECT_ON_LIST.to_string(),
+                    field_map: None,
+                    module: "".to_string(),
+                    arity: 1,
+                    location: Span::empty(),
+                    builtin: None,
+                },
+            ),
+            EXPECT_ON_LIST,
+            "",
+        );
+
+        let list_var = AirTree::local_var("__list_to_check", list(data()));
+
+        AirTree::call(
+            AirTree::local_var("__check_with", void()),
+            void(),
+            vec![list_var, expect_on_list],
+        )
     }
 
     pub fn expect_on_list() -> AirTree {
@@ -1107,6 +1124,21 @@ impl AirTree {
                 air_vec.push(Air::Let { name: name.clone() });
                 value.create_air_vec(air_vec);
                 then.create_air_vec(air_vec);
+            }
+            AirTree::SoftCastLet {
+                name,
+                tipo,
+                value,
+                then,
+                otherwise,
+            } => {
+                air_vec.push(Air::SoftCastLet {
+                    name: name.clone(),
+                    tipo: tipo.clone(),
+                });
+                value.create_air_vec(air_vec);
+                then.create_air_vec(air_vec);
+                otherwise.create_air_vec(air_vec);
             }
             AirTree::DefineFunc {
                 func_name,
@@ -1457,7 +1489,6 @@ impl AirTree {
             AirTree::CastFromData {
                 tipo,
                 value,
-                otherwise,
                 full_cast,
             } => {
                 air_vec.push(Air::CastFromData {
@@ -1466,9 +1497,6 @@ impl AirTree {
                 });
 
                 value.create_air_vec(air_vec);
-                if *full_cast {
-                    otherwise.create_air_vec(air_vec);
-                }
             }
             AirTree::CastToData { tipo, value } => {
                 air_vec.push(Air::CastToData { tipo: tipo.clone() });
@@ -1670,6 +1698,7 @@ impl AirTree {
             | AirTree::PairClause { then, .. }
             | AirTree::Finally { then, .. }
             | AirTree::Let { then, .. }
+            | AirTree::SoftCastLet { then, .. }
             | AirTree::DefineFunc { then, .. }
             | AirTree::DefineCyclicFuncs { then, .. }
             | AirTree::AssertConstr { then, .. }
@@ -1715,7 +1744,8 @@ impl AirTree {
             | AirTree::Constr { tipo, .. }
             | AirTree::ErrorTerm { tipo, .. }
             | AirTree::Trace { tipo, .. }
-            | AirTree::Pair { tipo, .. } => vec![tipo],
+            | AirTree::Pair { tipo, .. }
+            | AirTree::SoftCastLet { tipo, .. } => vec![tipo],
 
             AirTree::FieldsExpose { indices, .. } => {
                 let mut types = vec![];
@@ -1816,6 +1846,30 @@ impl AirTree {
                     tree_path,
                     current_depth + 1,
                     Fields::SecondField,
+                    with,
+                    apply_with_func_last,
+                );
+            }
+
+            AirTree::SoftCastLet {
+                name: _,
+                tipo: _,
+                value,
+                then: _,
+                otherwise,
+            } => {
+                value.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::ThirdField,
+                    with,
+                    apply_with_func_last,
+                );
+
+                otherwise.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::FifthField,
                     with,
                     apply_with_func_last,
                 );
@@ -2291,7 +2345,6 @@ impl AirTree {
             AirTree::CastFromData {
                 tipo: _,
                 value,
-                otherwise: _,
                 full_cast: _,
             } => {
                 value.do_traverse_tree_with(
@@ -2560,6 +2613,21 @@ impl AirTree {
                     apply_with_func_last,
                 );
             }
+            AirTree::SoftCastLet {
+                name: _,
+                tipo: _,
+                value: _,
+                then,
+                otherwise: _,
+            } => {
+                then.do_traverse_tree_with(
+                    tree_path,
+                    current_depth + 1,
+                    Fields::FourthField,
+                    with,
+                    apply_with_func_last,
+                );
+            }
             AirTree::AssertConstr {
                 constr_index: _,
                 constr: _,
@@ -2806,6 +2874,18 @@ impl AirTree {
                     Fields::ThirdField => then.as_mut().do_find_air_tree_node(tree_path_iter),
                     _ => panic!("Tree Path index outside tree children nodes"),
                 },
+                AirTree::SoftCastLet {
+                    name: _,
+                    tipo: _,
+                    value,
+                    then,
+                    otherwise,
+                } => match field {
+                    Fields::ThirdField => value.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::FourthField => then.as_mut().do_find_air_tree_node(tree_path_iter),
+                    Fields::FifthField => otherwise.as_mut().do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
                 AirTree::AssertConstr {
                     constr_index: _,
                     constr,
@@ -3011,11 +3091,9 @@ impl AirTree {
                 AirTree::CastFromData {
                     tipo: _,
                     value,
-                    otherwise,
                     full_cast: _,
                 } => match field {
                     Fields::SecondField => value.as_mut().do_find_air_tree_node(tree_path_iter),
-                    Fields::ThirdField => otherwise.as_mut().do_find_air_tree_node(tree_path_iter),
                     _ => panic!("Tree Path index outside tree children nodes"),
                 },
                 AirTree::CastToData { tipo: _, value } => match field {

@@ -101,6 +101,10 @@ pub enum Air {
     Let {
         name: String,
     },
+    SoftCastLet {
+        name: String,
+        tipo: Rc<Type>,
+    },
     CastFromData {
         tipo: Rc<Type>,
         full_cast: bool,
