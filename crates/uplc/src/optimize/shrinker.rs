@@ -988,7 +988,7 @@ impl Term<Name> {
         }
     }
 
-    fn pierce_no_inlines(&self) -> &Self {
+    pub fn pierce_no_inlines(&self) -> &Self {
         let mut term = self;
 
         while let Term::Lambda {

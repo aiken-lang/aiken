@@ -38,7 +38,7 @@ use crate::{
     },
     IdGenerator,
 };
-use builder::unknown_data_to_type;
+use builder::{softcast_data_to_type_otherwise, unknown_data_to_type};
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use petgraph::{algo, Graph};
@@ -656,7 +656,10 @@ impl<'a> CodeGenerator<'a> {
                                                 kind: AssignmentKind::Expect { backpassing: () },
                                                 remove_unused: false,
                                                 full_check: true,
-                                                otherwise: AirTree::local_var("acc_var", void()),
+                                                otherwise: Some(AirTree::local_var(
+                                                    "acc_var",
+                                                    tipo.clone(),
+                                                )),
                                             },
                                         ),
                                     )
@@ -3216,17 +3219,17 @@ impl<'a> CodeGenerator<'a> {
 
                         let msg_func_name = msg.split_whitespace().join("");
 
-                        self.special_functions.insert_new_function(
-                            msg_func_name.clone(),
-                            if msg.is_empty() {
-                                Term::Error.delay()
-                            } else {
-                                Term::Error.delayed_trace(Term::string(msg)).delay()
-                            },
-                            void(),
-                        );
+                        if msg.is_empty() {
+                            None
+                        } else {
+                            self.special_functions.insert_new_function(
+                                msg_func_name.clone(),
+                                Term::Error.delayed_trace(Term::string(msg)).delay(),
+                                void(),
+                            );
 
-                        self.special_functions.use_function_tree(msg_func_name)
+                            Some(self.special_functions.use_function_tree(msg_func_name))
+                        }
                     };
 
                     let inner_then = self.assignment(
@@ -4186,14 +4189,6 @@ impl<'a> CodeGenerator<'a> {
     }
 
     fn gen_uplc(&mut self, ir: Air, arg_stack: &mut Vec<Term<Name>>) -> Option<Term<Name>> {
-        let convert_data_to_type = |term, tipo, otherwise| {
-            if otherwise == Term::Error.delay() {
-                builder::unknown_data_to_type(term, tipo)
-            } else {
-                builder::softcast_data_to_type_otherwise(term, tipo, otherwise)
-            }
-        };
-
         match ir {
             Air::Int { value } => Some(Term::integer(value.parse().unwrap())),
             Air::String { value } => Some(Term::string(value)),
@@ -4911,7 +4906,7 @@ impl<'a> CodeGenerator<'a> {
                     known_data_to_type(term, &tipo)
                 };
 
-                if extract_constant(&term).is_some() {
+                if extract_constant(&term.pierce_no_inlines()).is_some() {
                     let mut program: Program<Name> = Program {
                         version: (1, 0, 0),
                         term,
@@ -5738,33 +5733,45 @@ impl<'a> CodeGenerator<'a> {
                 let list_id = self.id_gen.next();
 
                 if let Some(name) = snd {
-                    term = term.lambda(name).apply(if is_expect {
-                        convert_data_to_type(
-                            Term::snd_pair().apply(Term::var(format!("__pair_{list_id}"))),
-                            &inner_types[1],
-                            otherwise.clone(),
-                        )
+                    let value = Term::snd_pair().apply(Term::var(format!("__pair_{list_id}")));
+                    term = if is_expect {
+                        if otherwise == Term::Error.delay() {
+                            term.lambda(name)
+                                .apply(unknown_data_to_type(value, &inner_types[1]))
+                        } else {
+                            softcast_data_to_type_otherwise(
+                                value,
+                                &name,
+                                &inner_types[1],
+                                term,
+                                otherwise.clone(),
+                            )
+                        }
                     } else {
-                        known_data_to_type(
-                            Term::snd_pair().apply(Term::var(format!("__pair_{list_id}"))),
-                            &inner_types[1],
-                        )
-                    });
+                        term.lambda(name)
+                            .apply(known_data_to_type(value, &inner_types[1]))
+                    }
                 }
 
                 if let Some(name) = fst {
-                    term = term.lambda(name).apply(if is_expect {
-                        convert_data_to_type(
-                            Term::fst_pair().apply(Term::var(format!("__pair_{list_id}"))),
-                            &inner_types[0],
-                            otherwise,
-                        )
+                    let value = Term::fst_pair().apply(Term::var(format!("__pair_{list_id}")));
+                    term = if is_expect {
+                        if otherwise == Term::Error.delay() {
+                            term.lambda(name)
+                                .apply(unknown_data_to_type(value, &inner_types[0]))
+                        } else {
+                            softcast_data_to_type_otherwise(
+                                value,
+                                &name,
+                                &inner_types[0],
+                                term,
+                                otherwise,
+                            )
+                        }
                     } else {
-                        known_data_to_type(
-                            Term::fst_pair().apply(Term::var(format!("__pair_{list_id}"))),
-                            &inner_types[0],
-                        )
-                    })
+                        term.lambda(name)
+                            .apply(known_data_to_type(value, &inner_types[0]))
+                    }
                 }
 
                 term = term.lambda(format!("__pair_{list_id}")).apply(value);
@@ -5806,6 +5813,13 @@ impl<'a> CodeGenerator<'a> {
                 );
 
                 Some(term)
+            }
+            Air::SoftCastLet { name, tipo } => {
+                let value = arg_stack.pop().unwrap();
+                let then = arg_stack.pop().unwrap();
+                let otherwise = arg_stack.pop().unwrap();
+
+                todo!()
             }
         }
     }

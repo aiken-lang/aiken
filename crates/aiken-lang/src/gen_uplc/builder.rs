@@ -858,8 +858,8 @@ pub fn known_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
     match uplc_type {
         Some(UplcType::Integer) => Term::un_i_data().apply(term),
         Some(UplcType::ByteString) => Term::un_b_data().apply(term),
-        Some(UplcType::Bool) => Term::less_than_integer()
-            .apply(Term::integer(0.into()))
+        Some(UplcType::Bool) => Term::equals_integer()
+            .apply(Term::integer(1.into()))
             .apply(Term::fst_pair().apply(Term::unconstr_data().apply(term))),
         Some(UplcType::String) => Term::decode_utf8().apply(Term::un_b_data().apply(term)),
         Some(UplcType::Unit) => Term::unit().lambda("_").apply(term),
@@ -915,15 +915,14 @@ pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
         Some(UplcType::Bool) => Term::snd_pair()
             .apply(Term::var("__pair__"))
             .delayed_choose_list(
-                Term::equals_integer()
-                    .apply(Term::integer(1.into()))
+                Term::less_than_equals_integer()
+                    .apply(Term::integer(2.into()))
                     .apply(Term::fst_pair().apply(Term::var("__pair__")))
                     .delayed_if_then_else(
-                        Term::bool(true),
+                        Term::Error,
                         Term::equals_integer()
-                            .apply(Term::integer(0.into()))
-                            .apply(Term::fst_pair().apply(Term::var("__pair__")))
-                            .delayed_if_then_else(Term::bool(false), Term::Error),
+                            .apply(Term::integer(1.into()))
+                            .apply(Term::fst_pair().apply(Term::var("__pair__"))),
                     ),
                 Term::Error,
             )
