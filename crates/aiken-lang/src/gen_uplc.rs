@@ -17,7 +17,7 @@ use crate::{
         Span, TraceLevel, Tracing, TypedArg, TypedClause, TypedDataType, TypedFunction,
         TypedPattern, TypedValidator, UnOp,
     },
-    builtins::{bool, byte_array, data, int, list, void, PRELUDE},
+    builtins::{bool, byte_array, data, int, list, pair, void, PRELUDE},
     expr::TypedExpr,
     gen_uplc::{
         air::ExpectLevel,
@@ -975,17 +975,14 @@ impl<'a> CodeGenerator<'a> {
                 location,
                 ..
             } => {
-                let name = format!(
-                    "__expected_bytes_span_{}_{}",
-                    location.start, location.end
-                );
+                let name = format!("__expected_bytes_span_{}_{}", location.start, location.end);
 
                 let expect = AirTree::binop(
                     BinOp::Eq,
                     bool(),
-                    AirTree::byte_array(expected_bytes),
-                    AirTree::local_var(&name, byte_string()),
-                    byte_string(),
+                    AirTree::byte_array(expected_bytes.clone()),
+                    AirTree::local_var(&name, byte_array()),
+                    byte_array(),
                 );
 
                 assign_casted_value(
@@ -1627,7 +1624,7 @@ impl<'a> CodeGenerator<'a> {
                 | UplcType::Bls12_381G2Element
                 | UplcType::Bls12_381MlResult
                 | UplcType::Data,
-            ) => value,
+            ) => then,
 
             // Map type
             Some(UplcType::List(_)) if tipo.is_map() => {
@@ -1643,38 +1640,54 @@ impl<'a> CodeGenerator<'a> {
                 let fst_name = format!("__pair_fst_span_{}_{}", location.start, location.end);
                 let snd_name = format!("__pair_snd_span_{}_{}", location.start, location.end);
 
-                let expect_fst = self.expect_type_assign(
-                    &inner_pair_types[0],
-                    AirTree::local_var(fst_name.clone(), inner_pair_types[0].clone()),
-                    defined_data_types,
-                    location,
-                    otherwise.clone(),
-                );
-
                 let expect_snd = self.expect_type_assign(
                     &inner_pair_types[1],
                     AirTree::local_var(snd_name.clone(), inner_pair_types[1].clone()),
                     defined_data_types,
                     location,
+                    then,
                     otherwise.clone(),
                 );
 
-                let anon_func_body = AirTree::pair_access(
-                    Some(fst_name),
-                    Some(snd_name),
-                    inner_list_type.clone(),
-                    AirTree::local_var(&pair_name, inner_list_type.clone()),
-                    true,
-                    AirTree::let_assignment("_", expect_fst, expect_snd),
+                let expect_fst = self.expect_type_assign(
+                    &inner_pair_types[0],
+                    AirTree::local_var(fst_name.clone(), inner_pair_types[0].clone()),
+                    defined_data_types,
+                    location,
+                    expect_snd,
                     otherwise.clone(),
                 );
 
-                let unwrap_function = AirTree::anon_func(vec![pair_name], anon_func_body, false);
+                let unwrap_function = AirTree::anon_func(
+                    vec!["__list".to_string(), "__curried_expect_on_list".to_string()],
+                    AirTree::list_empty(
+                        AirTree::local_var("__list", tipo.clone()),
+                        then,
+                        AirTree::let_assignment(
+                            &pair_name,
+                            AirTree::builtin(
+                                DefaultFunction::HeadList,
+                                pair(data(), data()),
+                                vec![AirTree::local_var("__list", tipo.clone())],
+                            ),
+                            AirTree::pair_access(
+                                Some(fst_name),
+                                Some(snd_name),
+                                inner_list_type.clone(),
+                                AirTree::local_var(&pair_name, inner_list_type.clone()),
+                                true,
+                                expect_fst,
+                                otherwise.clone(),
+                            ),
+                        ),
+                    ),
+                    false,
+                );
 
                 let function = self.code_gen_functions.get(EXPECT_ON_LIST);
 
                 if function.is_none() {
-                    let expect_list_func = AirTree::expect_on_list();
+                    let expect_list_func = AirTree::expect_on_list2();
                     self.code_gen_functions.insert(
                         EXPECT_ON_LIST.to_string(),
                         CodeGenFunction::Function {
@@ -1771,7 +1784,7 @@ impl<'a> CodeGenerator<'a> {
                     let list_name = format!("__list_span_{}_{}", location.start, location.end);
                     let item_name = format!("__item_span_{}_{}", location.start, location.end);
 
-                    let g = AirTree::anon_func(
+                    let unwrap_function = AirTree::anon_func(
                         vec!["__list".to_string(), "__curried_expect_on_list".to_string()],
                         AirTree::list_empty(
                             AirTree::local_var("__list", tipo.clone()),
@@ -1783,58 +1796,37 @@ impl<'a> CodeGenerator<'a> {
                                     data(),
                                     vec![AirTree::local_var("__list", tipo.clone())],
                                 ),
-                                AirTree::let_assignment(
+                                AirTree::soft_cast_assignment(
                                     &item_name,
+                                    inner_list_type.clone(),
+                                    AirTree::local_var(item_name, data()),
                                     self.expect_type_assign(
                                         inner_list_type,
-                                        AirTree::cast_from_data(
-                                            AirTree::local_var(item_name, data()),
-                                            inner_list_type.clone(),
-                                            otherwise.clone(),
-                                            true,
-                                        ),
+                                        AirTree::local_var(item_name, inner_list_type.clone()),
                                         defined_data_types,
                                         location,
-                                        AirTree::void(),
+                                        AirTree::call(
+                                            AirTree::local_var("__curried_expect_on_list", void()),
+                                            void(),
+                                            vec![AirTree::builtin(
+                                                DefaultFunction::TailList,
+                                                list(data()),
+                                                vec![AirTree::local_var("__list", tipo.clone())],
+                                            )],
+                                        ),
                                         otherwise,
                                     ),
-                                    AirTree::call(
-                                        AirTree::local_var("__curried_expect_on_list", void()),
-                                        void(),
-                                        vec![AirTree::builtin(
-                                            DefaultFunction::TailList,
-                                            list(data()),
-                                            vec![AirTree::local_var("__list", tipo.clone())],
-                                        )],
-                                    ),
+                                    otherwise,
                                 ),
                             ),
                         ),
                         false,
                     );
 
-                    let expect_item = self.expect_type_assign(
-                        inner_list_type,
-                        AirTree::cast_from_data(
-                            AirTree::local_var(&item_name, data()),
-                            inner_list_type.clone(),
-                            otherwise.clone(),
-                            true,
-                        ),
-                        defined_data_types,
-                        location,
-                        otherwise,
-                    );
-
-                    let anon_func_body = expect_item;
-
-                    let unwrap_function =
-                        AirTree::anon_func(vec![item_name], anon_func_body, false);
-
                     let function = self.code_gen_functions.get(EXPECT_ON_LIST);
 
                     if function.is_none() {
-                        let expect_list_func = AirTree::expect_on_list();
+                        let expect_list_func = AirTree::expect_on_list2();
                         self.code_gen_functions.insert(
                             EXPECT_ON_LIST.to_string(),
                             CodeGenFunction::Function {
@@ -1890,19 +1882,21 @@ impl<'a> CodeGenerator<'a> {
                 let fst_name = format!("__pair_fst_span_{}_{}", location.start, location.end);
                 let snd_name = format!("__pair_snd_span_{}_{}", location.start, location.end);
 
-                let expect_fst = self.expect_type_assign(
-                    &tuple_inner_types[0],
-                    AirTree::local_var(fst_name.clone(), tuple_inner_types[0].clone()),
-                    defined_data_types,
-                    location,
-                    otherwise.clone(),
-                );
-
                 let expect_snd = self.expect_type_assign(
                     &tuple_inner_types[1],
                     AirTree::local_var(snd_name.clone(), tuple_inner_types[1].clone()),
                     defined_data_types,
                     location,
+                    then,
+                    otherwise.clone(),
+                );
+
+                let expect_fst = self.expect_type_assign(
+                    &tuple_inner_types[0],
+                    AirTree::local_var(fst_name.clone(), tuple_inner_types[0].clone()),
+                    defined_data_types,
+                    location,
+                    expect_snd,
                     otherwise.clone(),
                 );
 
