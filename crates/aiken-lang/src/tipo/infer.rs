@@ -220,44 +220,50 @@ fn infer_definition(
                 typed_handlers.push(typed_fun);
             }
 
-            let params = params.into_iter().chain(fallback.arguments);
-            fallback.arguments = params.collect();
+            let (typed_params, typed_fallback) = environment.in_new_scope(|environment| {
+                let temp_params = params.iter().cloned().chain(fallback.arguments);
+                fallback.arguments = temp_params.collect();
 
-            let mut typed_fallback =
-                infer_function(&fallback, module_name, hydrators, environment, tracing)?;
+                put_params_in_scope(&fallback.name, environment, &params);
 
-            if !typed_fallback.return_type.is_bool() {
-                return Err(Error::ValidatorMustReturnBool {
-                    return_type: typed_fallback.return_type.clone(),
-                    location: typed_fallback.location,
-                });
-            }
+                let mut typed_fallback =
+                    infer_function(&fallback, module_name, hydrators, environment, tracing)?;
 
-            let typed_params = typed_fallback
-                .arguments
-                .drain(0..params_length)
-                .map(|mut arg| {
+                if !typed_fallback.return_type.is_bool() {
+                    return Err(Error::ValidatorMustReturnBool {
+                        return_type: typed_fallback.return_type.clone(),
+                        location: typed_fallback.location,
+                    });
+                }
+
+                let typed_params = typed_fallback
+                    .arguments
+                    .drain(0..params_length)
+                    .map(|mut arg| {
+                        if arg.tipo.is_unbound() {
+                            arg.tipo = builtins::data();
+                        }
+
+                        arg
+                    })
+                    .collect();
+
+                if typed_fallback.arguments.len() != 1 {
+                    return Err(Error::IncorrectValidatorArity {
+                        count: typed_fallback.arguments.len() as u32,
+                        expected: 1,
+                        location: typed_fallback.location,
+                    });
+                }
+
+                for arg in typed_fallback.arguments.iter_mut() {
                     if arg.tipo.is_unbound() {
                         arg.tipo = builtins::data();
                     }
-
-                    arg
-                })
-                .collect();
-
-            if typed_fallback.arguments.len() != 1 {
-                return Err(Error::IncorrectValidatorArity {
-                    count: typed_fallback.arguments.len() as u32,
-                    expected: 1,
-                    location: typed_fallback.location,
-                });
-            }
-
-            for arg in typed_fallback.arguments.iter_mut() {
-                if arg.tipo.is_unbound() {
-                    arg.tipo = builtins::data();
                 }
-            }
+
+                Ok((typed_params, typed_fallback))
+            })?;
 
             Ok(Definition::Validator(Validator {
                 doc,
