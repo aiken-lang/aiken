@@ -1073,7 +1073,7 @@ impl ExtraData for Error {
             | Error::LastExpressionIsAssignment { .. }
             | Error::LogicalOpChainMissingExpr { .. }
             | Error::MissingVarInAlternativePattern { .. }
-            | Error::MultiValidatorEqualArgs { .. }
+            | Error::NonLocalClauseGuardVariable { .. }
             | Error::NotIndexable { .. }
             | Error::NotExhaustivePatternMatch { .. }
             | Error::NotFn { .. }

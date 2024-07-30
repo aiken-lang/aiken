@@ -9,7 +9,7 @@ use crate::{
     ast::{
         Annotation, ArgName, ArgVia, DataType, Definition, Function, ModuleConstant, ModuleKind,
         RecordConstructor, RecordConstructorArg, Tracing, TypeAlias, TypedArg, TypedDefinition,
-        TypedFunction, TypedModule, UntypedArg, UntypedDefinition, UntypedModule, Use, Validator,
+        TypedModule, UntypedArg, UntypedDefinition, UntypedModule, Use, Validator,
     },
     builtins::{self, fuzzer, generic_var},
     tipo::{expr::infer_function, Span, Type, TypeVar},
