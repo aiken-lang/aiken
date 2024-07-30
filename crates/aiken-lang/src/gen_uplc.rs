@@ -1648,7 +1648,15 @@ impl<'a> CodeGenerator<'a> {
                     AirTree::local_var(snd_name.clone(), inner_pair_types[1].clone()),
                     defined_data_types,
                     location,
-                    then,
+                    AirTree::call(
+                        AirTree::local_var("__curried_expect_on_list", void()),
+                        void(),
+                        vec![AirTree::builtin(
+                            DefaultFunction::TailList,
+                            list(data()),
+                            vec![AirTree::local_var("__list", tipo.clone())],
+                        )],
+                    ),
                     otherwise.clone(),
                 );
 
@@ -1802,10 +1810,10 @@ impl<'a> CodeGenerator<'a> {
                                 AirTree::soft_cast_assignment(
                                     &item_name,
                                     inner_list_type.clone(),
-                                    AirTree::local_var(item_name, data()),
+                                    AirTree::local_var(&item_name, data()),
                                     self.expect_type_assign(
                                         inner_list_type,
-                                        AirTree::local_var(item_name, inner_list_type.clone()),
+                                        AirTree::local_var(&item_name, inner_list_type.clone()),
                                         defined_data_types,
                                         location,
                                         AirTree::call(
@@ -1817,7 +1825,7 @@ impl<'a> CodeGenerator<'a> {
                                                 vec![AirTree::local_var("__list", tipo.clone())],
                                             )],
                                         ),
-                                        otherwise,
+                                        otherwise.clone(),
                                     ),
                                     otherwise,
                                 ),
@@ -1909,7 +1917,7 @@ impl<'a> CodeGenerator<'a> {
                     tipo.clone(),
                     AirTree::local_var(&pair_name, tipo.clone()),
                     true,
-                    AirTree::let_assignment("_", expect_fst, expect_snd),
+                    expect_fst,
                     otherwise,
                 );
 
@@ -1953,13 +1961,16 @@ impl<'a> CodeGenerator<'a> {
                     let current_defined = defined_data_types.clone();
                     let mut diff_defined_types = vec![];
 
+                    let var_then =
+                        AirTree::call(AirTree::local_var("then_delayed", void()), void(), vec![]);
+
                     let constr_clauses = data_type.constructors.iter().enumerate().rfold(
                         otherwise.clone(),
                         |acc, (index, constr)| {
                             let mut constr_args = vec![];
 
                             let constr_then = constr.arguments.iter().enumerate().rfold(
-                                AirTree::void(),
+                                var_then.clone(),
                                 |then, (index, arg)| {
                                     let arg_name =
                                         arg.label.clone().unwrap_or(format!("__field_{index}"));
@@ -1969,16 +1980,13 @@ impl<'a> CodeGenerator<'a> {
 
                                     constr_args.push((index, arg_name.clone(), arg_tipo.clone()));
 
-                                    AirTree::let_assignment(
-                                        "_",
-                                        self.expect_type_assign(
-                                            &arg_tipo.clone(),
-                                            AirTree::local_var(arg_name, arg_tipo),
-                                            defined_data_types,
-                                            location,
-                                            otherwise.clone(),
-                                        ),
+                                    self.expect_type_assign(
+                                        &arg_tipo.clone(),
+                                        AirTree::local_var(arg_name, arg_tipo),
+                                        defined_data_types,
+                                        location,
                                         then,
+                                        otherwise.clone(),
                                     )
                                 },
                             );
@@ -2059,15 +2067,13 @@ impl<'a> CodeGenerator<'a> {
                         }
                     }
 
-                    let code_gen_func = match self.tracing {
-                        TraceLevel::Silent => CodeGenFunction::Function {
-                            body: func_body,
-                            params: vec!["__param_0".to_string()],
-                        },
-                        TraceLevel::Compact | TraceLevel::Verbose => CodeGenFunction::Function {
-                            body: func_body,
-                            params: vec!["__param_0".to_string(), "__param_msg".to_string()],
-                        },
+                    let code_gen_func = CodeGenFunction::Function {
+                        body: func_body,
+                        params: vec![
+                            "__param_0".to_string(),
+                            "then_delayed".to_string(),
+                            "otherwise_delayed".to_string(),
+                        ],
                     };
 
                     self.code_gen_functions
@@ -2078,10 +2084,7 @@ impl<'a> CodeGenerator<'a> {
                     defined_data_types.insert(data_type_name.to_string(), 1);
                 }
 
-                let args = match self.tracing {
-                    TraceLevel::Silent => vec![value],
-                    TraceLevel::Compact | TraceLevel::Verbose => vec![value, otherwise],
-                };
+                let args = vec![value, AirTree::anon_func(vec![], then, true), otherwise];
 
                 let module_fn = ValueConstructorVariant::ModuleFn {
                     name: data_type_name.to_string(),
@@ -5819,7 +5822,13 @@ impl<'a> CodeGenerator<'a> {
                 let then = arg_stack.pop().unwrap();
                 let otherwise = arg_stack.pop().unwrap();
 
-                todo!()
+                if otherwise == Term::Error.delay() {
+                    Some(then.lambda(name).apply(unknown_data_to_type(value, &tipo)))
+                } else {
+                    Some(softcast_data_to_type_otherwise(
+                        value, &name, &tipo, then, otherwise,
+                    ))
+                }
             }
         }
     }
