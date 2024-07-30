@@ -489,15 +489,21 @@ If you really meant to return that last expression, try to replace it with the f
         name: String,
     },
 
-    #[error("I found a multi-validator where both take the same number of arguments.\n")]
-    #[diagnostic(code("illegal::multi_validator"))]
-    #[diagnostic(help("Multi-validators cannot take the same number of arguments. One must take 3 arguments\nand the other must take 2 arguments. Both of these take {} arguments.", count.to_string().purple()))]
-    MultiValidatorEqualArgs {
-        #[label("{} here", count)]
+    #[error(
+        "I stumbled upon an invalid (non-local) clause guard '{}'.\n",
+        name.if_supports_color(Stdout, |s| s.purple())
+    )]
+    #[diagnostic(url(
+        "https://aiken-lang.org/language-tour/control-flow#checking-equality-and-ordering-in-patterns"
+    ))]
+    #[diagnostic(code("illegal::clause_guard"))]
+    #[diagnostic(help(
+        "There are some conditions regarding what can be used in a guard. Values must be either local to the function, or defined as module constants. You can't use functions or records in there."
+    ))]
+    NonLocalClauseGuardVariable {
+        #[label]
         location: Span,
-        #[label("and {} here", count)]
-        other_location: Span,
-        count: usize,
+        name: String,
     },
 
     #[error("I tripped over an attempt to access elements on something that isn't indexable.\n")]
@@ -1021,7 +1027,8 @@ The best thing to do from here is to remove it."#))]
     ))]
     IncorrectValidatorArity {
         count: u32,
-        #[label("{} arguments", if *count < 2 { "not enough" } else { "too many" })]
+        expected: u32,
+        #[label("{} arguments", if count < expected { "not enough" } else { "too many" })]
         location: Span,
     },
 

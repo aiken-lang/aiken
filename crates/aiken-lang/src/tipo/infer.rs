@@ -9,10 +9,9 @@ use crate::{
     ast::{
         Annotation, ArgName, ArgVia, DataType, Definition, Function, ModuleConstant, ModuleKind,
         RecordConstructor, RecordConstructorArg, Tracing, TypeAlias, TypedArg, TypedDefinition,
-        TypedFunction, TypedModule, UntypedDefinition, UntypedModule, Use, Validator,
+        TypedFunction, TypedModule, UntypedArg, UntypedDefinition, UntypedModule, Use, Validator,
     },
-    builtins,
-    builtins::{fuzzer, generic_var},
+    builtins::{self, fuzzer, generic_var},
     tipo::{expr::infer_function, Span, Type, TypeVar},
     IdGenerator,
 };
@@ -172,61 +171,24 @@ fn infer_definition(
             doc,
             location,
             end_position,
-            mut handlers,
-            fallback,
+            handlers,
+            mut fallback,
             params,
             name,
         }) => {
             let params_length = params.len();
 
-            environment.in_new_scope(|environment| {
-                let preregistered_fn = environment
-                    .get_variable(&fun.name)
-                    .expect("Could not find preregistered type for function");
+            let mut typed_handlers = vec![];
 
-                let preregistered_type = preregistered_fn.tipo.clone();
+            for mut handler in handlers {
+                let typed_fun = environment.in_new_scope(|environment| {
+                    let temp_params = params.iter().cloned().chain(handler.arguments);
+                    handler.arguments = temp_params.collect();
 
-                let (args_types, _return_type) = preregistered_type
-                    .function_types()
-                    .expect("Preregistered type for fn was not a fn");
-
-                for (ix, (arg, t)) in params
-                    .iter()
-                    .zip(args_types[0..params.len()].iter())
-                    .enumerate()
-                {
-                    match &arg.arg_name(ix) {
-                        ArgName::Named {
-                            name,
-                            label: _,
-                            location: _,
-                        } if arg.is_validator_param => {
-                            environment.insert_variable(
-                                name.to_string(),
-                                ValueConstructorVariant::LocalVariable {
-                                    location: arg.location,
-                                },
-                                t.clone(),
-                            );
-
-                            environment.init_usage(
-                                name.to_string(),
-                                EntityKind::Variable,
-                                arg.location,
-                            );
-                        }
-                        ArgName::Named { .. } | ArgName::Discarded { .. } => (),
-                    };
-                }
-
-                let typed_handlers = vec![];
-
-                for handler in handlers {
-                    let temp_params = params.iter().cloned().chain(fun.arguments);
-                    fun.arguments = temp_params.collect();
+                    put_params_in_scope(&handler.name, environment, &params);
 
                     let mut typed_fun =
-                        infer_function(&fun, module_name, hydrators, environment, lines, tracing)?;
+                        infer_function(&handler, module_name, hydrators, environment, tracing)?;
 
                     if !typed_fun.return_type.is_bool() {
                         return Err(Error::ValidatorMustReturnBool {
@@ -235,9 +197,13 @@ fn infer_definition(
                         });
                     }
 
+                    typed_fun.arguments.drain(0..params_length);
+
+                    // TODO: the expected number of args comes from the script purpose
                     if typed_fun.arguments.len() < 2 || typed_fun.arguments.len() > 3 {
                         return Err(Error::IncorrectValidatorArity {
                             count: typed_fun.arguments.len() as u32,
+                            expected: 3,
                             location: typed_fun.location,
                         });
                     }
@@ -247,65 +213,61 @@ fn infer_definition(
                             arg.tipo = builtins::data();
                         }
                     }
-                }
 
-                let params = params.into_iter().chain(other.arguments);
-                other.arguments = params.collect();
+                    Ok(typed_fun)
+                })?;
 
-                let mut typed_fallback =
-                    infer_function(&other, module_name, hydrators, environment, lines, tracing)?;
+                typed_handlers.push(typed_fun);
+            }
 
-                if !typed_fallback.return_type.is_bool() {
-                    return Err(Error::ValidatorMustReturnBool {
-                        return_type: typed_fallback.return_type.clone(),
-                        location: typed_fallback.location,
-                    });
-                }
+            let params = params.into_iter().chain(fallback.arguments);
+            fallback.arguments = params.collect();
 
-                typed_fallback.arguments.drain(0..params_length);
+            let mut typed_fallback =
+                infer_function(&fallback, module_name, hydrators, environment, tracing)?;
 
-                if typed_fallback.arguments.len() < 2 || typed_fallback.arguments.len() > 3 {
-                    return Err(Error::IncorrectValidatorArity {
-                        count: typed_fallback.arguments.len() as u32,
-                        location: typed_fallback.location,
-                    });
-                }
+            if !typed_fallback.return_type.is_bool() {
+                return Err(Error::ValidatorMustReturnBool {
+                    return_type: typed_fallback.return_type.clone(),
+                    location: typed_fallback.location,
+                });
+            }
 
-                if typed_fun.arguments.len() == typed_fallback.arguments.len() {
-                    return Err(Error::MultiValidatorEqualArgs {
-                        location: typed_fun.location,
-                        other_location: typed_fallback.location,
-                        count: typed_fallback.arguments.len(),
-                    });
-                }
-
-                for arg in typed_fallback.arguments.iter_mut() {
+            let typed_params = typed_fallback
+                .arguments
+                .drain(0..params_length)
+                .map(|mut arg| {
                     if arg.tipo.is_unbound() {
                         arg.tipo = builtins::data();
                     }
+
+                    arg
+                })
+                .collect();
+
+            if typed_fallback.arguments.len() != 1 {
+                return Err(Error::IncorrectValidatorArity {
+                    count: typed_fallback.arguments.len() as u32,
+                    expected: 1,
+                    location: typed_fallback.location,
+                });
+            }
+
+            for arg in typed_fallback.arguments.iter_mut() {
+                if arg.tipo.is_unbound() {
+                    arg.tipo = builtins::data();
                 }
+            }
 
-                let typed_params = params
-                    .into_iter()
-                    .map(|mut arg| {
-                        if arg.tipo.is_unbound() {
-                            arg.tipo = builtins::data();
-                        }
-
-                        arg
-                    })
-                    .collect();
-
-                Ok(Definition::Validator(Validator {
-                    doc,
-                    end_position,
-                    handlers: typed_handlers,
-                    fallback: typed_fallback,
-                    name,
-                    location,
-                    params: typed_params,
-                }))
-            })
+            Ok(Definition::Validator(Validator {
+                doc,
+                end_position,
+                handlers: typed_handlers,
+                fallback: typed_fallback,
+                name,
+                location,
+                params: typed_params,
+            }))
         }
 
         Definition::Test(f) => {
@@ -775,5 +737,42 @@ fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
                 location: *location,
             })
         }
+    }
+}
+
+fn put_params_in_scope(name: &str, environment: &mut Environment, params: &[UntypedArg]) {
+    let preregistered_fn = environment
+        .get_variable(&name)
+        .expect("Could not find preregistered type for function");
+
+    let preregistered_type = preregistered_fn.tipo.clone();
+
+    let (args_types, _return_type) = preregistered_type
+        .function_types()
+        .expect("Preregistered type for fn was not a fn");
+
+    for (ix, (arg, t)) in params
+        .iter()
+        .zip(args_types[0..params.len()].iter())
+        .enumerate()
+    {
+        match &arg.arg_name(ix) {
+            ArgName::Named {
+                name,
+                label: _,
+                location: _,
+            } if arg.is_validator_param => {
+                environment.insert_variable(
+                    name.to_string(),
+                    ValueConstructorVariant::LocalVariable {
+                        location: arg.location,
+                    },
+                    t.clone(),
+                );
+
+                environment.init_usage(name.to_string(), EntityKind::Variable, arg.location);
+            }
+            ArgName::Named { .. } | ArgName::Discarded { .. } => (),
+        };
     }
 }
