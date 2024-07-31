@@ -1457,22 +1457,22 @@ pub fn list_access_to_uplc(
                                 .lambda(tail_name)
                             } else {
                                 // Custom error if list is not empty after this head
-                                head_item(
-                                    name,
-                                    tipo,
-                                    &tail_name,
-                                    Term::var(tail_name.to_string())
-                                        .choose_list(
-                                            otherwise_delayed.clone(),
+                                Term::var(tail_name.to_string())
+                                    .choose_list(
+                                        otherwise_delayed.clone(),
+                                        head_item(
+                                            name,
+                                            tipo,
+                                            &tail_name,
                                             Term::tail_list()
                                                 .apply(Term::var(tail_name.to_string()))
                                                 .choose_list(acc.delay(), otherwise_delayed.clone())
                                                 .force(),
                                         )
                                         .delay(),
-                                )
-                                .force()
-                                .lambda(tail_name)
+                                    )
+                                    .force()
+                                    .lambda(tail_name)
                             }
                         }
                     }
