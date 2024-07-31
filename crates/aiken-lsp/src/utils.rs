@@ -79,7 +79,7 @@ pub fn uri_to_module_name(uri: &url::Url, root: &Path) -> Option<String> {
         .ok()?
         .components()
         .skip(1)
-        .map(|c| c.as_os_str().to_string_lossy().replace("-", "_"));
+        .map(|c| c.as_os_str().to_string_lossy().replace('-', "_"));
 
     let module_name = Itertools::intersperse(components, "/".into())
         .collect::<String>()
