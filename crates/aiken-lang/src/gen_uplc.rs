@@ -640,8 +640,6 @@ impl<'a> CodeGenerator<'a> {
 
                             match &branch.is {
                                 Some((pattern, tipo)) => {
-                                    println!("PATTERN TYPE: {:#?}", pattern);
-                                    println!("Branch TYPE: {:#?}", tipo);
                                     AirTree::let_assignment(
                                         "acc_var",
                                         // use anon function as a delay to avoid evaluating the acc
@@ -4555,7 +4553,7 @@ impl<'a> CodeGenerator<'a> {
 
                     // How we handle zero arg anon functions has changed
                     // We now delay zero arg anon functions and force them on a call operation
-                    match &term {
+                    match term.pierce_no_inlines() {
                         Term::Var(name) => {
                             let zero_arg_functions = self.zero_arg_functions.clone();
                             let text = &name.text;
@@ -4935,7 +4933,7 @@ impl<'a> CodeGenerator<'a> {
             Air::CastToData { tipo } => {
                 let mut term = arg_stack.pop().unwrap();
 
-                if extract_constant(&term).is_some() {
+                if extract_constant(term.pierce_no_inlines()).is_some() {
                     term = builder::convert_type_to_data(term, &tipo);
 
                     let mut program: Program<Name> = Program {
@@ -5384,7 +5382,7 @@ impl<'a> CodeGenerator<'a> {
                     .apply(term);
 
                 if arg_vec.iter().all(|item| {
-                    let maybe_const = extract_constant(item);
+                    let maybe_const = extract_constant(item.pierce_no_inlines());
                     maybe_const.is_some()
                 }) {
                     let mut program: Program<Name> = Program {
