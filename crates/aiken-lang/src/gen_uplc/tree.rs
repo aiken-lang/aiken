@@ -8,7 +8,10 @@ use crate::{
 use indexmap::IndexSet;
 use itertools::Itertools;
 use std::{borrow::BorrowMut, rc::Rc, slice::Iter};
-use uplc::{builder::EXPECT_ON_LIST, builtins::DefaultFunction};
+use uplc::{
+    builder::{EXPECT_ON_LIST, INNER_EXPECT_ON_LIST},
+    builtins::DefaultFunction,
+};
 
 #[derive(Clone, Debug, PartialEq, Copy)]
 pub enum Fields {
@@ -1037,28 +1040,36 @@ impl AirTree {
     }
 
     pub fn expect_on_list2() -> AirTree {
-        let expect_on_list = AirTree::var(
-            ValueConstructor::public(
-                void(),
-                ValueConstructorVariant::ModuleFn {
-                    name: EXPECT_ON_LIST.to_string(),
-                    field_map: None,
-                    module: "".to_string(),
-                    arity: 1,
-                    location: Span::empty(),
-                    builtin: None,
-                },
-            ),
-            EXPECT_ON_LIST,
-            "",
-        );
+        let inner_expect_on_list = AirTree::local_var(INNER_EXPECT_ON_LIST, void());
 
         let list_var = AirTree::local_var("__list_to_check", list(data()));
 
-        AirTree::call(
-            AirTree::local_var("__check_with", void()),
-            void(),
-            vec![list_var, expect_on_list],
+        AirTree::let_assignment(
+            INNER_EXPECT_ON_LIST,
+            AirTree::anon_func(
+                vec![
+                    INNER_EXPECT_ON_LIST.to_string(),
+                    "__list_to_check".to_string(),
+                ],
+                AirTree::call(
+                    AirTree::local_var("__check_with", void()),
+                    void(),
+                    vec![
+                        list_var.clone(),
+                        AirTree::call(
+                            inner_expect_on_list.clone(),
+                            void(),
+                            vec![inner_expect_on_list.clone()],
+                        ),
+                    ],
+                ),
+                false,
+            ),
+            AirTree::call(
+                inner_expect_on_list.clone(),
+                void(),
+                vec![inner_expect_on_list, list_var],
+            ),
         )
     }
 
