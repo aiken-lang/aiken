@@ -484,4 +484,35 @@ impl Term<Name> {
                 .lambda("__constr_var"),
         )
     }
+
+    /// Convert an arbitrary 'term' into a bool term and pass it into a 'callback'.
+    /// Continue the execution 'otherwise' with a different branch.
+    ///
+    /// Note that the 'otherwise' term as well as the callback's result are expected
+    /// to be delayed terms.
+    pub fn unwrap_bool_or<F>(term: Term<Name>, callback: F, otherwise: &Term<Name>) -> Term<Name>
+    where
+        F: FnOnce(Term<Name>) -> Term<Name>,
+    {
+        Term::snd_pair()
+            .apply(Term::var("__pair__"))
+            .choose_list(
+                Term::less_than_equals_integer()
+                    .apply(Term::integer(2.into()))
+                    .apply(Term::fst_pair().apply(Term::var("__pair__")))
+                    .delayed_if_then_else(
+                        otherwise.clone(),
+                        callback(
+                            Term::equals_integer()
+                                .apply(Term::fst_pair().apply(Term::var("__pair__")))
+                                .apply(Term::integer(1.into())),
+                        ),
+                    )
+                    .delay(),
+                otherwise.clone(),
+            )
+            .force()
+            .lambda("__pair__")
+            .apply(Term::unconstr_data().apply(term))
+    }
 }
