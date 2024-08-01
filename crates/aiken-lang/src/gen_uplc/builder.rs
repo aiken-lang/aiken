@@ -941,203 +941,79 @@ pub fn softcast_data_to_type_otherwise(
 ) -> Term<Name> {
     let uplc_type = field_type.get_uplc_type();
 
-    let then = then.lambda(name);
+    let just_then = then.clone();
 
-    match uplc_type {
-        Some(UplcType::Integer) => Term::var("__val")
-            .choose_data(
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                then.apply(Term::un_i_data().apply(Term::var("__val")))
-                    .delay(),
-                otherwise_delayed.clone(),
-            )
-            .force()
-            .lambda("__val")
-            .apply(value),
-        Some(UplcType::ByteString) => Term::var("__val")
-            .choose_data(
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                then.apply(Term::un_b_data().apply(Term::var("__val")))
-                    .delay(),
-            )
-            .force()
-            .lambda("__val")
-            .apply(value),
-        Some(UplcType::String) => Term::var("__val")
-            .choose_data(
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                then.apply(Term::decode_utf8().apply(Term::un_b_data().apply(Term::var("__val"))))
-                    .delay(),
-            )
-            .force()
-            .lambda("__val")
-            .apply(value),
+    let then_delayed = |v| then.lambda(name).apply(v).delay();
 
-        Some(UplcType::List(_)) if field_type.is_map() => Term::var("__val")
-            .choose_data(
-                otherwise_delayed.clone(),
-                then.apply(Term::unmap_data().apply(Term::var("__val")))
-                    .delay(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-            )
-            .force()
-            .lambda("__val")
-            .apply(value),
-        Some(UplcType::List(_)) => Term::var("__val")
-            .choose_data(
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                then.apply(Term::unlist_data().apply(Term::var("__val")))
-                    .delay(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-            )
-            .force()
-            .lambda("__val")
-            .apply(value),
+    value.as_var("__val", |val| match uplc_type {
+        None => val
+            .choose_data_constr(then_delayed, &otherwise_delayed)
+            .force(),
 
-        Some(UplcType::Bls12_381G1Element) => Term::var("__val")
-            .choose_data(
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                then.apply(
-                    Term::bls12_381_g1_uncompress()
-                        .apply(Term::un_b_data().apply(Term::var("__val"))),
-                )
-                .delay(),
-            )
-            .force()
-            .lambda("__val")
-            .apply(value),
-        Some(UplcType::Bls12_381G2Element) => Term::var("__val")
-            .choose_data(
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                then.apply(
-                    Term::bls12_381_g2_uncompress()
-                        .apply(Term::un_b_data().apply(Term::var("__val"))),
-                )
-                .delay(),
-            )
-            .force()
-            .lambda("__val")
-            .apply(value),
-        Some(UplcType::Bls12_381MlResult) => panic!("ML Result not supported"),
-        Some(UplcType::Pair(_, _)) => Term::var("__val")
-            .choose_data(
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                Term::var("__list_data")
-                    .choose_list(
-                        otherwise_delayed.clone(),
-                        Term::var("__tail")
-                            .choose_list(
-                                otherwise_delayed.clone(),
-                                Term::tail_list()
-                                    .apply(Term::var("__tail"))
-                                    .choose_list(
-                                        then.apply(
-                                            Term::mk_pair_data()
-                                                .apply(
-                                                    Term::head_list()
-                                                        .apply(Term::var("__list_data")),
-                                                )
-                                                .apply(
-                                                    Term::head_list().apply(Term::var("__tail")),
-                                                ),
-                                        )
-                                        .delay(),
-                                        otherwise_delayed.clone(),
-                                    )
-                                    .force()
-                                    .delay(),
-                            )
-                            .force()
-                            .lambda("__tail")
-                            .apply(Term::tail_list().apply(Term::var("__list_data")))
-                            .delay(),
-                    )
-                    .force()
-                    .lambda("__list_data")
-                    .apply(Term::unlist_data().apply(Term::var("__val")))
-                    .delay(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-            )
-            .force()
-            .lambda("__val")
-            .apply(value),
-        Some(UplcType::Bool) => Term::var("__val")
-            .choose_data(
-                Term::unwrap_bool_or(
-                    Term::var("__val"),
-                    |result| then.apply(result),
-                    &otherwise_delayed,
-                )
-                .delay(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-            )
-            .force()
-            .lambda("__val")
-            .apply(value),
-        Some(UplcType::Unit) => Term::var("__val")
-            .choose_data(
-                Term::equals_integer()
-                    .apply(Term::integer(0.into()))
-                    .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("__val"))))
-                    .if_then_else(
-                        Term::snd_pair()
-                            .apply(Term::unconstr_data().apply(Term::var("__val")))
-                            .choose_list(
-                                then.apply(Term::unit()).delay(),
-                                otherwise_delayed.clone(),
-                            )
-                            .force()
-                            .delay(),
-                        otherwise_delayed.clone(),
-                    )
-                    .force()
-                    .delay(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-            )
-            .force()
-            .lambda("__val")
-            .apply(value),
+        Some(UplcType::Data) => just_then,
 
-        Some(UplcType::Data) => then.apply(value),
-        // constr type
-        None => Term::var("__val")
-            .choose_data(
-                then.apply(Term::var("__val")).delay(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
-                otherwise_delayed.clone(),
+        Some(UplcType::Bls12_381MlResult) => {
+            unreachable!("attempted to cast Data into Bls12_381MlResult ?!")
+        }
+
+        Some(UplcType::Integer) => val
+            .choose_data_integer(then_delayed, &otherwise_delayed)
+            .force(),
+
+        Some(UplcType::ByteString) => val
+            .choose_data_bytearray(then_delayed, &otherwise_delayed)
+            .force(),
+
+        Some(UplcType::String) => val
+            .choose_data_bytearray(
+                |bytes| then_delayed(Term::decode_utf8().apply(bytes)),
+                &otherwise_delayed,
             )
-            .force()
-            .lambda("__val")
-            .apply(value),
-    }
+            .force(),
+
+        Some(UplcType::List(_)) if field_type.is_map() => val
+            .choose_data_map(then_delayed, &otherwise_delayed)
+            .force(),
+
+        Some(UplcType::List(_)) => val
+            .choose_data_list(then_delayed, &otherwise_delayed)
+            .force(),
+
+        Some(UplcType::Bls12_381G1Element) => val
+            .choose_data_bytearray(
+                |bytes| then_delayed(Term::bls12_381_g1_uncompress().apply(bytes)),
+                &otherwise_delayed,
+            )
+            .force(),
+
+        Some(UplcType::Bls12_381G2Element) => val
+            .choose_data_bytearray(
+                |bytes| then_delayed(Term::bls12_381_g2_uncompress().apply(bytes)),
+                &otherwise_delayed,
+            )
+            .force(),
+
+        Some(UplcType::Pair(_, _)) => val
+            .choose_data_list(
+                |list| list.unwrap_pair_or(then_delayed, &otherwise_delayed),
+                &otherwise_delayed,
+            )
+            .force(),
+
+        Some(UplcType::Bool) => val
+            .choose_data_constr(
+                |constr| constr.unwrap_bool_or(then_delayed, &otherwise_delayed),
+                &otherwise_delayed,
+            )
+            .force(),
+
+        Some(UplcType::Unit) => val
+            .choose_data_constr(
+                |constr| constr.unwrap_void_or(then_delayed, &otherwise_delayed),
+                &otherwise_delayed,
+            )
+            .force(),
+    })
 }
 
 pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcConstant> {
