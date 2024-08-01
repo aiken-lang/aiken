@@ -12,7 +12,7 @@ use super::{runtime::BuiltinRuntime, Error};
 
 pub(super) type Env = Rc<Vec<Value>>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Con(Rc<Constant>),
     Delay(Rc<Term<NamedDeBruijn>>, Env),

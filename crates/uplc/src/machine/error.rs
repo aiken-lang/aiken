@@ -1,12 +1,9 @@
+use super::{ExBudget, Value};
+use crate::ast::{NamedDeBruijn, Term, Type};
+use num_bigint::BigInt;
 use std::string::FromUtf8Error;
 
-use num_bigint::BigInt;
-
-use crate::ast::{NamedDeBruijn, Term, Type};
-
-use super::{ExBudget, Value};
-
-#[derive(Debug, Clone, thiserror::Error, miette::Diagnostic)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error, miette::Diagnostic)]
 pub enum Error {
     #[error("Over budget mem: {} & cpu: {}", .0.mem, .0.cpu)]
     OutOfExError(ExBudget),

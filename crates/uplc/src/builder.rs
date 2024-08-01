@@ -591,29 +591,26 @@ impl Term<Name> {
         Term::unconstr_data()
             .apply(self)
             .as_var("__pair__", |pair| {
-                Term::snd_pair()
-                    .apply(pair.clone())
-                    .choose_list(
-                        Term::less_than_equals_integer()
-                            .apply(Term::integer(2.into()))
-                            .apply(Term::fst_pair().apply(pair.clone()))
-                            .if_then_else(
-                                otherwise.clone(),
-                                Term::less_than_integer()
-                                    .apply(Term::fst_pair().apply(pair.clone()))
-                                    .apply(Term::integer(0.into()))
-                                    .if_then_else(
-                                        otherwise.clone(),
-                                        callback(
-                                            Term::equals_integer()
-                                                .apply(Term::integer(1.into()))
-                                                .apply(Term::fst_pair().apply(pair)),
-                                        ),
+                Term::snd_pair().apply(pair.clone()).choose_list(
+                    Term::less_than_equals_integer()
+                        .apply(Term::integer(2.into()))
+                        .apply(Term::fst_pair().apply(pair.clone()))
+                        .if_then_else(
+                            otherwise.clone(),
+                            Term::less_than_integer()
+                                .apply(Term::fst_pair().apply(pair.clone()))
+                                .apply(Term::integer(0.into()))
+                                .if_then_else(
+                                    otherwise.clone(),
+                                    callback(
+                                        Term::equals_integer()
+                                            .apply(Term::integer(1.into()))
+                                            .apply(Term::fst_pair().apply(pair)),
                                     ),
-                            ),
-                        otherwise.clone(),
-                    )
-                    .force()
+                                ),
+                        ),
+                    otherwise.clone(),
+                )
             })
     }
 
@@ -656,10 +653,20 @@ impl Term<Name> {
                     tail.as_var("__tail", |tail| {
                         let right = Term::head_list().apply(tail.clone());
                         tail.unwrap_tail_or(
-                            |_| otherwise.clone(),
-                            &callback(Term::mk_pair_data().apply(left).apply(right)),
+                            |leftovers| {
+                                leftovers
+                                    .choose_list(
+                                        callback(Term::mk_pair_data().apply(left).apply(right)),
+                                        otherwise.clone(),
+                                    )
+                                    .force()
+                                    .delay()
+                            },
+                            otherwise,
                         )
                     })
+                    .force()
+                    .delay()
                 },
                 otherwise,
             )
@@ -667,14 +674,174 @@ impl Term<Name> {
     }
 
     /// Continue with the tail of a list, if any; or fallback 'otherwise'.
-    ///
-    /// Note that the 'otherwise' term as well as the callback's result are expected
-    /// to be delayed terms.
     pub fn unwrap_tail_or<F>(self, callback: F, otherwise: &Term<Name>) -> Term<Name>
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
         self.clone()
             .choose_list(otherwise.clone(), callback(Term::tail_list().apply(self)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        ast::{Data, Name, NamedDeBruijn, Program, Term},
+        builder::Constant,
+        machine::{cost_model::ExBudget, Error},
+        optimize::interner::CodeGenInterner,
+    };
+
+    fn quick_eval(term: Term<Name>) -> Result<Term<NamedDeBruijn>, Error> {
+        let version = (1, 0, 0);
+        let mut program = Program { version, term };
+        CodeGenInterner::new().program(&mut program);
+        program
+            .to_named_debruijn()
+            .expect("failed to convert program to NamedDeBruijn")
+            .eval(ExBudget::default())
+            .result()
+    }
+
+    #[test]
+    fn unwrap_bool_or_false() {
+        let result = quick_eval(
+            Term::data(Data::constr(0, vec![]))
+                .unwrap_bool_or(|b| b.delay(), &Term::Error.delay())
+                .force(),
+        );
+
+        assert_eq!(result, Ok(Term::bool(false)));
+    }
+
+    #[test]
+    fn unwrap_bool_or_true() {
+        let result = quick_eval(
+            Term::data(Data::constr(1, vec![]))
+                .unwrap_bool_or(|b| b.delay(), &Term::Error.delay())
+                .force(),
+        );
+
+        assert_eq!(result, Ok(Term::bool(true)));
+    }
+
+    #[test]
+    fn unwrap_bool_or_extra_args() {
+        let result = quick_eval(
+            Term::data(Data::constr(1, vec![Data::integer(42.into())]))
+                .unwrap_bool_or(|b| b.delay(), &Term::Error.delay())
+                .force(),
+        );
+
+        assert_eq!(result, Err(Error::EvaluationFailure));
+    }
+
+    #[test]
+    fn unwrap_bool_or_invalid_constr_hi() {
+        let result = quick_eval(
+            Term::data(Data::constr(2, vec![]))
+                .unwrap_bool_or(|b| b.delay(), &Term::Error.delay())
+                .force(),
+        );
+
+        assert_eq!(result, Err(Error::EvaluationFailure));
+    }
+
+    #[test]
+    fn unwrap_tail_or_0_elems() {
+        let result = quick_eval(
+            Term::list_values(vec![])
+                .unwrap_tail_or(|p| p.delay(), &Term::Error.delay())
+                .force(),
+        );
+
+        assert_eq!(result, Err(Error::EvaluationFailure));
+    }
+
+    #[test]
+    fn unwrap_tail_or_1_elem() {
+        let result = quick_eval(
+            Term::list_values(vec![Constant::Data(Data::integer(1.into()))])
+                .unwrap_tail_or(|p| p.delay(), &Term::Error.delay())
+                .force(),
+        );
+
+        assert_eq!(result, Ok(Term::list_values(vec![])),);
+    }
+
+    #[test]
+    fn unwrap_tail_or_2_elems() {
+        let result = quick_eval(
+            Term::list_values(vec![
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(2.into())),
+            ])
+            .unwrap_tail_or(|p| p.delay(), &Term::Error.delay())
+            .force(),
+        );
+
+        assert_eq!(
+            result,
+            Ok(Term::list_values(vec![Constant::Data(Data::integer(
+                2.into()
+            ))]))
+        );
+    }
+
+    #[test]
+    fn unwrap_pair_or() {
+        let result = quick_eval(
+            Term::list_values(vec![
+                Constant::Data(Data::integer(14.into())),
+                Constant::Data(Data::bytestring(vec![1, 2, 3])),
+            ])
+            .unwrap_pair_or(|p| p.delay(), &Term::Error.delay())
+            .force(),
+        );
+
+        assert_eq!(
+            result,
+            Ok(Term::pair_values(
+                Constant::Data(Data::integer(14.into())),
+                Constant::Data(Data::bytestring(vec![1, 2, 3])),
+            ))
+        );
+    }
+
+    #[test]
+    fn unwrap_pair_or_not_enough_args_1() {
+        let result = quick_eval(
+            Term::list_values(vec![Constant::Data(Data::integer(1.into()))])
+                .unwrap_pair_or(|p| p.delay(), &Term::Error.delay())
+                .force(),
+        );
+
+        assert_eq!(result, Err(Error::EvaluationFailure));
+    }
+
+    #[test]
+    fn unwrap_pair_or_not_enough_args_0() {
+        let result = quick_eval(
+            Term::list_values(vec![])
+                .unwrap_pair_or(|p| p.delay(), &Term::Error.delay())
+                .force(),
+        );
+
+        assert_eq!(result, Err(Error::EvaluationFailure));
+    }
+
+    #[test]
+    fn unwrap_pair_or_too_many_args() {
+        let result = quick_eval(
+            Term::list_values(vec![
+                Constant::Data(Data::integer(1.into())),
+                Constant::Data(Data::integer(2.into())),
+                Constant::Data(Data::integer(3.into())),
+            ])
+            .unwrap_pair_or(|p| p.delay(), &Term::Error.delay())
+            .force(),
+        );
+
+        assert_eq!(result, Err(Error::EvaluationFailure));
     }
 }
