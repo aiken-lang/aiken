@@ -8,6 +8,7 @@ use std::rc::Rc;
 pub const CONSTR_FIELDS_EXPOSER: &str = "__constr_fields_exposer";
 pub const CONSTR_INDEX_EXPOSER: &str = "__constr_index_exposer";
 pub const EXPECT_ON_LIST: &str = "__expect_on_list";
+pub const INNER_EXPECT_ON_LIST: &str = "__inner_expect_on_list";
 
 impl<T> Term<T> {
     // Terms
@@ -632,6 +633,7 @@ impl Term<Name> {
                     .delay(),
                 otherwise.clone(),
             )
+            .force()
     }
 
     /// Convert an arbitrary 'term' into a pair and pass it into a 'callback'.

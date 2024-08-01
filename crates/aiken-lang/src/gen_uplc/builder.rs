@@ -354,9 +354,29 @@ pub fn erase_opaque_type_operations(
 pub fn find_introduced_variables(air_tree: &AirTree) -> Vec<String> {
     match air_tree {
         AirTree::Let { name, .. } => vec![name.clone()],
+        AirTree::SoftCastLet { name, .. } => vec![name.clone()],
         AirTree::TupleGuard { indices, .. } | AirTree::TupleClause { indices, .. } => {
             indices.iter().map(|(_, name)| name.clone()).collect()
         }
+        AirTree::PairGuard {
+            fst_name, snd_name, ..
+        } => fst_name
+            .into_iter()
+            .cloned()
+            .chain(snd_name.into_iter().cloned())
+            .collect_vec(),
+        AirTree::PairAccessor { fst, snd, .. } => fst
+            .into_iter()
+            .cloned()
+            .chain(snd.into_iter().cloned())
+            .collect_vec(),
+        AirTree::PairClause {
+            fst_name, snd_name, ..
+        } => fst_name
+            .into_iter()
+            .cloned()
+            .chain(snd_name.into_iter().cloned())
+            .collect_vec(),
         AirTree::Fn { params, .. } => params.to_vec(),
         AirTree::ListAccessor { names, .. } => names.clone(),
         AirTree::ListExpose {
@@ -913,17 +933,7 @@ pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
             .lambda("__list_data")
             .apply(Term::unlist_data().apply(term)),
         Some(UplcType::Bool) => Term::unwrap_bool_or(term, |result| result, &Term::Error.delay()),
-        Some(UplcType::Unit) => Term::equals_integer()
-            .apply(Term::integer(0.into()))
-            .apply(Term::fst_pair().apply(Term::var("__pair__")))
-            .delayed_if_then_else(
-                Term::snd_pair()
-                    .apply(Term::var("__pair__"))
-                    .delayed_choose_list(Term::unit(), Term::Error),
-                Term::Error,
-            )
-            .lambda("__pair__")
-            .apply(Term::unconstr_data().apply(term)),
+        Some(UplcType::Unit) => Term::unwrap_void_or(term, |result| result, &Term::Error.delay()),
 
         Some(UplcType::Data) | None => term,
     }
@@ -948,7 +958,7 @@ pub fn softcast_data_to_type_otherwise(
     value.as_var("__val", |val| match uplc_type {
         None => Term::choose_data_constr(val, then_delayed, &otherwise_delayed).force(),
 
-        Some(UplcType::Data) => just_then,
+        Some(UplcType::Data) => just_then.lambda(name).apply(Term::Var(val)),
 
         Some(UplcType::Bls12_381MlResult) => {
             unreachable!("attempted to cast Data into Bls12_381MlResult ?!")
@@ -1343,9 +1353,9 @@ pub fn list_access_to_uplc(
                                     &tail_name,
                                     acc.apply(
                                         Term::tail_list().apply(Term::var(tail_name.to_string())),
-                                    )
-                                    .delay(),
-                                ),
+                                    ),
+                                )
+                                .delay(),
                             )
                             .force()
                             .lambda(tail_name)
