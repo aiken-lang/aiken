@@ -955,76 +955,64 @@ pub fn softcast_data_to_type_otherwise(
 ) -> Term<Name> {
     let uplc_type = field_type.get_uplc_type();
 
-    let just_then = then.clone();
-
-    let then_delayed = |v| then.lambda(name).apply(v).delay();
+    let callback = |v| then.lambda(name).apply(v);
 
     value.as_var("__val", |val| match uplc_type {
-        None => Term::choose_data_constr(val, then_delayed, &otherwise_delayed).force(),
+        None => Term::choose_data_constr(val, callback, &otherwise_delayed),
 
-        Some(UplcType::Data) => just_then.lambda(name).apply(Term::Var(val)),
+        Some(UplcType::Data) => callback(Term::Var(val)),
 
         Some(UplcType::Bls12_381MlResult) => {
             unreachable!("attempted to cast Data into Bls12_381MlResult ?!")
         }
 
-        Some(UplcType::Integer) => {
-            Term::choose_data_integer(val, then_delayed, &otherwise_delayed).force()
-        }
+        Some(UplcType::Integer) => Term::choose_data_integer(val, callback, &otherwise_delayed),
 
         Some(UplcType::ByteString) => {
-            Term::choose_data_bytearray(val, then_delayed, &otherwise_delayed).force()
+            Term::choose_data_bytearray(val, callback, &otherwise_delayed)
         }
 
         Some(UplcType::String) => Term::choose_data_bytearray(
             val,
-            |bytes| then_delayed(Term::decode_utf8().apply(bytes)),
+            |bytes| callback(Term::decode_utf8().apply(bytes)),
             &otherwise_delayed,
-        )
-        .force(),
+        ),
 
         Some(UplcType::List(_)) if field_type.is_map() => {
-            Term::choose_data_map(val, then_delayed, &otherwise_delayed).force()
+            Term::choose_data_map(val, callback, &otherwise_delayed)
         }
 
-        Some(UplcType::List(_)) => {
-            Term::choose_data_list(val, then_delayed, &otherwise_delayed).force()
-        }
+        Some(UplcType::List(_)) => Term::choose_data_list(val, callback, &otherwise_delayed),
 
         Some(UplcType::Bls12_381G1Element) => Term::choose_data_bytearray(
             val,
-            |bytes| then_delayed(Term::bls12_381_g1_uncompress().apply(bytes)),
+            |bytes| callback(Term::bls12_381_g1_uncompress().apply(bytes)),
             &otherwise_delayed,
-        )
-        .force(),
+        ),
 
         Some(UplcType::Bls12_381G2Element) => Term::choose_data_bytearray(
             val,
-            |bytes| then_delayed(Term::bls12_381_g2_uncompress().apply(bytes)),
+            |bytes| callback(Term::bls12_381_g2_uncompress().apply(bytes)),
             &otherwise_delayed,
-        )
-        .force(),
+        ),
 
         Some(UplcType::Pair(_, _)) => Term::choose_data_list(
             val,
-            |list| list.unwrap_pair_or(then_delayed, &otherwise_delayed),
+            |list| list.unwrap_pair_or(callback, &otherwise_delayed),
             &otherwise_delayed,
-        )
-        .force(),
+        ),
 
         Some(UplcType::Bool) => Term::choose_data_constr(
             val,
-            |constr| constr.unwrap_bool_or(then_delayed, &otherwise_delayed),
+            |constr| constr.unwrap_bool_or(callback, &otherwise_delayed),
             &otherwise_delayed,
-        )
-        .force(),
+        ),
 
         Some(UplcType::Unit) => Term::choose_data_constr(
             val,
-            |constr| constr.unwrap_void_or(then_delayed, &otherwise_delayed),
+            |constr| constr.unwrap_void_or(callback, &otherwise_delayed),
             &otherwise_delayed,
-        )
-        .force(),
+        ),
     })
 }
 

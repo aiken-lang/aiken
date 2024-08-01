@@ -514,13 +514,15 @@ impl Term<Name> {
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
-        Term::Var(var.clone()).choose_data(
-            otherwise.clone(),
-            otherwise.clone(),
-            otherwise.clone(),
-            callback(Term::un_i_data().apply(Term::Var(var))),
-            otherwise.clone(),
-        )
+        Term::Var(var.clone())
+            .choose_data(
+                otherwise.clone(),
+                otherwise.clone(),
+                otherwise.clone(),
+                callback(Term::un_i_data().apply(Term::Var(var))).delay(),
+                otherwise.clone(),
+            )
+            .force()
     }
 
     /// Continue a computation provided that the current term is a Data-wrapped
@@ -529,13 +531,15 @@ impl Term<Name> {
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
-        Term::Var(var.clone()).choose_data(
-            otherwise.clone(),
-            otherwise.clone(),
-            otherwise.clone(),
-            otherwise.clone(),
-            callback(Term::un_b_data().apply(Term::Var(var))),
-        )
+        Term::Var(var.clone())
+            .choose_data(
+                otherwise.clone(),
+                otherwise.clone(),
+                otherwise.clone(),
+                otherwise.clone(),
+                callback(Term::un_b_data().apply(Term::Var(var))).delay(),
+            )
+            .force()
     }
 
     /// Continue a computation provided that the current term is a Data-wrapped
@@ -544,13 +548,15 @@ impl Term<Name> {
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
-        Term::Var(var.clone()).choose_data(
-            otherwise.clone(),
-            otherwise.clone(),
-            callback(Term::unlist_data().apply(Term::Var(var))),
-            otherwise.clone(),
-            otherwise.clone(),
-        )
+        Term::Var(var.clone())
+            .choose_data(
+                otherwise.clone(),
+                otherwise.clone(),
+                callback(Term::unlist_data().apply(Term::Var(var))).delay(),
+                otherwise.clone(),
+                otherwise.clone(),
+            )
+            .force()
     }
 
     /// Continue a computation provided that the current term is a Data-wrapped
@@ -559,13 +565,15 @@ impl Term<Name> {
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
-        Term::Var(var.clone()).choose_data(
-            otherwise.clone(),
-            callback(Term::unmap_data().apply(Term::Var(var))),
-            otherwise.clone(),
-            otherwise.clone(),
-            otherwise.clone(),
-        )
+        Term::Var(var.clone())
+            .choose_data(
+                otherwise.clone(),
+                callback(Term::unmap_data().apply(Term::Var(var))).delay(),
+                otherwise.clone(),
+                otherwise.clone(),
+                otherwise.clone(),
+            )
+            .force()
     }
 
     /// Continue a computation provided that the current term is a Data-wrapped
@@ -574,13 +582,15 @@ impl Term<Name> {
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
-        Term::Var(var.clone()).choose_data(
-            callback(Term::Var(var)),
-            otherwise.clone(),
-            otherwise.clone(),
-            otherwise.clone(),
-            otherwise.clone(),
-        )
+        Term::Var(var.clone())
+            .choose_data(
+                callback(Term::Var(var)).delay(),
+                otherwise.clone(),
+                otherwise.clone(),
+                otherwise.clone(),
+                otherwise.clone(),
+            )
+            .force()
     }
 
     /// Convert an arbitrary 'term' into a bool term and pass it into a 'callback'.
