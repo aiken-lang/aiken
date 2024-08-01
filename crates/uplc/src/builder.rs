@@ -485,34 +485,190 @@ impl Term<Name> {
         )
     }
 
+    /// Introduce a let-binding for a given term. The callback receives a Term::Var
+    /// whose name matches the given 'var_name'. Handy to re-use a same var across
+    /// multiple lambda expressions.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// value.as_var("__val", |val| {
+    ///   val.do_something()
+    ///      .do_another_thing()
+    /// })
+    /// ```
+    pub fn as_var<F>(self, var_name: &str, callback: F) -> Term<Name>
+    where
+        F: FnOnce(Term<Name>) -> Term<Name>,
+    {
+        callback(Term::var(var_name)).lambda(var_name).apply(self)
+    }
+
+    /// Continue a computation provided that the current term is a Data-wrapped integer.
+    /// The 'callback' receives an integer constant Term as argument.
+    pub fn choose_data_integer<F>(self, callback: F, otherwise: &Term<Name>) -> Self
+    where
+        F: FnOnce(Term<Name>) -> Term<Name>,
+    {
+        self.clone().choose_data(
+            otherwise.clone(),
+            otherwise.clone(),
+            otherwise.clone(),
+            callback(Term::un_i_data().apply(self)),
+            otherwise.clone(),
+        )
+    }
+
+    /// Continue a computation provided that the current term is a Data-wrapped
+    /// bytearray. The 'callback' receives a bytearray constant Term as argument.
+    pub fn choose_data_bytearray<F>(self, callback: F, otherwise: &Term<Name>) -> Self
+    where
+        F: FnOnce(Term<Name>) -> Term<Name>,
+    {
+        self.clone().choose_data(
+            otherwise.clone(),
+            otherwise.clone(),
+            otherwise.clone(),
+            otherwise.clone(),
+            callback(Term::un_b_data().apply(self)),
+        )
+    }
+
+    /// Continue a computation provided that the current term is a Data-wrapped
+    /// list. The 'callback' receives a ProtoList Term as argument.
+    pub fn choose_data_list<F>(self, callback: F, otherwise: &Term<Name>) -> Self
+    where
+        F: FnOnce(Term<Name>) -> Term<Name>,
+    {
+        self.clone().choose_data(
+            otherwise.clone(),
+            otherwise.clone(),
+            callback(Term::unlist_data().apply(self)),
+            otherwise.clone(),
+            otherwise.clone(),
+        )
+    }
+
+    /// Continue a computation provided that the current term is a Data-wrapped
+    /// list. The 'callback' receives a ProtoMap Term as argument.
+    pub fn choose_data_map<F>(self, callback: F, otherwise: &Term<Name>) -> Self
+    where
+        F: FnOnce(Term<Name>) -> Term<Name>,
+    {
+        self.clone().choose_data(
+            otherwise.clone(),
+            callback(Term::unmap_data().apply(self)),
+            otherwise.clone(),
+            otherwise.clone(),
+            otherwise.clone(),
+        )
+    }
+
+    /// Continue a computation provided that the current term is a Data-wrapped
+    /// constr. The 'callback' receives a Data as argument.
+    pub fn choose_data_constr<F>(self, callback: F, otherwise: &Term<Name>) -> Self
+    where
+        F: FnOnce(Term<Name>) -> Term<Name>,
+    {
+        self.clone().choose_data(
+            callback(self),
+            otherwise.clone(),
+            otherwise.clone(),
+            otherwise.clone(),
+            otherwise.clone(),
+        )
+    }
+
     /// Convert an arbitrary 'term' into a bool term and pass it into a 'callback'.
     /// Continue the execution 'otherwise' with a different branch.
     ///
     /// Note that the 'otherwise' term as well as the callback's result are expected
     /// to be delayed terms.
-    pub fn unwrap_bool_or<F>(term: Term<Name>, callback: F, otherwise: &Term<Name>) -> Term<Name>
+    pub fn unwrap_bool_or<F>(self, callback: F, otherwise: &Term<Name>) -> Term<Name>
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
-        Term::snd_pair()
-            .apply(Term::var("__pair__"))
-            .choose_list(
-                Term::less_than_equals_integer()
-                    .apply(Term::integer(2.into()))
-                    .apply(Term::fst_pair().apply(Term::var("__pair__")))
-                    .delayed_if_then_else(
+        Term::unconstr_data()
+            .apply(self)
+            .as_var("__pair__", |pair| {
+                Term::snd_pair()
+                    .apply(pair.clone())
+                    .choose_list(
+                        Term::less_than_equals_integer()
+                            .apply(Term::integer(2.into()))
+                            .apply(Term::fst_pair().apply(pair.clone()))
+                            .if_then_else(
+                                otherwise.clone(),
+                                callback(
+                                    Term::equals_integer()
+                                        .apply(Term::fst_pair().apply(pair))
+                                        .apply(Term::integer(1.into())),
+                                ),
+                            ),
                         otherwise.clone(),
-                        callback(
-                            Term::equals_integer()
-                                .apply(Term::fst_pair().apply(Term::var("__pair__")))
-                                .apply(Term::integer(1.into())),
-                        ),
                     )
+                    .force()
+            })
+    }
+
+    /// Convert an arbitrary 'term' into a unit term and pass it into a 'callback'.
+    /// Continue the execution 'otherwise' with a different branch.
+    ///
+    /// Note that the 'otherwise' term as well as the callback's result are expected
+    /// to be delayed terms.
+    pub fn unwrap_void_or<F>(self, callback: F, otherwise: &Term<Name>) -> Term<Name>
+    where
+        F: FnOnce(Term<Name>) -> Term<Name>,
+    {
+        Term::equals_integer()
+            .apply(Term::integer(0.into()))
+            .apply(Term::fst_pair().apply(Term::unconstr_data().apply(self.clone())))
+            .if_then_else(
+                Term::snd_pair()
+                    .apply(Term::unconstr_data().apply(self))
+                    .choose_list(callback(Term::unit()), otherwise.clone())
+                    .force()
                     .delay(),
                 otherwise.clone(),
             )
             .force()
-            .lambda("__pair__")
-            .apply(Term::unconstr_data().apply(term))
+    }
+
+    /// Convert an arbitrary 'term' into a pair and pass it into a 'callback'.
+    /// Continue the execution 'otherwise' with a different branch.
+    ///
+    /// Note that the 'otherwise' term as well as the callback's result are expected
+    /// to be delayed terms.
+    pub fn unwrap_pair_or<F>(self, callback: F, otherwise: &Term<Name>) -> Term<Name>
+    where
+        F: FnOnce(Term<Name>) -> Term<Name>,
+    {
+        self.as_var("__list_data", |list| {
+            let left = Term::head_list().apply(list.clone());
+            list.unwrap_tail_or(
+                |tail| {
+                    tail.as_var("__tail", |tail| {
+                        let right = Term::head_list().apply(tail.clone());
+                        tail.unwrap_tail_or(
+                            |_| otherwise.clone(),
+                            &callback(Term::mk_pair_data().apply(left).apply(right)),
+                        )
+                    })
+                },
+                otherwise,
+            )
+        })
+    }
+
+    /// Continue with the tail of a list, if any; or fallback 'otherwise'.
+    ///
+    /// Note that the 'otherwise' term as well as the callback's result are expected
+    /// to be delayed terms.
+    pub fn unwrap_tail_or<F>(self, callback: F, otherwise: &Term<Name>) -> Term<Name>
+    where
+        F: FnOnce(Term<Name>) -> Term<Name>,
+    {
+        self.clone()
+            .choose_list(otherwise.clone(), callback(Term::tail_list().apply(self)))
     }
 }
