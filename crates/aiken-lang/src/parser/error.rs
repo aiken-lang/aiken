@@ -35,7 +35,7 @@ use std::collections::HashSet;
 )]
 pub struct ParseError {
     pub kind: ErrorKind,
-    #[label]
+    #[label("{}", .label.unwrap_or_default())]
     pub span: Span,
     #[allow(dead_code)]
     while_parsing: Option<(Span, &'static str)>,
@@ -83,13 +83,13 @@ impl ParseError {
         }
     }
 
-    pub fn invalid_when_clause_guard(span: Span) -> Self {
+    pub fn deprecated_when_clause_guard(span: Span) -> Self {
         Self {
-            kind: ErrorKind::InvalidWhenClause,
+            kind: ErrorKind::DeprecatedWhenClause,
             span,
             while_parsing: None,
             expected: HashSet::new(),
-            label: Some("invalid clause guard"),
+            label: Some("deprecated"),
         }
     }
 
@@ -249,35 +249,17 @@ pub enum ErrorKind {
     }))]
     MalformedBase16StringLiteral,
 
-    #[error("I came across a bytearray declared using two different notations")]
+    #[error("I came across a bytearray declared using two different notations.")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#bytearray"))]
     #[diagnostic(help("Either use decimal or hexadecimal notation, but don't mix them."))]
     HybridNotationInByteArray,
 
-    #[error("I failed to understand a when clause guard.")]
-    #[diagnostic(url(
-        "https://aiken-lang.org/language-tour/control-flow#checking-equality-and-ordering-in-patterns"
-    ))]
+    #[error("I found a now-deprecated clause guard in a when/is expression.")]
     #[diagnostic(help("{}", formatdoc! {
-        r#"Clause guards are not as capable as standard expressions. While you can combine multiple clauses using '{operator_or}' and '{operator_and}', you can't do any arithmetic in there. They are mainly meant to compare pattern variables to some known constants using simple binary operators.
-
-           For example, the following clauses are well-formed:
-
-           {good}   (x, _) if x == 10 -> ...
-           {good}   (_, y) if y > 0 && y < 10 -> ...
-           {good}   (x, y) if x && (y > 0 || y < 10) -> ...
-
-           However, those aren't:
-
-           {bad}   (x, _) if x % 3 == 0 -> ...
-           {bad}   (x, y) if x + y > 42 -> ...
+        r#"Clause guards have been removed from Aiken. They were underused, considered potentially harmful and created needless complexity in the compiler. If you were using clause guards, our apologies, but you can now update your code and move the clause guards patterns inside a nested if/else expression.
         "#
-        , operator_or = "||".if_supports_color(Stdout, |s| s.yellow())
-        , operator_and = "&&".if_supports_color(Stdout, |s| s.yellow())
-        , good = "✔️".if_supports_color(Stdout, |s| s.green())
-        , bad = "✖️".if_supports_color(Stdout, |s| s.red())
     }))]
-    InvalidWhenClause,
+    DeprecatedWhenClause,
 }
 
 fn fmt_curve_type(curve: &CurveType) -> String {

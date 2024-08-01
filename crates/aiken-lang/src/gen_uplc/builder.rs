@@ -4,11 +4,10 @@ use super::{
 };
 use crate::{
     ast::{
-        BinOp, ClauseGuard, Constant, DataTypeKey, FunctionAccessKey, Pattern, Span, TraceLevel,
-        TypedArg, TypedAssignmentKind, TypedClause, TypedClauseGuard, TypedDataType, TypedPattern,
-        UnOp,
+        Constant, DataTypeKey, FunctionAccessKey, Pattern, Span, TraceLevel, TypedArg,
+        TypedAssignmentKind, TypedClause, TypedDataType, TypedPattern,
     },
-    builtins::{bool, data, function, int, list, void},
+    builtins::{data, function, int, list, void},
     expr::TypedExpr,
     line_numbers::{LineColumn, LineNumbers},
     tipo::{
@@ -295,66 +294,6 @@ pub fn constants_ir(literal: &Constant) -> AirTree {
         Constant::String { value, .. } => AirTree::string(value),
         Constant::ByteArray { bytes, .. } => AirTree::byte_array(bytes.clone()),
         Constant::CurvePoint { point, .. } => AirTree::curve(*point.as_ref()),
-    }
-}
-
-pub fn handle_clause_guard(clause_guard: &TypedClauseGuard) -> AirTree {
-    match clause_guard {
-        ClauseGuard::Not { value, .. } => {
-            let val = handle_clause_guard(value);
-
-            AirTree::unop(UnOp::Not, val)
-        }
-        ClauseGuard::Equals { left, right, .. } => {
-            let left_child = handle_clause_guard(left);
-            let right_child = handle_clause_guard(right);
-
-            AirTree::binop(BinOp::Eq, bool(), left_child, right_child, left.tipo())
-        }
-        ClauseGuard::NotEquals { left, right, .. } => {
-            let left_child = handle_clause_guard(left);
-            let right_child = handle_clause_guard(right);
-
-            AirTree::binop(BinOp::NotEq, bool(), left_child, right_child, left.tipo())
-        }
-        ClauseGuard::GtInt { left, right, .. } => {
-            let left_child = handle_clause_guard(left);
-            let right_child = handle_clause_guard(right);
-
-            AirTree::binop(BinOp::GtInt, bool(), left_child, right_child, left.tipo())
-        }
-        ClauseGuard::GtEqInt { left, right, .. } => {
-            let left_child = handle_clause_guard(left);
-            let right_child = handle_clause_guard(right);
-
-            AirTree::binop(BinOp::GtEqInt, bool(), left_child, right_child, left.tipo())
-        }
-        ClauseGuard::LtInt { left, right, .. } => {
-            let left_child = handle_clause_guard(left);
-            let right_child = handle_clause_guard(right);
-
-            AirTree::binop(BinOp::LtInt, bool(), left_child, right_child, left.tipo())
-        }
-        ClauseGuard::LtEqInt { left, right, .. } => {
-            let left_child = handle_clause_guard(left);
-            let right_child = handle_clause_guard(right);
-
-            AirTree::binop(BinOp::LtEqInt, bool(), left_child, right_child, left.tipo())
-        }
-        ClauseGuard::Or { left, right, .. } => {
-            let left_child = handle_clause_guard(left);
-            let right_child = handle_clause_guard(right);
-
-            AirTree::binop(BinOp::Or, bool(), left_child, right_child, left.tipo())
-        }
-        ClauseGuard::And { left, right, .. } => {
-            let left_child = handle_clause_guard(left);
-            let right_child = handle_clause_guard(right);
-
-            AirTree::binop(BinOp::And, bool(), left_child, right_child, left.tipo())
-        }
-        ClauseGuard::Var { tipo, name, .. } => AirTree::local_var(name, tipo.clone()),
-        ClauseGuard::Constant(constant) => constants_ir(constant),
     }
 }
 
@@ -726,18 +665,16 @@ pub fn rearrange_list_clauses(
 
             let clause1_len = match clause_pattern1 {
                 Pattern::List { elements, tail, .. } => {
-                    Some(elements.len() + usize::from(tail.is_some() && clause1.guard.is_none()))
+                    Some(elements.len() + usize::from(tail.is_some()))
                 }
-                _ if clause1.guard.is_none() => Some(100000),
-                _ => None,
+                _ => Some(100000),
             };
 
             let clause2_len = match clause_pattern2 {
                 Pattern::List { elements, tail, .. } => {
-                    Some(elements.len() + usize::from(tail.is_some() && clause2.guard.is_none()))
+                    Some(elements.len() + usize::from(tail.is_some()))
                 }
-                _ if clause2.guard.is_none() => Some(100001),
-                _ => None,
+                _ => Some(100001),
             };
 
             if let Some(clause1_len) = clause1_len {
@@ -759,29 +696,9 @@ pub fn rearrange_list_clauses(
 
     // If we have a catch all, use that. Otherwise use todo which will result in error
     // TODO: fill in todo label with description
-    let plug_in_then = &|index: usize, last_clause: &TypedClause| {
-        if last_clause.guard.is_none() {
-            match &last_clause.pattern {
-                Pattern::Var { .. } | Pattern::Discard { .. } => last_clause.clone().then,
-                _ => {
-                    let tipo = last_clause.then.tipo();
-
-                    TypedExpr::Trace {
-                        location: Span::empty(),
-                        tipo: tipo.clone(),
-                        text: Box::new(TypedExpr::String {
-                            location: Span::empty(),
-                            tipo: crate::builtins::string(),
-                            value: format!("Clause hole found for {index} elements."),
-                        }),
-                        then: Box::new(TypedExpr::ErrorTerm {
-                            location: Span::empty(),
-                            tipo,
-                        }),
-                    }
-                }
-            }
-        } else {
+    let plug_in_then = &|index: usize, last_clause: &TypedClause| match &last_clause.pattern {
+        Pattern::Var { .. } | Pattern::Discard { .. } => last_clause.clone().then,
+        _ => {
             let tipo = last_clause.then.tipo();
 
             TypedExpr::Trace {
@@ -849,7 +766,6 @@ pub fn rearrange_list_clauses(
                             }
                             .into(),
                         },
-                        guard: None,
                         then: plug_in_then(wild_card_clause_elems, last_clause),
                     }
                 } else {
@@ -860,7 +776,6 @@ pub fn rearrange_list_clauses(
                             elements: discard_elems,
                             tail: None,
                         },
-                        guard: None,
                         then: plug_in_then(wild_card_clause_elems, last_clause),
                     }
                 };
@@ -869,7 +784,7 @@ pub fn rearrange_list_clauses(
                 wild_card_clause_elems += 1;
             }
 
-            let mut is_wild_card_elems_clause = clause.guard.is_none();
+            let mut is_wild_card_elems_clause = true;
 
             for element in elements.iter() {
                 is_wild_card_elems_clause =
@@ -881,16 +796,14 @@ pub fn rearrange_list_clauses(
                     wild_card_clause_elems += 1;
                 }
 
-                if clause.guard.is_none() && tail.is_some() && !elements.is_empty() {
+                if tail.is_some() && !elements.is_empty() {
                     last_clause_index = index;
                     last_clause_set = true;
                 }
             }
         } else if let Pattern::Var { .. } | Pattern::Discard { .. } = &clause.pattern {
-            if clause.guard.is_none() {
-                last_clause_set = true;
-                last_clause_index = index;
-            }
+            last_clause_set = true;
+            last_clause_index = index;
         } else {
             unreachable!("Found a clause that is not a list or var or discard");
         }
@@ -904,7 +817,6 @@ pub fn rearrange_list_clauses(
                         name: "_".to_string(),
                         location: Span::empty(),
                     },
-                    guard: None,
                     then: plug_in_then(index + 1, last_clause),
                 });
             }

@@ -11,12 +11,11 @@ use super::{
 use crate::{
     ast::{
         self, Annotation, ArgName, AssignmentKind, AssignmentPattern, BinOp, Bls12_381Point,
-        ByteArrayFormatPreference, CallArg, ClauseGuard, Constant, Curve, Function, IfBranch,
+        ByteArrayFormatPreference, CallArg, Constant, Curve, Function, IfBranch,
         LogicalOpChainKind, Pattern, RecordUpdateSpread, Span, TraceKind, TraceLevel, Tracing,
-        TypedArg, TypedCallArg, TypedClause, TypedClauseGuard, TypedIfBranch, TypedPattern,
-        TypedRecordUpdateArg, UnOp, UntypedArg, UntypedAssignmentKind, UntypedClause,
-        UntypedClauseGuard, UntypedFunction, UntypedIfBranch, UntypedPattern,
-        UntypedRecordUpdateArg,
+        TypedArg, TypedCallArg, TypedClause, TypedIfBranch, TypedPattern, TypedRecordUpdateArg,
+        UnOp, UntypedArg, UntypedAssignmentKind, UntypedClause, UntypedFunction, UntypedIfBranch,
+        UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{
         bool, byte_array, data, from_default_function, function, g1_element, g2_element, int, list,
@@ -259,14 +258,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         // for clauses that don't have guards.
         let mut patterns = Vec::new();
         for clause in typed_clauses {
-            if let TypedClause {
-                guard: None,
-                pattern,
-                ..
-            } = clause
-            {
-                patterns.push(pattern)
-            }
+            patterns.push(&clause.pattern);
         }
 
         self.environment
@@ -1398,21 +1390,18 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     ) -> Result<Vec<TypedClause>, Error> {
         let UntypedClause {
             patterns,
-            guard,
             then,
             location,
         } = clause;
 
-        let (guard, then, typed_patterns) = self.in_new_scope(|scope| {
+        let (then, typed_patterns) = self.in_new_scope(|scope| {
             let typed_patterns = scope.infer_clause_pattern(patterns, subject, &location)?;
-
-            let guard = scope.infer_optional_clause_guard(guard)?;
 
             assert_no_assignment(&then)?;
 
             let then = scope.infer(then)?;
 
-            Ok::<_, Error>((guard, then, typed_patterns))
+            Ok::<_, Error>((then, typed_patterns))
         })?;
 
         Ok(typed_patterns
@@ -1420,217 +1409,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             .map(|pattern| TypedClause {
                 location,
                 pattern,
-                guard: guard.clone(),
                 then: then.clone(),
             })
             .collect())
-    }
-
-    fn infer_clause_guard(&mut self, guard: UntypedClauseGuard) -> Result<TypedClauseGuard, Error> {
-        match guard {
-            ClauseGuard::Var { location, name, .. } => {
-                let constructor = self.infer_value_constructor(&None, &name, &location)?;
-
-                // We cannot support all values in guard expressions as the BEAM does not
-                match &constructor.variant {
-                    ValueConstructorVariant::LocalVariable { .. } => (),
-
-                    ValueConstructorVariant::ModuleFn { .. }
-                    | ValueConstructorVariant::Record { .. } => {
-                        return Err(Error::NonLocalClauseGuardVariable { location, name });
-                    }
-
-                    ValueConstructorVariant::ModuleConstant { literal, .. } => {
-                        return Ok(ClauseGuard::Constant(literal.clone()));
-                    }
-                };
-
-                Ok(ClauseGuard::Var {
-                    location,
-                    name,
-                    tipo: constructor.tipo,
-                })
-            }
-
-            ClauseGuard::Not {
-                location, value, ..
-            } => {
-                let value = self.infer_clause_guard(*value)?;
-
-                self.unify(bool(), value.tipo(), value.location(), false)?;
-
-                Ok(ClauseGuard::Not {
-                    location,
-                    value: Box::new(value),
-                })
-            }
-
-            ClauseGuard::And {
-                location,
-                left,
-                right,
-                ..
-            } => {
-                let left = self.infer_clause_guard(*left)?;
-
-                self.unify(bool(), left.tipo(), left.location(), false)?;
-
-                let right = self.infer_clause_guard(*right)?;
-
-                self.unify(bool(), right.tipo(), right.location(), false)?;
-
-                Ok(ClauseGuard::And {
-                    location,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                })
-            }
-
-            ClauseGuard::Or {
-                location,
-                left,
-                right,
-                ..
-            } => {
-                let left = self.infer_clause_guard(*left)?;
-
-                self.unify(bool(), left.tipo(), left.location(), false)?;
-
-                let right = self.infer_clause_guard(*right)?;
-
-                self.unify(bool(), right.tipo(), right.location(), false)?;
-
-                Ok(ClauseGuard::Or {
-                    location,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                })
-            }
-
-            ClauseGuard::Equals {
-                location,
-                left,
-                right,
-                ..
-            } => {
-                let left = self.infer_clause_guard(*left)?;
-                let right = self.infer_clause_guard(*right)?;
-
-                self.unify(left.tipo(), right.tipo(), location, false)?;
-
-                Ok(ClauseGuard::Equals {
-                    location,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                })
-            }
-
-            ClauseGuard::NotEquals {
-                location,
-                left,
-                right,
-                ..
-            } => {
-                let left = self.infer_clause_guard(*left)?;
-                let right = self.infer_clause_guard(*right)?;
-
-                self.unify(left.tipo(), right.tipo(), location, false)?;
-
-                Ok(ClauseGuard::NotEquals {
-                    location,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                })
-            }
-
-            ClauseGuard::GtInt {
-                location,
-                left,
-                right,
-                ..
-            } => {
-                let left = self.infer_clause_guard(*left)?;
-
-                self.unify(int(), left.tipo(), left.location(), false)?;
-
-                let right = self.infer_clause_guard(*right)?;
-
-                self.unify(int(), right.tipo(), right.location(), false)?;
-
-                Ok(ClauseGuard::GtInt {
-                    location,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                })
-            }
-
-            ClauseGuard::GtEqInt {
-                location,
-                left,
-                right,
-                ..
-            } => {
-                let left = self.infer_clause_guard(*left)?;
-
-                self.unify(int(), left.tipo(), left.location(), false)?;
-
-                let right = self.infer_clause_guard(*right)?;
-
-                self.unify(int(), right.tipo(), right.location(), false)?;
-
-                Ok(ClauseGuard::GtEqInt {
-                    location,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                })
-            }
-
-            ClauseGuard::LtInt {
-                location,
-                left,
-                right,
-                ..
-            } => {
-                let left = self.infer_clause_guard(*left)?;
-
-                self.unify(int(), left.tipo(), left.location(), false)?;
-
-                let right = self.infer_clause_guard(*right)?;
-
-                self.unify(int(), right.tipo(), right.location(), false)?;
-
-                Ok(ClauseGuard::LtInt {
-                    location,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                })
-            }
-
-            ClauseGuard::LtEqInt {
-                location,
-                left,
-                right,
-                ..
-            } => {
-                let left = self.infer_clause_guard(*left)?;
-
-                self.unify(int(), left.tipo(), left.location(), false)?;
-
-                let right = self.infer_clause_guard(*right)?;
-
-                self.unify(int(), right.tipo(), right.location(), false)?;
-
-                Ok(ClauseGuard::LtEqInt {
-                    location,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                })
-            }
-
-            ClauseGuard::Constant(constant) => {
-                self.infer_const(&None, constant).map(ClauseGuard::Constant)
-            }
-        }
     }
 
     fn infer_clause_pattern(
@@ -1961,25 +1742,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             elements: elems,
             tail,
         })
-    }
-
-    fn infer_optional_clause_guard(
-        &mut self,
-        guard: Option<UntypedClauseGuard>,
-    ) -> Result<Option<TypedClauseGuard>, Error> {
-        match guard {
-            // If there is no guard we do nothing
-            None => Ok(None),
-
-            // If there is a guard we assert that it is of type Bool
-            Some(guard) => {
-                let guard = self.infer_clause_guard(guard)?;
-
-                self.unify(bool(), guard.tipo(), guard.location(), false)?;
-
-                Ok(Some(guard))
-            }
-        }
     }
 
     fn infer_logical_op_chain(

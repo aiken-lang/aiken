@@ -25,7 +25,6 @@ When {
                     tipo: (),
                 },
             ],
-            guard: None,
             then: ErrorTerm {
                 location: 28..32,
             },

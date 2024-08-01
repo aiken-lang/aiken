@@ -3,13 +3,12 @@ use chumsky::prelude::*;
 mod clause;
 mod guard;
 
-pub use clause::parser as clause;
-pub use guard::parser as guard;
-
 use crate::{
     expr::UntypedExpr,
     parser::{error::ParseError, token::Token},
 };
+pub use clause::parser as clause;
+pub use guard::parser as guard;
 
 pub fn parser(
     expression: Recursive<'_, Token, UntypedExpr, ParseError>,
@@ -38,13 +37,24 @@ mod tests {
         assert_expr!(
             r#"
             when a is {
-              2 if x > 1 -> 3
               1 | 4 | 5 -> {
                 let amazing = 5
                 amazing
               }
               3 -> 9
               _ -> 4
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn when_guard_deprecation() {
+        assert_expr!(
+            r#"
+            when a is {
+              2 if x > 1 -> 3
+              _ -> 1
             }
             "#
         );

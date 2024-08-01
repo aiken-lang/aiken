@@ -1,12 +1,12 @@
 use crate::{
     ast::{
         Annotation, ArgBy, ArgName, ArgVia, AssignmentKind, AssignmentPattern, BinOp,
-        ByteArrayFormatPreference, CallArg, ClauseGuard, Constant, CurveType, DataType, Definition,
-        Function, LogicalOpChainKind, ModuleConstant, OnTestFailure, Pattern, RecordConstructor,
+        ByteArrayFormatPreference, CallArg, Constant, CurveType, DataType, Definition, Function,
+        LogicalOpChainKind, ModuleConstant, OnTestFailure, Pattern, RecordConstructor,
         RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg, UnOp,
         UnqualifiedImport, UntypedArg, UntypedArgVia, UntypedAssignmentKind, UntypedClause,
-        UntypedClauseGuard, UntypedDefinition, UntypedFunction, UntypedIfBranch, UntypedModule,
-        UntypedPattern, UntypedRecordUpdateArg, Use, Validator, CAPTURE_VARIABLE,
+        UntypedDefinition, UntypedFunction, UntypedIfBranch, UntypedModule, UntypedPattern,
+        UntypedRecordUpdateArg, Use, Validator, CAPTURE_VARIABLE,
     },
     docvec,
     expr::{FnStyle, UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
@@ -1844,10 +1844,6 @@ impl<'comments> Formatter<'comments> {
             clause.patterns.iter().map(|p| self.pattern(p)),
             " | ".to_doc(),
         );
-        let clause_doc = match &clause.guard {
-            None => clause_doc,
-            Some(guard) => clause_doc.append(" if ").append(self.clause_guard(guard)),
-        };
 
         if index == 0 {
             clause_doc
@@ -1944,61 +1940,6 @@ impl<'comments> Formatter<'comments> {
             .append(self.pattern(&arg.value));
 
         commented(doc, comments)
-    }
-
-    pub fn clause_guard_bin_op<'a>(
-        &mut self,
-        name: &'a str,
-        name_precedence: u8,
-        left: &'a UntypedClauseGuard,
-        right: &'a UntypedClauseGuard,
-    ) -> Document<'a> {
-        let left_precedence = left.precedence();
-        let right_precedence = right.precedence();
-        let left = self.clause_guard(left);
-        let right = self.clause_guard(right);
-        self.operator_side(left, name_precedence, left_precedence)
-            .append(name)
-            .append(self.operator_side(right, name_precedence, right_precedence.saturating_sub(1)))
-    }
-
-    fn clause_guard<'a>(&mut self, clause_guard: &'a UntypedClauseGuard) -> Document<'a> {
-        match clause_guard {
-            ClauseGuard::Not { value, .. } => {
-                docvec!["!", self.clause_guard(value)]
-            }
-            ClauseGuard::And { left, right, .. } => {
-                self.clause_guard_bin_op(" && ", clause_guard.precedence(), left, right)
-            }
-            ClauseGuard::Or { left, right, .. } => {
-                self.clause_guard_bin_op(" || ", clause_guard.precedence(), left, right)
-            }
-            ClauseGuard::Equals { left, right, .. } => {
-                self.clause_guard_bin_op(" == ", clause_guard.precedence(), left, right)
-            }
-
-            ClauseGuard::NotEquals { left, right, .. } => {
-                self.clause_guard_bin_op(" != ", clause_guard.precedence(), left, right)
-            }
-            ClauseGuard::GtInt { left, right, .. } => {
-                self.clause_guard_bin_op(" > ", clause_guard.precedence(), left, right)
-            }
-
-            ClauseGuard::GtEqInt { left, right, .. } => {
-                self.clause_guard_bin_op(" >= ", clause_guard.precedence(), left, right)
-            }
-            ClauseGuard::LtInt { left, right, .. } => {
-                self.clause_guard_bin_op(" < ", clause_guard.precedence(), left, right)
-            }
-
-            ClauseGuard::LtEqInt { left, right, .. } => {
-                self.clause_guard_bin_op(" <= ", clause_guard.precedence(), left, right)
-            }
-
-            ClauseGuard::Var { name, .. } => name.to_doc(),
-
-            ClauseGuard::Constant(constant) => self.const_expr(constant),
-        }
     }
 
     fn un_op<'a>(&mut self, value: &'a UntypedExpr, op: &'a UnOp) -> Document<'a> {

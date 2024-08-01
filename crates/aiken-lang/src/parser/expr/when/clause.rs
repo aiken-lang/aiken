@@ -1,45 +1,41 @@
-use chumsky::prelude::*;
-use vec1::vec1;
-
+use super::guard;
 use crate::{
     ast,
     expr::UntypedExpr,
     parser::{error::ParseError, pattern, token::Token},
 };
-
-use super::guard;
+use chumsky::prelude::*;
+use vec1::vec1;
 
 pub fn parser(
     expression: Recursive<'_, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, ast::UntypedClause, Error = ParseError> + '_ {
     pattern()
         .then(just(Token::Vbar).ignore_then(pattern()).repeated().or_not())
-        .then(choice((
-            just(Token::If)
-                .ignore_then(guard())
-                .or_not()
-                .then_ignore(just(Token::RArrow)),
-            just(Token::If)
-                .ignore_then(take_until(just(Token::RArrow)))
-                .validate(|_value, span, emit| {
-                    emit(ParseError::invalid_when_clause_guard(span));
-                    None
-                }),
-        )))
+        .then(choice((just(Token::If)
+            .ignore_then(guard())
+            .or_not()
+            .then_ignore(just(Token::RArrow)),)))
         // TODO: add hint "Did you mean to wrap a multi line clause in curly braces?"
         .then(expression)
-        .map_with_span(
-            |(((pattern, alternative_patterns_opt), guard), then), span| {
-                let mut patterns = vec1![pattern];
-                patterns.append(&mut alternative_patterns_opt.unwrap_or_default());
-                ast::UntypedClause {
-                    location: span,
-                    patterns,
-                    guard,
-                    then,
+        .validate(
+            |(((pattern, alternative_patterns_opt), guard), then), span, emit| {
+                if guard.is_some() {
+                    emit(ParseError::deprecated_when_clause_guard(span));
                 }
+
+                (pattern, alternative_patterns_opt, then)
             },
         )
+        .map_with_span(|(pattern, alternative_patterns_opt, then), span| {
+            let mut patterns = vec1![pattern];
+            patterns.append(&mut alternative_patterns_opt.unwrap_or_default());
+            ast::UntypedClause {
+                location: span,
+                patterns,
+                then,
+            }
+        })
 }
 
 #[cfg(test)]
