@@ -3,6 +3,7 @@ use crate::{
     builtins::DefaultFunction,
 };
 use pallas_primitives::alonzo::PlutusData;
+use std::rc::Rc;
 
 pub const CONSTR_FIELDS_EXPOSER: &str = "__constr_fields_exposer";
 pub const CONSTR_INDEX_EXPOSER: &str = "__constr_index_exposer";
@@ -499,51 +500,53 @@ impl Term<Name> {
     /// ```
     pub fn as_var<F>(self, var_name: &str, callback: F) -> Term<Name>
     where
-        F: FnOnce(Term<Name>) -> Term<Name>,
+        F: FnOnce(Rc<Name>) -> Term<Name>,
     {
-        callback(Term::var(var_name)).lambda(var_name).apply(self)
+        callback(Name::text(var_name).into())
+            .lambda(var_name)
+            .apply(self)
     }
 
     /// Continue a computation provided that the current term is a Data-wrapped integer.
     /// The 'callback' receives an integer constant Term as argument.
-    pub fn choose_data_integer<F>(self, callback: F, otherwise: &Term<Name>) -> Self
+    pub fn choose_data_integer<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name>) -> Self
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
-        self.clone().choose_data(
+        Term::Var(var.clone()).choose_data(
             otherwise.clone(),
             otherwise.clone(),
             otherwise.clone(),
-            callback(Term::un_i_data().apply(self)),
+            callback(Term::un_i_data().apply(Term::Var(var))),
             otherwise.clone(),
         )
     }
 
     /// Continue a computation provided that the current term is a Data-wrapped
     /// bytearray. The 'callback' receives a bytearray constant Term as argument.
-    pub fn choose_data_bytearray<F>(self, callback: F, otherwise: &Term<Name>) -> Self
+    pub fn choose_data_bytearray<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name>) -> Self
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
-        self.clone().choose_data(
+        Term::Var(var.clone()).choose_data(
             otherwise.clone(),
             otherwise.clone(),
             otherwise.clone(),
             otherwise.clone(),
-            callback(Term::un_b_data().apply(self)),
+            callback(Term::un_b_data().apply(Term::Var(var))),
         )
     }
 
     /// Continue a computation provided that the current term is a Data-wrapped
     /// list. The 'callback' receives a ProtoList Term as argument.
-    pub fn choose_data_list<F>(self, callback: F, otherwise: &Term<Name>) -> Self
+    pub fn choose_data_list<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name>) -> Self
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
-        self.clone().choose_data(
+        Term::Var(var.clone()).choose_data(
             otherwise.clone(),
             otherwise.clone(),
-            callback(Term::unlist_data().apply(self)),
+            callback(Term::unlist_data().apply(Term::Var(var))),
             otherwise.clone(),
             otherwise.clone(),
         )
@@ -551,13 +554,13 @@ impl Term<Name> {
 
     /// Continue a computation provided that the current term is a Data-wrapped
     /// list. The 'callback' receives a ProtoMap Term as argument.
-    pub fn choose_data_map<F>(self, callback: F, otherwise: &Term<Name>) -> Self
+    pub fn choose_data_map<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name>) -> Self
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
-        self.clone().choose_data(
+        Term::Var(var.clone()).choose_data(
             otherwise.clone(),
-            callback(Term::unmap_data().apply(self)),
+            callback(Term::unmap_data().apply(Term::Var(var))),
             otherwise.clone(),
             otherwise.clone(),
             otherwise.clone(),
@@ -566,12 +569,12 @@ impl Term<Name> {
 
     /// Continue a computation provided that the current term is a Data-wrapped
     /// constr. The 'callback' receives a Data as argument.
-    pub fn choose_data_constr<F>(self, callback: F, otherwise: &Term<Name>) -> Self
+    pub fn choose_data_constr<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name>) -> Self
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
-        self.clone().choose_data(
-            callback(self),
+        Term::Var(var.clone()).choose_data(
+            callback(Term::Var(var)),
             otherwise.clone(),
             otherwise.clone(),
             otherwise.clone(),
@@ -591,21 +594,21 @@ impl Term<Name> {
         Term::unconstr_data()
             .apply(self)
             .as_var("__pair__", |pair| {
-                Term::snd_pair().apply(pair.clone()).choose_list(
+                Term::snd_pair().apply(Term::Var(pair.clone())).choose_list(
                     Term::less_than_equals_integer()
                         .apply(Term::integer(2.into()))
-                        .apply(Term::fst_pair().apply(pair.clone()))
+                        .apply(Term::fst_pair().apply(Term::Var(pair.clone())))
                         .if_then_else(
                             otherwise.clone(),
                             Term::less_than_integer()
-                                .apply(Term::fst_pair().apply(pair.clone()))
+                                .apply(Term::fst_pair().apply(Term::Var(pair.clone())))
                                 .apply(Term::integer(0.into()))
                                 .if_then_else(
                                     otherwise.clone(),
                                     callback(
                                         Term::equals_integer()
                                             .apply(Term::integer(1.into()))
-                                            .apply(Term::fst_pair().apply(pair)),
+                                            .apply(Term::fst_pair().apply(Term::Var(pair))),
                                     ),
                                 ),
                         ),
@@ -647,12 +650,14 @@ impl Term<Name> {
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
         self.as_var("__list_data", |list| {
-            let left = Term::head_list().apply(list.clone());
-            list.unwrap_tail_or(
+            let left = Term::head_list().apply(Term::Var(list.clone()));
+            Term::unwrap_tail_or(
+                list,
                 |tail| {
                     tail.as_var("__tail", |tail| {
-                        let right = Term::head_list().apply(tail.clone());
-                        tail.unwrap_tail_or(
+                        let right = Term::head_list().apply(Term::Var(tail.clone()));
+                        Term::unwrap_tail_or(
+                            tail,
                             |leftovers| {
                                 leftovers
                                     .choose_list(
@@ -674,12 +679,14 @@ impl Term<Name> {
     }
 
     /// Continue with the tail of a list, if any; or fallback 'otherwise'.
-    pub fn unwrap_tail_or<F>(self, callback: F, otherwise: &Term<Name>) -> Term<Name>
+    pub fn unwrap_tail_or<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name>) -> Term<Name>
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
-        self.clone()
-            .choose_list(otherwise.clone(), callback(Term::tail_list().apply(self)))
+        Term::Var(var.clone()).choose_list(
+            otherwise.clone(),
+            callback(Term::tail_list().apply(Term::Var(var))),
+        )
     }
 }
 
@@ -749,11 +756,9 @@ mod tests {
 
     #[test]
     fn unwrap_tail_or_0_elems() {
-        let result = quick_eval(
-            Term::list_values(vec![])
-                .unwrap_tail_or(|p| p.delay(), &Term::Error.delay())
-                .force(),
-        );
+        let result = quick_eval(Term::list_values(vec![]).as_var("__tail", |tail| {
+            Term::unwrap_tail_or(tail, |p| p.delay(), &Term::Error.delay()).force()
+        }));
 
         assert_eq!(result, Err(Error::EvaluationFailure));
     }
@@ -762,8 +767,9 @@ mod tests {
     fn unwrap_tail_or_1_elem() {
         let result = quick_eval(
             Term::list_values(vec![Constant::Data(Data::integer(1.into()))])
-                .unwrap_tail_or(|p| p.delay(), &Term::Error.delay())
-                .force(),
+                .as_var("__tail", |tail| {
+                    Term::unwrap_tail_or(tail, |p| p.delay(), &Term::Error.delay()).force()
+                }),
         );
 
         assert_eq!(result, Ok(Term::list_values(vec![])),);
@@ -776,8 +782,9 @@ mod tests {
                 Constant::Data(Data::integer(1.into())),
                 Constant::Data(Data::integer(2.into())),
             ])
-            .unwrap_tail_or(|p| p.delay(), &Term::Error.delay())
-            .force(),
+            .as_var("__tail", |tail| {
+                Term::unwrap_tail_or(tail, |p| p.delay(), &Term::Error.delay()).force()
+            }),
         );
 
         assert_eq!(

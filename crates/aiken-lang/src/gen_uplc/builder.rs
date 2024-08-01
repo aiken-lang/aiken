@@ -946,9 +946,7 @@ pub fn softcast_data_to_type_otherwise(
     let then_delayed = |v| then.lambda(name).apply(v).delay();
 
     value.as_var("__val", |val| match uplc_type {
-        None => val
-            .choose_data_constr(then_delayed, &otherwise_delayed)
-            .force(),
+        None => Term::choose_data_constr(val, then_delayed, &otherwise_delayed).force(),
 
         Some(UplcType::Data) => just_then,
 
@@ -956,63 +954,63 @@ pub fn softcast_data_to_type_otherwise(
             unreachable!("attempted to cast Data into Bls12_381MlResult ?!")
         }
 
-        Some(UplcType::Integer) => val
-            .choose_data_integer(then_delayed, &otherwise_delayed)
-            .force(),
+        Some(UplcType::Integer) => {
+            Term::choose_data_integer(val, then_delayed, &otherwise_delayed).force()
+        }
 
-        Some(UplcType::ByteString) => val
-            .choose_data_bytearray(then_delayed, &otherwise_delayed)
-            .force(),
+        Some(UplcType::ByteString) => {
+            Term::choose_data_bytearray(val, then_delayed, &otherwise_delayed).force()
+        }
 
-        Some(UplcType::String) => val
-            .choose_data_bytearray(
-                |bytes| then_delayed(Term::decode_utf8().apply(bytes)),
-                &otherwise_delayed,
-            )
-            .force(),
+        Some(UplcType::String) => Term::choose_data_bytearray(
+            val,
+            |bytes| then_delayed(Term::decode_utf8().apply(bytes)),
+            &otherwise_delayed,
+        )
+        .force(),
 
-        Some(UplcType::List(_)) if field_type.is_map() => val
-            .choose_data_map(then_delayed, &otherwise_delayed)
-            .force(),
+        Some(UplcType::List(_)) if field_type.is_map() => {
+            Term::choose_data_map(val, then_delayed, &otherwise_delayed).force()
+        }
 
-        Some(UplcType::List(_)) => val
-            .choose_data_list(then_delayed, &otherwise_delayed)
-            .force(),
+        Some(UplcType::List(_)) => {
+            Term::choose_data_list(val, then_delayed, &otherwise_delayed).force()
+        }
 
-        Some(UplcType::Bls12_381G1Element) => val
-            .choose_data_bytearray(
-                |bytes| then_delayed(Term::bls12_381_g1_uncompress().apply(bytes)),
-                &otherwise_delayed,
-            )
-            .force(),
+        Some(UplcType::Bls12_381G1Element) => Term::choose_data_bytearray(
+            val,
+            |bytes| then_delayed(Term::bls12_381_g1_uncompress().apply(bytes)),
+            &otherwise_delayed,
+        )
+        .force(),
 
-        Some(UplcType::Bls12_381G2Element) => val
-            .choose_data_bytearray(
-                |bytes| then_delayed(Term::bls12_381_g2_uncompress().apply(bytes)),
-                &otherwise_delayed,
-            )
-            .force(),
+        Some(UplcType::Bls12_381G2Element) => Term::choose_data_bytearray(
+            val,
+            |bytes| then_delayed(Term::bls12_381_g2_uncompress().apply(bytes)),
+            &otherwise_delayed,
+        )
+        .force(),
 
-        Some(UplcType::Pair(_, _)) => val
-            .choose_data_list(
-                |list| list.unwrap_pair_or(then_delayed, &otherwise_delayed),
-                &otherwise_delayed,
-            )
-            .force(),
+        Some(UplcType::Pair(_, _)) => Term::choose_data_list(
+            val,
+            |list| list.unwrap_pair_or(then_delayed, &otherwise_delayed),
+            &otherwise_delayed,
+        )
+        .force(),
 
-        Some(UplcType::Bool) => val
-            .choose_data_constr(
-                |constr| constr.unwrap_bool_or(then_delayed, &otherwise_delayed),
-                &otherwise_delayed,
-            )
-            .force(),
+        Some(UplcType::Bool) => Term::choose_data_constr(
+            val,
+            |constr| constr.unwrap_bool_or(then_delayed, &otherwise_delayed),
+            &otherwise_delayed,
+        )
+        .force(),
 
-        Some(UplcType::Unit) => val
-            .choose_data_constr(
-                |constr| constr.unwrap_void_or(then_delayed, &otherwise_delayed),
-                &otherwise_delayed,
-            )
-            .force(),
+        Some(UplcType::Unit) => Term::choose_data_constr(
+            val,
+            |constr| constr.unwrap_void_or(then_delayed, &otherwise_delayed),
+            &otherwise_delayed,
+        )
+        .force(),
     })
 }
 
