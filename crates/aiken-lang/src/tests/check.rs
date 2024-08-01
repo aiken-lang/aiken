@@ -910,30 +910,6 @@ fn exhaustiveness_nested_list_and_tuples() {
 }
 
 #[test]
-fn exhaustiveness_guard() {
-    let source_code = r#"
-        fn foo() {
-            when [(True, 42)] is {
-                [(True,  x), ..] if x == 42 -> Void
-                [(False, x), ..] -> Void
-                [] -> Void
-            }
-        }
-    "#;
-
-    assert!(matches!(
-        check(parse(source_code)),
-        Err((
-            _,
-            Error::NotExhaustivePatternMatch {
-                unmatched,
-                ..
-            }
-        )) if unmatched[0] == "[(True, _), ..]"
-    ));
-}
-
-#[test]
 fn expect_sugar_correct_type() {
     let source_code = r#"
         fn foo() {
@@ -1188,25 +1164,6 @@ fn list_pattern_4() {
           let xs = [1, 2, 3]
           let x = when xs is {
             [] -> 1
-            [x] -> x
-            [x, ..] if x > 10 -> x
-          }
-          x == 1
-        }
-    "#;
-    assert!(matches!(
-        check(parse(source_code)),
-        Err((_, Error::NotExhaustivePatternMatch { .. }))
-    ))
-}
-
-#[test]
-fn list_pattern_5() {
-    let source_code = r#"
-        test foo() {
-          let xs = [1, 2, 3]
-          let x = when xs is {
-            [] -> 1
             [_, ..] -> 1
           }
           x == 1
@@ -1216,7 +1173,7 @@ fn list_pattern_5() {
 }
 
 #[test]
-fn list_pattern_6() {
+fn list_pattern_5() {
     let source_code = r#"
         test foo() {
           let xs = [1, 2, 3]

@@ -1970,28 +1970,7 @@ impl<'a> CodeGenerator<'a> {
         props.complex_clause = false;
 
         if let Some((clause, rest_clauses)) = clauses.split_first() {
-            let mut clause_then = self.build(&clause.then, module_name, &[]);
-
-            // handles clause guard if it exists
-            if let Some(guard) = &clause.guard {
-                props.complex_clause = true;
-
-                let clause_guard_name = format!(
-                    "__clause_guard_span_{}_{}",
-                    clause.location.start, clause.location.end
-                );
-
-                clause_then = AirTree::let_assignment(
-                    &clause_guard_name,
-                    builder::handle_clause_guard(guard),
-                    AirTree::clause_guard(
-                        &clause_guard_name,
-                        AirTree::bool(true),
-                        bool(),
-                        clause_then,
-                    ),
-                );
-            }
+            let clause_then = self.build(&clause.then, module_name, &[]);
 
             match &mut props.specific_clause {
                 // TODO: Implement PairClause and PairClauseGuard
@@ -2170,7 +2149,7 @@ impl<'a> CodeGenerator<'a> {
                         }
                     };
 
-                    let mut is_wild_card_elems_clause = clause.guard.is_none();
+                    let mut is_wild_card_elems_clause = true;
                     for element in elements.iter() {
                         is_wild_card_elems_clause = is_wild_card_elems_clause
                             && !pattern_has_conditions(element, &self.data_types);
@@ -2319,8 +2298,6 @@ impl<'a> CodeGenerator<'a> {
         } else {
             // handle final_clause
             props.final_clause = true;
-
-            assert!(final_clause.guard.is_none());
 
             let clause_then = self.build(&final_clause.then, module_name, &[]);
 

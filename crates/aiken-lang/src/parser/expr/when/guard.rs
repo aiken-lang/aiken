@@ -1,9 +1,8 @@
-use chumsky::prelude::*;
-
 use crate::{
     ast,
     parser::{definition, error::ParseError, token::Token},
 };
+use chumsky::prelude::*;
 
 pub fn parser() -> impl Parser<Token, ast::UntypedClauseGuard, Error = ParseError> {
     recursive(|expression| {
@@ -11,13 +10,9 @@ pub fn parser() -> impl Parser<Token, ast::UntypedClauseGuard, Error = ParseErro
             Token::Name { name } => name,
             Token::UpName { name } => name,
         }
-        .map_with_span(|name, span| ast::ClauseGuard::Var {
-            name,
-            tipo: (),
-            location: span,
-        });
+        .map_with_span(|_name, _span| ast::UntypedClauseGuard {});
 
-        let constant_parser = definition::constant::value().map(ast::ClauseGuard::Constant);
+        let constant_parser = definition::constant::value().map(|_| ast::UntypedClauseGuard {});
 
         let block_parser = expression
             .clone()
@@ -31,10 +26,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedClauseGuard, Error = ParseErro
             .map_with_span(|op, span| (op, span))
             .repeated()
             .then(leaf_parser)
-            .foldr(|(_, span), value| ast::ClauseGuard::Not {
-                location: span.union(value.location()),
-                value: Box::new(value),
-            })
+            .foldr(|(_, _span), _value| ast::UntypedClauseGuard {})
             .boxed();
 
         let comparison_op = choice((
@@ -49,74 +41,19 @@ pub fn parser() -> impl Parser<Token, ast::UntypedClauseGuard, Error = ParseErro
         let comparison = unary
             .clone()
             .then(comparison_op.then(unary).repeated())
-            .foldl(|left, (op, right)| {
-                let location = left.location().union(right.location());
-                let left = Box::new(left);
-                let right = Box::new(right);
-                match op {
-                    ast::BinOp::Eq => ast::ClauseGuard::Equals {
-                        location,
-                        left,
-                        right,
-                    },
-                    ast::BinOp::NotEq => ast::ClauseGuard::NotEquals {
-                        location,
-                        left,
-                        right,
-                    },
-                    ast::BinOp::LtInt => ast::ClauseGuard::LtInt {
-                        location,
-                        left,
-                        right,
-                    },
-                    ast::BinOp::GtInt => ast::ClauseGuard::GtInt {
-                        location,
-                        left,
-                        right,
-                    },
-                    ast::BinOp::LtEqInt => ast::ClauseGuard::LtEqInt {
-                        location,
-                        left,
-                        right,
-                    },
-                    ast::BinOp::GtEqInt => ast::ClauseGuard::GtEqInt {
-                        location,
-                        left,
-                        right,
-                    },
-                    _ => unreachable!(),
-                }
-            })
+            .foldl(|_left, (_op, _right)| ast::UntypedClauseGuard {})
             .boxed();
 
         let and_op = just(Token::AmperAmper);
         let conjunction = comparison
             .clone()
             .then(and_op.then(comparison).repeated())
-            .foldl(|left, (_tok, right)| {
-                let location = left.location().union(right.location());
-                let left = Box::new(left);
-                let right = Box::new(right);
-                ast::ClauseGuard::And {
-                    location,
-                    left,
-                    right,
-                }
-            });
+            .foldl(|_left, (_tok, _right)| ast::UntypedClauseGuard {});
 
         let or_op = just(Token::VbarVbar);
         conjunction
             .clone()
             .then(or_op.then(conjunction).repeated())
-            .foldl(|left, (_tok, right)| {
-                let location = left.location().union(right.location());
-                let left = Box::new(left);
-                let right = Box::new(right);
-                ast::ClauseGuard::Or {
-                    location,
-                    left,
-                    right,
-                }
-            })
+            .foldl(|_left, (_tok, _right)| ast::UntypedClauseGuard {})
     })
 }

@@ -26,9 +26,7 @@ test is_work_2() {
 fn is_happy_hour(day: DayOfTheWeek, current_time: Int) {
   when day is {
     Monday | Sunday -> True
-    Tuesday | Wednesday | Thursday | Friday | Saturday if current_time > 18 ->
-      True
-    _ -> False
+    Tuesday | Wednesday | Thursday | Friday | Saturday -> current_time > 18
   }
 }
 

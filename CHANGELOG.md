@@ -13,7 +13,7 @@
 
 ### Removed
 
-∅
+- **aiken-lang**: clause guards are no longer part of the language. See [#886](https://github.com/aiken-lang/aiken/issues/886). @KtorZ.
 
 ## v1.0.30-alpha - 2024-07-25
 

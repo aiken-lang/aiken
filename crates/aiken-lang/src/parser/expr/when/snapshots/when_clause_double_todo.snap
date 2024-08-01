@@ -25,7 +25,6 @@ When {
                     tipo: (),
                 },
             ],
-            guard: None,
             then: Trace {
                 kind: Todo,
                 location: 28..32,
@@ -55,7 +54,6 @@ When {
                     tipo: (),
                 },
             ],
-            guard: None,
             then: Trace {
                 kind: Todo,
                 location: 47..51,

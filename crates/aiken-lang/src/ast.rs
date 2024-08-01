@@ -1,5 +1,5 @@
 use crate::{
-    builtins::{self, bool, g1_element, g2_element},
+    builtins::{self, g1_element, g2_element},
     expr::{TypedExpr, UntypedExpr},
     line_numbers::LineNumbers,
     parser::token::{Base, Token},
@@ -1752,7 +1752,6 @@ pub type TypedMultiPattern = MultiPattern<PatternConstructor, Rc<Type>>;
 pub struct UntypedClause {
     pub location: Span,
     pub patterns: Vec1<Pattern<(), ()>>,
-    pub guard: Option<ClauseGuard<()>>,
     pub then: UntypedExpr,
 }
 
@@ -1760,7 +1759,6 @@ pub struct UntypedClause {
 pub struct TypedClause {
     pub location: Span,
     pub pattern: Pattern<PatternConstructor, Rc<Type>>,
-    pub guard: Option<ClauseGuard<Rc<Type>>>,
     pub then: TypedExpr,
 }
 
@@ -1779,123 +1777,7 @@ impl TypedClause {
     }
 }
 
-pub type UntypedClauseGuard = ClauseGuard<()>;
-pub type TypedClauseGuard = ClauseGuard<Rc<Type>>;
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum ClauseGuard<Type> {
-    Not {
-        location: Span,
-        value: Box<Self>,
-    },
-
-    Equals {
-        location: Span,
-        left: Box<Self>,
-        right: Box<Self>,
-    },
-
-    NotEquals {
-        location: Span,
-        left: Box<Self>,
-        right: Box<Self>,
-    },
-
-    GtInt {
-        location: Span,
-        left: Box<Self>,
-        right: Box<Self>,
-    },
-
-    GtEqInt {
-        location: Span,
-        left: Box<Self>,
-        right: Box<Self>,
-    },
-
-    LtInt {
-        location: Span,
-        left: Box<Self>,
-        right: Box<Self>,
-    },
-
-    LtEqInt {
-        location: Span,
-        left: Box<Self>,
-        right: Box<Self>,
-    },
-
-    Or {
-        location: Span,
-        left: Box<Self>,
-        right: Box<Self>,
-    },
-
-    And {
-        location: Span,
-        left: Box<Self>,
-        right: Box<Self>,
-    },
-
-    Var {
-        location: Span,
-        tipo: Type,
-        name: String,
-    },
-
-    Constant(Constant),
-}
-
-impl<A> ClauseGuard<A> {
-    pub fn location(&self) -> Span {
-        match self {
-            ClauseGuard::Constant(constant) => constant.location(),
-            ClauseGuard::Not { location, .. }
-            | ClauseGuard::Or { location, .. }
-            | ClauseGuard::And { location, .. }
-            | ClauseGuard::Var { location, .. }
-            | ClauseGuard::Equals { location, .. }
-            | ClauseGuard::NotEquals { location, .. }
-            | ClauseGuard::GtInt { location, .. }
-            | ClauseGuard::GtEqInt { location, .. }
-            | ClauseGuard::LtInt { location, .. }
-            | ClauseGuard::LtEqInt { location, .. } => *location,
-        }
-    }
-
-    pub fn precedence(&self) -> u8 {
-        // Ensure that this matches the other precedence function for guards
-        match self {
-            ClauseGuard::Not { .. } => 1,
-            ClauseGuard::Or { .. } => 2,
-            ClauseGuard::And { .. } => 3,
-            ClauseGuard::Equals { .. } | ClauseGuard::NotEquals { .. } => 4,
-            ClauseGuard::GtInt { .. }
-            | ClauseGuard::GtEqInt { .. }
-            | ClauseGuard::LtInt { .. }
-            | ClauseGuard::LtEqInt { .. } => 5,
-            ClauseGuard::Constant(_) | ClauseGuard::Var { .. } => 6,
-        }
-    }
-}
-
-impl TypedClauseGuard {
-    pub fn tipo(&self) -> Rc<Type> {
-        match self {
-            ClauseGuard::Var { tipo, .. } => tipo.clone(),
-            ClauseGuard::Constant(constant) => constant.tipo(),
-            ClauseGuard::Not { .. }
-            | ClauseGuard::Or { .. }
-            | ClauseGuard::And { .. }
-            | ClauseGuard::Equals { .. }
-            | ClauseGuard::NotEquals { .. }
-            | ClauseGuard::GtInt { .. }
-            | ClauseGuard::GtEqInt { .. }
-            | ClauseGuard::LtInt { .. }
-            | ClauseGuard::LtEqInt { .. } => bool(),
-        }
-    }
-}
+pub struct UntypedClauseGuard {}
 
 pub type TypedIfBranch = IfBranch<TypedExpr, TypedPattern>;
 pub type UntypedIfBranch = IfBranch<UntypedExpr, AssignmentPattern>;

@@ -504,23 +504,6 @@ If you really meant to return that last expression, try to replace it with the f
         count: usize,
     },
 
-    #[error(
-        "I stumbled upon an invalid (non-local) clause guard '{}'.\n",
-        name.if_supports_color(Stdout, |s| s.purple())
-    )]
-    #[diagnostic(url(
-        "https://aiken-lang.org/language-tour/control-flow#checking-equality-and-ordering-in-patterns"
-    ))]
-    #[diagnostic(code("illegal::clause_guard"))]
-    #[diagnostic(help(
-        "There are some conditions regarding what can be used in a guard. Values must be either local to the function, or defined as module constants. You can't use functions or records in there."
-    ))]
-    NonLocalClauseGuardVariable {
-        #[label]
-        location: Span,
-        name: String,
-    },
-
     #[error("I tripped over an attempt to access elements on something that isn't indexable.\n")]
     #[diagnostic(url("https://aiken-lang.org/language-tour/primitive-types#tuples"))]
     #[diagnostic(code("illegal::indexable"))]
@@ -1065,7 +1048,6 @@ impl ExtraData for Error {
             | Error::LogicalOpChainMissingExpr { .. }
             | Error::MissingVarInAlternativePattern { .. }
             | Error::MultiValidatorEqualArgs { .. }
-            | Error::NonLocalClauseGuardVariable { .. }
             | Error::NotIndexable { .. }
             | Error::NotExhaustivePatternMatch { .. }
             | Error::NotFn { .. }

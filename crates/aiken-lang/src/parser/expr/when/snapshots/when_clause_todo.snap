@@ -25,7 +25,6 @@ When {
                     tipo: (),
                 },
             ],
-            guard: None,
             then: Var {
                 location: 28..32,
                 name: "True",
@@ -47,7 +46,6 @@ When {
                     tipo: (),
                 },
             ],
-            guard: None,
             then: Trace {
                 kind: Todo,
                 location: 47..68,

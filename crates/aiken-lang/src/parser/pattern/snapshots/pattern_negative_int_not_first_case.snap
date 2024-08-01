@@ -20,7 +20,6 @@ When {
                     },
                 },
             ],
-            guard: None,
             then: UnOp {
                 op: Negate,
                 location: 22..25,
@@ -44,7 +43,6 @@ When {
                     },
                 },
             ],
-            guard: None,
             then: UInt {
                 location: 35..37,
                 value: "14",
