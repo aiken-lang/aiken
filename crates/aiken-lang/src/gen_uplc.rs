@@ -1798,35 +1798,45 @@ impl<'a> CodeGenerator<'a> {
                         AirTree::list_empty(
                             AirTree::local_var("__list", tipo.clone()),
                             then,
-                            AirTree::let_assignment(
-                                &item_name,
-                                AirTree::builtin(
-                                    DefaultFunction::HeadList,
-                                    data(),
-                                    vec![AirTree::local_var("__list", tipo.clone())],
-                                ),
-                                AirTree::soft_cast_assignment(
+                            AirTree::anon_func(
+                                vec![],
+                                AirTree::let_assignment(
                                     &item_name,
-                                    inner_list_type.clone(),
-                                    AirTree::local_var(&item_name, data()),
-                                    self.expect_type_assign(
-                                        inner_list_type,
-                                        AirTree::local_var(&item_name, inner_list_type.clone()),
-                                        defined_data_types,
-                                        location,
-                                        AirTree::call(
-                                            AirTree::local_var("__curried_expect_on_list", void()),
-                                            void(),
-                                            vec![AirTree::builtin(
-                                                DefaultFunction::TailList,
-                                                list(data()),
-                                                vec![AirTree::local_var("__list", tipo.clone())],
-                                            )],
-                                        ),
-                                        otherwise.clone(),
+                                    AirTree::builtin(
+                                        DefaultFunction::HeadList,
+                                        data(),
+                                        vec![AirTree::local_var("__list", tipo.clone())],
                                     ),
-                                    otherwise,
+                                    AirTree::soft_cast_assignment(
+                                        &item_name,
+                                        inner_list_type.clone(),
+                                        AirTree::local_var(&item_name, data()),
+                                        self.expect_type_assign(
+                                            inner_list_type,
+                                            AirTree::local_var(&item_name, inner_list_type.clone()),
+                                            defined_data_types,
+                                            location,
+                                            AirTree::call(
+                                                AirTree::local_var(
+                                                    "__curried_expect_on_list",
+                                                    void(),
+                                                ),
+                                                void(),
+                                                vec![AirTree::builtin(
+                                                    DefaultFunction::TailList,
+                                                    list(data()),
+                                                    vec![AirTree::local_var(
+                                                        "__list",
+                                                        tipo.clone(),
+                                                    )],
+                                                )],
+                                            ),
+                                            otherwise.clone(),
+                                        ),
+                                        otherwise,
+                                    ),
                                 ),
+                                true,
                             ),
                         ),
                         false,
