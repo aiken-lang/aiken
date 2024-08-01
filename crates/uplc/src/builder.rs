@@ -599,11 +599,17 @@ impl Term<Name> {
                             .apply(Term::fst_pair().apply(pair.clone()))
                             .if_then_else(
                                 otherwise.clone(),
-                                callback(
-                                    Term::equals_integer()
-                                        .apply(Term::fst_pair().apply(pair))
-                                        .apply(Term::integer(1.into())),
-                                ),
+                                Term::less_than_integer()
+                                    .apply(Term::fst_pair().apply(pair.clone()))
+                                    .apply(Term::integer(0.into()))
+                                    .if_then_else(
+                                        otherwise.clone(),
+                                        callback(
+                                            Term::equals_integer()
+                                                .apply(Term::integer(1.into()))
+                                                .apply(Term::fst_pair().apply(pair)),
+                                        ),
+                                    ),
                             ),
                         otherwise.clone(),
                     )
