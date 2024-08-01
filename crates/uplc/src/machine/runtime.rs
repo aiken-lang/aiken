@@ -54,7 +54,7 @@ impl From<&Language> for BuiltinSemantics {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BuiltinRuntime {
     pub(super) args: Vec<Value>,
     fun: DefaultFunction,
