@@ -9,6 +9,7 @@
 ### Changed
 
 - **aiken-project**: fix blueprint's apply truncating last character of outputs. See [#987](https://github.com/aiken-lang/aiken/issues/987). @KtorZ
+- **aiken-project**: provide better error (include input ref) when inputs are missing during transaction evaluation. See [#974](https://github.com/aiken-lang/aiken/issues/974). @KtorZ
 
 ### Removed
 

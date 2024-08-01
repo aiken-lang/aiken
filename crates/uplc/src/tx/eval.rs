@@ -1,22 +1,3 @@
-use crate::{
-    ast::{FakeNamedDeBruijn, NamedDeBruijn, Program},
-    machine::cost_model::ExBudget,
-    PlutusData,
-};
-use pallas_addresses::{Address, ScriptHash, StakePayload};
-use pallas_codec::utils::{KeyValuePairs, MaybeIndefArray};
-use pallas_crypto::hash::Hash;
-use pallas_primitives::babbage::{
-    Certificate, CostMdls, DatumHash, DatumOption, ExUnits, Mint, MintedTx, NativeScript,
-    PlutusV1Script, PlutusV2Script, PolicyId, PseudoScript, Redeemer, RedeemerTag, RewardAccount,
-    StakeCredential, TransactionInput, TransactionOutput, Value, Withdrawals,
-};
-use pallas_traverse::{ComputeHash, OriginalHash};
-
-use pallas_primitives::conway::Language;
-
-use std::{cmp::Ordering, collections::HashMap, convert::TryInto, ops::Deref, vec};
-
 use super::{
     script_context::{
         ResolvedInput, ScriptContext, ScriptPurpose, SlotConfig, TimeRange, TxInInfo, TxInfo,
@@ -25,7 +6,25 @@ use super::{
     to_plutus_data::{MintValue, ToPlutusData},
     Error,
 };
+use crate::{
+    ast::{FakeNamedDeBruijn, NamedDeBruijn, Program},
+    machine::cost_model::ExBudget,
+    PlutusData,
+};
 use itertools::Itertools;
+use pallas_addresses::{Address, ScriptHash, StakePayload};
+use pallas_codec::utils::{KeyValuePairs, MaybeIndefArray};
+use pallas_crypto::hash::Hash;
+use pallas_primitives::{
+    babbage::{
+        Certificate, CostMdls, DatumHash, DatumOption, ExUnits, Mint, MintedTx, NativeScript,
+        PlutusV1Script, PlutusV2Script, PolicyId, PseudoScript, Redeemer, RedeemerTag,
+        RewardAccount, StakeCredential, TransactionInput, TransactionOutput, Value, Withdrawals,
+    },
+    conway::Language,
+};
+use pallas_traverse::{ComputeHash, OriginalHash};
+use std::{cmp::Ordering, collections::HashMap, convert::TryInto, ops::Deref, vec};
 
 pub fn slot_to_begin_posix_time(slot: u64, sc: &SlotConfig) -> u64 {
     let ms_after_begin = (slot - sc.zero_slot) * sc.slot_length as u64;
@@ -134,7 +133,7 @@ pub fn get_tx_in_info_v1(
         .map(|input| {
             let utxo = match utxos.iter().find(|utxo| utxo.input == *input) {
                 Some(resolved) => resolved,
-                None => return Err(Error::ResolvedInputNotFound),
+                None => return Err(Error::ResolvedInputNotFound(input.clone())),
             };
             let address = Address::from_bytes(match &utxo.output {
                 TransactionOutput::Legacy(output) => output.address.as_ref(),
@@ -183,7 +182,7 @@ fn get_tx_in_info_v2(
         .map(|input| {
             let utxo = match utxos.iter().find(|utxo| utxo.input == *input) {
                 Some(resolved) => resolved,
-                None => return Err(Error::ResolvedInputNotFound),
+                None => return Err(Error::ResolvedInputNotFound(input.clone())),
             };
             let address = Address::from_bytes(match &utxo.output {
                 TransactionOutput::Legacy(output) => output.address.as_ref(),
@@ -494,7 +493,7 @@ fn get_execution_purpose(
                 None => {
                     return Err(Error::MissingRequiredScript {
                         hash: hash.to_string(),
-                    })
+                    });
                 }
             };
             Ok(ExecutionPurpose::NoDatum(script))
@@ -502,7 +501,7 @@ fn get_execution_purpose(
         ScriptPurpose::Spending(out_ref) => {
             let utxo = match utxos.iter().find(|utxo| utxo.input == *out_ref) {
                 Some(resolved) => resolved,
-                None => return Err(Error::ResolvedInputNotFound),
+                None => return Err(Error::ResolvedInputNotFound(out_ref.clone())),
             };
             match &utxo.output {
                 TransactionOutput::Legacy(output) => {
@@ -515,7 +514,7 @@ fn get_execution_purpose(
                                 None => {
                                     return Err(Error::MissingRequiredScript {
                                         hash: hash.to_string(),
-                                    })
+                                    });
                                 }
                             };
 
@@ -529,7 +528,7 @@ fn get_execution_purpose(
                                 None => {
                                     return Err(Error::MissingRequiredDatum {
                                         hash: datum_hash.to_string(),
-                                    })
+                                    });
                                 }
                             };
 
@@ -548,7 +547,7 @@ fn get_execution_purpose(
                                 None => {
                                     return Err(Error::MissingRequiredScript {
                                         hash: hash.to_string(),
-                                    })
+                                    });
                                 }
                             };
 
@@ -559,7 +558,7 @@ fn get_execution_purpose(
                                         None => {
                                             return Err(Error::MissingRequiredDatum {
                                                 hash: hash.to_string(),
-                                            })
+                                            });
                                         }
                                     }
                                 }
@@ -585,7 +584,7 @@ fn get_execution_purpose(
                 None => {
                     return Err(Error::MissingRequiredScript {
                         hash: script_hash.to_string(),
-                    })
+                    });
                 }
             };
 
@@ -603,7 +602,7 @@ fn get_execution_purpose(
                     None => {
                         return Err(Error::MissingRequiredScript {
                             hash: script_hash.to_string(),
-                        })
+                        });
                     }
                 };
 
@@ -620,7 +619,7 @@ fn get_execution_purpose(
                     None => {
                         return Err(Error::MissingRequiredScript {
                             hash: script_hash.to_string(),
-                        })
+                        });
                     }
                 };
 

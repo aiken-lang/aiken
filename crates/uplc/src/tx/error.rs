@@ -1,4 +1,7 @@
-use crate::machine::{self, cost_model::ExBudget};
+use crate::{
+    machine::{self, cost_model::ExBudget},
+    TransactionInput,
+};
 
 #[derive(thiserror::Error, Debug, miette::Diagnostic)]
 pub enum Error {
@@ -24,7 +27,7 @@ pub enum Error {
     #[error("Extraneous redeemer")]
     ExtraneousRedeemer,
     #[error("Resolved Input not found.")]
-    ResolvedInputNotFound,
+    ResolvedInputNotFound(TransactionInput),
     #[error("A key hash cannot be the hash of a script.")]
     ScriptKeyHash,
     #[error("PlutusV1 cost model not found.")]

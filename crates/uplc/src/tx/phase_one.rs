@@ -1,16 +1,14 @@
-use std::collections::HashMap;
-
-use pallas_addresses::{Address, ScriptHash, ShelleyPaymentPart, StakePayload};
-use pallas_codec::utils::{KeyValuePairs, MaybeIndefArray};
-use pallas_primitives::babbage::{
-    Certificate, MintedTx, PolicyId, RedeemerTag, RewardAccount, StakeCredential, TransactionOutput,
-};
-
 use super::{
     error::Error,
     eval::{DataLookupTable, ScriptVersion},
     script_context::{ResolvedInput, ScriptPurpose},
 };
+use pallas_addresses::{Address, ScriptHash, ShelleyPaymentPart, StakePayload};
+use pallas_codec::utils::{KeyValuePairs, MaybeIndefArray};
+use pallas_primitives::babbage::{
+    Certificate, MintedTx, PolicyId, RedeemerTag, RewardAccount, StakeCredential, TransactionOutput,
+};
+use std::collections::HashMap;
 
 // TODO: include in pallas eventually?
 #[derive(Debug, PartialEq, Clone)]
@@ -83,7 +81,7 @@ pub fn scripts_needed(
     for input in txb.inputs.iter() {
         let utxo = match utxos.iter().find(|utxo| utxo.input == *input) {
             Some(u) => u,
-            None => return Err(Error::ResolvedInputNotFound),
+            None => return Err(Error::ResolvedInputNotFound(input.clone())),
         };
 
         let address = Address::from_bytes(match &utxo.output {
