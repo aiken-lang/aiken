@@ -5318,16 +5318,19 @@ fn expect_head_cast_data_with_tail() {
     "#;
     let expect_on_list = Term::var("expect_on_list")
         .apply(Term::var("expect_on_list"))
+        .apply(Term::var("__list"))
         .lambda("expect_on_list")
         .apply(
             Term::var("check_with")
                 .apply(Term::var("__list"))
                 .apply(Term::var("expect_on_list").apply(Term::var("expect_on_list")))
                 .lambda("__list")
-                .lambda("expect_on_list"),
+                .lambda("expect_on_list")
+                .lambda("__no_inline__"),
         )
         .lambda("check_with")
-        .lambda("__list");
+        .lambda("__list")
+        .lambda("__no_inline__");
 
     let values = Term::list_values(vec![
         Constant::Data(Data::integer(1.into())),
@@ -5346,7 +5349,7 @@ fn expect_head_cast_data_with_tail() {
         );
 
     let check_with = Term::var("__list")
-        .choose_list(
+        .delayed_choose_list(
             then,
             Term::var("__head")
                 .choose_data(
@@ -5356,14 +5359,17 @@ fn expect_head_cast_data_with_tail() {
                     Term::var("__curried_expect_on_list")
                         .apply(Term::tail_list().apply(Term::var("__list")))
                         .lambda("_")
-                        .apply(Term::un_i_data().apply(Term::var("__head"))),
+                        .apply(Term::un_i_data().apply(Term::var("__head")))
+                        .delay(),
                     Term::var("expect[h,j,..]:List<Int>=a"),
                 )
+                .force()
                 .lambda("__head")
                 .apply(Term::head_list().apply(Term::var("__list"))),
         )
         .lambda("__curried_expect_on_list")
-        .lambda("__list");
+        .lambda("__list")
+        .lambda("__no_inline__");
 
     let on_list = values
         .clone()
@@ -5383,19 +5389,18 @@ fn expect_head_cast_data_with_tail() {
                                     Term::var("expect[h,j,..]:List<Int>=a"),
                                     Term::var("expect[h,j,..]:List<Int>=a"),
                                     Term::var("expect_on_list")
-                                        .apply(Term::tail_list().apply(Term::var("tail_2")))
-                                        .apply(check_with)
                                         .lambda("expect_on_list")
                                         .apply(expect_on_list)
+                                        .apply(Term::tail_list().apply(Term::var("tail_1")))
+                                        .apply(check_with)
                                         .lambda("j")
-                                        .apply(Term::un_i_data().apply(Term::var("__val")).delay()),
+                                        .apply(Term::un_i_data().apply(Term::var("__val")))
+                                        .delay(),
                                     Term::var("expect[h,j,..]:List<Int>=a"),
                                 )
                                 .force()
                                 .lambda("__val")
                                 .apply(Term::head_list().apply(Term::var("tail_1")))
-                                .lambda("tail_2")
-                                .apply(Term::tail_list().apply(Term::var("tail_1")))
                                 .delay(),
                         )
                         .force()
@@ -5408,7 +5413,8 @@ fn expect_head_cast_data_with_tail() {
                 )
                 .force()
                 .lambda("__val")
-                .apply(Term::head_list().apply(values)),
+                .apply(Term::head_list().apply(values))
+                .delay(),
         )
         .force()
         .delay();
