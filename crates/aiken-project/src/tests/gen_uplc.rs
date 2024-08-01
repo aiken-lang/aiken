@@ -51,6 +51,8 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
         TestType::Func(Function { body: func, .. }) => {
             let program = generator.generate_raw(func, &[], &script.1);
 
+            let pretty_program = program.to_pretty();
+
             let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
 
             let expected = Program {
@@ -60,9 +62,16 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
 
             let expected = optimize::aiken_optimize_and_intern(expected);
 
+            let pretty_expected = expected.to_pretty();
+
             let expected: Program<DeBruijn> = expected.try_into().unwrap();
 
-            assert!(debruijn_program.to_pretty() == expected.to_pretty());
+            assert!(
+                debruijn_program.to_pretty() == expected.to_pretty(),
+                "=============== generated:\n{}\n\n=============== expected:\n{}",
+                pretty_program,
+                pretty_expected,
+            );
 
             let mut eval = debruijn_program.eval(ExBudget::default());
 
@@ -5307,6 +5316,102 @@ fn expect_head_cast_data_with_tail() {
         h == h && j == j
       }
     "#;
+    let expect_on_list = Term::var("expect_on_list")
+        .apply(Term::var("expect_on_list"))
+        .lambda("expect_on_list")
+        .apply(
+            Term::var("check_with")
+                .apply(Term::var("__list"))
+                .apply(Term::var("expect_on_list").apply(Term::var("expect_on_list")))
+                .lambda("__list")
+                .lambda("expect_on_list"),
+        )
+        .lambda("check_with")
+        .lambda("__list");
+
+    let values = Term::list_values(vec![
+        Constant::Data(Data::integer(1.into())),
+        Constant::Data(Data::integer(2.into())),
+        Constant::Data(Data::integer(3.into())),
+    ]);
+
+    let then = Term::equals_integer()
+        .apply(Term::var("h"))
+        .apply(Term::var("h"))
+        .delayed_if_then_else(
+            Term::equals_integer()
+                .apply(Term::var("j"))
+                .apply(Term::var("j")),
+            Term::bool(false),
+        );
+
+    let check_with = Term::var("__list")
+        .choose_list(
+            then,
+            Term::var("__head")
+                .choose_data(
+                    Term::var("expect[h,j,..]:List<Int>=a"),
+                    Term::var("expect[h,j,..]:List<Int>=a"),
+                    Term::var("expect[h,j,..]:List<Int>=a"),
+                    Term::var("__curried_expect_on_list")
+                        .apply(Term::tail_list().apply(Term::var("__list")))
+                        .lambda("_")
+                        .apply(Term::un_i_data().apply(Term::var("__head"))),
+                    Term::var("expect[h,j,..]:List<Int>=a"),
+                )
+                .lambda("__head")
+                .apply(Term::head_list().apply(Term::var("__list"))),
+        )
+        .lambda("__curried_expect_on_list")
+        .lambda("__list");
+
+    let on_list = values
+        .clone()
+        .choose_list(
+            Term::var("expect[h,j,..]:List<Int>=a"),
+            Term::var("__val")
+                .choose_data(
+                    Term::var("expect[h,j,..]:List<Int>=a"),
+                    Term::var("expect[h,j,..]:List<Int>=a"),
+                    Term::var("expect[h,j,..]:List<Int>=a"),
+                    Term::var("tail_1")
+                        .choose_list(
+                            Term::var("expect[h,j,..]:List<Int>=a"),
+                            Term::var("__val")
+                                .choose_data(
+                                    Term::var("expect[h,j,..]:List<Int>=a"),
+                                    Term::var("expect[h,j,..]:List<Int>=a"),
+                                    Term::var("expect[h,j,..]:List<Int>=a"),
+                                    Term::var("expect_on_list")
+                                        .apply(Term::tail_list().apply(Term::var("tail_2")))
+                                        .apply(check_with)
+                                        .lambda("expect_on_list")
+                                        .apply(expect_on_list)
+                                        .lambda("j")
+                                        .apply(Term::un_i_data().apply(Term::var("__val")).delay()),
+                                    Term::var("expect[h,j,..]:List<Int>=a"),
+                                )
+                                .force()
+                                .lambda("__val")
+                                .apply(Term::head_list().apply(Term::var("tail_1")))
+                                .lambda("tail_2")
+                                .apply(Term::tail_list().apply(Term::var("tail_1")))
+                                .delay(),
+                        )
+                        .force()
+                        .lambda("tail_1")
+                        .apply(Term::tail_list().apply(values.clone()))
+                        .lambda("h")
+                        .apply(Term::un_i_data().apply(Term::var("__val")))
+                        .delay(),
+                    Term::var("expect[h,j,..]:List<Int>=a"),
+                )
+                .force()
+                .lambda("__val")
+                .apply(Term::head_list().apply(values)),
+        )
+        .force()
+        .delay();
 
     assert_uplc(
         src,
@@ -5314,129 +5419,7 @@ fn expect_head_cast_data_with_tail() {
             .choose_data(
                 Term::var("expect[h,j,..]:List<Int>=a"),
                 Term::var("expect[h,j,..]:List<Int>=a"),
-                Term::list_values(vec![
-                    Constant::Data(Data::integer(1.into())),
-                    Constant::Data(Data::integer(2.into())),
-                    Constant::Data(Data::integer(3.into())),
-                ])
-                .choose_list(
-                    Term::var("expect[h,j,..]:List<Int>=a"),
-                    Term::var("__val")
-                        .choose_data(
-                            Term::var("expect[h,j,..]:List<Int>=a"),
-                            Term::var("expect[h,j,..]:List<Int>=a"),
-                            Term::var("expect[h,j,..]:List<Int>=a"),
-                            Term::var("tail_1")
-                                .choose_list(
-                                    Term::var("expect[h,j,..]:List<Int>=a"),
-                                    Term::var("__val")
-                                        .choose_data(
-                                            Term::var("expect[h,j,..]:List<Int>=a"),
-                                            Term::var("expect[h,j,..]:List<Int>=a"),
-                                            Term::var("expect[h,j,..]:List<Int>=a"),
-                                            Term::var("expect_on_list")
-                                                .apply(Term::tail_list().apply(Term::var("tail_2")))
-                                                .apply(
-                                                    Term::var("__list")
-                                                        .choose_list(
-                                                            Term::equals_integer()
-                                                                .apply(Term::var("h"))
-                                                                .apply(Term::var("h"))
-                                                                .delayed_if_then_else(
-                                                                    Term::equals_integer()
-                                                                        .apply(Term::var("j"))
-                                                                        .apply(Term::var("j")),
-                                                                    Term::bool(false),
-                                                                ),
-                                                            Term::var("__head").choose_data(
-                                                                Term::var(
-                                                                    "expect[h,j,..]:List<Int>=a",
-                                                                ),
-                                                                Term::var(
-                                                                    "expect[h,j,..]:List<Int>=a",
-                                                                ),
-                                                                Term::var(
-                                                                    "expect[h,j,..]:List<Int>=a",
-                                                                ),
-                                                                Term::var(
-                                                                    "__curried_expect_on_list",
-                                                                )
-                                                                .apply(
-                                                                    Term::tail_list()
-                                                                        .apply(Term::var("__list")),
-                                                                )
-                                                                .lambda("_")
-                                                                .apply(
-                                                                    Term::un_i_data()
-                                                                        .apply(Term::var("__head")),
-                                                                ),
-                                                                Term::var(
-                                                                    "expect[h,j,..]:List<Int>=a",
-                                                                ),
-                                                            )
-                                                            .lambda("__head")
-                                                            .apply(Term::head_list().apply(Term::var("__list"))),
-                                                        )
-                                                        .lambda("__curried_expect_on_list")
-                                                        .lambda("__list"),
-                                                )
-                                                .lambda("expect_on_list")
-                                                .apply(
-                                                    Term::var("expect_on_list")
-                                                        .apply(Term::var("expect_on_list"))
-                                                        .lambda("expect_on_list")
-                                                        .apply(
-                                                            Term::var("check_with")
-                                                                .apply(Term::var("__list"))
-                                                                .apply(
-                                                                    Term::var("expect_on_list")
-                                                                        .apply(Term::var(
-                                                                            "expect_on_list",
-                                                                        )),
-                                                                )
-                                                                .lambda("__list")
-                                                                .lambda("expect_on_list"),
-                                                        )
-                                                        .lambda("check_with")
-                                                        .lambda("__list"),
-                                                )
-                                                .lambda("j")
-                                                .apply(
-                                                    Term::un_i_data()
-                                                        .apply(Term::var("__val"))
-                                                        .delay(),
-                                                ),
-                                            Term::var("expect[h,j,..]:List<Int>=a"),
-                                        )
-                                        .force()
-                                        .lambda("__val")
-                                        .apply(Term::head_list().apply(Term::var("tail_1")))
-                                        .lambda("tail_2")
-                                        .apply(Term::tail_list().apply(Term::var("tail_1")))
-                                        .delay(),
-                                )
-                                .force()
-                                .lambda("tail_1")
-                                .apply(Term::tail_list().apply(Term::list_values(vec![
-                                    Constant::Data(Data::integer(1.into())),
-                                    Constant::Data(Data::integer(2.into())),
-                                    Constant::Data(Data::integer(3.into())),
-                                ])))
-                                .lambda("h")
-                                .apply(Term::un_i_data().apply(Term::var("__val")))
-                                .delay(),
-                            Term::var("expect[h,j,..]:List<Int>=a"),
-                        )
-                        .force()
-                        .lambda("__val")
-                        .apply(Term::head_list().apply(Term::list_values(vec![
-                            Constant::Data(Data::integer(1.into())),
-                            Constant::Data(Data::integer(2.into())),
-                            Constant::Data(Data::integer(3.into())),
-                        ]))),
-                )
-                .force()
-                .delay(),
+                on_list,
                 Term::var("expect[h,j,..]:List<Int>=a"),
                 Term::var("expect[h,j,..]:List<Int>=a"),
             )
