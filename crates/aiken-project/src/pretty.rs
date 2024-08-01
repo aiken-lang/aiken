@@ -167,7 +167,7 @@ pub fn multiline(max_len: usize, s: String) -> Vec<String> {
     let len = s.len();
     loop {
         let lo = i * max_len;
-        let hi = cmp::min(len - 1, lo + max_len - 1);
+        let hi = cmp::min(len, lo + max_len);
 
         if lo >= len {
             break;
@@ -178,4 +178,27 @@ pub fn multiline(max_len: usize, s: String) -> Vec<String> {
         i += 1;
     }
     xs
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn multiline_empty_string() {
+        assert_eq!(multiline(10, "".to_string()), Vec::<String>::new());
+    }
+
+    #[test]
+    fn multiline_single_line() {
+        assert_eq!(multiline(10, "foo".to_string()), vec!["foo".to_string()]);
+    }
+
+    #[test]
+    fn multiline_many_lines() {
+        assert_eq!(
+            multiline(3, "foobar".to_string()),
+            vec!["foo".to_string(), "bar".to_string()]
+        );
+    }
 }

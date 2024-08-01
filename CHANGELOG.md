@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.1.0 - UNRELEASED
+
+### Added
+
+∅
+
+### Changed
+
+- **aiken-project**: fix blueprint's apply truncating last character of outputs. See [#987](https://github.com/aiken-lang/aiken/issues/987). @KtorZ
+
+### Removed
+
+∅
+
 ## v1.0.30-alpha - 2024-07-25
 
 ### Added
