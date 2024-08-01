@@ -912,22 +912,7 @@ pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
             )
             .lambda("__list_data")
             .apply(Term::unlist_data().apply(term)),
-        Some(UplcType::Bool) => Term::snd_pair()
-            .apply(Term::var("__pair__"))
-            .delayed_choose_list(
-                Term::less_than_equals_integer()
-                    .apply(Term::integer(2.into()))
-                    .apply(Term::fst_pair().apply(Term::var("__pair__")))
-                    .delayed_if_then_else(
-                        Term::Error,
-                        Term::equals_integer()
-                            .apply(Term::integer(1.into()))
-                            .apply(Term::fst_pair().apply(Term::var("__pair__"))),
-                    ),
-                Term::Error,
-            )
-            .lambda("__pair__")
-            .apply(Term::unconstr_data().apply(term)),
+        Some(UplcType::Bool) => Term::unwrap_bool_or(term, |result| result, &Term::Error.delay()),
         Some(UplcType::Unit) => Term::equals_integer()
             .apply(Term::integer(0.into()))
             .apply(Term::fst_pair().apply(Term::var("__pair__")))
@@ -956,14 +941,15 @@ pub fn softcast_data_to_type_otherwise(
 ) -> Term<Name> {
     let uplc_type = field_type.get_uplc_type();
 
+    let then = then.lambda(name);
+
     match uplc_type {
         Some(UplcType::Integer) => Term::var("__val")
             .choose_data(
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
-                then.lambda(name)
-                    .apply(Term::un_i_data().apply(Term::var("__val")))
+                then.apply(Term::un_i_data().apply(Term::var("__val")))
                     .delay(),
                 otherwise_delayed.clone(),
             )
@@ -976,8 +962,7 @@ pub fn softcast_data_to_type_otherwise(
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
-                then.lambda(name)
-                    .apply(Term::un_b_data().apply(Term::var("__val")))
+                then.apply(Term::un_b_data().apply(Term::var("__val")))
                     .delay(),
             )
             .force()
@@ -989,8 +974,7 @@ pub fn softcast_data_to_type_otherwise(
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
-                then.lambda(name)
-                    .apply(Term::decode_utf8().apply(Term::un_b_data().apply(Term::var("__val"))))
+                then.apply(Term::decode_utf8().apply(Term::un_b_data().apply(Term::var("__val"))))
                     .delay(),
             )
             .force()
@@ -1000,8 +984,7 @@ pub fn softcast_data_to_type_otherwise(
         Some(UplcType::List(_)) if field_type.is_map() => Term::var("__val")
             .choose_data(
                 otherwise_delayed.clone(),
-                then.lambda(name)
-                    .apply(Term::unmap_data().apply(Term::var("__val")))
+                then.apply(Term::unmap_data().apply(Term::var("__val")))
                     .delay(),
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
@@ -1014,8 +997,7 @@ pub fn softcast_data_to_type_otherwise(
             .choose_data(
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
-                then.lambda(name)
-                    .apply(Term::unlist_data().apply(Term::var("__val")))
+                then.apply(Term::unlist_data().apply(Term::var("__val")))
                     .delay(),
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
@@ -1030,12 +1012,11 @@ pub fn softcast_data_to_type_otherwise(
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
-                then.lambda(name)
-                    .apply(
-                        Term::bls12_381_g1_uncompress()
-                            .apply(Term::un_b_data().apply(Term::var("__val"))),
-                    )
-                    .delay(),
+                then.apply(
+                    Term::bls12_381_g1_uncompress()
+                        .apply(Term::un_b_data().apply(Term::var("__val"))),
+                )
+                .delay(),
             )
             .force()
             .lambda("__val")
@@ -1046,12 +1027,11 @@ pub fn softcast_data_to_type_otherwise(
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
-                then.lambda(name)
-                    .apply(
-                        Term::bls12_381_g2_uncompress()
-                            .apply(Term::un_b_data().apply(Term::var("__val"))),
-                    )
-                    .delay(),
+                then.apply(
+                    Term::bls12_381_g2_uncompress()
+                        .apply(Term::un_b_data().apply(Term::var("__val"))),
+                )
+                .delay(),
             )
             .force()
             .lambda("__val")
@@ -1070,19 +1050,17 @@ pub fn softcast_data_to_type_otherwise(
                                 Term::tail_list()
                                     .apply(Term::var("__tail"))
                                     .choose_list(
-                                        then.lambda(name)
-                                            .apply(
-                                                Term::mk_pair_data()
-                                                    .apply(
-                                                        Term::head_list()
-                                                            .apply(Term::var("__list_data")),
-                                                    )
-                                                    .apply(
-                                                        Term::head_list()
-                                                            .apply(Term::var("__tail")),
-                                                    ),
-                                            )
-                                            .delay(),
+                                        then.apply(
+                                            Term::mk_pair_data()
+                                                .apply(
+                                                    Term::head_list()
+                                                        .apply(Term::var("__list_data")),
+                                                )
+                                                .apply(
+                                                    Term::head_list().apply(Term::var("__tail")),
+                                                ),
+                                        )
+                                        .delay(),
                                         otherwise_delayed.clone(),
                                     )
                                     .force()
@@ -1105,27 +1083,12 @@ pub fn softcast_data_to_type_otherwise(
             .apply(value),
         Some(UplcType::Bool) => Term::var("__val")
             .choose_data(
-                Term::snd_pair()
-                    .apply(Term::var("__pair__"))
-                    .choose_list(
-                        Term::less_than_equals_integer()
-                            .apply(Term::integer(2.into()))
-                            .apply(Term::fst_pair().apply(Term::var("__pair__")))
-                            .delayed_if_then_else(
-                                otherwise_delayed.clone(),
-                                then.lambda(name).apply(
-                                    Term::equals_integer()
-                                        .apply(Term::fst_pair().apply(Term::var("__pair__")))
-                                        .apply(Term::integer(1.into())),
-                                ),
-                            )
-                            .delay(),
-                        otherwise_delayed.clone(),
-                    )
-                    .force()
-                    .lambda("__pair__")
-                    .apply(Term::unconstr_data().apply(Term::var("__val")))
-                    .delay(),
+                Term::unwrap_bool_or(
+                    Term::var("__val"),
+                    |result| then.apply(result),
+                    &otherwise_delayed,
+                )
+                .delay(),
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
@@ -1143,7 +1106,7 @@ pub fn softcast_data_to_type_otherwise(
                         Term::snd_pair()
                             .apply(Term::unconstr_data().apply(Term::var("__val")))
                             .choose_list(
-                                then.lambda(name).apply(Term::unit()).delay(),
+                                then.apply(Term::unit()).delay(),
                                 otherwise_delayed.clone(),
                             )
                             .force()
@@ -1161,11 +1124,11 @@ pub fn softcast_data_to_type_otherwise(
             .lambda("__val")
             .apply(value),
 
-        Some(UplcType::Data) => then.lambda(name).apply(value),
+        Some(UplcType::Data) => then.apply(value),
         // constr type
         None => Term::var("__val")
             .choose_data(
-                then.lambda(name).apply(Term::var("__val")).delay(),
+                then.apply(Term::var("__val")).delay(),
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
                 otherwise_delayed.clone(),
