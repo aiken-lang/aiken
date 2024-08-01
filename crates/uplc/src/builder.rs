@@ -610,6 +610,7 @@ impl Term<Name> {
                     otherwise.clone(),
                 )
             })
+            .force()
     }
 
     /// Convert an arbitrary 'term' into a unit term and pass it into a 'callback'.
@@ -671,11 +672,13 @@ impl Term<Name> {
                 },
                 otherwise,
             )
+            .force()
         })
+        .force()
     }
 
     /// Continue with the tail of a list, if any; or fallback 'otherwise'.
-    pub fn unwrap_tail_or<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name>) -> Term<Name>
+    fn unwrap_tail_or<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name>) -> Term<Name>
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
@@ -709,9 +712,7 @@ mod tests {
     #[test]
     fn unwrap_bool_or_false() {
         let result = quick_eval(
-            Term::data(Data::constr(0, vec![]))
-                .unwrap_bool_or(|b| b.delay(), &Term::Error.delay())
-                .force(),
+            Term::data(Data::constr(0, vec![])).unwrap_bool_or(|b| b.delay(), &Term::Error.delay()),
         );
 
         assert_eq!(result, Ok(Term::bool(false)));
@@ -720,9 +721,7 @@ mod tests {
     #[test]
     fn unwrap_bool_or_true() {
         let result = quick_eval(
-            Term::data(Data::constr(1, vec![]))
-                .unwrap_bool_or(|b| b.delay(), &Term::Error.delay())
-                .force(),
+            Term::data(Data::constr(1, vec![])).unwrap_bool_or(|b| b.delay(), &Term::Error.delay()),
         );
 
         assert_eq!(result, Ok(Term::bool(true)));
@@ -732,8 +731,7 @@ mod tests {
     fn unwrap_bool_or_extra_args() {
         let result = quick_eval(
             Term::data(Data::constr(1, vec![Data::integer(42.into())]))
-                .unwrap_bool_or(|b| b.delay(), &Term::Error.delay())
-                .force(),
+                .unwrap_bool_or(|b| b.delay(), &Term::Error.delay()),
         );
 
         assert_eq!(result, Err(Error::EvaluationFailure));
@@ -742,9 +740,7 @@ mod tests {
     #[test]
     fn unwrap_bool_or_invalid_constr_hi() {
         let result = quick_eval(
-            Term::data(Data::constr(2, vec![]))
-                .unwrap_bool_or(|b| b.delay(), &Term::Error.delay())
-                .force(),
+            Term::data(Data::constr(2, vec![])).unwrap_bool_or(|b| b.delay(), &Term::Error.delay()),
         );
 
         assert_eq!(result, Err(Error::EvaluationFailure));
@@ -798,8 +794,7 @@ mod tests {
                 Constant::Data(Data::integer(14.into())),
                 Constant::Data(Data::bytestring(vec![1, 2, 3])),
             ])
-            .unwrap_pair_or(|p| p.delay(), &Term::Error.delay())
-            .force(),
+            .unwrap_pair_or(|p| p.delay(), &Term::Error.delay()),
         );
 
         assert_eq!(
@@ -815,8 +810,7 @@ mod tests {
     fn unwrap_pair_or_not_enough_args_1() {
         let result = quick_eval(
             Term::list_values(vec![Constant::Data(Data::integer(1.into()))])
-                .unwrap_pair_or(|p| p.delay(), &Term::Error.delay())
-                .force(),
+                .unwrap_pair_or(|p| p.delay(), &Term::Error.delay()),
         );
 
         assert_eq!(result, Err(Error::EvaluationFailure));
@@ -825,9 +819,7 @@ mod tests {
     #[test]
     fn unwrap_pair_or_not_enough_args_0() {
         let result = quick_eval(
-            Term::list_values(vec![])
-                .unwrap_pair_or(|p| p.delay(), &Term::Error.delay())
-                .force(),
+            Term::list_values(vec![]).unwrap_pair_or(|p| p.delay(), &Term::Error.delay()),
         );
 
         assert_eq!(result, Err(Error::EvaluationFailure));
@@ -841,8 +833,7 @@ mod tests {
                 Constant::Data(Data::integer(2.into())),
                 Constant::Data(Data::integer(3.into())),
             ])
-            .unwrap_pair_or(|p| p.delay(), &Term::Error.delay())
-            .force(),
+            .unwrap_pair_or(|p| p.delay(), &Term::Error.delay()),
         );
 
         assert_eq!(result, Err(Error::EvaluationFailure));
@@ -852,9 +843,7 @@ mod tests {
     fn unwrap_void_or_happy() {
         let result = quick_eval(
             Term::data(Data::constr(0, vec![])).as_var("__unit", |unit| {
-                Term::Var(unit)
-                    .unwrap_void_or(|u| u.delay(), &Term::Error.delay())
-                    .force()
+                Term::Var(unit).unwrap_void_or(|u| u.delay(), &Term::Error.delay())
             }),
         );
 
@@ -865,9 +854,7 @@ mod tests {
     fn unwrap_void_or_wrong_constr() {
         let result = quick_eval(
             Term::data(Data::constr(14, vec![])).as_var("__unit", |unit| {
-                Term::Var(unit)
-                    .unwrap_void_or(|u| u.delay(), &Term::Error.delay())
-                    .force()
+                Term::Var(unit).unwrap_void_or(|u| u.delay(), &Term::Error.delay())
             }),
         );
 
@@ -878,9 +865,7 @@ mod tests {
     fn unwrap_void_or_too_many_args() {
         let result = quick_eval(
             Term::data(Data::constr(0, vec![Data::integer(0.into())])).as_var("__unit", |unit| {
-                Term::Var(unit)
-                    .unwrap_void_or(|u| u.delay(), &Term::Error.delay())
-                    .force()
+                Term::Var(unit).unwrap_void_or(|u| u.delay(), &Term::Error.delay())
             }),
         );
 
