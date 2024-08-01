@@ -620,6 +620,7 @@ impl Term<Name> {
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
+        assert!(matches!(self, Term::Var(..)));
         Term::equals_integer()
             .apply(Term::integer(0.into()))
             .apply(Term::fst_pair().apply(Term::unconstr_data().apply(self.clone())))
@@ -631,7 +632,6 @@ impl Term<Name> {
                     .delay(),
                 otherwise.clone(),
             )
-            .force()
     }
 
     /// Convert an arbitrary 'term' into a pair and pass it into a 'callback'.
@@ -841,6 +841,45 @@ mod tests {
             ])
             .unwrap_pair_or(|p| p.delay(), &Term::Error.delay())
             .force(),
+        );
+
+        assert_eq!(result, Err(Error::EvaluationFailure));
+    }
+
+    #[test]
+    fn unwrap_void_or_happy() {
+        let result = quick_eval(
+            Term::data(Data::constr(0, vec![])).as_var("__unit", |unit| {
+                Term::Var(unit)
+                    .unwrap_void_or(|u| u.delay(), &Term::Error.delay())
+                    .force()
+            }),
+        );
+
+        assert_eq!(result, Ok(Term::unit()));
+    }
+
+    #[test]
+    fn unwrap_void_or_wrong_constr() {
+        let result = quick_eval(
+            Term::data(Data::constr(14, vec![])).as_var("__unit", |unit| {
+                Term::Var(unit)
+                    .unwrap_void_or(|u| u.delay(), &Term::Error.delay())
+                    .force()
+            }),
+        );
+
+        assert_eq!(result, Err(Error::EvaluationFailure));
+    }
+
+    #[test]
+    fn unwrap_void_or_too_many_args() {
+        let result = quick_eval(
+            Term::data(Data::constr(0, vec![Data::integer(0.into())])).as_var("__unit", |unit| {
+                Term::Var(unit)
+                    .unwrap_void_or(|u| u.delay(), &Term::Error.delay())
+                    .force()
+            }),
         );
 
         assert_eq!(result, Err(Error::EvaluationFailure));
