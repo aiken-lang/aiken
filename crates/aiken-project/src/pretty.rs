@@ -195,6 +195,11 @@ mod tests {
     }
 
     #[test]
+    fn multiline_single_line_limit() {
+        assert_eq!(multiline(3, "foo".to_string()), vec!["foo".to_string()]);
+    }
+
+    #[test]
     fn multiline_many_lines() {
         assert_eq!(
             multiline(3, "foobar".to_string()),
