@@ -1198,8 +1198,7 @@ pub fn list_access_to_uplc(
         }
 
         return Term::var("empty_list")
-            .choose_list(term.delay(), otherwise_delayed)
-            .force()
+            .delay_empty_choose_list(term, otherwise_delayed)
             .lambda("empty_list");
     }
 
@@ -1272,11 +1271,10 @@ pub fn list_access_to_uplc(
                             } else if tail_present {
                                 // Custom error instead of trying to do head_item on a possibly empty list.
                                 Term::var(tail_name.to_string())
-                                    .choose_list(
+                                    .delay_filled_choose_list(
                                         otherwise_delayed.clone(),
-                                        head_item(name, tipo, &tail_name, acc).delay(),
+                                        head_item(name, tipo, &tail_name, acc),
                                     )
-                                    .force()
                                     .lambda(tail_name)
                             } else if otherwise_delayed == Term::Error.delay() {
                                 // Check head is last item in this list
@@ -1286,14 +1284,13 @@ pub fn list_access_to_uplc(
                                     &tail_name,
                                     Term::tail_list()
                                         .apply(Term::var(tail_name.to_string()))
-                                        .choose_list(acc.delay(), Term::Error.delay())
-                                        .force(),
+                                        .delayed_choose_list(acc, Term::Error),
                                 )
                                 .lambda(tail_name)
                             } else {
                                 // Custom error if list is not empty after this head
                                 Term::var(tail_name.to_string())
-                                    .choose_list(
+                                    .delay_filled_choose_list(
                                         otherwise_delayed.clone(),
                                         head_item(
                                             name,
@@ -1301,12 +1298,12 @@ pub fn list_access_to_uplc(
                                             &tail_name,
                                             Term::tail_list()
                                                 .apply(Term::var(tail_name.to_string()))
-                                                .choose_list(acc.delay(), otherwise_delayed.clone())
-                                                .force(),
-                                        )
-                                        .delay(),
+                                                .delay_empty_choose_list(
+                                                    acc,
+                                                    otherwise_delayed.clone(),
+                                                ),
+                                        ),
                                     )
-                                    .force()
                                     .lambda(tail_name)
                             }
                         }
@@ -1333,7 +1330,7 @@ pub fn list_access_to_uplc(
                         // case for a custom error if the list is empty at this point
 
                         Term::var(tail_name.to_string())
-                            .choose_list(
+                            .delay_filled_choose_list(
                                 otherwise_delayed.clone(),
                                 head_item(
                                     name,
@@ -1342,10 +1339,8 @@ pub fn list_access_to_uplc(
                                     acc.apply(
                                         Term::tail_list().apply(Term::var(tail_name.to_string())),
                                     ),
-                                )
-                                .delay(),
+                                ),
                             )
-                            .force()
                             .lambda(tail_name)
                     }
                 }
