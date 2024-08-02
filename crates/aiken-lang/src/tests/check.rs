@@ -2883,3 +2883,74 @@ fn side_effects() {
         unreachable!();
     }
 }
+
+#[test]
+fn pattern_bytearray() {
+    let source_code = r#"
+        pub fn main(foo: ByteArray) {
+            when foo is {
+                #[1, 2, 3] -> True
+                #"00ff" -> True
+                "Aiken, rocks!" -> True
+                _ -> False
+            }
+        }
+    "#;
+
+    let result = check(parse(source_code));
+    assert!(result.is_ok());
+
+    let (warnings, _) = result.unwrap();
+    assert!(warnings.is_empty(), "no warnings: {warnings:#?}");
+}
+
+#[test]
+fn pattern_bytearray_not_unify_clause_list() {
+    let source_code = r#"
+        pub fn main(foo: ByteArray) {
+            when foo is {
+                [1, 2, 3] -> True
+                _ -> False
+            }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CouldNotUnify { .. }))
+    ))
+}
+
+#[test]
+fn pattern_bytearray_not_unify_clause_int() {
+    let source_code = r#"
+        pub fn main(foo: ByteArray) {
+            when foo is {
+                42 -> True
+                _ -> False
+            }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CouldNotUnify { .. }))
+    ))
+}
+
+#[test]
+fn pattern_bytearray_not_unify_subject() {
+    let source_code = r#"
+        pub fn main(foo: String) {
+            when foo is {
+                "42" -> True
+                _ -> False
+            }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CouldNotUnify { .. }))
+    ))
+}

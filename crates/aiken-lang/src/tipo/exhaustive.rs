@@ -381,6 +381,7 @@ pub(crate) enum Pattern {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Literal {
     Int(String),
+    ByteArray(Vec<u8>),
 }
 
 impl Pattern {
@@ -536,6 +537,9 @@ pub(super) fn simplify(
 ) -> Result<Pattern, Error> {
     match value {
         ast::Pattern::Int { value, .. } => Ok(Pattern::Literal(Literal::Int(value.clone()))),
+        ast::Pattern::ByteArray { value, .. } => {
+            Ok(Pattern::Literal(Literal::ByteArray(value.clone())))
+        }
         ast::Pattern::Assign { pattern, .. } => simplify(environment, pattern.as_ref()),
         ast::Pattern::List { elements, tail, .. } => {
             let mut p = if let Some(t) = tail {

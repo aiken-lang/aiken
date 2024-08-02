@@ -62,7 +62,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
 
             let expected: Program<DeBruijn> = expected.try_into().unwrap();
 
-            assert_eq!(debruijn_program.to_pretty(), expected.to_pretty());
+            assert!(debruijn_program.to_pretty() == expected.to_pretty());
 
             let mut eval = debruijn_program.eval(ExBudget::default());
 
@@ -6630,4 +6630,43 @@ fn mk_pair_data() {
             )),
         false,
     )
+}
+
+#[test]
+fn pattern_bytearray() {
+    let src = r#"
+        test pattern_bytearray() {
+            let bytes = "foo"
+            when bytes is {
+                "bar" -> False
+                #[0x66, 0x6f, 0x6f] -> True
+                _ -> False
+            }
+        }
+    "#;
+
+    let snd_clause = Term::equals_bytestring()
+        .apply(Term::byte_string(vec![0x66, 0x6f, 0x6f]))
+        .apply(Term::var("__subject"))
+        .delayed_if_then_else(Term::bool(true), Term::bool(false));
+
+    let fst_clause = Term::equals_bytestring()
+        .apply(Term::byte_string(vec![0x62, 0x61, 0x72]))
+        .apply(Term::var("__subject"))
+        .delayed_if_then_else(Term::bool(false), snd_clause);
+
+    let when_clause = fst_clause
+        .lambda("__subject")
+        .apply(Term::var("__when_var"))
+        .lambda("__when_var")
+        .apply(Term::var("bytes"));
+
+    let program = when_clause
+        .lambda("bytes")
+        .apply(Term::byte_string(vec![0x66, 0x6f, 0x6f]))
+        // Not sure what this extra lambda is or do?
+        .lambda("???")
+        .apply(Term::Error.delay());
+
+    assert_uplc(src, program, false)
 }

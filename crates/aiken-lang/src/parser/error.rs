@@ -148,6 +148,26 @@ impl ParseError {
             label: None,
         }
     }
+
+    pub fn match_on_curve(span: Span) -> Self {
+        Self {
+            kind: ErrorKind::PatternMatchOnCurvePoint,
+            span,
+            while_parsing: None,
+            expected: HashSet::new(),
+            label: Some("cannot pattern-match on curve point"),
+        }
+    }
+
+    pub fn match_string(span: Span) -> Self {
+        Self {
+            kind: ErrorKind::PatternMatchOnString,
+            span,
+            while_parsing: None,
+            expected: HashSet::new(),
+            label: Some("cannot pattern-match on string"),
+        }
+    }
 }
 
 impl PartialEq for ParseError {
@@ -260,6 +280,18 @@ pub enum ErrorKind {
         "#
     }))]
     DeprecatedWhenClause,
+
+    #[error("I choked on a curve point in a bytearray pattern.")]
+    #[diagnostic(help(
+        "You can pattern-match on bytearrays just fine, but not on G1 nor G2 elements. Use if/else with an equality if you have to compare those."
+    ))]
+    PatternMatchOnCurvePoint,
+
+    #[error("I refuse to cooperate and match a utf-8 string.")]
+    #[diagnostic(help(
+        "You can pattern-match on bytearrays but not on strings. Note that I can parse utf-8 encoded bytearrays just fine, so you probably want to drop the extra '@' and only manipulate bytearrays wherever you need to. On-chain, strings shall be avoided as much as possible."
+    ))]
+    PatternMatchOnString,
 }
 
 fn fmt_curve_type(curve: &CurveType) -> String {

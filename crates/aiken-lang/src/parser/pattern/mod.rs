@@ -1,10 +1,12 @@
 use chumsky::prelude::*;
 
+mod bytearray;
 mod constructor;
 mod discard;
 mod int;
 mod list;
 mod pair;
+mod string;
 mod tuple;
 mod var;
 
@@ -12,11 +14,13 @@ use crate::{
     ast::UntypedPattern,
     parser::{error::ParseError, token::Token},
 };
+pub use bytearray::parser as bytearray;
 pub use constructor::parser as constructor;
 pub use discard::parser as discard;
 pub use int::parser as int;
 pub use list::parser as list;
 pub use pair::parser as pair;
+pub use string::parser as string;
 pub use tuple::parser as tuple;
 pub use var::parser as var;
 
@@ -28,8 +32,10 @@ pub fn parser() -> impl Parser<Token, UntypedPattern, Error = ParseError> {
             constructor(pattern.clone()),
             discard(),
             int(),
+            bytearray(),
             tuple(pattern.clone()),
             list(pattern),
+            string(),
         ))
         .then(
             just(Token::As)

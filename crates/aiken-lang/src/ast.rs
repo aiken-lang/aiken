@@ -1262,6 +1262,12 @@ pub enum Pattern<Constructor, Type> {
         base: Base,
     },
 
+    ByteArray {
+        location: Span,
+        value: Vec<u8>,
+        preferred_format: ByteArrayFormatPreference,
+    },
+
     /// The creation of a variable.
     /// e.g. `expect [this_is_a_var, .._] = x`
     /// e.g. `let foo = 42`
@@ -1330,6 +1336,7 @@ impl<A, B> Pattern<A, B> {
             | Pattern::Discard { location, .. }
             | Pattern::Tuple { location, .. }
             | Pattern::Pair { location, .. }
+            | Pattern::ByteArray { location, .. }
             | Pattern::Constructor { location, .. } => *location,
         }
     }
@@ -1383,6 +1390,7 @@ impl TypedPattern {
             Pattern::Int { .. }
             | Pattern::Var { .. }
             | Pattern::Assign { .. }
+            | Pattern::ByteArray { .. }
             | Pattern::Discard { .. } => Some(Located::Pattern(self, value.clone())),
 
             Pattern::List { elements, .. }
@@ -1438,6 +1446,7 @@ impl TypedPattern {
     pub fn tipo(&self, value: &TypedExpr) -> Option<Rc<Type>> {
         match self {
             Pattern::Int { .. } => Some(builtins::int()),
+            Pattern::ByteArray { .. } => Some(builtins::byte_array()),
             Pattern::Constructor { tipo, .. } => Some(tipo.clone()),
             Pattern::Var { .. } | Pattern::Assign { .. } | Pattern::Discard { .. } => {
                 Some(value.tipo())

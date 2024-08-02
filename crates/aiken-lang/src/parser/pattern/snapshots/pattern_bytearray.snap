@@ -1,0 +1,115 @@
+---
+source: crates/aiken-lang/src/parser/pattern/bytearray.rs
+description: "Code:\n\nwhen foo is {\n    #\"00abcd\" -> True\n    \"Aiken, rocks!\" -> True\n    #[1, 2, 3, 4] -> True\n    #[0x00, 0xab, 0xcd] -> True\n    _ -> False\n}\n"
+---
+When {
+    location: 0..138,
+    subject: Var {
+        location: 5..8,
+        name: "foo",
+    },
+    clauses: [
+        UntypedClause {
+            location: 18..35,
+            patterns: [
+                ByteArray {
+                    location: 18..27,
+                    value: [
+                        0,
+                        171,
+                        205,
+                    ],
+                    preferred_format: HexadecimalString,
+                },
+            ],
+            then: Var {
+                location: 31..35,
+                name: "True",
+            },
+        },
+        UntypedClause {
+            location: 40..63,
+            patterns: [
+                ByteArray {
+                    location: 40..55,
+                    value: [
+                        65,
+                        105,
+                        107,
+                        101,
+                        110,
+                        44,
+                        32,
+                        114,
+                        111,
+                        99,
+                        107,
+                        115,
+                        33,
+                    ],
+                    preferred_format: Utf8String,
+                },
+            ],
+            then: Var {
+                location: 59..63,
+                name: "True",
+            },
+        },
+        UntypedClause {
+            location: 68..89,
+            patterns: [
+                ByteArray {
+                    location: 68..81,
+                    value: [
+                        1,
+                        2,
+                        3,
+                        4,
+                    ],
+                    preferred_format: ArrayOfBytes(
+                        Decimal {
+                            numeric_underscore: false,
+                        },
+                    ),
+                },
+            ],
+            then: Var {
+                location: 85..89,
+                name: "True",
+            },
+        },
+        UntypedClause {
+            location: 94..121,
+            patterns: [
+                ByteArray {
+                    location: 94..113,
+                    value: [
+                        0,
+                        171,
+                        205,
+                    ],
+                    preferred_format: ArrayOfBytes(
+                        Hexadecimal,
+                    ),
+                },
+            ],
+            then: Var {
+                location: 117..121,
+                name: "True",
+            },
+        },
+        UntypedClause {
+            location: 126..136,
+            patterns: [
+                Discard {
+                    name: "_",
+                    location: 126..127,
+                },
+            ],
+            then: Var {
+                location: 131..136,
+                name: "False",
+            },
+        },
+    ],
+}

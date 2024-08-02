@@ -1,0 +1,13 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn main(foo) {\n    when foo is {\n        \"Aiken, rocks!\" -> True\n        #\"00abcd\" -> True\n        #[1, 2, 3, 4] -> True\n        #[0x00, 0xab, 0xcd] -> True\n        _ -> False\n    }\n}\n"
+---
+fn main(foo) {
+  when foo is {
+    "Aiken, rocks!" -> True
+    #"00abcd" -> True
+    #[1, 2, 3, 4] -> True
+    #[0x00, 0xab, 0xcd] -> True
+    _ -> False
+  }
+}
