@@ -421,6 +421,28 @@ impl<T> Term<T> {
             .force()
     }
 
+    /// Note the otherwise is expected to be a delayed term cast to a Var
+    pub fn delay_empty_choose_list(self, empty: Self, otherwise: Self) -> Self {
+        Term::Builtin(DefaultFunction::ChooseList)
+            .force()
+            .force()
+            .apply(self)
+            .apply(empty.delay())
+            .apply(otherwise)
+            .force()
+    }
+
+    /// Note the otherwise is expected to be a delayed term cast to a Var
+    pub fn delay_filled_choose_list(self, otherwise: Self, filled: Self) -> Self {
+        Term::Builtin(DefaultFunction::ChooseList)
+            .force()
+            .force()
+            .apply(self)
+            .apply(otherwise)
+            .apply(filled.delay())
+            .force()
+    }
+
     pub fn delayed_choose_unit(self, then_term: Self) -> Self {
         Term::Builtin(DefaultFunction::ChooseUnit)
             .force()
@@ -435,6 +457,26 @@ impl<T> Term<T> {
             .apply(self)
             .apply(then_term.delay())
             .apply(else_term.delay())
+            .force()
+    }
+
+    /// Note the otherwise is expected to be a delayed term cast to a Var
+    pub fn delay_true_if_then_else(self, then: Self, otherwise: Self) -> Self {
+        Term::Builtin(DefaultFunction::IfThenElse)
+            .force()
+            .apply(self)
+            .apply(then.delay())
+            .apply(otherwise)
+            .force()
+    }
+
+    /// Note the otherwise is expected to be a delayed term cast to a Var
+    pub fn delay_false_if_then_else(self, otherwise: Self, alternative: Self) -> Self {
+        Term::Builtin(DefaultFunction::IfThenElse)
+            .force()
+            .apply(self)
+            .apply(otherwise)
+            .apply(alternative.delay())
             .force()
     }
 
@@ -596,8 +638,8 @@ impl Term<Name> {
     /// Convert an arbitrary 'term' into a bool term and pass it into a 'callback'.
     /// Continue the execution 'otherwise' with a different branch.
     ///
-    /// Note that the 'otherwise' term as well as the callback's result are expected
-    /// to be delayed terms.
+    /// Note that the 'otherwise' term is expected
+    /// to be a delayed term.
     pub fn unwrap_bool_or<F>(self, callback: F, otherwise: &Term<Name>) -> Term<Name>
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
@@ -605,29 +647,30 @@ impl Term<Name> {
         Term::unconstr_data()
             .apply(self)
             .as_var("__pair__", |pair| {
-                Term::snd_pair().apply(Term::Var(pair.clone())).choose_list(
-                    Term::less_than_equals_integer()
-                        .apply(Term::integer(2.into()))
-                        .apply(Term::fst_pair().apply(Term::Var(pair.clone())))
-                        .if_then_else(
-                            otherwise.clone(),
-                            callback(
-                                Term::equals_integer()
-                                    .apply(Term::integer(1.into()))
-                                    .apply(Term::fst_pair().apply(Term::Var(pair))),
+                Term::snd_pair()
+                    .apply(Term::Var(pair.clone()))
+                    .delay_empty_choose_list(
+                        Term::less_than_equals_integer()
+                            .apply(Term::integer(2.into()))
+                            .apply(Term::fst_pair().apply(Term::Var(pair.clone())))
+                            .delay_false_if_then_else(
+                                otherwise.clone(),
+                                callback(
+                                    Term::equals_integer()
+                                        .apply(Term::integer(1.into()))
+                                        .apply(Term::fst_pair().apply(Term::Var(pair))),
+                                ),
                             ),
-                        ),
-                    otherwise.clone(),
-                )
+                        otherwise.clone(),
+                    )
             })
-            .force()
     }
 
     /// Convert an arbitrary 'term' into a unit term and pass it into a 'callback'.
     /// Continue the execution 'otherwise' with a different branch.
     ///
-    /// Note that the 'otherwise' term as well as the callback's result are expected
-    /// to be delayed terms.
+    /// Note that the 'otherwise' term is expected
+    /// to be a delayed term.
     pub fn unwrap_void_or<F>(self, callback: F, otherwise: &Term<Name>) -> Term<Name>
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
@@ -636,63 +679,58 @@ impl Term<Name> {
         Term::equals_integer()
             .apply(Term::integer(0.into()))
             .apply(Term::fst_pair().apply(Term::unconstr_data().apply(self.clone())))
-            .if_then_else(
+            .delay_true_if_then_else(
                 Term::snd_pair()
                     .apply(Term::unconstr_data().apply(self))
-                    .choose_list(callback(Term::unit()), otherwise.clone())
-                    .force()
-                    .delay(),
+                    .delay_empty_choose_list(callback(Term::unit()), otherwise.clone()),
                 otherwise.clone(),
             )
-            .force()
     }
 
     /// Convert an arbitrary 'term' into a pair and pass it into a 'callback'.
     /// Continue the execution 'otherwise' with a different branch.
     ///
-    /// Note that the 'otherwise' term as well as the callback's result are expected
-    /// to be delayed terms.
+    /// Note that the 'otherwise' term is expected
+    /// to be a delayed term.
     pub fn unwrap_pair_or<F>(self, callback: F, otherwise: &Term<Name>) -> Term<Name>
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
         self.as_var("__list_data", |list| {
             let left = Term::head_list().apply(Term::Var(list.clone()));
+
             Term::unwrap_tail_or(
                 list,
                 |tail| {
                     tail.as_var("__tail", |tail| {
                         let right = Term::head_list().apply(Term::Var(tail.clone()));
+
                         Term::unwrap_tail_or(
                             tail,
                             |leftovers| {
-                                leftovers
-                                    .choose_list(
-                                        callback(Term::mk_pair_data().apply(left).apply(right)),
-                                        otherwise.clone(),
-                                    )
-                                    .force()
-                                    .delay()
+                                leftovers.delay_empty_choose_list(
+                                    callback(Term::mk_pair_data().apply(left).apply(right)),
+                                    otherwise.clone(),
+                                )
                             },
                             otherwise,
                         )
                     })
-                    .force()
-                    .delay()
                 },
                 otherwise,
             )
-            .force()
         })
-        .force()
     }
 
     /// Continue with the tail of a list, if any; or fallback 'otherwise'.
+    ///
+    /// Note that the 'otherwise' term is expected
+    /// to be a delayed term.
     fn unwrap_tail_or<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name>) -> Term<Name>
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
-        Term::Var(var.clone()).choose_list(
+        Term::Var(var.clone()).delay_filled_choose_list(
             otherwise.clone(),
             callback(Term::tail_list().apply(Term::Var(var))),
         )
@@ -722,7 +760,7 @@ mod tests {
     #[test]
     fn unwrap_bool_or_false() {
         let result = quick_eval(
-            Term::data(Data::constr(0, vec![])).unwrap_bool_or(|b| b.delay(), &Term::Error.delay()),
+            Term::data(Data::constr(0, vec![])).unwrap_bool_or(|b| b, &Term::Error.delay()),
         );
 
         assert_eq!(result, Ok(Term::bool(false)));
@@ -731,7 +769,7 @@ mod tests {
     #[test]
     fn unwrap_bool_or_true() {
         let result = quick_eval(
-            Term::data(Data::constr(1, vec![])).unwrap_bool_or(|b| b.delay(), &Term::Error.delay()),
+            Term::data(Data::constr(1, vec![])).unwrap_bool_or(|b| b, &Term::Error.delay()),
         );
 
         assert_eq!(result, Ok(Term::bool(true)));
@@ -741,7 +779,7 @@ mod tests {
     fn unwrap_bool_or_extra_args() {
         let result = quick_eval(
             Term::data(Data::constr(1, vec![Data::integer(42.into())]))
-                .unwrap_bool_or(|b| b.delay(), &Term::Error.delay()),
+                .unwrap_bool_or(|b| b, &Term::Error.delay()),
         );
 
         assert_eq!(result, Err(Error::EvaluationFailure));
@@ -750,7 +788,7 @@ mod tests {
     #[test]
     fn unwrap_bool_or_invalid_constr_hi() {
         let result = quick_eval(
-            Term::data(Data::constr(2, vec![])).unwrap_bool_or(|b| b.delay(), &Term::Error.delay()),
+            Term::data(Data::constr(2, vec![])).unwrap_bool_or(|b| b, &Term::Error.delay()),
         );
 
         assert_eq!(result, Err(Error::EvaluationFailure));
@@ -759,7 +797,7 @@ mod tests {
     #[test]
     fn unwrap_tail_or_0_elems() {
         let result = quick_eval(Term::list_values(vec![]).as_var("__tail", |tail| {
-            Term::unwrap_tail_or(tail, |p| p.delay(), &Term::Error.delay()).force()
+            Term::unwrap_tail_or(tail, |p| p, &Term::Error.delay())
         }));
 
         assert_eq!(result, Err(Error::EvaluationFailure));
@@ -770,7 +808,7 @@ mod tests {
         let result = quick_eval(
             Term::list_values(vec![Constant::Data(Data::integer(1.into()))])
                 .as_var("__tail", |tail| {
-                    Term::unwrap_tail_or(tail, |p| p.delay(), &Term::Error.delay()).force()
+                    Term::unwrap_tail_or(tail, |p| p, &Term::Error.delay())
                 }),
         );
 
@@ -785,7 +823,7 @@ mod tests {
                 Constant::Data(Data::integer(2.into())),
             ])
             .as_var("__tail", |tail| {
-                Term::unwrap_tail_or(tail, |p| p.delay(), &Term::Error.delay()).force()
+                Term::unwrap_tail_or(tail, |p| p, &Term::Error.delay())
             }),
         );
 
@@ -804,7 +842,7 @@ mod tests {
                 Constant::Data(Data::integer(14.into())),
                 Constant::Data(Data::bytestring(vec![1, 2, 3])),
             ])
-            .unwrap_pair_or(|p| p.delay(), &Term::Error.delay()),
+            .unwrap_pair_or(|p| p, &Term::Error.delay()),
         );
 
         assert_eq!(
@@ -820,7 +858,7 @@ mod tests {
     fn unwrap_pair_or_not_enough_args_1() {
         let result = quick_eval(
             Term::list_values(vec![Constant::Data(Data::integer(1.into()))])
-                .unwrap_pair_or(|p| p.delay(), &Term::Error.delay()),
+                .unwrap_pair_or(|p| p, &Term::Error.delay()),
         );
 
         assert_eq!(result, Err(Error::EvaluationFailure));
@@ -828,9 +866,8 @@ mod tests {
 
     #[test]
     fn unwrap_pair_or_not_enough_args_0() {
-        let result = quick_eval(
-            Term::list_values(vec![]).unwrap_pair_or(|p| p.delay(), &Term::Error.delay()),
-        );
+        let result =
+            quick_eval(Term::list_values(vec![]).unwrap_pair_or(|p| p, &Term::Error.delay()));
 
         assert_eq!(result, Err(Error::EvaluationFailure));
     }
@@ -843,7 +880,7 @@ mod tests {
                 Constant::Data(Data::integer(2.into())),
                 Constant::Data(Data::integer(3.into())),
             ])
-            .unwrap_pair_or(|p| p.delay(), &Term::Error.delay()),
+            .unwrap_pair_or(|p| p, &Term::Error.delay()),
         );
 
         assert_eq!(result, Err(Error::EvaluationFailure));
@@ -853,7 +890,7 @@ mod tests {
     fn unwrap_void_or_happy() {
         let result = quick_eval(
             Term::data(Data::constr(0, vec![])).as_var("__unit", |unit| {
-                Term::Var(unit).unwrap_void_or(|u| u.delay(), &Term::Error.delay())
+                Term::Var(unit).unwrap_void_or(|u| u, &Term::Error.delay())
             }),
         );
 
@@ -864,7 +901,7 @@ mod tests {
     fn unwrap_void_or_wrong_constr() {
         let result = quick_eval(
             Term::data(Data::constr(14, vec![])).as_var("__unit", |unit| {
-                Term::Var(unit).unwrap_void_or(|u| u.delay(), &Term::Error.delay())
+                Term::Var(unit).unwrap_void_or(|u| u, &Term::Error.delay())
             }),
         );
 
@@ -875,7 +912,7 @@ mod tests {
     fn unwrap_void_or_too_many_args() {
         let result = quick_eval(
             Term::data(Data::constr(0, vec![Data::integer(0.into())])).as_var("__unit", |unit| {
-                Term::Var(unit).unwrap_void_or(|u| u.delay(), &Term::Error.delay())
+                Term::Var(unit).unwrap_void_or(|u| u, &Term::Error.delay())
             }),
         );
 
