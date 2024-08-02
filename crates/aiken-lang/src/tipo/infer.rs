@@ -9,9 +9,10 @@ use crate::{
     ast::{
         Annotation, ArgName, ArgVia, DataType, Definition, Function, ModuleConstant, ModuleKind,
         RecordConstructor, RecordConstructorArg, Tracing, TypeAlias, TypedArg, TypedDefinition,
-        TypedModule, TypedValidator, UntypedArg, UntypedDefinition, UntypedModule,
+        TypedModule, TypedValidator, UntypedArg, UntypedDefinition, UntypedModule, UntypedPattern,
         UntypedValidator, Use, Validator,
     },
+    expr::{TypedExpr, UntypedAssignmentKind},
     tipo::{expr::infer_function, Span, Type, TypeVar},
     IdGenerator,
 };
@@ -619,10 +620,22 @@ fn infer_definition(
             annotation,
             public,
             value,
-            tipo: _,
         }) => {
-            let typed_expr =
-                ExprTyper::new(environment, tracing).infer_const(&annotation, *value)?;
+            let typed_assignment = ExprTyper::new(environment, tracing).infer_assignment(
+                UntypedPattern::Var {
+                    location,
+                    name: name.clone(),
+                },
+                value,
+                UntypedAssignmentKind::Let { backpassing: false },
+                &annotation,
+                location,
+            )?;
+
+            let typed_expr = match typed_assignment {
+                TypedExpr::Assignment { value, .. } => value,
+                _ => unreachable!("infer_assignment inferred something else than an assignment?"),
+            };
 
             let tipo = typed_expr.tipo();
 
@@ -630,7 +643,7 @@ fn infer_definition(
                 public,
                 variant: ValueConstructorVariant::ModuleConstant {
                     location,
-                    literal: typed_expr.clone(),
+                    name: name.to_owned(),
                     module: module_name.to_owned(),
                 },
                 tipo: tipo.clone(),
@@ -650,8 +663,7 @@ fn infer_definition(
                 name,
                 annotation,
                 public,
-                value: Box::new(typed_expr),
-                tipo,
+                value: *typed_expr,
             }))
         }
     }

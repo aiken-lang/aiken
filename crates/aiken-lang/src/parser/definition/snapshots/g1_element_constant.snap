@@ -49,6 +49,5 @@ ModuleConstant(
             ),
             preferred_format: HexadecimalString,
         },
-        tipo: (),
     },
 )

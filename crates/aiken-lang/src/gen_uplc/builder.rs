@@ -4,8 +4,8 @@ use super::{
 };
 use crate::{
     ast::{
-        Constant, DataTypeKey, FunctionAccessKey, Pattern, Span, TraceLevel, TypedArg,
-        TypedAssignmentKind, TypedClause, TypedDataType, TypedPattern,
+        DataTypeKey, FunctionAccessKey, Pattern, Span, TraceLevel, TypedArg, TypedAssignmentKind,
+        TypedClause, TypedDataType, TypedPattern,
     },
     expr::TypedExpr,
     line_numbers::{LineColumn, LineNumbers},
@@ -284,15 +284,6 @@ impl CodeGenSpecialFuncs {
 impl Default for CodeGenSpecialFuncs {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-pub fn constants_ir(literal: &Constant) -> AirTree {
-    match literal {
-        Constant::Int { value, .. } => AirTree::int(value),
-        Constant::String { value, .. } => AirTree::string(value),
-        Constant::ByteArray { bytes, .. } => AirTree::byte_array(bytes.clone()),
-        Constant::CurvePoint { point, .. } => AirTree::curve(*point.as_ref()),
     }
 }
 

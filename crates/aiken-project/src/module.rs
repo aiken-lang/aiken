@@ -5,6 +5,7 @@ use aiken_lang::{
         Tracing, TypedDataType, TypedFunction, TypedModule, TypedValidator, UntypedModule,
         Validator,
     },
+    expr::TypedExpr,
     line_numbers::LineNumbers,
     parser::extra::{comments_before, Comment, ModuleExtra},
     tipo::TypeInfo,
@@ -49,6 +50,7 @@ impl ParsedModule {
         module_sources: &mut HashMap<String, (String, LineNumbers)>,
         module_types: &mut HashMap<String, TypeInfo>,
         functions: &mut IndexMap<FunctionAccessKey, TypedFunction>,
+        constants: &mut IndexMap<FunctionAccessKey, TypedExpr>,
         data_types: &mut IndexMap<DataTypeKey, TypedDataType>,
     ) -> Result<(CheckedModule, Vec<Warning>), Error> {
         let mut warnings = Vec::new();
@@ -92,7 +94,7 @@ impl ParsedModule {
         module_types.insert(self.name.clone(), ast.type_info.clone());
 
         // Register function definitions & data-types for easier access later.
-        ast.register_definitions(functions, data_types);
+        ast.register_definitions(functions, constants, data_types);
 
         Ok((
             CheckedModule {

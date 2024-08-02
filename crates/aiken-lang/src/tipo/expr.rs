@@ -11,11 +11,11 @@ use super::{
 use crate::{
     ast::{
         self, Annotation, ArgName, AssignmentKind, AssignmentPattern, BinOp, Bls12_381Point,
-        ByteArrayFormatPreference, CallArg, Constant, Curve, Function, IfBranch,
-        LogicalOpChainKind, Pattern, RecordUpdateSpread, Span, TraceKind, TraceLevel, Tracing,
-        TypedArg, TypedCallArg, TypedClause, TypedIfBranch, TypedPattern, TypedRecordUpdateArg,
-        TypedValidator, UnOp, UntypedArg, UntypedAssignmentKind, UntypedClause, UntypedFunction,
-        UntypedIfBranch, UntypedPattern, UntypedRecordUpdateArg,
+        ByteArrayFormatPreference, CallArg, Curve, Function, IfBranch, LogicalOpChainKind, Pattern,
+        RecordUpdateSpread, Span, TraceKind, TraceLevel, Tracing, TypedArg, TypedCallArg,
+        TypedClause, TypedIfBranch, TypedPattern, TypedRecordUpdateArg, TypedValidator, UnOp,
+        UntypedArg, UntypedAssignmentKind, UntypedClause, UntypedFunction, UntypedIfBranch,
+        UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{from_default_function, BUILTIN},
     expr::{FnStyle, TypedExpr, UntypedExpr},
@@ -1176,7 +1176,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         Ok((typed_arg, extra_assignment))
     }
 
-    fn infer_assignment(
+    pub fn infer_assignment(
         &mut self,
         untyped_pattern: UntypedPattern,
         untyped_value: UntypedExpr,
@@ -1464,64 +1464,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         }
 
         Ok(typed_patterns)
-    }
-
-    // TODO: extract the type annotation checking into a infer_module_const
-    // function that uses this function internally
-    pub fn infer_const(
-        &mut self,
-        annotation: &Option<Annotation>,
-        value: Constant,
-    ) -> Result<Constant, Error> {
-        let inferred = match value {
-            Constant::Int {
-                location,
-                value,
-                base,
-            } => Ok(Constant::Int {
-                location,
-                value,
-                base,
-            }),
-
-            Constant::String { location, value } => Ok(Constant::String { location, value }),
-
-            Constant::ByteArray {
-                location,
-                bytes,
-                preferred_format,
-            } => {
-                let _ = self.infer_bytearray(bytes.clone(), preferred_format, location)?;
-                Ok(Constant::ByteArray {
-                    location,
-                    bytes,
-                    preferred_format,
-                })
-            }
-            Constant::CurvePoint {
-                location,
-                point,
-                preferred_format,
-            } => Ok(Constant::CurvePoint {
-                location,
-                point,
-                preferred_format,
-            }),
-        }?;
-
-        // Check type annotation is accurate.
-        if let Some(ann) = annotation {
-            let const_ann = self.type_from_annotation(ann)?;
-
-            self.unify(
-                const_ann.clone(),
-                inferred.tipo(),
-                inferred.location(),
-                const_ann.is_data(),
-            )?;
-        };
-
-        Ok(inferred)
     }
 
     fn infer_if(

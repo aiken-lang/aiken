@@ -62,7 +62,8 @@ mod test {
 
         let mut functions = builtins::prelude_functions(&id_gen, &module_types);
         let mut data_types = builtins::prelude_data_types(&id_gen);
-        ast.register_definitions(&mut functions, &mut data_types);
+        let mut constants = IndexMap::new();
+        ast.register_definitions(&mut functions, &mut constants, &mut data_types);
 
         let mut module_sources = HashMap::new();
         module_sources.insert(
@@ -87,6 +88,7 @@ mod test {
         let mut generator = CodeGenerator::new(
             PlutusVersion::default(),
             utils::indexmap::as_ref_values(&functions),
+            utils::indexmap::as_ref_values(&constants),
             utils::indexmap::as_ref_values(&data_types),
             utils::indexmap::as_str_ref_values(&module_types),
             utils::indexmap::as_str_ref_values(&module_sources),
@@ -240,13 +242,14 @@ mod test {
             }
         "#});
 
-        assert!(prop
-            .run::<()>(
+        assert!(
+            prop.run::<()>(
                 42,
                 PropertyTest::DEFAULT_MAX_SUCCESS,
                 &PlutusVersion::default()
             )
-            .is_success());
+            .is_success()
+        );
     }
 
     #[test]

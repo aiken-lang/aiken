@@ -19,7 +19,7 @@ pub enum Error {
             format!(
                 "\n{:>13} {}",
                 "Trace",
-                if trace.contains("\n") {
+                if trace.contains('\n') {
                     trace.lines()
                         .enumerate()
                         .map(|(ix, row)| {

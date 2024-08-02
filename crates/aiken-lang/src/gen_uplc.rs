@@ -5,9 +5,9 @@ pub mod tree;
 use self::{
     air::Air,
     builder::{
-        cast_validator_args, constants_ir, convert_type_to_data, extract_constant,
-        modify_cyclic_calls, modify_self_calls, rearrange_list_clauses, AssignmentProperties,
-        ClauseProperties, CodeGenSpecialFuncs, CycleFunctionNames, HoistableFunction, Variant,
+        cast_validator_args, convert_type_to_data, extract_constant, modify_cyclic_calls,
+        modify_self_calls, rearrange_list_clauses, AssignmentProperties, ClauseProperties,
+        CodeGenSpecialFuncs, CycleFunctionNames, HoistableFunction, Variant,
     },
     tree::{AirTree, TreePath},
 };
@@ -58,6 +58,7 @@ pub struct CodeGenerator<'a> {
     plutus_version: PlutusVersion,
     /// immutable index maps
     functions: IndexMap<&'a FunctionAccessKey, &'a TypedFunction>,
+    constants: IndexMap<&'a FunctionAccessKey, &'a TypedExpr>,
     data_types: IndexMap<&'a DataTypeKey, &'a TypedDataType>,
     module_types: IndexMap<&'a str, &'a TypeInfo>,
     module_src: IndexMap<&'a str, &'a (String, LineNumbers)>,
@@ -82,6 +83,7 @@ impl<'a> CodeGenerator<'a> {
     pub fn new(
         plutus_version: PlutusVersion,
         functions: IndexMap<&'a FunctionAccessKey, &'a TypedFunction>,
+        constants: IndexMap<&'a FunctionAccessKey, &'a TypedExpr>,
         data_types: IndexMap<&'a DataTypeKey, &'a TypedDataType>,
         module_types: IndexMap<&'a str, &'a TypeInfo>,
         module_src: IndexMap<&'a str, &'a (String, LineNumbers)>,
@@ -90,6 +92,7 @@ impl<'a> CodeGenerator<'a> {
         CodeGenerator {
             plutus_version,
             functions,
+            constants,
             data_types,
             module_types,
             module_src,
@@ -268,12 +271,7 @@ impl<'a> CodeGenerator<'a> {
 
                 TypedExpr::Var {
                     constructor, name, ..
-                } => match &constructor.variant {
-                    ValueConstructorVariant::ModuleConstant { literal, .. } => {
-                        constants_ir(literal)
-                    }
-                    _ => AirTree::var(constructor.clone(), name, ""),
-                },
+                } => AirTree::var(constructor.clone(), name, ""),
 
                 TypedExpr::Fn { args, body, .. } => AirTree::anon_func(
                     args.iter()
@@ -743,8 +741,16 @@ impl<'a> CodeGenerator<'a> {
                             AirTree::builtin(*builtin, tipo.clone(), vec![])
                         }
                     }
-                    ModuleValueConstructor::Constant { literal, .. } => {
-                        builder::constants_ir(literal)
+                    ModuleValueConstructor::Constant { module, name, .. } => {
+                        let type_info = self.module_types.get(module_name.as_str()).unwrap();
+
+                        let value = type_info.values.get(name).unwrap();
+
+                        AirTree::var(
+                            ValueConstructor::public(tipo.clone(), value.variant.clone()),
+                            format!("{module}_{name}"),
+                            "",
+                        )
                     }
                 },
 
@@ -4245,8 +4251,52 @@ impl<'a> CodeGenerator<'a> {
                     }
                     .into(),
                 )),
-                ValueConstructorVariant::ModuleConstant { .. } => {
-                    unreachable!("{:#?}, {}", constructor, name)
+                ValueConstructorVariant::ModuleConstant { module, name, .. } => {
+                    let access_key = FunctionAccessKey {
+                        module_name: module.clone(),
+                        function_name: name.clone(),
+                    };
+
+                    let definition = self
+                        .constants
+                        .get(&access_key)
+                        .unwrap_or_else(|| panic!("unknown constant {module}.{name}"));
+
+                    let mut value =
+                        AirTree::no_op(self.build(definition, &access_key.module_name, &[]));
+
+                    value.traverse_tree_with(
+                        &mut |air_tree, _| {
+                            erase_opaque_type_operations(air_tree, &self.data_types);
+                        },
+                        true,
+                    );
+
+                    let term = self
+                        .uplc_code_gen(value.to_vec())
+                        .constr_fields_exposer()
+                        .constr_index_exposer();
+
+                    let mut program: Program<Name> = Program {
+                        version: (1, 0, 0),
+                        term: self.special_functions.apply_used_functions(term),
+                    };
+
+                    let mut interner = CodeGenInterner::new();
+
+                    interner.program(&mut program);
+
+                    let eval_program: Program<NamedDeBruijn> =
+                        program.remove_no_inlines().try_into().unwrap();
+
+                    Some(
+                        eval_program
+                            .eval(ExBudget::max())
+                            .result()
+                            .unwrap_or_else(|e| panic!("Failed to evaluate constant: {e:#?}"))
+                            .try_into()
+                            .unwrap(),
+                    )
                 }
                 ValueConstructorVariant::ModuleFn {
                     name: func_name,

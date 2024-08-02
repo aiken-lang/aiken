@@ -1,8 +1,6 @@
 use crate::{github::repo::LatestRelease, package_name::PackageName, paths, Error};
 use aiken_lang::{
-    ast::{
-        Annotation, ByteArrayFormatPreference, Constant, ModuleConstant, Span, UntypedDefinition,
-    },
+    ast::{Annotation, ByteArrayFormatPreference, ModuleConstant, Span, UntypedDefinition},
     expr::UntypedExpr,
     parser::token::Base,
 };
@@ -78,24 +76,14 @@ impl SimpleExpr {
 
         let (value, annotation) = match self {
             SimpleExpr::Bool(..) => todo!("requires https://github.com/aiken-lang/aiken/pull/992"),
-            SimpleExpr::Int(i) => (
+            SimpleExpr::Int(_) => (
                 // TODO: Replace with 'self.as_untyped_expr()' after https://github.com/aiken-lang/aiken/pull/992
-                Constant::Int {
-                    location,
-                    value: format!("{i}"),
-                    base: Base::Decimal {
-                        numeric_underscore: false,
-                    },
-                },
+                self.as_untyped_expr(),
                 Some(Annotation::int(location)),
             ),
-            SimpleExpr::ByteArray(bs, preferred_format) => (
+            SimpleExpr::ByteArray(_, _) => (
                 // TODO: Replace with 'self.as_untyped_expr()' after https://github.com/aiken-lang/aiken/pull/992
-                Constant::ByteArray {
-                    location,
-                    bytes: bs.to_vec(),
-                    preferred_format: *preferred_format,
-                },
+                self.as_untyped_expr(),
                 Some(Annotation::bytearray(location)),
             ),
             SimpleExpr::List(..) => todo!("requires https://github.com/aiken-lang/aiken/pull/992"),
@@ -107,8 +95,7 @@ impl SimpleExpr {
             public: true,
             name: identifier.to_string(),
             annotation,
-            value: Box::new(value),
-            tipo: (),
+            value,
         })
     }
 }

@@ -1,6 +1,6 @@
 use crate::{
     ast,
-    parser::{definition, error::ParseError, token::Token},
+    parser::{error::ParseError, literal, token::Token},
 };
 use chumsky::prelude::*;
 
@@ -12,13 +12,11 @@ pub fn parser() -> impl Parser<Token, ast::UntypedClauseGuard, Error = ParseErro
         }
         .map_with_span(|_name, _span| ast::UntypedClauseGuard {});
 
-        let constant_parser = definition::constant::value().map(|_| ast::UntypedClauseGuard {});
-
         let block_parser = expression
             .clone()
             .delimited_by(just(Token::LeftParen), just(Token::RightParen));
 
-        let leaf_parser = choice((var_parser, constant_parser, block_parser)).boxed();
+        let leaf_parser = choice((var_parser, constant(), block_parser)).boxed();
 
         let unary_op = just(Token::Bang);
 
@@ -56,4 +54,21 @@ pub fn parser() -> impl Parser<Token, ast::UntypedClauseGuard, Error = ParseErro
             .then(or_op.then(conjunction).repeated())
             .foldl(|_left, (_tok, _right)| ast::UntypedClauseGuard {})
     })
+}
+
+// NOTE: This is only there for backward-compatibility, in order to provide nicer error message
+// when a clause guard is found. However, Aiken no longer supports clause guards.
+pub fn constant() -> impl Parser<Token, ast::UntypedClauseGuard, Error = ParseError> {
+    let constant_string_parser =
+        select! {Token::String {value} => value}.map(|_| ast::UntypedClauseGuard {});
+
+    let constant_int_parser = literal::int().map(|_| ast::UntypedClauseGuard {});
+
+    let constant_bytearray_parser = literal::bytearray(|_, _, _, _, _| ast::UntypedClauseGuard {});
+
+    choice((
+        constant_string_parser,
+        constant_int_parser,
+        constant_bytearray_parser,
+    ))
 }

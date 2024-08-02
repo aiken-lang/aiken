@@ -1,7 +1,7 @@
 use crate::{
     ast::{
         Annotation, ArgBy, ArgName, ArgVia, AssignmentKind, AssignmentPattern, BinOp,
-        ByteArrayFormatPreference, CallArg, Constant, CurveType, DataType, Definition, Function,
+        ByteArrayFormatPreference, CallArg, CurveType, DataType, Definition, Function,
         LogicalOpChainKind, ModuleConstant, OnTestFailure, Pattern, RecordConstructor,
         RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg,
         TypedValidator, UnOp, UnqualifiedImport, UntypedArg, UntypedArgVia, UntypedAssignmentKind,
@@ -9,7 +9,7 @@ use crate::{
         UntypedPattern, UntypedRecordUpdateArg, Use, Validator, CAPTURE_VARIABLE,
     },
     docvec,
-    expr::{FnStyle, UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
+    expr::{FnStyle, TypedExpr, UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
     parser::{
         extra::{Comment, ModuleExtra},
         token::Base,
@@ -338,34 +338,20 @@ impl<'comments> Formatter<'comments> {
             })
     }
 
-    fn const_expr<'a>(&mut self, value: &'a Constant) -> Document<'a> {
-        match value {
-            Constant::ByteArray {
-                bytes,
-                preferred_format,
-                ..
-            } => self.bytearray(bytes, None, preferred_format),
-            Constant::CurvePoint {
-                point,
-                preferred_format,
-                ..
-            } => self.bytearray(
-                &point.compress(),
-                Some(point.as_ref().into()),
-                preferred_format,
-            ),
-            Constant::Int { value, base, .. } => self.int(value, base),
-            Constant::String { value, .. } => self.string(value),
-        }
+    fn const_expr<'a>(&mut self, _value: &'a UntypedExpr) -> Document<'a> {
+        todo!(
+            "format const_expr: surround complex expressions with a block, and leave simple expression without"
+        );
     }
 
-    pub fn docs_const_expr<'a>(&mut self, name: &'a str, value: &'a Constant) -> Document<'a> {
+    pub fn docs_const_expr<'a>(&mut self, name: &'a str, value: &'a TypedExpr) -> Document<'a> {
         let mut printer = tipo::pretty::Printer::new();
         name.to_doc()
             .append(": ")
             .append(printer.print(&value.tipo()))
-            .append(" = ")
-            .append(self.const_expr(value))
+        // TODO: Show full expression in docs when simple enough
+        // .append(" = ")
+        // .append(self.const_expr(value))
     }
 
     fn documented_definition<'a>(&mut self, s: &'a UntypedDefinition) -> Document<'a> {
