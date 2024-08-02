@@ -4,10 +4,11 @@
 
 ### Added
 
-∅
+- **aiken-lang**: add support for `mk_cons` and `mk_pair_data` builtins. See [#964](https://github.com/aiken-lang/aiken/issues/964). @KtorZ
 
 ### Changed
 
+- **aiken-lang**: fix zero-arg builtins `mk_nil_data` and `mk_nil_pair_data` invokation. @KtorZ
 - **aiken-project**: fix blueprint's apply truncating last character of outputs. See [#987](https://github.com/aiken-lang/aiken/issues/987). @KtorZ
 - **aiken-project**: provide better error (include input ref) when inputs are missing during transaction evaluation. See [#974](https://github.com/aiken-lang/aiken/issues/974). @KtorZ
 
