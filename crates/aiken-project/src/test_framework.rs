@@ -12,7 +12,7 @@ use cryptoxide::{blake2b::Blake2b, digest::Digest};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use owo_colors::{OwoColorize, Stream};
-use pallas::ledger::primitives::alonzo::{Constr, PlutusData};
+use pallas_primitives::alonzo::{Constr, PlutusData};
 use patricia_tree::PatriciaMap;
 use std::{
     borrow::Borrow, collections::BTreeMap, convert::TryFrom, ops::Deref, path::PathBuf, rc::Rc,

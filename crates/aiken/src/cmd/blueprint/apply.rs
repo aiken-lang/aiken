@@ -12,7 +12,7 @@ use inquire;
 use num_bigint::BigInt;
 use ordinal::Ordinal;
 use owo_colors::{OwoColorize, Stream::Stderr};
-use pallas::ledger::primitives::alonzo::PlutusData;
+use pallas_primitives::alonzo::PlutusData;
 use std::{fs, path::PathBuf, process, str::FromStr};
 use uplc::ast::Data as UplcData;
 

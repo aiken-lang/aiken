@@ -1,13 +1,12 @@
-use clap::ValueEnum;
-use miette::IntoDiagnostic;
-use serde_json::json;
-use std::{env, fs::File, io::BufReader, path::PathBuf, process};
-
 use aiken_project::{
     blueprint::{error::Error as BlueprintError, Blueprint},
     config::Config,
     error::Error as ProjectError,
 };
+use clap::ValueEnum;
+use miette::IntoDiagnostic;
+use serde_json::json;
+use std::{env, fs::File, io::BufReader, path::PathBuf, process};
 
 /// Convert a blueprint into other formats.
 #[derive(clap::Args)]
@@ -88,8 +87,7 @@ pub fn exec(
 
                 let mut double_cbor_bytes = Vec::new();
 
-                let mut cbor_encoder =
-                    pallas::codec::minicbor::Encoder::new(&mut double_cbor_bytes);
+                let mut cbor_encoder = pallas_codec::minicbor::Encoder::new(&mut double_cbor_bytes);
 
                 cbor_encoder.bytes(&cbor_bytes).unwrap();
 

@@ -48,11 +48,9 @@ use indexmap::IndexMap;
 use miette::NamedSource;
 use options::{CodeGenMode, Options};
 use package_name::PackageName;
-use pallas::ledger::{
-    addresses::{Address, Network, ShelleyAddress, ShelleyDelegationPart, StakePayload},
-    primitives::conway::{self as cardano, PolicyId},
-    traverse::ComputeHash,
-};
+use pallas_addresses::{Address, Network, ShelleyAddress, ShelleyDelegationPart, StakePayload};
+use pallas_primitives::conway::{self as cardano, PolicyId};
+use pallas_traverse::ComputeHash;
 use std::{
     collections::{BTreeSet, HashMap},
     fs::{self, File},

@@ -15,7 +15,7 @@ use crate::{
     },
 };
 use indexmap::IndexMap;
-use pallas::ledger::primitives::alonzo::{Constr, PlutusData};
+use pallas_primitives::alonzo::{Constr, PlutusData};
 use std::{fmt::Debug, rc::Rc};
 use uplc::{
     ast::Data,

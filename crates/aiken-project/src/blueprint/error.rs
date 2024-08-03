@@ -5,7 +5,7 @@ use super::{
 use aiken_lang::ast::Span;
 use miette::{Diagnostic, NamedSource};
 use owo_colors::{OwoColorize, Stream::Stdout};
-use pallas::codec::minicbor as cbor;
+use pallas_codec::minicbor as cbor;
 use std::fmt::Debug;
 use uplc::ast::Constant;
 
@@ -50,7 +50,7 @@ pub enum Error {
     ParameterizedValidator { n: usize },
 
     #[error(
-        "I couldn't compute the address of the given validator because it's actually a minting policy!",
+        "I couldn't compute the address of the given validator because it's actually a minting policy!"
     )]
     #[diagnostic(code("aiken::blueprint::address::minting_validator"))]
     #[diagnostic(help(
@@ -60,7 +60,7 @@ pub enum Error {
     UnexpectedMintingValidator,
 
     #[error(
-        "I couldn't compute the policyId of the given validator because it's actually a spending policy!",
+        "I couldn't compute the policyId of the given validator because it's actually a spending policy!"
     )]
     #[diagnostic(code("aiken::blueprint::address::spending_validator"))]
     #[diagnostic(help(

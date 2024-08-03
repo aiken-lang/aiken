@@ -116,7 +116,7 @@ pub enum Error {
 
     #[error("I couldn't parse the provided stake address.")]
     MalformedStakeAddress {
-        error: Option<pallas::ledger::addresses::Error>,
+        error: Option<pallas_addresses::Error>,
     },
 
     #[error("I didn't find any validator matching your criteria.")]

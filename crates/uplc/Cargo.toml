@@ -19,11 +19,11 @@ miette = "5.5.0"
 num-bigint = "0.4.3"
 num-integer = "0.1.45"
 num-traits = "0.2.15"
-pallas-crypto = "0.22.0"
-pallas-primitives = "0.22.0"
-pallas-addresses = "0.22.0"
-pallas-codec = { version = "0.22.0", features = ["num-bigint"] }
-pallas-traverse = "0.22.0"
+pallas-addresses.workspace = true
+pallas-codec.workspace = true
+pallas-crypto.workspace = true
+pallas-primitives.workspace = true
+pallas-traverse.workspace = true
 peg = "0.8.1"
 pretty = "0.11.3"
 serde = { version = "1.0.152", features = ["derive"] }
