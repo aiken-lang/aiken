@@ -2,6 +2,7 @@ use super::air::{Air, ExpectLevel};
 use crate::{
     ast::{BinOp, Curve, Span, UnOp},
     builtins::{bool, byte_array, data, int, list, string, void},
+    gen_uplc::AssignmentProperties,
     tipo::{Type, ValueConstructor, ValueConstructorVariant},
 };
 use indexmap::IndexSet;
@@ -586,6 +587,29 @@ impl AirTree {
             value: value.into(),
             then: then.into(),
         }
+    }
+
+    pub fn assign_literal_pattern(
+        name: String,
+        pattern: AirTree,
+        rhs: AirTree,
+        tipo: Rc<Type>,
+        props: AssignmentProperties,
+        then: AirTree,
+    ) -> AirTree {
+        assert!(props.kind.is_expect());
+
+        let expect = AirTree::binop(
+            BinOp::Eq,
+            bool(),
+            pattern,
+            AirTree::local_var(&name, tipo.clone()),
+            tipo,
+        );
+
+        let expr = AirTree::let_assignment(name, rhs, expect);
+
+        AirTree::assert_bool(true, expr, then, props.otherwise.clone())
     }
 
     pub fn cast_from_data(

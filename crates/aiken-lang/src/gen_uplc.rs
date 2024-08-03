@@ -17,7 +17,7 @@ use crate::{
         Span, TraceLevel, Tracing, TypedArg, TypedClause, TypedDataType, TypedFunction,
         TypedPattern, TypedValidator, UnOp,
     },
-    builtins::{bool, data, int, list, void, PRELUDE},
+    builtins::{bool, byte_array, data, int, list, void, PRELUDE},
     expr::TypedExpr,
     gen_uplc::{
         air::ExpectLevel,
@@ -915,26 +915,30 @@ impl<'a> CodeGenerator<'a> {
                 value: expected_int,
                 location,
                 ..
-            } => {
-                assert!(props.kind.is_expect());
-
-                let name = format!(
+            } => AirTree::assign_literal_pattern(
+                format!(
                     "__expected_by_{}_span_{}_{}",
                     expected_int, location.start, location.end
-                );
+                ),
+                AirTree::int(expected_int),
+                value,
+                int(),
+                props,
+                then,
+            ),
 
-                let expect = AirTree::binop(
-                    BinOp::Eq,
-                    bool(),
-                    AirTree::int(expected_int),
-                    AirTree::local_var(&name, int()),
-                    int(),
-                );
-
-                let expr = AirTree::let_assignment(name, value, expect);
-
-                AirTree::assert_bool(true, expr, then, props.otherwise.clone())
-            }
+            Pattern::ByteArray {
+                location,
+                value: expected_bytes,
+                ..
+            } => AirTree::assign_literal_pattern(
+                format!("__expected_bytes_span_{}_{}", location.start, location.end),
+                AirTree::byte_array(expected_bytes.clone()),
+                value,
+                byte_array(),
+                props,
+                then,
+            ),
 
             Pattern::Var { name, .. } => {
                 if props.full_check {
@@ -2321,6 +2325,10 @@ impl<'a> CodeGenerator<'a> {
                 assert!(!props.final_clause);
                 (AirTree::int(value), then)
             }
+            Pattern::ByteArray { value, .. } => {
+                assert!(!props.final_clause);
+                (AirTree::byte_array(value.clone()), then)
+            }
             Pattern::Var { name, .. } => (
                 AirTree::void(),
                 AirTree::let_assignment(
@@ -2836,6 +2844,15 @@ impl<'a> CodeGenerator<'a> {
                         &props.original_subject_name,
                         AirTree::int(value),
                         int(),
+                        then,
+                    )
+                }
+                Pattern::ByteArray { value, .. } => {
+                    props.complex_clause = true;
+                    AirTree::clause_guard(
+                        &props.original_subject_name,
+                        AirTree::byte_array(value.clone()),
+                        byte_array(),
                         then,
                     )
                 }

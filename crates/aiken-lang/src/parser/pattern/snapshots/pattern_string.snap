@@ -1,0 +1,15 @@
+---
+source: crates/aiken-lang/src/parser/pattern/string.rs
+description: "Invalid code (parse error):\n\nwhen foo is {\n  @\"foo\" -> True\n}\n"
+---
+[
+    ParseError {
+        kind: PatternMatchOnString,
+        span: 16..22,
+        while_parsing: None,
+        expected: {},
+        label: Some(
+            "cannot pattern-match on string",
+        ),
+    },
+]

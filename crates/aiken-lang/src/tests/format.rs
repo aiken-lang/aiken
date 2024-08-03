@@ -1000,3 +1000,20 @@ fn format_variadic_trace() {
         "#
     );
 }
+
+#[test]
+fn format_pattern_bytearray() {
+    assert_format!(
+        r#"
+        fn main(foo) {
+            when foo is {
+                "Aiken, rocks!" -> True
+                #"00abcd" -> True
+                #[1, 2, 3, 4] -> True
+                #[0x00, 0xab, 0xcd] -> True
+                _ -> False
+            }
+        }
+        "#
+    );
+}

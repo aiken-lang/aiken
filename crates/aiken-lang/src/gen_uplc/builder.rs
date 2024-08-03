@@ -615,7 +615,7 @@ pub fn pattern_has_conditions(
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> bool {
     match pattern {
-        Pattern::List { .. } | Pattern::Int { .. } => true,
+        Pattern::List { .. } | Pattern::Int { .. } | Pattern::ByteArray { .. } => true,
         Pattern::Tuple { elems, .. } => elems
             .iter()
             .any(|elem| pattern_has_conditions(elem, data_types)),

@@ -8,7 +8,7 @@ use super::{
 };
 use crate::{
     ast::{CallArg, Pattern, Span, TypedPattern, UntypedPattern},
-    builtins::{int, list, pair, tuple},
+    builtins::{byte_array, int, list, pair, tuple},
 };
 use itertools::Itertools;
 use std::{
@@ -196,6 +196,21 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                     location,
                     value,
                     base,
+                })
+            }
+
+            Pattern::ByteArray {
+                location,
+                value,
+                preferred_format,
+            } => {
+                self.environment
+                    .unify(tipo, byte_array(), location, false)?;
+
+                Ok(Pattern::ByteArray {
+                    location,
+                    value,
+                    preferred_format,
                 })
             }
 

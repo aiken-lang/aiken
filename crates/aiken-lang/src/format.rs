@@ -1877,6 +1877,12 @@ impl<'comments> Formatter<'comments> {
         let doc = match pattern {
             Pattern::Int { value, base, .. } => self.int(value, base),
 
+            Pattern::ByteArray {
+                value,
+                preferred_format,
+                ..
+            } => self.bytearray(value, None, preferred_format),
+
             Pattern::Var { name, .. } => name.to_doc(),
 
             Pattern::Assign { name, pattern, .. } => {
