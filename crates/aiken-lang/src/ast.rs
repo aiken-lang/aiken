@@ -28,6 +28,7 @@ pub type UntypedModule = Module<(), UntypedDefinition>;
 pub enum ModuleKind {
     Lib,
     Validator,
+    Env,
 }
 
 impl ModuleKind {
@@ -37,6 +38,10 @@ impl ModuleKind {
 
     pub fn is_lib(&self) -> bool {
         matches!(self, ModuleKind::Lib)
+    }
+
+    pub fn is_env(&self) -> bool {
+        matches!(self, ModuleKind::Env)
     }
 }
 

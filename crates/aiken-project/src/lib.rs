@@ -65,6 +65,8 @@ use uplc::{
     PlutusData,
 };
 
+const DEFAULT_ENV_MODULE: &str = "default";
+
 #[derive(Debug)]
 pub struct Source {
     pub path: PathBuf,
@@ -611,11 +613,13 @@ where
     }
 
     fn read_source_files(&mut self) -> Result<(), Error> {
+        let env = self.root.join("env");
         let lib = self.root.join("lib");
         let validators = self.root.join("validators");
 
         self.aiken_files(&validators, ModuleKind::Validator)?;
         self.aiken_files(&lib, ModuleKind::Lib)?;
+        self.aiken_files(&env, ModuleKind::Env)?;
 
         Ok(())
     }
@@ -879,12 +883,18 @@ where
     }
 
     fn aiken_files(&mut self, dir: &Path, kind: ModuleKind) -> Result<(), Error> {
+        let mut has_default = None;
+
         walkdir::WalkDir::new(dir)
             .follow_links(true)
             .into_iter()
             .filter_map(Result::ok)
             .filter(|e| e.file_type().is_file())
             .try_for_each(|d| {
+                if has_default.is_none() {
+                    has_default = Some(false);
+                }
+
                 let path = d.into_path();
                 let keep = is_aiken_path(&path, dir);
                 let ext = path.extension();
@@ -895,11 +905,20 @@ where
                 }
 
                 if keep {
+                    if self.module_name(dir, &path).as_str() == DEFAULT_ENV_MODULE {
+                        has_default = Some(true);
+                    }
                     self.add_module(path, dir, kind)
                 } else {
                     Ok(())
                 }
-            })
+            })?;
+
+        if kind == ModuleKind::Env && has_default == Some(false) {
+            return Err(Error::NoDefaultEnvironment);
+        }
+
+        Ok(())
     }
 
     fn add_module(&mut self, path: PathBuf, dir: &Path, kind: ModuleKind) -> Result<(), Error> {

@@ -785,7 +785,9 @@ impl<'a> Environment<'a> {
                         })?;
 
                 if module_info.kind.is_validator()
-                    && (self.current_kind.is_lib() || !self.current_module.starts_with("tests"))
+                    && (self.current_kind.is_lib()
+                        || self.current_kind.is_env()
+                        || !self.current_module.starts_with("tests"))
                 {
                     return Err(Error::ValidatorImported {
                         location: *location,

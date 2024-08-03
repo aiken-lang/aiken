@@ -127,6 +127,9 @@ pub enum Error {
 
     #[error("I couldn't find any exportable function named '{name}' in module '{module}'.")]
     ExportNotFound { module: String, name: String },
+
+    #[error("I located conditional modules under 'env', but no default one!")]
+    NoDefaultEnvironment,
 }
 
 impl Error {
@@ -195,6 +198,7 @@ impl ExtraData for Error {
             | Error::NoValidatorNotFound { .. }
             | Error::MoreThanOneValidatorFound { .. }
             | Error::Module { .. }
+            | Error::NoDefaultEnvironment { .. }
             | Error::ExportNotFound { .. } => None,
             Error::Type { error, .. } => error.extra_data(),
         }
@@ -224,6 +228,7 @@ impl GetSource for Error {
             | Error::NoValidatorNotFound { .. }
             | Error::MoreThanOneValidatorFound { .. }
             | Error::ExportNotFound { .. }
+            | Error::NoDefaultEnvironment { .. }
             | Error::Module { .. } => None,
             Error::DuplicateModule { second: path, .. }
             | Error::MissingManifest { path }
@@ -252,6 +257,7 @@ impl GetSource for Error {
             | Error::Json { .. }
             | Error::MalformedStakeAddress { .. }
             | Error::NoValidatorNotFound { .. }
+            | Error::NoDefaultEnvironment { .. }
             | Error::MoreThanOneValidatorFound { .. }
             | Error::ExportNotFound { .. }
             | Error::Module { .. } => None,
@@ -307,6 +313,7 @@ impl Diagnostic for Error {
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
             Error::ExportNotFound { .. } => None,
+            Error::NoDefaultEnvironment { .. } => None,
             Error::Module(e) => e.code().map(boxed),
         }
     }
@@ -329,6 +336,9 @@ impl Diagnostic for Error {
             Error::StandardIo(_) => None,
             Error::MissingManifest { .. } => Some(Box::new(
                 "Try running `aiken new <REPOSITORY/PROJECT>` to initialise a project with an example manifest.",
+            )),
+            Error::NoDefaultEnvironment { .. } => Some(Box::new(
+                "Environment module names are free, but there must be at least one named 'default.ak'.",
             )),
             Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
@@ -408,6 +418,7 @@ impl Diagnostic for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
+            Error::NoDefaultEnvironment { .. } => None,
             Error::Module(e) => e.labels(),
         }
     }
@@ -419,6 +430,7 @@ impl Diagnostic for Error {
             Error::ImportCycle { .. } => None,
             Error::ExportNotFound { .. } => None,
             Error::Blueprint(e) => e.source_code(),
+            Error::NoDefaultEnvironment { .. } => None,
             Error::Parse { named, .. } => Some(named),
             Error::Type { named, .. } => Some(named),
             Error::StandardIo(_) => None,
@@ -462,6 +474,7 @@ impl Diagnostic for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
+            Error::NoDefaultEnvironment { .. } => None,
             Error::Module(e) => e.url(),
         }
     }
@@ -476,6 +489,7 @@ impl Diagnostic for Error {
             Error::Parse { .. } => None,
             Error::Type { error, .. } => error.related(),
             Error::StandardIo(_) => None,
+            Error::NoDefaultEnvironment { .. } => None,
             Error::MissingManifest { .. } => None,
             Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
