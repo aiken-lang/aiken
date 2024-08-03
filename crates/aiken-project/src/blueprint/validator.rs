@@ -307,7 +307,13 @@ mod tests {
                     description => concat!("Code:\n\n", indoc::indoc! { $code }),
                     omit_expression => true
                 }, {
-                    insta::assert_json_snapshot!(validator);
+                    insta::assert_json_snapshot!(
+                        validator,
+                        {
+                            ".compiledCode" => "<redacted>",
+                            ".hash" => "<redacted>"
+                        }
+                    );
                 }),
             };
         };
