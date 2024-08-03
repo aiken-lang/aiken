@@ -365,11 +365,9 @@ pub fn find_introduced_variables(air_tree: &AirTree) -> Vec<String> {
             .cloned()
             .chain(snd_name.iter().cloned())
             .collect_vec(),
-        AirTree::PairAccessor { fst, snd, .. } => fst
-            .iter()
-            .cloned()
-            .chain(snd.iter().cloned())
-            .collect_vec(),
+        AirTree::PairAccessor { fst, snd, .. } => {
+            fst.iter().cloned().chain(snd.iter().cloned()).collect_vec()
+        }
         AirTree::PairClause {
             fst_name, snd_name, ..
         } => fst_name
