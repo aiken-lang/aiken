@@ -361,21 +361,21 @@ pub fn find_introduced_variables(air_tree: &AirTree) -> Vec<String> {
         AirTree::PairGuard {
             fst_name, snd_name, ..
         } => fst_name
-            .into_iter()
+            .iter()
             .cloned()
-            .chain(snd_name.into_iter().cloned())
+            .chain(snd_name.iter().cloned())
             .collect_vec(),
         AirTree::PairAccessor { fst, snd, .. } => fst
-            .into_iter()
+            .iter()
             .cloned()
-            .chain(snd.into_iter().cloned())
+            .chain(snd.iter().cloned())
             .collect_vec(),
         AirTree::PairClause {
             fst_name, snd_name, ..
         } => fst_name
-            .into_iter()
+            .iter()
             .cloned()
-            .chain(snd_name.into_iter().cloned())
+            .chain(snd_name.iter().cloned())
             .collect_vec(),
         AirTree::Fn { params, .. } => params.to_vec(),
         AirTree::ListAccessor { names, .. } => names.clone(),

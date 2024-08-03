@@ -726,7 +726,7 @@ impl Term<Name> {
     ///
     /// Note that the 'otherwise' term is expected
     /// to be a delayed term.
-    fn unwrap_tail_or<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name>) -> Term<Name>
+    pub fn unwrap_tail_or<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name>) -> Term<Name>
     where
         F: FnOnce(Term<Name>) -> Term<Name>,
     {
