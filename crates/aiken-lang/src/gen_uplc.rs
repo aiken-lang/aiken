@@ -4917,7 +4917,7 @@ impl<'a> CodeGenerator<'a> {
                     known_data_to_type(term, &tipo)
                 };
 
-                if extract_constant(&term.pierce_no_inlines()).is_some() {
+                if extract_constant(term.pierce_no_inlines()).is_some() {
                     let mut program: Program<Name> = Program {
                         version: (1, 0, 0),
                         term,
