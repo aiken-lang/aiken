@@ -956,9 +956,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 .ok_or_else(|| Error::UnknownModule {
                     name: module_alias.to_string(),
                     location: *module_location,
-                    imported_modules: self
+                    known_modules: self
                         .environment
-                        .imported_modules
+                        .importable_modules
                         .keys()
                         .map(|t| t.to_string())
                         .collect(),
@@ -2327,9 +2327,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     .ok_or_else(|| Error::UnknownModule {
                         location: *location,
                         name: module_name.to_string(),
-                        imported_modules: self
+                        known_modules: self
                             .environment
-                            .imported_modules
+                            .importable_modules
                             .keys()
                             .map(|t| t.to_string())
                             .collect(),

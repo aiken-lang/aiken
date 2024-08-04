@@ -751,13 +751,39 @@ Perhaps, try the following:
     #[diagnostic(code("unknown::module"))]
     #[diagnostic(help(
         "{}",
-        suggest_neighbor(name, imported_modules.iter(), "Did you forget to add a package as dependency?")
+        suggest_neighbor(name, known_modules.iter(), "Did you forget to add a package as dependency?")
     ))]
     UnknownModule {
         #[label]
         location: Span,
         name: String,
-        imported_modules: Vec<String>,
+        known_modules: Vec<String>,
+    },
+
+    #[error(
+        "I couldn't find any module for the environment: '{}'\n",
+        name.if_supports_color(Stdout, |s| s.purple())
+    )]
+    #[diagnostic(code("unknown::environment"))]
+    #[diagnostic(help(
+        "{}{}",
+        if known_environments.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "I know about the following environments:\n{}\n\n",
+                known_environments
+                    .iter()
+                    .map(|s| format!("─▶ {}", s.if_supports_color(Stdout, |s| s.purple())))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        },
+        suggest_neighbor(name, known_environments.iter(), "Did you forget to define this environment?")
+    ))]
+    UnknownEnvironment {
+        name: String,
+        known_environments: Vec<String>,
     },
 
     #[error(
@@ -1066,6 +1092,7 @@ impl ExtraData for Error {
             | Error::UnknownModuleType { .. }
             | Error::UnknownModuleValue { .. }
             | Error::UnknownRecordField { .. }
+            | Error::UnknownEnvironment { .. }
             | Error::UnnecessarySpreadOperator { .. }
             | Error::UpdateMultiConstructorType { .. }
             | Error::ValidatorImported { .. }

@@ -91,20 +91,36 @@ impl<'a> Environment<'a> {
     pub fn find_module(&self, fragments: &[String], location: Span) -> Result<&'a TypeInfo, Error> {
         let mut name = fragments.join("/");
 
-        if name == ast::ENV_MODULE {
+        let is_env = name == ast::ENV_MODULE;
+
+        if is_env {
             name = self
                 .target_env
                 .unwrap_or(ast::DEFAULT_ENV_MODULE)
                 .to_string()
         }
 
-        self.importable_modules
-            .get(&name)
-            .ok_or_else(|| Error::UnknownModule {
-                location,
-                name,
-                imported_modules: self.imported_modules.keys().cloned().collect(),
-            })
+        self.importable_modules.get(&name).ok_or_else(|| {
+            if is_env {
+                Error::UnknownEnvironment {
+                    name,
+                    known_environments: self
+                        .importable_modules
+                        .values()
+                        .filter_map(|m| match m.kind {
+                            ModuleKind::Env => Some(m.name.clone()),
+                            ModuleKind::Lib | ModuleKind::Validator => None,
+                        })
+                        .collect(),
+                }
+            } else {
+                Error::UnknownModule {
+                    location,
+                    name,
+                    known_modules: self.importable_modules.keys().cloned().collect(),
+                }
+            }
+        })
     }
 
     pub fn close_scope(&mut self, data: ScopeResetData) {
@@ -373,7 +389,7 @@ impl<'a> Environment<'a> {
                         .ok_or_else(|| Error::UnknownModule {
                             location,
                             name: name.to_string(),
-                            imported_modules: self
+                            known_modules: self
                                 .importable_modules
                                 .keys()
                                 .map(|t| t.to_string())
@@ -419,7 +435,7 @@ impl<'a> Environment<'a> {
                         .get(m)
                         .ok_or_else(|| Error::UnknownModule {
                             name: m.to_string(),
-                            imported_modules: self
+                            known_modules: self
                                 .importable_modules
                                 .keys()
                                 .map(|t| t.to_string())
@@ -1726,7 +1742,7 @@ impl<'a> Environment<'a> {
                 .ok_or_else(|| Error::UnknownModule {
                     location,
                     name: name.to_string(),
-                    imported_modules: self
+                    known_modules: self
                         .importable_modules
                         .keys()
                         .map(|t| t.to_string())
