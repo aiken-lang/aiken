@@ -109,7 +109,7 @@ impl<'a> Environment<'a> {
                         .values()
                         .filter_map(|m| match m.kind {
                             ModuleKind::Env => Some(m.name.clone()),
-                            ModuleKind::Lib | ModuleKind::Validator => None,
+                            ModuleKind::Lib | ModuleKind::Validator | ModuleKind::Config => None,
                         })
                         .collect(),
                 }

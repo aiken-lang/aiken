@@ -526,6 +526,8 @@ pub enum Warning {
     InvalidModuleName { path: PathBuf },
     #[error("aiken.toml demands compiler version {demanded}, but you are using {current}.")]
     CompilerVersionMismatch { demanded: String, current: String },
+    #[error("No configuration found for environment {env}.")]
+    NoConfigurationForEnv { env: String },
 }
 
 impl ExtraData for Warning {
@@ -534,7 +536,8 @@ impl ExtraData for Warning {
             Warning::NoValidators { .. }
             | Warning::DependencyAlreadyExists { .. }
             | Warning::InvalidModuleName { .. }
-            | Warning::CompilerVersionMismatch { .. } => None,
+            | Warning::CompilerVersionMismatch { .. }
+            | Warning::NoConfigurationForEnv { .. } => None,
             Warning::Type { warning, .. } => warning.extra_data(),
         }
     }
@@ -546,6 +549,7 @@ impl GetSource for Warning {
             Warning::InvalidModuleName { path } | Warning::Type { path, .. } => Some(path.clone()),
             Warning::NoValidators
             | Warning::DependencyAlreadyExists { .. }
+            | Warning::NoConfigurationForEnv { .. }
             | Warning::CompilerVersionMismatch { .. } => None,
         }
     }
@@ -556,6 +560,7 @@ impl GetSource for Warning {
             Warning::NoValidators
             | Warning::InvalidModuleName { .. }
             | Warning::DependencyAlreadyExists { .. }
+            | Warning::NoConfigurationForEnv { .. }
             | Warning::CompilerVersionMismatch { .. } => None,
         }
     }
@@ -571,6 +576,7 @@ impl Diagnostic for Warning {
             Warning::Type { named, .. } => Some(named),
             Warning::NoValidators
             | Warning::InvalidModuleName { .. }
+            | Warning::NoConfigurationForEnv { .. }
             | Warning::DependencyAlreadyExists { .. }
             | Warning::CompilerVersionMismatch { .. } => None,
         }
@@ -582,6 +588,7 @@ impl Diagnostic for Warning {
             Warning::InvalidModuleName { .. }
             | Warning::NoValidators
             | Warning::DependencyAlreadyExists { .. }
+            | Warning::NoConfigurationForEnv { .. }
             | Warning::CompilerVersionMismatch { .. } => None,
         }
     }
@@ -600,6 +607,9 @@ impl Diagnostic for Warning {
             Warning::DependencyAlreadyExists { .. } => {
                 Some(Box::new("aiken::packages::already_exists"))
             }
+            Warning::NoConfigurationForEnv { .. } => {
+                Some(Box::new("aiken::project::config::missing::env"))
+            }
         }
     }
 
@@ -616,6 +626,9 @@ impl Diagnostic for Warning {
             )),
             Warning::DependencyAlreadyExists { .. } => Some(Box::new(
                 "If you need to change the version, try 'aiken packages upgrade' instead.",
+            )),
+            Warning::NoConfigurationForEnv { .. } => Some(Box::new(
+                "When configuration keys are missing for a target environment, no 'config' module will be created. This may lead to issues down the line.",
             )),
         }
     }
