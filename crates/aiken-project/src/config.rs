@@ -11,7 +11,7 @@ use miette::NamedSource;
 use semver::Version;
 use serde::{
     de,
-    ser::{self, SerializeSeq},
+    ser::{self, SerializeSeq, SerializeStruct},
     Deserialize, Serialize,
 };
 use std::{collections::BTreeMap, fmt::Display, fs, io, path::Path};
@@ -42,7 +42,7 @@ pub struct Config {
 pub enum SimpleExpr {
     Int(i64),
     Bool(bool),
-    ByteArray(String),
+    ByteArray(Vec<u8>, ByteArrayFormatPreference),
     List(Vec<SimpleExpr>),
 }
 
@@ -60,10 +60,10 @@ impl SimpleExpr {
                     numeric_underscore: false,
                 },
             },
-            SimpleExpr::ByteArray(s) => UntypedExpr::ByteArray {
+            SimpleExpr::ByteArray(bs, preferred_format) => UntypedExpr::ByteArray {
                 location: Span::empty(),
-                bytes: s.as_bytes().to_vec(),
-                preferred_format: ByteArrayFormatPreference::Utf8String,
+                bytes: bs.to_vec(),
+                preferred_format: *preferred_format,
             },
             SimpleExpr::List(es) => UntypedExpr::List {
                 location: Span::empty(),
@@ -89,12 +89,12 @@ impl SimpleExpr {
                 },
                 Some(Annotation::int(location)),
             ),
-            SimpleExpr::ByteArray(s) => (
+            SimpleExpr::ByteArray(bs, preferred_format) => (
                 // TODO: Replace with 'self.as_untyped_expr()' after https://github.com/aiken-lang/aiken/pull/992
                 Constant::ByteArray {
                     location,
-                    bytes: s.as_bytes().to_vec(),
-                    preferred_format: ByteArrayFormatPreference::Utf8String,
+                    bytes: bs.to_vec(),
+                    preferred_format: *preferred_format,
                 },
                 Some(Annotation::bytearray(location)),
             ),
@@ -118,7 +118,18 @@ impl Serialize for SimpleExpr {
         match self {
             SimpleExpr::Bool(b) => serializer.serialize_bool(*b),
             SimpleExpr::Int(i) => serializer.serialize_i64(*i),
-            SimpleExpr::ByteArray(s) => serializer.serialize_str(s.as_str()),
+            SimpleExpr::ByteArray(bs, preferred_format) => match preferred_format {
+                ByteArrayFormatPreference::Utf8String => {
+                    serializer.serialize_str(String::from_utf8(bs.to_vec()).unwrap().as_str())
+                }
+                ByteArrayFormatPreference::ArrayOfBytes(..)
+                | ByteArrayFormatPreference::HexadecimalString => {
+                    let mut s = serializer.serialize_struct("ByteArray", 2)?;
+                    s.serialize_field("bytes", &hex::encode(bs))?;
+                    s.serialize_field("encoding", "base16")?;
+                    s.end()
+                }
+            },
             SimpleExpr::List(es) => {
                 let mut seq = serializer.serialize_seq(Some(es.len()))?;
                 for e in es {
@@ -133,6 +144,24 @@ impl Serialize for SimpleExpr {
 impl<'a> Deserialize<'a> for SimpleExpr {
     fn deserialize<D: de::Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
         struct SimpleExprVisitor;
+
+        #[derive(Deserialize)]
+        enum Encoding {
+            #[serde(rename(deserialize = "utf8"))]
+            Utf8,
+            #[serde(rename(deserialize = "utf-8"))]
+            Utf8Bis,
+            #[serde(rename(deserialize = "hex"))]
+            Hex,
+            #[serde(rename(deserialize = "base16"))]
+            Base16,
+        }
+
+        #[derive(Deserialize)]
+        struct Bytes {
+            bytes: String,
+            encoding: Encoding,
+        }
 
         impl<'a> de::Visitor<'a> for SimpleExprVisitor {
             type Value = SimpleExpr;
@@ -150,7 +179,32 @@ impl<'a> Deserialize<'a> for SimpleExpr {
             }
 
             fn visit_str<E>(self, s: &str) -> Result<Self::Value, E> {
-                Ok(SimpleExpr::ByteArray(s.to_string()))
+                Ok(SimpleExpr::ByteArray(
+                    s.as_bytes().to_vec(),
+                    ByteArrayFormatPreference::Utf8String,
+                ))
+            }
+
+            fn visit_map<V>(self, map: V) -> Result<Self::Value, V::Error>
+            where
+                V: de::MapAccess<'a>,
+            {
+                let Bytes { bytes, encoding } =
+                    Bytes::deserialize(de::value::MapAccessDeserializer::new(map))?;
+
+                match encoding {
+                    Encoding::Hex | Encoding::Base16 => match hex::decode(&bytes) {
+                        Err(e) => Err(de::Error::custom(format!("invalid base16 string: {e:?}"))),
+                        Ok(bytes) => Ok(SimpleExpr::ByteArray(
+                            bytes,
+                            ByteArrayFormatPreference::HexadecimalString,
+                        )),
+                    },
+                    Encoding::Utf8 | Encoding::Utf8Bis => Ok(SimpleExpr::ByteArray(
+                        bytes.as_bytes().to_vec(),
+                        ByteArrayFormatPreference::Utf8String,
+                    )),
+                }
             }
 
             fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
@@ -335,7 +389,14 @@ mod tests {
         let leaf = prop_oneof![
             (any::<i64>)().prop_map(SimpleExpr::Int),
             (any::<bool>)().prop_map(SimpleExpr::Bool),
-            "[a-z]*".prop_map(SimpleExpr::ByteArray)
+            "[a-z0-9]*".prop_map(|bytes| SimpleExpr::ByteArray(
+                bytes.as_bytes().to_vec(),
+                ByteArrayFormatPreference::Utf8String
+            )),
+            "([0-9a-f][0-9a-f])*".prop_map(|bytes| SimpleExpr::ByteArray(
+                bytes.as_bytes().to_vec(),
+                ByteArrayFormatPreference::HexadecimalString
+            ))
         ];
 
         leaf.prop_recursive(3, 8, 3, |inner| {
