@@ -51,6 +51,7 @@ impl ParsedModule {
         id_gen: &IdGenerator,
         package: &str,
         tracing: Tracing,
+        env: Option<&str>,
         validate_module_name: bool,
         module_sources: &mut HashMap<String, (String, LineNumbers)>,
         module_types: &mut HashMap<String, TypeInfo>,
@@ -68,6 +69,7 @@ impl ParsedModule {
                 module_types,
                 tracing,
                 &mut warnings,
+                env,
             )
             .map_err(|error| Error::Type {
                 path: self.path.clone(),

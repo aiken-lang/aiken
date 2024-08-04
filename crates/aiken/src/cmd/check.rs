@@ -48,6 +48,10 @@ pub struct Args {
     #[clap(short, long)]
     exact_match: bool,
 
+    /// Environment to build against.
+    #[clap(long)]
+    env: Option<String>,
+
     /// Filter traces to be included in the generated program(s).
     ///
     ///   - user-defined:
@@ -95,6 +99,7 @@ pub fn exec(
         trace_level,
         seed,
         max_success,
+        env,
     }: Args,
 ) -> miette::Result<()> {
     let mut rng = rand::thread_rng();
@@ -114,6 +119,7 @@ pub fn exec(
                     Some(filter_traces) => filter_traces(trace_level),
                     None => Tracing::All(trace_level),
                 },
+                env.clone(),
             )
         })
     } else {
@@ -129,6 +135,7 @@ pub fn exec(
                     Some(filter_traces) => filter_traces(trace_level),
                     None => Tracing::All(trace_level),
                 },
+                env.clone(),
             )
         })
     };

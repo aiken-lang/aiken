@@ -32,7 +32,7 @@ use crate::{
 };
 use aiken_lang::{
     ast::{
-        DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Tracing, TypedDataType,
+        self, DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Tracing, TypedDataType,
         TypedFunction,
     },
     builtins,
@@ -64,8 +64,6 @@ use uplc::{
     ast::{Constant, Name, Program},
     PlutusData,
 };
-
-const DEFAULT_ENV_MODULE: &str = "default";
 
 #[derive(Debug)]
 pub struct Source {
@@ -186,10 +184,16 @@ where
         self.defined_modules = checkpoint.defined_modules;
     }
 
-    pub fn build(&mut self, uplc: bool, tracing: Tracing) -> Result<(), Vec<Error>> {
+    pub fn build(
+        &mut self,
+        uplc: bool,
+        tracing: Tracing,
+        env: Option<String>,
+    ) -> Result<(), Vec<Error>> {
         let options = Options {
             code_gen_mode: CodeGenMode::Build(uplc),
             tracing,
+            env,
         };
 
         self.compile(options)
@@ -211,7 +215,7 @@ where
 
         let mut modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(&mut modules, Tracing::silent(), false)?;
+        self.type_check(&mut modules, Tracing::silent(), None, false)?;
 
         let destination = destination.unwrap_or_else(|| self.root.join("docs"));
 
@@ -252,9 +256,11 @@ where
         seed: u32,
         property_max_success: usize,
         tracing: Tracing,
+        env: Option<String>,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
             tracing,
+            env,
             code_gen_mode: if skip_tests {
                 CodeGenMode::NoOp
             } else {
@@ -307,7 +313,7 @@ where
 
         let mut modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(&mut modules, options.tracing, true)?;
+        self.type_check(&mut modules, options.tracing, options.env.as_deref(), true)?;
 
         match options.code_gen_mode {
             CodeGenMode::Build(uplc_dump) => {
@@ -725,6 +731,7 @@ where
         &mut self,
         modules: &mut ParsedModules,
         tracing: Tracing,
+        env: Option<&str>,
         validate_module_name: bool,
     ) -> Result<(), Vec<Error>> {
         let our_modules: BTreeSet<String> = modules.keys().cloned().collect();
@@ -737,6 +744,7 @@ where
                     &self.id_gen,
                     &self.config.name.to_string(),
                     tracing,
+                    env,
                     validate_module_name,
                     &mut self.module_sources,
                     &mut self.module_types,
@@ -905,7 +913,7 @@ where
                 }
 
                 if keep {
-                    if self.module_name(dir, &path).as_str() == DEFAULT_ENV_MODULE {
+                    if self.module_name(dir, &path).as_str() == ast::DEFAULT_ENV_MODULE {
                         has_default = Some(true);
                     }
                     self.add_module(path, dir, kind)

@@ -21,6 +21,10 @@ pub struct Args {
     #[clap(short, long)]
     uplc: bool,
 
+    /// Environment to build against.
+    #[clap(long)]
+    env: Option<String>,
+
     /// Filter traces to be included in the generated program(s).
     ///
     ///   - user-defined:
@@ -63,6 +67,7 @@ pub fn exec(
         uplc,
         filter_traces,
         trace_level,
+        env,
     }: Args,
 ) -> miette::Result<()> {
     let result = if watch {
@@ -73,6 +78,7 @@ pub fn exec(
                     Some(filter_traces) => filter_traces(trace_level),
                     None => Tracing::All(trace_level),
                 },
+                env.clone(),
             )
         })
     } else {
@@ -83,6 +89,7 @@ pub fn exec(
                     Some(filter_traces) => filter_traces(trace_level),
                     None => Tracing::All(trace_level),
                 },
+                env.clone(),
             )
         })
     };

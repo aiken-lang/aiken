@@ -21,6 +21,9 @@ pub const BACKPASS_VARIABLE: &str = "_backpass";
 pub const CAPTURE_VARIABLE: &str = "_capture";
 pub const PIPE_VARIABLE: &str = "_pipe";
 
+pub const ENV_MODULE: &str = "env";
+pub const DEFAULT_ENV_MODULE: &str = "default";
+
 pub type TypedModule = Module<TypeInfo, TypedDefinition>;
 pub type UntypedModule = Module<(), UntypedDefinition>;
 

@@ -1,4 +1,3 @@
-use aiken_lang::ast::Tracing;
 use aiken_project::watch::with_project;
 use std::path::PathBuf;
 
@@ -15,10 +14,6 @@ pub struct Args {
     /// Name of the validator within the module. Optional if there's only one validator
     #[clap(short, long)]
     validator: Option<String>,
-
-    /// Force the project to be rebuilt, otherwise relies on existing artifacts (i.e. plutus.json)
-    #[clap(long)]
-    rebuild: bool,
 }
 
 pub fn exec(
@@ -26,14 +21,9 @@ pub fn exec(
         directory,
         module,
         validator,
-        rebuild,
     }: Args,
 ) -> miette::Result<()> {
     with_project(directory.as_deref(), false, |p| {
-        if rebuild {
-            p.build(false, Tracing::silent())?;
-        }
-
         let title = module.as_ref().map(|m| {
             format!(
                 "{m}{}",
