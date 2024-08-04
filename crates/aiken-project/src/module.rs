@@ -32,16 +32,9 @@ pub struct ParsedModule {
 }
 
 impl ParsedModule {
-    pub fn deps_for_graph(&self) -> (String, Vec<String>) {
+    pub fn deps_for_graph(&self, env_modules: &[String]) -> (String, Vec<String>) {
         let name = self.name.clone();
-
-        let deps: Vec<_> = self
-            .ast
-            .dependencies()
-            .into_iter()
-            .map(|(dep, _span)| dep)
-            .collect();
-
+        let deps: Vec<_> = self.ast.dependencies(env_modules);
         (name, deps)
     }
 
@@ -124,10 +117,19 @@ impl ParsedModules {
     }
 
     pub fn sequence(&self, our_modules: &BTreeSet<String>) -> Result<Vec<String>, Error> {
+        let env_modules = self
+            .0
+            .values()
+            .filter_map(|m| match m.kind {
+                ModuleKind::Env => Some(m.name.clone()),
+                ModuleKind::Lib | ModuleKind::Validator => None,
+            })
+            .collect::<Vec<String>>();
+
         let inputs = self
             .0
             .values()
-            .map(|m| m.deps_for_graph())
+            .map(|m| m.deps_for_graph(&env_modules))
             .collect::<Vec<(String, Vec<String>)>>();
 
         let capacity = inputs.len();

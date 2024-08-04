@@ -69,16 +69,18 @@ impl<Info, Definitions> Module<Info, Definitions> {
 }
 
 impl UntypedModule {
-    pub fn dependencies(&self) -> Vec<(String, Span)> {
+    pub fn dependencies(&self, env_modules: &[String]) -> Vec<String> {
         self.definitions()
             .flat_map(|def| {
-                if let Definition::Use(Use {
-                    location, module, ..
-                }) = def
-                {
-                    Some((module.join("/"), *location))
+                if let Definition::Use(Use { module, .. }) = def {
+                    let name = module.join("/");
+                    if name == ENV_MODULE {
+                        env_modules.to_vec()
+                    } else {
+                        vec![name]
+                    }
                 } else {
-                    None
+                    Vec::new()
                 }
             })
             .collect()
