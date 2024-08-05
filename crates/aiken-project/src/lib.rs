@@ -36,7 +36,7 @@ use aiken_lang::{
         TypedFunction,
     },
     builtins,
-    expr::UntypedExpr,
+    expr::{TypedExpr, UntypedExpr},
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
     plutus_version::PlutusVersion,
@@ -93,6 +93,7 @@ where
     checks_count: Option<usize>,
     event_listener: T,
     functions: IndexMap<FunctionAccessKey, TypedFunction>,
+    constants: IndexMap<FunctionAccessKey, TypedExpr>,
     data_types: IndexMap<DataTypeKey, TypedDataType>,
     module_sources: HashMap<String, (String, LineNumbers)>,
 }
@@ -144,6 +145,7 @@ where
             checks_count: None,
             event_listener,
             functions,
+            constants: IndexMap::new(),
             data_types,
             module_sources: HashMap::new(),
         }
@@ -153,6 +155,7 @@ where
         CodeGenerator::new(
             self.config.plutus,
             utils::indexmap::as_ref_values(&self.functions),
+            utils::indexmap::as_ref_values(&self.constants),
             utils::indexmap::as_ref_values(&self.data_types),
             utils::indexmap::as_str_ref_values(&self.module_types),
             utils::indexmap::as_str_ref_values(&self.module_sources),
@@ -737,6 +740,7 @@ where
                     &mut self.module_sources,
                     &mut self.module_types,
                     &mut self.functions,
+                    &mut self.constants,
                     &mut self.data_types,
                 )?;
 
