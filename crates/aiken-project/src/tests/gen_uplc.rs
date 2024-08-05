@@ -4982,8 +4982,7 @@ fn expect_head3_no_tail() {
                                     .apply(
                                         Term::un_i_data()
                                             .apply(Term::head_list().apply(Term::var("tail_2"))),
-                                    )
-                                    .delay(),
+                                    ),
                             )
                             .lambda("tail_2")
                             .apply(Term::tail_list().apply(Term::var("tail_1")))
