@@ -61,7 +61,7 @@ pub enum Error {
     TomlLoading {
         path: PathBuf,
         src: String,
-        named: NamedSource<String>,
+        named: Box<NamedSource<String>>,
         location: Option<Span>,
         help: String,
     },
@@ -76,7 +76,7 @@ pub enum Error {
     Parse {
         path: PathBuf,
         src: String,
-        named: NamedSource<String>,
+        named: Box<NamedSource<String>>,
         #[source]
         error: Box<ParseError>,
     },
@@ -454,7 +454,7 @@ impl Diagnostic for Error {
             Error::Type { named, .. } => Some(named),
             Error::StandardIo(_) => None,
             Error::MissingManifest { .. } => None,
-            Error::TomlLoading { named, .. } => Some(named),
+            Error::TomlLoading { named, .. } => Some(named.as_ref()),
             Error::Format { .. } => None,
             Error::TestFailure { .. } => None,
             Error::Http(_) => None,
