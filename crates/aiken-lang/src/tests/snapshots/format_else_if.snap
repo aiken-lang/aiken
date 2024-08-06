@@ -11,4 +11,3 @@ pub fn foo(xs: List<a>, n: Int) -> List<a> {
     xs
   }
 }
-

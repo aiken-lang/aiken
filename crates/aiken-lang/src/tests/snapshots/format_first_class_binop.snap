@@ -17,4 +17,3 @@ fn foo() {
   compute_with(a, *, b)
   compute_with(a, %, b)
 }
-

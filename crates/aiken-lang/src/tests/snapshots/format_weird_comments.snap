@@ -17,4 +17,3 @@ fn foo() {
 fn bar() {
   todo
 }
-

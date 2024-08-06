@@ -9,4 +9,3 @@ use aiken/list
 use aiken/transaction
 use aiken/transaction/certificate
 use aiken/transaction/value
-

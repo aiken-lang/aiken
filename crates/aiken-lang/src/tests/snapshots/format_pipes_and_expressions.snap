@@ -5,4 +5,3 @@ description: "Code:\n\ntest fmt() {\n  (x == y) && ((z |> length()) == x)\n}\n"
 test fmt() {
   x == y && ( z |> length() ) == x
 }
-

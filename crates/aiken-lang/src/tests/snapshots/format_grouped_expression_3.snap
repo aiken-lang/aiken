@@ -5,4 +5,3 @@ description: "Code:\n\nfn foo() {\n  { x |> f } == y\n}\n"
 fn foo() {
   ( x |> f ) == y
 }
-

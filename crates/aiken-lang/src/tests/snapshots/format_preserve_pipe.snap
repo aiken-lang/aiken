@@ -22,4 +22,3 @@ fn baz() {
     |> it_is_too_long
   // What?
 }
-

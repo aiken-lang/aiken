@@ -9,4 +9,3 @@ fn foo() {
 fn bar() {
   (True && False)? || foo()?
 }
-

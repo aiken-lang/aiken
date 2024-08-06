@@ -7,4 +7,3 @@ const foo_const: String = @"foo"
 fn foo() {
   let foo_var: String = @"foo"
 }
-

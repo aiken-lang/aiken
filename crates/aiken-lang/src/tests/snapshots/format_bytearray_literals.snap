@@ -15,4 +15,3 @@ fn foo() {
 
   let foo_const_utf8 = "foo"
 }
-

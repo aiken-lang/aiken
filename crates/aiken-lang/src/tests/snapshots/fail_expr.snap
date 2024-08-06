@@ -5,4 +5,3 @@ description: "Code:\n\nfn foo() {\n  fail some_var\n}\n"
 fn foo() {
   fail some_var
 }
-

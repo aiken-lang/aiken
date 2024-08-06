@@ -7,4 +7,3 @@ test foo() fail {
 
   a
 }
-

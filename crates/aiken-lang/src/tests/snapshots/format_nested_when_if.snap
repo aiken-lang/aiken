@@ -13,4 +13,3 @@ pub fn drop(xs: List<a>, n: Int) -> List<a> {
     }
   }
 }
-

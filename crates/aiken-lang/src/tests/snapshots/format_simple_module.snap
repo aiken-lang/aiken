@@ -5,4 +5,3 @@ description: "Code:\n\nfn smth() { let a = foo.Foo { bar: 1 } }\n"
 fn smth() {
   let a = foo.Foo { bar: 1 }
 }
-

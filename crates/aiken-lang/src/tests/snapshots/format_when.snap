@@ -13,4 +13,3 @@ pub fn foo(a) {
     False -> 42
   }
 }
-

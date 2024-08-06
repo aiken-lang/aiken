@@ -11,4 +11,3 @@ description: "Code:\n\n//// My module comment\n////\n//// has a newline.\n\nfn f
 fn foo() {
   True
 }
-
