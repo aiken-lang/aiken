@@ -1,10 +1,12 @@
+use std::rc::Rc;
+
 use super::TestProject;
 use crate::module::CheckedModules;
 use aiken_lang::ast::{Definition, Function, TraceLevel, Tracing, TypedTest, TypedValidator};
 use pretty_assertions::assert_eq;
 use uplc::{
     ast::{Constant, Data, DeBruijn, Name, Program, Term, Type},
-    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
+    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
     machine::{cost_model::ExBudget, runtime::Compressable},
     optimize,
 };
