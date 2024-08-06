@@ -1921,7 +1921,7 @@ pub struct Span {
 
 impl From<Span> for miette::SourceSpan {
     fn from(span: Span) -> Self {
-        Self::new(span.start.into(), (span.end - span.start).into())
+        Self::new(span.start.into(), span.end - span.start)
     }
 }
 

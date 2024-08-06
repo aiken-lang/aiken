@@ -19,7 +19,7 @@ pub enum Error {
         #[label("invalid validator's boundary")]
         location: Span,
         #[source_code]
-        source_code: NamedSource,
+        source_code: NamedSource<String>,
     },
 
     #[error("Invalid or missing project's blueprint file.")]

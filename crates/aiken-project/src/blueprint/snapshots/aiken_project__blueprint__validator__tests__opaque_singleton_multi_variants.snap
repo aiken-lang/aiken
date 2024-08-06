@@ -20,5 +20,6 @@ Schema {
     source_code: NamedSource {
         name: "",
         source: "<redacted>",
+        language: None,
     ,
 }

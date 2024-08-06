@@ -16,13 +16,6 @@ use owo_colors::{
 };
 use std::{collections::HashMap, fmt::Display, rc::Rc};
 
-#[derive(Debug, thiserror::Error, Diagnostic, Clone)]
-#[error("Something is possibly wrong here...")]
-pub struct Snippet {
-    #[label]
-    pub location: Span,
-}
-
 #[derive(Debug, Clone, thiserror::Error)]
 #[error(
     "I don't know some of the labels used in this expression. I've highlighted them just below."
@@ -100,8 +93,8 @@ pub enum Error {
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#type-aliases"))]
     #[diagnostic(code("cycle"))]
     CyclicTypeDefinitions {
-        #[related]
-        errors: Vec<Snippet>,
+        #[label(collection, "part of a cycle")]
+        cycle: Vec<Span>,
     },
 
     #[error(

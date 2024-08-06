@@ -16,7 +16,6 @@ use owo_colors::{
 use std::{
     fmt::{Debug, Display},
     io,
-    ops::Deref,
     path::{Path, PathBuf},
 };
 use zip::result::ZipError;
@@ -62,7 +61,7 @@ pub enum Error {
     TomlLoading {
         path: PathBuf,
         src: String,
-        named: Box<NamedSource>,
+        named: Box<NamedSource<String>>,
         location: Option<Span>,
         help: String,
     },
@@ -77,7 +76,7 @@ pub enum Error {
     Parse {
         path: PathBuf,
         src: String,
-        named: NamedSource,
+        named: Box<NamedSource<String>>,
         #[source]
         error: Box<ParseError>,
     },
@@ -86,7 +85,7 @@ pub enum Error {
     Type {
         path: PathBuf,
         src: String,
-        named: NamedSource,
+        named: NamedSource<String>,
         #[source]
         error: tipo::error::Error,
     },
@@ -156,7 +155,7 @@ impl Error {
             errors.push(Error::Parse {
                 path: path.into(),
                 src: src.to_string(),
-                named: NamedSource::new(path.display().to_string(), src.to_string()),
+                named: NamedSource::new(path.display().to_string(), src.to_string()).into(),
                 error: error.into(),
             });
         }
@@ -451,11 +450,11 @@ impl Diagnostic for Error {
             Error::ExportNotFound { .. } => None,
             Error::Blueprint(e) => e.source_code(),
             Error::NoDefaultEnvironment { .. } => None,
-            Error::Parse { named, .. } => Some(named),
+            Error::Parse { named, .. } => Some(named.as_ref()),
             Error::Type { named, .. } => Some(named),
             Error::StandardIo(_) => None,
             Error::MissingManifest { .. } => None,
-            Error::TomlLoading { named, .. } => Some(named.deref()),
+            Error::TomlLoading { named, .. } => Some(named.as_ref()),
             Error::Format { .. } => None,
             Error::TestFailure { .. } => None,
             Error::Http(_) => None,
@@ -538,7 +537,7 @@ pub enum Warning {
     Type {
         path: PathBuf,
         src: String,
-        named: NamedSource,
+        named: NamedSource<String>,
         #[source]
         warning: tipo::error::Warning,
     },

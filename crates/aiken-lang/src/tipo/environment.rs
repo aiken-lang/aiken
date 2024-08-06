@@ -1,5 +1,5 @@
 use super::{
-    error::{Error, Snippet, Warning},
+    error::{Error, Warning},
     exhaustive::{simplify, Matrix, PatternStack},
     hydrator::Hydrator,
     AccessorsMap, RecordAccessor, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
@@ -972,7 +972,7 @@ impl<'a> Environment<'a> {
     ) -> Result<(), Error> {
         let known_types_before = names.keys().copied().collect::<Vec<_>>();
 
-        let mut error = None;
+        let mut errors = vec![];
         let mut remaining_definitions = vec![];
 
         // in case we failed at registering a type-definition, we backtrack and
@@ -989,60 +989,57 @@ impl<'a> Environment<'a> {
         // a cycle).
         for def in definitions {
             if let Err(e) = self.register_type(def, module, hydrators, names) {
-                error = Some(e);
+                let type_name = match def {
+                    Definition::TypeAlias(TypeAlias { alias, .. }) => {
+                        names.remove(alias.as_str());
+                        Some(alias)
+                    }
+                    Definition::DataType(DataType { name, .. }) => Some(name),
+                    _ => None,
+                };
+                errors.push((type_name, e));
                 remaining_definitions.push(def);
-                if let Definition::TypeAlias(TypeAlias { alias, .. }) = def {
-                    names.remove(alias.as_str());
-                }
             };
         }
 
-        match error {
-            None => Ok(()),
-            Some(e) => {
-                let known_types_after = names.keys().copied().collect::<Vec<_>>();
-                if known_types_before == known_types_after {
-                    let unknown_name = match e {
-                        Error::UnknownType { ref name, .. } => name,
-                        _ => "",
-                    };
-                    let mut is_cyclic = false;
-                    let unknown_types = remaining_definitions
-                        .into_iter()
-                        .filter_map(|def| match def {
-                            Definition::TypeAlias(TypeAlias {
-                                alias, location, ..
-                            }) => {
-                                is_cyclic = is_cyclic || alias == unknown_name;
-                                Some(Snippet {
-                                    location: location.to_owned(),
-                                })
-                            }
-                            Definition::DataType(DataType { name, location, .. }) => {
-                                is_cyclic = is_cyclic || name == unknown_name;
-                                Some(Snippet {
-                                    location: location.to_owned(),
-                                })
-                            }
-                            Definition::Fn { .. }
-                            | Definition::Validator { .. }
-                            | Definition::Use { .. }
-                            | Definition::ModuleConstant { .. }
-                            | Definition::Test { .. } => None,
-                        })
-                        .collect::<Vec<Snippet>>();
+        if errors.is_empty() {
+            return Ok(());
+        }
 
-                    if is_cyclic {
-                        Err(Error::CyclicTypeDefinitions {
-                            errors: unknown_types,
-                        })
-                    } else {
-                        Err(e)
-                    }
+        let known_types_after = names.keys().copied().collect::<Vec<_>>();
+        if known_types_before == known_types_after {
+            let (type_definitions, mut unknowns): (Vec<_>, Vec<_>) = errors.into_iter().unzip();
+
+            let first_error = unknowns.first().cloned();
+
+            unknowns.retain(|err| {
+                if let Error::UnknownType { ref name, .. } = err {
+                    !type_definitions.contains(&Some(name))
                 } else {
-                    self.register_types(remaining_definitions, module, hydrators, names)
+                    false
                 }
+            });
+
+            if unknowns.is_empty() {
+                let cycle = remaining_definitions
+                    .iter()
+                    .filter_map(|def| match def {
+                        Definition::TypeAlias(TypeAlias { location, .. })
+                        | Definition::DataType(DataType { location, .. }) => Some(*location),
+                        Definition::Fn { .. }
+                        | Definition::Validator { .. }
+                        | Definition::Use { .. }
+                        | Definition::ModuleConstant { .. }
+                        | Definition::Test { .. } => None,
+                    })
+                    .collect::<Vec<Span>>();
+
+                Err(Error::CyclicTypeDefinitions { cycle })
+            } else {
+                Err(first_error.unwrap())
             }
+        } else {
+            self.register_types(remaining_definitions, module, hydrators, names)
         }
     }
 
