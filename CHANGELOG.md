@@ -4,24 +4,6 @@
 
 ### Added
 
-- **aiken-lang**: add support for `mk_cons` and `mk_pair_data` builtins. See [#964](https://github.com/aiken-lang/aiken/issues/964). @KtorZ
-- **aiken-lang**: pattern-matching on bytearrays is now available. See [#989](https://github.com/aiken-lang/aiken/issues/989). @KtorZ
-- **aiken-project**: conditional configuration and environment. See [#937](https://github.com/aiken-lang/aiken/issues/937). @KtorZ
-
-### Changed
-
-- **aiken-lang**: fix zero-arg builtins `mk_nil_data` and `mk_nil_pair_data` invokation. @KtorZ
-- **aiken-project**: fix blueprint's apply truncating last character of outputs. See [#987](https://github.com/aiken-lang/aiken/issues/987). @KtorZ
-- **aiken-project**: provide better error (include input ref) when inputs are missing during transaction evaluation. See [#974](https://github.com/aiken-lang/aiken/issues/974). @KtorZ
-
-### Removed
-
-- **aiken-lang**: clause guards are no longer part of the language. See [#886](https://github.com/aiken-lang/aiken/issues/886). @KtorZ.
-
-## v1.0.30-alpha - 2024-07-25
-
-### Added
-
 - **aiken-lang**: also authorize (complete) patterns in function arguments list instead of only variable names. @KtorZ
 
 - **aiken-lang**: new syntax for soft casting otherwise known as `if/is`. See [#959](https://github.com/aiken-lang/aiken/pull/959) or [Control Flow - soft casting](https://aiken-lang.org/language-tour/control-flow#soft-casting-with-ifis) for more details. @rvcas
@@ -30,9 +12,17 @@
 
 - **aiken-lang**: infer type when immediately possible during a patterned type-cast. See [#969](https://github.com/aiken-lang/aiken/pull/979). @KtorZ
 
+- **aiken-lang**: add support for `mk_cons` and `mk_pair_data` builtins. See [#964](https://github.com/aiken-lang/aiken/issues/964). @KtorZ
+
+- **aiken-lang**: pattern-matching on bytearrays is now available. See [#989](https://github.com/aiken-lang/aiken/issues/989). @KtorZ
+
+- **aiken-project**: conditional configuration and environment. See [#937](https://github.com/aiken-lang/aiken/issues/937). @KtorZ
+
 - **aiken-project**: warning on compiler version mismatch. See [de870e2](https://github.com/aiken-lang/aiken/commit/de870e2529eb2336957e228cd30d4850ec2619a2). @rvcas
 
 ### Changed
+
+- **aiken-lang**: fix zero-arg builtins `mk_nil_data` and `mk_nil_pair_data` invokation. @KtorZ
 
 - **aiken-lang**: duplicate import lines are now automatically merged instead of raising a warning. However, imports can no longer appear anywhere in the file and must come as the first definitions. @KtorZ
 
@@ -74,6 +64,14 @@
    - only keep the label (first trace argument) and error when it isn't a string.
 
   See also [#978](https://github.com/aiken-lang/aiken/pull/978).
+
+- **aiken-project**: fix blueprint's apply truncating last character of outputs. See [#987](https://github.com/aiken-lang/aiken/issues/987). @KtorZ
+
+- **aiken-project**: provide better error (include input ref) when inputs are missing during transaction evaluation. See [#974](https://github.com/aiken-lang/aiken/issues/974). @KtorZ
+
+### Removed
+
+- **aiken-lang**: clause guards are no longer part of the language. See [#886](https://github.com/aiken-lang/aiken/issues/886). @KtorZ.
 
 ## v1.0.29-alpha - 2024-06-06
 
