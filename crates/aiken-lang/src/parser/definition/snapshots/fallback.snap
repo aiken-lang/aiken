@@ -1,11 +1,11 @@
 ---
 source: crates/aiken-lang/src/parser/definition/validator.rs
-description: "Code:\n\nvalidator hello {\n  spend (datum, rdmr, ctx) {\n    True\n  }\n}\n"
+description: "Code:\n\nvalidator thing {\n  spend (datum, rdmr, ctx) {\n    True\n  }\n\n  mint (rdmr, ctx) {\n    True\n  }\n\n  else (_) {\n    fail\n  }\n}\n"
 ---
 Validator(
     Validator {
         doc: None,
-        end_position: 60,
+        end_position: 122,
         handlers: [
             Function {
                 arguments: [
@@ -62,36 +62,78 @@ Validator(
                 end_position: 58,
                 on_test_failure: FailImmediately,
             },
+            Function {
+                arguments: [
+                    UntypedArg {
+                        by: ByName(
+                            Named {
+                                name: "rdmr",
+                                label: "rdmr",
+                                location: 69..73,
+                            },
+                        ),
+                        location: 69..73,
+                        annotation: None,
+                        doc: None,
+                        is_validator_param: false,
+                    },
+                    UntypedArg {
+                        by: ByName(
+                            Named {
+                                name: "ctx",
+                                label: "ctx",
+                                location: 75..78,
+                            },
+                        ),
+                        location: 75..78,
+                        annotation: None,
+                        doc: None,
+                        is_validator_param: false,
+                    },
+                ],
+                body: Var {
+                    location: 86..90,
+                    name: "True",
+                },
+                doc: None,
+                location: 68..79,
+                name: "mint",
+                public: true,
+                return_annotation: None,
+                return_type: (),
+                end_position: 93,
+                on_test_failure: FailImmediately,
+            },
         ],
         location: 0..9,
-        name: "hello",
+        name: "thing",
         params: [],
         fallback: Function {
             arguments: [
                 UntypedArg {
                     by: ByName(
                         Discarded {
-                            name: "_ctx",
-                            label: "_ctx",
-                            location: 0..0,
+                            name: "_",
+                            label: "_",
+                            location: 104..105,
                         },
                     ),
-                    location: 0..0,
+                    location: 104..105,
                     annotation: None,
                     doc: None,
                     is_validator_param: false,
                 },
             ],
             body: ErrorTerm {
-                location: 0..0,
+                location: 113..117,
             },
             doc: None,
-            location: 0..0,
-            name: "fallback",
+            location: 103..106,
+            name: "temp",
             public: true,
             return_annotation: None,
             return_type: (),
-            end_position: 60,
+            end_position: 120,
             on_test_failure: FailImmediately,
         },
     },
