@@ -390,8 +390,8 @@ impl CheckedModule {
                 }
                 Definition::Validator(Validator {
                     params,
-                    fun,
-                    other_fun,
+                    handlers,
+                    fallback,
                     ..
                 }) => {
                     for param in params {
@@ -404,18 +404,8 @@ impl CheckedModule {
                         }
                     }
 
-                    for argument in fun.arguments.iter_mut() {
-                        let docs: Vec<&str> =
-                            comments_before(&mut doc_comments, argument.location.start, &self.code);
-
-                        if !docs.is_empty() {
-                            let doc = docs.join("\n");
-                            argument.put_doc(doc);
-                        }
-                    }
-
-                    if let Some(fun) = other_fun {
-                        for argument in fun.arguments.iter_mut() {
+                    for handler in handlers.iter_mut() {
+                        for argument in handler.arguments.iter_mut() {
                             let docs: Vec<&str> = comments_before(
                                 &mut doc_comments,
                                 argument.location.start,
@@ -426,6 +416,16 @@ impl CheckedModule {
                                 let doc = docs.join("\n");
                                 argument.put_doc(doc);
                             }
+                        }
+                    }
+
+                    for argument in fallback.arguments.iter_mut() {
+                        let docs: Vec<&str> =
+                            comments_before(&mut doc_comments, argument.location.start, &self.code);
+
+                        if !docs.is_empty() {
+                            let doc = docs.join("\n");
+                            argument.put_doc(doc);
                         }
                     }
                 }
@@ -463,6 +463,7 @@ impl CheckedModules {
         modules
     }
 
+    // todo: this might need fixing
     pub fn validators(&self) -> impl Iterator<Item = (&CheckedModule, &TypedValidator)> {
         let mut items = vec![];
 

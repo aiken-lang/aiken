@@ -52,33 +52,31 @@ impl Validator {
         def: &TypedValidator,
         plutus_version: &PlutusVersion,
     ) -> Vec<Result<Validator, Error>> {
-        let is_multi_validator = def.other_fun.is_some();
-
         let mut program = MemoProgram::new();
 
-        let mut validators = vec![Validator::create_validator_blueprint(
-            generator,
-            modules,
-            module,
-            def,
-            &def.fun,
-            is_multi_validator,
-            &mut program,
-            plutus_version,
-        )];
+        let mut validators = vec![];
 
-        if let Some(ref other_func) = def.other_fun {
+        for handler in &def.handlers {
             validators.push(Validator::create_validator_blueprint(
                 generator,
                 modules,
                 module,
                 def,
-                other_func,
-                is_multi_validator,
+                hander,
                 &mut program,
                 plutus_version,
             ));
         }
+
+        validators.push(Validator::create_validator_blueprint(
+            generator,
+            modules,
+            module,
+            def,
+            &def.fallback,
+            &mut program,
+            plutus_version,
+        ));
 
         validators
     }
@@ -90,7 +88,6 @@ impl Validator {
         module: &CheckedModule,
         def: &TypedValidator,
         func: &TypedFunction,
-        is_multi_validator: bool,
         program: &mut MemoProgram,
         plutus_version: &PlutusVersion,
     ) -> Result<Validator, Error> {
@@ -160,16 +157,11 @@ impl Validator {
         })
         .map(|schema| Parameter {
             title: Some(redeemer.arg_name.get_label()),
-            schema: match datum {
-                Some(..) if is_multi_validator => {
-                    Annotated::as_wrapped_redeemer(&mut definitions, schema, redeemer.tipo.clone())
-                }
-                _ => schema,
-            },
+            schema,
         })?;
 
         Ok(Validator {
-            title: format!("{}.{}", &module.name, &func.name),
+            title: format!("{}.{}_{}", &module.name, &def.name, &func.name),
             description: func.doc.clone(),
             parameters,
             datum,
@@ -848,11 +840,13 @@ mod tests {
         let mut definitions = fixture_definitions();
         definitions.insert(
             &schema,
-            Schema::Data(Data::AnyOf(vec![Constructor {
-                index: 0,
-                fields: vec![Declaration::Referenced(Reference::new("Bool")).into()],
-            }
-            .into()]))
+            Schema::Data(Data::AnyOf(vec![
+                Constructor {
+                    index: 0,
+                    fields: vec![Declaration::Referenced(Reference::new("Bool")).into()],
+                }
+                .into(),
+            ]))
             .into(),
         );
 
