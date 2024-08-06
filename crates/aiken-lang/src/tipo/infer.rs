@@ -19,6 +19,7 @@ use crate::{
 use std::{borrow::Borrow, collections::HashMap, ops::Deref, rc::Rc};
 
 impl UntypedModule {
+    #[allow(clippy::too_many_arguments)]
     pub fn infer(
         mut self,
         id_gen: &IdGenerator,
@@ -27,11 +28,12 @@ impl UntypedModule {
         modules: &HashMap<String, TypeInfo>,
         tracing: Tracing,
         warnings: &mut Vec<Warning>,
+        env: Option<&str>,
     ) -> Result<TypedModule, Error> {
         let module_name = self.name.clone();
         let docs = std::mem::take(&mut self.docs);
         let mut environment =
-            Environment::new(id_gen.clone(), &module_name, &kind, modules, warnings);
+            Environment::new(id_gen.clone(), &module_name, &kind, modules, warnings, env);
 
         let mut type_names = HashMap::with_capacity(self.definitions.len());
         let mut value_names = HashMap::with_capacity(self.definitions.len());
@@ -574,18 +576,7 @@ fn infer_definition(
             unqualified,
             package: _,
         }) => {
-            let name = module.join("/");
-
-            // Find imported module
-            let module_info =
-                environment
-                    .importable_modules
-                    .get(&name)
-                    .ok_or_else(|| Error::UnknownModule {
-                        location,
-                        name,
-                        imported_modules: environment.imported_modules.keys().cloned().collect(),
-                    })?;
+            let module_info = environment.find_module(&module, location)?;
 
             Ok(Definition::Use(Use {
                 location,

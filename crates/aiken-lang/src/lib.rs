@@ -49,6 +49,7 @@ macro_rules! aiken_fn {
                 $module_types,
                 $crate::ast::Tracing::silent(),
                 &mut warnings,
+                None,
             )
             .unwrap();
 

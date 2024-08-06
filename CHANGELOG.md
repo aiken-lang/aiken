@@ -6,6 +6,7 @@
 
 - **aiken-lang**: add support for `mk_cons` and `mk_pair_data` builtins. See [#964](https://github.com/aiken-lang/aiken/issues/964). @KtorZ
 - **aiken-lang**: pattern-matching on bytearrays is now available. See [#989](https://github.com/aiken-lang/aiken/issues/989). @KtorZ
+- **aiken-project**: conditional configuration and environment. See [#937](https://github.com/aiken-lang/aiken/issues/937). @KtorZ
 
 ### Changed
 

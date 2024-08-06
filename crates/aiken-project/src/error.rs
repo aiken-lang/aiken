@@ -127,6 +127,9 @@ pub enum Error {
 
     #[error("I couldn't find any exportable function named '{name}' in module '{module}'.")]
     ExportNotFound { module: String, name: String },
+
+    #[error("I located conditional modules under 'env', but no default one!")]
+    NoDefaultEnvironment,
 }
 
 impl Error {
@@ -195,6 +198,7 @@ impl ExtraData for Error {
             | Error::NoValidatorNotFound { .. }
             | Error::MoreThanOneValidatorFound { .. }
             | Error::Module { .. }
+            | Error::NoDefaultEnvironment { .. }
             | Error::ExportNotFound { .. } => None,
             Error::Type { error, .. } => error.extra_data(),
         }
@@ -224,6 +228,7 @@ impl GetSource for Error {
             | Error::NoValidatorNotFound { .. }
             | Error::MoreThanOneValidatorFound { .. }
             | Error::ExportNotFound { .. }
+            | Error::NoDefaultEnvironment { .. }
             | Error::Module { .. } => None,
             Error::DuplicateModule { second: path, .. }
             | Error::MissingManifest { path }
@@ -252,6 +257,7 @@ impl GetSource for Error {
             | Error::Json { .. }
             | Error::MalformedStakeAddress { .. }
             | Error::NoValidatorNotFound { .. }
+            | Error::NoDefaultEnvironment { .. }
             | Error::MoreThanOneValidatorFound { .. }
             | Error::ExportNotFound { .. }
             | Error::Module { .. } => None,
@@ -307,6 +313,7 @@ impl Diagnostic for Error {
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
             Error::ExportNotFound { .. } => None,
+            Error::NoDefaultEnvironment { .. } => None,
             Error::Module(e) => e.code().map(boxed),
         }
     }
@@ -329,6 +336,9 @@ impl Diagnostic for Error {
             Error::StandardIo(_) => None,
             Error::MissingManifest { .. } => Some(Box::new(
                 "Try running `aiken new <REPOSITORY/PROJECT>` to initialise a project with an example manifest.",
+            )),
+            Error::NoDefaultEnvironment { .. } => Some(Box::new(
+                "Environment module names are free, but there must be at least one named 'default.ak'.",
             )),
             Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
@@ -408,6 +418,7 @@ impl Diagnostic for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
+            Error::NoDefaultEnvironment { .. } => None,
             Error::Module(e) => e.labels(),
         }
     }
@@ -419,6 +430,7 @@ impl Diagnostic for Error {
             Error::ImportCycle { .. } => None,
             Error::ExportNotFound { .. } => None,
             Error::Blueprint(e) => e.source_code(),
+            Error::NoDefaultEnvironment { .. } => None,
             Error::Parse { named, .. } => Some(named),
             Error::Type { named, .. } => Some(named),
             Error::StandardIo(_) => None,
@@ -462,6 +474,7 @@ impl Diagnostic for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
+            Error::NoDefaultEnvironment { .. } => None,
             Error::Module(e) => e.url(),
         }
     }
@@ -476,6 +489,7 @@ impl Diagnostic for Error {
             Error::Parse { .. } => None,
             Error::Type { error, .. } => error.related(),
             Error::StandardIo(_) => None,
+            Error::NoDefaultEnvironment { .. } => None,
             Error::MissingManifest { .. } => None,
             Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
@@ -512,6 +526,8 @@ pub enum Warning {
     InvalidModuleName { path: PathBuf },
     #[error("aiken.toml demands compiler version {demanded}, but you are using {current}.")]
     CompilerVersionMismatch { demanded: String, current: String },
+    #[error("No configuration found for environment {env}.")]
+    NoConfigurationForEnv { env: String },
 }
 
 impl ExtraData for Warning {
@@ -520,7 +536,8 @@ impl ExtraData for Warning {
             Warning::NoValidators { .. }
             | Warning::DependencyAlreadyExists { .. }
             | Warning::InvalidModuleName { .. }
-            | Warning::CompilerVersionMismatch { .. } => None,
+            | Warning::CompilerVersionMismatch { .. }
+            | Warning::NoConfigurationForEnv { .. } => None,
             Warning::Type { warning, .. } => warning.extra_data(),
         }
     }
@@ -532,6 +549,7 @@ impl GetSource for Warning {
             Warning::InvalidModuleName { path } | Warning::Type { path, .. } => Some(path.clone()),
             Warning::NoValidators
             | Warning::DependencyAlreadyExists { .. }
+            | Warning::NoConfigurationForEnv { .. }
             | Warning::CompilerVersionMismatch { .. } => None,
         }
     }
@@ -542,6 +560,7 @@ impl GetSource for Warning {
             Warning::NoValidators
             | Warning::InvalidModuleName { .. }
             | Warning::DependencyAlreadyExists { .. }
+            | Warning::NoConfigurationForEnv { .. }
             | Warning::CompilerVersionMismatch { .. } => None,
         }
     }
@@ -557,6 +576,7 @@ impl Diagnostic for Warning {
             Warning::Type { named, .. } => Some(named),
             Warning::NoValidators
             | Warning::InvalidModuleName { .. }
+            | Warning::NoConfigurationForEnv { .. }
             | Warning::DependencyAlreadyExists { .. }
             | Warning::CompilerVersionMismatch { .. } => None,
         }
@@ -568,6 +588,7 @@ impl Diagnostic for Warning {
             Warning::InvalidModuleName { .. }
             | Warning::NoValidators
             | Warning::DependencyAlreadyExists { .. }
+            | Warning::NoConfigurationForEnv { .. }
             | Warning::CompilerVersionMismatch { .. } => None,
         }
     }
@@ -586,6 +607,9 @@ impl Diagnostic for Warning {
             Warning::DependencyAlreadyExists { .. } => {
                 Some(Box::new("aiken::packages::already_exists"))
             }
+            Warning::NoConfigurationForEnv { .. } => {
+                Some(Box::new("aiken::project::config::missing::env"))
+            }
         }
     }
 
@@ -602,6 +626,9 @@ impl Diagnostic for Warning {
             )),
             Warning::DependencyAlreadyExists { .. } => Some(Box::new(
                 "If you need to change the version, try 'aiken packages upgrade' instead.",
+            )),
+            Warning::NoConfigurationForEnv { .. } => Some(Box::new(
+                "When configuration keys are missing for a target environment, no 'config' module will be created. This may lead to issues down the line.",
             )),
         }
     }

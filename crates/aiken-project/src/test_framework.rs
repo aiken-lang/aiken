@@ -1314,6 +1314,7 @@ mod test {
                     &module_types,
                     Tracing::All(TraceLevel::Verbose),
                     &mut warnings,
+                    None,
                 )
                 .expect("Failed to type-check module.");
 

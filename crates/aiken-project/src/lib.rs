@@ -32,11 +32,12 @@ use crate::{
 };
 use aiken_lang::{
     ast::{
-        DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Tracing, TypedDataType,
-        TypedFunction,
+        self, DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Tracing, TypedDataType,
+        TypedFunction, UntypedDefinition,
     },
     builtins,
     expr::UntypedExpr,
+    format::{Formatter, DOCS_MAX_COLUMNS},
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
     plutus_version::PlutusVersion,
@@ -76,6 +77,12 @@ pub struct Source {
 pub struct Checkpoint {
     module_types: HashMap<String, TypeInfo>,
     defined_modules: HashMap<String, PathBuf>,
+}
+
+#[derive(Debug, Clone)]
+enum AddModuleBy {
+    Source { name: String, code: String },
+    Path(PathBuf),
 }
 
 pub struct Project<T>
@@ -184,10 +191,16 @@ where
         self.defined_modules = checkpoint.defined_modules;
     }
 
-    pub fn build(&mut self, uplc: bool, tracing: Tracing) -> Result<(), Vec<Error>> {
+    pub fn build(
+        &mut self,
+        uplc: bool,
+        tracing: Tracing,
+        env: Option<String>,
+    ) -> Result<(), Vec<Error>> {
         let options = Options {
             code_gen_mode: CodeGenMode::Build(uplc),
             tracing,
+            env,
         };
 
         self.compile(options)
@@ -205,11 +218,13 @@ where
                 version: self.config.version.clone(),
             });
 
-        self.read_source_files()?;
+        let config = self.config_definitions(None);
+
+        self.read_source_files(config)?;
 
         let mut modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(&mut modules, Tracing::silent(), false)?;
+        self.type_check(&mut modules, Tracing::silent(), None, false)?;
 
         let destination = destination.unwrap_or_else(|| self.root.join("docs"));
 
@@ -250,9 +265,11 @@ where
         seed: u32,
         property_max_success: usize,
         tracing: Tracing,
+        env: Option<String>,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
             tracing,
+            env,
             code_gen_mode: if skip_tests {
                 CodeGenMode::NoOp
             } else {
@@ -293,6 +310,32 @@ where
         self.root.join("plutus.json")
     }
 
+    fn config_definitions(&mut self, env: Option<&str>) -> Option<Vec<UntypedDefinition>> {
+        if !self.config.config.is_empty() {
+            let env = env.unwrap_or(ast::DEFAULT_ENV_MODULE);
+
+            match self.config.config.get(env) {
+                None => {
+                    self.warnings.push(Warning::NoConfigurationForEnv {
+                        env: env.to_string(),
+                    });
+                    None
+                }
+                Some(config) => {
+                    let mut conf_definitions = Vec::new();
+
+                    for (identifier, value) in config.iter() {
+                        conf_definitions.push(value.as_definition(identifier));
+                    }
+
+                    Some(conf_definitions)
+                }
+            }
+        } else {
+            None
+        }
+    }
+
     pub fn compile(&mut self, options: Options) -> Result<(), Vec<Error>> {
         self.event_listener
             .handle_event(Event::StartingCompilation {
@@ -301,11 +344,15 @@ where
                 version: self.config.version.clone(),
             });
 
-        self.read_source_files()?;
+        let env = options.env.as_deref();
+
+        let config = self.config_definitions(env);
+
+        self.read_source_files(config)?;
 
         let mut modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(&mut modules, options.tracing, true)?;
+        self.type_check(&mut modules, options.tracing, env, true)?;
 
         match options.code_gen_mode {
             CodeGenMode::Build(uplc_dump) => {
@@ -610,12 +657,28 @@ where
         Ok(())
     }
 
-    fn read_source_files(&mut self) -> Result<(), Error> {
+    fn read_source_files(&mut self, config: Option<Vec<UntypedDefinition>>) -> Result<(), Error> {
+        let env = self.root.join("env");
         let lib = self.root.join("lib");
         let validators = self.root.join("validators");
+        let root = self.root.clone();
+
+        if let Some(defs) = config {
+            self.add_module(
+                AddModuleBy::Source {
+                    name: ast::CONFIG_MODULE.to_string(),
+                    code: Formatter::new()
+                        .definitions(&defs[..])
+                        .to_pretty_string(DOCS_MAX_COLUMNS),
+                },
+                &root,
+                ModuleKind::Config,
+            )?;
+        }
 
         self.aiken_files(&validators, ModuleKind::Validator)?;
         self.aiken_files(&lib, ModuleKind::Lib)?;
+        self.aiken_files(&env, ModuleKind::Env)?;
 
         Ok(())
     }
@@ -721,6 +784,7 @@ where
         &mut self,
         modules: &mut ParsedModules,
         tracing: Tracing,
+        env: Option<&str>,
         validate_module_name: bool,
     ) -> Result<(), Vec<Error>> {
         let our_modules: BTreeSet<String> = modules.keys().cloned().collect();
@@ -733,6 +797,7 @@ where
                     &self.id_gen,
                     &self.config.name.to_string(),
                     tracing,
+                    env,
                     validate_module_name,
                     &mut self.module_sources,
                     &mut self.module_types,
@@ -879,12 +944,18 @@ where
     }
 
     fn aiken_files(&mut self, dir: &Path, kind: ModuleKind) -> Result<(), Error> {
+        let mut has_default = None;
+
         walkdir::WalkDir::new(dir)
             .follow_links(true)
             .into_iter()
             .filter_map(Result::ok)
             .filter(|e| e.file_type().is_file())
             .try_for_each(|d| {
+                if has_default.is_none() {
+                    has_default = Some(false);
+                }
+
                 let path = d.into_path();
                 let keep = is_aiken_path(&path, dir);
                 let ext = path.extension();
@@ -895,19 +966,39 @@ where
                 }
 
                 if keep {
-                    self.add_module(path, dir, kind)
+                    if self.module_name(dir, &path).as_str() == ast::DEFAULT_ENV_MODULE {
+                        has_default = Some(true);
+                    }
+                    self.add_module(AddModuleBy::Path(path), dir, kind)
                 } else {
                     Ok(())
                 }
-            })
+            })?;
+
+        if kind == ModuleKind::Env && has_default == Some(false) {
+            return Err(Error::NoDefaultEnvironment);
+        }
+
+        Ok(())
     }
 
-    fn add_module(&mut self, path: PathBuf, dir: &Path, kind: ModuleKind) -> Result<(), Error> {
-        let name = self.module_name(dir, &path);
-        let code = fs::read_to_string(&path).map_err(|error| Error::FileIo {
-            path: path.clone(),
-            error,
-        })?;
+    fn add_module(
+        &mut self,
+        add_by: AddModuleBy,
+        dir: &Path,
+        kind: ModuleKind,
+    ) -> Result<(), Error> {
+        let (name, code, path) = match add_by {
+            AddModuleBy::Path(path) => {
+                let name = self.module_name(dir, &path);
+                let code = fs::read_to_string(&path).map_err(|error| Error::FileIo {
+                    path: path.clone(),
+                    error,
+                })?;
+                (name, code, path)
+            }
+            AddModuleBy::Source { name, code } => (name, code, dir.to_path_buf()),
+        };
 
         self.sources.push(Source {
             name,

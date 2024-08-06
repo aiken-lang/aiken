@@ -25,8 +25,8 @@ use ordinal::Ordinal;
 use std::rc::Rc;
 use vec1::Vec1;
 
-const INDENT: isize = 2;
-const DOCS_MAX_COLUMNS: isize = 80;
+pub const INDENT: isize = 2;
+pub const DOCS_MAX_COLUMNS: isize = 80;
 
 pub fn pretty(writer: &mut String, module: UntypedModule, extra: ModuleExtra, src: &str) {
     let intermediate = Intermediate {
@@ -130,7 +130,7 @@ impl<'comments> Formatter<'comments> {
         end != 0
     }
 
-    fn definitions<'a>(&mut self, definitions: &'a [UntypedDefinition]) -> Document<'a> {
+    pub fn definitions<'a>(&mut self, definitions: &'a [UntypedDefinition]) -> Document<'a> {
         let mut has_imports = false;
         let mut has_declarations = false;
         let mut imports = Vec::new();

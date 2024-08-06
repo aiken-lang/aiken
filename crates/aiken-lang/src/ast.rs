@@ -21,6 +21,10 @@ pub const BACKPASS_VARIABLE: &str = "_backpass";
 pub const CAPTURE_VARIABLE: &str = "_capture";
 pub const PIPE_VARIABLE: &str = "_pipe";
 
+pub const ENV_MODULE: &str = "env";
+pub const CONFIG_MODULE: &str = "config";
+pub const DEFAULT_ENV_MODULE: &str = "default";
+
 pub type TypedModule = Module<TypeInfo, TypedDefinition>;
 pub type UntypedModule = Module<(), UntypedDefinition>;
 
@@ -28,6 +32,8 @@ pub type UntypedModule = Module<(), UntypedDefinition>;
 pub enum ModuleKind {
     Lib,
     Validator,
+    Env,
+    Config,
 }
 
 impl ModuleKind {
@@ -37,6 +43,14 @@ impl ModuleKind {
 
     pub fn is_lib(&self) -> bool {
         matches!(self, ModuleKind::Lib)
+    }
+
+    pub fn is_env(&self) -> bool {
+        matches!(self, ModuleKind::Env)
+    }
+
+    pub fn is_config(&self) -> bool {
+        matches!(self, ModuleKind::Config)
     }
 }
 
@@ -61,16 +75,18 @@ impl<Info, Definitions> Module<Info, Definitions> {
 }
 
 impl UntypedModule {
-    pub fn dependencies(&self) -> Vec<(String, Span)> {
+    pub fn dependencies(&self, env_modules: &[String]) -> Vec<String> {
         self.definitions()
             .flat_map(|def| {
-                if let Definition::Use(Use {
-                    location, module, ..
-                }) = def
-                {
-                    Some((module.join("/"), *location))
+                if let Definition::Use(Use { module, .. }) = def {
+                    let name = module.join("/");
+                    if name == ENV_MODULE {
+                        env_modules.to_vec()
+                    } else {
+                        vec![name]
+                    }
                 } else {
-                    None
+                    Vec::new()
                 }
             })
             .collect()
@@ -1063,6 +1079,15 @@ impl Annotation {
     pub fn int(location: Span) -> Self {
         Annotation::Constructor {
             name: "Int".to_string(),
+            module: None,
+            arguments: vec![],
+            location,
+        }
+    }
+
+    pub fn bytearray(location: Span) -> Self {
+        Annotation::Constructor {
+            name: "ByteArray".to_string(),
             module: None,
             arguments: vec![],
             location,

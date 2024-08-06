@@ -7,7 +7,7 @@ use super::{
 };
 use crate::{
     ast::{
-        Annotation, CallArg, DataType, Definition, Function, ModuleConstant, ModuleKind,
+        self, Annotation, CallArg, DataType, Definition, Function, ModuleConstant, ModuleKind,
         RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition, TypedFunction,
         TypedPattern, UnqualifiedImport, UntypedArg, UntypedDefinition, UntypedFunction, Use,
         Validator, PIPE_VARIABLE,
@@ -80,11 +80,49 @@ pub struct Environment<'a> {
     /// A mapping from known annotations to their resolved type.
     pub annotations: HashMap<Annotation, Rc<Type>>,
 
+    /// The user-defined target environment referred to as the module 'env'.
+    pub target_env: Option<&'a str>,
+
     /// Warnings
     pub warnings: &'a mut Vec<Warning>,
 }
 
 impl<'a> Environment<'a> {
+    pub fn find_module(&self, fragments: &[String], location: Span) -> Result<&'a TypeInfo, Error> {
+        let mut name = fragments.join("/");
+
+        let is_env = name == ast::ENV_MODULE;
+
+        if is_env {
+            name = self
+                .target_env
+                .unwrap_or(ast::DEFAULT_ENV_MODULE)
+                .to_string()
+        }
+
+        self.importable_modules.get(&name).ok_or_else(|| {
+            if is_env {
+                Error::UnknownEnvironment {
+                    name,
+                    known_environments: self
+                        .importable_modules
+                        .values()
+                        .filter_map(|m| match m.kind {
+                            ModuleKind::Env => Some(m.name.clone()),
+                            ModuleKind::Lib | ModuleKind::Validator | ModuleKind::Config => None,
+                        })
+                        .collect(),
+                }
+            } else {
+                Error::UnknownModule {
+                    location,
+                    name,
+                    known_modules: self.importable_modules.keys().cloned().collect(),
+                }
+            }
+        })
+    }
+
     pub fn close_scope(&mut self, data: ScopeResetData) {
         let unused = self
             .entity_usages
@@ -351,7 +389,7 @@ impl<'a> Environment<'a> {
                         .ok_or_else(|| Error::UnknownModule {
                             location,
                             name: name.to_string(),
-                            imported_modules: self
+                            known_modules: self
                                 .importable_modules
                                 .keys()
                                 .map(|t| t.to_string())
@@ -397,7 +435,7 @@ impl<'a> Environment<'a> {
                         .get(m)
                         .ok_or_else(|| Error::UnknownModule {
                             name: m.to_string(),
-                            imported_modules: self
+                            known_modules: self
                                 .importable_modules
                                 .keys()
                                 .map(|t| t.to_string())
@@ -705,6 +743,7 @@ impl<'a> Environment<'a> {
         current_kind: &'a ModuleKind,
         importable_modules: &'a HashMap<String, TypeInfo>,
         warnings: &'a mut Vec<Warning>,
+        target_env: Option<&'a str>,
     ) -> Self {
         let prelude = importable_modules
             .get("aiken")
@@ -731,6 +770,7 @@ impl<'a> Environment<'a> {
             annotations: HashMap::new(),
             warnings,
             entity_usages: vec![HashMap::new()],
+            target_env,
         }
     }
 
@@ -772,24 +812,16 @@ impl<'a> Environment<'a> {
                 location,
                 package: _,
             }) => {
-                let name = module.join("/");
-
-                // Find imported module
-                let module_info =
-                    self.importable_modules
-                        .get(&name)
-                        .ok_or_else(|| Error::UnknownModule {
-                            location: *location,
-                            name: name.clone(),
-                            imported_modules: self.imported_modules.keys().cloned().collect(),
-                        })?;
+                let module_info = self.find_module(module, *location)?;
 
                 if module_info.kind.is_validator()
-                    && (self.current_kind.is_lib() || !self.current_module.starts_with("tests"))
+                    && (self.current_kind.is_lib()
+                        || self.current_kind.is_env()
+                        || !self.current_module.starts_with("tests"))
                 {
                     return Err(Error::ValidatorImported {
                         location: *location,
-                        name,
+                        name: module.join("/"),
                     });
                 }
 
@@ -1710,7 +1742,7 @@ impl<'a> Environment<'a> {
                 .ok_or_else(|| Error::UnknownModule {
                     location,
                     name: name.to_string(),
-                    imported_modules: self
+                    known_modules: self
                         .importable_modules
                         .keys()
                         .map(|t| t.to_string())

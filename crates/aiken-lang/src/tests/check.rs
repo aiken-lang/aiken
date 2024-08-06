@@ -38,6 +38,7 @@ fn check_module(
                 &module_types,
                 Tracing::All(TraceLevel::Verbose),
                 &mut warnings,
+                None,
             )
             .expect("extra dependency did not compile");
         module_types.insert(package.clone(), typed_module.type_info.clone());
@@ -50,6 +51,7 @@ fn check_module(
         &module_types,
         tracing,
         &mut warnings,
+        None,
     );
 
     result
