@@ -189,11 +189,7 @@ impl TypedModule {
                 Definition::Validator(v) => {
                     let module_name = self.name.as_str();
 
-                    if let Some((k, v)) = v.into_function_definition(module_name, |f, _| Some(f)) {
-                        functions.insert(k, v);
-                    }
-
-                    if let Some((k, v)) = v.into_function_definition(module_name, |_, f| f) {
+                    for (k, v) in v.into_function_definitions(module_name) {
                         functions.insert(k, v);
                     }
                 }
@@ -561,36 +557,32 @@ impl TypedValidator {
             .or_else(|| self.fallback.find_node(byte_index))
     }
 
-    pub fn into_function_definition<'a, F>(
+    pub fn into_function_definitions<'a>(
         &'a self,
         module_name: &str,
-        select: F,
-    ) -> Option<(FunctionAccessKey, TypedFunction)>
-    where
-        F: Fn(&'a TypedFunction, Option<&'a TypedFunction>) -> Option<&'a TypedFunction> + 'a,
-    {
-        // match select(&self.fun, self.other_fun.as_ref()) {
-        //     None => None,
-        //     Some(fun) => {
-        //         let mut fun = fun.clone();
+    ) -> Vec<(FunctionAccessKey, TypedFunction)> {
+        self.handlers
+            .iter()
+            .chain(std::iter::once(&self.fallback))
+            .map(|handler| {
+                let mut handler = handler.clone();
 
-        //         fun.arguments = self
-        //             .params
-        //             .clone()
-        //             .into_iter()
-        //             .chain(fun.arguments)
-        //             .collect();
+                handler.arguments = self
+                    .params
+                    .clone()
+                    .into_iter()
+                    .chain(handler.arguments)
+                    .collect();
 
-        //         Some((
-        //             FunctionAccessKey {
-        //                 module_name: module_name.to_string(),
-        //                 function_name: fun.name.clone(),
-        //             },
-        //             fun,
-        //         ))
-        //     }
-        // }
-        todo!()
+                (
+                    FunctionAccessKey {
+                        module_name: module_name.to_string(),
+                        function_name: handler.name.clone(),
+                    },
+                    handler,
+                )
+            })
+            .collect()
     }
 }
 
