@@ -1344,11 +1344,23 @@ impl UntypedExpr {
         }
     }
 
-    pub fn is_simple_constant(&self) -> bool {
-        matches!(
-            self,
-            Self::String { .. } | Self::UInt { .. } | Self::ByteArray { .. }
-        )
+    /// Returns true when an UntypedExpr can be displayed in a flex-break manner (i.e. tries to fit as
+    /// much as possible on a single line). When false, long lines with several of those patterns
+    /// will be broken down to one expr per line.
+    pub fn is_simple_expr_to_format(&self) -> bool {
+        match self {
+            Self::String { .. } | Self::UInt { .. } | Self::ByteArray { .. } | Self::Var { .. } => {
+                true
+            }
+            Self::Pair { fst, snd, .. } => {
+                fst.is_simple_expr_to_format() && snd.is_simple_expr_to_format()
+            }
+            Self::Tuple { elems, .. } => elems.iter().all(|e| e.is_simple_expr_to_format()),
+            Self::List { elements, .. } if elements.len() <= 3 => {
+                elements.iter().all(|e| e.is_simple_expr_to_format())
+            }
+            _ => false,
+        }
     }
 
     pub fn lambda(

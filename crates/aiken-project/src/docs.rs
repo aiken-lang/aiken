@@ -556,7 +556,7 @@ impl DocTypeConstructor {
         DocTypeConstructor {
             definition: format::Formatter::new()
                 .docs_record_constructor(constructor)
-                .to_pretty_string(80),
+                .to_pretty_string(format::MAX_COLUMNS),
             documentation: constructor
                 .doc
                 .as_deref()

@@ -1,0 +1,10 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\ntest foo() {\n    [foo, bar, baz, (2, 3), (4, 5), (6, 7), (8, 9), biz, buz, fizz, fuzz, alice, bob, carole, i, am, out, of, names] == [0, 0, 0]\n}\n"
+---
+test foo() {
+  [
+    foo, bar, baz, (2, 3), (4, 5), (6, 7), (8, 9), biz, buz, fizz, fuzz, alice,
+    bob, carole, i, am, out, of, names,
+  ] == [0, 0, 0]
+}

@@ -65,6 +65,10 @@
 
   See also [#978](https://github.com/aiken-lang/aiken/pull/978).
 
+- **aiken-lang**: rework formatter behaviour on long-lines, especially in the presence of binary operators. @KtorZ
+
+- **aiken-lang**: provide better errors for unknown types used in cyclic type definitions. @KtorZ
+
 - **aiken-project**: fix blueprint's apply truncating last character of outputs. See [#987](https://github.com/aiken-lang/aiken/issues/987). @KtorZ
 
 - **aiken-project**: provide better error (include input ref) when inputs are missing during transaction evaluation. See [#974](https://github.com/aiken-lang/aiken/issues/974). @KtorZ

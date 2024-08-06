@@ -37,7 +37,7 @@ use aiken_lang::{
     },
     builtins,
     expr::UntypedExpr,
-    format::{Formatter, DOCS_MAX_COLUMNS},
+    format::{Formatter, MAX_COLUMNS},
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
     plutus_version::PlutusVersion,
@@ -676,7 +676,7 @@ where
                     name: ast::CONFIG_MODULE.to_string(),
                     code: Formatter::new()
                         .definitions(&defs[..])
-                        .to_pretty_string(DOCS_MAX_COLUMNS),
+                        .to_pretty_string(MAX_COLUMNS),
                 },
                 &root,
                 ModuleKind::Config,

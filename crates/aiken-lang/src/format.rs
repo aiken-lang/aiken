@@ -26,7 +26,7 @@ use std::rc::Rc;
 use vec1::Vec1;
 
 pub const INDENT: isize = 2;
-pub const DOCS_MAX_COLUMNS: isize = 80;
+pub const MAX_COLUMNS: isize = 80;
 
 pub fn pretty(writer: &mut String, module: UntypedModule, extra: ModuleExtra, src: &str) {
     let intermediate = Intermediate {
@@ -50,7 +50,7 @@ pub fn pretty(writer: &mut String, module: UntypedModule, extra: ModuleExtra, sr
 
     Formatter::with_comments(&intermediate)
         .module(&module)
-        .pretty_print(80, writer);
+        .pretty_print(MAX_COLUMNS, writer);
 }
 
 #[derive(Debug)]
@@ -1332,8 +1332,15 @@ impl<'comments> Formatter<'comments> {
         let left_precedence = left.binop_precedence();
         let right_precedence = right.binop_precedence();
 
-        let left = self.expr(left, false);
-        let right = self.expr(right, false);
+        let mut left = self.expr(left, false);
+        if left.fits(MAX_COLUMNS) {
+            left = left.force_unbroken()
+        }
+
+        let mut right = self.expr(right, false);
+        if right.fits(MAX_COLUMNS) {
+            right = right.force_unbroken()
+        }
 
         self.operator_side(
             left,
@@ -1724,11 +1731,7 @@ impl<'comments> Formatter<'comments> {
         let doc = head.append(tail.clone()).group();
 
         // Wrap arguments on multi-lines if they are lengthy.
-        if doc
-            .clone()
-            .to_pretty_string(DOCS_MAX_COLUMNS)
-            .contains('\n')
-        {
+        if doc.clone().to_pretty_string(MAX_COLUMNS).contains('\n') {
             let head = name
                 .to_doc()
                 .append(self.docs_fn_args(args).force_break())
@@ -1862,7 +1865,7 @@ impl<'comments> Formatter<'comments> {
         tail: Option<&'a UntypedExpr>,
     ) -> Document<'a> {
         let comma: fn() -> Document<'a> =
-            if tail.is_none() && elements.iter().all(UntypedExpr::is_simple_constant) {
+            if elements.iter().all(UntypedExpr::is_simple_expr_to_format) {
                 || flex_break(",", ", ")
             } else {
                 || break_(",", ", ")
@@ -1905,8 +1908,14 @@ impl<'comments> Formatter<'comments> {
                 .group(),
 
             Pattern::List { elements, tail, .. } => {
+                let break_style: fn() -> Document<'a> =
+                    if elements.iter().all(Pattern::is_simple_pattern_to_format) {
+                        || flex_break(",", ", ")
+                    } else {
+                        || break_(",", ", ")
+                    };
                 let elements_document =
-                    join(elements.iter().map(|e| self.pattern(e)), break_(",", ", "));
+                    join(elements.iter().map(|e| self.pattern(e)), break_style());
                 let tail = tail.as_ref().map(|e| {
                     if e.is_discard() {
                         nil()

@@ -12,9 +12,8 @@
 //! - `ForcedBreak` from Elixir.
 #![allow(clippy::wrong_self_convention)]
 
-use std::collections::VecDeque;
-
 use itertools::Itertools;
+use std::collections::VecDeque;
 
 #[macro_export]
 macro_rules! docvec {
@@ -131,6 +130,9 @@ pub enum Document<'a> {
     /// Forces contained groups to break
     ForceBroken(Box<Self>),
 
+    /// Forces contained group to not break
+    ForceUnbroken(Box<Self>),
+
     /// Renders `broken` if group is broken, `unbroken` otherwise
     Break {
         broken: &'a str,
@@ -166,12 +168,12 @@ enum Mode {
     //
     /// Broken and forced to remain broken
     ForcedBroken,
-    // ForcedUnbroken, // Used for next_break_fits. Not yet implemented.
+    ForcedUnbroken,
 }
 
 impl Mode {
     fn is_forced(&self) -> bool {
-        matches!(self, Mode::ForcedBroken)
+        matches!(self, Mode::ForcedBroken | Mode::ForcedUnbroken)
     }
 }
 
@@ -199,6 +201,8 @@ fn fits(
 
             Document::Nest(i, doc) => docs.push_front((i + indent, mode, doc)),
 
+            Document::ForceUnbroken(doc) => docs.push_front((indent, mode, doc)),
+
             Document::Group(doc) if mode.is_forced() => docs.push_front((indent, mode, doc)),
 
             Document::Group(doc) => docs.push_front((indent, Mode::Unbroken, doc)),
@@ -209,7 +213,7 @@ fn fits(
 
             Document::Break { unbroken, .. } => match mode {
                 Mode::Broken | Mode::ForcedBroken => return true,
-                Mode::Unbroken => current_width += unbroken.len() as isize,
+                Mode::Unbroken | Mode::ForcedUnbroken => current_width += unbroken.len() as isize,
             },
 
             Document::Vec(vec) => {
@@ -254,29 +258,34 @@ fn format(
                 break_first,
                 kind: BreakKind::Flex,
             } => {
-                let unbroken_width = width + unbroken.len() as isize;
-
-                if fits(limit, unbroken_width, docs.clone()) {
+                if mode == Mode::ForcedUnbroken {
                     writer.push_str(unbroken);
-                    width = unbroken_width;
-                    continue;
-                }
-
-                if *break_first {
-                    writer.push('\n');
-                    for _ in 0..indent {
-                        writer.push(' ');
-                    }
-                    writer.push_str(broken);
+                    width += unbroken.len() as isize
                 } else {
-                    writer.push_str(broken);
-                    writer.push('\n');
-                    for _ in 0..indent {
-                        writer.push(' ');
-                    }
-                }
+                    let unbroken_width = width + unbroken.len() as isize;
 
-                width = indent;
+                    if fits(limit, unbroken_width, docs.clone()) {
+                        writer.push_str(unbroken);
+                        width = unbroken_width;
+                        continue;
+                    }
+
+                    if *break_first {
+                        writer.push('\n');
+                        for _ in 0..indent {
+                            writer.push(' ');
+                        }
+                        writer.push_str(broken);
+                    } else {
+                        writer.push_str(broken);
+                        writer.push('\n');
+                        for _ in 0..indent {
+                            writer.push(' ');
+                        }
+                    }
+
+                    width = indent;
+                }
             }
 
             // Strict breaks are conditional to the mode
@@ -287,7 +296,7 @@ fn format(
                 kind: BreakKind::Strict,
             } => {
                 width = match mode {
-                    Mode::Unbroken => {
+                    Mode::Unbroken | Mode::ForcedUnbroken => {
                         writer.push_str(unbroken);
 
                         width + unbroken.len() as isize
@@ -344,10 +353,16 @@ fn format(
             Document::Group(doc) => {
                 let mut group_docs = VecDeque::new();
 
-                group_docs.push_front((indent, Mode::Unbroken, doc.as_ref()));
+                let inner_mode = if mode == Mode::ForcedUnbroken {
+                    Mode::ForcedUnbroken
+                } else {
+                    Mode::Unbroken
+                };
+
+                group_docs.push_front((indent, inner_mode, doc.as_ref()));
 
                 if fits(limit, width, group_docs) {
-                    docs.push_front((indent, Mode::Unbroken, doc));
+                    docs.push_front((indent, inner_mode, doc));
                 } else {
                     docs.push_front((indent, Mode::Broken, doc));
                 }
@@ -355,6 +370,10 @@ fn format(
 
             Document::ForceBroken(document) => {
                 docs.push_front((indent, Mode::ForcedBroken, document));
+            }
+
+            Document::ForceUnbroken(document) => {
+                docs.push_front((indent, Mode::ForcedUnbroken, document));
             }
         }
     }
@@ -409,6 +428,12 @@ pub fn flex_prebreak<'a>(broken: &'a str, unbroken: &'a str) -> Document<'a> {
 }
 
 impl<'a> Document<'a> {
+    pub fn fits(&self, target: isize) -> bool {
+        let mut docs = VecDeque::new();
+        docs.push_front((0, Mode::Unbroken, self));
+        fits(target, 0, docs)
+    }
+
     pub fn group(self) -> Self {
         Self::Group(Box::new(self))
     }
@@ -419,6 +444,10 @@ impl<'a> Document<'a> {
 
     pub fn force_break(self) -> Self {
         Self::ForceBroken(Box::new(self))
+    }
+
+    pub fn force_unbroken(self) -> Self {
+        Self::ForceUnbroken(Box::new(self))
     }
 
     pub fn append(self, second: impl Documentable<'a>) -> Self {
@@ -461,7 +490,7 @@ impl<'a> Document<'a> {
             Str(s) => s.is_empty(),
             // assuming `broken` and `unbroken` are equivalent
             Break { broken, .. } => broken.is_empty(),
-            ForceBroken(d) | Nest(_, d) | Group(d) => d.is_empty(),
+            ForceUnbroken(d) | ForceBroken(d) | Nest(_, d) | Group(d) => d.is_empty(),
             Vec(docs) => docs.iter().all(|d| d.is_empty()),
         }
     }

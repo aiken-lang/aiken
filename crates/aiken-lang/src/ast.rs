@@ -1366,6 +1366,26 @@ impl<A, B> Pattern<A, B> {
         }
     }
 
+    /// Returns true when a Pattern can be displayed in a flex-break manner (i.e. tries to fit as
+    /// much as possible on a single line). When false, long lines with several of those patterns
+    /// will be broken down to one pattern per line.
+    pub fn is_simple_pattern_to_format(&self) -> bool {
+        match self {
+            Self::ByteArray { .. } | Self::Int { .. } | Self::Var { .. } | Self::Discard { .. } => {
+                true
+            }
+            Self::Pair { fst, snd, .. } => {
+                fst.is_simple_pattern_to_format() && snd.is_simple_pattern_to_format()
+            }
+            Self::Tuple { elems, .. } => elems.iter().all(|e| e.is_simple_pattern_to_format()),
+            Self::List { elements, .. } if elements.len() <= 3 => {
+                elements.iter().all(|e| e.is_simple_pattern_to_format())
+            }
+            Self::Constructor { arguments, .. } => arguments.is_empty(),
+            _ => false,
+        }
+    }
+
     pub fn with_spread(&self) -> bool {
         match self {
             Pattern::Constructor {

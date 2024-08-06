@@ -1,6 +1,6 @@
 use super::{Type, TypeVar};
 use crate::{
-    docvec,
+    docvec, format,
     pretty::{nil, *},
     tipo::{Annotation, TypeAliasAnnotation},
 };
@@ -40,7 +40,7 @@ impl Printer {
             .to_doc()
             .append(self.print(typ))
             .nest(initial_indent as isize)
-            .to_pretty_string(80)
+            .to_pretty_string(format::MAX_COLUMNS)
     }
 
     // TODO: have this function return a Document that borrows from the Type.

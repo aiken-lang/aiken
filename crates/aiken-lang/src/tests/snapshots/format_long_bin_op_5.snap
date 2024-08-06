@@ -1,0 +1,14 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\ntest foo() {\n    when x is {\n        [True, False, True, False, True, False, True, False, True, False, True, False, True, False, True, False, ..] -> todo\n        _ -> todo\n    }\n}\n"
+---
+test foo() {
+  when x is {
+    [
+      True, False, True, False, True, False, True, False, True, False, True,
+      False, True, False, True, False,
+      ..
+    ] -> todo
+    _ -> todo
+  }
+}

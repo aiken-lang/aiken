@@ -1,0 +1,8 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nuse aiken/list.{foldr, foldl, is_empty, filter, map, find, any, all, flat_map, partition, push, reduce, reverse, repeat}\n"
+---
+use aiken/list.{
+  all, any, filter, find, flat_map, foldl, foldr, is_empty, map, partition, push,
+  reduce, repeat, reverse,
+}

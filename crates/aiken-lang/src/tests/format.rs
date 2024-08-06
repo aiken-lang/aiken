@@ -1017,3 +1017,102 @@ fn format_pattern_bytearray() {
         "#
     );
 }
+
+#[test]
+fn format_long_bin_op_1() {
+    assert_format!(
+        r#"
+        test foo() {
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] == [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        }
+        "#
+    );
+}
+
+#[test]
+fn format_long_bin_op_2() {
+    assert_format!(
+        r#"
+        test foo() {
+            [0, 0, 0] == [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        }
+        "#
+    );
+}
+
+#[test]
+fn format_long_bin_op_3() {
+    assert_format!(
+        r#"
+        test foo() {
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] == [0, 0, 0]
+        }
+        "#
+    );
+}
+
+#[test]
+fn format_long_bin_op_4() {
+    assert_format!(
+        r#"
+        test foo() {
+            [foo, bar, baz, (2, 3), (4, 5), (6, 7), (8, 9), biz, buz, fizz, fuzz, alice, bob, carole, i, am, out, of, names] == [0, 0, 0]
+        }
+        "#
+    );
+}
+
+#[test]
+fn format_long_pattern_1() {
+    assert_format!(
+        r#"
+        test foo() {
+            when x is {
+                [True, False, True, False, True, False, True, False, True, False, True, False, True, False, True, False, ..] -> todo
+                _ -> todo
+            }
+        }
+        "#
+    );
+}
+
+#[test]
+fn format_long_pattern_2() {
+    assert_format!(
+        r#"
+        test foo() {
+            when x is {
+                [(1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12), (13, 14, 15), (16, 17, 18), (19, 20, 21), (22, 23, 24)] -> todo
+                _ -> todo
+            }
+        }
+        "#
+    );
+}
+
+#[test]
+fn format_long_standalone_literal() {
+    assert_format!(
+        r#"
+        test foo() {
+          let left =
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+          let right =
+            [
+              0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+              0, 0, 0, 0,
+            ]
+          left == right
+        }
+        "#
+    );
+}
+
+#[test]
+fn format_long_imports() {
+    assert_format!(
+        r#"
+        use aiken/list.{foldr, foldl, is_empty, filter, map, find, any, all, flat_map, partition, push, reduce, reverse, repeat}
+        "#
+    );
+}
