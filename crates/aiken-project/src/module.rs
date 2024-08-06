@@ -479,12 +479,12 @@ impl CheckedModules {
             (
                 left.0.package.to_string(),
                 left.0.name.to_string(),
-                left.1.fun.name.to_string(),
+                left.1.name.to_string(),
             )
                 .cmp(&(
                     right.0.package.to_string(),
                     right.0.name.to_string(),
-                    right.1.fun.name.to_string(),
+                    right.1.name.to_string(),
                 ))
         });
 

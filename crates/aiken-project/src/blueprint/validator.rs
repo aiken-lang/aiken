@@ -62,7 +62,7 @@ impl Validator {
                 modules,
                 module,
                 def,
-                hander,
+                handler,
                 &mut program,
                 plutus_version,
             ));
