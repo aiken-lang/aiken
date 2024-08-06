@@ -4,6 +4,8 @@ use aiken_project::{options::Options, watch::with_project};
 use std::path::PathBuf;
 
 #[derive(clap::Args)]
+/// Export a function as a standalone UPLC program. Arguments to the function can be applied using
+/// `aiken apply`.
 pub struct Args {
     /// Path to project
     directory: Option<PathBuf>,

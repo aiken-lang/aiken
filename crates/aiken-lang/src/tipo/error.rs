@@ -1820,7 +1820,7 @@ pub enum UnknownRecordFieldSituation {
     FunctionCall,
 }
 
-fn format_suggestion(sample: &UntypedExpr) -> String {
+pub fn format_suggestion(sample: &UntypedExpr) -> String {
     Formatter::new()
         .expr(sample, false)
         .to_pretty_string(70)

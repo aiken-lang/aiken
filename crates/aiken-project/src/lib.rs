@@ -534,13 +534,20 @@ where
     }
 
     pub fn export(&self, module: &str, name: &str, tracing: Tracing) -> Result<Export, Error> {
-        self.checked_modules
-            .get(module)
-            .and_then(|checked_module| {
-                checked_module.ast.definitions().find_map(|def| match def {
-                    Definition::Fn(func) if func.name == name => Some((checked_module, func)),
-                    _ => None,
-                })
+        let checked_module =
+            self.checked_modules
+                .get(module)
+                .ok_or_else(|| Error::ModuleNotFound {
+                    module: module.to_string(),
+                    known_modules: self.checked_modules.keys().cloned().collect(),
+                })?;
+
+        checked_module
+            .ast
+            .definitions()
+            .find_map(|def| match def {
+                Definition::Fn(func) if func.name == name => Some((checked_module, func)),
+                _ => None,
             })
             .map(|(checked_module, func)| {
                 let mut generator = self.new_generator(tracing);

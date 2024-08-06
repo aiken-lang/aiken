@@ -128,6 +128,12 @@ pub enum Error {
     #[error("I couldn't find any exportable function named '{name}' in module '{module}'.")]
     ExportNotFound { module: String, name: String },
 
+    #[error("No such module '{module}' found in the project.")]
+    ModuleNotFound {
+        module: String,
+        known_modules: Vec<String>,
+    },
+
     #[error("I located conditional modules under 'env', but no default one!")]
     NoDefaultEnvironment,
 }
@@ -199,6 +205,7 @@ impl ExtraData for Error {
             | Error::MoreThanOneValidatorFound { .. }
             | Error::Module { .. }
             | Error::NoDefaultEnvironment { .. }
+            | Error::ModuleNotFound { .. }
             | Error::ExportNotFound { .. } => None,
             Error::Type { error, .. } => error.extra_data(),
         }
@@ -227,6 +234,7 @@ impl GetSource for Error {
             | Error::MalformedStakeAddress { .. }
             | Error::NoValidatorNotFound { .. }
             | Error::MoreThanOneValidatorFound { .. }
+            | Error::ModuleNotFound { .. }
             | Error::ExportNotFound { .. }
             | Error::NoDefaultEnvironment { .. }
             | Error::Module { .. } => None,
@@ -259,6 +267,7 @@ impl GetSource for Error {
             | Error::NoValidatorNotFound { .. }
             | Error::NoDefaultEnvironment { .. }
             | Error::MoreThanOneValidatorFound { .. }
+            | Error::ModuleNotFound { .. }
             | Error::ExportNotFound { .. }
             | Error::Module { .. } => None,
             Error::TomlLoading { src, .. } | Error::Parse { src, .. } | Error::Type { src, .. } => {
@@ -313,6 +322,7 @@ impl Diagnostic for Error {
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
             Error::ExportNotFound { .. } => None,
+            Error::ModuleNotFound { .. } => None,
             Error::NoDefaultEnvironment { .. } => None,
             Error::Module(e) => e.code().map(boxed),
         }
@@ -347,6 +357,14 @@ impl Diagnostic for Error {
             Error::ZipExtract(_) => None,
             Error::JoinError(_) => None,
             Error::ExportNotFound { .. } => None,
+            Error::ModuleNotFound { known_modules, .. } => Some(Box::new(format!(
+                "I know about the following modules:\n{}",
+                known_modules
+                    .iter()
+                    .map(|s| format!("─▶ {}", s.if_supports_color(Stdout, |s| s.purple())))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ))),
             Error::UnknownPackageVersion { .. } => Some(Box::new(
                 "Perhaps, double-check the package repository and version?",
             )),
@@ -419,6 +437,7 @@ impl Diagnostic for Error {
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
             Error::NoDefaultEnvironment { .. } => None,
+            Error::ModuleNotFound { .. } => None,
             Error::Module(e) => e.labels(),
         }
     }
@@ -428,6 +447,7 @@ impl Diagnostic for Error {
             Error::DuplicateModule { .. } => None,
             Error::FileIo { .. } => None,
             Error::ImportCycle { .. } => None,
+            Error::ModuleNotFound { .. } => None,
             Error::ExportNotFound { .. } => None,
             Error::Blueprint(e) => e.source_code(),
             Error::NoDefaultEnvironment { .. } => None,
@@ -456,6 +476,7 @@ impl Diagnostic for Error {
             Error::DuplicateModule { .. } => None,
             Error::FileIo { .. } => None,
             Error::ImportCycle { .. } => None,
+            Error::ModuleNotFound { .. } => None,
             Error::ExportNotFound { .. } => None,
             Error::Blueprint(e) => e.url(),
             Error::Parse { .. } => None,
@@ -483,6 +504,7 @@ impl Diagnostic for Error {
         match self {
             Error::DuplicateModule { .. } => None,
             Error::FileIo { .. } => None,
+            Error::ModuleNotFound { .. } => None,
             Error::ExportNotFound { .. } => None,
             Error::Blueprint(e) => e.related(),
             Error::ImportCycle { .. } => None,
