@@ -812,6 +812,10 @@ where
                     &mut self.data_types,
                 )?;
 
+                if name == "foo" {
+                    println!("{:#?}", checked_module.ast);
+                }
+
                 if our_modules.contains(checked_module.name.as_str()) {
                     self.warnings.extend(warnings);
                 }

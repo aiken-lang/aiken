@@ -1,0 +1,177 @@
+---
+source: crates/aiken-lang/src/parser/expr/when/clause.rs
+description: "Code:\n\nwhen val is {\n  Bar1{..} | Bar2{..} -> todo\n  Bar3{..} || Bar4{..} -> todo\n  Bar5{..} or Bar6{..} -> todo\n  Bar5{..}, Bar6{..} -> todo\n}\n"
+---
+When {
+    location: 0..136,
+    subject: Var {
+        location: 5..8,
+        name: "val",
+    },
+    clauses: [
+        UntypedClause {
+            location: 16..43,
+            patterns: [
+                Constructor {
+                    is_record: true,
+                    location: 16..24,
+                    name: "Bar1",
+                    arguments: [],
+                    module: None,
+                    constructor: (),
+                    spread_location: Some(
+                        21..23,
+                    ),
+                    tipo: (),
+                },
+                Constructor {
+                    is_record: true,
+                    location: 27..35,
+                    name: "Bar2",
+                    arguments: [],
+                    module: None,
+                    constructor: (),
+                    spread_location: Some(
+                        32..34,
+                    ),
+                    tipo: (),
+                },
+            ],
+            then: Trace {
+                kind: Todo,
+                location: 39..43,
+                then: ErrorTerm {
+                    location: 39..43,
+                },
+                label: String {
+                    location: 39..43,
+                    value: "aiken::todo",
+                },
+                arguments: [],
+            },
+        },
+        UntypedClause {
+            location: 46..74,
+            patterns: [
+                Constructor {
+                    is_record: true,
+                    location: 46..54,
+                    name: "Bar3",
+                    arguments: [],
+                    module: None,
+                    constructor: (),
+                    spread_location: Some(
+                        51..53,
+                    ),
+                    tipo: (),
+                },
+                Constructor {
+                    is_record: true,
+                    location: 58..66,
+                    name: "Bar4",
+                    arguments: [],
+                    module: None,
+                    constructor: (),
+                    spread_location: Some(
+                        63..65,
+                    ),
+                    tipo: (),
+                },
+            ],
+            then: Trace {
+                kind: Todo,
+                location: 70..74,
+                then: ErrorTerm {
+                    location: 70..74,
+                },
+                label: String {
+                    location: 70..74,
+                    value: "aiken::todo",
+                },
+                arguments: [],
+            },
+        },
+        UntypedClause {
+            location: 77..105,
+            patterns: [
+                Constructor {
+                    is_record: true,
+                    location: 77..85,
+                    name: "Bar5",
+                    arguments: [],
+                    module: None,
+                    constructor: (),
+                    spread_location: Some(
+                        82..84,
+                    ),
+                    tipo: (),
+                },
+                Constructor {
+                    is_record: true,
+                    location: 89..97,
+                    name: "Bar6",
+                    arguments: [],
+                    module: None,
+                    constructor: (),
+                    spread_location: Some(
+                        94..96,
+                    ),
+                    tipo: (),
+                },
+            ],
+            then: Trace {
+                kind: Todo,
+                location: 101..105,
+                then: ErrorTerm {
+                    location: 101..105,
+                },
+                label: String {
+                    location: 101..105,
+                    value: "aiken::todo",
+                },
+                arguments: [],
+            },
+        },
+        UntypedClause {
+            location: 108..134,
+            patterns: [
+                Constructor {
+                    is_record: true,
+                    location: 108..116,
+                    name: "Bar5",
+                    arguments: [],
+                    module: None,
+                    constructor: (),
+                    spread_location: Some(
+                        113..115,
+                    ),
+                    tipo: (),
+                },
+                Constructor {
+                    is_record: true,
+                    location: 118..126,
+                    name: "Bar6",
+                    arguments: [],
+                    module: None,
+                    constructor: (),
+                    spread_location: Some(
+                        123..125,
+                    ),
+                    tipo: (),
+                },
+            ],
+            then: Trace {
+                kind: Todo,
+                location: 130..134,
+                then: ErrorTerm {
+                    location: 130..134,
+                },
+                label: String {
+                    location: 130..134,
+                    value: "aiken::todo",
+                },
+                arguments: [],
+            },
+        },
+    ],
+}

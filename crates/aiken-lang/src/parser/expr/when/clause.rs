@@ -11,7 +11,17 @@ pub fn parser(
     expression: Recursive<'_, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, ast::UntypedClause, Error = ParseError> + '_ {
     pattern()
-        .then(just(Token::Vbar).ignore_then(pattern()).repeated().or_not())
+        .then(
+            choice((
+                just(Token::Vbar),
+                just(Token::VbarVbar),
+                just(Token::Or),
+                just(Token::Comma),
+            ))
+            .ignore_then(pattern())
+            .repeated()
+            .or_not(),
+        )
         .then(choice((just(Token::If)
             .ignore_then(guard())
             .or_not()
@@ -72,6 +82,20 @@ mod tests {
             when val is {
               Bar1{..} -> todo
               Bar2{..} -> todo
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn when_clause_alternative() {
+        assert_expr!(
+            r#"
+            when val is {
+              Bar1{..} | Bar2{..} -> todo
+              Bar3{..} || Bar4{..} -> todo
+              Bar5{..} or Bar6{..} -> todo
+              Bar5{..}, Bar6{..} -> todo
             }
             "#
         );
