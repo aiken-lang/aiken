@@ -557,8 +557,8 @@ impl TypedValidator {
             .or_else(|| self.fallback.find_node(byte_index))
     }
 
-    pub fn into_function_definitions<'a>(
-        &'a self,
+    pub fn into_function_definitions(
+        &self,
         module_name: &str,
     ) -> Vec<(FunctionAccessKey, TypedFunction)> {
         self.handlers

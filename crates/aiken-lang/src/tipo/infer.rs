@@ -748,7 +748,7 @@ fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
 
 fn put_params_in_scope(name: &str, environment: &mut Environment, params: &[UntypedArg]) {
     let preregistered_fn = environment
-        .get_variable(&name)
+        .get_variable(name)
         .expect("Could not find preregistered type for function");
 
     let preregistered_type = preregistered_fn.tipo.clone();
