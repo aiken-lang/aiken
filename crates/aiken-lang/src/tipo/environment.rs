@@ -1167,12 +1167,12 @@ impl<'a> Environment<'a> {
     #[allow(clippy::too_many_arguments)]
     fn register_function(
         &mut self,
-        name: &'a str,
+        name: &str,
         arguments: &[UntypedArg],
         return_annotation: &Option<Annotation>,
         module_name: &String,
         hydrators: &mut HashMap<String, Hydrator>,
-        names: &mut HashMap<&'a str, &'a Span>,
+        names: &mut HashMap<String, &'a Span>,
         location: &'a Span,
     ) -> Result<(), Error> {
         assert_unique_value_name(names, name, location)?;
@@ -1229,7 +1229,7 @@ impl<'a> Environment<'a> {
         def: &'a UntypedDefinition,
         module_name: &String,
         hydrators: &mut HashMap<String, Hydrator>,
-        names: &mut HashMap<&'a str, &'a Span>,
+        names: &mut HashMap<String, &'a Span>,
         kind: ModuleKind,
     ) -> Result<(), Error> {
         match def {
@@ -1279,7 +1279,7 @@ impl<'a> Environment<'a> {
                         .collect();
 
                     self.register_function(
-                        &handler.name,
+                        &format!("{}_{}", name, handler.name),
                         &temp_params,
                         &handler.return_annotation,
                         module_name,
@@ -1297,7 +1297,7 @@ impl<'a> Environment<'a> {
                     .collect();
 
                 self.register_function(
-                    &fallback.name,
+                    &format!("{}_{}", name, fallback.name),
                     &temp_params,
                     &fallback.return_annotation,
                     module_name,
@@ -1916,11 +1916,11 @@ fn assert_unique_type_name<'a>(
 }
 
 fn assert_unique_value_name<'a>(
-    names: &mut HashMap<&'a str, &'a Span>,
-    name: &'a str,
+    names: &mut HashMap<String, &'a Span>,
+    name: &str,
     location: &'a Span,
 ) -> Result<(), Error> {
-    match names.insert(name, location) {
+    match names.insert(name.to_string(), location) {
         Some(previous_location) => Err(Error::DuplicateName {
             name: name.to_string(),
             previous_location: *previous_location,
@@ -1931,11 +1931,11 @@ fn assert_unique_value_name<'a>(
 }
 
 fn assert_unique_const_name<'a>(
-    names: &mut HashMap<&'a str, &'a Span>,
-    name: &'a str,
+    names: &mut HashMap<String, &'a Span>,
+    name: &str,
     location: &'a Span,
 ) -> Result<(), Error> {
-    match names.insert(name, location) {
+    match names.insert(name.to_string(), location) {
         Some(previous_location) => Err(Error::DuplicateConstName {
             name: name.to_string(),
             previous_location: *previous_location,
