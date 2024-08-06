@@ -1014,6 +1014,7 @@ impl<'a> CodeGenerator<'a> {
                                 pattern.location(),
                                 then,
                                 otherwise,
+                                0,
                             ),
                         )
                     }
@@ -1056,6 +1057,7 @@ impl<'a> CodeGenerator<'a> {
                                 pattern.location(),
                                 then,
                                 otherwise,
+                                0,
                             ),
                         )
                     }
@@ -1605,6 +1607,7 @@ impl<'a> CodeGenerator<'a> {
         location: Span,
         then: AirTree,
         otherwise: AirTree,
+        depth: usize,
     ) -> AirTree {
         assert!(tipo.get_generic().is_none());
         // Shouldn't be needed but still here just in case
@@ -1647,15 +1650,19 @@ impl<'a> CodeGenerator<'a> {
                     defined_data_types,
                     location,
                     AirTree::call(
-                        AirTree::local_var("__curried_expect_on_list", void()),
+                        AirTree::local_var(format!("__curried_expect_on_list_{}", depth), void()),
                         void(),
                         vec![AirTree::builtin(
                             DefaultFunction::TailList,
                             list(data()),
-                            vec![AirTree::local_var("__list", tipo.clone())],
+                            vec![AirTree::local_var(
+                                format!("__list_{}", depth),
+                                tipo.clone(),
+                            )],
                         )],
                     ),
                     otherwise.clone(),
+                    depth + 1,
                 );
 
                 let expect_fst = self.expect_type_assign(
@@ -1665,29 +1672,40 @@ impl<'a> CodeGenerator<'a> {
                     location,
                     expect_snd,
                     otherwise.clone(),
+                    depth + 1,
                 );
 
                 let unwrap_function = AirTree::anon_func(
-                    vec!["__list".to_string(), "__curried_expect_on_list".to_string()],
+                    vec![
+                        format!("__list_{}", depth),
+                        format!("__curried_expect_on_list_{}", depth),
+                    ],
                     AirTree::list_empty(
-                        AirTree::local_var("__list", tipo.clone()),
+                        AirTree::local_var(format!("__list_{}", depth), tipo.clone()),
                         then,
-                        AirTree::let_assignment(
-                            &pair_name,
-                            AirTree::builtin(
-                                DefaultFunction::HeadList,
-                                pair(data(), data()),
-                                vec![AirTree::local_var("__list", tipo.clone())],
+                        AirTree::anon_func(
+                            vec![],
+                            AirTree::let_assignment(
+                                &pair_name,
+                                AirTree::builtin(
+                                    DefaultFunction::HeadList,
+                                    pair(data(), data()),
+                                    vec![AirTree::local_var(
+                                        format!("__list_{}", depth),
+                                        tipo.clone(),
+                                    )],
+                                ),
+                                AirTree::pair_access(
+                                    Some(fst_name),
+                                    Some(snd_name),
+                                    inner_list_type.clone(),
+                                    AirTree::local_var(&pair_name, inner_list_type.clone()),
+                                    true,
+                                    expect_fst,
+                                    otherwise.clone(),
+                                ),
                             ),
-                            AirTree::pair_access(
-                                Some(fst_name),
-                                Some(snd_name),
-                                inner_list_type.clone(),
-                                AirTree::local_var(&pair_name, inner_list_type.clone()),
-                                true,
-                                expect_fst,
-                                otherwise.clone(),
-                            ),
+                            true,
                         ),
                     ),
                     false,
@@ -1761,6 +1779,7 @@ impl<'a> CodeGenerator<'a> {
                                 location,
                                 then,
                                 otherwise.clone(),
+                                depth + 1,
                             );
 
                             tuple_expect_items.push(tuple_index_name);
@@ -1794,9 +1813,12 @@ impl<'a> CodeGenerator<'a> {
                     let item_name = format!("__item_span_{}_{}", location.start, location.end);
 
                     let unwrap_function = AirTree::anon_func(
-                        vec!["__list".to_string(), "__curried_expect_on_list".to_string()],
+                        vec![
+                            format!("__list_{}", depth),
+                            format!("__curried_expect_on_list_{}", depth),
+                        ],
                         AirTree::list_empty(
-                            AirTree::local_var("__list", tipo.clone()),
+                            AirTree::local_var(format!("__list_{}", depth), tipo.clone()),
                             then,
                             AirTree::anon_func(
                                 vec![],
@@ -1805,7 +1827,10 @@ impl<'a> CodeGenerator<'a> {
                                     AirTree::builtin(
                                         DefaultFunction::HeadList,
                                         data(),
-                                        vec![AirTree::local_var("__list", tipo.clone())],
+                                        vec![AirTree::local_var(
+                                            format!("__list_{}", depth),
+                                            tipo.clone(),
+                                        )],
                                     ),
                                     AirTree::soft_cast_assignment(
                                         &item_name,
@@ -1818,7 +1843,7 @@ impl<'a> CodeGenerator<'a> {
                                             location,
                                             AirTree::call(
                                                 AirTree::local_var(
-                                                    "__curried_expect_on_list",
+                                                    format!("__curried_expect_on_list_{}", depth),
                                                     void(),
                                                 ),
                                                 void(),
@@ -1826,12 +1851,13 @@ impl<'a> CodeGenerator<'a> {
                                                     DefaultFunction::TailList,
                                                     list(data()),
                                                     vec![AirTree::local_var(
-                                                        "__list",
+                                                        format!("__list_{}", depth),
                                                         tipo.clone(),
                                                     )],
                                                 )],
                                             ),
                                             otherwise.clone(),
+                                            depth + 1,
                                         ),
                                         otherwise,
                                     ),
@@ -1908,6 +1934,7 @@ impl<'a> CodeGenerator<'a> {
                     location,
                     then,
                     otherwise.clone(),
+                    depth + 1,
                 );
 
                 let expect_fst = self.expect_type_assign(
@@ -1917,6 +1944,7 @@ impl<'a> CodeGenerator<'a> {
                     location,
                     expect_snd,
                     otherwise.clone(),
+                    depth + 1,
                 );
 
                 let pair_access = AirTree::pair_access(
@@ -1972,8 +2000,10 @@ impl<'a> CodeGenerator<'a> {
                     let var_then =
                         AirTree::call(AirTree::local_var("then_delayed", void()), void(), vec![]);
 
+                    let otherwise_delayed = AirTree::local_var("otherwise_delayed", void());
+
                     let constr_clauses = data_type.constructors.iter().enumerate().rfold(
-                        otherwise.clone(),
+                        otherwise_delayed.clone(),
                         |acc, (index, constr)| {
                             let mut constr_args = vec![];
 
@@ -1994,7 +2024,8 @@ impl<'a> CodeGenerator<'a> {
                                         defined_data_types,
                                         location,
                                         then,
-                                        otherwise.clone(),
+                                        otherwise_delayed.clone(),
+                                        depth + 1,
                                     )
                                 },
                             );
@@ -2010,7 +2041,7 @@ impl<'a> CodeGenerator<'a> {
                                         tipo.clone(),
                                     ),
                                     constr_then,
-                                    otherwise.clone(),
+                                    otherwise_delayed.clone(),
                                 )
                             } else {
                                 AirTree::fields_expose(
@@ -2024,7 +2055,7 @@ impl<'a> CodeGenerator<'a> {
                                     ),
                                     true,
                                     constr_then,
-                                    otherwise.clone(),
+                                    otherwise_delayed.clone(),
                                 )
                             };
 

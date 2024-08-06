@@ -1212,7 +1212,8 @@ pub fn list_access_to_uplc(
         if name == "_" {
             then
         } else if tipo.is_pair() && is_list_accessor {
-            Term::head_list().apply(Term::var(tail_name.to_string()))
+            then.lambda(name)
+                .apply(Term::head_list().apply(Term::var(tail_name.to_string())))
         } else if matches!(expect_level, ExpectLevel::Full) {
             // Expect level is full so we have an unknown piece of data to cast
             if otherwise_delayed == Term::Error.delay() {
