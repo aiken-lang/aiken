@@ -1,12 +1,14 @@
 {
   "preamble": {
-    "title": "aiken-lang/acceptance_test_script_context",
+    "title": "script_context/v2",
+    "description": "Aiken contracts for project 'script_context/v2'",
     "version": "0.0.0",
     "plutusVersion": "v2",
     "compiler": {
       "name": "Aiken",
-      "version": "v1.0.31-alpha+3aa9eb5"
-    }
+      "version": "v1.0.31-alpha+3cf34da"
+    },
+    "license": "Apache-2.0"
   },
   "validators": [
     {
