@@ -1598,6 +1598,7 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn expect_type_assign(
         &mut self,
         tipo: &Rc<Type>,

@@ -3775,7 +3775,7 @@ fn when_tuple_deconstruction() {
                     otherwise_delay.clone(),
                 );
 
-            let subject_first_constr = Term::equals_integer()
+            Term::equals_integer()
                 .apply(Term::integer(0.into()))
                 .apply(Term::Var(subject.clone()))
                 .delayed_if_then_else(
@@ -3808,9 +3808,7 @@ fn when_tuple_deconstruction() {
                             )
                         }),
                     subject_second_constr,
-                );
-
-            subject_first_constr
+                )
         })
         .lambda("otherwise_delayed")
         .lambda("then_delayed")
@@ -3870,7 +3868,7 @@ fn when_tuple_deconstruction() {
                     otherwise_delay.clone(),
                 );
 
-            let subject_first_constr = Term::equals_integer()
+            Term::equals_integer()
                 .apply(Term::integer(0.into()))
                 .apply(Term::Var(subject.clone()))
                 .delayed_if_then_else(
@@ -3910,9 +3908,7 @@ fn when_tuple_deconstruction() {
                             )
                         }),
                     subject_second_constr,
-                );
-
-            subject_first_constr
+                )
         })
         .lambda("otherwise_delayed")
         .lambda("then_delayed")
@@ -5820,7 +5816,7 @@ fn opaque_value_in_datum() {
             |_| {
                 expect_on_list
                     .as_var(EXPECT_ON_LIST, |_| {
-                        expect_dat.as_var("__expect_Dat_", |expect| Term::Var(expect))
+                        expect_dat.as_var("__expect_Dat_", Term::Var)
                     })
                     .apply(Term::var("dat"))
                     .apply(assignments_body.delay())
