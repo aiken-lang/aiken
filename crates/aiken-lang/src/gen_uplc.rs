@@ -625,7 +625,7 @@ impl<'a> CodeGenerator<'a> {
                 //
                 // if <expr:condition> is <pattern>: <annotation> { <expr:body> }
                 // [(builtin ifThenElse) (condition is pattern) (body) (else) ]
-                a @ TypedExpr::If {
+                TypedExpr::If {
                     branches,
                     final_else,
                     tipo,
