@@ -1,8 +1,8 @@
-# Script Context Tests
+# V2 Script Context Tests
 
-This project contains a few handcrafted validators and transactions whose sole
-purpose is to test the interpretation of the `ScriptContext` from within an
-Aiken's validators.
+This project contains a few handcrafted Plutus V2 validators and transactions
+whose sole purpose is to test the interpretation of the `ScriptContext` from
+within an Aiken's validators.
 
 So validators are meant to work hand-in-hand with an associated context.
 Because we can't have fully static context (since they contain the validator

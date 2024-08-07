@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+TESTS=()
+for lang in $(ls script_context); do
+  for interaction in $(find script_context/$lang/validators -type f); do
+    title=$(basename $interaction)
+    title="${title%.*}"
+    cd script_context/$lang
+    ./test.sh $title &
+    TESTS+=("$title,$lang,$!")
+    cd - 1>/dev/null
+  done
+done
+
+for args in ${TESTS[@]}; do
+  IFS=',' read title lang pid <<< "${args}"
+  wait $pid
+  code=("$?")
+  log="script_context/$lang/$title.log"
+  if [ $code -ne 0 ]; then
+    echo "=== $title ❌ (code=$code)"
+    cat $log && rm -f $log
+    exit $code
+  else
+    echo "=== $title ✅"
+    cat $log && rm -f $log
+  fi
+  echo ""
+done

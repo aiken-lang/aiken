@@ -1,8 +1,0 @@
-name = 'aiken-lang/acceptance_test_script_context'
-version = '0.0.0'
-description = ''
-
-[[dependencies]]
-name = 'aiken-lang/stdlib'
-version = 'main'
-source = 'github'
