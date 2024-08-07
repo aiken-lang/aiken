@@ -2,7 +2,6 @@ use super::air::{Air, ExpectLevel};
 use crate::{
     ast::{BinOp, Curve, Span, UnOp},
     builtins::{bool, byte_array, data, int, list, string, void},
-    gen_uplc::AssignmentProperties,
     tipo::{Type, ValueConstructor, ValueConstructorVariant},
 };
 use indexmap::IndexSet;
