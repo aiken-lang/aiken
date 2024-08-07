@@ -631,7 +631,6 @@ impl<'a> CodeGenerator<'a> {
                     tipo,
                     ..
                 } => {
-                    println!("A: {:#?}", a);
                     branches.iter().rfold(
                         self.build(final_else, module_build_name, &[]),
                         |acc, branch| {
