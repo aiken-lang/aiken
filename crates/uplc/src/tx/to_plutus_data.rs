@@ -1,16 +1,13 @@
+use super::script_context::{ScriptContext, ScriptPurpose, TimeRange, TxInInfo, TxInfo, TxOut};
+use crate::machine::runtime::{convert_constr_to_tag, ANY_TAG};
 use pallas_addresses::{Address, ShelleyDelegationPart, ShelleyPaymentPart, StakePayload};
 use pallas_codec::utils::{AnyUInt, Bytes, Int, KeyValuePairs};
 use pallas_crypto::hash::Hash;
-use pallas_primitives::babbage::{AssetName, BigInt, Constr, Mint, PlutusData, ScriptRef};
-use pallas_primitives::babbage::{
-    Certificate, DatumOption, PseudoScript, Redeemer, StakeCredential, TransactionInput,
-    TransactionOutput, Value,
+use pallas_primitives::conway::{
+    AssetName, BigInt, Certificate, Constr, DatumOption, Mint, PlutusData, PseudoScript, Redeemer,
+    ScriptRef, StakeCredential, TransactionInput, TransactionOutput, Value,
 };
 use pallas_traverse::ComputeHash;
-
-use crate::machine::runtime::{convert_constr_to_tag, ANY_TAG};
-
-use super::script_context::{ScriptContext, ScriptPurpose, TimeRange, TxInInfo, TxInfo, TxOut};
 
 fn wrap_with_constr(index: u64, data: PlutusData) -> PlutusData {
     let converted = convert_constr_to_tag(index);
@@ -235,7 +232,8 @@ impl ToPlutusData for Value {
                 for (policy_id, assets) in multiassets.iter() {
                     let mut assets_vec = vec![];
                     for (asset, amount) in assets.iter() {
-                        assets_vec.push((asset.to_plutus_data(), amount.to_plutus_data()));
+                        assets_vec
+                            .push((asset.to_plutus_data(), u64::from(amount).to_plutus_data()));
                     }
                     data_vec.push((
                         policy_id.to_plutus_data(),
@@ -262,7 +260,7 @@ impl ToPlutusData for MintValue {
         for (policy_id, assets) in self.mint_value.iter() {
             let mut assets_vec = vec![];
             for (asset, amount) in assets.iter() {
-                assets_vec.push((asset.to_plutus_data(), amount.to_plutus_data()));
+                assets_vec.push((asset.to_plutus_data(), i64::from(amount).to_plutus_data()));
             }
             data_vec.push((
                 policy_id.to_plutus_data(),
@@ -282,6 +280,7 @@ impl ToPlutusData for ScriptRef {
             }
             PseudoScript::PlutusV1Script(plutus_v1) => plutus_v1.compute_hash().to_plutus_data(),
             PseudoScript::PlutusV2Script(plutus_v2) => plutus_v2.compute_hash().to_plutus_data(),
+            PseudoScript::PlutusV3Script(plutus_v3) => plutus_v3.compute_hash().to_plutus_data(),
         }
     }
 }
@@ -290,16 +289,17 @@ impl ToPlutusData for TxOut {
     fn to_plutus_data(&self) -> PlutusData {
         match self {
             TxOut::V1(output) => match output {
-                TransactionOutput::Legacy(legacy_output) => wrap_multiple_with_constr(
-                    0,
-                    vec![
-                        Address::from_bytes(&legacy_output.address)
-                            .unwrap()
-                            .to_plutus_data(),
-                        legacy_output.amount.to_plutus_data(),
-                        legacy_output.datum_hash.to_plutus_data(),
-                    ],
-                ),
+                // TransactionOutput::Legacy(legacy_output) => wrap_multiple_with_constr(
+                //     0,
+                //     vec![
+                //         Address::from_bytes(&legacy_output.address)
+                //             .unwrap()
+                //             .to_plutus_data(),
+                //         legacy_output.amount.to_plutus_data(),
+                //         legacy_output.datum_hash.to_plutus_data(),
+                //     ],
+                // ),
+                TransactionOutput::Legacy(..) => todo!("TransactionOutput::Legacy"),
                 TransactionOutput::PostAlonzo(post_alonzo_output) => wrap_multiple_with_constr(
                     0,
                     vec![
@@ -315,20 +315,21 @@ impl ToPlutusData for TxOut {
                 ),
             },
             TxOut::V2(output) => match output {
-                TransactionOutput::Legacy(legacy_output) => wrap_multiple_with_constr(
-                    0,
-                    vec![
-                        Address::from_bytes(&legacy_output.address)
-                            .unwrap()
-                            .to_plutus_data(),
-                        legacy_output.amount.to_plutus_data(),
-                        match legacy_output.datum_hash {
-                            Some(hash) => wrap_with_constr(1, hash.to_plutus_data()),
-                            _ => empty_constr(0),
-                        },
-                        None::<ScriptRef>.to_plutus_data(),
-                    ],
-                ),
+                // TransactionOutput::Legacy(legacy_output) => wrap_multiple_with_constr(
+                //     0,
+                //     vec![
+                //         Address::from_bytes(&legacy_output.address)
+                //             .unwrap()
+                //             .to_plutus_data(),
+                //         legacy_output.amount.to_plutus_data(),
+                //         match legacy_output.datum_hash {
+                //             Some(hash) => wrap_with_constr(1, hash.to_plutus_data()),
+                //             _ => empty_constr(0),
+                //         },
+                //         None::<ScriptRef>.to_plutus_data(),
+                //     ],
+                // ),
+                TransactionOutput::Legacy(..) => todo!("TransactionOutput::Legacy"),
                 TransactionOutput::PostAlonzo(post_alonzo_output) => wrap_multiple_with_constr(
                     0,
                     vec![
@@ -401,8 +402,18 @@ impl ToPlutusData for Certificate {
                 4,
                 vec![pool_keyhash.to_plutus_data(), epoch.to_plutus_data()],
             ),
-            Certificate::GenesisKeyDelegation(_, _, _) => empty_constr(5),
-            Certificate::MoveInstantaneousRewardsCert(_) => empty_constr(6),
+            _ => todo!("other certificates"), // Reg(StakeCredential, Coin),
+                                              // UnReg(StakeCredential, Coin),
+                                              // VoteDeleg(StakeCredential, DRep),
+                                              // StakeVoteDeleg(StakeCredential, PoolKeyhash, DRep),
+                                              // StakeRegDeleg(StakeCredential, PoolKeyhash, Coin),
+                                              // VoteRegDeleg(StakeCredential, DRep, Coin),
+                                              // StakeVoteRegDeleg(StakeCredential, PoolKeyhash, DRep, Coin),
+                                              // AuthCommitteeHot(CommitteeColdCredential, CommitteeHotCredential),
+                                              // ResignCommitteeCold(CommitteeColdCredential, Nullable<Anchor>),
+                                              // RegDRepCert(DRepCredential, Coin, Nullable<Anchor>),
+                                              // UnRegDRepCert(DRepCredential, Coin),
+                                              // UpdateDRepCert(StakeCredential, Nullable<Anchor>),
         }
     }
 }

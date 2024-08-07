@@ -1,46 +1,24 @@
 use super::{
-    script_context::{
-        ResolvedInput, ScriptContext, ScriptPurpose, SlotConfig, TimeRange, TxInInfo, TxInfo,
-        TxInfoV1, TxInfoV2, TxOut,
-    },
-    to_plutus_data::{MintValue, ToPlutusData},
+    script_context::{ResolvedInput, ScriptContext, ScriptPurpose, SlotConfig, TxInfo},
+    to_plutus_data::ToPlutusData,
     Error,
 };
 use crate::{
     ast::{FakeNamedDeBruijn, NamedDeBruijn, Program},
     machine::cost_model::ExBudget,
+    tx::script_context::{TxInfoV1, TxInfoV2, TxInfoV3},
     PlutusData,
 };
-use itertools::Itertools;
 use pallas_addresses::{Address, ScriptHash, StakePayload};
-use pallas_codec::utils::{KeyValuePairs, MaybeIndefArray};
+use pallas_codec::utils::{Bytes, NonEmptyKeyValuePairs, NonEmptySet};
 use pallas_crypto::hash::Hash;
-use pallas_primitives::{
-    babbage::{
-        Certificate, CostMdls, DatumHash, DatumOption, ExUnits, Mint, MintedTx, NativeScript,
-        PlutusV1Script, PlutusV2Script, PolicyId, PseudoScript, Redeemer, RedeemerTag,
-        RewardAccount, StakeCredential, TransactionInput, TransactionOutput, Value, Withdrawals,
-    },
-    conway::Language,
+use pallas_primitives::conway::{
+    Certificate, CostMdls, CostModel, DatumHash, DatumOption, ExUnits, Language, Mint, MintedTx,
+    NativeScript, PlutusV1Script, PlutusV2Script, PlutusV3Script, PolicyId, PseudoScript, Redeemer,
+    RedeemerTag, RewardAccount, StakeCredential, TransactionInput, TransactionOutput, Withdrawals,
 };
 use pallas_traverse::{ComputeHash, OriginalHash};
-use std::{cmp::Ordering, collections::HashMap, convert::TryInto, ops::Deref, vec};
-
-pub fn slot_to_begin_posix_time(slot: u64, sc: &SlotConfig) -> u64 {
-    let ms_after_begin = (slot - sc.zero_slot) * sc.slot_length as u64;
-    sc.zero_time + ms_after_begin
-}
-
-fn slot_range_to_posix_time_range(slot_range: TimeRange, sc: &SlotConfig) -> TimeRange {
-    TimeRange {
-        lower_bound: slot_range
-            .lower_bound
-            .map(|lower_bound| slot_to_begin_posix_time(lower_bound, sc)),
-        upper_bound: slot_range
-            .upper_bound
-            .map(|upper_bound| slot_to_begin_posix_time(upper_bound, sc)),
-    }
-}
+use std::{collections::HashMap, convert::TryInto, vec};
 
 fn redeemer_tag_to_string(redeemer_tag: &RedeemerTag) -> String {
     match redeemer_tag {
@@ -48,54 +26,7 @@ fn redeemer_tag_to_string(redeemer_tag: &RedeemerTag) -> String {
         RedeemerTag::Mint => "Mint".to_string(),
         RedeemerTag::Cert => "Cert".to_string(),
         RedeemerTag::Reward => "Reward".to_string(),
-    }
-}
-
-fn sort_mint(mint: &Mint) -> Mint {
-    let mut mint_vec = vec![];
-
-    for m in mint.deref().iter().sorted() {
-        mint_vec.push((
-            m.0,
-            KeyValuePairs::Indef(m.1.deref().clone().into_iter().sorted().clone().collect()),
-        ));
-    }
-
-    KeyValuePairs::Indef(mint_vec)
-}
-
-fn sort_value(value: &Value) -> Value {
-    match value {
-        Value::Coin(_) => value.clone(),
-        Value::Multiasset(coin, ma) => {
-            let mut ma_vec = vec![];
-
-            for m in ma.deref().iter().sorted() {
-                ma_vec.push((
-                    m.0,
-                    KeyValuePairs::Indef(
-                        m.1.deref().clone().into_iter().sorted().clone().collect(),
-                    ),
-                ));
-            }
-
-            Value::Multiasset(*coin, KeyValuePairs::Indef(ma_vec))
-        }
-    }
-}
-
-fn sort_tx_out_value(tx_output: &TransactionOutput) -> TransactionOutput {
-    match tx_output {
-        TransactionOutput::Legacy(output) => {
-            let mut new_output = output.clone();
-            new_output.amount = sort_value(&output.amount);
-            TransactionOutput::Legacy(new_output)
-        }
-        TransactionOutput::PostAlonzo(output) => {
-            let mut new_output = output.clone();
-            new_output.value = sort_value(&output.value);
-            TransactionOutput::PostAlonzo(new_output)
-        }
+        tag => todo!("redeemer_tag_to_string for {tag:?}"),
     }
 }
 
@@ -104,6 +35,7 @@ pub enum ScriptVersion {
     Native(NativeScript),
     V1(PlutusV1Script),
     V2(PlutusV2Script),
+    V3(PlutusV3Script),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -123,107 +55,22 @@ impl DataLookupTable {
     }
 }
 
-pub fn get_tx_in_info_v1(
-    inputs: &[TransactionInput],
-    utxos: &[ResolvedInput],
-) -> Result<Vec<TxInInfo>, Error> {
-    inputs
-        .iter()
-        .sorted()
-        .map(|input| {
-            let utxo = match utxos.iter().find(|utxo| utxo.input == *input) {
-                Some(resolved) => resolved,
-                None => return Err(Error::ResolvedInputNotFound(input.clone())),
-            };
-            let address = Address::from_bytes(match &utxo.output {
-                TransactionOutput::Legacy(output) => output.address.as_ref(),
-                TransactionOutput::PostAlonzo(output) => output.address.as_ref(),
-            })
-            .unwrap();
-
-            match address {
-                Address::Byron(_) => {
-                    return Err(Error::ByronAddressNotAllowed);
-                }
-                Address::Stake(_) => {
-                    return Err(Error::NoPaymentCredential);
-                }
-                _ => {}
-            };
-
-            match &utxo.output {
-                TransactionOutput::Legacy(_) => {}
-                TransactionOutput::PostAlonzo(output) => {
-                    if let Some(DatumOption::Data(_)) = output.datum_option {
-                        return Err(Error::InlineDatumNotAllowed);
-                    }
-
-                    if output.script_ref.is_some() {
-                        return Err(Error::ScriptAndInputRefNotAllowed);
-                    }
-                }
-            }
-
-            Ok(TxInInfo {
-                out_ref: utxo.input.clone(),
-                resolved: TxOut::V1(sort_tx_out_value(&utxo.output)),
-            })
-        })
-        .collect()
-}
-
-fn get_tx_in_info_v2(
-    inputs: &[TransactionInput],
-    utxos: &[ResolvedInput],
-) -> Result<Vec<TxInInfo>, Error> {
-    inputs
-        .iter()
-        .sorted()
-        .map(|input| {
-            let utxo = match utxos.iter().find(|utxo| utxo.input == *input) {
-                Some(resolved) => resolved,
-                None => return Err(Error::ResolvedInputNotFound(input.clone())),
-            };
-            let address = Address::from_bytes(match &utxo.output {
-                TransactionOutput::Legacy(output) => output.address.as_ref(),
-                TransactionOutput::PostAlonzo(output) => output.address.as_ref(),
-            })
-            .unwrap();
-
-            match address {
-                Address::Byron(_) => {
-                    return Err(Error::ByronAddressNotAllowed);
-                }
-                Address::Stake(_) => {
-                    return Err(Error::NoPaymentCredential);
-                }
-                _ => {}
-            };
-
-            Ok(TxInInfo {
-                out_ref: utxo.input.clone(),
-                resolved: TxOut::V2(sort_tx_out_value(&utxo.output)),
-            })
-        })
-        .collect()
-}
-
 fn get_script_purpose(
     redeemer: &Redeemer,
     inputs: &[TransactionInput],
     mint: &Option<Mint>,
-    dcert: &Option<Vec<Certificate>>,
+    dcert: &Option<NonEmptySet<Certificate>>,
     wdrl: &Option<Withdrawals>,
 ) -> Result<ScriptPurpose, Error> {
     // sorting according to specs section 4.1: https://hydra.iohk.io/build/18583827/download/1/alonzo-changes.pdf
-    let tag = redeemer.tag.clone();
+    let tag = redeemer.tag;
     let index = redeemer.index;
     match tag {
         RedeemerTag::Mint => {
             // sort lexical by policy id
             let mut policy_ids = mint
                 .as_ref()
-                .unwrap_or(&KeyValuePairs::Indef(vec![]))
+                .unwrap_or(&NonEmptyKeyValuePairs::Indef(vec![]))
                 .iter()
                 .map(|(policy_id, _)| *policy_id)
                 .collect::<Vec<PolicyId>>();
@@ -246,7 +93,7 @@ fn get_script_purpose(
             // sort lexical by reward account
             let mut reward_accounts = wdrl
                 .as_ref()
-                .unwrap_or(&KeyValuePairs::Indef(vec![]))
+                .unwrap_or(&NonEmptyKeyValuePairs::Indef(vec![]))
                 .iter()
                 .map(|(racnt, _)| racnt.clone())
                 .collect::<Vec<RewardAccount>>();
@@ -269,213 +116,13 @@ fn get_script_purpose(
         }
         RedeemerTag::Cert => {
             // sort by order given in the tx (just take it as it is basically)
-            match dcert
-                .as_ref()
-                .unwrap_or(&MaybeIndefArray::Indef(vec![]))
-                .get(index as usize)
-            {
+            match dcert.as_deref().unwrap_or(&vec![]).get(index as usize) {
                 Some(cert) => Ok(ScriptPurpose::Certifying(cert.clone())),
                 None => Err(Error::ExtraneousRedeemer),
             }
         }
+        tag => todo!("get_script_purpose for {tag:?}"),
     }
-}
-
-fn get_tx_info_v1(
-    tx: &MintedTx,
-    utxos: &[ResolvedInput],
-    slot_config: &SlotConfig,
-) -> Result<TxInfo, Error> {
-    let body = tx.transaction_body.clone();
-
-    if body.reference_inputs.is_some() {
-        return Err(Error::ScriptAndInputRefNotAllowed);
-    }
-
-    let inputs = get_tx_in_info_v1(&body.inputs, utxos)?;
-
-    let outputs = body
-        .outputs
-        .iter()
-        .cloned()
-        .map(|output| TxOut::V1(sort_tx_out_value(&output.into())))
-        .collect();
-
-    let fee = Value::Coin(body.fee);
-
-    let mint = sort_mint(&body.mint.clone().unwrap_or(KeyValuePairs::Indef(vec![])));
-
-    let dcert = body.certificates.clone().unwrap_or_default();
-
-    let wdrl = body
-        .withdrawals
-        .clone()
-        .unwrap_or(KeyValuePairs::Indef(vec![]))
-        .deref()
-        .clone()
-        .into_iter()
-        .sorted()
-        .map(|(reward_account, coin)| (Address::from_bytes(&reward_account).unwrap(), coin))
-        .collect_vec();
-
-    let valid_range = slot_range_to_posix_time_range(
-        TimeRange {
-            lower_bound: body.validity_interval_start,
-            upper_bound: body.ttl,
-        },
-        slot_config,
-    );
-
-    let signatories = body
-        .required_signers
-        .clone()
-        .unwrap_or_default()
-        .into_iter()
-        .sorted()
-        .collect();
-
-    let data = tx
-        .transaction_witness_set
-        .plutus_data
-        .as_ref()
-        .unwrap_or(&vec![])
-        .iter()
-        .map(|d| (d.original_hash(), d.clone().unwrap()))
-        .sorted()
-        .collect();
-
-    let id = tx.transaction_body.original_hash();
-
-    Ok(TxInfo::V1(TxInfoV1 {
-        inputs,
-        outputs,
-        fee,
-        mint: MintValue { mint_value: mint },
-        dcert,
-        wdrl,
-        valid_range,
-        signatories,
-        data,
-        id,
-    }))
-}
-
-fn get_tx_info_v2(
-    tx: &MintedTx,
-    utxos: &[ResolvedInput],
-    slot_config: &SlotConfig,
-) -> Result<TxInfo, Error> {
-    let body = tx.transaction_body.clone();
-
-    let inputs = get_tx_in_info_v2(&body.inputs, utxos)?;
-
-    let reference_inputs =
-        get_tx_in_info_v2(&body.reference_inputs.clone().unwrap_or_default(), utxos)?;
-
-    let outputs = body
-        .outputs
-        .iter()
-        .cloned()
-        .map(|output| TxOut::V2(sort_tx_out_value(&output.into())))
-        .collect();
-
-    let fee = Value::Coin(body.fee);
-
-    let mint = sort_mint(&body.mint.clone().unwrap_or(KeyValuePairs::Indef(vec![])));
-
-    let dcert = body.certificates.clone().unwrap_or_default();
-
-    let wdrl = KeyValuePairs::Indef(
-        body.withdrawals
-            .clone()
-            .unwrap_or(KeyValuePairs::Indef(vec![]))
-            .deref()
-            .clone()
-            .into_iter()
-            .sorted()
-            .map(|(reward_account, coin)| (Address::from_bytes(&reward_account).unwrap(), coin))
-            .collect(),
-    );
-
-    let valid_range = slot_range_to_posix_time_range(
-        TimeRange {
-            lower_bound: body.validity_interval_start,
-            upper_bound: body.ttl,
-        },
-        slot_config,
-    );
-
-    let signatories = body
-        .required_signers
-        .clone()
-        .unwrap_or_default()
-        .into_iter()
-        .sorted()
-        .collect();
-
-    let redeemers = KeyValuePairs::Indef(
-        tx.transaction_witness_set
-            .redeemer
-            .as_ref()
-            .unwrap_or(&MaybeIndefArray::Indef(vec![]))
-            .iter()
-            .sorted_by(|a, b| -> Ordering {
-                if a.tag == b.tag {
-                    a.index.cmp(&b.index)
-                } else {
-                    match (&a.tag, &b.tag) {
-                        (RedeemerTag::Spend, _) => Ordering::Greater,
-                        (RedeemerTag::Mint, RedeemerTag::Spend) => Ordering::Less,
-                        (RedeemerTag::Mint, _) => Ordering::Greater,
-                        (RedeemerTag::Cert, RedeemerTag::Reward) => Ordering::Greater,
-                        (RedeemerTag::Cert, _) => Ordering::Less,
-                        (RedeemerTag::Reward, _) => Ordering::Less,
-                    }
-                }
-            })
-            .map(|r| {
-                (
-                    get_script_purpose(
-                        r,
-                        &tx.transaction_body.inputs,
-                        &tx.transaction_body.mint,
-                        &tx.transaction_body.certificates,
-                        &tx.transaction_body.withdrawals,
-                    )
-                    .unwrap(),
-                    r.clone(),
-                )
-            })
-            .collect(),
-    );
-
-    let data = KeyValuePairs::Indef(
-        tx.transaction_witness_set
-            .plutus_data
-            .as_ref()
-            .unwrap_or(&vec![])
-            .iter()
-            .map(|d| (d.original_hash(), d.clone().unwrap()))
-            .sorted()
-            .collect(),
-    );
-
-    let id = tx.transaction_body.original_hash();
-
-    Ok(TxInfo::V2(TxInfoV2 {
-        inputs,
-        reference_inputs,
-        outputs,
-        fee,
-        mint: MintValue { mint_value: mint },
-        dcert,
-        wdrl,
-        valid_range,
-        signatories,
-        redeemers,
-        data,
-        id,
-    }))
 }
 
 fn get_execution_purpose(
@@ -643,24 +290,35 @@ pub fn get_script_and_datum_lookup_table(
         .transaction_witness_set
         .plutus_data
         .clone()
+        .map(|s| s.to_vec())
         .unwrap_or_default();
 
     let scripts_native_witnesses = tx
         .transaction_witness_set
         .native_script
         .clone()
+        .map(|s| s.to_vec())
         .unwrap_or_default();
 
     let scripts_v1_witnesses = tx
         .transaction_witness_set
         .plutus_v1_script
         .clone()
+        .map(|s| s.to_vec())
         .unwrap_or_default();
 
     let scripts_v2_witnesses = tx
         .transaction_witness_set
         .plutus_v2_script
         .clone()
+        .map(|s| s.to_vec())
+        .unwrap_or_default();
+
+    let scripts_v3_witnesses = tx
+        .transaction_witness_set
+        .plutus_v3_script
+        .clone()
+        .map(|s| s.to_vec())
         .unwrap_or_default();
 
     for plutus_data in plutus_data_witnesses.iter() {
@@ -682,6 +340,10 @@ pub fn get_script_and_datum_lookup_table(
         scripts.insert(script.compute_hash(), ScriptVersion::V2(script.clone()));
     }
 
+    for script in scripts_v3_witnesses.iter() {
+        scripts.insert(script.compute_hash(), ScriptVersion::V3(script.clone()));
+    }
+
     // discovery in utxos (script ref)
 
     for utxo in utxos.iter() {
@@ -699,6 +361,9 @@ pub fn get_script_and_datum_lookup_table(
                         PseudoScript::PlutusV2Script(v2) => {
                             scripts.insert(v2.compute_hash(), ScriptVersion::V2(v2.clone()));
                         }
+                        PseudoScript::PlutusV3Script(v3) => {
+                            scripts.insert(v3.compute_hash(), ScriptVersion::V3(v3.clone()));
+                        }
                     }
                 }
             }
@@ -706,6 +371,49 @@ pub fn get_script_and_datum_lookup_table(
     }
 
     DataLookupTable { datum, scripts }
+}
+
+fn mk_redeemer_with_datum(
+    cost_mdl_opt: Option<&CostModel>,
+    initial_budget: &ExBudget,
+    lang: &Language,
+    datum: PlutusData,
+    (redeemer, purpose): (&Redeemer, ScriptPurpose),
+    tx_info: TxInfo,
+    program: Program<NamedDeBruijn>,
+) -> Result<Redeemer, Error> {
+    let script_context = ScriptContext { tx_info, purpose };
+
+    let program = program
+        .apply_data(datum)
+        .apply_data(redeemer.data.clone())
+        .apply_data(script_context.to_plutus_data());
+
+    let mut eval_result = if let Some(costs) = cost_mdl_opt {
+        program.eval_as(lang, costs, Some(initial_budget))
+    } else {
+        program.eval_version(ExBudget::default(), lang)
+    };
+
+    let cost = eval_result.cost();
+    let logs = eval_result.logs();
+
+    match eval_result.result() {
+        Ok(_) => (),
+        Err(err) => return Err(Error::Machine(err, cost, logs)),
+    }
+
+    let new_redeemer = Redeemer {
+        tag: redeemer.tag,
+        index: redeemer.index,
+        data: redeemer.data.clone(),
+        ex_units: ExUnits {
+            mem: cost.mem as u64,
+            steps: cost.cpu as u64,
+        },
+    };
+
+    Ok(new_redeemer)
 }
 
 pub fn eval_redeemer(
@@ -726,114 +434,73 @@ pub fn eval_redeemer(
             &tx.transaction_body.withdrawals,
         )?;
 
+        let program = |script: Bytes| {
+            let mut buffer = Vec::new();
+            Program::<FakeNamedDeBruijn>::from_cbor(&script, &mut buffer)
+                .map(Into::<Program<NamedDeBruijn>>::into)
+        };
+
         let execution_purpose: ExecutionPurpose =
             get_execution_purpose(utxos, &purpose, lookup_table)?;
 
         match execution_purpose {
             ExecutionPurpose::WithDatum(script_version, datum) => match script_version {
-                ScriptVersion::V1(script) => {
-                    let tx_info = get_tx_info_v1(tx, utxos, slot_config)?;
-                    let script_context = ScriptContext { tx_info, purpose };
+                ScriptVersion::V1(script) => mk_redeemer_with_datum(
+                    cost_mdls_opt
+                        .map(|cost_mdls| {
+                            cost_mdls
+                                .plutus_v1
+                                .as_ref()
+                                .ok_or(Error::CostModelNotFound(Language::PlutusV1))
+                        })
+                        .transpose()?,
+                    initial_budget,
+                    &Language::PlutusV1,
+                    datum,
+                    (redeemer, purpose),
+                    TxInfoV1::from_transaction(tx, utxos, slot_config)?,
+                    program(script.0)?,
+                ),
 
-                    let program: Program<NamedDeBruijn> = {
-                        let mut buffer = Vec::new();
+                ScriptVersion::V2(script) => mk_redeemer_with_datum(
+                    cost_mdls_opt
+                        .map(|cost_mdls| {
+                            cost_mdls
+                                .plutus_v2
+                                .as_ref()
+                                .ok_or(Error::CostModelNotFound(Language::PlutusV2))
+                        })
+                        .transpose()?,
+                    initial_budget,
+                    &Language::PlutusV2,
+                    datum,
+                    (redeemer, purpose),
+                    TxInfoV2::from_transaction(tx, utxos, slot_config)?,
+                    program(script.0)?,
+                ),
 
-                        let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
+                ScriptVersion::V3(script) => mk_redeemer_with_datum(
+                    cost_mdls_opt
+                        .map(|cost_mdls| {
+                            cost_mdls
+                                .plutus_v3
+                                .as_ref()
+                                .ok_or(Error::CostModelNotFound(Language::PlutusV3))
+                        })
+                        .transpose()?,
+                    initial_budget,
+                    &Language::PlutusV2,
+                    datum,
+                    (redeemer, purpose),
+                    TxInfoV3::from_transaction(tx, utxos, slot_config)?,
+                    program(script.0)?,
+                ),
 
-                        prog.into()
-                    };
-
-                    let program = program
-                        .apply_data(datum)
-                        .apply_data(redeemer.data.clone())
-                        .apply_data(script_context.to_plutus_data());
-
-                    let mut eval_result = if let Some(cost_mdls) = cost_mdls_opt {
-                        let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
-                            costs
-                        } else {
-                            return Err(Error::V1CostModelNotFound);
-                        };
-
-                        program.eval_as(&Language::PlutusV1, costs, Some(initial_budget))
-                    } else {
-                        program.eval_version(ExBudget::default(), &Language::PlutusV1)
-                    };
-
-                    let cost = eval_result.cost();
-                    let logs = eval_result.logs();
-
-                    match eval_result.result() {
-                        Ok(_) => (),
-                        Err(err) => return Err(Error::Machine(err, cost, logs)),
-                    }
-
-                    let new_redeemer = Redeemer {
-                        tag: redeemer.tag.clone(),
-                        index: redeemer.index,
-                        data: redeemer.data.clone(),
-                        ex_units: ExUnits {
-                            mem: cost.mem as u32,
-                            steps: cost.cpu as u64,
-                        },
-                    };
-
-                    Ok(new_redeemer)
-                }
-                ScriptVersion::V2(script) => {
-                    let tx_info = get_tx_info_v2(tx, utxos, slot_config)?;
-                    let script_context = ScriptContext { tx_info, purpose };
-
-                    let program: Program<NamedDeBruijn> = {
-                        let mut buffer = Vec::new();
-
-                        let prog = Program::<FakeNamedDeBruijn>::from_cbor(&script.0, &mut buffer)?;
-
-                        prog.into()
-                    };
-
-                    let program = program
-                        .apply_data(datum)
-                        .apply_data(redeemer.data.clone())
-                        .apply_data(script_context.to_plutus_data());
-
-                    let mut eval_result = if let Some(cost_mdls) = cost_mdls_opt {
-                        let costs = if let Some(costs) = &cost_mdls.plutus_v2 {
-                            costs
-                        } else {
-                            return Err(Error::V2CostModelNotFound);
-                        };
-
-                        program.eval_as(&Language::PlutusV2, costs, Some(initial_budget))
-                    } else {
-                        program.eval(ExBudget::default())
-                    };
-
-                    let cost = eval_result.cost();
-                    let logs = eval_result.logs();
-
-                    match eval_result.result() {
-                        Ok(_) => (),
-                        Err(err) => return Err(Error::Machine(err, cost, logs)),
-                    }
-
-                    let new_redeemer = Redeemer {
-                        tag: redeemer.tag.clone(),
-                        index: redeemer.index,
-                        data: redeemer.data.clone(),
-                        ex_units: ExUnits {
-                            mem: cost.mem as u32,
-                            steps: cost.cpu as u64,
-                        },
-                    };
-
-                    Ok(new_redeemer)
-                }
                 ScriptVersion::Native(_) => Err(Error::NativeScriptPhaseTwo),
             },
             ExecutionPurpose::NoDatum(script_version) => match script_version {
                 ScriptVersion::V1(script) => {
-                    let tx_info = get_tx_info_v1(tx, utxos, slot_config)?;
+                    let tx_info = TxInfoV1::from_transaction(tx, utxos, slot_config)?;
                     let script_context = ScriptContext { tx_info, purpose };
 
                     let program: Program<NamedDeBruijn> = {
@@ -852,7 +519,7 @@ pub fn eval_redeemer(
                         let costs = if let Some(costs) = &cost_mdls.plutus_v1 {
                             costs
                         } else {
-                            return Err(Error::V1CostModelNotFound);
+                            return Err(Error::CostModelNotFound(Language::PlutusV1));
                         };
 
                         program.eval_as(&Language::PlutusV1, costs, Some(initial_budget))
@@ -869,11 +536,11 @@ pub fn eval_redeemer(
                     }
 
                     let new_redeemer = Redeemer {
-                        tag: redeemer.tag.clone(),
+                        tag: redeemer.tag,
                         index: redeemer.index,
                         data: redeemer.data.clone(),
                         ex_units: ExUnits {
-                            mem: cost.mem as u32,
+                            mem: cost.mem as u64,
                             steps: cost.cpu as u64,
                         },
                     };
@@ -881,7 +548,7 @@ pub fn eval_redeemer(
                     Ok(new_redeemer)
                 }
                 ScriptVersion::V2(script) => {
-                    let tx_info = get_tx_info_v2(tx, utxos, slot_config)?;
+                    let tx_info = TxInfoV2::from_transaction(tx, utxos, slot_config)?;
                     let script_context = ScriptContext { tx_info, purpose };
 
                     let program: Program<NamedDeBruijn> = {
@@ -900,7 +567,7 @@ pub fn eval_redeemer(
                         let costs = if let Some(costs) = &cost_mdls.plutus_v2 {
                             costs
                         } else {
-                            return Err(Error::V2CostModelNotFound);
+                            return Err(Error::CostModelNotFound(Language::PlutusV2));
                         };
 
                         program.eval_as(&Language::PlutusV2, costs, Some(initial_budget))
@@ -917,17 +584,18 @@ pub fn eval_redeemer(
                     }
 
                     let new_redeemer = Redeemer {
-                        tag: redeemer.tag.clone(),
+                        tag: redeemer.tag,
                         index: redeemer.index,
                         data: redeemer.data.clone(),
                         ex_units: ExUnits {
-                            mem: cost.mem as u32,
+                            mem: cost.mem as u64,
                             steps: cost.cpu as u64,
                         },
                     };
 
                     Ok(new_redeemer)
                 }
+                ScriptVersion::V3(_script) => todo!(),
                 ScriptVersion::Native(_) => Err(Error::NativeScriptPhaseTwo),
             },
         }
