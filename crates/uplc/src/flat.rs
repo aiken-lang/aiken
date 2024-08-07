@@ -1,13 +1,3 @@
-use num_bigint::BigInt;
-use pallas_codec::flat::{
-    de::{self, Decode, Decoder},
-    en::{self, Encode, Encoder},
-    Flat,
-};
-use pallas_primitives::{babbage::PlutusData, Fragment};
-
-use std::{collections::VecDeque, fmt::Debug, rc::Rc};
-
 use crate::{
     ast::{
         Constant, DeBruijn, FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term, Type, Unique,
@@ -15,6 +5,14 @@ use crate::{
     builtins::DefaultFunction,
     machine::runtime::Compressable,
 };
+use num_bigint::BigInt;
+use pallas_codec::flat::{
+    de::{self, Decode, Decoder},
+    en::{self, Encode, Encoder},
+    Flat,
+};
+use pallas_primitives::{conway::PlutusData, Fragment};
+use std::{collections::VecDeque, fmt::Debug, rc::Rc};
 
 const BUILTIN_TAG_WIDTH: u32 = 7;
 const CONST_TAG_WIDTH: u32 = 4;

@@ -1,20 +1,17 @@
-use pallas_primitives::{
-    babbage::{CostMdls, MintedTx, Redeemer, TransactionInput, TransactionOutput},
-    Fragment,
-};
-use pallas_traverse::{Era, MultiEraTx};
-
-use error::Error;
-pub use phase_one::eval_phase_one;
-pub use script_context::{ResolvedInput, SlotConfig};
-
 use crate::{
     ast::{DeBruijn, Program},
     machine::cost_model::ExBudget,
     PlutusData,
 };
-
+use error::Error;
 use eval::get_script_and_datum_lookup_table;
+use pallas_primitives::{
+    conway::{CostMdls, MintedTx, Redeemer, TransactionInput, TransactionOutput},
+    Fragment,
+};
+use pallas_traverse::{Era, MultiEraTx};
+pub use phase_one::eval_phase_one;
+pub use script_context::{ResolvedInput, SlotConfig};
 
 pub mod error;
 pub mod eval;
@@ -53,14 +50,21 @@ pub fn eval_phase_two(
 
             let mut remaining_budget = *initial_budget.unwrap_or(&ExBudget::default());
 
-            for redeemer in rs.iter() {
-                with_redeemer(redeemer);
+            for (redeemer_key, redeemer_value) in rs.iter() {
+                let redeemer = Redeemer {
+                    tag: redeemer_key.tag,
+                    index: redeemer_key.index,
+                    data: redeemer_value.data.clone(),
+                    ex_units: redeemer_value.ex_units,
+                };
+
+                with_redeemer(&redeemer);
 
                 let redeemer = eval::eval_redeemer(
                     tx,
                     utxos,
                     slot_config,
-                    redeemer,
+                    &redeemer,
                     &lookup_table,
                     cost_mdls,
                     &remaining_budget,
@@ -119,7 +123,10 @@ pub fn eval_phase_two_raw(
     };
 
     match multi_era_tx {
-        MultiEraTx::Babbage(tx) => {
+        MultiEraTx::Babbage(_) => {
+            todo!("convert Babbage's tx into Conway's")
+        }
+        MultiEraTx::Conway(tx) => {
             match eval_phase_two(
                 &tx,
                 &utxos,
@@ -136,15 +143,7 @@ pub fn eval_phase_two_raw(
                 Err(err) => Err(err),
             }
         }
-        // MultiEraTx::AlonzoCompatible(tx, _) => match eval_tx(&tx, &utxos, &sc) {
-        //     Ok(redeemers) => Ok(redeemers
-        //         .iter()
-        //         .map(|r| r.encode_fragment().unwrap())
-        //         .collect()),
-        //     Err(_) => Err(()),
-        // },
-        // TODO: I probably did a mistake here with using MintedTx which is only compatible with Babbage tx.
-        _ => todo!("Wrong era. Please use babbage"),
+        _ => todo!("Wrong era. Please use a more recent transaction format"),
     }
 }
 

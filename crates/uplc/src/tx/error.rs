@@ -2,6 +2,7 @@ use crate::{
     machine::{self, cost_model::ExBudget},
     TransactionInput,
 };
+use pallas_primitives::conway::Language;
 
 #[derive(thiserror::Error, Debug, miette::Diagnostic)]
 pub enum Error {
@@ -30,10 +31,8 @@ pub enum Error {
     ResolvedInputNotFound(TransactionInput),
     #[error("A key hash cannot be the hash of a script.")]
     ScriptKeyHash,
-    #[error("PlutusV1 cost model not found.")]
-    V1CostModelNotFound,
-    #[error("PlutusV2 cost model not found.")]
-    V2CostModelNotFound,
+    #[error("Cost model not found for language: {:?}.", .0)]
+    CostModelNotFound(Language),
     #[error("Wrong era, Please use Babbage or Alonzo: {0}")]
     WrongEra(#[from] pallas_codec::minicbor::decode::Error),
     #[error("Byron address not allowed in Plutus.")]
