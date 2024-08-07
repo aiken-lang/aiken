@@ -947,6 +947,8 @@ pub fn softcast_data_to_type_otherwise(
     then: Term<Name>,
     otherwise_delayed: Term<Name>,
 ) -> Term<Name> {
+    assert!(matches!(otherwise_delayed, Term::Var(_)));
+
     let uplc_type = field_type.get_uplc_type();
 
     let callback = |v| then.lambda(name).apply(v);
