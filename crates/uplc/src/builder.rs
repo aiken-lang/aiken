@@ -536,6 +536,8 @@ impl Term<Name> {
     /// ## Example
     ///
     /// ```
+    /// let value = Term::var("thing");
+    ///
     /// value.as_var("__val", |val| {
     ///   val.do_something()
     ///      .do_another_thing()
