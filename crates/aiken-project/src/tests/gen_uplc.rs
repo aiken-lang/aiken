@@ -3759,7 +3759,7 @@ fn when_tuple_deconstruction() {
 
     let otherwise_delay = &Term::var("otherwise_delayed");
 
-    let redSpend = Term::var(CONSTR_INDEX_EXPOSER)
+    let red_spend = Term::var(CONSTR_INDEX_EXPOSER)
         .apply(Term::var("__param_0"))
         .as_var("subject", |subject| {
             let subject_second_constr = Term::equals_integer()
@@ -3780,7 +3780,7 @@ fn when_tuple_deconstruction() {
                 .apply(Term::Var(subject.clone()))
                 .delayed_if_then_else(
                     Term::var(CONSTR_FIELDS_EXPOSER)
-                        .apply(Term::var("__params_0"))
+                        .apply(Term::var("__param_0"))
                         .as_var("fields", |fields| {
                             Term::unwrap_tail_or(
                                 fields.clone(),
@@ -3811,11 +3811,11 @@ fn when_tuple_deconstruction() {
                 );
 
             subject_first_constr
-                .lambda("otherwise_delayed")
-                .lambda("then_delayed")
-                .lambda("__param_0")
-                .lambda(NO_INLINE)
-        });
+        })
+        .lambda("otherwise_delayed")
+        .lambda("then_delayed")
+        .lambda("__param_0")
+        .lambda(NO_INLINE);
 
     let thing = Term::equals_integer()
         .apply(Term::integer(0.into()))
@@ -3851,11 +3851,116 @@ fn when_tuple_deconstruction() {
         )
         .lambda("otherwise_delayed")
         .lambda("then_delayed")
-        .lambda("__param_0");
+        .lambda("__param_0")
+        .lambda(NO_INLINE);
 
-    let datum: Term<Name> = Term::Error;
+    let datum = Term::var(CONSTR_INDEX_EXPOSER)
+        .apply(Term::var("__param_0"))
+        .as_var("subject", |subject| {
+            let subject_second_constr = Term::equals_integer()
+                .apply(Term::integer(1.into()))
+                .apply(Term::Var(subject.clone()))
+                .delay_true_if_then_else(
+                    Term::var(CONSTR_FIELDS_EXPOSER)
+                        .apply(Term::var("__param_0"))
+                        .delay_empty_choose_list(
+                            Term::var("then_delayed").force(),
+                            otherwise_delay.clone(),
+                        ),
+                    otherwise_delay.clone(),
+                );
 
-    assert_uplc(src, Term::Error, false);
+            let subject_first_constr = Term::equals_integer()
+                .apply(Term::integer(0.into()))
+                .apply(Term::Var(subject.clone()))
+                .delayed_if_then_else(
+                    Term::var(CONSTR_FIELDS_EXPOSER)
+                        .apply(Term::var("__param_0"))
+                        .as_var("fields", |fields| {
+                            Term::unwrap_tail_or(
+                                fields.clone(),
+                                |after_fields| {
+                                    Term::head_list().apply(Term::Var(fields)).as_var(
+                                        "head",
+                                        |head| {
+                                            Term::choose_data_constr(
+                                                head,
+                                                |field_0| {
+                                                    after_fields
+                                                        .delay_empty_choose_list(
+                                                            thing
+                                                                .apply(Term::var("field_0"))
+                                                                .apply(
+                                                                    Term::var("then_delayed")
+                                                                        .force()
+                                                                        .delay(),
+                                                                )
+                                                                .apply(otherwise_delay.clone()),
+                                                            otherwise_delay.clone(),
+                                                        )
+                                                        .lambda("field_0")
+                                                        .apply(field_0)
+                                                },
+                                                otherwise_delay,
+                                            )
+                                        },
+                                    )
+                                },
+                                otherwise_delay,
+                            )
+                        }),
+                    subject_second_constr,
+                );
+
+            subject_first_constr
+        })
+        .lambda("otherwise_delayed")
+        .lambda("then_delayed")
+        .lambda("__param_0")
+        .lambda(NO_INLINE);
+
+    assert_uplc(
+        src,
+        Term::choose_data_constr(
+            Name::text("dat").into(),
+            |dat| {
+                datum
+                    .apply(dat)
+                    .apply(
+                        Term::choose_data_constr(
+                            Name::text("red").into(),
+                            |red| {
+                                red_spend
+                                    .apply(red)
+                                    .apply(delayed_then)
+                                    .apply(Term::var("red:RedSpend"))
+                            },
+                            &Term::var("red:RedSpend"),
+                        )
+                        .lambda("red")
+                        .delay(),
+                    )
+                    .apply(Term::var("dat:Datum"))
+            },
+            &Term::var("dat:Datum"),
+        )
+        .lambda("dat")
+        .constr_fields_exposer()
+        .lambda("red:RedSpend")
+        .apply(
+            Term::Error
+                .delayed_trace(Term::string("red: RedSpend"))
+                .delay(),
+        )
+        .lambda("dat:Datum")
+        .apply(
+            Term::Error
+                .delayed_trace(Term::string("dat: Datum"))
+                .delay(),
+        )
+        .constr_index_exposer(),
+        false,
+    );
 }
 
 #[test]
