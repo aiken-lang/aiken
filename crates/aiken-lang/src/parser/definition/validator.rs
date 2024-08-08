@@ -29,7 +29,15 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                     function
                 })
                 .repeated()
-                .then(just(Token::Else).ignore_then(args_and_body()).or_not())
+                .then(
+                    just(Token::Else)
+                        .ignore_then(args_and_body().map(|mut function| {
+                            function.name = "else".to_string();
+
+                            function
+                        }))
+                        .or_not(),
+                )
                 .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
         )
         .map_with_span(
