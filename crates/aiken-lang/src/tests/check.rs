@@ -111,8 +111,8 @@ fn bls12_381_ml_result_in_data_type() {
 #[test]
 fn validator_illegal_return_type() {
     let source_code = r#"
-      validator {
-        fn foo(d, r, c) {
+      validator foo {
+        spend(d, r, c) {
           1
         }
       }
@@ -140,8 +140,8 @@ fn implicitly_discard_void() {
 #[test]
 fn validator_illegal_arity() {
     let source_code = r#"
-      validator {
-        fn foo(c) {
+      validator foo {
+        mint(c) {
           True
         }
       }
@@ -318,8 +318,8 @@ fn mark_constructors_as_used_via_field_access() {
         bar: Int,
       }
 
-      validator {
-        fn foo(d: Datum, _r, _c) {
+      validator foo {
+        spend(d: Datum, _r, _c) {
           when d is {
             D0(params) -> params.foo == 1
             D1(_params) -> False
@@ -359,8 +359,8 @@ fn expect_multi_patterns() {
 #[test]
 fn validator_correct_form() {
     let source_code = r#"
-      validator {
-        fn foo(d, r, c) {
+      validator foo {
+        spend(d, r, c) {
           True
         }
       }
@@ -372,8 +372,8 @@ fn validator_correct_form() {
 #[test]
 fn validator_in_lib_warning() {
     let source_code = r#"
-      validator {
-        fn foo(c) {
+      validator foo {
+        spend(c) {
           True
         }
       }
@@ -390,12 +390,12 @@ fn validator_in_lib_warning() {
 #[test]
 fn multi_validator() {
     let source_code = r#"
-      validator(foo: ByteArray, bar: Int) {
-        fn spend(_d, _r, _c) {
+      validator foo(foo: ByteArray, bar: Int) {
+        spend(_d, _r, _c) {
           foo == #"aabb"
         }
 
-        fn mint(_r, _c) {
+        mint(_r, _c) {
           bar == 0
         }
       }
@@ -409,12 +409,12 @@ fn multi_validator() {
 #[test]
 fn multi_validator_warning() {
     let source_code = r#"
-      validator(foo: ByteArray, bar: Int) {
-        fn spend(_d, _r, _c) {
+      validator foo(foo: ByteArray, bar: Int) {
+        spend(_d, _r, _c) {
           foo == #"aabb"
         }
 
-        fn mint(_r, _c) {
+        mint(_r, _c) {
           True
         }
       }
@@ -460,7 +460,7 @@ fn exhaustiveness_simple() {
 fn validator_args_no_annotation() {
     let source_code = r#"
       validator hello(d) {
-        foo (a, b, c) {
+        spend(a, b, c) {
           True
         }
       }
@@ -2472,8 +2472,8 @@ fn validator_private_type_leak() {
           bar: Int,
         }
 
-        validator {
-          pub fn bar(datum: Datum, redeemer: Redeemer, _ctx) {
+        validator bar {
+          spend(datum: Datum, redeemer: Redeemer, _ctx) {
             datum.foo == redeemer.bar
           }
         }
@@ -2496,8 +2496,8 @@ fn validator_public() {
           bar: Int,
         }
 
-        validator {
-          pub fn bar(datum: Datum, redeemer: Redeemer, _ctx) {
+        validator bar {
+          spend(datum: Datum, redeemer: Redeemer, _ctx) {
             datum.foo == redeemer.bar
           }
         }
@@ -2517,8 +2517,8 @@ fn validator_private_everything() {
           bar: Int,
         }
 
-        validator {
-          fn bar(datum: Datum, redeemer: Redeemer, _ctx) {
+        validator bar {
+          spend(datum: Datum, redeemer: Redeemer, _ctx) {
             datum.foo == redeemer.bar
           }
         }

@@ -198,18 +198,18 @@ fn format_preserve_newline_after_bool_expect() {
 fn format_validator() {
     assert_format!(
         r#"
-      validator ( ) {
+      validator thing ( ) {
       // What is the purpose of life
 
-      fn foo (d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
+      spend(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
       True
       }
       }
 
       // What?
-      validator {
+      validator foo {
         /// Some documentation for foo
-        fn foo() {
+        foo() {
           Void
         }
 
@@ -223,12 +223,12 @@ fn format_validator() {
 fn format_double_validator() {
     assert_format!(
         r#"
-        validator ( param1 : ByteArray ) {
-        fn foo (d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
+        validator foo( param1 : ByteArray ) {
+        spend(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
         True
         }
         /// This is bar
-    fn bar(r: Redeemer, ctx    : ScriptContext  )   ->   Bool { True }
+    mint(r: Redeemer, ctx    : ScriptContext  )   ->   Bool { True }
         }
     "#
     );
@@ -238,12 +238,12 @@ fn format_double_validator() {
 fn format_double_validator_public() {
     assert_format!(
         r#"
-        validator ( param1 : ByteArray ) {
-        pub fn foo (d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
+        validator foo ( param1 : ByteArray ) {
+        spend(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
         True
         }
         /// This is bar
-    pub fn bar(r: Redeemer, ctx    : ScriptContext  )   ->   Bool { True }
+    mint(r: Redeemer, ctx    : ScriptContext  )   ->   Bool { True }
         }
     "#
     );
@@ -967,20 +967,20 @@ fn format_anon_fn_pattern() {
 fn format_validator_pattern() {
     assert_format!(
         r#"
-        validator(Foo { a, b, .. }) {
-            fn foo() { todo }
+        validator foo(Foo { a, b, .. }) {
+            spend() { todo }
         }
 
-        validator([Bar] : List<Bar>) {
-            fn bar() { todo }
+        validator foo([Bar] : List<Bar>) {
+            spend() { todo }
         }
 
-        validator((Baz, Baz) as x) {
-            fn baz() { todo }
+        validator foo((Baz, Baz) as x) {
+            mint() { todo }
         }
 
-        validator((fst, snd) as x: Pair<Int, Int>) {
-            fn fiz() { todo }
+        validator fiz((fst, snd) as x: Pair<Int, Int>) {
+            spend() { todo }
         }
         "#
     );
