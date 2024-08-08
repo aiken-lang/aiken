@@ -4,14 +4,13 @@ use crate::{
     PlutusData,
 };
 use error::Error;
-use eval::get_script_and_datum_lookup_table;
 use pallas_primitives::{
     conway::{CostMdls, MintedTx, Redeemer, TransactionInput, TransactionOutput},
     Fragment,
 };
 use pallas_traverse::{Era, MultiEraTx};
 pub use phase_one::eval_phase_one;
-pub use script_context::{ResolvedInput, SlotConfig};
+pub use script_context::{DataLookupTable, ResolvedInput, SlotConfig};
 
 pub mod error;
 pub mod eval;
@@ -37,7 +36,7 @@ pub fn eval_phase_two(
 ) -> Result<Vec<Redeemer>, Error> {
     let redeemers = tx.transaction_witness_set.redeemer.as_ref();
 
-    let lookup_table = get_script_and_datum_lookup_table(tx, utxos);
+    let lookup_table = DataLookupTable::from_transaction(tx, utxos);
 
     if run_phase_one {
         // subset of phase 1 check on redeemers and scripts
@@ -123,9 +122,6 @@ pub fn eval_phase_two_raw(
     };
 
     match multi_era_tx {
-        MultiEraTx::Babbage(_) => {
-            todo!("convert Babbage's tx into Conway's")
-        }
         MultiEraTx::Conway(tx) => {
             match eval_phase_two(
                 &tx,
@@ -143,7 +139,12 @@ pub fn eval_phase_two_raw(
                 Err(err) => Err(err),
             }
         }
-        _ => todo!("Wrong era. Please use a more recent transaction format"),
+        _ => unimplemented!(
+            r#"The transaction is serialized in an old era format. Because we're slightly lazy to
+maintain backward compatibility with every possible transaction format AND, because
+those formats are mostly forward-compatible, you are kindly expected to provide a
+transaction in a format suitable for the Conway era."#
+        ),
     }
 }
 

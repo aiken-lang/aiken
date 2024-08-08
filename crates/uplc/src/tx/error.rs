@@ -29,8 +29,10 @@ pub enum Error {
     ExtraneousRedeemer,
     #[error("Resolved Input not found.")]
     ResolvedInputNotFound(TransactionInput),
-    #[error("A key hash cannot be the hash of a script.")]
-    ScriptKeyHash,
+    #[error("Redeemer points to a non-script withdrawal.")]
+    NonScriptWithdrawal,
+    #[error("Stake credential points to a non-script withdrawal.")]
+    NonScriptStakeCredential,
     #[error("Cost model not found for language: {:?}.", .0)]
     CostModelNotFound(Language),
     #[error("Wrong era, Please use Babbage or Alonzo: {0}")]
@@ -49,14 +51,16 @@ pub enum Error {
     MissingRequiredScript { hash: String },
     #[error("Missing required inline datum or datum hash in script input.")]
     MissingRequiredInlineDatumOrHash,
-    #[error("Only stake deregistration and delegation are valid certificate script purposes.")]
-    OnlyStakeDeregAndDelegAllowed,
+    #[error("Redeemer points to an unsupported certificate type.")]
+    UnsupportedCertificateType,
     #[error("Redeemer ({}, {}): {}", tag, index, err)]
     RedeemerError {
         tag: String,
         index: u32,
         err: Box<Error>,
     },
+    #[error("Missing script for redeemer")]
+    MissingScriptForRedeemer,
     #[error("Failed to apply parameters to Plutus script.")]
     ApplyParamsError,
 }
