@@ -241,6 +241,10 @@ impl TypedExpr {
         )
     }
 
+    pub fn is_error_term(&self) -> bool {
+        matches!(self, Self::ErrorTerm { .. })
+    }
+
     /// Returns `true` if the typed expr is [`Assignment`].
     pub fn is_assignment(&self) -> bool {
         matches!(self, Self::Assignment { .. })

@@ -178,102 +178,117 @@ fn infer_definition(
         }) => {
             let params_length = params.len();
 
-            let mut typed_handlers = vec![];
+            environment.in_new_scope(|environment| {
+                let fallback_name = format!("{}_{}", &name, &fallback.name);
 
-            for mut handler in handlers {
-                let typed_fun = environment.in_new_scope(|environment| {
-                    let temp_params = params.iter().cloned().chain(handler.arguments);
-                    handler.arguments = temp_params.collect();
+                put_params_in_scope(&fallback_name, environment, &params);
 
-                    put_params_in_scope(&handler.name, environment, &params);
+                let mut typed_handlers = vec![];
 
-                    let mut typed_fun =
-                        infer_function(&handler, module_name, hydrators, environment, tracing)?;
+                for mut handler in handlers {
+                    let typed_fun = environment.in_new_scope(|environment| {
+                        let temp_params = params.iter().cloned().chain(handler.arguments);
+                        handler.arguments = temp_params.collect();
 
-                    if !typed_fun.return_type.is_bool() {
+                        let handler_name = format!("{}_{}", &name, &handler.name);
+
+                        let old_name = handler.name;
+                        handler.name = handler_name;
+
+                        let mut typed_fun =
+                            infer_function(&handler, module_name, hydrators, environment, tracing)?;
+
+                        typed_fun.name = old_name;
+
+                        if !typed_fun.return_type.is_bool() {
+                            return Err(Error::ValidatorMustReturnBool {
+                                return_type: typed_fun.return_type.clone(),
+                                location: typed_fun.location,
+                            });
+                        }
+
+                        typed_fun.arguments.drain(0..params_length);
+
+                        // TODO: the expected number of args comes from the script purpose
+                        if typed_fun.arguments.len() < 2 || typed_fun.arguments.len() > 3 {
+                            return Err(Error::IncorrectValidatorArity {
+                                count: typed_fun.arguments.len() as u32,
+                                expected: 3,
+                                location: typed_fun.location,
+                            });
+                        }
+
+                        for arg in typed_fun.arguments.iter_mut() {
+                            if arg.tipo.is_unbound() {
+                                arg.tipo = builtins::data();
+                            }
+                        }
+
+                        Ok(typed_fun)
+                    })?;
+
+                    typed_handlers.push(typed_fun);
+                }
+
+                let (typed_params, typed_fallback) = environment.in_new_scope(|environment| {
+                    let temp_params = params.iter().cloned().chain(fallback.arguments);
+                    fallback.arguments = temp_params.collect();
+
+                    let old_name = fallback.name;
+                    fallback.name = fallback_name;
+
+                    let mut typed_fallback =
+                        infer_function(&fallback, module_name, hydrators, environment, tracing)?;
+
+                    typed_fallback.name = old_name;
+
+                    if !typed_fallback.body.is_error_term() && !typed_fallback.return_type.is_bool()
+                    {
                         return Err(Error::ValidatorMustReturnBool {
-                            return_type: typed_fun.return_type.clone(),
-                            location: typed_fun.location,
+                            return_type: typed_fallback.return_type.clone(),
+                            location: typed_fallback.location,
                         });
                     }
 
-                    typed_fun.arguments.drain(0..params_length);
+                    let typed_params = typed_fallback
+                        .arguments
+                        .drain(0..params_length)
+                        .map(|mut arg| {
+                            if arg.tipo.is_unbound() {
+                                arg.tipo = builtins::data();
+                            }
 
-                    // TODO: the expected number of args comes from the script purpose
-                    if typed_fun.arguments.len() < 2 || typed_fun.arguments.len() > 3 {
+                            arg
+                        })
+                        .collect();
+
+                    if typed_fallback.arguments.len() != 1 {
                         return Err(Error::IncorrectValidatorArity {
-                            count: typed_fun.arguments.len() as u32,
-                            expected: 3,
-                            location: typed_fun.location,
+                            count: typed_fallback.arguments.len() as u32,
+                            expected: 1,
+                            location: typed_fallback.location,
                         });
                     }
 
-                    for arg in typed_fun.arguments.iter_mut() {
+                    for arg in typed_fallback.arguments.iter_mut() {
                         if arg.tipo.is_unbound() {
                             arg.tipo = builtins::data();
                         }
                     }
 
-                    Ok(typed_fun)
+                    Ok((typed_params, typed_fallback))
                 })?;
 
-                typed_handlers.push(typed_fun);
-            }
-
-            let (typed_params, typed_fallback) = environment.in_new_scope(|environment| {
-                let temp_params = params.iter().cloned().chain(fallback.arguments);
-                fallback.arguments = temp_params.collect();
-
-                put_params_in_scope(&fallback.name, environment, &params);
-
-                let mut typed_fallback =
-                    infer_function(&fallback, module_name, hydrators, environment, tracing)?;
-
-                if !typed_fallback.return_type.is_bool() {
-                    return Err(Error::ValidatorMustReturnBool {
-                        return_type: typed_fallback.return_type.clone(),
-                        location: typed_fallback.location,
-                    });
-                }
-
-                let typed_params = typed_fallback
-                    .arguments
-                    .drain(0..params_length)
-                    .map(|mut arg| {
-                        if arg.tipo.is_unbound() {
-                            arg.tipo = builtins::data();
-                        }
-
-                        arg
-                    })
-                    .collect();
-
-                if typed_fallback.arguments.len() != 1 {
-                    return Err(Error::IncorrectValidatorArity {
-                        count: typed_fallback.arguments.len() as u32,
-                        expected: 1,
-                        location: typed_fallback.location,
-                    });
-                }
-
-                for arg in typed_fallback.arguments.iter_mut() {
-                    if arg.tipo.is_unbound() {
-                        arg.tipo = builtins::data();
-                    }
-                }
-
-                Ok((typed_params, typed_fallback))
-            })?;
-
-            Ok(Definition::Validator(Validator {
-                doc,
-                end_position,
-                handlers: typed_handlers,
-                fallback: typed_fallback,
-                name,
-                location,
-                params: typed_params,
-            }))
+                Ok(Definition::Validator(Validator {
+                    doc,
+                    end_position,
+                    handlers: typed_handlers,
+                    fallback: typed_fallback,
+                    name,
+                    location,
+                    params: typed_params,
+                }))
+            })
         }
 
         Definition::Test(f) => {

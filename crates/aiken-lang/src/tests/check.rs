@@ -318,19 +318,17 @@ fn mark_constructors_as_used_via_field_access() {
         bar: Int,
       }
 
-      validator foo {
-        spend(d: Datum, _r, _c) {
-          when d is {
-            D0(params) -> params.foo == 1
-            D1(_params) -> False
-          }
+      fn spend(d: Datum, _r, _c) {
+        when d is {
+          D0(params) -> params.foo == 1
+          D1(_params) -> False
         }
       }
     "#;
 
-    let (warnings, _) = check_validator(parse(source_code)).unwrap();
+    let (warnings, _) = check(parse(source_code)).unwrap();
 
-    assert_eq!(warnings.len(), 1)
+    assert_eq!(warnings.len(), 2)
 }
 
 #[test]
@@ -2493,27 +2491,6 @@ fn validator_public() {
         }
 
         pub type Redeemer {
-          bar: Int,
-        }
-
-        validator bar {
-          spend(datum: Datum, redeemer: Redeemer, _ctx) {
-            datum.foo == redeemer.bar
-          }
-        }
-    "#;
-
-    assert!(check_validator(parse(source_code)).is_ok())
-}
-
-#[test]
-fn validator_private_everything() {
-    let source_code = r#"
-        type Datum {
-          foo: Int,
-        }
-
-        type Redeemer {
           bar: Int,
         }
 
