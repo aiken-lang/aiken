@@ -1,10 +1,12 @@
 use crate::{
     ast::{Constant, Program, Term, Type},
     flat::Binder,
-    machine::runtime::{convert_tag_to_constr, Compressable},
-    machine::value::from_pallas_bigint,
+    machine::{
+        runtime::{convert_tag_to_constr, Compressable},
+        value::from_pallas_bigint,
+    },
 };
-use pallas_primitives::babbage::{Constr, PlutusData};
+use pallas_primitives::conway::{Constr, PlutusData};
 use pretty::RcDoc;
 use std::ascii::escape_default;
 

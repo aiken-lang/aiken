@@ -1,7 +1,3 @@
-use aiken_lang::{ast::TypedFunction, gen_uplc::CodeGenerator};
-use miette::NamedSource;
-use uplc::ast::{DeBruijn, Program};
-
 use crate::{
     blueprint::{
         self,
@@ -11,6 +7,9 @@ use crate::{
     },
     module::{CheckedModule, CheckedModules},
 };
+use aiken_lang::{ast::TypedFunction, gen_uplc::CodeGenerator, plutus_version::PlutusVersion};
+use miette::NamedSource;
+use uplc::ast::SerializableProgram;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Export {
@@ -24,7 +23,7 @@ pub struct Export {
     pub parameters: Vec<Parameter>,
 
     #[serde(flatten)]
-    pub program: Program<DeBruijn>,
+    pub program: SerializableProgram,
 
     #[serde(skip_serializing_if = "Definitions::is_empty")]
     #[serde(default)]
@@ -37,6 +36,7 @@ impl Export {
         module: &CheckedModule,
         generator: &mut CodeGenerator,
         modules: &CheckedModules,
+        plutus_version: &PlutusVersion,
     ) -> Result<Export, blueprint::Error> {
         let mut definitions = Definitions::new();
 
@@ -64,10 +64,16 @@ impl Export {
             })
             .collect::<Result<_, _>>()?;
 
-        let program = generator
-            .generate_raw(&func.body, &func.arguments, &module.name)
-            .to_debruijn()
-            .unwrap();
+        let program = match plutus_version {
+            PlutusVersion::V1 => SerializableProgram::PlutusV1Program,
+            PlutusVersion::V2 => SerializableProgram::PlutusV2Program,
+            PlutusVersion::V3 => SerializableProgram::PlutusV3Program,
+        }(
+            generator
+                .generate_raw(&func.body, &func.arguments, &module.name)
+                .to_debruijn()
+                .unwrap(),
+        );
 
         Ok(Export {
             name: format!("{}.{}", &module.name, &func.name),
@@ -86,6 +92,7 @@ mod tests {
     use aiken_lang::{
         self,
         ast::{TraceLevel, Tracing},
+        plutus_version::PlutusVersion,
     };
 
     macro_rules! assert_export {
@@ -103,7 +110,7 @@ mod tests {
                 .next()
                 .expect("source code did no yield any exports");
 
-            let export = Export::from_function(func, module, &mut generator, &modules);
+            let export = Export::from_function(func, module, &mut generator, &modules, &PlutusVersion::default());
 
             match export {
                 Err(e) => insta::with_settings!({

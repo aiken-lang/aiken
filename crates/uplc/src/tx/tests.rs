@@ -1,13 +1,11 @@
+use super::{eval_phase_two, ResolvedInput, SlotConfig};
+use crate::machine::cost_model::ExBudget;
 use pallas_codec::utils::MaybeIndefArray;
 use pallas_primitives::{
-    babbage::{CostMdls, TransactionInput, TransactionOutput},
+    conway::{CostMdls, TransactionInput, TransactionOutput},
     Fragment,
 };
 use pallas_traverse::{Era, MultiEraTx};
-
-use crate::machine::cost_model::ExBudget;
-
-use super::{eval_phase_two, ResolvedInput, SlotConfig};
 
 #[test]
 fn test_eval_0() {
@@ -227,6 +225,7 @@ fn test_eval_0() {
     let cost_mdl = CostMdls {
         plutus_v1: None,
         plutus_v2: Some(costs),
+        plutus_v3: None,
     };
 
     let initial_budget = ExBudget {
@@ -234,11 +233,12 @@ fn test_eval_0() {
         mem: 14000000,
     };
 
-    let multi_era_tx = MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes)
+    let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes)
+        .or_else(|_| MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes))
         .or_else(|_| MultiEraTx::decode_for_era(Era::Alonzo, &tx_bytes))
         .unwrap();
     match multi_era_tx {
-        MultiEraTx::Babbage(tx) => {
+        MultiEraTx::Conway(tx) => {
             let redeemers = eval_phase_two(
                 &tx,
                 &utxos,
@@ -497,6 +497,7 @@ fn test_eval_1() {
     let cost_mdl = CostMdls {
         plutus_v1: None,
         plutus_v2: Some(costs),
+        plutus_v3: None,
     };
 
     let initial_budget = ExBudget {
@@ -504,11 +505,13 @@ fn test_eval_1() {
         mem: 14000000,
     };
 
-    let multi_era_tx = MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes)
+    let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes)
+        .or_else(|_| MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes))
         .or_else(|_| MultiEraTx::decode_for_era(Era::Alonzo, &tx_bytes))
         .unwrap();
+
     match multi_era_tx {
-        MultiEraTx::Babbage(tx) => {
+        MultiEraTx::Conway(tx) => {
             let redeemers = eval_phase_two(
                 &tx,
                 &utxos,
@@ -606,6 +609,7 @@ fn test_eval_2() {
     let cost_mdl = CostMdls {
         plutus_v1: Some(costs),
         plutus_v2: None,
+        plutus_v3: None,
     };
 
     let initial_budget = ExBudget {
@@ -613,11 +617,12 @@ fn test_eval_2() {
         mem: 14000000,
     };
 
-    let multi_era_tx = MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes)
+    let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes)
+        .or_else(|_| MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes))
         .or_else(|_| MultiEraTx::decode_for_era(Era::Alonzo, &tx_bytes))
         .unwrap();
     match multi_era_tx {
-        MultiEraTx::Babbage(tx) => {
+        MultiEraTx::Conway(tx) => {
             let redeemers = eval_phase_two(
                 &tx,
                 &utxos,
@@ -874,6 +879,7 @@ fn test_eval_3() {
     let cost_mdl = CostMdls {
         plutus_v1: None,
         plutus_v2: Some(costs),
+        plutus_v3: None,
     };
 
     let initial_budget = ExBudget {
@@ -881,11 +887,12 @@ fn test_eval_3() {
         mem: 14000000,
     };
 
-    let multi_era_tx = MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes)
+    let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes)
+        .or_else(|_| MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes))
         .or_else(|_| MultiEraTx::decode_for_era(Era::Alonzo, &tx_bytes))
         .unwrap();
     match multi_era_tx {
-        MultiEraTx::Babbage(tx) => {
+        MultiEraTx::Conway(tx) => {
             let redeemers = eval_phase_two(
                 &tx,
                 &utxos,
@@ -980,6 +987,7 @@ fn test_eval_4() {
     let cost_mdl = CostMdls {
         plutus_v1: Some(costs),
         plutus_v2: None,
+        plutus_v3: None,
     };
 
     let initial_budget = ExBudget {
@@ -987,11 +995,12 @@ fn test_eval_4() {
         mem: 14000000,
     };
 
-    let multi_era_tx = MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes)
+    let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes)
+        .or_else(|_| MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes))
         .or_else(|_| MultiEraTx::decode_for_era(Era::Alonzo, &tx_bytes))
         .unwrap();
     match multi_era_tx {
-        MultiEraTx::Babbage(tx) => {
+        MultiEraTx::Conway(tx) => {
             assert!(eval_phase_two(
                 &tx,
                 &utxos,
@@ -1063,6 +1072,7 @@ fn test_eval_5() {
     let cost_mdl = CostMdls {
         plutus_v1: Some(costs),
         plutus_v2: None,
+        plutus_v3: None,
     };
 
     let initial_budget = ExBudget {
@@ -1070,11 +1080,12 @@ fn test_eval_5() {
         mem: 14000000,
     };
 
-    let multi_era_tx = MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes)
+    let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes)
+        .or_else(|_| MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes))
         .or_else(|_| MultiEraTx::decode_for_era(Era::Alonzo, &tx_bytes))
         .unwrap();
     match multi_era_tx {
-        MultiEraTx::Babbage(tx) => {
+        MultiEraTx::Conway(tx) => {
             let redeemers = eval_phase_two(
                 &tx,
                 &utxos,
@@ -1171,6 +1182,7 @@ fn test_eval_6() {
     let cost_mdl = CostMdls {
         plutus_v1: Some(costs),
         plutus_v2: None,
+        plutus_v3: None,
     };
 
     let initial_budget = ExBudget {
@@ -1178,11 +1190,12 @@ fn test_eval_6() {
         mem: 14000000,
     };
 
-    let multi_era_tx = MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes)
+    let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes)
+        .or_else(|_| MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes))
         .or_else(|_| MultiEraTx::decode_for_era(Era::Alonzo, &tx_bytes))
         .unwrap();
     match multi_era_tx {
-        MultiEraTx::Babbage(tx) => {
+        MultiEraTx::Conway(tx) => {
             let redeemers = eval_phase_two(
                 &tx,
                 &utxos,
@@ -1279,6 +1292,7 @@ fn test_eval_7() {
     let cost_mdl = CostMdls {
         plutus_v1: Some(costs),
         plutus_v2: None,
+        plutus_v3: None,
     };
 
     let initial_budget = ExBudget {
@@ -1286,11 +1300,12 @@ fn test_eval_7() {
         mem: 14000000,
     };
 
-    let multi_era_tx = MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes)
+    let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes)
+        .or_else(|_| MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes))
         .or_else(|_| MultiEraTx::decode_for_era(Era::Alonzo, &tx_bytes))
         .unwrap();
     match multi_era_tx {
-        MultiEraTx::Babbage(tx) => {
+        MultiEraTx::Conway(tx) => {
             let redeemers = eval_phase_two(
                 &tx,
                 &utxos,
@@ -1538,6 +1553,7 @@ fn test_eval_8() {
     let cost_mdl = CostMdls {
         plutus_v1: None,
         plutus_v2: Some(costs),
+        plutus_v3: None,
     };
 
     let initial_budget = ExBudget {
@@ -1545,11 +1561,12 @@ fn test_eval_8() {
         mem: 14000000,
     };
 
-    let multi_era_tx = MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes)
+    let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes)
+        .or_else(|_| MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes))
         .or_else(|_| MultiEraTx::decode_for_era(Era::Alonzo, &tx_bytes))
         .unwrap();
     match multi_era_tx {
-        MultiEraTx::Babbage(tx) => {
+        MultiEraTx::Conway(tx) => {
             let redeemers = eval_phase_two(
                 &tx,
                 &utxos,
@@ -1593,12 +1610,13 @@ fn test_eval_8() {
 fn eval_missing_redeemer() {
     let tx_bytes = hex::decode("84a30082825820275b5da338c8b899035081eb34bfa950b634911a5dd3271b3ad6cf4c2bba0c5000825820275b5da338c8b899035081eb34bfa950b634911a5dd3271b3ad6cf4c2bba0c50010181825839000af00cc47500bb64cfffb783e8c42f746b4e8b8a70ede9c08c7113acf3bde34d1041f5a2076ef9aa6cf4539ab1a96ed462a0300acbdb65d51a02cf47c8021a00028d89a1068149480100002221200101f5f6").unwrap();
 
-    let multi_era_tx = MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes)
+    let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes)
+        .or_else(|_| MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes))
         .or_else(|_| MultiEraTx::decode_for_era(Era::Alonzo, &tx_bytes))
         .unwrap();
 
     let inputs = multi_era_tx
-        .as_babbage()
+        .as_conway()
         .unwrap()
         .transaction_body
         .inputs
@@ -1641,6 +1659,7 @@ fn eval_missing_redeemer() {
     let cost_mdl = CostMdls {
         plutus_v1: Some(costs),
         plutus_v2: None,
+        plutus_v3: None,
     };
 
     let initial_budget = ExBudget {
@@ -1648,12 +1667,13 @@ fn eval_missing_redeemer() {
         mem: 14000000,
     };
 
-    let multi_era_tx = MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes)
+    let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes)
+        .or_else(|_| MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes))
         .or_else(|_| MultiEraTx::decode_for_era(Era::Alonzo, &tx_bytes))
         .unwrap();
 
     match multi_era_tx {
-        MultiEraTx::Babbage(tx) => {
+        MultiEraTx::Conway(tx) => {
             eval_phase_two(
                 &tx,
                 &utxos,
@@ -1673,12 +1693,13 @@ fn eval_missing_redeemer() {
 fn eval_extraneous_redeemer() {
     let tx_bytes = hex::decode("84a70082825820275b5da338c8b899035081eb34bfa950b634911a5dd3271b3ad6cf4c2bba0c5000825820275b5da338c8b899035081eb34bfa950b634911a5dd3271b3ad6cf4c2bba0c50010181825839000af00cc47500bb64cfffb783e8c42f746b4e8b8a70ede9c08c7113acf3bde34d1041f5a2076ef9aa6cf4539ab1a96ed462a0300acbdb65d51a02cf2b47021a0002aa0a0b5820fc54f302cff3a8a1cb374f5e4979e18a1d3627dcf4539637b03f5959eb8565bf0d81825820275b5da338c8b899035081eb34bfa950b634911a5dd3271b3ad6cf4c2bba0c500110825839000af00cc47500bb64cfffb783e8c42f746b4e8b8a70ede9c08c7113acf3bde34d1041f5a2076ef9aa6cf4539ab1a96ed462a0300acbdb65d51a02af51c2111a0003ff0fa40081825820065dd553fbe4e240a8f819bb9e333a7483de4a22b65c7fb6a95ce9450f84dff758402c26125a057a696079d08f2c8c9d2b8ccda9fe7cf7360c1a86712b85a91db82a3b80996b30ba6f4b2f969c93eb50694e0f6ea0bcf129080dcc07ecd9e605f00a049fd87980ff0582840000d879808219044c1a000382d48401001864821903e81903e8068149480100002221200101f5f6").unwrap();
 
-    let multi_era_tx = MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes)
+    let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes)
+        .or_else(|_| MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes))
         .or_else(|_| MultiEraTx::decode_for_era(Era::Alonzo, &tx_bytes))
         .unwrap();
 
     let inputs = multi_era_tx
-        .as_babbage()
+        .as_conway()
         .unwrap()
         .transaction_body
         .inputs
@@ -1721,6 +1742,7 @@ fn eval_extraneous_redeemer() {
     let cost_mdl = CostMdls {
         plutus_v1: Some(costs),
         plutus_v2: None,
+        plutus_v3: None,
     };
 
     let initial_budget = ExBudget {
@@ -1728,12 +1750,13 @@ fn eval_extraneous_redeemer() {
         mem: 14000000,
     };
 
-    let multi_era_tx = MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes)
+    let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes)
+        .or_else(|_| MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes))
         .or_else(|_| MultiEraTx::decode_for_era(Era::Alonzo, &tx_bytes))
         .unwrap();
 
     match multi_era_tx {
-        MultiEraTx::Babbage(tx) => {
+        MultiEraTx::Conway(tx) => {
             assert!(eval_phase_two(
                 &tx,
                 &utxos,

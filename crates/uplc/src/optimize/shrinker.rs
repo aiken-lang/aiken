@@ -1,18 +1,14 @@
-use std::{cmp::Ordering, iter, ops::Neg, rc::Rc, vec};
-
-use indexmap::IndexMap;
-use itertools::Itertools;
-
-use pallas_primitives::babbage::{BigInt, PlutusData};
-
+use super::interner::CodeGenInterner;
 use crate::{
     ast::{Constant, Data, Name, NamedDeBruijn, Program, Term, Type},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
     builtins::DefaultFunction,
     machine::cost_model::ExBudget,
 };
-
-use super::interner::CodeGenInterner;
+use indexmap::IndexMap;
+use itertools::Itertools;
+use pallas_primitives::conway::{BigInt, PlutusData};
+use std::{cmp::Ordering, iter, ops::Neg, rc::Rc, vec};
 
 #[derive(Eq, Hash, PartialEq, Clone, Debug, PartialOrd)]
 pub enum ScopePath {
@@ -1981,18 +1977,15 @@ fn pop_lambdas_and_get_names(term: &Term<Name>) -> (Vec<Rc<Name>>, &Term<Name>) 
 
 #[cfg(test)]
 mod tests {
-
-    use pallas_primitives::babbage::{BigInt, PlutusData};
-    use pretty_assertions::assert_eq;
-
+    use super::NO_INLINE;
     use crate::{
         ast::{Constant, Data, Name, NamedDeBruijn, Program, Term},
         builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
         builtins::DefaultFunction,
         optimize::interner::CodeGenInterner,
     };
-
-    use super::NO_INLINE;
+    use pallas_primitives::conway::{BigInt, PlutusData};
+    use pretty_assertions::assert_eq;
 
     fn compare_optimization(
         mut expected: Program<Name>,

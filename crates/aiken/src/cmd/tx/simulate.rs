@@ -1,7 +1,7 @@
 use miette::IntoDiagnostic;
 use owo_colors::{OwoColorize, Stream::Stderr};
 use pallas_primitives::{
-    babbage::{Redeemer, TransactionInput, TransactionOutput},
+    conway::{Redeemer, TransactionInput, TransactionOutput},
     Fragment,
 };
 use pallas_traverse::{Era, MultiEraTx};
@@ -79,7 +79,7 @@ pub fn exec(
         )
     };
 
-    let tx = MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes).into_diagnostic()?;
+    let tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes).into_diagnostic()?;
 
     eprintln!(
         "{} {}",
@@ -101,7 +101,7 @@ pub fn exec(
         })
         .collect();
 
-    if let Some(tx_babbage) = tx.as_babbage() {
+    if let Some(tx_conway) = tx.as_conway() {
         let slot_config = SlotConfig {
             zero_time,
             zero_slot,
@@ -120,7 +120,7 @@ pub fn exec(
         };
 
         let result = tx::eval_phase_two(
-            tx_babbage,
+            tx_conway,
             &resolved_inputs,
             None,
             None,
