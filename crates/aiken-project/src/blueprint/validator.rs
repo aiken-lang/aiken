@@ -29,7 +29,8 @@ pub struct Validator {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub datum: Option<Parameter>,
 
-    pub redeemer: Parameter,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub redeemer: Option<Parameter>,
 
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
@@ -50,31 +51,29 @@ impl Validator {
         module: &CheckedModule,
         def: &TypedValidator,
     ) -> Vec<Result<Validator, Error>> {
-        let is_multi_validator = def.other_fun.is_some();
-
         let mut program = MemoProgram::new();
 
-        let mut validators = vec![Validator::create_validator_blueprint(
-            generator,
-            modules,
-            module,
-            def,
-            &def.fun,
-            is_multi_validator,
-            &mut program,
-        )];
+        let mut validators = vec![];
 
-        if let Some(ref other_func) = def.other_fun {
+        for handler in &def.handlers {
             validators.push(Validator::create_validator_blueprint(
                 generator,
                 modules,
                 module,
                 def,
-                other_func,
-                is_multi_validator,
+                handler,
                 &mut program,
             ));
         }
+
+        validators.push(Validator::create_validator_blueprint(
+            generator,
+            modules,
+            module,
+            def,
+            &def.fallback,
+            &mut program,
+        ));
 
         validators
     }
@@ -85,11 +84,11 @@ impl Validator {
         module: &CheckedModule,
         def: &TypedValidator,
         func: &TypedFunction,
-        is_multi_validator: bool,
         program: &mut MemoProgram,
     ) -> Result<Validator, Error> {
         let mut args = func.arguments.iter().rev();
-        let (_, redeemer, datum) = (args.next(), args.next().unwrap(), args.next());
+
+        let (_, _, redeemer, datum) = (args.next(), args.next(), args.next(), args.next());
 
         let mut definitions = Definitions::new();
 
@@ -139,31 +138,30 @@ impl Validator {
                 schema,
             });
 
-        let redeemer = Annotated::from_type(
-            modules.into(),
-            tipo_or_annotation(module, redeemer),
-            &mut definitions,
-        )
-        .map_err(|error| Error::Schema {
-            error,
-            location: redeemer.location,
-            source_code: NamedSource::new(
-                module.input_path.display().to_string(),
-                module.code.clone(),
-            ),
-        })
-        .map(|schema| Parameter {
-            title: Some(redeemer.arg_name.get_label()),
-            schema: match datum {
-                Some(..) if is_multi_validator => {
-                    Annotated::as_wrapped_redeemer(&mut definitions, schema, redeemer.tipo.clone())
-                }
-                _ => schema,
-            },
-        })?;
+        let redeemer = redeemer
+            .map(|redeemer| {
+                Annotated::from_type(
+                    modules.into(),
+                    tipo_or_annotation(module, redeemer),
+                    &mut definitions,
+                )
+                .map_err(|error| Error::Schema {
+                    error,
+                    location: redeemer.location,
+                    source_code: NamedSource::new(
+                        module.input_path.display().to_string(),
+                        module.code.clone(),
+                    ),
+                })
+            })
+            .transpose()?
+            .map(|schema| Parameter {
+                title: redeemer.map(|redeemer| redeemer.arg_name.get_label()),
+                schema,
+            });
 
         Ok(Validator {
-            title: format!("{}.{}", &module.name, &func.name),
+            title: format!("{}.{}_{}", &module.name, &def.name, &func.name),
             description: func.doc.clone(),
             parameters,
             datum,
@@ -386,8 +384,8 @@ mod tests {
     fn mint_basic() {
         assert_validator!(
             r#"
-            validator {
-              fn mint(redeemer: Data, ctx: Data) {
+            validator thing {
+              mint(redeemer: Data, ctx: Data) {
                 True
               }
             }
@@ -399,8 +397,8 @@ mod tests {
     fn mint_parameterized() {
         assert_validator!(
             r#"
-            validator(utxo_ref: Int) {
-              fn mint(redeemer: Data, ctx: Data) {
+            validator thing(utxo_ref: Int) {
+              mint(redeemer: Data, ctx: Data) {
                 True
               }
             }
@@ -413,7 +411,7 @@ mod tests {
         assert_validator!(
             r#"
             /// On-chain state
-            type State {
+            pub type State {
                 /// The contestation period as a number of seconds
                 contestationPeriod: ContestationPeriod,
                 /// List of public key hashes of all participants
@@ -422,28 +420,28 @@ mod tests {
             }
 
             /// A Hash digest for a given algorithm.
-            type Hash<alg> = ByteArray
+            pub type Hash<alg> = ByteArray
 
-            type Blake2b_256 { Blake2b_256 }
+            pub type Blake2b_256 { Blake2b_256 }
 
             /// Whatever
-            type ContestationPeriod {
+            pub type ContestationPeriod {
               /// A positive, non-zero number of seconds.
               ContestationPeriod(Int)
             }
 
-            type Party =
+            pub type Party =
               ByteArray
 
-            type Input {
+            pub type Input {
                 CollectCom
                 Close
                 /// Abort a transaction
                 Abort
             }
 
-            validator {
-              fn simplified_hydra(datum: State, redeemer: Input, ctx: Data) {
+            validator simplified_hydra {
+              spend(datum: State, redeemer: Input, ctx: Data) {
                 True
               }
             }
@@ -455,8 +453,8 @@ mod tests {
     fn tuples() {
         assert_validator!(
             r#"
-            validator {
-              fn tuples(datum: (Int, ByteArray), redeemer: (Int, Int, Int), ctx: Void) {
+            validator tuples {
+              spend(datum: (Int, ByteArray), redeemer: (Int, Int, Int), ctx: Void) {
                 True
               }
             }
@@ -468,18 +466,18 @@ mod tests {
     fn generics() {
         assert_validator!(
             r#"
-            type Either<left, right> {
+            pub type Either<left, right> {
                 Left(left)
                 Right(right)
             }
 
-            type Interval<a> {
+            pub type Interval<a> {
                 Finite(a)
                 Infinite
             }
 
-            validator {
-              fn generics(redeemer: Either<ByteArray, Interval<Int>>, ctx: Void) {
+            validator generics {
+              spend(redeemer: Either<ByteArray, Interval<Int>>, ctx: Void) {
                 True
               }
             }
@@ -491,8 +489,8 @@ mod tests {
     fn free_vars() {
         assert_validator!(
             r#"
-            validator {
-              fn generics(redeemer: a, ctx: Void) {
+            validator generics {
+              mint(redeemer: a, policy_id: ByteArray, ctx: Void) {
                 True
               }
             }
@@ -504,14 +502,14 @@ mod tests {
     fn list_2_tuples_as_list() {
         assert_validator!(
             r#"
-            type Dict<key, value> {
+            pub type Dict<key, value> {
                 inner: List<(ByteArray, value)>
             }
 
-            type UUID { UUID }
+            pub type UUID { UUID }
 
-            validator {
-              fn list_2_tuples_as_list(redeemer: Dict<UUID, Int>, ctx: Void) {
+            validator list_2_tuples_as_list {
+              mint(redeemer: Dict<UUID, Int>, ctx: Void) {
                 True
               }
             }
@@ -523,14 +521,14 @@ mod tests {
     fn list_pairs_as_map() {
         assert_validator!(
             r#"
-            type Dict<key, value> {
+            pub type Dict<key, value> {
                 inner: List<Pair<ByteArray, value>>
             }
 
-            type UUID { UUID }
+            pub type UUID { UUID }
 
-            validator {
-              fn list_pairs_as_map(redeemer: Dict<UUID, Int>, ctx: Void) {
+            validator list_pairs_as_map {
+              spend(redeemer: Dict<UUID, Int>, ctx: Void) {
                 True
               }
             }
@@ -546,10 +544,10 @@ mod tests {
                 inner: List<(ByteArray, value)>
             }
 
-            type UUID { UUID }
+            pub type UUID { UUID }
 
-            validator {
-              fn opaque_singleton_variants(redeemer: Dict<UUID, Int>, ctx: Void) {
+            validator opaque_singleton_variants {
+              spend(redeemer: Dict<UUID, Int>, ctx: Void) {
                 True
               }
             }
@@ -566,8 +564,8 @@ mod tests {
               denominator: Int,
             }
 
-            validator {
-              fn opaque_singleton_multi_variants(redeemer: Rational, ctx: Void) {
+            validator opaque_singleton_multi_variants {
+              spend(redeemer: Rational, oref: Data, ctx: Void) {
                 True
               }
             }
@@ -583,8 +581,8 @@ mod tests {
                 foo: Data
             }
 
-            validator {
-              fn nested_data(datum: Foo, redeemer: Int, ctx: Void) {
+            validator nested_data {
+              spend(datum: Foo, redeemer: Int, ctx: Void) {
                 True
               }
             }
@@ -602,8 +600,8 @@ mod tests {
               Mul(Expr, Expr)
             }
 
-            validator {
-              fn recursive_types(redeemer: Expr, ctx: Void) {
+            validator recursive_types {
+              spend(redeemer: Expr, ctx: Void) {
                 True
               }
             }
@@ -630,8 +628,8 @@ mod tests {
                 }
             }
 
-            validator {
-              fn recursive_generic_types(datum: Foo, redeemer: LinkedList<Int>, ctx: Void) {
+            validator recursive_generic_types {
+              spend(datum: Foo, redeemer: LinkedList<Int>, ctx: Void) {
                 True
               }
             }
@@ -647,8 +645,8 @@ mod tests {
                 foo: Int
             }
 
-            validator {
-                fn annotated_data(datum: Data<Foo>, redeemer: Data, ctx: Void) {
+            validator annotated_data {
+                spend(datum: Data<Foo>, redeemer: Data, ctx: Void) {
                     True
                 }
             }

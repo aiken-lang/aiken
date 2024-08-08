@@ -3673,22 +3673,22 @@ fn when_bool_is_false() {
 #[test]
 fn when_tuple_deconstruction() {
     let src = r#"
-      type Thing {
+      pub type Thing {
         idx: Int,
       }
 
-      type Datum {
+      pub type Datum {
         A(Thing)
         B
       }
 
-      type RedSpend {
+      pub type RedSpend {
         Spend(Int)
         Buy
       }
 
-      validator {
-        fn spend(dat: Datum, red: RedSpend, ctx: Data) {
+      validator thing {
+        spend(dat: Datum, red: RedSpend, ctx: Data) {
           when (dat, red) is {
             (A(a), Spend(x)) ->
               (a.idx == x)?
@@ -4037,17 +4037,17 @@ fn when_tuple_empty_lists() {
 #[test]
 fn generic_validator_type_test() {
     let src = r#"
-      type A<x> {
+      pub type A<x> {
         NoA
         SomeA(Void, x)
       }
 
-      type B {
+      pub type B {
         something: Void,
       }
 
-      validator {
-        fn err_example(r: A<B>, _ctx: Data) -> Bool {
+      validator err_example {
+        spend(r: A<B>, _ctx: Data) -> Bool {
           when r is {
             NoA ->
               False
@@ -5548,22 +5548,22 @@ fn list_clause_with_assign() {
 #[test]
 fn opaque_value_in_datum() {
     let src = r#"
-      opaque type Value {
+      pub opaque type Value {
         inner: Dict<Dict<Int>>
       }
 
-      opaque type Dict<v> {
+      pub opaque type Dict<v> {
         inner: List<Pair<ByteArray, v>>
       }
 
-      type Dat {
+      pub type Dat {
           c: Int,
           a: Value
       }
 
 
-      validator {
-        fn spend(dat: Dat, red: Data, ctx: Data) {
+      validator foo {
+        spend(dat: Dat, red: Data, ctx: Data) {
           let val = dat.a
 
           expect [Pair(_, amount)] = val.inner.inner

@@ -189,11 +189,7 @@ impl TypedModule {
                 Definition::Validator(v) => {
                     let module_name = self.name.as_str();
 
-                    if let Some((k, v)) = v.into_function_definition(module_name, |f, _| Some(f)) {
-                        functions.insert(k, v);
-                    }
-
-                    if let Some((k, v)) = v.into_function_definition(module_name, |_, f| f) {
+                    for (k, v) in v.into_function_definitions(module_name) {
                         functions.insert(k, v);
                     }
                 }
@@ -541,10 +537,11 @@ pub type UntypedValidator = Validator<(), UntypedArg, UntypedExpr>;
 pub struct Validator<T, Arg, Expr> {
     pub doc: Option<String>,
     pub end_position: usize,
-    pub fun: Function<T, Expr, Arg>,
-    pub other_fun: Option<Function<T, Expr, Arg>>,
+    pub handlers: Vec<Function<T, Expr, Arg>>,
     pub location: Span,
+    pub name: String,
     pub params: Vec<Arg>,
+    pub fallback: Function<T, Expr, Arg>,
 }
 
 impl TypedValidator {
@@ -552,43 +549,40 @@ impl TypedValidator {
         self.params
             .iter()
             .find_map(|arg| arg.find_node(byte_index))
-            .or_else(|| self.fun.find_node(byte_index))
             .or_else(|| {
-                self.other_fun
-                    .as_ref()
-                    .and_then(|f| f.find_node(byte_index))
+                self.handlers
+                    .iter()
+                    .find_map(|func| func.find_node(byte_index))
             })
+            .or_else(|| self.fallback.find_node(byte_index))
     }
 
-    pub fn into_function_definition<'a, F>(
-        &'a self,
+    pub fn into_function_definitions(
+        &self,
         module_name: &str,
-        select: F,
-    ) -> Option<(FunctionAccessKey, TypedFunction)>
-    where
-        F: Fn(&'a TypedFunction, Option<&'a TypedFunction>) -> Option<&'a TypedFunction> + 'a,
-    {
-        match select(&self.fun, self.other_fun.as_ref()) {
-            None => None,
-            Some(fun) => {
-                let mut fun = fun.clone();
+    ) -> Vec<(FunctionAccessKey, TypedFunction)> {
+        self.handlers
+            .iter()
+            .chain(std::iter::once(&self.fallback))
+            .map(|handler| {
+                let mut handler = handler.clone();
 
-                fun.arguments = self
+                handler.arguments = self
                     .params
                     .clone()
                     .into_iter()
-                    .chain(fun.arguments)
+                    .chain(handler.arguments)
                     .collect();
 
-                Some((
+                (
                     FunctionAccessKey {
                         module_name: module_name.to_string(),
-                        function_name: fun.name.clone(),
+                        function_name: handler.name.clone(),
                     },
-                    fun,
-                ))
-            }
-        }
+                    handler,
+                )
+            })
+            .collect()
     }
 }
 
@@ -895,6 +889,10 @@ impl TypedArg {
 
     pub fn get_variable_name(&self) -> Option<&str> {
         self.arg_name.get_variable_name()
+    }
+
+    pub fn get_name(&self) -> String {
+        self.arg_name.get_name()
     }
 
     pub fn is_capture(&self) -> bool {

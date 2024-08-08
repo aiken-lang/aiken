@@ -307,32 +307,51 @@ impl<'a> Environment<'a> {
             Definition::Validator(Validator {
                 doc,
                 end_position,
-                fun,
-                other_fun,
+                handlers,
+                name,
+                mut fallback,
                 location,
                 params,
             }) => {
-                let Definition::Fn(fun) =
-                    self.generalise_definition(Definition::Fn(fun), module_name)
+                let handlers = handlers
+                    .into_iter()
+                    .map(|mut fun| {
+                        let handler_name = format!("{}_{}", &name, &fun.name);
+
+                        let old_name = fun.name;
+                        fun.name = handler_name;
+
+                        let Definition::Fn(mut fun) =
+                            self.generalise_definition(Definition::Fn(fun), module_name)
+                        else {
+                            unreachable!()
+                        };
+
+                        fun.name = old_name;
+
+                        fun
+                    })
+                    .collect();
+
+                let fallback_name = format!("{}_{}", &name, &fallback.name);
+
+                let old_name = fallback.name;
+                fallback.name = fallback_name;
+
+                let Definition::Fn(mut fallback) =
+                    self.generalise_definition(Definition::Fn(fallback), module_name)
                 else {
                     unreachable!()
                 };
 
-                let other_fun = other_fun.map(|other_fun| {
-                    let Definition::Fn(other_fun) =
-                        self.generalise_definition(Definition::Fn(other_fun), module_name)
-                    else {
-                        unreachable!()
-                    };
-
-                    other_fun
-                });
+                fallback.name = old_name;
 
                 Definition::Validator(Validator {
                     doc,
+                    name,
                     end_position,
-                    fun,
-                    other_fun,
+                    handlers,
+                    fallback,
                     location,
                     params,
                 })
@@ -1162,12 +1181,12 @@ impl<'a> Environment<'a> {
     #[allow(clippy::too_many_arguments)]
     fn register_function(
         &mut self,
-        name: &'a str,
+        name: &str,
         arguments: &[UntypedArg],
         return_annotation: &Option<Annotation>,
         module_name: &String,
         hydrators: &mut HashMap<String, Hydrator>,
-        names: &mut HashMap<&'a str, &'a Span>,
+        names: &mut HashMap<String, &'a Span>,
         location: &'a Span,
     ) -> Result<(), Error> {
         assert_unique_value_name(names, name, location)?;
@@ -1224,7 +1243,7 @@ impl<'a> Environment<'a> {
         def: &'a UntypedDefinition,
         module_name: &String,
         hydrators: &mut HashMap<String, Hydrator>,
-        names: &mut HashMap<&'a str, &'a Span>,
+        names: &mut HashMap<String, &'a Span>,
         kind: ModuleKind,
     ) -> Result<(), Error> {
         match def {
@@ -1247,9 +1266,10 @@ impl<'a> Environment<'a> {
             }
 
             Definition::Validator(Validator {
-                fun,
-                other_fun,
+                handlers,
+                fallback,
                 params,
+                name,
                 doc: _,
                 location: _,
                 end_position: _,
@@ -1264,41 +1284,41 @@ impl<'a> Environment<'a> {
                     }
                 };
 
-                let temp_params: Vec<UntypedArg> = params
-                    .iter()
-                    .cloned()
-                    .chain(fun.arguments.clone())
-                    .map(default_annotation)
-                    .collect();
-
-                self.register_function(
-                    &fun.name,
-                    &temp_params,
-                    &fun.return_annotation,
-                    module_name,
-                    hydrators,
-                    names,
-                    &fun.location,
-                )?;
-
-                if let Some(other) = other_fun {
+                for handler in handlers {
                     let temp_params: Vec<UntypedArg> = params
                         .iter()
                         .cloned()
-                        .chain(other.arguments.clone())
+                        .chain(handler.arguments.clone())
                         .map(default_annotation)
                         .collect();
 
                     self.register_function(
-                        &other.name,
+                        &format!("{}_{}", name, handler.name),
                         &temp_params,
-                        &other.return_annotation,
+                        &handler.return_annotation,
                         module_name,
                         hydrators,
                         names,
-                        &other.location,
+                        &handler.location,
                     )?;
                 }
+
+                let temp_params: Vec<UntypedArg> = params
+                    .iter()
+                    .cloned()
+                    .chain(fallback.arguments.clone())
+                    .map(default_annotation)
+                    .collect();
+
+                self.register_function(
+                    &format!("{}_{}", name, fallback.name),
+                    &temp_params,
+                    &fallback.return_annotation,
+                    module_name,
+                    hydrators,
+                    names,
+                    &fallback.location,
+                )?;
             }
 
             Definition::Validator(Validator { location, .. }) => {
@@ -1910,11 +1930,11 @@ fn assert_unique_type_name<'a>(
 }
 
 fn assert_unique_value_name<'a>(
-    names: &mut HashMap<&'a str, &'a Span>,
-    name: &'a str,
+    names: &mut HashMap<String, &'a Span>,
+    name: &str,
     location: &'a Span,
 ) -> Result<(), Error> {
-    match names.insert(name, location) {
+    match names.insert(name.to_string(), location) {
         Some(previous_location) => Err(Error::DuplicateName {
             name: name.to_string(),
             previous_location: *previous_location,
@@ -1925,11 +1945,11 @@ fn assert_unique_value_name<'a>(
 }
 
 fn assert_unique_const_name<'a>(
-    names: &mut HashMap<&'a str, &'a Span>,
-    name: &'a str,
+    names: &mut HashMap<String, &'a Span>,
+    name: &str,
     location: &'a Span,
 ) -> Result<(), Error> {
-    match names.insert(name, location) {
+    match names.insert(name.to_string(), location) {
         Some(previous_location) => Err(Error::DuplicateConstName {
             name: name.to_string(),
             previous_location: *previous_location,
