@@ -69,7 +69,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                         doc: None,
                         location: ast::Span::empty(),
                         end_position: span.end - 1,
-                        name: "fallback".to_string(),
+                        name: "else".to_string(),
                         public: true,
                         return_annotation: None,
                         return_type: (),
