@@ -309,28 +309,42 @@ impl<'a> Environment<'a> {
                 end_position,
                 handlers,
                 name,
-                fallback,
+                mut fallback,
                 location,
                 params,
             }) => {
                 let handlers = handlers
                     .into_iter()
-                    .map(|fun| {
-                        let Definition::Fn(fun) =
+                    .map(|mut fun| {
+                        let handler_name = format!("{}_{}", &name, &fun.name);
+
+                        let old_name = fun.name;
+                        fun.name = handler_name;
+
+                        let Definition::Fn(mut fun) =
                             self.generalise_definition(Definition::Fn(fun), module_name)
                         else {
                             unreachable!()
                         };
 
+                        fun.name = old_name;
+
                         fun
                     })
                     .collect();
 
-                let Definition::Fn(fallback) =
+                let fallback_name = format!("{}_{}", &name, &fallback.name);
+
+                let old_name = fallback.name;
+                fallback.name = fallback_name;
+
+                let Definition::Fn(mut fallback) =
                     self.generalise_definition(Definition::Fn(fallback), module_name)
                 else {
                     unreachable!()
                 };
+
+                fallback.name = old_name;
 
                 Definition::Validator(Validator {
                     doc,

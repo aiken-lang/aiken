@@ -3687,8 +3687,8 @@ fn when_tuple_deconstruction() {
         Buy
       }
 
-      validator {
-        fn spend(dat: Datum, red: RedSpend, ctx: Data) {
+      validator thing {
+        spend(dat: Datum, red: RedSpend, ctx: Data) {
           when (dat, red) is {
             (A(a), Spend(x)) ->
               (a.idx == x)?
@@ -4046,8 +4046,8 @@ fn generic_validator_type_test() {
         something: Void,
       }
 
-      validator {
-        fn err_example(r: A<B>, _ctx: Data) -> Bool {
+      validator err_example {
+        spend(r: A<B>, _ctx: Data) -> Bool {
           when r is {
             NoA ->
               False
@@ -5562,8 +5562,8 @@ fn opaque_value_in_datum() {
       }
 
 
-      validator {
-        fn spend(dat: Dat, red: Data, ctx: Data) {
+      validator foo {
+        spend(dat: Dat, red: Data, ctx: Data) {
           let val = dat.a
 
           expect [Pair(_, amount)] = val.inner.inner

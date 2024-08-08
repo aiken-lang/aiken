@@ -540,8 +540,8 @@ mod tests {
 
             type UUID { UUID }
 
-            validator {
-              fn opaque_singleton_variants(redeemer: Dict<UUID, Int>, ctx: Void) {
+            validator opaque_singleton_variants {
+              spend(redeemer: Dict<UUID, Int>, ctx: Void) {
                 True
               }
             }
@@ -558,8 +558,8 @@ mod tests {
               denominator: Int,
             }
 
-            validator {
-              fn opaque_singleton_multi_variants(redeemer: Rational, ctx: Void) {
+            validator opaque_singleton_multi_variants {
+              spend(redeemer: Rational, ctx: Void) {
                 True
               }
             }
@@ -575,8 +575,8 @@ mod tests {
                 foo: Data
             }
 
-            validator {
-              fn nested_data(datum: Foo, redeemer: Int, ctx: Void) {
+            validator nested_data {
+              spend(datum: Foo, redeemer: Int, ctx: Void) {
                 True
               }
             }
@@ -594,8 +594,8 @@ mod tests {
               Mul(Expr, Expr)
             }
 
-            validator {
-              fn recursive_types(redeemer: Expr, ctx: Void) {
+            validator recursive_types {
+              spend(redeemer: Expr, ctx: Void) {
                 True
               }
             }
@@ -622,8 +622,8 @@ mod tests {
                 }
             }
 
-            validator {
-              fn recursive_generic_types(datum: Foo, redeemer: LinkedList<Int>, ctx: Void) {
+            validator recursive_generic_types {
+              spend(datum: Foo, redeemer: LinkedList<Int>, ctx: Void) {
                 True
               }
             }
@@ -639,8 +639,8 @@ mod tests {
                 foo: Int
             }
 
-            validator {
-                fn annotated_data(datum: Data<Foo>, redeemer: Data, ctx: Void) {
+            validator annotated_data {
+                spend(datum: Data<Foo>, redeemer: Data, ctx: Void) {
                     True
                 }
             }
