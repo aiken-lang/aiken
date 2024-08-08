@@ -5,14 +5,13 @@ pub mod parameter;
 pub mod schema;
 pub mod validator;
 
-pub use error::Error;
-
 use crate::{
     config::{self, Config, PlutusVersion},
     module::CheckedModules,
 };
 use aiken_lang::gen_uplc::CodeGenerator;
 use definitions::Definitions;
+pub use error::Error;
 use schema::{Annotated, Schema};
 use std::fmt::Debug;
 use validator::Validator;
@@ -70,7 +69,7 @@ impl Blueprint {
         let validators: Result<Vec<_>, Error> = modules
             .validators()
             .flat_map(|(validator, def)| {
-                Validator::from_checked_module(modules, generator, validator, def)
+                Validator::from_checked_module(modules, generator, validator, def, &config.plutus)
                     .into_iter()
                     .map(|result| {
                         result.map(|mut schema| {
