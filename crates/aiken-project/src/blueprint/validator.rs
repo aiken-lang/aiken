@@ -30,7 +30,8 @@ pub struct Validator {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub datum: Option<Parameter>,
 
-    pub redeemer: Parameter,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub redeemer: Option<Parameter>,
 
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
@@ -92,7 +93,8 @@ impl Validator {
         plutus_version: &PlutusVersion,
     ) -> Result<Validator, Error> {
         let mut args = func.arguments.iter().rev();
-        let (_, redeemer, datum) = (args.next(), args.next().unwrap(), args.next());
+
+        let (_, _, redeemer, datum) = (args.next(), args.next(), args.next(), args.next());
 
         let mut definitions = Definitions::new();
 
@@ -142,23 +144,27 @@ impl Validator {
                 schema,
             });
 
-        let redeemer = Annotated::from_type(
-            modules.into(),
-            tipo_or_annotation(module, redeemer),
-            &mut definitions,
-        )
-        .map_err(|error| Error::Schema {
-            error,
-            location: redeemer.location,
-            source_code: NamedSource::new(
-                module.input_path.display().to_string(),
-                module.code.clone(),
-            ),
-        })
-        .map(|schema| Parameter {
-            title: Some(redeemer.arg_name.get_label()),
-            schema,
-        })?;
+        let redeemer = redeemer
+            .map(|redeemer| {
+                Annotated::from_type(
+                    modules.into(),
+                    tipo_or_annotation(module, redeemer),
+                    &mut definitions,
+                )
+                .map_err(|error| Error::Schema {
+                    error,
+                    location: redeemer.location,
+                    source_code: NamedSource::new(
+                        module.input_path.display().to_string(),
+                        module.code.clone(),
+                    ),
+                })
+            })
+            .transpose()?
+            .map(|schema| Parameter {
+                title: redeemer.map(|redeemer| redeemer.arg_name.get_label()),
+                schema,
+            });
 
         Ok(Validator {
             title: format!("{}.{}_{}", &module.name, &def.name, &func.name),
@@ -494,7 +500,7 @@ mod tests {
         assert_validator!(
             r#"
             validator generics {
-              spend(redeemer: a, ctx: Void) {
+              mint(redeemer: a, policy_id: ByteArray, ctx: Void) {
                 True
               }
             }
@@ -569,7 +575,7 @@ mod tests {
             }
 
             validator opaque_singleton_multi_variants {
-              spend(redeemer: Rational, ctx: Void) {
+              spend(redeemer: Rational, oref: Data, ctx: Void) {
                 True
               }
             }
