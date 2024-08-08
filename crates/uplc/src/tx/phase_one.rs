@@ -1,7 +1,6 @@
 use super::{
     error::Error,
-    eval::{DataLookupTable, ScriptVersion},
-    script_context::{ResolvedInput, ScriptPurpose},
+    script_context::{DataLookupTable, ResolvedInput, ScriptPurpose, ScriptVersion},
 };
 use itertools::Itertools;
 use pallas_addresses::{Address, ScriptHash, ShelleyPaymentPart, StakePayload};
