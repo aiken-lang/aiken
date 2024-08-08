@@ -3673,16 +3673,16 @@ fn when_bool_is_false() {
 #[test]
 fn when_tuple_deconstruction() {
     let src = r#"
-      type Thing {
+      pub type Thing {
         idx: Int,
       }
 
-      type Datum {
+      pub type Datum {
         A(Thing)
         B
       }
 
-      type RedSpend {
+      pub type RedSpend {
         Spend(Int)
         Buy
       }
@@ -4037,12 +4037,12 @@ fn when_tuple_empty_lists() {
 #[test]
 fn generic_validator_type_test() {
     let src = r#"
-      type A<x> {
+      pub type A<x> {
         NoA
         SomeA(Void, x)
       }
 
-      type B {
+      pub type B {
         something: Void,
       }
 
@@ -5548,15 +5548,15 @@ fn list_clause_with_assign() {
 #[test]
 fn opaque_value_in_datum() {
     let src = r#"
-      opaque type Value {
+      pub opaque type Value {
         inner: Dict<Dict<Int>>
       }
 
-      opaque type Dict<v> {
+      pub opaque type Dict<v> {
         inner: List<Pair<ByteArray, v>>
       }
 
-      type Dat {
+      pub type Dat {
           c: Int,
           a: Value
       }

@@ -405,7 +405,7 @@ mod tests {
         assert_validator!(
             r#"
             /// On-chain state
-            type State {
+            pub type State {
                 /// The contestation period as a number of seconds
                 contestationPeriod: ContestationPeriod,
                 /// List of public key hashes of all participants
@@ -414,20 +414,20 @@ mod tests {
             }
 
             /// A Hash digest for a given algorithm.
-            type Hash<alg> = ByteArray
+            pub type Hash<alg> = ByteArray
 
-            type Blake2b_256 { Blake2b_256 }
+            pub type Blake2b_256 { Blake2b_256 }
 
             /// Whatever
-            type ContestationPeriod {
+            pub type ContestationPeriod {
               /// A positive, non-zero number of seconds.
               ContestationPeriod(Int)
             }
 
-            type Party =
+            pub type Party =
               ByteArray
 
-            type Input {
+            pub type Input {
                 CollectCom
                 Close
                 /// Abort a transaction
@@ -460,12 +460,12 @@ mod tests {
     fn generics() {
         assert_validator!(
             r#"
-            type Either<left, right> {
+            pub type Either<left, right> {
                 Left(left)
                 Right(right)
             }
 
-            type Interval<a> {
+            pub type Interval<a> {
                 Finite(a)
                 Infinite
             }
@@ -483,8 +483,8 @@ mod tests {
     fn free_vars() {
         assert_validator!(
             r#"
-            validator {
-              fn generics(redeemer: a, ctx: Void) {
+            validator generics {
+              spend(redeemer: a, ctx: Void) {
                 True
               }
             }
@@ -496,11 +496,11 @@ mod tests {
     fn list_2_tuples_as_list() {
         assert_validator!(
             r#"
-            type Dict<key, value> {
+            pub type Dict<key, value> {
                 inner: List<(ByteArray, value)>
             }
 
-            type UUID { UUID }
+            pub type UUID { UUID }
 
             validator list_2_tuples_as_list {
               mint(redeemer: Dict<UUID, Int>, ctx: Void) {
@@ -515,14 +515,14 @@ mod tests {
     fn list_pairs_as_map() {
         assert_validator!(
             r#"
-            type Dict<key, value> {
+            pub type Dict<key, value> {
                 inner: List<Pair<ByteArray, value>>
             }
 
-            type UUID { UUID }
+            pub type UUID { UUID }
 
-            validator {
-              fn list_pairs_as_map(redeemer: Dict<UUID, Int>, ctx: Void) {
+            validator list_pairs_as_map {
+              spend(redeemer: Dict<UUID, Int>, ctx: Void) {
                 True
               }
             }
@@ -538,7 +538,7 @@ mod tests {
                 inner: List<(ByteArray, value)>
             }
 
-            type UUID { UUID }
+            pub type UUID { UUID }
 
             validator opaque_singleton_variants {
               spend(redeemer: Dict<UUID, Int>, ctx: Void) {
