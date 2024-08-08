@@ -175,6 +175,6 @@ macro_rules! assert_format {
         let (module2, extra2) = $crate::parser::module(&out, $crate::ast::ModuleKind::Lib).unwrap();
         let mut out2 = String::new();
         $crate::format::pretty(&mut out2, module2, extra2, &out);
-        assert_eq!(out, out2, "formatting isn't idempotent");
+        pretty_assertions::assert_eq!(out, out2, "formatting isn't idempotent");
     };
 }
