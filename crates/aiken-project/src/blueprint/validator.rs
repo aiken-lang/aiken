@@ -378,8 +378,8 @@ mod tests {
     fn mint_basic() {
         assert_validator!(
             r#"
-            validator {
-              fn mint(redeemer: Data, ctx: Data) {
+            validator thing {
+              mint(redeemer: Data, ctx: Data) {
                 True
               }
             }
@@ -391,8 +391,8 @@ mod tests {
     fn mint_parameterized() {
         assert_validator!(
             r#"
-            validator(utxo_ref: Int) {
-              fn mint(redeemer: Data, ctx: Data) {
+            validator thing(utxo_ref: Int) {
+              mint(redeemer: Data, ctx: Data) {
                 True
               }
             }
@@ -434,8 +434,8 @@ mod tests {
                 Abort
             }
 
-            validator {
-              fn simplified_hydra(datum: State, redeemer: Input, ctx: Data) {
+            validator simplified_hydra {
+              spend(datum: State, redeemer: Input, ctx: Data) {
                 True
               }
             }
@@ -447,8 +447,8 @@ mod tests {
     fn tuples() {
         assert_validator!(
             r#"
-            validator {
-              fn tuples(datum: (Int, ByteArray), redeemer: (Int, Int, Int), ctx: Void) {
+            validator tuples {
+              spend(datum: (Int, ByteArray), redeemer: (Int, Int, Int), ctx: Void) {
                 True
               }
             }
@@ -470,8 +470,8 @@ mod tests {
                 Infinite
             }
 
-            validator {
-              fn generics(redeemer: Either<ByteArray, Interval<Int>>, ctx: Void) {
+            validator generics {
+              spend(redeemer: Either<ByteArray, Interval<Int>>, ctx: Void) {
                 True
               }
             }
@@ -502,8 +502,8 @@ mod tests {
 
             type UUID { UUID }
 
-            validator {
-              fn list_2_tuples_as_list(redeemer: Dict<UUID, Int>, ctx: Void) {
+            validator list_2_tuples_as_list {
+              mint(redeemer: Dict<UUID, Int>, ctx: Void) {
                 True
               }
             }
