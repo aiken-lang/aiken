@@ -232,7 +232,15 @@ impl<'comments> Formatter<'comments> {
                 return_annotation,
                 end_position,
                 ..
-            }) => self.definition_fn(public, name, args, return_annotation, body, *end_position),
+            }) => self.definition_fn(
+                public,
+                name,
+                args,
+                return_annotation,
+                body,
+                *end_position,
+                false,
+            ),
 
             Definition::Validator(Validator {
                 end_position,
@@ -513,12 +521,18 @@ impl<'comments> Formatter<'comments> {
         return_annotation: &'a Option<Annotation>,
         body: &'a UntypedExpr,
         end_location: usize,
+        is_validator: bool,
     ) -> Document<'a> {
         // Fn name and args
-        let head = pub_(*public)
-            .append("fn ")
-            .append(name)
-            .append(wrap_args(args.iter().map(|e| (self.fn_arg(e), false))));
+        let head = if !is_validator {
+            pub_(*public)
+                .append("fn ")
+                .append(name)
+                .append(wrap_args(args.iter().map(|e| (self.fn_arg(e), false))))
+        } else {
+            name.to_doc()
+                .append(wrap_args(args.iter().map(|e| (self.fn_arg(e), false))))
+        };
 
         // Add return annotation
         let head = match return_annotation {
@@ -613,6 +627,7 @@ impl<'comments> Formatter<'comments> {
                     &handler.return_annotation,
                     &handler.body,
                     handler.end_position,
+                    true,
                 )
                 .group();
 
@@ -632,6 +647,7 @@ impl<'comments> Formatter<'comments> {
                 &fallback.return_annotation,
                 &fallback.body,
                 fallback.end_position,
+                true,
             )
             .group();
 

@@ -1,21 +1,28 @@
 ---
 source: crates/aiken-lang/src/tests/format.rs
-description: "Code:\n\nvalidator ( ) {\n// What is the purpose of life\n\nfn foo (d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {\nTrue\n}\n}\n\n// What?\nvalidator {\n  /// Some documentation for foo\n  fn foo() {\n    Void\n  }\n\n  // I am lost\n}\n"
+description: "Code:\n\nvalidator thing ( ) {\n// What is the purpose of life\n\nspend(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {\nTrue\n}\n}\n\n// What?\nvalidator foo {\n  /// Some documentation for foo\n  foo() {\n    Void\n  }\n\n  // I am lost\n}\n"
 ---
-validator {
+validator thing {
   // What is the purpose of life
 
-  fn foo(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
+  spend(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
     True
+  }
+
+  else(_ctx) {
+    fail
   }
 }
 
 // What?
-validator {
+validator foo {
   /// Some documentation for foo
-  fn foo() {
+  foo() {
     Void
   }
 
-  // I am lost
+  else(_ctx) {
+    fail
+    // I am lost
+  }
 }
