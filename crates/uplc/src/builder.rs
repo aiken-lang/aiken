@@ -536,6 +536,8 @@ impl Term<Name> {
     /// ## Example
     ///
     /// ```
+    ///
+    /// use uplc::ast::Term
     /// let value = Term::var("thing");
     ///
     /// value.as_var("__val", |val| {
