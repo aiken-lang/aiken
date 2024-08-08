@@ -83,7 +83,7 @@ pub fn exec(
     let result =
         blueprint.with_validator(title, when_too_many, when_missing, |validator| match to {
             Format::CardanoCli => {
-                let cbor_bytes = validator.program.to_cbor().unwrap();
+                let cbor_bytes = validator.program.inner().to_cbor().unwrap();
 
                 let mut double_cbor_bytes = Vec::new();
 

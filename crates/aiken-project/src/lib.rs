@@ -40,7 +40,6 @@ use aiken_lang::{
     format::{Formatter, MAX_COLUMNS},
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
-    plutus_version::PlutusVersion,
     tipo::{Type, TypeInfo},
     IdGenerator,
 };
@@ -50,8 +49,7 @@ use miette::NamedSource;
 use options::{CodeGenMode, Options};
 use package_name::PackageName;
 use pallas_addresses::{Address, Network, ShelleyAddress, ShelleyDelegationPart, StakePayload};
-use pallas_primitives::conway::{self as cardano, PolicyId};
-use pallas_traverse::ComputeHash;
+use pallas_primitives::conway::PolicyId;
 use std::{
     collections::{BTreeSet, HashMap},
     fs::{self, File},
@@ -298,7 +296,7 @@ where
             let path = dir.clone().join(format!("{}.uplc", validator.title));
 
             let program = &validator.program;
-            let program: Program<Name> = program.try_into().unwrap();
+            let program: Program<Name> = program.inner().try_into().unwrap();
 
             fs::write(&path, program.to_pretty()).map_err(|error| Error::FileIo { error, path })?;
         }
@@ -490,7 +488,7 @@ where
                     Network::Testnet
                 };
 
-                Ok(validator.program.address(
+                Ok(validator.program.inner().address(
                     network,
                     delegation_part.to_owned(),
                     &self.config.plutus.into(),
@@ -520,15 +518,7 @@ where
             if n > 0 {
                 Err(blueprint::error::Error::ParameterizedValidator { n }.into())
             } else {
-                let cbor = validator.program.to_cbor().unwrap();
-
-                let validator_hash = match self.config.plutus {
-                    PlutusVersion::V1 => cardano::PlutusV1Script(cbor.into()).compute_hash(),
-                    PlutusVersion::V2 => cardano::PlutusV2Script(cbor.into()).compute_hash(),
-                    PlutusVersion::V3 => cardano::PlutusV3Script(cbor.into()).compute_hash(),
-                };
-
-                Ok(validator_hash)
+                Ok(validator.program.compiled_code_and_hash().1)
             }
         })
     }
@@ -552,7 +542,13 @@ where
             .map(|(checked_module, func)| {
                 let mut generator = self.new_generator(tracing);
 
-                Export::from_function(func, checked_module, &mut generator, &self.checked_modules)
+                Export::from_function(
+                    func,
+                    checked_module,
+                    &mut generator,
+                    &self.checked_modules,
+                    &self.config.plutus,
+                )
             })
             .transpose()?
             .ok_or_else(|| Error::ExportNotFound {
