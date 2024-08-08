@@ -891,6 +891,10 @@ impl TypedArg {
         self.arg_name.get_variable_name()
     }
 
+    pub fn get_name(&self) -> String {
+        self.arg_name.get_name()
+    }
+
     pub fn is_capture(&self) -> bool {
         if let ArgName::Named {
             ref name, location, ..
