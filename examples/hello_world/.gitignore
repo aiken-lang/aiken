@@ -2,3 +2,4 @@ artifacts/
 build/
 *.sk
 *.addr
+node_modules/
