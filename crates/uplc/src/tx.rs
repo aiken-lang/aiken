@@ -96,7 +96,8 @@ pub fn eval_phase_two_raw(
     run_phase_one: bool,
     with_redeemer: fn(&Redeemer) -> (),
 ) -> Result<Vec<Vec<u8>>, Error> {
-    let multi_era_tx = MultiEraTx::decode_for_era(Era::Babbage, tx_bytes)
+    let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, tx_bytes)
+        .or_else(|_| MultiEraTx::decode_for_era(Era::Babbage, tx_bytes))
         .or_else(|_| MultiEraTx::decode_for_era(Era::Alonzo, tx_bytes))?;
 
     let cost_mdls = CostMdls::decode_fragment(cost_mdls_bytes)?;

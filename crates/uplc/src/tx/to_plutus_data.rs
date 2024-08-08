@@ -36,6 +36,8 @@ fn empty_constr(index: u64) -> PlutusData {
     })
 }
 
+struct WithWrappedTransactionId<'a, T>(&'a T);
+
 pub trait ToPlutusData {
     fn to_plutus_data(&self) -> PlutusData;
 }
@@ -98,12 +100,24 @@ impl ToPlutusData for Address {
     }
 }
 
+impl<'a> ToPlutusData for WithWrappedTransactionId<'a, TransactionInput> {
+    fn to_plutus_data(&self) -> PlutusData {
+        wrap_multiple_with_constr(
+            0,
+            vec![
+                wrap_with_constr(0, self.0.transaction_id.to_plutus_data()),
+                PlutusData::BigInt(BigInt::Int((self.0.index as i128).try_into().unwrap())),
+            ],
+        )
+    }
+}
+
 impl ToPlutusData for TransactionInput {
     fn to_plutus_data(&self) -> PlutusData {
         wrap_multiple_with_constr(
             0,
             vec![
-                wrap_with_constr(0, self.transaction_id.to_plutus_data()),
+                self.transaction_id.to_plutus_data(),
                 PlutusData::BigInt(BigInt::Int((self.index as i128).try_into().unwrap())),
             ],
         )
@@ -299,7 +313,7 @@ impl ToPlutusData for TxOut {
                 //         legacy_output.datum_hash.to_plutus_data(),
                 //     ],
                 // ),
-                TransactionOutput::Legacy(..) => todo!("TransactionOutput::Legacy"),
+                TransactionOutput::Legacy(..) => unimplemented!("TransactionOutput::Legacy"),
                 TransactionOutput::PostAlonzo(post_alonzo_output) => wrap_multiple_with_constr(
                     0,
                     vec![
@@ -329,7 +343,7 @@ impl ToPlutusData for TxOut {
                 //         None::<ScriptRef>.to_plutus_data(),
                 //     ],
                 // ),
-                TransactionOutput::Legacy(..) => todo!("TransactionOutput::Legacy"),
+                TransactionOutput::Legacy(..) => unimplemented!("TransactionOutput::Legacy"),
                 TransactionOutput::PostAlonzo(post_alonzo_output) => wrap_multiple_with_constr(
                     0,
                     vec![
@@ -556,6 +570,29 @@ impl ToPlutusData for TimeRange {
     }
 }
 
+impl<'a> ToPlutusData for WithWrappedTransactionId<'a, Vec<TxInInfo>> {
+    fn to_plutus_data(&self) -> PlutusData {
+        PlutusData::Array(
+            self.0
+                .iter()
+                .map(|p| WithWrappedTransactionId(p).to_plutus_data())
+                .collect(),
+        )
+    }
+}
+
+impl<'a> ToPlutusData for WithWrappedTransactionId<'a, TxInInfo> {
+    fn to_plutus_data(&self) -> PlutusData {
+        wrap_multiple_with_constr(
+            0,
+            vec![
+                WithWrappedTransactionId(&self.0.out_ref).to_plutus_data(),
+                self.0.resolved.to_plutus_data(),
+            ],
+        )
+    }
+}
+
 impl ToPlutusData for TxInInfo {
     fn to_plutus_data(&self) -> PlutusData {
         wrap_multiple_with_constr(
@@ -587,7 +624,7 @@ impl ToPlutusData for TxInfo {
             TxInfo::V1(tx_info) => wrap_multiple_with_constr(
                 0,
                 vec![
-                    tx_info.inputs.to_plutus_data(),
+                    WithWrappedTransactionId(&tx_info.inputs).to_plutus_data(),
                     tx_info.outputs.to_plutus_data(),
                     tx_info.fee.to_plutus_data(),
                     tx_info.mint.to_plutus_data(),
@@ -602,6 +639,23 @@ impl ToPlutusData for TxInfo {
             TxInfo::V2(tx_info) => wrap_multiple_with_constr(
                 0,
                 vec![
+                    WithWrappedTransactionId(&tx_info.inputs).to_plutus_data(),
+                    WithWrappedTransactionId(&tx_info.reference_inputs).to_plutus_data(),
+                    tx_info.outputs.to_plutus_data(),
+                    tx_info.fee.to_plutus_data(),
+                    tx_info.mint.to_plutus_data(),
+                    tx_info.certificates.to_plutus_data(),
+                    tx_info.withdrawals.to_plutus_data(),
+                    tx_info.valid_range.to_plutus_data(),
+                    tx_info.signatories.to_plutus_data(),
+                    tx_info.redeemers.to_plutus_data(),
+                    tx_info.data.to_plutus_data(),
+                    wrap_with_constr(0, tx_info.id.to_plutus_data()),
+                ],
+            ),
+            TxInfo::V3(tx_info) => wrap_multiple_with_constr(
+                0,
+                vec![
                     tx_info.inputs.to_plutus_data(),
                     tx_info.reference_inputs.to_plutus_data(),
                     tx_info.outputs.to_plutus_data(),
@@ -613,7 +667,7 @@ impl ToPlutusData for TxInfo {
                     tx_info.signatories.to_plutus_data(),
                     tx_info.redeemers.to_plutus_data(),
                     tx_info.data.to_plutus_data(),
-                    wrap_with_constr(0, tx_info.id.to_plutus_data()),
+                    tx_info.id.to_plutus_data(),
                 ],
             ),
         }

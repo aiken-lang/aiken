@@ -27,6 +27,7 @@ pub struct TxInInfo {
     pub out_ref: TransactionInput,
     pub resolved: TxOut,
 }
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum TxOut {
     V1(TransactionOutput),
@@ -290,15 +291,51 @@ impl TxInfoV2 {
     }
 }
 
-pub struct TxInfoV3 {}
+#[derive(Debug, PartialEq, Clone)]
+pub struct TxInfoV3 {
+    pub inputs: Vec<TxInInfo>,
+    pub reference_inputs: Vec<TxInInfo>,
+    pub outputs: Vec<TxOut>,
+    pub fee: Value,
+    pub mint: MintValue,
+    pub certificates: Vec<Certificate>,
+    pub withdrawals: KeyValuePairs<Address, Coin>,
+    pub valid_range: TimeRange,
+    pub signatories: Vec<AddrKeyhash>,
+    pub redeemers: KeyValuePairs<ScriptPurpose, Redeemer>,
+    pub data: KeyValuePairs<DatumHash, PlutusData>,
+    // TODO:
+    // votes : KeyValuePairs<Voter, KeyValuePairs<GovernanceActionId, Vote>>
+    // proposalProcedures : Vec<ProposalProcedure>
+    // currentTreasuryAmount : Option<Coin>
+    // treasuryDonation : Option<Coin>
+    pub id: Hash<32>,
+}
 
 impl TxInfoV3 {
     pub fn from_transaction(
-        _tx: &MintedTx,
-        _utxos: &[ResolvedInput],
-        _slot_config: &SlotConfig,
+        tx: &MintedTx,
+        utxos: &[ResolvedInput],
+        slot_config: &SlotConfig,
     ) -> Result<TxInfo, Error> {
-        todo!("TxInfoV3")
+        if let TxInfo::V2(tx_info_v2) = TxInfoV2::from_transaction(tx, utxos, slot_config)? {
+            Ok(TxInfo::V3(TxInfoV3 {
+                inputs: tx_info_v2.inputs,
+                reference_inputs: tx_info_v2.reference_inputs,
+                outputs: tx_info_v2.outputs,
+                fee: tx_info_v2.fee,
+                mint: tx_info_v2.mint,
+                certificates: tx_info_v2.certificates,
+                withdrawals: tx_info_v2.withdrawals,
+                valid_range: tx_info_v2.valid_range,
+                signatories: tx_info_v2.signatories,
+                redeemers: tx_info_v2.redeemers,
+                data: tx_info_v2.data,
+                id: tx_info_v2.id,
+            }))
+        } else {
+            unreachable!()
+        }
     }
 }
 
@@ -306,12 +343,15 @@ impl TxInfoV3 {
 pub enum TxInfo {
     V1(TxInfoV1),
     V2(TxInfoV2),
+    V3(TxInfoV3),
 }
 
 impl TxInfo {
     pub fn purpose(&self, needle: &Redeemer) -> Option<ScriptPurpose> {
         match self {
-            TxInfo::V1(TxInfoV1 { redeemers, .. }) | TxInfo::V2(TxInfoV2 { redeemers, .. }) => {
+            TxInfo::V1(TxInfoV1 { redeemers, .. })
+            | TxInfo::V2(TxInfoV2 { redeemers, .. })
+            | TxInfo::V3(TxInfoV3 { redeemers, .. }) => {
                 redeemers.iter().find_map(|(purpose, redeemer)| {
                     if redeemer == needle {
                         Some(purpose.clone())
@@ -327,6 +367,7 @@ impl TxInfo {
         match self {
             TxInfo::V1(info) => &info.inputs,
             TxInfo::V2(info) => &info.inputs,
+            TxInfo::V3(info) => &info.inputs,
         }
     }
 
@@ -334,6 +375,7 @@ impl TxInfo {
         match self {
             TxInfo::V1(info) => &info.mint,
             TxInfo::V2(info) => &info.mint,
+            TxInfo::V3(info) => &info.mint,
         }
     }
 
@@ -341,6 +383,7 @@ impl TxInfo {
         match self {
             TxInfo::V1(info) => &info.withdrawals[..],
             TxInfo::V2(info) => &info.withdrawals[..],
+            TxInfo::V3(info) => &info.withdrawals[..],
         }
     }
 
@@ -348,6 +391,7 @@ impl TxInfo {
         match self {
             TxInfo::V1(info) => &info.certificates[..],
             TxInfo::V2(info) => &info.certificates[..],
+            TxInfo::V3(info) => &info.certificates[..],
         }
     }
 }

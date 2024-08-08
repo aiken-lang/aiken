@@ -10,7 +10,7 @@ use pallas_primitives::conway::{
 };
 use std::collections::HashMap;
 
-type AlonzoScriptsNeeded = Vec<(ScriptPurpose, ScriptHash)>;
+type ScriptsNeeded = Vec<(ScriptPurpose, ScriptHash)>;
 
 // subset of phase-1 ledger checks related to scripts
 pub fn eval_phase_one(
@@ -28,7 +28,7 @@ pub fn eval_phase_one(
 }
 
 pub fn validate_missing_scripts(
-    needed: &AlonzoScriptsNeeded,
+    needed: &ScriptsNeeded,
     txscripts: HashMap<ScriptHash, ScriptVersion>,
 ) -> Result<(), Error> {
     let received_hashes = txscripts.keys().copied().collect::<Vec<ScriptHash>>();
@@ -61,10 +61,7 @@ pub fn validate_missing_scripts(
     Ok(())
 }
 
-pub fn scripts_needed(
-    tx: &MintedTx,
-    utxos: &[ResolvedInput],
-) -> Result<AlonzoScriptsNeeded, Error> {
+pub fn scripts_needed(tx: &MintedTx, utxos: &[ResolvedInput]) -> Result<ScriptsNeeded, Error> {
     let mut needed = Vec::new();
 
     let txb = tx.transaction_body.clone();
@@ -106,7 +103,7 @@ pub fn scripts_needed(
 
                     None
                 })
-                .collect::<AlonzoScriptsNeeded>()
+                .collect::<ScriptsNeeded>()
         })
         .unwrap_or_default();
 
@@ -127,7 +124,7 @@ pub fn scripts_needed(
                         _ => None,
                     }
                 })
-                .collect::<AlonzoScriptsNeeded>()
+                .collect::<ScriptsNeeded>()
         })
         .unwrap_or_default();
 
@@ -137,7 +134,7 @@ pub fn scripts_needed(
         .map(|m| {
             m.iter()
                 .map(|(policy_id, _)| (ScriptPurpose::Minting(*policy_id), *policy_id))
-                .collect::<AlonzoScriptsNeeded>()
+                .collect::<ScriptsNeeded>()
         })
         .unwrap_or_default();
 
@@ -156,7 +153,7 @@ pub fn scripts_needed(
 /// hasExactSetOfRedeemers in Ledger Spec, but we pass `txscripts` directly
 pub fn has_exact_set_of_redeemers(
     tx: &MintedTx,
-    needed: &AlonzoScriptsNeeded,
+    needed: &ScriptsNeeded,
     tx_scripts: HashMap<ScriptHash, ScriptVersion>,
 ) -> Result<(), Error> {
     let mut redeemers_needed = Vec::new();

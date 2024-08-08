@@ -6,7 +6,7 @@ use super::{
 use crate::{
     ast::{FakeNamedDeBruijn, NamedDeBruijn, Program},
     machine::cost_model::ExBudget,
-    tx::script_context::{DataLookupTable, ScriptVersion, TxInfoV1, TxInfoV2},
+    tx::script_context::{DataLookupTable, ScriptVersion, TxInfoV1, TxInfoV2, TxInfoV3},
     PlutusData,
 };
 use pallas_codec::utils::Bytes;
@@ -116,7 +116,22 @@ pub fn eval_redeemer(
             program(script.0)?,
         ),
 
-        (ScriptVersion::V3(_script), _datum) => todo!(),
+        (ScriptVersion::V3(script), datum) => do_eval_redeemer(
+            cost_mdls_opt
+                .map(|cost_mdls| {
+                    cost_mdls
+                        .plutus_v3
+                        .as_ref()
+                        .ok_or(Error::CostModelNotFound(Language::PlutusV3))
+                })
+                .transpose()?,
+            initial_budget,
+            &Language::PlutusV3,
+            datum,
+            redeemer,
+            TxInfoV3::from_transaction(tx, utxos, slot_config)?,
+            program(script.0)?,
+        ),
     }
     .map_err(|err| Error::RedeemerError {
         tag: redeemer_tag_to_string(&redeemer.tag),
