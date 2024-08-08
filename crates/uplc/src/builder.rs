@@ -535,7 +535,7 @@ impl Term<Name> {
     ///
     /// ## Example
     ///
-    /// ```
+    ///
     ///
     /// use uplc::ast::Term
     /// let value = Term::var("thing");
@@ -544,7 +544,7 @@ impl Term<Name> {
     ///   val.do_something()
     ///      .do_another_thing()
     /// })
-    /// ```
+    ///
     pub fn as_var<F>(self, var_name: &str, callback: F) -> Term<Name>
     where
         F: FnOnce(Rc<Name>) -> Term<Name>,
