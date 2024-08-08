@@ -141,6 +141,10 @@ pub fn scripts_needed(
         })
         .unwrap_or_default();
 
+    // TODO
+    assert!(txb.proposal_procedures.is_none());
+    assert!(txb.voting_procedures.is_none());
+
     needed.append(&mut spend);
     needed.append(&mut reward);
     needed.append(&mut cert);

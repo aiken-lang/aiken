@@ -79,7 +79,7 @@ pub fn exec(
         )
     };
 
-    let tx = MultiEraTx::decode_for_era(Era::Babbage, &tx_bytes).into_diagnostic()?;
+    let tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes).into_diagnostic()?;
 
     eprintln!(
         "{} {}",
