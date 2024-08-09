@@ -81,7 +81,7 @@ pub fn scripts_needed(tx: &MintedTx, utxos: &[ResolvedInput]) -> Result<ScriptsN
 
         if let Address::Shelley(a) = address {
             if let ShelleyPaymentPart::Script(h) = a.payment() {
-                spend.push((ScriptPurpose::Spending(input.clone()), *h));
+                spend.push((ScriptPurpose::Spending(input.clone(), ()), *h));
             }
         }
     }
@@ -241,7 +241,7 @@ fn build_redeemer_key(
             Ok(redeemer_key)
         }
 
-        ScriptPurpose::Spending(txin) => {
+        ScriptPurpose::Spending(txin, ()) => {
             let redeemer_key = tx_body
                 .inputs
                 .iter()

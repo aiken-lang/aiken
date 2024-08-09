@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 
+AIKEN=${1:-"cargo run -r --quiet --"}
+
 TESTS=()
 for lang in $(ls script_context); do
   for interaction in $(find script_context/$lang/validators -type f); do
     title=$(basename $interaction)
     title="${title%.*}"
     cd script_context/$lang
-    ./test.sh $title &
+    ./test.sh $title "$AIKEN" &
     TESTS+=("$title,$lang,$!")
     cd - 1>/dev/null
   done

@@ -12,6 +12,8 @@ if [ -z $TITLE ]; then
   exit 1
 fi
 
+AIKEN=${2:-"cargo run -r --quiet --"}
+
 if ! command -v jq &> /dev/null
 then
     echo "\033[1mjq\033[0m missing from system but required."
@@ -24,7 +26,7 @@ then
     exit 1
 fi
 
-cargo run -r --quiet -- build 2>/dev/null
+$AIKEN build 2>/dev/null
 if [ $? -ne 0 ]; then
   exit $?
 fi
@@ -39,4 +41,4 @@ cp ctx/$TITLE/inputs.cbor.template ctx/$TITLE/inputs.cbor
 sed "s/{{ VALIDATOR_HASH }}/$VALIDATOR_HASH/" ctx/$TITLE/outputs.cbor.template > ctx/$TITLE/outputs.cbor
 sed "s/{{ VALIDATOR }}/$VALIDATOR/" ctx/$TITLE/tx.cbor.template | sed "s/{{ VALIDATOR_HASH }}/$VALIDATOR_HASH/" > ctx/$TITLE/tx.cbor
 
-cargo run -r --quiet -- tx simulate 1>$TITLE.log 2>&1 ctx/$TITLE/tx.cbor ctx/$TITLE/inputs.cbor ctx/$TITLE/outputs.cbor
+$AIKEN tx simulate 1>$TITLE.log 2>&1 ctx/$TITLE/tx.cbor ctx/$TITLE/inputs.cbor ctx/$TITLE/outputs.cbor

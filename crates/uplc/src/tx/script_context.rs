@@ -25,45 +25,46 @@ pub struct ResolvedInput {
 #[derive(Debug, PartialEq, Clone)]
 pub struct TxInInfo {
     pub out_ref: TransactionInput,
-    pub resolved: TxOut,
+    pub resolved: TransactionOutput,
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum TxOut {
-    V1(TransactionOutput),
-    V2(TransactionOutput),
-}
-
-impl TxOut {
-    pub fn address(&self) -> Address {
-        let address_from_output = |output: &TransactionOutput| match output {
-            TransactionOutput::Legacy(x) => Address::from_bytes(&x.address).unwrap(),
-            TransactionOutput::PostAlonzo(x) => Address::from_bytes(&x.address).unwrap(),
-        };
-        match self {
-            TxOut::V1(output) => address_from_output(output),
-            TxOut::V2(output) => address_from_output(output),
-        }
-    }
-
-    pub fn datum(&self) -> Option<DatumOption> {
-        let datum_from_output = |output: &TransactionOutput| match output {
-            TransactionOutput::Legacy(x) => x.datum_hash.map(DatumOption::Hash),
-            TransactionOutput::PostAlonzo(x) => x.datum_option.clone(),
-        };
-        match self {
-            TxOut::V1(output) => datum_from_output(output),
-            TxOut::V2(output) => datum_from_output(output),
-        }
+pub fn output_address(output: &TransactionOutput) -> Address {
+    match output {
+        TransactionOutput::Legacy(x) => Address::from_bytes(&x.address).unwrap(),
+        TransactionOutput::PostAlonzo(x) => Address::from_bytes(&x.address).unwrap(),
     }
 }
 
+pub fn output_datum(output: &TransactionOutput) -> Option<DatumOption> {
+    match output {
+        TransactionOutput::Legacy(x) => x.datum_hash.map(DatumOption::Hash),
+        TransactionOutput::PostAlonzo(x) => x.datum_option.clone(),
+    }
+}
+
+/// The ScriptPurpose is part of the ScriptContext is the case of Plutus V1 and V2.
+/// It is superseded by the ScriptInfo in PlutusV3.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum ScriptPurpose {
+pub enum ScriptInfo<T> {
     Minting(PolicyId),
-    Spending(TransactionInput),
+    Spending(TransactionInput, T),
     Rewarding(StakeCredential),
     Certifying(Certificate),
+}
+
+pub type ScriptPurpose = ScriptInfo<()>;
+
+impl ScriptPurpose {
+    pub fn into_script_info<T>(self, datum: T) -> ScriptInfo<T> {
+        match self {
+            Self::Minting(policy_id) => ScriptInfo::Minting(policy_id),
+            Self::Spending(transaction_output, ()) => {
+                ScriptInfo::Spending(transaction_output, datum)
+            }
+            Self::Rewarding(stake_credential) => ScriptInfo::Rewarding(stake_credential),
+            Self::Certifying(certificate) => ScriptInfo::Certifying(certificate),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -184,7 +185,7 @@ impl DataLookupTable {
 #[derive(Debug, PartialEq, Clone)]
 pub struct TxInfoV1 {
     pub inputs: Vec<TxInInfo>,
-    pub outputs: Vec<TxOut>,
+    pub outputs: Vec<TransactionOutput>,
     pub fee: Value,
     pub mint: MintValue,
     pub certificates: Vec<Certificate>,
@@ -219,8 +220,8 @@ impl TxInfoV1 {
 
         Ok(TxInfo::V1(TxInfoV1 {
             inputs,
-            outputs: get_outputs_info(TxOut::V1, &tx.transaction_body.outputs[..]),
-            fee: get_fee_info(&tx.transaction_body.fee),
+            outputs: get_outputs_info(&tx.transaction_body.outputs[..]),
+            fee: Value::Coin(get_fee_info(&tx.transaction_body.fee)),
             mint,
             certificates,
             withdrawals: withdrawals.into(),
@@ -237,7 +238,7 @@ impl TxInfoV1 {
 pub struct TxInfoV2 {
     pub inputs: Vec<TxInInfo>,
     pub reference_inputs: Vec<TxInInfo>,
-    pub outputs: Vec<TxOut>,
+    pub outputs: Vec<TransactionOutput>,
     pub fee: Value,
     pub mint: MintValue,
     pub certificates: Vec<Certificate>,
@@ -277,8 +278,8 @@ impl TxInfoV2 {
         Ok(TxInfo::V2(TxInfoV2 {
             inputs,
             reference_inputs,
-            outputs: get_outputs_info(TxOut::V2, &tx.transaction_body.outputs[..]),
-            fee: get_fee_info(&tx.transaction_body.fee),
+            outputs: get_outputs_info(&tx.transaction_body.outputs[..]),
+            fee: Value::Coin(get_fee_info(&tx.transaction_body.fee)),
             mint,
             certificates,
             withdrawals,
@@ -295,8 +296,8 @@ impl TxInfoV2 {
 pub struct TxInfoV3 {
     pub inputs: Vec<TxInInfo>,
     pub reference_inputs: Vec<TxInInfo>,
-    pub outputs: Vec<TxOut>,
-    pub fee: Value,
+    pub outputs: Vec<TransactionOutput>,
+    pub fee: Coin,
     pub mint: MintValue,
     pub certificates: Vec<Certificate>,
     pub withdrawals: KeyValuePairs<Address, Coin>,
@@ -323,7 +324,7 @@ impl TxInfoV3 {
                 inputs: tx_info_v2.inputs,
                 reference_inputs: tx_info_v2.reference_inputs,
                 outputs: tx_info_v2.outputs,
-                fee: tx_info_v2.fee,
+                fee: get_fee_info(&tx.transaction_body.fee),
                 mint: tx_info_v2.mint,
                 certificates: tx_info_v2.certificates,
                 withdrawals: tx_info_v2.withdrawals,
@@ -347,19 +348,41 @@ pub enum TxInfo {
 }
 
 impl TxInfo {
-    pub fn purpose(&self, needle: &Redeemer) -> Option<ScriptPurpose> {
+    pub fn into_script_context(
+        self,
+        redeemer: &Redeemer,
+        datum: Option<&PlutusData>,
+    ) -> Option<ScriptContext> {
         match self {
-            TxInfo::V1(TxInfoV1 { redeemers, .. })
-            | TxInfo::V2(TxInfoV2 { redeemers, .. })
-            | TxInfo::V3(TxInfoV3 { redeemers, .. }) => {
-                redeemers.iter().find_map(|(purpose, redeemer)| {
-                    if redeemer == needle {
+            TxInfo::V1(TxInfoV1 { ref redeemers, .. })
+            | TxInfo::V2(TxInfoV2 { ref redeemers, .. }) => redeemers
+                .iter()
+                .find_map(move |(purpose, some_redeemer)| {
+                    if redeemer == some_redeemer {
                         Some(purpose.clone())
                     } else {
                         None
                     }
                 })
-            }
+                .map(move |purpose| ScriptContext::V1V2 {
+                    tx_info: self,
+                    purpose: purpose.clone().into(),
+                }),
+
+            TxInfo::V3(TxInfoV3 { ref redeemers, .. }) => redeemers
+                .iter()
+                .find_map(move |(purpose, some_redeemer)| {
+                    if redeemer == some_redeemer {
+                        Some(purpose.clone())
+                    } else {
+                        None
+                    }
+                })
+                .map(move |purpose| ScriptContext::V3 {
+                    tx_info: self,
+                    redeemer: redeemer.data.clone(),
+                    purpose: purpose.clone().into_script_info(datum.cloned()),
+                }),
         }
     }
 
@@ -397,9 +420,16 @@ impl TxInfo {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct ScriptContext {
-    pub tx_info: TxInfo,
-    pub purpose: ScriptPurpose,
+pub enum ScriptContext {
+    V1V2 {
+        tx_info: TxInfo,
+        purpose: Box<ScriptPurpose>,
+    },
+    V3 {
+        tx_info: TxInfo,
+        redeemer: PlutusData,
+        purpose: ScriptInfo<Option<PlutusData>>,
+    },
 }
 
 //---- Time conversion: slot range => posix time range
@@ -470,7 +500,7 @@ pub fn get_tx_in_info_v1(
 
             Ok(TxInInfo {
                 out_ref: utxo.input.clone(),
-                resolved: TxOut::V1(sort_tx_out_value(&utxo.output)),
+                resolved: sort_tx_out_value(&utxo.output),
             })
         })
         .collect()
@@ -506,7 +536,7 @@ pub fn get_tx_in_info_v2(
 
             Ok(TxInInfo {
                 out_ref: utxo.input.clone(),
-                resolved: TxOut::V2(sort_tx_out_value(&utxo.output)),
+                resolved: sort_tx_out_value(&utxo.output),
             })
         })
         .collect()
@@ -521,19 +551,16 @@ pub fn get_mint_info(mint: &Option<Mint>) -> MintValue {
     }
 }
 
-pub fn get_outputs_info(
-    to_tx_out: fn(TransactionOutput) -> TxOut,
-    outputs: &[MintedTransactionOutput],
-) -> Vec<TxOut> {
+pub fn get_outputs_info(outputs: &[MintedTransactionOutput]) -> Vec<TransactionOutput> {
     outputs
         .iter()
         .cloned()
-        .map(|output| to_tx_out(sort_tx_out_value(&output.into())))
+        .map(|output| sort_tx_out_value(&output.into()))
         .collect()
 }
 
-pub fn get_fee_info(fee: &Coin) -> Value {
-    Value::Coin(*fee)
+pub fn get_fee_info(fee: &Coin) -> Coin {
+    *fee
 }
 
 pub fn get_certificates_info(certificates: &Option<NonEmptySet<Certificate>>) -> Vec<Certificate> {
@@ -649,7 +676,7 @@ fn script_purpose_builder<'a>(
             RedeemerTag::Spend => inputs
                 .get(index)
                 .cloned()
-                .map(|i| ScriptPurpose::Spending(i.out_ref)),
+                .map(|i| ScriptPurpose::Spending(i.out_ref, ())),
             RedeemerTag::Cert => certificates
                 .get(index)
                 .cloned()
@@ -756,13 +783,13 @@ pub fn find_script(
             })?
             .get(redeemer.index as usize)
             .ok_or(Error::MissingScriptForRedeemer)
-            .and_then(|input| match input.resolved.address() {
+            .and_then(|input| match output_address(&input.resolved) {
                 Address::Shelley(shelley_address) => {
                     let hash = shelley_address.payment().as_hash();
 
                     let script = lookup_script(hash);
 
-                    let datum = lookup_datum(input.resolved.datum());
+                    let datum = lookup_datum(output_datum(&input.resolved));
 
                     script.and_then(|(script, _)| Ok((script, Some(datum?))))
                 }
@@ -775,7 +802,7 @@ pub fn find_script(
     }
 }
 
-fn from_alonzo_value(value: &alonzo::Value) -> Value {
+pub fn from_alonzo_value(value: &alonzo::Value) -> Value {
     match value {
         alonzo::Value::Coin(coin) => Value::Coin(*coin),
         alonzo::Value::Multiasset(coin, assets) if assets.is_empty() => Value::Coin(*coin),
@@ -808,6 +835,15 @@ fn from_alonzo_value(value: &alonzo::Value) -> Value {
             .expect("assets cannot be empty due to pattern-guard"),
         ),
     }
+}
+
+pub fn from_alonzo_output(output: &alonzo::TransactionOutput) -> TransactionOutput {
+    TransactionOutput::PostAlonzo(PostAlonzoTransactionOutput {
+        address: output.address.clone(),
+        value: from_alonzo_value(&output.amount),
+        datum_option: output.datum_hash.map(DatumOption::Hash),
+        script_ref: None,
+    })
 }
 
 // --------------------- Sorting
@@ -880,5 +916,93 @@ fn sort_redeemers(a: &RedeemersKey, b: &RedeemersKey) -> Ordering {
         a.index.cmp(&b.index)
     } else {
         redeemer_tag_as_usize(&a.tag).cmp(&redeemer_tag_as_usize(&b.tag))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        ast::Data,
+        tx::{
+            script_context::{TxInfo, TxInfoV3},
+            to_plutus_data::ToPlutusData,
+            ResolvedInput, SlotConfig,
+        },
+    };
+    use pallas_primitives::{
+        conway::{ExUnits, PlutusData, Redeemer, RedeemerTag, TransactionInput, TransactionOutput},
+        Fragment,
+    };
+    use pallas_traverse::{Era, MultiEraTx};
+
+    fn fixture_tx_info(transaction: &str, inputs: &str, outputs: &str) -> TxInfo {
+        let transaction_bytes = hex::decode(transaction).unwrap();
+        let inputs_bytes = hex::decode(inputs).unwrap();
+        let outputs_bytes = hex::decode(outputs).unwrap();
+
+        let inputs = Vec::<TransactionInput>::decode_fragment(inputs_bytes.as_slice()).unwrap();
+        let outputs = Vec::<TransactionOutput>::decode_fragment(outputs_bytes.as_slice()).unwrap();
+        let resolved_inputs: Vec<ResolvedInput> = inputs
+            .iter()
+            .zip(outputs.iter())
+            .map(|(input, output)| ResolvedInput {
+                input: input.clone(),
+                output: output.clone(),
+            })
+            .collect();
+
+        TxInfoV3::from_transaction(
+            MultiEraTx::decode_for_era(Era::Conway, transaction_bytes.as_slice())
+                .unwrap()
+                .as_conway()
+                .unwrap(),
+            &resolved_inputs,
+            &SlotConfig::default(),
+        )
+        .unwrap()
+    }
+
+    #[allow(dead_code)]
+    fn from_haskell(data: &str) -> PlutusData {
+        PlutusData::decode_fragment(hex::decode(data).unwrap().as_slice()).unwrap()
+    }
+
+    #[test]
+    fn tx_to_plutus_data() {
+        let datum = Some(Data::constr(0, Vec::new()));
+
+        let redeemer = Redeemer {
+            tag: RedeemerTag::Spend,
+            index: 0,
+            data: Data::constr(0, Vec::new()),
+            ex_units: ExUnits {
+                mem: 1000000,
+                steps: 100000000,
+            },
+        };
+
+        let script_context = fixture_tx_info(
+            "84a7008182582000000000000000000000000000000000000000000000000000\
+             0000000000000000018182581d60111111111111111111111111111111111111\
+             111111111111111111111a3b9aca0002182a0b5820ffffffffffffffffffffff\
+             ffffffffffffffffffffffffffffffffffffffffff0d81825820000000000000\
+             0000000000000000000000000000000000000000000000000000001082581d60\
+             000000000000000000000000000000000000000000000000000000001a3b9aca\
+             001101a20581840000d87980821a000f42401a05f5e100078152510101003222\
+             253330044a229309b2b2b9a1f5f6",
+            "8182582000000000000000000000000000000000000000000000000000000000\
+             0000000000",
+            "81a300581d7039f47fd3b388ef53c48f08de24766d3e55dade6cae908cc24e0f\
+             4f3e011a3b9aca00028201d81843d87980",
+        )
+        .into_script_context(&redeemer, datum.as_ref())
+        .unwrap();
+
+        // NOTE: The initial snapshot has been generated using the Haskell
+        // implementation of the ledger library for that same serialized
+        // transactions. It is meant to control that our construction of the
+        // script context and its serialization matches exactly those
+        // from the Haskell ledger / cardano node.
+        insta::assert_debug_snapshot!(script_context.to_plutus_data())
     }
 }

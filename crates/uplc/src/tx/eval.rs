@@ -32,19 +32,20 @@ pub fn eval_redeemer(
         tx_info: TxInfo,
         program: Program<NamedDeBruijn>,
     ) -> Result<Redeemer, Error> {
-        let purpose = tx_info
-            .purpose(redeemer)
-            .expect("redeemer's purpose shall be known by this point.");
+        let script_context = tx_info
+            .into_script_context(redeemer, datum.as_ref())
+            .expect("couldn't create script context from transaction?");
 
-        let script_context = ScriptContext { tx_info, purpose };
-
-        let program = if let Some(datum) = datum {
-            program.apply_data(datum)
-        } else {
-            program
-        }
-        .apply_data(redeemer.data.clone())
-        .apply_data(script_context.to_plutus_data());
+        let program = match script_context {
+            ScriptContext::V1V2 { .. } => if let Some(datum) = datum {
+                program.apply_data(datum)
+            } else {
+                program
+            }
+            .apply_data(redeemer.data.clone())
+            .apply_data(script_context.to_plutus_data()),
+            ScriptContext::V3 { .. } => program.apply_data(script_context.to_plutus_data()),
+        };
 
         let mut eval_result = if let Some(costs) = cost_mdl_opt {
             program.eval_as(lang, costs, Some(initial_budget))
