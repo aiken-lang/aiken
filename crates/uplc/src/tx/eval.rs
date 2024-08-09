@@ -4,7 +4,7 @@ use super::{
     Error,
 };
 use crate::{
-    ast::{FakeNamedDeBruijn, NamedDeBruijn, Program},
+    ast::{Data, FakeNamedDeBruijn, NamedDeBruijn, Program},
     machine::cost_model::ExBudget,
     tx::script_context::{DataLookupTable, ScriptVersion, TxInfoV1, TxInfoV2, TxInfoV3},
     PlutusData,
@@ -44,7 +44,14 @@ pub fn eval_redeemer(
             }
             .apply_data(redeemer.data.clone())
             .apply_data(script_context.to_plutus_data()),
-            ScriptContext::V3 { .. } => program.apply_data(script_context.to_plutus_data()),
+            ScriptContext::V3 { .. } => {
+                program
+                    // FIXME: Temporary, but needed until https://github.com/aiken-lang/aiken/pull/977
+                    // is implemented.
+                    .apply_data(Data::constr(0, vec![]))
+                    .apply_data(Data::constr(0, vec![]))
+                    .apply_data(script_context.to_plutus_data())
+            }
         };
 
         let mut eval_result = if let Some(costs) = cost_mdl_opt {
