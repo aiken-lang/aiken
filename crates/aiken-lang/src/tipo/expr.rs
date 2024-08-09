@@ -1926,9 +1926,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 let mut new_arguments = Vec::new();
                 new_arguments.extend(arguments);
                 new_arguments.push(CallArg {
-                    location: call_location,
+                    location: lambda_span,
                     label: None,
-                    value: UntypedExpr::lambda(names, continuation, call_location),
+                    value: UntypedExpr::lambda(names, continuation, lambda_span),
                 });
 
                 UntypedExpr::Call {
