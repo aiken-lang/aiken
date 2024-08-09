@@ -1806,7 +1806,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         mut continuation: Vec<UntypedExpr>,
     ) -> UntypedExpr {
         let UntypedExpr::Assignment {
-            location: _,
+            location,
             value,
             kind,
             patterns,
@@ -1818,7 +1818,15 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let value_location = value.location();
 
         let call_location = Span {
-            start: value_location.end,
+            start: location.start,
+            end: continuation
+                .last()
+                .map(|expr| expr.location().end)
+                .unwrap_or_else(|| value_location.end),
+        };
+
+        let lambda_span = Span {
+            start: location.end, // Start immediately after the assignment
             end: continuation
                 .last()
                 .map(|expr| expr.location().end)
@@ -1848,7 +1856,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         location: var_location,
                     };
 
-                    names.push((name, assignment_pattern_location, annotation));
+                    names.push((name, var_location, annotation));
                 }
                 Pattern::Discard {
                     name,
@@ -1860,15 +1868,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         location: var_location,
                     };
 
-                    names.push((name, assignment_pattern_location, annotation));
+                    names.push((name, var_location, annotation));
                 }
                 _ => {
                     let name = format!("{}_{}", ast::BACKPASS_VARIABLE, index);
 
+                    let pattern_location = pattern.location();
+
                     let arg_name = ArgName::Named {
                         label: name.clone(),
                         name: name.clone(),
-                        location: pattern.location(),
+                        location: pattern_location,
                     };
 
                     let pattern_is_var = pattern.is_var();
@@ -1878,7 +1888,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         UntypedExpr::Assignment {
                             location: assignment_pattern_location,
                             value: UntypedExpr::Var {
-                                location: assignment_pattern_location,
+                                location: pattern_location,
                                 name: name.clone(),
                             }
                             .into(),
@@ -1902,7 +1912,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         },
                     );
 
-                    names.push((arg_name, assignment_pattern_location, annotation));
+                    names.push((arg_name, pattern_location, annotation));
                 }
             }
         }
@@ -1949,9 +1959,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     location: call_location,
                     fun: value,
                     arguments: vec![CallArg {
-                        location: call_location,
+                        location: lambda_span,
                         label: None,
-                        value: UntypedExpr::lambda(names, continuation, call_location),
+                        value: UntypedExpr::lambda(names, continuation, lambda_span),
                     }],
                 };
 
@@ -1976,9 +1986,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 location: call_location,
                 fun: value,
                 arguments: vec![CallArg {
-                    location: call_location,
+                    location: lambda_span,
                     label: None,
-                    value: UntypedExpr::lambda(names, continuation, call_location),
+                    value: UntypedExpr::lambda(names, continuation, lambda_span),
                 }],
             },
         }
