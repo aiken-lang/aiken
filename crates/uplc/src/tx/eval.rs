@@ -44,11 +44,18 @@ pub fn eval_redeemer(
             }
             .apply_data(redeemer.data.clone())
             .apply_data(script_context.to_plutus_data()),
-            ScriptContext::V3 { .. } => {
+            ScriptContext::V3 { .. } if datum.is_some() => {
                 program
                     // FIXME: Temporary, but needed until https://github.com/aiken-lang/aiken/pull/977
                     // is implemented.
                     .apply_data(Data::constr(0, vec![]))
+                    .apply_data(Data::constr(0, vec![]))
+                    .apply_data(script_context.to_plutus_data())
+            }
+            ScriptContext::V3 { .. } => {
+                program
+                    // FIXME: Temporary, but needed until https://github.com/aiken-lang/aiken/pull/977
+                    // is implemented.
                     .apply_data(Data::constr(0, vec![]))
                     .apply_data(script_context.to_plutus_data())
             }

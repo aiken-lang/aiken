@@ -49,11 +49,11 @@ pub enum Error {
     #[error("can't eval without redeemers")]
     NoRedeemers,
     #[error(
-        "mismatch in expected redeemers\n{:>13} {}\n{:>13} {}",
+        "missing and/or unexpected validator(s) and/or redeemer(s)\n{:>13} {}\n{:>13} {}",
         "Missing",
-        if .missing.is_empty() { "ø".to_string() } else { .missing.join(&format!("\n{:>13}", "")) },
+        if .missing.is_empty() { "ø".to_string() } else { .missing.join(&format!("\n{:>14}", "")) },
         "Unexpected",
-        if .extra.is_empty() { "ø".to_string() } else { .extra.join(&format!("\n{:>13}", "")) },
+        if .extra.is_empty() { "ø".to_string() } else { .extra.join(&format!("\n{:>14}", "")) },
     )]
     RequiredRedeemersMismatch {
         missing: Vec<String>,
@@ -87,7 +87,7 @@ pub enum Error {
     MissingRequiredInlineDatumOrHash,
     #[error("redeemer points to an unsupported certificate type")]
     UnsupportedCertificateType,
-    #[error("failed script execution\n{:>13} {}", format!("{}({})", tag, index), err)]
+    #[error("failed script execution\n{:>13} {}", format!("{}[{}]", tag, index), err)]
     RedeemerError {
         tag: String,
         index: u32,

@@ -185,7 +185,7 @@ pub fn has_exact_set_of_redeemers(
     let missing: Vec<_> = redeemers_needed
         .into_iter()
         .filter(|x| !wits_redeemer_keys.contains(&&x.0))
-        .map(|x| format!("{} (key: {:?}, purpose: {:?})", x.2, x.0, x.1,))
+        .map(|x| format!("{:?}[{:?}] -> {}", x.0.tag, x.0.index, x.2))
         .collect();
 
     let extra: Vec<_> = wits_redeemer_keys

@@ -16,13 +16,13 @@ AIKEN=${2:-"cargo run -r --quiet --"}
 
 if ! command -v jq &> /dev/null
 then
-    echo "\033[1mjq\033[0m missing from system but required."
+    echo -e "\033[1mjq\033[0m missing from system but required."
     exit 1
 fi
 
 if ! command -v cbor-diag &> /dev/null
 then
-    echo "\033[1mcbor-diag\033[0m missing from system but required."
+    echo -e "\033[1mcbor-diag\033[0m missing from system but required."
     exit 1
 fi
 
@@ -31,21 +31,43 @@ if [ $? -ne 0 ]; then
   exit $?
 fi
 
-BLUEPRINT=$(jq ".validators[] | select(.title|contains(\"$TITLE\"))" plutus.json)
+declare -a VALIDATORS=($(jq -c ".validators | map(select(.title|contains(\"$TITLE\"))) | .[]" plutus.json))
 
-VALIDATOR_HASH=$(echo $BLUEPRINT | jq -r .hash)
-VALIDATOR=$(echo $BLUEPRINT | jq -r .compiledCode)
+if [ -z $VALIDATORS ]; then
+    echo -e "\033[31mvalidator \033[1m$TITLE\033[0m\033[31m not found!\033[0m"
+    exit 1
+fi
 
-DATUM=$(cbor-diag --to hex --from diag <<< "h'$(cat ctx/$TITLE/datum.cbor)'")
+TRANSACTION=$(cat ctx/$TITLE/tx.template)
+RESOLVED_INPUTS=$(cat ctx/$TITLE/resolved_inputs.template)
 
-sed "s/{{ VALIDATOR_HASH }}/$VALIDATOR_HASH/" ctx/$TITLE/resolved_inputs.template \
-  | sed "s/{{ DATUM }}/$DATUM/" \
-  > ctx/$TITLE/resolved_inputs.cbor
+for ITEM in ${VALIDATORS[@]}; do
+  VALIDATOR_NAME=$(echo $ITEM | jq -r .title)
+  VALIDATOR_HASH=$(echo $ITEM | jq -r .hash)
+  VALIDATOR=$(echo $ITEM | jq -r .compiledCode)
 
-sed "s/{{ VALIDATOR }}/$VALIDATOR/" ctx/$TITLE/tx.template \
-  | sed "s/{{ VALIDATOR_HASH }}/$VALIDATOR_HASH/" \
-  | cbor-diag --to hex --from diag \
-  > ctx/$TITLE/tx.cbor
+  RESOLVED_INPUTS=$(echo $RESOLVED_INPUTS \
+    | sed "s/{{ $VALIDATOR_NAME.cbor }}/$VALIDATOR/g" \
+    | sed "s/{{ $VALIDATOR_NAME.hash }}/$VALIDATOR_HASH/g")
+
+ TRANSACTION=$(echo $TRANSACTION \
+   | sed "s/{{ $VALIDATOR_NAME.cbor }}/$VALIDATOR/g" \
+   | sed "s/{{ $VALIDATOR_NAME.hash }}/$VALIDATOR_HASH/g")
+done
+
+echo $RESOLVED_INPUTS | cbor-diag --to hex --from diag > ctx/$TITLE/resolved_inputs.cbor
+echo $TRANSACTION | cbor-diag --to hex --from diag > ctx/$TITLE/tx.cbor
+
+# echo "TRANSACTION"
+# cat ctx/$TITLE/tx.cbor
+
+# ogmios inspect transaction $(cat ctx/$TITLE/tx.cbor) | jq
+
+# echo -e "\n\nINPUTS"
+# cat ctx/inputs.cbor
+#
+# echo -e "\n\nRESOLVED_INPUTS"
+# cat ctx/$TITLE/resolved_inputs.cbor
 
 $AIKEN tx simulate \
   ctx/$TITLE/tx.cbor \

@@ -110,8 +110,8 @@ pub fn exec(
 
         let with_redeemer = |redeemer: &Redeemer| {
             eprintln!(
-                "{} {:?} → {}",
-                "     Redeemer"
+                "{} {:?}[{}]",
+                "   Evaluating"
                     .if_supports_color(Stderr, |s| s.purple())
                     .if_supports_color(Stderr, |s| s.bold()),
                 redeemer.tag,

@@ -21,7 +21,7 @@ for convenience.
 
 - Purpose
   - [x] spend
-  - [ ] mint
+  - [x] mint
   - [ ] withdraw
   - [ ] publish
   - [ ] voting
