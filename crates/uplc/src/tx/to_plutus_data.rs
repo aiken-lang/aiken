@@ -6,12 +6,16 @@ use crate::{
     machine::runtime::{convert_constr_to_tag, ANY_TAG},
     tx::script_context::from_alonzo_output,
 };
-use pallas_addresses::{Address, ShelleyDelegationPart, ShelleyPaymentPart, StakePayload};
-use pallas_codec::utils::{AnyUInt, Bytes, Int, KeyValuePairs, NonEmptyKeyValuePairs};
+use pallas_addresses::{
+    Address, ShelleyDelegationPart, ShelleyPaymentPart, StakeAddress, StakePayload,
+};
+use pallas_codec::utils::{AnyUInt, Bytes, Int, KeyValuePairs, NonEmptyKeyValuePairs, Nullable};
 use pallas_crypto::hash::Hash;
 use pallas_primitives::conway::{
-    AssetName, BigInt, Certificate, Coin, Constr, DatumOption, Mint, PlutusData, PolicyId,
-    PseudoScript, Redeemer, ScriptRef, StakeCredential, TransactionInput, TransactionOutput, Value,
+    AssetName, BigInt, Certificate, Coin, Constitution, Constr, DatumOption, GovAction,
+    GovActionId, Mint, PlutusData, PolicyId, ProposalProcedure, ProtocolParamUpdate, PseudoScript,
+    RationalNumber, Redeemer, ScriptRef, StakeCredential, TransactionInput, TransactionOutput,
+    Value,
 };
 use pallas_traverse::ComputeHash;
 
@@ -34,6 +38,8 @@ fn empty_constr(index: u64) -> PlutusData {
 
 struct WithWrappedTransactionId<'a, T>(&'a T);
 
+struct WithWrappedStakeCredential<'a, T>(&'a T);
+
 struct WithZeroAdaAsset<'a, T>(&'a T);
 
 struct WithOptionDatum<'a, T>(&'a T);
@@ -45,6 +51,23 @@ pub trait ToPlutusData {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MintValue {
     pub mint_value: Mint,
+}
+
+impl ToPlutusData for bool {
+    fn to_plutus_data(&self) -> PlutusData {
+        match self {
+            false => empty_constr(0),
+            true => empty_constr(1),
+        }
+    }
+}
+impl ToPlutusData for StakeAddress {
+    fn to_plutus_data(&self) -> PlutusData {
+        match self.payload() {
+            StakePayload::Stake(x) => wrap_with_constr(0, x.to_plutus_data()),
+            StakePayload::Script(x) => wrap_with_constr(1, x.to_plutus_data()),
+        }
+    }
 }
 
 impl ToPlutusData for Address {
@@ -64,12 +87,16 @@ impl ToPlutusData for Address {
                 };
 
                 let stake_part_plutus_data = match stake_part {
-                    ShelleyDelegationPart::Key(stake_keyhash) => {
-                        Some(StakeCredential::AddrKeyhash(*stake_keyhash)).to_plutus_data()
-                    }
-                    ShelleyDelegationPart::Script(script_hash) => {
-                        Some(StakeCredential::Scripthash(*script_hash)).to_plutus_data()
-                    }
+                    ShelleyDelegationPart::Key(stake_keyhash) => Some(wrap_with_constr(
+                        0,
+                        StakeCredential::AddrKeyhash(*stake_keyhash).to_plutus_data(),
+                    ))
+                    .to_plutus_data(),
+                    ShelleyDelegationPart::Script(script_hash) => Some(wrap_with_constr(
+                        0,
+                        StakeCredential::Scripthash(*script_hash).to_plutus_data(),
+                    ))
+                    .to_plutus_data(),
                     ShelleyDelegationPart::Pointer(pointer) => Some(wrap_multiple_with_constr(
                         1,
                         vec![
@@ -84,17 +111,7 @@ impl ToPlutusData for Address {
 
                 wrap_multiple_with_constr(0, vec![payment_part_plutus_data, stake_part_plutus_data])
             }
-            Address::Stake(stake_address) => {
-                // This is right now only used in Withdrawals (Reward account)
-                match stake_address.payload() {
-                    StakePayload::Stake(stake_keyhash) => {
-                        StakeCredential::AddrKeyhash(*stake_keyhash).to_plutus_data()
-                    }
-                    StakePayload::Script(script_hash) => {
-                        StakeCredential::Scripthash(*script_hash).to_plutus_data()
-                    }
-                }
-            }
+            Address::Stake(stake_address) => stake_address.to_plutus_data(),
             _ => unreachable!(),
         }
     }
@@ -230,7 +247,19 @@ impl ToPlutusData for i64 {
     }
 }
 
+impl ToPlutusData for u32 {
+    fn to_plutus_data(&self) -> PlutusData {
+        PlutusData::BigInt(BigInt::Int(Int::try_from(*self as i128).unwrap()))
+    }
+}
+
 impl ToPlutusData for u64 {
+    fn to_plutus_data(&self) -> PlutusData {
+        PlutusData::BigInt(BigInt::Int(Int::try_from(*self as i128).unwrap()))
+    }
+}
+
+impl ToPlutusData for usize {
     fn to_plutus_data(&self) -> PlutusData {
         PlutusData::BigInt(BigInt::Int(Int::try_from(*self as i128).unwrap()))
     }
@@ -443,16 +472,13 @@ impl ToPlutusData for TransactionOutput {
 }
 
 impl ToPlutusData for StakeCredential {
-    // Stake Credential needs to be wrapped inside another Constr, because we could have either a StakingHash or a StakingPtr
-    // The current implementation of StakeCredential doesn't capture the credential of a Pointer address.
-    // So a StakeCredential for a Pointer address needs to be converted separately
     fn to_plutus_data(&self) -> PlutusData {
         match self {
             StakeCredential::AddrKeyhash(addr_keyhas) => {
-                wrap_with_constr(0, wrap_with_constr(0, addr_keyhas.to_plutus_data()))
+                wrap_with_constr(0, addr_keyhas.to_plutus_data())
             }
             StakeCredential::Scripthash(script_hash) => {
-                wrap_with_constr(0, wrap_with_constr(1, script_hash.to_plutus_data()))
+                wrap_with_constr(1, script_hash.to_plutus_data())
             }
         }
     }
@@ -722,6 +748,10 @@ impl<'a> ToPlutusData for WithWrappedTransactionId<'a, ScriptPurpose> {
             ScriptPurpose::Spending(out_ref, ()) => {
                 wrap_with_constr(1, WithWrappedTransactionId(out_ref).to_plutus_data())
             }
+            // NOTE: This is a _small_ abuse of the 'WithWrappedTransactionId'. We know the wrapped
+            // is needed for V1 and V2, and it also appears that for V1 and V2, the certifying
+            // purpose mustn't include the certificate index. So, we also short-circuit it here.
+            ScriptPurpose::Certifying(_, dcert) => wrap_with_constr(3, dcert.to_plutus_data()),
             otherwise => otherwise.to_plutus_data(),
         }
     }
@@ -735,8 +765,164 @@ impl ToPlutusData for ScriptPurpose {
             ScriptPurpose::Rewarding(stake_credential) => {
                 wrap_with_constr(2, stake_credential.to_plutus_data())
             }
-            ScriptPurpose::Certifying(dcert) => wrap_with_constr(3, dcert.to_plutus_data()),
+            ScriptPurpose::Certifying(ix, dcert) => {
+                wrap_multiple_with_constr(3, vec![ix.to_plutus_data(), dcert.to_plutus_data()])
+            }
+            ScriptPurpose::Proposing(ix, procedure) => {
+                wrap_multiple_with_constr(5, vec![ix.to_plutus_data(), procedure.to_plutus_data()])
+            }
         }
+    }
+}
+
+impl ToPlutusData for ProposalProcedure {
+    fn to_plutus_data(&self) -> PlutusData {
+        wrap_multiple_with_constr(
+            0,
+            vec![
+                self.deposit.to_plutus_data(),
+                Address::from_bytes(&self.reward_account)
+                    .unwrap()
+                    .to_plutus_data(),
+                self.gov_action.to_plutus_data(),
+            ],
+        )
+    }
+}
+
+impl<T> ToPlutusData for Nullable<T>
+where
+    T: ToPlutusData + Clone,
+{
+    fn to_plutus_data(&self) -> PlutusData {
+        match self {
+            Nullable::Some(t) => wrap_with_constr(0, t.to_plutus_data()),
+            Nullable::Null | Nullable::Undefined => empty_constr(1),
+        }
+    }
+}
+
+impl ToPlutusData for GovActionId {
+    fn to_plutus_data(&self) -> PlutusData {
+        wrap_multiple_with_constr(
+            0,
+            vec![
+                self.transaction_id.to_plutus_data(),
+                self.action_index.to_plutus_data(),
+            ],
+        )
+    }
+}
+
+impl ToPlutusData for ProtocolParamUpdate {
+    fn to_plutus_data(&self) -> PlutusData {
+        todo!("ToPlutusData for ProtocolParamUpdate")
+    }
+}
+
+impl ToPlutusData for GovAction {
+    fn to_plutus_data(&self) -> PlutusData {
+        match self {
+            GovAction::ParameterChange(previous_action, params, guardrail) => {
+                wrap_multiple_with_constr(
+                    0,
+                    vec![
+                        previous_action.to_plutus_data(),
+                        params.as_ref().to_plutus_data(),
+                        guardrail.to_plutus_data(),
+                    ],
+                )
+            }
+            GovAction::HardForkInitiation(previous_action, version) => wrap_multiple_with_constr(
+                1,
+                vec![previous_action.to_plutus_data(), version.to_plutus_data()],
+            ),
+            GovAction::TreasuryWithdrawals(withdrawals, guardrail) => wrap_multiple_with_constr(
+                2,
+                vec![
+                    KeyValuePairs::from(
+                        withdrawals
+                            .iter()
+                            .map(|(reward_account, amount)| {
+                                (
+                                    Address::from_bytes(reward_account)
+                                        .expect("Invalid stake address in treasury withdrawal?"),
+                                    *amount,
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                    .to_plutus_data(),
+                    guardrail.to_plutus_data(),
+                ],
+            ),
+            GovAction::NoConfidence(previous_action) => {
+                wrap_with_constr(3, previous_action.to_plutus_data())
+            }
+            GovAction::UpdateCommittee(previous_action, removed, added, quorum) => {
+                wrap_multiple_with_constr(
+                    4,
+                    vec![
+                        previous_action.to_plutus_data(),
+                        removed.to_plutus_data(),
+                        added.to_plutus_data(),
+                        quorum.to_plutus_data(),
+                    ],
+                )
+            }
+            GovAction::NewConstitution(previous_action, constitution) => wrap_multiple_with_constr(
+                5,
+                vec![
+                    previous_action.to_plutus_data(),
+                    constitution.to_plutus_data(),
+                ],
+            ),
+            GovAction::Information => empty_constr(6),
+        }
+    }
+}
+
+impl ToPlutusData for Constitution {
+    fn to_plutus_data(&self) -> PlutusData {
+        wrap_with_constr(0, self.guardrail_script.to_plutus_data())
+    }
+}
+
+impl ToPlutusData for RationalNumber {
+    fn to_plutus_data(&self) -> PlutusData {
+        (self.numerator, self.denominator).to_plutus_data()
+    }
+}
+
+impl<'a> ToPlutusData for WithWrappedStakeCredential<'a, Vec<(Address, Coin)>> {
+    fn to_plutus_data(&self) -> PlutusData {
+        self.0
+            .iter()
+            .map(|(reward_account, amount)| {
+                (
+                    wrap_with_constr(0, reward_account.to_plutus_data()),
+                    *amount,
+                )
+            })
+            .collect::<Vec<_>>()
+            .to_plutus_data()
+    }
+}
+
+impl<'a> ToPlutusData for WithWrappedStakeCredential<'a, KeyValuePairs<Address, Coin>> {
+    fn to_plutus_data(&self) -> PlutusData {
+        KeyValuePairs::from(
+            self.0
+                .iter()
+                .map(|(reward_account, amount)| {
+                    (
+                        wrap_with_constr(0, reward_account.to_plutus_data()),
+                        *amount,
+                    )
+                })
+                .collect::<Vec<_>>(),
+        )
+        .to_plutus_data()
     }
 }
 
@@ -753,7 +939,12 @@ where
             ScriptInfo::Rewarding(stake_credential) => {
                 wrap_with_constr(2, stake_credential.to_plutus_data())
             }
-            ScriptInfo::Certifying(dcert) => wrap_with_constr(3, dcert.to_plutus_data()),
+            ScriptInfo::Certifying(ix, dcert) => {
+                wrap_multiple_with_constr(3, vec![ix.to_plutus_data(), dcert.to_plutus_data()])
+            }
+            ScriptInfo::Proposing(ix, procedure) => {
+                wrap_multiple_with_constr(5, vec![ix.to_plutus_data(), procedure.to_plutus_data()])
+            }
         }
     }
 }
@@ -772,7 +963,7 @@ impl ToPlutusData for TxInfo {
                     WithZeroAdaAsset(&tx_info.fee).to_plutus_data(),
                     WithZeroAdaAsset(&tx_info.mint).to_plutus_data(),
                     tx_info.certificates.to_plutus_data(),
-                    tx_info.withdrawals.to_plutus_data(),
+                    WithWrappedStakeCredential(&tx_info.withdrawals).to_plutus_data(),
                     tx_info.valid_range.to_plutus_data(),
                     tx_info.signatories.to_plutus_data(),
                     tx_info.data.to_plutus_data(),
@@ -789,7 +980,7 @@ impl ToPlutusData for TxInfo {
                     WithZeroAdaAsset(&tx_info.fee).to_plutus_data(),
                     WithZeroAdaAsset(&tx_info.mint).to_plutus_data(),
                     tx_info.certificates.to_plutus_data(),
-                    tx_info.withdrawals.to_plutus_data(),
+                    WithWrappedStakeCredential(&tx_info.withdrawals).to_plutus_data(),
                     tx_info.valid_range.to_plutus_data(),
                     tx_info.signatories.to_plutus_data(),
                     WithWrappedTransactionId(&tx_info.redeemers).to_plutus_data(),
@@ -813,7 +1004,7 @@ impl ToPlutusData for TxInfo {
                     tx_info.data.to_plutus_data(),
                     tx_info.id.to_plutus_data(),
                     Data::map(vec![]), // TODO tx_info.votes :: Map Voter (Map GovernanceActionId Vote)
-                    Data::list(vec![]), // TODO tx_info.proposal_procedures :: [ProposalProcedure]
+                    tx_info.proposal_procedures.to_plutus_data(),
                     empty_constr(1), // TODO tx_info.current_treasury_amount :: Haskell.Maybe V2.Lovelace
                     empty_constr(1), // TODO tx_info.treasury_donation :: Haskell.Maybe V2.Lovelace
                 ],
@@ -844,15 +1035,6 @@ impl ToPlutusData for ScriptContext {
                     purpose.to_plutus_data(),
                 ],
             ),
-        }
-    }
-}
-
-impl ToPlutusData for bool {
-    fn to_plutus_data(&self) -> PlutusData {
-        match self {
-            false => empty_constr(0),
-            true => empty_constr(1),
         }
     }
 }

@@ -4,9 +4,10 @@ use super::{
 };
 use itertools::Itertools;
 use pallas_addresses::{Address, ScriptHash, ShelleyPaymentPart, StakePayload};
+use pallas_codec::utils::Nullable;
 use pallas_primitives::conway::{
-    Certificate, MintedTx, PolicyId, RedeemerTag, RedeemersKey, RewardAccount, StakeCredential,
-    TransactionOutput,
+    Certificate, GovAction, MintedTx, PolicyId, RedeemerTag, RedeemersKey, RewardAccount,
+    StakeCredential, TransactionOutput,
 };
 use std::collections::HashMap;
 
@@ -106,14 +107,15 @@ pub fn scripts_needed(tx: &MintedTx, utxos: &[ResolvedInput]) -> Result<ScriptsN
         .as_deref()
         .map(|m| {
             m.iter()
-                .filter_map(|cert| {
+                .enumerate()
+                .filter_map(|(ix, cert)| {
                     // only Dereg and Deleg certs can require scripts
                     match cert {
                         Certificate::StakeDeregistration(StakeCredential::Scripthash(h)) => {
-                            Some((ScriptPurpose::Certifying(cert.clone()), *h))
+                            Some((ScriptPurpose::Certifying(ix, cert.clone()), *h))
                         }
                         Certificate::StakeDelegation(StakeCredential::Scripthash(h), _) => {
-                            Some((ScriptPurpose::Certifying(cert.clone()), *h))
+                            Some((ScriptPurpose::Certifying(ix, cert.clone()), *h))
                         }
                         _ => None,
                     }
@@ -132,14 +134,39 @@ pub fn scripts_needed(tx: &MintedTx, utxos: &[ResolvedInput]) -> Result<ScriptsN
         })
         .unwrap_or_default();
 
+    let mut propose = txb
+        .proposal_procedures
+        .as_deref()
+        .map(|m| {
+            m.iter()
+                .enumerate()
+                .filter_map(|(ix, procedure)| match procedure.gov_action {
+                    GovAction::ParameterChange(_, _, Nullable::Some(hash)) => {
+                        Some((ScriptPurpose::Proposing(ix, procedure.clone()), hash))
+                    }
+                    GovAction::TreasuryWithdrawals(_, Nullable::Some(hash)) => {
+                        Some((ScriptPurpose::Proposing(ix, procedure.clone()), hash))
+                    }
+                    GovAction::HardForkInitiation(..)
+                    | GovAction::Information
+                    | GovAction::NewConstitution(..)
+                    | GovAction::TreasuryWithdrawals(..)
+                    | GovAction::ParameterChange(..)
+                    | GovAction::NoConfidence(..)
+                    | GovAction::UpdateCommittee(..) => None,
+                })
+                .collect::<ScriptsNeeded>()
+        })
+        .unwrap_or_default();
+
     // TODO
-    assert!(txb.proposal_procedures.is_none());
     assert!(txb.voting_procedures.is_none());
 
     needed.append(&mut spend);
     needed.append(&mut reward);
     needed.append(&mut cert);
     needed.append(&mut mint);
+    needed.append(&mut propose);
 
     Ok(needed)
 }
@@ -191,7 +218,7 @@ pub fn has_exact_set_of_redeemers(
     let extra: Vec<_> = wits_redeemer_keys
         .into_iter()
         .filter(|x| !needed_redeemer_keys.contains(x))
-        .map(|x| format!("{x:?}"))
+        .map(|x| format!("{:?}[{:?}]", x.tag, x.index))
         .collect();
 
     if !missing.is_empty() || !extra.is_empty() {
@@ -281,7 +308,7 @@ fn build_redeemer_key(
             Ok(redeemer_key)
         }
 
-        ScriptPurpose::Certifying(d) => {
+        ScriptPurpose::Certifying(_, d) => {
             let redeemer_key = tx_body
                 .certificates
                 .as_deref()
@@ -289,6 +316,20 @@ fn build_redeemer_key(
                 .unwrap_or_default()
                 .map(|index| RedeemersKey {
                     tag: RedeemerTag::Cert,
+                    index: index as u32,
+                });
+
+            Ok(redeemer_key)
+        }
+
+        ScriptPurpose::Proposing(_, procedure) => {
+            let redeemer_key = tx_body
+                .proposal_procedures
+                .as_deref()
+                .map(|m| m.iter().position(|x| x == procedure))
+                .unwrap_or_default()
+                .map(|index| RedeemersKey {
+                    tag: RedeemerTag::Propose,
                     index: index as u32,
                 });
 

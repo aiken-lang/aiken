@@ -49,11 +49,11 @@ x86_64-unknown-linux-gnu = "ubuntu-22.04"
 walkdir = "2.3.2"
 insta = { version = "1.30.0", features = ["yaml", "json", "redactions"] }
 miette = { version = "7.2.0", features = ["fancy"] }
-pallas-addresses = { git = "https://github.com/KtorZ/pallas.git", rev = "8ea5a1adc9919b70b213dfe597e920d6e113120c" }
-pallas-codec = { git = "https://github.com/KtorZ/pallas.git", rev = "8ea5a1adc9919b70b213dfe597e920d6e113120c", features = ["num-bigint"] }
-pallas-crypto = { git = "https://github.com/KtorZ/pallas.git", rev = "8ea5a1adc9919b70b213dfe597e920d6e113120c" }
-pallas-primitives = { git = "https://github.com/KtorZ/pallas.git", rev = "8ea5a1adc9919b70b213dfe597e920d6e113120c" }
-pallas-traverse = { git = "https://github.com/KtorZ/pallas.git", rev = "8ea5a1adc9919b70b213dfe597e920d6e113120c" }
+pallas-addresses = { git = "https://github.com/KtorZ/pallas.git", rev = "0cdd6393bb3fbceb3b5209ad248877b381822e90" }
+pallas-codec = { git = "https://github.com/KtorZ/pallas.git", rev = "0cdd6393bb3fbceb3b5209ad248877b381822e90", features = ["num-bigint"] }
+pallas-crypto = { git = "https://github.com/KtorZ/pallas.git", rev = "0cdd6393bb3fbceb3b5209ad248877b381822e90" }
+pallas-primitives = { git = "https://github.com/KtorZ/pallas.git", rev = "0cdd6393bb3fbceb3b5209ad248877b381822e90" }
+pallas-traverse = { git = "https://github.com/KtorZ/pallas.git", rev = "0cdd6393bb3fbceb3b5209ad248877b381822e90" }
 
 [profile.dev.package.insta]
 opt-level = 3

@@ -67,6 +67,8 @@ pub enum Error {
     NonScriptWithdrawal,
     #[error("stake credential points to a non-script withdrawal")]
     NonScriptStakeCredential,
+    #[error("the designated procedure defines no guardrail script")]
+    NoGuardrailScriptForProcedure,
     #[error("cost model not found for language\n{:>13} {:?}", "Language", .0)]
     CostModelNotFound(Language),
     #[error("unsupported era, please use Conway\n{:>13} {0}", "Decoder error")]
