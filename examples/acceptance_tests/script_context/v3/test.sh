@@ -58,17 +58,6 @@ done
 echo $RESOLVED_INPUTS | cbor-diag --to hex --from diag > ctx/$TITLE/resolved_inputs.cbor
 echo $TRANSACTION | cbor-diag --to hex --from diag > ctx/$TITLE/tx.cbor
 
-# echo "TRANSACTION"
-# cat ctx/$TITLE/tx.cbor
-
-# ogmios inspect transaction $(cat ctx/$TITLE/tx.cbor) | jq
-
-# echo -e "\n\nINPUTS"
-# cat ctx/inputs.cbor
-#
-# echo -e "\n\nRESOLVED_INPUTS"
-# cat ctx/$TITLE/resolved_inputs.cbor
-
 $AIKEN tx simulate \
   ctx/$TITLE/tx.cbor \
   ctx/inputs.cbor \

@@ -968,7 +968,7 @@ mod tests {
     }
 
     #[test]
-    fn tx_to_plutus_data() {
+    fn script_context_simple_send() {
         let datum = Some(Data::constr(0, Vec::new()));
 
         let redeemer = Redeemer {
@@ -1004,5 +1004,65 @@ mod tests {
         // script context and its serialization matches exactly those
         // from the Haskell ledger / cardano node.
         insta::assert_debug_snapshot!(script_context.to_plutus_data())
+    }
+
+    #[test]
+    fn script_context_mint() {
+        let redeemer = Redeemer {
+            tag: RedeemerTag::Mint,
+            index: 1,
+            data: Data::integer(42.into()),
+            ex_units: ExUnits {
+                mem: 1000000,
+                steps: 100000000,
+            },
+        };
+
+        let script_context = fixture_tx_info(
+            "84a9008182582000000000000000000000000000000000000000000000000000\
+             00000000000000000183a300581d600000000000000000000000000000000000\
+             0000000000000000000000011a000f42400282005820923918e403bf43c34b4e\
+             f6b48eb2ee04babed17320d8d1b9ff9ad086e86f44eca2005839000000000000\
+             0000000000000000000000000000000000000000000000000000000000000000\
+             0000000000000000000000000000000000000001821a000f4240a2581c12593b\
+             4cbf7fdfd8636db99fe356437cd6af8539aadaa0a401964874a14474756e611b\
+             00005af3107a4000581c0c8eaf490c53afbf27e3d84a3b57da51fbafe5aa7844\
+             3fcec2dc262ea14561696b656e182aa300583910000000000000000000000000\
+             0000000000000000000000000000000000000000000000000000000000000000\
+             00000000000000000000000001821a000f4240a1581c0c8eaf490c53afbf27e3\
+             d84a3b57da51fbafe5aa78443fcec2dc262ea14763617264616e6f0103d81847\
+             82034463666f6f02182a09a2581c12593b4cbf7fdfd8636db99fe356437cd6af\
+             8539aadaa0a401964874a14474756e611b00005af3107a4000581c0c8eaf490c\
+             53afbf27e3d84a3b57da51fbafe5aa78443fcec2dc262ea24763617264616e6f\
+             014561696b656e2d0b5820ffffffffffffffffffffffffffffffffffffffffff\
+             ffffffffffffffffffffff0d8182582000000000000000000000000000000000\
+             00000000000000000000000000000000001082581d6000000000000000000000\
+             0000000000000000000000000000000000001a3b9aca00110112818258200000\
+             00000000000000000000000000000000000000000000000000000000000000a3\
+             0582840100d87980821a000f42401a05f5e100840101182a821a000f42401a05\
+             f5e1000481d879800782587d587b010100323232323232322533333300800115\
+             3330033370e900018029baa001153330073006375400224a6660089445261533\
+             0054911856616c696461746f722072657475726e65642066616c736500136560\
+             02002002002002002153300249010b5f746d70323a20566f696400165734ae71\
+             55ceaab9e5573eae915895589301010032323232323232253333330080011533\
+             30033370e900018029baa001153330073006375400224a666008a6600a920110\
+             5f5f5f5f5f6d696e745f325f5f5f5f5f0014a22930a99802a4811856616c6964\
+             61746f722072657475726e65642066616c736500136560020020020020020021\
+             53300249010b5f746d70323a20566f696400165734ae7155ceaab9e5573eae91\
+             f5f6",
+            "8182582000000000000000000000000000000000000000000000000000000000\
+             0000000000",
+            "81a200581d600000000000000000000000000000000000000000000000000000\
+             0000011a000f4240",
+        )
+        .into_script_context(&redeemer, None)
+        .unwrap();
+
+        // NOTE: The initial snapshot has been generated using the Haskell
+        // implementation of the ledger library for that same serialized
+        // transactions. It is meant to control that our construction of the
+        // script context and its serialization matches exactly those
+        // from the Haskell ledger / cardano node.
+        insta::assert_debug_snapshot!(script_context.to_plutus_data());
     }
 }

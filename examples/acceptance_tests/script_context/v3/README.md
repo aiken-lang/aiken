@@ -31,12 +31,12 @@ for convenience.
   - [x] inputs
   - reference inputs
     - [x] none
-    - [ ] some
+    - [x] some
   - outputs
-    - [ ] none
-    - [ ] some
+    - [x] none
+    - [x] some
   - [x] fee
-  - [ ] mint
+  - [x] mint
   - certificates
     - [ ] none
     - some
@@ -63,7 +63,7 @@ for convenience.
     - [x] none
     - [ ] some
   - [ ] redeemers
-  - [ ] datums
+  - [x] datums
   - votes
      - [ ] none
      - [ ] some
@@ -78,27 +78,27 @@ for convenience.
      - [ ] without
 
 - Address
-    - [ ] type-0 (key | key)
-    - [ ] type-1 (script | key)
+    - [x] type-0 (key | key)
+    - [x] type-1 (script | key)
     - [ ] type-2 (key | script)
     - [ ] type-3 (script | script)
     - [ ] type-4 (key | ptr)
     - [ ] type-5 (script | ptr)
-    - [ ] type-6 (key | ø)
+    - [x] type-6 (key | ø)
     - [x] type-7 (key | ø)
 
 - Value
     - [x] only ada
-    - [ ] multi-assets
+    - [x] multi-assets
 
 - Output datum
-    - [ ] none
-    - [ ] hash
+    - [x] none
+    - [x] hash
     - [x] inline
 
 - Output script
     - [x] none
-    - [ ] inline
+    - [x] inline
 
 - Governance Action
   - parameter change
@@ -166,10 +166,6 @@ for convenience.
 - Constitution
   - [ ] with guardrail script
   - [ ] without guardrail script
-
-- Value
-  - [x] pure ada
-  - [ ] native assets
 
 - Credential
   - [ ] key
