@@ -149,54 +149,18 @@ pub fn exec(
                 );
             }
             Err(err) => {
-                eprintln!("{}", display_tx_error(&err));
+                eprintln!(
+                    "{} {}",
+                    "        Error"
+                        .if_supports_color(Stderr, |s| s.red())
+                        .if_supports_color(Stderr, |s| s.bold()),
+                    err.red()
+                );
+
                 process::exit(1);
             }
         }
     }
 
     Ok(())
-}
-
-fn display_tx_error(err: &tx::error::Error) -> String {
-    let mut msg = format!(
-        "{} {}",
-        "        Error"
-            .if_supports_color(Stderr, |s| s.red())
-            .if_supports_color(Stderr, |s| s.bold()),
-        err.red()
-    );
-    match err {
-        tx::error::Error::RedeemerError { err, .. } => {
-            msg.push_str(&format!(
-                "\n{}",
-                display_tx_error(err)
-                    .lines()
-                    .skip(1)
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            ));
-            msg
-        }
-        tx::error::Error::Machine(_, _, traces) => {
-            msg.push_str(
-                traces
-                    .iter()
-                    .map(|s| {
-                        format!(
-                            "\n{} {}",
-                            "        Trace"
-                                .if_supports_color(Stderr, |s| s.yellow())
-                                .if_supports_color(Stderr, |s| s.bold()),
-                            s.if_supports_color(Stderr, |s| s.yellow())
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join("")
-                    .as_str(),
-            );
-            msg
-        }
-        _ => msg,
-    }
 }

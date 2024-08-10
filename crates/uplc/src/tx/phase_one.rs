@@ -39,23 +39,17 @@ pub fn validate_missing_scripts(
         .clone()
         .into_iter()
         .filter(|x| !received_hashes.contains(x))
-        .map(|x| format!("[Missing (sh: {x})]"))
+        .map(|x| x.to_string())
         .collect();
 
     let extra: Vec<_> = received_hashes
         .into_iter()
         .filter(|x| !needed_hashes.contains(x))
-        .map(|x| format!("[Extraneous (sh: {x:?})]"))
+        .map(|x| x.to_string())
         .collect();
 
     if !missing.is_empty() || !extra.is_empty() {
-        let missing_errors = missing.join(" ");
-        let extra_errors = extra.join(" ");
-
-        unreachable!(
-            "Mismatch in required scripts: {} {}",
-            missing_errors, extra_errors
-        );
+        return Err(Error::RequiredRedeemersMismatch { missing, extra });
     }
 
     Ok(())
@@ -191,18 +185,13 @@ pub fn has_exact_set_of_redeemers(
     let missing: Vec<_> = redeemers_needed
         .into_iter()
         .filter(|x| !wits_redeemer_keys.contains(&&x.0))
-        .map(|x| {
-            format!(
-                "[Missing (redeemer_key: {:?}, script_purpose: {:?}, script_hash: {})]",
-                x.0, x.1, x.2,
-            )
-        })
+        .map(|x| format!("{} (key: {:?}, purpose: {:?})", x.2, x.0, x.1,))
         .collect();
 
     let extra: Vec<_> = wits_redeemer_keys
         .into_iter()
         .filter(|x| !needed_redeemer_keys.contains(x))
-        .map(|x| format!("[Extraneous (redeemer_key: {x:?})]"))
+        .map(|x| format!("{x:?}"))
         .collect();
 
     if !missing.is_empty() || !extra.is_empty() {

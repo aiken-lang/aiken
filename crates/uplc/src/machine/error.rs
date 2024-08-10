@@ -11,7 +11,7 @@ pub enum Error {
     InvalidStepKind(u8),
     #[error("Cannot evaluate an open term:\\n\\n{}", .0.to_pretty())]
     OpenTermEvaluated(Term<NamedDeBruijn>),
-    #[error("The provided Plutus code called 'error'.")]
+    #[error("The validator crashed / exited prematurely")]
     EvaluationFailure,
     #[error("Attempted to instantiate a non-polymorphic term:\n\n{0:#?}")]
     NonPolymorphicInstantiation(Value),
@@ -29,9 +29,13 @@ pub enum Error {
     PairTypeMismatch(Type),
     #[error("Empty List:\n\n{0:#?}")]
     EmptyList(Value),
-    #[error("A builtin received a term argument when something else was expected:\n\n{0}\n\nYou probably forgot to wrap the builtin with a force.")]
+    #[error(
+        "A builtin received a term argument when something else was expected:\n\n{0}\n\nYou probably forgot to wrap the builtin with a force."
+    )]
     UnexpectedBuiltinTermArgument(Term<NamedDeBruijn>),
-    #[error("A builtin expected a term argument, but something else was received:\n\n{0}\n\nYou probably have an extra force wrapped around a builtin")]
+    #[error(
+        "A builtin expected a term argument, but something else was received:\n\n{0}\n\nYou probably have an extra force wrapped around a builtin"
+    )]
     BuiltinTermArgumentExpected(Term<NamedDeBruijn>),
     #[error("Unable to unlift value because it is not a constant:\n\n{0:#?}")]
     NotAConstant(Value),
