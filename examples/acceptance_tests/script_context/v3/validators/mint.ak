@@ -1,11 +1,11 @@
-use aiken/dict.{Dict}
-use aiken/list
-use aiken/transaction.{
+use aiken/collection/dict.{Dict}
+use aiken/collection/list
+use cardano/assets.{PolicyId, Value}
+use cardano/credential
+use cardano/transaction.{
   DatumHash, Input, Mint, Minting, NoDatum, Output, OutputReference,
   ScriptContext, ScriptInfo, ScriptPurpose,
 }
-use aiken/transaction/credential
-use aiken/transaction/value.{PolicyId, Value}
 
 const null28 = #"00000000000000000000000000000000000000000000000000000000"
 
@@ -37,7 +37,7 @@ fn assert_reference_inputs(inputs: List<Input>) -> Void {
         },
         output: Output {
           address: credential.from_verification_key(null28),
-          value: value.from_lovelace(1_000_000),
+          value: assets.from_lovelace(1_000_000),
           datum: NoDatum,
           reference_script: None,
         },
@@ -74,7 +74,7 @@ fn assert_outputs(
     Some(
       Output {
         address: credential.from_verification_key(null28),
-        value: value.from_lovelace(1_000_000),
+        value: assets.from_lovelace(1_000_000),
         datum: DatumHash(void_hash),
         reference_script: None,
       },
@@ -85,9 +85,9 @@ fn assert_outputs(
       Output {
         address: credential.from_verification_key(null28)
           |> credential.with_delegation_key(null28),
-        value: value.from_lovelace(1_000_000)
-          |> value.add(our_policy_id, "tuna", 100000000000000)
-          |> value.add(other_policy_id, "aiken", 42),
+        value: assets.from_lovelace(1_000_000)
+          |> assets.add(our_policy_id, "tuna", 100000000000000)
+          |> assets.add(other_policy_id, "aiken", 42),
         datum: NoDatum,
         reference_script: None,
       },
@@ -98,8 +98,8 @@ fn assert_outputs(
       Output {
         address: credential.from_script(null28)
           |> credential.with_delegation_key(null28),
-        value: value.from_lovelace(1_000_000)
-          |> value.add(other_policy_id, "cardano", 1),
+        value: assets.from_lovelace(1_000_000)
+          |> assets.add(other_policy_id, "cardano", 1),
         datum: NoDatum,
         reference_script: Some(
           #"68ad54b3a8124d9fe5caaaf2011a85d72096e696a2fb3d7f86c41717",
@@ -116,7 +116,7 @@ fn assert_mint(mint: Value, our_policy_id: PolicyId, other_policy_id: PolicyId) 
       (other_policy_id, "aiken", -14),
       (other_policy_id, "cardano", 1),
       (our_policy_id, "tuna", 100000000000000),
-    ] == value.flatten(mint)
+    ] == assets.flatten(mint)
   Void
 }
 

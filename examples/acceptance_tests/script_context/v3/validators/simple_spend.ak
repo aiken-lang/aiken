@@ -1,10 +1,10 @@
-use aiken/dict
-use aiken/transaction.{
+use aiken/collection/dict
+use cardano/assets
+use cardano/credential.{Address, Script}
+use cardano/transaction.{
   InlineDatum, Input, Output, OutputReference, ScriptContext, ScriptInfo,
   ScriptPurpose, Spend, Spending,
 }
-use aiken/transaction/credential.{Address, ScriptCredential}
-use aiken/transaction/value
 
 validator {
   fn spend(_tmp1: Void, _tmp2: Void, ctx: ScriptContext) {
@@ -64,12 +64,10 @@ fn assert_inputs(inputs: List<Input>) {
   expect
     transaction_id == #"0000000000000000000000000000000000000000000000000000000000000000"
 
-  expect resolved_input_value == value.from_lovelace(1000000000)
+  expect resolved_input_value == assets.from_lovelace(1000000000)
 
-  expect Address {
-    payment_credential: ScriptCredential(_),
-    stake_credential: None,
-  } = address
+  expect Address { payment_credential: Script(_), stake_credential: None } =
+    address
 
   Void
 }

@@ -1,1 +1,2 @@
-ctx/**/*.cbor
+*.cbor
+*.log

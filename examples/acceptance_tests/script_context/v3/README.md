@@ -25,7 +25,7 @@ for convenience.
   - [ ] withdraw
   - [ ] publish
   - [ ] voting
-  - [ ] proposing
+  - [x] proposing
 
 - Transaction body
   - [x] inputs
@@ -38,7 +38,7 @@ for convenience.
   - [x] fee
   - [x] mint
   - certificates
-    - [ ] none
+    - [x] none
     - some
       - Register credential
           - [ ] no deposit
@@ -56,26 +56,26 @@ for convenience.
       - [ ] Delegate CC
       - [ ] Retire CC
   - withdrawals
-    - [ ] none
+    - [x] none
     - [ ] some
   - [ ] validity range
   - extra signatories
     - [x] none
     - [ ] some
-  - [ ] redeemers
+  - [x] redeemers
   - [x] datums
   - votes
-     - [ ] none
+     - [x] none
      - [ ] some
   - proposal procedures
-     - [ ] none
-     - [ ] some
+     - [x] none
+     - [x] some
   - current treasury
      - [ ] with
-     - [ ] without
+     - [x] without
   - treasury donation
      - [ ] with
-     - [ ] without
+     - [x] without
 
 - Address
     - [x] type-0 (key | key)
@@ -105,21 +105,21 @@ for convenience.
     - [ ] with action id
     - [ ] without action id
   - hardfork initiation
-    - [ ] with action id
-    - [ ] without action id
+    - [x] with action id
+    - [x] without action id
   - treasuryWithdrawals
-    - [ ] with constitution
-    - [ ] without constitution
+    - [x] with constitution
+    - [x] without constitution
   - no confidence
-    - [ ] with action id
-    - [ ] without action id
+    - [x] with action id
+    - [x] without action id
   - update committee
-    - [ ] with action id
-    - [ ] without action id
+    - [x] with action id
+    - [x] without action id
   - new constitution
-    - [ ] with action id
-    - [ ] without action id
-  - [ ] info action
+    - [x] with action id
+    - [x] without action id
+  - [x] info action
 
 - Vote
   - [ ] No
@@ -164,11 +164,11 @@ for convenience.
   - [ ] 33 : nonnegative_interval}
 
 - Constitution
-  - [ ] with guardrail script
-  - [ ] without guardrail script
+  - [x] with guardrail script
+  - [x] without guardrail script
 
 - Credential
-  - [ ] key
+  - [x] key
   - [x] script
 
 - Delegatee
