@@ -433,11 +433,13 @@ pub fn identify_recursive_static_params(
     air_tree: &mut AirTree,
     tree_path: &TreePath,
     func_params: &[String],
-    func_key: &FunctionAccessKey,
-    variant: &String,
+    func_key: &(FunctionAccessKey, String),
+    function_calls_and_usage: &mut (usize, usize),
     shadowed_parameters: &mut HashMap<String, TreePath>,
     potential_recursive_statics: &mut Vec<String>,
 ) {
+    let variant = &func_key.1;
+    let func_key = &func_key.0;
     // Find whether any of the potential recursive statics get shadowed (because even if we pass in the same referenced name, it might not be static)
     for introduced_variable in find_introduced_variables(air_tree) {
         if potential_recursive_statics.contains(&introduced_variable) {
@@ -474,6 +476,26 @@ pub fn identify_recursive_static_params(
                 }
             }
         }
+        // This is a function call of a recursive function so track that
+        *function_calls_and_usage = (function_calls_and_usage.0 + 1, function_calls_and_usage.1);
+    } else if let AirTree::Var {
+        constructor:
+            ValueConstructor {
+                variant: ValueConstructorVariant::ModuleFn { name, module, .. },
+                ..
+            },
+        variant_name,
+        ..
+    } = air_tree
+    {
+        if name == &func_key.function_name
+            && module == &func_key.module_name
+            && variant == variant_name
+        {
+            // This is a usage of the recursive function either by call or being passed to a function or returned
+            *function_calls_and_usage =
+                (function_calls_and_usage.0, function_calls_and_usage.1 + 1);
+        }
     }
 }
 
@@ -488,14 +510,15 @@ pub fn modify_self_calls(
     // TODO: this would be a lot simpler if each `Var`, `Let`, function argument, etc. had a unique identifier
     // rather than just a name; this would let us track if the Var passed to itself was the same value as the method argument
     let mut shadowed_parameters: HashMap<String, TreePath> = HashMap::new();
+    let mut calls_and_var_usage = (0, 0);
     body.traverse_tree_with(
         &mut |air_tree: &mut AirTree, tree_path| {
             identify_recursive_static_params(
                 air_tree,
                 tree_path,
                 func_params,
-                func_key,
-                variant,
+                &(func_key.clone(), variant.clone()),
+                &mut calls_and_var_usage,
                 &mut shadowed_parameters,
                 &mut potential_recursive_statics,
             );
@@ -515,42 +538,79 @@ pub fn modify_self_calls(
     // Modify any self calls to remove recursive static parameters and append `self` as a parameter for the recursion
     body.traverse_tree_with(
         &mut |air_tree: &mut AirTree, _| {
-            if let AirTree::Call { func, args, .. } = air_tree {
-                if let AirTree::Var {
-                    constructor:
-                        ValueConstructor {
-                            variant: ValueConstructorVariant::ModuleFn { name, module, .. },
-                            ..
-                        },
-                    variant_name,
-                    ..
-                } = func.as_ref()
-                {
-                    if name == &func_key.function_name
-                        && module == &func_key.module_name
-                        && variant == variant_name
+            if let AirTree::Call {
+                func: func_recursive,
+                args,
+                ..
+            } = air_tree
+            {
+                if let AirTree::Call { func, .. } = func_recursive.as_ref() {
+                    if let AirTree::Var {
+                        constructor:
+                            ValueConstructor {
+                                variant: ValueConstructorVariant::ModuleFn { name, module, .. },
+                                ..
+                            },
+                        variant_name,
+                        ..
+                    } = func.as_ref()
                     {
-                        // Remove any static-recursive-parameters, because they'll be bound statically
-                        // above the recursive part of the function
-                        // note: assumes that static_recursive_params is sorted
-                        for arg in recursive_static_indexes.iter().rev() {
-                            args.remove(*arg);
+                        // The name must match and the recursive function must not be
+                        // passed around for this optimization to work.
+                        if name == &func_key.function_name
+                            && module == &func_key.module_name
+                            && variant == variant_name
+                            && calls_and_var_usage.0 == calls_and_var_usage.1
+                        {
+                            // Remove any static-recursive-parameters, because they'll be bound statically
+                            // above the recursive part of the function
+                            // note: assumes that static_recursive_params is sorted
+                            for arg in recursive_static_indexes.iter().rev() {
+                                args.remove(*arg);
+                            }
+                            args.insert(0, func.as_ref().clone());
+                            *func_recursive = func.as_ref().clone().into();
                         }
-                        let mut new_args = vec![func.as_ref().clone()];
-                        new_args.append(args);
-                        *args = new_args;
                     }
+                }
+            } else if let AirTree::Var {
+                constructor:
+                    ValueConstructor {
+                        variant: ValueConstructorVariant::ModuleFn { name, module, .. },
+                        ..
+                    },
+                variant_name,
+                ..
+            } = &air_tree
+            {
+                if name.clone() == func_key.function_name
+                    && module.clone() == func_key.module_name
+                    && variant.clone() == variant_name.clone()
+                {
+                    let self_call = AirTree::call(
+                        air_tree.clone(),
+                        air_tree.return_type(),
+                        vec![air_tree.clone()],
+                    );
+
+                    *air_tree = self_call;
                 }
             }
         },
         true,
     );
-    let recursive_nonstatics = func_params
-        .iter()
-        .filter(|p| !potential_recursive_statics.contains(p))
-        .cloned()
-        .collect();
-    recursive_nonstatics
+
+    // In the case of equal calls to usage we can reduce the static params
+    if calls_and_var_usage.0 == calls_and_var_usage.1 {
+        let recursive_nonstatics = func_params
+            .iter()
+            .filter(|p| !potential_recursive_statics.contains(p))
+            .cloned()
+            .collect();
+        recursive_nonstatics
+    } else {
+        func_params.to_vec()
+    }
 }
 
 pub fn modify_cyclic_calls(
