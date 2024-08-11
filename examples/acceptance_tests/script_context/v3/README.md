@@ -132,36 +132,36 @@ for convenience.
   - [ ] SPO
 
 - ChangedParameters
-  - [ ] 0: coin
-  - [ ] 1 : coin
-  - [ ] 2 : uint .size 4
-  - [ ] 3 : uint .size 4
-  - [ ] 4 : uint .size 2
-  - [ ] 5 : coin
-  - [ ] 6 : coin
-  - [ ] 7 : epoch_interval
-  - [ ] 8 : uint .size 2
-  - [ ] 9 : nonnegative_interval
-  - [ ] 10 : unit_interval
-  - [ ] 11 : unit_interval
-  - [ ] 16 : coin
-  - [ ] 17 : coin
-  - [ ] 18 : costmdls
-  - [ ] 19 : ex_unit_prices
-  - [ ] 20 : ex_units
-  - [ ] 21 : ex_units
-  - [ ] 22 : uint .size 4
-  - [ ] 23 : uint .size 2
-  - [ ] 24 : uint .size 2
-  - [ ] 25 : pool_voting_thresholds
-  - [ ] 26 : drep_voting_thresholds
-  - [ ] 27 : uint .size 2
-  - [ ] 28 : epoch_interval
-  - [ ] 29 : epoch_interval
-  - [ ] 30 : coin
-  - [ ] 31 : coin
-  - [ ] 32 : epoch_interval
-  - [ ] 33 : nonnegative_interval}
+  - [x] txFeePerByte
+  - [x] txFeeFixed
+  - [x] maxBlockBodySize
+  - [x] maxTxSize
+  - [x] maxBlockHeaderSize
+  - [x] stakeAddressDeposit
+  - [x] stakePoolDeposit
+  - [x] poolRetireMaxEpoch
+  - [x] stakePoolTargetNum
+  - [x] poolPledgeInfluence
+  - [x] monetaryExpansion
+  - [x] treasuryCut
+  - [x] minPoolCost
+  - [x] utxoCostPerByte
+  - [ ] costModels
+  - [x] executionUnitPrices
+  - [x] maxTxExecutionUnits
+  - [x] maxBlockExecutionUnits
+  - [x] maxValueSize
+  - [x] collateralPercentage
+  - [x] maxCollateralInputs
+  - [x] poolVotingThresholds
+  - [x] dRepVotingThresholds
+  - [x] committeeMinSize
+  - [x] committeeMaxTermLength
+  - [x] govActionLifetime
+  - [x] govActionDeposit
+  - [x] dRepDeposit
+  - [x] dRepActivity
+  - [x] minFeeRefScriptCostPerByte
 
 - Constitution
   - [x] with guardrail script

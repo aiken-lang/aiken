@@ -6,16 +6,17 @@ use crate::{
     machine::runtime::{convert_constr_to_tag, ANY_TAG},
     tx::script_context::from_alonzo_output,
 };
+use num_integer::Integer;
 use pallas_addresses::{
     Address, ShelleyDelegationPart, ShelleyPaymentPart, StakeAddress, StakePayload,
 };
 use pallas_codec::utils::{AnyUInt, Bytes, Int, KeyValuePairs, NonEmptyKeyValuePairs, Nullable};
 use pallas_crypto::hash::Hash;
 use pallas_primitives::conway::{
-    AssetName, BigInt, Certificate, Coin, Constitution, Constr, DatumOption, GovAction,
-    GovActionId, Mint, PlutusData, PolicyId, ProposalProcedure, ProtocolParamUpdate, PseudoScript,
-    RationalNumber, Redeemer, ScriptRef, StakeCredential, TransactionInput, TransactionOutput,
-    Value,
+    AssetName, BigInt, Certificate, Coin, Constitution, Constr, DRepVotingThresholds, DatumOption,
+    ExUnitPrices, ExUnits, GovAction, GovActionId, Mint, PlutusData, PolicyId,
+    PoolVotingThresholds, ProposalProcedure, ProtocolParamUpdate, PseudoScript, RationalNumber,
+    Redeemer, ScriptRef, StakeCredential, TransactionInput, TransactionOutput, Value,
 };
 use pallas_traverse::ComputeHash;
 
@@ -43,6 +44,8 @@ struct WithWrappedStakeCredential<'a, T>(&'a T);
 struct WithZeroAdaAsset<'a, T>(&'a T);
 
 struct WithOptionDatum<'a, T>(&'a T);
+
+struct WithArrayRational<'a, T>(&'a T);
 
 pub trait ToPlutusData {
     fn to_plutus_data(&self) -> PlutusData;
@@ -816,7 +819,181 @@ impl ToPlutusData for GovActionId {
 
 impl ToPlutusData for ProtocolParamUpdate {
     fn to_plutus_data(&self) -> PlutusData {
-        todo!("ToPlutusData for ProtocolParamUpdate")
+        let mut pparams = Vec::with_capacity(30);
+
+        let mut push = |ix: usize, p: PlutusData| {
+            pparams.push((ix.to_plutus_data(), p));
+        };
+
+        if let Some(p) = self.minfee_a {
+            push(0, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.minfee_b {
+            push(1, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.max_block_body_size {
+            push(2, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.max_transaction_size {
+            push(3, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.max_block_header_size {
+            push(4, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.key_deposit {
+            push(5, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.pool_deposit {
+            push(6, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.maximum_epoch {
+            push(7, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.desired_number_of_stake_pools {
+            push(8, p.to_plutus_data());
+        }
+
+        if let Some(ref p) = self.pool_pledge_influence {
+            push(9, WithArrayRational(p).to_plutus_data());
+        }
+
+        if let Some(ref p) = self.expansion_rate {
+            push(10, WithArrayRational(p).to_plutus_data());
+        }
+
+        if let Some(ref p) = self.treasury_growth_rate {
+            push(11, WithArrayRational(p).to_plutus_data());
+        }
+
+        if let Some(p) = self.min_pool_cost {
+            push(16, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.ada_per_utxo_byte {
+            push(17, p.to_plutus_data());
+        }
+
+        #[allow(clippy::redundant_pattern_matching)]
+        if let Some(_) = self.cost_models_for_script_languages {
+            unimplemented!("TODO: ToPlutusData for cost models.");
+        }
+
+        if let Some(ref p) = self.execution_costs {
+            push(19, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.max_tx_ex_units {
+            push(20, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.max_block_ex_units {
+            push(21, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.max_value_size {
+            push(22, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.collateral_percentage {
+            push(23, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.max_collateral_inputs {
+            push(24, p.to_plutus_data());
+        }
+
+        if let Some(ref p) = self.pool_voting_thresholds {
+            push(25, p.to_plutus_data());
+        }
+
+        if let Some(ref p) = self.drep_voting_thresholds {
+            push(26, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.min_committee_size {
+            push(27, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.committee_term_limit {
+            push(28, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.governance_action_validity_period {
+            push(29, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.governance_action_deposit {
+            push(30, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.drep_deposit {
+            push(31, p.to_plutus_data());
+        }
+
+        if let Some(p) = self.drep_inactivity_period {
+            push(32, p.to_plutus_data());
+        }
+
+        if let Some(ref p) = self.minfee_refscript_cost_per_byte {
+            push(33, WithArrayRational(p).to_plutus_data());
+        }
+
+        Data::map(pparams)
+    }
+}
+
+impl ToPlutusData for PoolVotingThresholds {
+    fn to_plutus_data(&self) -> PlutusData {
+        vec![
+            WithArrayRational(&self.motion_no_confidence).to_plutus_data(),
+            WithArrayRational(&self.committee_normal).to_plutus_data(),
+            WithArrayRational(&self.committee_no_confidence).to_plutus_data(),
+            WithArrayRational(&self.hard_fork_initiation).to_plutus_data(),
+            WithArrayRational(&self.security_voting_threshold).to_plutus_data(),
+        ]
+        .to_plutus_data()
+    }
+}
+
+impl ToPlutusData for DRepVotingThresholds {
+    fn to_plutus_data(&self) -> PlutusData {
+        vec![
+            WithArrayRational(&self.motion_no_confidence).to_plutus_data(),
+            WithArrayRational(&self.committee_normal).to_plutus_data(),
+            WithArrayRational(&self.committee_no_confidence).to_plutus_data(),
+            WithArrayRational(&self.update_constitution).to_plutus_data(),
+            WithArrayRational(&self.hard_fork_initiation).to_plutus_data(),
+            WithArrayRational(&self.pp_network_group).to_plutus_data(),
+            WithArrayRational(&self.pp_economic_group).to_plutus_data(),
+            WithArrayRational(&self.pp_technical_group).to_plutus_data(),
+            WithArrayRational(&self.pp_governance_group).to_plutus_data(),
+            WithArrayRational(&self.treasury_withdrawal).to_plutus_data(),
+        ]
+        .to_plutus_data()
+    }
+}
+
+impl ToPlutusData for ExUnitPrices {
+    fn to_plutus_data(&self) -> PlutusData {
+        vec![
+            WithArrayRational(&self.mem_price).to_plutus_data(),
+            WithArrayRational(&self.step_price).to_plutus_data(),
+        ]
+        .to_plutus_data()
+    }
+}
+
+impl ToPlutusData for ExUnits {
+    fn to_plutus_data(&self) -> PlutusData {
+        vec![self.mem.to_plutus_data(), self.steps.to_plutus_data()].to_plutus_data()
     }
 }
 
@@ -890,7 +1067,15 @@ impl ToPlutusData for Constitution {
 
 impl ToPlutusData for RationalNumber {
     fn to_plutus_data(&self) -> PlutusData {
-        (self.numerator, self.denominator).to_plutus_data()
+        let gcd = self.numerator.gcd(&self.denominator);
+        (self.numerator / gcd, self.denominator / gcd).to_plutus_data()
+    }
+}
+
+impl<'a> ToPlutusData for WithArrayRational<'a, RationalNumber> {
+    fn to_plutus_data(&self) -> PlutusData {
+        let gcd = self.0.numerator.gcd(&self.0.denominator);
+        vec![self.0.numerator / gcd, self.0.denominator / gcd].to_plutus_data()
     }
 }
 

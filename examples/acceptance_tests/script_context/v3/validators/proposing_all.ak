@@ -3,7 +3,7 @@ use aiken/math/rational
 use cardano/credential.{Script, VerificationKey}
 use cardano/governance.{
   Constitution, ConstitutionalCommittee, GovernanceAction, GovernanceActionId,
-  HardForkInitiation, NewConstitution, NicePoll, NoConfidence, ProposalProcedure,
+  HardFork, NewConstitution, NicePoll, NoConfidence, ProposalProcedure,
   ProtocolVersion, TreasuryWithdrawal,
 }
 use cardano/transaction.{Propose, Redeemer, ScriptContext, ScriptPurpose}
@@ -23,10 +23,7 @@ validator {
       list.at(procedures, 0),
       fn(action) {
         expect
-          HardForkInitiation {
-            ancestor: None,
-            new_version: ProtocolVersion(10, 0),
-          } == action
+          HardFork { ancestor: None, new_version: ProtocolVersion(10, 0) } == action
         Void
       },
     )
@@ -35,7 +32,7 @@ validator {
       list.at(procedures, 1),
       fn(action) {
         expect
-          HardForkInitiation {
+          HardFork {
             ancestor: Some(GovernanceActionId(null32, 0)),
             new_version: ProtocolVersion(11, 0),
           } == action

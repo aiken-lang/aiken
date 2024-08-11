@@ -1,5 +1,11 @@
 name = "script_context/v3"
 version = "0.0.0"
+compiler = "v1.0.31-alpha"
 plutus = "v3"
 license = "Apache-2.0"
 description = "Aiken contracts for project 'script_context/v3'"
+
+[[dependencies]]
+name = "logicalmechanism/stdlib"
+version = "plutus-v3"
+source = "github"
