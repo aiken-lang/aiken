@@ -377,8 +377,20 @@ impl TypedExpr {
                 expressions.iter().find_map(|e| e.find_node(byte_index))
             }
 
-            TypedExpr::Fn { body, .. } => body
-                .find_node(byte_index)
+            TypedExpr::Fn {
+                body,
+                args,
+                return_annotation,
+                ..
+            } => args
+                .iter()
+                .find_map(|arg| arg.find_node(byte_index))
+                .or_else(|| body.find_node(byte_index))
+                .or_else(|| {
+                    return_annotation
+                        .as_ref()
+                        .and_then(|a| a.find_node(byte_index))
+                })
                 .or(Some(Located::Expression(self))),
 
             TypedExpr::Tuple {
