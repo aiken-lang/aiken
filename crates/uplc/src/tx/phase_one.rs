@@ -108,17 +108,24 @@ pub fn scripts_needed(tx: &MintedTx, utxos: &[ResolvedInput]) -> Result<ScriptsN
         .map(|m| {
             m.iter()
                 .enumerate()
-                .filter_map(|(ix, cert)| {
-                    // only Dereg and Deleg certs can require scripts
-                    match cert {
-                        Certificate::StakeDeregistration(StakeCredential::Scripthash(h)) => {
-                            Some((ScriptPurpose::Certifying(ix, cert.clone()), *h))
-                        }
-                        Certificate::StakeDelegation(StakeCredential::Scripthash(h), _) => {
-                            Some((ScriptPurpose::Certifying(ix, cert.clone()), *h))
-                        }
-                        _ => None,
+                .filter_map(|(ix, cert)| match cert {
+                    Certificate::StakeDeregistration(StakeCredential::Scripthash(h))
+                    | Certificate::UnReg(StakeCredential::Scripthash(h), _)
+                    | Certificate::VoteDeleg(StakeCredential::Scripthash(h), _)
+                    | Certificate::VoteRegDeleg(StakeCredential::Scripthash(h), _, _)
+                    | Certificate::StakeVoteDeleg(StakeCredential::Scripthash(h), _, _)
+                    | Certificate::StakeRegDeleg(StakeCredential::Scripthash(h), _, _)
+                    | Certificate::StakeVoteRegDeleg(StakeCredential::Scripthash(h), _, _, _)
+                    | Certificate::RegDRepCert(StakeCredential::Scripthash(h), _, _)
+                    | Certificate::UnRegDRepCert(StakeCredential::Scripthash(h), _)
+                    | Certificate::UpdateDRepCert(StakeCredential::Scripthash(h), _)
+                    | Certificate::AuthCommitteeHot(StakeCredential::Scripthash(h), _)
+                    | Certificate::ResignCommitteeCold(StakeCredential::Scripthash(h), _)
+                    | Certificate::StakeDelegation(StakeCredential::Scripthash(h), _) => {
+                        Some((ScriptPurpose::Certifying(ix, cert.clone()), *h))
                     }
+
+                    _ => None,
                 })
                 .collect::<ScriptsNeeded>()
         })

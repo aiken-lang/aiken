@@ -10,11 +10,13 @@ use num_integer::Integer;
 use pallas_addresses::{
     Address, ShelleyDelegationPart, ShelleyPaymentPart, StakeAddress, StakePayload,
 };
-use pallas_codec::utils::{AnyUInt, Bytes, Int, KeyValuePairs, NonEmptyKeyValuePairs, Nullable};
+use pallas_codec::utils::{
+    AnyUInt, Bytes, Int, KeyValuePairs, NonEmptyKeyValuePairs, Nullable, PositiveCoin,
+};
 use pallas_crypto::hash::Hash;
 use pallas_primitives::conway::{
-    AssetName, BigInt, Certificate, Coin, Constitution, Constr, DRepVotingThresholds, DatumOption,
-    ExUnitPrices, ExUnits, GovAction, GovActionId, Mint, PlutusData, PolicyId,
+    AssetName, BigInt, Certificate, Coin, Constitution, Constr, DRep, DRepVotingThresholds,
+    DatumOption, ExUnitPrices, ExUnits, GovAction, GovActionId, Mint, PlutusData, PolicyId,
     PoolVotingThresholds, ProposalProcedure, ProtocolParamUpdate, PseudoScript, RationalNumber,
     Redeemer, ScriptRef, StakeCredential, TransactionInput, TransactionOutput, Value,
 };
@@ -46,6 +48,8 @@ struct WithZeroAdaAsset<'a, T>(&'a T);
 struct WithOptionDatum<'a, T>(&'a T);
 
 struct WithArrayRational<'a, T>(&'a T);
+
+struct WithPartialCertificates<'a, T>(&'a T);
 
 pub trait ToPlutusData {
     fn to_plutus_data(&self) -> PlutusData;
@@ -268,6 +272,12 @@ impl ToPlutusData for usize {
     }
 }
 
+impl ToPlutusData for PositiveCoin {
+    fn to_plutus_data(&self) -> PlutusData {
+        u64::from(self).to_plutus_data()
+    }
+}
+
 impl<'a> ToPlutusData for WithZeroAdaAsset<'a, Value> {
     fn to_plutus_data(&self) -> PlutusData {
         match self.0 {
@@ -487,15 +497,27 @@ impl ToPlutusData for StakeCredential {
     }
 }
 
-impl ToPlutusData for Certificate {
+impl<'a> ToPlutusData for WithPartialCertificates<'a, Vec<Certificate>> {
     fn to_plutus_data(&self) -> PlutusData {
-        match self {
+        self.0
+            .iter()
+            .map(WithPartialCertificates)
+            .collect::<Vec<_>>()
+            .to_plutus_data()
+    }
+}
+
+impl<'a> ToPlutusData for WithPartialCertificates<'a, Certificate> {
+    fn to_plutus_data(&self) -> PlutusData {
+        match self.0 {
             Certificate::StakeRegistration(stake_credential) => {
                 wrap_with_constr(0, stake_credential.to_plutus_data())
             }
+
             Certificate::StakeDeregistration(stake_credential) => {
                 wrap_with_constr(1, stake_credential.to_plutus_data())
             }
+
             Certificate::StakeDelegation(stake_credential, pool_keyhash) => {
                 wrap_multiple_with_constr(
                     2,
@@ -505,6 +527,7 @@ impl ToPlutusData for Certificate {
                     ],
                 )
             }
+
             Certificate::PoolRegistration {
                 operator,
                 vrf_keyhash,
@@ -519,22 +542,181 @@ impl ToPlutusData for Certificate {
                 3,
                 vec![operator.to_plutus_data(), vrf_keyhash.to_plutus_data()],
             ),
+
             Certificate::PoolRetirement(pool_keyhash, epoch) => wrap_multiple_with_constr(
                 4,
                 vec![pool_keyhash.to_plutus_data(), epoch.to_plutus_data()],
             ),
-            _ => todo!("other certificates"), // Reg(StakeCredential, Coin),
-                                              // UnReg(StakeCredential, Coin),
-                                              // VoteDeleg(StakeCredential, DRep),
-                                              // StakeVoteDeleg(StakeCredential, PoolKeyhash, DRep),
-                                              // StakeRegDeleg(StakeCredential, PoolKeyhash, Coin),
-                                              // VoteRegDeleg(StakeCredential, DRep, Coin),
-                                              // StakeVoteRegDeleg(StakeCredential, PoolKeyhash, DRep, Coin),
-                                              // AuthCommitteeHot(CommitteeColdCredential, CommitteeHotCredential),
-                                              // ResignCommitteeCold(CommitteeColdCredential, Nullable<Anchor>),
-                                              // RegDRepCert(DRepCredential, Coin, Nullable<Anchor>),
-                                              // UnRegDRepCert(DRepCredential, Coin),
-                                              // UpdateDRepCert(StakeCredential, Nullable<Anchor>),
+
+            certificate => unreachable!("unexpected in V1/V2 script context: {certificate:?}"),
+        }
+    }
+}
+
+impl ToPlutusData for Certificate {
+    fn to_plutus_data(&self) -> PlutusData {
+        match self {
+            Certificate::StakeRegistration(stake_credential) => wrap_multiple_with_constr(
+                0,
+                vec![
+                    stake_credential.to_plutus_data(),
+                    None::<PlutusData>.to_plutus_data(),
+                ],
+            ),
+
+            Certificate::Reg(stake_credential, deposit) => wrap_multiple_with_constr(
+                0,
+                vec![
+                    stake_credential.to_plutus_data(),
+                    Some(*deposit).to_plutus_data(),
+                ],
+            ),
+
+            Certificate::StakeDeregistration(stake_credential) => wrap_multiple_with_constr(
+                1,
+                vec![
+                    stake_credential.to_plutus_data(),
+                    None::<PlutusData>.to_plutus_data(),
+                ],
+            ),
+
+            Certificate::UnReg(stake_credential, deposit) => wrap_multiple_with_constr(
+                1,
+                vec![
+                    stake_credential.to_plutus_data(),
+                    Some(*deposit).to_plutus_data(),
+                ],
+            ),
+
+            Certificate::StakeDelegation(stake_credential, pool_id) => wrap_multiple_with_constr(
+                2,
+                vec![
+                    stake_credential.to_plutus_data(),
+                    wrap_with_constr(0, pool_id.to_plutus_data()),
+                ],
+            ),
+
+            Certificate::VoteDeleg(stake_credential, drep) => wrap_multiple_with_constr(
+                2,
+                vec![
+                    stake_credential.to_plutus_data(),
+                    wrap_with_constr(1, drep.to_plutus_data()),
+                ],
+            ),
+
+            Certificate::StakeVoteDeleg(stake_credential, pool_id, drep) => {
+                wrap_multiple_with_constr(
+                    2,
+                    vec![
+                        stake_credential.to_plutus_data(),
+                        wrap_multiple_with_constr(
+                            2,
+                            vec![pool_id.to_plutus_data(), drep.to_plutus_data()],
+                        ),
+                    ],
+                )
+            }
+
+            Certificate::StakeRegDeleg(stake_credential, pool_id, deposit) => {
+                wrap_multiple_with_constr(
+                    3,
+                    vec![
+                        stake_credential.to_plutus_data(),
+                        wrap_multiple_with_constr(0, vec![pool_id.to_plutus_data()]),
+                        deposit.to_plutus_data(),
+                    ],
+                )
+            }
+
+            Certificate::VoteRegDeleg(stake_credential, drep, deposit) => {
+                wrap_multiple_with_constr(
+                    3,
+                    vec![
+                        stake_credential.to_plutus_data(),
+                        wrap_multiple_with_constr(1, vec![drep.to_plutus_data()]),
+                        deposit.to_plutus_data(),
+                    ],
+                )
+            }
+
+            Certificate::StakeVoteRegDeleg(stake_credential, pool_id, drep, deposit) => {
+                wrap_multiple_with_constr(
+                    3,
+                    vec![
+                        stake_credential.to_plutus_data(),
+                        wrap_multiple_with_constr(
+                            2,
+                            vec![pool_id.to_plutus_data(), drep.to_plutus_data()],
+                        ),
+                        deposit.to_plutus_data(),
+                    ],
+                )
+            }
+
+            Certificate::RegDRepCert(drep_credential, deposit, _anchor) => {
+                wrap_multiple_with_constr(
+                    4,
+                    vec![drep_credential.to_plutus_data(), deposit.to_plutus_data()],
+                )
+            }
+
+            Certificate::UpdateDRepCert(drep_credential, _anchor) => {
+                wrap_multiple_with_constr(5, vec![drep_credential.to_plutus_data()])
+            }
+
+            Certificate::UnRegDRepCert(drep_credential, deposit) => wrap_multiple_with_constr(
+                6,
+                vec![drep_credential.to_plutus_data(), deposit.to_plutus_data()],
+            ),
+
+            Certificate::PoolRegistration {
+                operator,
+                vrf_keyhash,
+                pledge: _,
+                cost: _,
+                margin: _,
+                reward_account: _,
+                pool_owners: _,
+                relays: _,
+                pool_metadata: _,
+            } => wrap_multiple_with_constr(
+                7,
+                vec![operator.to_plutus_data(), vrf_keyhash.to_plutus_data()],
+            ),
+
+            Certificate::PoolRetirement(pool_keyhash, epoch) => wrap_multiple_with_constr(
+                8,
+                vec![pool_keyhash.to_plutus_data(), epoch.to_plutus_data()],
+            ),
+
+            Certificate::AuthCommitteeHot(cold_credential, hot_credential) => {
+                wrap_multiple_with_constr(
+                    9,
+                    vec![
+                        cold_credential.to_plutus_data(),
+                        hot_credential.to_plutus_data(),
+                    ],
+                )
+            }
+
+            Certificate::ResignCommitteeCold(cold_credential, _anchor) => {
+                wrap_multiple_with_constr(10, vec![cold_credential.to_plutus_data()])
+            }
+        }
+    }
+}
+
+impl ToPlutusData for DRep {
+    fn to_plutus_data(&self) -> PlutusData {
+        match self {
+            DRep::Key(hash) => {
+                wrap_with_constr(0, StakeCredential::AddrKeyhash(*hash).to_plutus_data())
+            }
+            DRep::Script(hash) => {
+                wrap_with_constr(0, StakeCredential::Scripthash(*hash).to_plutus_data())
+            }
+            DRep::Abstain => empty_constr(1),
+            DRep::NoConfidence => empty_constr(2),
         }
     }
 }
@@ -1147,7 +1329,7 @@ impl ToPlutusData for TxInfo {
                     WithOptionDatum(&WithZeroAdaAsset(&tx_info.outputs)).to_plutus_data(),
                     WithZeroAdaAsset(&tx_info.fee).to_plutus_data(),
                     WithZeroAdaAsset(&tx_info.mint).to_plutus_data(),
-                    tx_info.certificates.to_plutus_data(),
+                    WithPartialCertificates(&tx_info.certificates).to_plutus_data(),
                     WithWrappedStakeCredential(&tx_info.withdrawals).to_plutus_data(),
                     tx_info.valid_range.to_plutus_data(),
                     tx_info.signatories.to_plutus_data(),
@@ -1164,7 +1346,7 @@ impl ToPlutusData for TxInfo {
                     WithZeroAdaAsset(&tx_info.outputs).to_plutus_data(),
                     WithZeroAdaAsset(&tx_info.fee).to_plutus_data(),
                     WithZeroAdaAsset(&tx_info.mint).to_plutus_data(),
-                    tx_info.certificates.to_plutus_data(),
+                    WithPartialCertificates(&tx_info.certificates).to_plutus_data(),
                     WithWrappedStakeCredential(&tx_info.withdrawals).to_plutus_data(),
                     tx_info.valid_range.to_plutus_data(),
                     tx_info.signatories.to_plutus_data(),
@@ -1190,8 +1372,8 @@ impl ToPlutusData for TxInfo {
                     tx_info.id.to_plutus_data(),
                     Data::map(vec![]), // TODO tx_info.votes :: Map Voter (Map GovernanceActionId Vote)
                     tx_info.proposal_procedures.to_plutus_data(),
-                    empty_constr(1), // TODO tx_info.current_treasury_amount :: Haskell.Maybe V2.Lovelace
-                    empty_constr(1), // TODO tx_info.treasury_donation :: Haskell.Maybe V2.Lovelace
+                    tx_info.current_treasury_amount.to_plutus_data(),
+                    tx_info.treasury_donation.to_plutus_data(),
                 ],
             ),
         }

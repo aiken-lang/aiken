@@ -23,7 +23,7 @@ for convenience.
   - [x] spend
   - [x] mint
   - [ ] withdraw
-  - [ ] publish
+  - [x] publish
   - [ ] voting
   - [x] proposing
 
@@ -41,20 +41,20 @@ for convenience.
     - [x] none
     - some
       - Register credential
-          - [ ] no deposit
-          - [ ] with deposit
+          - [x] no deposit
+          - [x] with deposit
       - Unregister credential
-          - [ ] no deposit
-          - [ ] with deposit
-      - [ ] Delegate
-      - [ ] Register & delegate credential
-      - [ ] Register drep
-      - [ ] Unregister drep
-      - [ ] Update drep
-      - [ ] Register pool
-      - [ ] Retire pool
-      - [ ] Delegate CC
-      - [ ] Retire CC
+          - [x] no deposit
+          - [x] with deposit
+      - [x] Delegate
+      - [x] Register & delegate credential
+      - [x] Register drep
+      - [x] Unregister drep
+      - [x] Update drep
+      - [x] Register pool
+      - [x] Retire pool
+      - [x] Delegate CC
+      - [x] Retire CC
   - withdrawals
     - [x] none
     - [ ] some
@@ -71,10 +71,10 @@ for convenience.
      - [x] none
      - [x] some
   - current treasury
-     - [ ] with
+     - [x] with
      - [x] without
   - treasury donation
-     - [ ] with
+     - [x] with
      - [x] without
 
 - Address
@@ -102,8 +102,8 @@ for convenience.
 
 - Governance Action
   - parameter change
-    - [ ] with action id
-    - [ ] without action id
+    - [x] with action id
+    - [x] without action id
   - hardfork initiation
     - [x] with action id
     - [x] without action id
@@ -172,15 +172,15 @@ for convenience.
   - [x] script
 
 - Delegatee
-  - [ ] pool
-  - [ ] drep
-  - [ ] pool + drep
+  - [x] pool
+  - [x] drep
+  - [x] pool + drep
 
 - DRep
-  - [ ] key
-  - [ ] script
-  - [ ] abstain
-  - [ ] no confidence
+  - [x] key
+  - [x] script
+  - [x] abstain
+  - [x] no confidence
 
 - Boundary
   - [ ] closed

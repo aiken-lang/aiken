@@ -1,7 +1,9 @@
 use super::{to_plutus_data::MintValue, Error};
 use itertools::Itertools;
 use pallas_addresses::{Address, StakePayload};
-use pallas_codec::utils::{KeyValuePairs, NonEmptyKeyValuePairs, NonEmptySet, Nullable};
+use pallas_codec::utils::{
+    KeyValuePairs, NonEmptyKeyValuePairs, NonEmptySet, Nullable, PositiveCoin,
+};
 use pallas_crypto::hash::Hash;
 use pallas_primitives::{
     alonzo,
@@ -310,10 +312,10 @@ pub struct TxInfoV3 {
     pub data: KeyValuePairs<DatumHash, PlutusData>,
     pub proposal_procedures: Vec<ProposalProcedure>,
     pub id: Hash<32>,
+    pub current_treasury_amount: Option<Coin>,
+    pub treasury_donation: Option<PositiveCoin>,
     // TODO:
     // votes : KeyValuePairs<Voter, KeyValuePairs<GovernanceActionId, Vote>>
-    // currentTreasuryAmount : Option<Coin>
-    // treasuryDonation : Option<Coin>
 }
 
 impl TxInfoV3 {
@@ -366,6 +368,10 @@ impl TxInfoV3 {
             data: KeyValuePairs::from(get_data_info(&tx.transaction_witness_set)),
             redeemers,
             proposal_procedures,
+            current_treasury_amount: get_current_treasury_amount_info(
+                &tx.transaction_body.treasury_value,
+            ),
+            treasury_donation: get_treasury_donation_info(&tx.transaction_body.donation),
             id: tx.transaction_body.original_hash(),
         }))
     }
@@ -594,6 +600,14 @@ pub fn get_fee_info(fee: &Coin) -> Coin {
     *fee
 }
 
+pub fn get_current_treasury_amount_info(amount: &Option<Coin>) -> Option<Coin> {
+    *amount
+}
+
+pub fn get_treasury_donation_info(amount: &Option<PositiveCoin>) -> Option<PositiveCoin> {
+    *amount
+}
+
 pub fn get_certificates_info(certificates: &Option<NonEmptySet<Certificate>>) -> Vec<Certificate> {
     certificates.clone().map(|s| s.to_vec()).unwrap_or_default()
 }
@@ -807,20 +821,26 @@ pub fn find_script(
             .get(redeemer.index as usize)
             .ok_or(Error::MissingScriptForRedeemer)
             .and_then(|cert| match cert {
-                Certificate::StakeDeregistration(stake_credential) => match stake_credential {
+                Certificate::StakeDeregistration(stake_credential)
+                | Certificate::UnReg(stake_credential, _)
+                | Certificate::VoteDeleg(stake_credential, _)
+                | Certificate::VoteRegDeleg(stake_credential, _, _)
+                | Certificate::StakeVoteDeleg(stake_credential, _, _)
+                | Certificate::StakeRegDeleg(stake_credential, _, _)
+                | Certificate::StakeVoteRegDeleg(stake_credential, _, _, _)
+                | Certificate::RegDRepCert(stake_credential, _, _)
+                | Certificate::UnRegDRepCert(stake_credential, _)
+                | Certificate::UpdateDRepCert(stake_credential, _)
+                | Certificate::AuthCommitteeHot(stake_credential, _)
+                | Certificate::ResignCommitteeCold(stake_credential, _)
+                | Certificate::StakeDelegation(stake_credential, _) => match stake_credential {
                     StakeCredential::Scripthash(hash) => Ok(hash),
                     _ => Err(Error::NonScriptStakeCredential),
                 },
-                Certificate::StakeDelegation(stake_credential, _) => match stake_credential {
-                    StakeCredential::Scripthash(hash) => Ok(hash),
-                    _ => Err(Error::NonScriptStakeCredential),
-                },
-                Certificate::PoolRetirement { .. } | Certificate::PoolRegistration { .. } => {
-                    Err(Error::UnsupportedCertificateType)
-                }
-                _ => {
-                    todo!("remaining certificate types")
-                }
+                Certificate::StakeRegistration { .. }
+                | Certificate::PoolRetirement { .. }
+                | Certificate::Reg { .. }
+                | Certificate::PoolRegistration { .. } => Err(Error::UnsupportedCertificateType),
             })
             .and_then(lookup_script),
 
@@ -1241,6 +1261,76 @@ mod tests {
              6c696461746f722072657475726e65642066616c736500136560020020020020\
              02002153300249010b5f746d70313a20566f696400165734ae7155ceaab9e557\
              3eae91f5f6",
+            "8182582000000000000000000000000000000000000000000000000000000000\
+             0000000000",
+            "81a200581d600000000000000000000000000000000000000000000000000000\
+             0000011a000f4240",
+        )
+        .into_script_context(&redeemer, None)
+        .unwrap();
+
+        // NOTE: The initial snapshot has been generated using the Haskell
+        // implementation of the ledger library for that same serialized
+        // transactions. It is meant to control that our construction of the
+        // script context and its serialization matches exactly those
+        // from the Haskell ledger / cardano node.
+        insta::assert_debug_snapshot!(script_context.to_plutus_data());
+    }
+
+    #[test]
+    fn script_context_certificates() {
+        let redeemer = Redeemer {
+            tag: RedeemerTag::Cert,
+            index: 20,
+            data: Data::constr(0, vec![]),
+            ex_units: ExUnits {
+                mem: 1000000,
+                steps: 100000000,
+            },
+        };
+
+        // NOTE: The transaction also contains treasury donation and current treasury amount
+        let script_context = fixture_tx_info(
+            "84a6008182582000000000000000000000000000000000000000000000000000\
+             00000000000000000180049582008201581c2222222222222222222222222222\
+             222222222222222222222222222282008200581c000000000000000000000000\
+             0000000000000000000000000000000082018200581c00000000000000000000\
+             0000000000000000000000000000000000008a03581c11111111111111111111\
+             1111111111111111111111111111111111115820999999999999999999999999\
+             99999999999999999999999999999999999999991a000f4240190154d81e8201\
+             1864581de0000000000000000000000000000000000000000000000000000000\
+             00d901028080f68304581c111111111111111111111111111111111111111111\
+             1111111111111119053983078200581c00000000000000000000000000000000\
+             0000000000000000000000001a002dc6c083088200581c000000000000000000\
+             000000000000000000000000000000000000001a002dc6c083098200581c0000\
+             00000000000000000000000000000000000000000000000000008200581c0000\
+             000000000000000000000000000000000000000000000000000083098200581c\
+             000000000000000000000000000000000000000000000000000000008201581c\
+             0000000000000000000000000000000000000000000000000000000083098200\
+             581c000000000000000000000000000000000000000000000000000000008102\
+             83098200581c0000000000000000000000000000000000000000000000000000\
+             00008103840a8200581c00000000000000000000000000000000000000000000\
+             000000000000581c111111111111111111111111111111111111111111111111\
+             111111118103840b8200581c0000000000000000000000000000000000000000\
+             0000000000000000581c11111111111111111111111111111111111111111111\
+             1111111111111a002dc6c0840c8200581c000000000000000000000000000000\
+             0000000000000000000000000081031a002dc6c0850d8200581c000000000000\
+             00000000000000000000000000000000000000000000581c1111111111111111\
+             111111111111111111111111111111111111111181031a002dc6c0830e820058\
+             1c00000000000000000000000000000000000000000000000000000000820058\
+             1c22222222222222222222222222222222222222222222222222222222830f82\
+             00581c00000000000000000000000000000000000000000000000000000000f6\
+             84108200581c0000000000000000000000000000000000000000000000000000\
+             00001a002dc6c0f683118200581c000000000000000000000000000000000000\
+             000000000000000000001a002dc6c083128200581c0000000000000000000000\
+             0000000000000000000000000000000000f683028201581c9b24324046544393\
+             443e1fb35c8b72c3c39e18a516a95df5f6654101581c11111111111111111111\
+             11111111111111111111111111111111111102182a151a00989680160ea20581\
+             840214d87980821a000f42401a05f5e1000781587d587b010100323232323232\
+             3225333333008001153330033370e900018029baa00115333007300637540022\
+             4a66600894452615330054911856616c696461746f722072657475726e656420\
+             66616c73650013656002002002002002002153300249010b5f746d70313a2056\
+             6f696400165734ae7155ceaab9e5573eae91f5f6",
             "8182582000000000000000000000000000000000000000000000000000000000\
              0000000000",
             "81a200581d600000000000000000000000000000000000000000000000000000\
