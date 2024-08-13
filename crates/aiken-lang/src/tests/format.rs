@@ -1116,3 +1116,27 @@ fn format_long_imports() {
         "#
     );
 }
+
+#[test]
+fn format_long_pair() {
+    assert_format!(
+        r#"
+        test foo() {
+            expect(Some([
+                Pair(GovernanceActionId { transaction: only7s, proposal_procedure: 2 },
+                Abstain),
+            ])) == whatever
+
+            expect(Some([
+                Foo(GovernanceActionId { transaction: only7s, proposal_procedure: 2 },
+                Abstain),
+            ])) == whatever
+
+            expect(Some([
+                (GovernanceActionId { transaction: only7s, proposal_procedure: 2 },
+                Abstain),
+            ])) == whatever
+        }
+        "#
+    );
+}

@@ -75,13 +75,15 @@ fn assert_inputs(inputs: List<Input>) {
 fn assert_redeemers(redeemers: Pairs<ScriptPurpose, Data>) {
   expect
     [
-      Pair(Spend(
-        OutputReference {
-          transaction_id: #"0000000000000000000000000000000000000000000000000000000000000000",
-          output_index: 0,
-        },
+      Pair(
+        Spend(
+          OutputReference {
+            transaction_id: #"0000000000000000000000000000000000000000000000000000000000000000",
+            output_index: 0,
+          },
+        ),
+        void(),
       ),
-      void()),
     ] == redeemers
   Void
 }

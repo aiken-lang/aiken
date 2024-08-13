@@ -35,14 +35,18 @@ validator {
 
     expect
       Some(
-        Pair(ConstitutionalCommitteeMember(VerificationKey(only0s)),
-        [
-          Pair(GovernanceActionId {
-            transaction: only9s,
-            proposal_procedure: 152,
-          },
-          No),
-        ]),
+        Pair(
+          ConstitutionalCommitteeMember(VerificationKey(only0s)),
+          [
+            Pair(
+              GovernanceActionId {
+                transaction: only9s,
+                proposal_procedure: 152,
+              },
+              No,
+            ),
+          ],
+        ),
       ) == list.at(votes, 1)
 
     expect Some(Pair(DelegateRepresentative(Script(..)), [_, ..])) =
@@ -50,15 +54,23 @@ validator {
 
     expect
       Some(
-        Pair(DelegateRepresentative(VerificationKey(only0s)),
-        [
-          Pair(GovernanceActionId { transaction: only7s, proposal_procedure: 2 },
-          Abstain),
-          Pair(GovernanceActionId { transaction: only8s, proposal_procedure: 1 },
-          Abstain),
-          Pair(GovernanceActionId { transaction: only9s, proposal_procedure: 0 },
-          Abstain),
-        ]),
+        Pair(
+          DelegateRepresentative(VerificationKey(only0s)),
+          [
+            Pair(
+              GovernanceActionId { transaction: only7s, proposal_procedure: 2 },
+              Abstain,
+            ),
+            Pair(
+              GovernanceActionId { transaction: only8s, proposal_procedure: 1 },
+              Abstain,
+            ),
+            Pair(
+              GovernanceActionId { transaction: only9s, proposal_procedure: 0 },
+              Abstain,
+            ),
+          ],
+        ),
       ) == list.at(votes, 3)
 
     expect Some(Pair(StakePool(pool_id), [_, ..])) = list.at(votes, 4)

@@ -998,14 +998,12 @@ impl<'comments> Formatter<'comments> {
                 wrap_args(elems.iter().map(|e| (self.wrap_expr(e), false))).group()
             }
 
-            UntypedExpr::Pair { fst, snd, .. } => "Pair"
-                .to_doc()
-                .append("(")
-                .append(self.expr(fst, false))
-                .append(break_(",", ", "))
-                .append(self.expr(snd, false))
-                .append(")")
-                .group(),
+            UntypedExpr::Pair { fst, snd, .. } => {
+                let elems = [fst, snd];
+                "Pair"
+                    .to_doc()
+                    .append(wrap_args(elems.iter().map(|e| (self.wrap_expr(e), false))).group())
+            }
 
             UntypedExpr::TupleIndex { index, tuple, .. } => {
                 let suffix = Ordinal(*index + 1).suffix().to_doc();

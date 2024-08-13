@@ -46,10 +46,12 @@ validator {
         expect
           TreasuryWithdrawal {
             beneficiaries: [
-              Pair(VerificationKey(
-                #"11111111111111111111111111111111111111111111111111111111",
+              Pair(
+                VerificationKey(
+                  #"11111111111111111111111111111111111111111111111111111111",
+                ),
+                1_000_000,
               ),
-              1_000_000),
             ],
             guardrails: None,
           } == action

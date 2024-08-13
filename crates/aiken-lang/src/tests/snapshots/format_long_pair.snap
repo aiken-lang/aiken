@@ -1,0 +1,35 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\ntest foo() {\n    expect(Some([\n        Pair(GovernanceActionId { transaction: only7s, proposal_procedure: 2 },\n        Abstain),\n    ])) == whatever\n\n    expect(Some([\n        Foo(GovernanceActionId { transaction: only7s, proposal_procedure: 2 },\n        Abstain),\n    ])) == whatever\n\n    expect(Some([\n        (GovernanceActionId { transaction: only7s, proposal_procedure: 2 },\n        Abstain),\n    ])) == whatever\n}\n"
+---
+test foo() {
+  expect
+    Some(
+      [
+        Pair(
+          GovernanceActionId { transaction: only7s, proposal_procedure: 2 },
+          Abstain,
+        ),
+      ],
+    ) == whatever
+
+  expect
+    Some(
+      [
+        Foo(
+          GovernanceActionId { transaction: only7s, proposal_procedure: 2 },
+          Abstain,
+        ),
+      ],
+    ) == whatever
+
+  expect
+    Some(
+      [
+        (
+          GovernanceActionId { transaction: only7s, proposal_procedure: 2 },
+          Abstain,
+        ),
+      ],
+    ) == whatever
+}
