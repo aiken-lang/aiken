@@ -9,13 +9,35 @@ Because we can't have fully static context (since they contain the validator
 and its hash), we define _templates_.
 
 Everything is a bit clunky, but steps have been captured in a `test.sh` script
-for convenience.
+for convenience. The test still assumes a few things. For any
+`VALIDATOR_GROUP`:
+
+- There's a `ctx/{VALIDATOR_GROUP}/tx.template` and
+  `ctx/{VALIDATOR_GROUP}/resolved_inputs.template` respectively.
+
+- There's a corresponding validator `validators/{VALIDATOR_GROUP}.ak`
+
+- Templates may reference variables using a mustache-template-like syntax `{{ ... }}`.
+  Provided variables are:
+  - `{VALIDATOR_GROUP}.{VALIDATOR_TITLE}.hash`
+  - `{VALIDATOR_GROUP}.{VALIDATOR_TITLE}.cbor`
+
+  Where `VALIDATOR_TITLE` corresponds to the validator Aiken's name.
 
 ## How to use
 
 ```
-./test.sh [VALIDATOR_TITLE]
+./test.sh VALIDATOR_GROUP
 ```
+
+> ![TIP]
+> By default, this recompiles the project in --release mode, which can be long
+> when iterating / testing. You can provide a binary to use as a second
+> argument. For a dev build, just do:
+>
+> ```
+> ./test.sh VALIDATOR_GROUP "cargo run --"
+> ```
 
 ## Test Coverage
 
@@ -24,7 +46,7 @@ for convenience.
   - [x] mint
   - [ ] withdraw
   - [x] publish
-  - [ ] voting
+  - [x] voting
   - [x] proposing
 
 - Transaction body
@@ -66,7 +88,7 @@ for convenience.
   - [x] datums
   - votes
      - [x] none
-     - [ ] some
+     - [x] some
   - proposal procedures
      - [x] none
      - [x] some
@@ -122,14 +144,14 @@ for convenience.
   - [x] info action
 
 - Vote
-  - [ ] No
-  - [ ] Yes
-  - [ ] Abstain
+  - [x] No
+  - [x] Yes
+  - [x] Abstain
 
 - Voter
-  - [ ] CC
-  - [ ] DRep
-  - [ ] SPO
+  - [x] CC
+  - [x] DRep
+  - [x] SPO
 
 - ChangedParameters
   - [x] txFeePerByte

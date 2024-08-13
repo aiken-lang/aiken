@@ -18,7 +18,8 @@ use pallas_primitives::conway::{
     AssetName, BigInt, Certificate, Coin, Constitution, Constr, DRep, DRepVotingThresholds,
     DatumOption, ExUnitPrices, ExUnits, GovAction, GovActionId, Mint, PlutusData, PolicyId,
     PoolVotingThresholds, ProposalProcedure, ProtocolParamUpdate, PseudoScript, RationalNumber,
-    Redeemer, ScriptRef, StakeCredential, TransactionInput, TransactionOutput, Value,
+    Redeemer, ScriptRef, StakeCredential, TransactionInput, TransactionOutput, Value, Vote, Voter,
+    VotingProcedure,
 };
 use pallas_traverse::ComputeHash;
 
@@ -953,6 +954,9 @@ impl ToPlutusData for ScriptPurpose {
             ScriptPurpose::Certifying(ix, dcert) => {
                 wrap_multiple_with_constr(3, vec![ix.to_plutus_data(), dcert.to_plutus_data()])
             }
+            ScriptPurpose::Voting(voter) => {
+                wrap_multiple_with_constr(4, vec![voter.to_plutus_data()])
+            }
             ScriptPurpose::Proposing(ix, procedure) => {
                 wrap_multiple_with_constr(5, vec![ix.to_plutus_data(), procedure.to_plutus_data()])
             }
@@ -1293,6 +1297,42 @@ impl<'a> ToPlutusData for WithWrappedStakeCredential<'a, KeyValuePairs<Address, 
     }
 }
 
+impl ToPlutusData for Voter {
+    fn to_plutus_data(&self) -> PlutusData {
+        match self {
+            Voter::ConstitutionalCommitteeScript(hash) => {
+                wrap_with_constr(0, StakeCredential::Scripthash(*hash).to_plutus_data())
+            }
+            Voter::ConstitutionalCommitteeKey(hash) => {
+                wrap_with_constr(0, StakeCredential::AddrKeyhash(*hash).to_plutus_data())
+            }
+            Voter::DRepScript(hash) => {
+                wrap_with_constr(1, StakeCredential::Scripthash(*hash).to_plutus_data())
+            }
+            Voter::DRepKey(hash) => {
+                wrap_with_constr(1, StakeCredential::AddrKeyhash(*hash).to_plutus_data())
+            }
+            Voter::StakePoolKey(hash) => wrap_with_constr(2, hash.to_plutus_data()),
+        }
+    }
+}
+
+impl ToPlutusData for VotingProcedure {
+    fn to_plutus_data(&self) -> PlutusData {
+        self.vote.to_plutus_data()
+    }
+}
+
+impl ToPlutusData for Vote {
+    fn to_plutus_data(&self) -> PlutusData {
+        match self {
+            Vote::No => empty_constr(0),
+            Vote::Yes => empty_constr(1),
+            Vote::Abstain => empty_constr(2),
+        }
+    }
+}
+
 impl<T> ToPlutusData for ScriptInfo<T>
 where
     T: ToPlutusData,
@@ -1309,6 +1349,7 @@ where
             ScriptInfo::Certifying(ix, dcert) => {
                 wrap_multiple_with_constr(3, vec![ix.to_plutus_data(), dcert.to_plutus_data()])
             }
+            ScriptInfo::Voting(voter) => wrap_multiple_with_constr(4, vec![voter.to_plutus_data()]),
             ScriptInfo::Proposing(ix, procedure) => {
                 wrap_multiple_with_constr(5, vec![ix.to_plutus_data(), procedure.to_plutus_data()])
             }
@@ -1370,7 +1411,7 @@ impl ToPlutusData for TxInfo {
                     tx_info.redeemers.to_plutus_data(),
                     tx_info.data.to_plutus_data(),
                     tx_info.id.to_plutus_data(),
-                    Data::map(vec![]), // TODO tx_info.votes :: Map Voter (Map GovernanceActionId Vote)
+                    tx_info.votes.to_plutus_data(),
                     tx_info.proposal_procedures.to_plutus_data(),
                     tx_info.current_treasury_amount.to_plutus_data(),
                     tx_info.treasury_donation.to_plutus_data(),

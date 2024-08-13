@@ -8,12 +8,12 @@ use pallas_crypto::hash::Hash;
 use pallas_primitives::{
     alonzo,
     conway::{
-        AddrKeyhash, Certificate, Coin, DatumHash, DatumOption, GovAction, Mint,
+        AddrKeyhash, Certificate, Coin, DatumHash, DatumOption, GovAction, GovActionId, Mint,
         MintedTransactionBody, MintedTransactionOutput, MintedTx, MintedWitnessSet, NativeScript,
         PlutusData, PlutusV1Script, PlutusV2Script, PlutusV3Script, PolicyId,
         PostAlonzoTransactionOutput, ProposalProcedure, PseudoDatumOption, PseudoScript, Redeemer,
         RedeemerTag, RedeemersKey, RequiredSigners, RewardAccount, ScriptHash, StakeCredential,
-        TransactionInput, TransactionOutput, Value,
+        TransactionInput, TransactionOutput, Value, Voter, VotingProcedure,
     },
 };
 use pallas_traverse::{ComputeHash, OriginalHash};
@@ -53,6 +53,7 @@ pub enum ScriptInfo<T> {
     Spending(TransactionInput, T),
     Rewarding(StakeCredential),
     Certifying(usize, Certificate),
+    Voting(Voter),
     Proposing(usize, ProposalProcedure),
 }
 
@@ -67,6 +68,7 @@ impl ScriptPurpose {
             }
             Self::Rewarding(stake_credential) => ScriptInfo::Rewarding(stake_credential),
             Self::Certifying(ix, certificate) => ScriptInfo::Certifying(ix, certificate),
+            Self::Voting(voter) => ScriptInfo::Voting(voter),
             Self::Proposing(ix, procedure) => ScriptInfo::Proposing(ix, procedure),
         }
     }
@@ -220,7 +222,7 @@ impl TxInfoV1 {
 
         let redeemers = get_redeemers_info(
             &tx.transaction_witness_set,
-            script_purpose_builder(&inputs[..], &mint, &certificates, &withdrawals, &[]),
+            script_purpose_builder(&inputs[..], &mint, &certificates, &withdrawals, &[], &[]),
         )?;
 
         Ok(TxInfo::V1(TxInfoV1 {
@@ -269,7 +271,7 @@ impl TxInfoV2 {
 
         let redeemers = get_redeemers_info(
             &tx.transaction_witness_set,
-            script_purpose_builder(&inputs[..], &mint, &certificates, &withdrawals, &[]),
+            script_purpose_builder(&inputs[..], &mint, &certificates, &withdrawals, &[], &[]),
         )?;
 
         let reference_inputs = tx
@@ -310,12 +312,11 @@ pub struct TxInfoV3 {
     pub signatories: Vec<AddrKeyhash>,
     pub redeemers: KeyValuePairs<ScriptPurpose, Redeemer>,
     pub data: KeyValuePairs<DatumHash, PlutusData>,
-    pub proposal_procedures: Vec<ProposalProcedure>,
     pub id: Hash<32>,
+    pub votes: KeyValuePairs<Voter, KeyValuePairs<GovActionId, VotingProcedure>>,
+    pub proposal_procedures: Vec<ProposalProcedure>,
     pub current_treasury_amount: Option<Coin>,
     pub treasury_donation: Option<PositiveCoin>,
-    // TODO:
-    // votes : KeyValuePairs<Voter, KeyValuePairs<GovernanceActionId, Vote>>
 }
 
 impl TxInfoV3 {
@@ -336,6 +337,8 @@ impl TxInfoV3 {
         let proposal_procedures =
             get_proposal_procedures_info(&tx.transaction_body.proposal_procedures);
 
+        let votes = get_votes_info(&tx.transaction_body.voting_procedures);
+
         let redeemers = get_redeemers_info(
             &tx.transaction_witness_set,
             script_purpose_builder(
@@ -344,6 +347,7 @@ impl TxInfoV3 {
                 &certificates,
                 &withdrawals,
                 &proposal_procedures,
+                &votes.iter().map(|(k, _v)| k).collect_vec()[..],
             ),
         )?;
 
@@ -368,6 +372,7 @@ impl TxInfoV3 {
             data: KeyValuePairs::from(get_data_info(&tx.transaction_witness_set)),
             redeemers,
             proposal_procedures,
+            votes,
             current_treasury_amount: get_current_treasury_amount_info(
                 &tx.transaction_body.treasury_value,
             ),
@@ -713,12 +718,44 @@ pub fn get_redeemers_info<'a>(
     ))
 }
 
+pub fn get_votes_info(
+    votes: &Option<
+        NonEmptyKeyValuePairs<Voter, NonEmptyKeyValuePairs<GovActionId, VotingProcedure>>,
+    >,
+) -> KeyValuePairs<Voter, KeyValuePairs<GovActionId, VotingProcedure>> {
+    KeyValuePairs::from(
+        votes
+            .as_deref()
+            .map(|votes| {
+                votes
+                    .iter()
+                    .sorted_by(|(a, _), (b, _)| sort_voters(a, b))
+                    .cloned()
+                    .map(|(voter, actions)| {
+                        (
+                            voter,
+                            KeyValuePairs::from(
+                                actions
+                                    .iter()
+                                    .sorted_by(|(a, _), (b, _)| sort_gov_action_id(a, b))
+                                    .cloned()
+                                    .collect::<Vec<_>>(),
+                            ),
+                        )
+                    })
+                    .collect_vec()
+            })
+            .unwrap_or_default(),
+    )
+}
+
 fn script_purpose_builder<'a>(
     inputs: &'a [TxInInfo],
     mint: &'a MintValue,
     certificates: &'a [Certificate],
     withdrawals: &'a KeyValuePairs<Address, Coin>,
     proposal_procedures: &'a [ProposalProcedure],
+    votes: &'a [&'a Voter],
 ) -> impl Fn(&'a RedeemersKey) -> Result<ScriptPurpose, Error> {
     move |redeemer: &'a RedeemersKey| {
         let tag = redeemer.tag;
@@ -754,12 +791,16 @@ fn script_purpose_builder<'a>(
                 })
                 .transpose()?,
 
+            RedeemerTag::Vote => votes
+                .get(index)
+                .cloned()
+                .cloned()
+                .map(ScriptPurpose::Voting),
+
             RedeemerTag::Propose => proposal_procedures
-                .get(redeemer.index as usize)
+                .get(index)
                 .cloned()
                 .map(|p| ScriptPurpose::Proposing(index, p)),
-
-            tag => todo!("get_script_purpose for {tag:?}"),
         }
         .ok_or(Error::ExtraneousRedeemer)
     }
@@ -867,6 +908,18 @@ pub fn find_script(
                 _ => Err(Error::NonScriptStakeCredential),
             }),
 
+        RedeemerTag::Vote => get_votes_info(&tx.transaction_body.voting_procedures)
+            .get(redeemer.index as usize)
+            .ok_or(Error::MissingScriptForRedeemer)
+            .and_then(|(voter, _)| match voter {
+                Voter::ConstitutionalCommitteeScript(hash) => Ok(hash),
+                Voter::ConstitutionalCommitteeKey(..) => Err(Error::NonScriptStakeCredential),
+                Voter::DRepScript(hash) => Ok(hash),
+                Voter::DRepKey(..) => Err(Error::NonScriptStakeCredential),
+                Voter::StakePoolKey(..) => Err(Error::NonScriptStakeCredential),
+            })
+            .and_then(lookup_script),
+
         RedeemerTag::Propose => {
             get_proposal_procedures_info(&tx.transaction_body.proposal_procedures)
                 .get(redeemer.index as usize)
@@ -884,8 +937,6 @@ pub fn find_script(
                 })
                 .and_then(lookup_script)
         }
-
-        RedeemerTag::Vote => todo!("find_script: RedeemerTag::Vote"),
     }
 }
 
@@ -1003,6 +1054,35 @@ fn sort_redeemers(a: &RedeemersKey, b: &RedeemersKey) -> Ordering {
         a.index.cmp(&b.index)
     } else {
         redeemer_tag_as_usize(&a.tag).cmp(&redeemer_tag_as_usize(&b.tag))
+    }
+}
+
+pub fn sort_voters(a: &Voter, b: &Voter) -> Ordering {
+    fn explode(voter: &Voter) -> (usize, &Hash<28>) {
+        match voter {
+            Voter::ConstitutionalCommitteeScript(hash) => (0, hash),
+            Voter::ConstitutionalCommitteeKey(hash) => (1, hash),
+            Voter::DRepScript(hash) => (2, hash),
+            Voter::DRepKey(hash) => (3, hash),
+            Voter::StakePoolKey(hash) => (4, hash),
+        }
+    }
+
+    let (tag_a, hash_a) = explode(a);
+    let (tag_b, hash_b) = explode(b);
+
+    if tag_a == tag_b {
+        hash_a.cmp(hash_b)
+    } else {
+        tag_a.cmp(&tag_b)
+    }
+}
+
+fn sort_gov_action_id(a: &GovActionId, b: &GovActionId) -> Ordering {
+    if a.transaction_id == b.transaction_id {
+        a.action_index.cmp(&b.action_index)
+    } else {
+        a.transaction_id.cmp(&b.transaction_id)
     }
 }
 
@@ -1331,6 +1411,59 @@ mod tests {
              4a66600894452615330054911856616c696461746f722072657475726e656420\
              66616c73650013656002002002002002002153300249010b5f746d70313a2056\
              6f696400165734ae7155ceaab9e5573eae91f5f6",
+            "8182582000000000000000000000000000000000000000000000000000000000\
+             0000000000",
+            "81a200581d600000000000000000000000000000000000000000000000000000\
+             0000011a000f4240",
+        )
+        .into_script_context(&redeemer, None)
+        .unwrap();
+
+        // NOTE: The initial snapshot has been generated using the Haskell
+        // implementation of the ledger library for that same serialized
+        // transactions. It is meant to control that our construction of the
+        // script context and its serialization matches exactly those
+        // from the Haskell ledger / cardano node.
+        insta::assert_debug_snapshot!(script_context.to_plutus_data());
+    }
+
+    #[test]
+    fn script_context_voting() {
+        let redeemer = Redeemer {
+            tag: RedeemerTag::Vote,
+            index: 0,
+            data: Data::constr(0, vec![Data::integer(42.into())]),
+            ex_units: ExUnits {
+                mem: 1000000,
+                steps: 100000000,
+            },
+        };
+
+        // NOTE: The transaction also contains treasury donation and current treasury amount
+        let script_context = fixture_tx_info(
+            "84a4008182582000000000000000000000000000000000000000000000000000\
+             0000000000000000018002182a13a58200581c00000000000000000000000000\
+             000000000000000000000000000000a182582099999999999999999999999999\
+             9999999999999999999999999999999999999918988200827668747470733a2f\
+             2f61696b656e2d6c616e672e6f72675820000000000000000000000000000000\
+             00000000000000000000000000000000008202581c0000000000000000000000\
+             0000000000000000000000000000000000a38258209999999999999999999999\
+             999999999999999999999999999999999999999999008202f682582088888888\
+             88888888888888888888888888888888888888888888888888888888018202f6\
+             8258207777777777777777777777777777777777777777777777777777777777\
+             777777028202f68203581c43fa47afc68a7913fbe2f400e3849cb492d9a2610c\
+             85966de0f2ba1ea1825820999999999999999999999999999999999999999999\
+             9999999999999999999999038200f68204581c00000000000000000000000000\
+             000000000000000000000000000000a182582099999999999999999999999999\
+             99999999999999999999999999999999999999048201f68201581c43fa47afc6\
+             8a7913fbe2f400e3849cb492d9a2610c85966de0f2ba1ea18258209999999999\
+             999999999999999999999999999999999999999999999999999999018201f6a2\
+             0582840402d87980821a000f42401a05f5e100840400d87981182a821a000f42\
+             401a05f5e1000781587d587b0101003232323232323225333333008001153330\
+             033370e900018029baa001153330073006375400224a66600894452615330054\
+             911856616c696461746f722072657475726e65642066616c7365001365600200\
+             2002002002002153300249010b5f746d70303a20566f696400165734ae7155ce\
+             aab9e5573eae91f5f6",
             "8182582000000000000000000000000000000000000000000000000000000000\
              0000000000",
             "81a200581d600000000000000000000000000000000000000000000000000000\

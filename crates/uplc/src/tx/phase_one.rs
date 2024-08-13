@@ -1,13 +1,13 @@
 use super::{
     error::Error,
-    script_context::{DataLookupTable, ResolvedInput, ScriptPurpose, ScriptVersion},
+    script_context::{sort_voters, DataLookupTable, ResolvedInput, ScriptPurpose, ScriptVersion},
 };
 use itertools::Itertools;
 use pallas_addresses::{Address, ScriptHash, ShelleyPaymentPart, StakePayload};
 use pallas_codec::utils::Nullable;
 use pallas_primitives::conway::{
     Certificate, GovAction, MintedTx, PolicyId, RedeemerTag, RedeemersKey, RewardAccount,
-    StakeCredential, TransactionOutput,
+    StakeCredential, TransactionOutput, Voter,
 };
 use std::collections::HashMap;
 
@@ -166,14 +166,29 @@ pub fn scripts_needed(tx: &MintedTx, utxos: &[ResolvedInput]) -> Result<ScriptsN
         })
         .unwrap_or_default();
 
-    // TODO
-    assert!(txb.voting_procedures.is_none());
+    let mut voting = txb
+        .voting_procedures
+        .as_deref()
+        .map(|m| {
+            m.iter()
+                .filter_map(|(voter, _)| match voter {
+                    Voter::ConstitutionalCommitteeScript(hash) | Voter::DRepScript(hash) => {
+                        Some((ScriptPurpose::Voting(voter.clone()), *hash))
+                    }
+                    Voter::ConstitutionalCommitteeKey(_)
+                    | Voter::DRepKey(_)
+                    | Voter::StakePoolKey(_) => None,
+                })
+                .collect::<ScriptsNeeded>()
+        })
+        .unwrap_or_default();
 
     needed.append(&mut spend);
     needed.append(&mut reward);
     needed.append(&mut cert);
     needed.append(&mut mint);
     needed.append(&mut propose);
+    needed.append(&mut voting);
 
     Ok(needed)
 }
@@ -323,6 +338,24 @@ fn build_redeemer_key(
                 .unwrap_or_default()
                 .map(|index| RedeemersKey {
                     tag: RedeemerTag::Cert,
+                    index: index as u32,
+                });
+
+            Ok(redeemer_key)
+        }
+
+        ScriptPurpose::Voting(v) => {
+            let redeemer_key = tx_body
+                .voting_procedures
+                .as_deref()
+                .map(|m| {
+                    m.iter()
+                        .sorted_by(|(a, _), (b, _)| sort_voters(a, b))
+                        .position(|x| &x.0 == v)
+                })
+                .unwrap_or_default()
+                .map(|index| RedeemersKey {
+                    tag: RedeemerTag::Vote,
                     index: index as u32,
                 });
 

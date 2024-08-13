@@ -56,7 +56,10 @@ for ITEM in ${VALIDATORS[@]}; do
 done
 
 echo $RESOLVED_INPUTS | cbor-diag --to hex --from diag > ctx/$TITLE/resolved_inputs.cbor
+
 echo $TRANSACTION | cbor-diag --to hex --from diag > ctx/$TITLE/tx.cbor
+
+# ogmios inspect transaction $(cat ctx/$TITLE/tx.cbor) | jq ".votes"
 
 $AIKEN tx simulate \
   ctx/$TITLE/tx.cbor \
