@@ -16,7 +16,7 @@ const void_hash =
   #"923918e403bf43c34b4ef6b48eb2ee04babed17320d8d1b9ff9ad086e86f44ec"
 
 validator {
-  fn mint_1(_tmp2: Void, ctx: ScriptContext) {
+  fn mint_1(_tmp2: Data, ctx: ScriptContext) {
     let our_policy_id = assert_script_info(ctx.info)
     let other_policy_id = assert_redeemers(ctx.transaction.redeemers)
     assert_outputs(ctx.transaction.outputs, our_policy_id, other_policy_id)

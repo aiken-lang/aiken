@@ -45,9 +45,10 @@ for ITEM in ${VALIDATORS[@]}; do
   VALIDATOR_NAME=$(echo $ITEM | jq -r .title)
   VALIDATOR_HASH=$(echo $ITEM | jq -r .hash)
   VALIDATOR=$(echo $ITEM | jq -r .compiledCode)
+  VALIDATOR_CBOR=$(echo "h'$VALIDATOR'" | cbor-diag --to hex --from diag)
 
   RESOLVED_INPUTS=$(echo $RESOLVED_INPUTS \
-    | sed "s/{{ $VALIDATOR_NAME.cbor }}/$VALIDATOR/g" \
+    | sed "s/{{ $VALIDATOR_NAME.cbor }}/$VALIDATOR_CBOR/g" \
     | sed "s/{{ $VALIDATOR_NAME.hash }}/$VALIDATOR_HASH/g")
 
  TRANSACTION=$(echo $TRANSACTION \
@@ -59,9 +60,7 @@ echo $RESOLVED_INPUTS | cbor-diag --to hex --from diag > ctx/$TITLE/resolved_inp
 
 echo $TRANSACTION | cbor-diag --to hex --from diag > ctx/$TITLE/tx.cbor
 
-# ogmios inspect transaction $(cat ctx/$TITLE/tx.cbor) | jq ".votes"
-
-$AIKEN tx simulate \
+$AIKEN tx simulate 1>$TITLE.log 2>&1 \
   ctx/$TITLE/tx.cbor \
   ctx/inputs.cbor \
   ctx/$TITLE/resolved_inputs.cbor

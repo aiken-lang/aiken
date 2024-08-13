@@ -22,7 +22,7 @@ const only9s =
   #"9999999999999999999999999999999999999999999999999999999999999999"
 
 validator {
-  fn script(_tmp0: Void, ctx: ScriptContext) {
+  fn script(_tmp0: Data, ctx: ScriptContext) {
     assert_redeemer(ctx.redeemer)
 
     let votes = ctx.transaction.votes
@@ -35,18 +35,14 @@ validator {
 
     expect
       Some(
-        Pair(
-          ConstitutionalCommitteeMember(VerificationKey(only0s)),
-          [
-            Pair(
-              GovernanceActionId {
-                transaction: only9s,
-                proposal_procedure: 152,
-              },
-              No,
-            ),
-          ],
-        ),
+        Pair(ConstitutionalCommitteeMember(VerificationKey(only0s)),
+        [
+          Pair(GovernanceActionId {
+            transaction: only9s,
+            proposal_procedure: 152,
+          },
+          No),
+        ]),
       ) == list.at(votes, 1)
 
     expect Some(Pair(DelegateRepresentative(Script(..)), [_, ..])) =
@@ -54,23 +50,15 @@ validator {
 
     expect
       Some(
-        Pair(
-          DelegateRepresentative(VerificationKey(only0s)),
-          [
-            Pair(
-              GovernanceActionId { transaction: only7s, proposal_procedure: 2 },
-              Abstain,
-            ),
-            Pair(
-              GovernanceActionId { transaction: only8s, proposal_procedure: 1 },
-              Abstain,
-            ),
-            Pair(
-              GovernanceActionId { transaction: only9s, proposal_procedure: 0 },
-              Abstain,
-            ),
-          ],
-        ),
+        Pair(DelegateRepresentative(VerificationKey(only0s)),
+        [
+          Pair(GovernanceActionId { transaction: only7s, proposal_procedure: 2 },
+          Abstain),
+          Pair(GovernanceActionId { transaction: only8s, proposal_procedure: 1 },
+          Abstain),
+          Pair(GovernanceActionId { transaction: only9s, proposal_procedure: 0 },
+          Abstain),
+        ]),
       ) == list.at(votes, 3)
 
     expect Some(Pair(StakePool(pool_id), [_, ..])) = list.at(votes, 4)
@@ -83,8 +71,10 @@ validator {
 fn assert_redeemer(data: Data) {
   let is_valid =
     if data is Foo(42): Foo {
+      trace data
       True
     } else if data is Void {
+      trace data
       True
     } else {
       False

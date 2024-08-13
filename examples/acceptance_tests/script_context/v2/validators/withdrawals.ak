@@ -31,7 +31,7 @@ validator {
         None -> fail @"bob's withdrawal not found"
         Some(value) -> value.2nd == 14
       },
-      list.map(ctx.transaction.withdrawals, fn(kv) { kv.1st }) == [alice, bob],
+      list.map(ctx.transaction.withdrawals, fn(kv) { kv.1st }) == [bob, alice],
     }
   }
 }

@@ -8,23 +8,22 @@ for lang in $(ls script_context); do
     title=$(basename $interaction)
     title="${title%.*}"
     cd script_context/$lang
-    ./test.sh $title "$AIKEN" &
-    TESTS+=("$title,$lang,$!")
+    echo "running $lang/$title..."
+    ./test.sh $title "$AIKEN"
+    TESTS+=("$title,$lang,$?")
     cd - 1>/dev/null
   done
 done
 
 for args in ${TESTS[@]}; do
-  IFS=',' read title lang pid <<< "${args}"
-  wait $pid
-  code=("$?")
+  IFS=',' read title lang code <<< "${args}"
   log="script_context/$lang/$title.log"
   if [ $code -ne 0 ]; then
-    echo "=== $title ❌ (code=$code)"
+    echo "=== $lang/$title ❌ (code=$code)"
     cat $log && rm -f $log
     exit $code
   else
-    echo "=== $title ✅"
+    echo "=== $lang/$title ✅"
     cat $log && rm -f $log
   fi
   echo ""

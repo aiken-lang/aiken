@@ -9,7 +9,7 @@ use std::{fmt, fs, path::PathBuf, process};
 use uplc::{
     machine::cost_model::ExBudget,
     tx::{
-        self,
+        self, redeemer_tag_to_string,
         script_context::{ResolvedInput, SlotConfig},
     },
 };
@@ -110,11 +110,11 @@ pub fn exec(
 
         let with_redeemer = |redeemer: &Redeemer| {
             eprintln!(
-                "{} {:?}[{}]",
+                "{} {}[{}]",
                 "   Evaluating"
                     .if_supports_color(Stderr, |s| s.purple())
                     .if_supports_color(Stderr, |s| s.bold()),
-                redeemer.tag,
+                redeemer_tag_to_string(&redeemer.tag),
                 redeemer.index
             )
         };

@@ -9,7 +9,7 @@ use pallas_primitives::{
     Fragment,
 };
 use pallas_traverse::{Era, MultiEraTx};
-pub use phase_one::eval_phase_one;
+pub use phase_one::{eval_phase_one, redeemer_tag_to_string};
 pub use script_context::{DataLookupTable, ResolvedInput, SlotConfig};
 
 pub mod error;

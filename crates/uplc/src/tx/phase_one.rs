@@ -2,6 +2,7 @@ use super::{
     error::Error,
     script_context::{sort_voters, DataLookupTable, ResolvedInput, ScriptPurpose, ScriptVersion},
 };
+use crate::tx::script_context::sort_reward_accounts;
 use itertools::Itertools;
 use pallas_addresses::{Address, ScriptHash, ShelleyPaymentPart, StakePayload};
 use pallas_codec::utils::Nullable;
@@ -234,13 +235,20 @@ pub fn has_exact_set_of_redeemers(
     let missing: Vec<_> = redeemers_needed
         .into_iter()
         .filter(|x| !wits_redeemer_keys.contains(&&x.0))
-        .map(|x| format!("{:?}[{:?}] -> {}", x.0.tag, x.0.index, x.2))
+        .map(|x| {
+            format!(
+                "{}[{:?}] -> {}",
+                redeemer_tag_to_string(&x.0.tag),
+                x.0.index,
+                x.2
+            )
+        })
         .collect();
 
     let extra: Vec<_> = wits_redeemer_keys
         .into_iter()
         .filter(|x| !needed_redeemer_keys.contains(x))
-        .map(|x| format!("{:?}[{:?}]", x.tag, x.index))
+        .map(|x| format!("{}[{:?}]", redeemer_tag_to_string(&x.tag), x.index))
         .collect();
 
     if !missing.is_empty() || !extra.is_empty() {
@@ -306,7 +314,7 @@ fn build_redeemer_key(
                 .map(|m| m.iter().map(|(acnt, _)| acnt).collect())
                 .unwrap_or_default();
 
-            reward_accounts.sort();
+            reward_accounts.sort_by(|acnt_a, acnt_b| sort_reward_accounts(acnt_a, acnt_b));
 
             let mut redeemer_key = None;
 
@@ -376,4 +384,16 @@ fn build_redeemer_key(
             Ok(redeemer_key)
         }
     }
+}
+
+pub fn redeemer_tag_to_string(redeemer_tag: &RedeemerTag) -> String {
+    match redeemer_tag {
+        RedeemerTag::Spend => "Spend",
+        RedeemerTag::Mint => "Mint",
+        RedeemerTag::Reward => "Withdraw",
+        RedeemerTag::Cert => "Publish",
+        RedeemerTag::Propose => "Propose",
+        RedeemerTag::Vote => "Vote",
+    }
+    .to_string()
 }

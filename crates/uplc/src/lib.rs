@@ -16,6 +16,7 @@ pub use pallas_primitives::{
     babbage::{PostAlonzoTransactionOutput, TransactionInput, TransactionOutput, Value},
     Error, Fragment,
 };
+pub use tx::redeemer_tag_to_string;
 
 pub fn plutus_data(bytes: &[u8]) -> Result<PlutusData, Error> {
     PlutusData::decode_fragment(bytes)

@@ -44,7 +44,7 @@ for convenience. The test still assumes a few things. For any
 - Purpose
   - [x] spend
   - [x] mint
-  - [ ] withdraw
+  - [x] withdraw
   - [x] publish
   - [x] voting
   - [x] proposing
@@ -79,11 +79,11 @@ for convenience. The test still assumes a few things. For any
       - [x] Retire CC
   - withdrawals
     - [x] none
-    - [ ] some
-  - [ ] validity range
+    - [x] some
+  - [x] validity range
   - extra signatories
     - [x] none
-    - [ ] some
+    - [x] some
   - [x] redeemers
   - [x] datums
   - votes
@@ -102,10 +102,10 @@ for convenience. The test still assumes a few things. For any
 - Address
     - [x] type-0 (key | key)
     - [x] type-1 (script | key)
-    - [ ] type-2 (key | script)
-    - [ ] type-3 (script | script)
-    - [ ] type-4 (key | ptr)
-    - [ ] type-5 (script | ptr)
+    - [x] type-2 (key | script)
+    - [x] type-3 (script | script)
+    - [x] type-4 (key | ptr)
+    - [x] type-5 (script | ptr)
     - [x] type-6 (key | ø)
     - [x] type-7 (key | ø)
 
@@ -205,5 +205,5 @@ for convenience. The test still assumes a few things. For any
   - [x] no confidence
 
 - Boundary
-  - [ ] closed
-  - [ ] open
+  - [x] closed
+  - [x] open

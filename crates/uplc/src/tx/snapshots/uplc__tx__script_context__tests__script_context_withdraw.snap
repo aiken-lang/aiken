@@ -1,0 +1,1236 @@
+---
+source: crates/uplc/src/tx/script_context.rs
+expression: script_context.to_plutus_data()
+---
+Constr(
+    Constr {
+        tag: 121,
+        any_constructor: None,
+        fields: [
+            Constr(
+                Constr {
+                    tag: 121,
+                    any_constructor: None,
+                    fields: [
+                        Array(
+                            [
+                                Constr(
+                                    Constr {
+                                        tag: 121,
+                                        any_constructor: None,
+                                        fields: [
+                                            Constr(
+                                                Constr {
+                                                    tag: 121,
+                                                    any_constructor: None,
+                                                    fields: [
+                                                        BoundedBytes(
+                                                            BoundedBytes(
+                                                                [
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                    0,
+                                                                ],
+                                                            ),
+                                                        ),
+                                                        BigInt(
+                                                            Int(
+                                                                Int(
+                                                                    Int {
+                                                                        neg: false,
+                                                                        val: 0,
+                                                                    },
+                                                                ),
+                                                            ),
+                                                        ),
+                                                    ],
+                                                },
+                                            ),
+                                            Constr(
+                                                Constr {
+                                                    tag: 121,
+                                                    any_constructor: None,
+                                                    fields: [
+                                                        Constr(
+                                                            Constr {
+                                                                tag: 121,
+                                                                any_constructor: None,
+                                                                fields: [
+                                                                    Constr(
+                                                                        Constr {
+                                                                            tag: 122,
+                                                                            any_constructor: None,
+                                                                            fields: [
+                                                                                BoundedBytes(
+                                                                                    BoundedBytes(
+                                                                                        [
+                                                                                            4,
+                                                                                            3,
+                                                                                            110,
+                                                                                            236,
+                                                                                            173,
+                                                                                            194,
+                                                                                            241,
+                                                                                            158,
+                                                                                            149,
+                                                                                            248,
+                                                                                            49,
+                                                                                            180,
+                                                                                            188,
+                                                                                            8,
+                                                                                            145,
+                                                                                            156,
+                                                                                            222,
+                                                                                            29,
+                                                                                            16,
+                                                                                            136,
+                                                                                            215,
+                                                                                            70,
+                                                                                            2,
+                                                                                            189,
+                                                                                            61,
+                                                                                            205,
+                                                                                            120,
+                                                                                            162,
+                                                                                        ],
+                                                                                    ),
+                                                                                ),
+                                                                            ],
+                                                                        },
+                                                                    ),
+                                                                    Constr(
+                                                                        Constr {
+                                                                            tag: 121,
+                                                                            any_constructor: None,
+                                                                            fields: [
+                                                                                Constr(
+                                                                                    Constr {
+                                                                                        tag: 121,
+                                                                                        any_constructor: None,
+                                                                                        fields: [
+                                                                                            Constr(
+                                                                                                Constr {
+                                                                                                    tag: 122,
+                                                                                                    any_constructor: None,
+                                                                                                    fields: [
+                                                                                                        BoundedBytes(
+                                                                                                            BoundedBytes(
+                                                                                                                [
+                                                                                                                    4,
+                                                                                                                    3,
+                                                                                                                    110,
+                                                                                                                    236,
+                                                                                                                    173,
+                                                                                                                    194,
+                                                                                                                    241,
+                                                                                                                    158,
+                                                                                                                    149,
+                                                                                                                    248,
+                                                                                                                    49,
+                                                                                                                    180,
+                                                                                                                    188,
+                                                                                                                    8,
+                                                                                                                    145,
+                                                                                                                    156,
+                                                                                                                    222,
+                                                                                                                    29,
+                                                                                                                    16,
+                                                                                                                    136,
+                                                                                                                    215,
+                                                                                                                    70,
+                                                                                                                    2,
+                                                                                                                    189,
+                                                                                                                    61,
+                                                                                                                    205,
+                                                                                                                    120,
+                                                                                                                    162,
+                                                                                                                ],
+                                                                                                            ),
+                                                                                                        ),
+                                                                                                    ],
+                                                                                                },
+                                                                                            ),
+                                                                                        ],
+                                                                                    },
+                                                                                ),
+                                                                            ],
+                                                                        },
+                                                                    ),
+                                                                ],
+                                                            },
+                                                        ),
+                                                        Map(
+                                                            Def(
+                                                                [
+                                                                    (
+                                                                        BoundedBytes(
+                                                                            BoundedBytes(
+                                                                                [],
+                                                                            ),
+                                                                        ),
+                                                                        Map(
+                                                                            Def(
+                                                                                [
+                                                                                    (
+                                                                                        BoundedBytes(
+                                                                                            BoundedBytes(
+                                                                                                [],
+                                                                                            ),
+                                                                                        ),
+                                                                                        BigInt(
+                                                                                            Int(
+                                                                                                Int(
+                                                                                                    Int {
+                                                                                                        neg: false,
+                                                                                                        val: 1000000,
+                                                                                                    },
+                                                                                                ),
+                                                                                            ),
+                                                                                        ),
+                                                                                    ),
+                                                                                ],
+                                                                            ),
+                                                                        ),
+                                                                    ),
+                                                                ],
+                                                            ),
+                                                        ),
+                                                        Constr(
+                                                            Constr {
+                                                                tag: 123,
+                                                                any_constructor: None,
+                                                                fields: [
+                                                                    Constr(
+                                                                        Constr {
+                                                                            tag: 121,
+                                                                            any_constructor: None,
+                                                                            fields: [],
+                                                                        },
+                                                                    ),
+                                                                ],
+                                                            },
+                                                        ),
+                                                        Constr(
+                                                            Constr {
+                                                                tag: 121,
+                                                                any_constructor: None,
+                                                                fields: [
+                                                                    BoundedBytes(
+                                                                        BoundedBytes(
+                                                                            [
+                                                                                4,
+                                                                                3,
+                                                                                110,
+                                                                                236,
+                                                                                173,
+                                                                                194,
+                                                                                241,
+                                                                                158,
+                                                                                149,
+                                                                                248,
+                                                                                49,
+                                                                                180,
+                                                                                188,
+                                                                                8,
+                                                                                145,
+                                                                                156,
+                                                                                222,
+                                                                                29,
+                                                                                16,
+                                                                                136,
+                                                                                215,
+                                                                                70,
+                                                                                2,
+                                                                                189,
+                                                                                61,
+                                                                                205,
+                                                                                120,
+                                                                                162,
+                                                                            ],
+                                                                        ),
+                                                                    ),
+                                                                ],
+                                                            },
+                                                        ),
+                                                    ],
+                                                },
+                                            ),
+                                        ],
+                                    },
+                                ),
+                            ],
+                        ),
+                        Array(
+                            [],
+                        ),
+                        Array(
+                            [
+                                Constr(
+                                    Constr {
+                                        tag: 121,
+                                        any_constructor: None,
+                                        fields: [
+                                            Constr(
+                                                Constr {
+                                                    tag: 121,
+                                                    any_constructor: None,
+                                                    fields: [
+                                                        Constr(
+                                                            Constr {
+                                                                tag: 121,
+                                                                any_constructor: None,
+                                                                fields: [
+                                                                    BoundedBytes(
+                                                                        BoundedBytes(
+                                                                            [
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                            ],
+                                                                        ),
+                                                                    ),
+                                                                ],
+                                                            },
+                                                        ),
+                                                        Constr(
+                                                            Constr {
+                                                                tag: 121,
+                                                                any_constructor: None,
+                                                                fields: [
+                                                                    Constr(
+                                                                        Constr {
+                                                                            tag: 121,
+                                                                            any_constructor: None,
+                                                                            fields: [
+                                                                                Constr(
+                                                                                    Constr {
+                                                                                        tag: 122,
+                                                                                        any_constructor: None,
+                                                                                        fields: [
+                                                                                            BoundedBytes(
+                                                                                                BoundedBytes(
+                                                                                                    [
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                        17,
+                                                                                                    ],
+                                                                                                ),
+                                                                                            ),
+                                                                                        ],
+                                                                                    },
+                                                                                ),
+                                                                            ],
+                                                                        },
+                                                                    ),
+                                                                ],
+                                                            },
+                                                        ),
+                                                    ],
+                                                },
+                                            ),
+                                            Map(
+                                                Def(
+                                                    [
+                                                        (
+                                                            BoundedBytes(
+                                                                BoundedBytes(
+                                                                    [],
+                                                                ),
+                                                            ),
+                                                            Map(
+                                                                Def(
+                                                                    [
+                                                                        (
+                                                                            BoundedBytes(
+                                                                                BoundedBytes(
+                                                                                    [],
+                                                                                ),
+                                                                            ),
+                                                                            BigInt(
+                                                                                Int(
+                                                                                    Int(
+                                                                                        Int {
+                                                                                            neg: false,
+                                                                                            val: 1000000,
+                                                                                        },
+                                                                                    ),
+                                                                                ),
+                                                                            ),
+                                                                        ),
+                                                                    ],
+                                                                ),
+                                                            ),
+                                                        ),
+                                                    ],
+                                                ),
+                                            ),
+                                            Constr(
+                                                Constr {
+                                                    tag: 121,
+                                                    any_constructor: None,
+                                                    fields: [],
+                                                },
+                                            ),
+                                            Constr(
+                                                Constr {
+                                                    tag: 122,
+                                                    any_constructor: None,
+                                                    fields: [],
+                                                },
+                                            ),
+                                        ],
+                                    },
+                                ),
+                                Constr(
+                                    Constr {
+                                        tag: 121,
+                                        any_constructor: None,
+                                        fields: [
+                                            Constr(
+                                                Constr {
+                                                    tag: 121,
+                                                    any_constructor: None,
+                                                    fields: [
+                                                        Constr(
+                                                            Constr {
+                                                                tag: 121,
+                                                                any_constructor: None,
+                                                                fields: [
+                                                                    BoundedBytes(
+                                                                        BoundedBytes(
+                                                                            [
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                                0,
+                                                                            ],
+                                                                        ),
+                                                                    ),
+                                                                ],
+                                                            },
+                                                        ),
+                                                        Constr(
+                                                            Constr {
+                                                                tag: 121,
+                                                                any_constructor: None,
+                                                                fields: [
+                                                                    Constr(
+                                                                        Constr {
+                                                                            tag: 122,
+                                                                            any_constructor: None,
+                                                                            fields: [
+                                                                                BigInt(
+                                                                                    Int(
+                                                                                        Int(
+                                                                                            Int {
+                                                                                                neg: false,
+                                                                                                val: 2498243,
+                                                                                            },
+                                                                                        ),
+                                                                                    ),
+                                                                                ),
+                                                                                BigInt(
+                                                                                    Int(
+                                                                                        Int(
+                                                                                            Int {
+                                                                                                neg: false,
+                                                                                                val: 27,
+                                                                                            },
+                                                                                        ),
+                                                                                    ),
+                                                                                ),
+                                                                                BigInt(
+                                                                                    Int(
+                                                                                        Int(
+                                                                                            Int {
+                                                                                                neg: false,
+                                                                                                val: 3,
+                                                                                            },
+                                                                                        ),
+                                                                                    ),
+                                                                                ),
+                                                                            ],
+                                                                        },
+                                                                    ),
+                                                                ],
+                                                            },
+                                                        ),
+                                                    ],
+                                                },
+                                            ),
+                                            Map(
+                                                Def(
+                                                    [
+                                                        (
+                                                            BoundedBytes(
+                                                                BoundedBytes(
+                                                                    [],
+                                                                ),
+                                                            ),
+                                                            Map(
+                                                                Def(
+                                                                    [
+                                                                        (
+                                                                            BoundedBytes(
+                                                                                BoundedBytes(
+                                                                                    [],
+                                                                                ),
+                                                                            ),
+                                                                            BigInt(
+                                                                                Int(
+                                                                                    Int(
+                                                                                        Int {
+                                                                                            neg: false,
+                                                                                            val: 1000000,
+                                                                                        },
+                                                                                    ),
+                                                                                ),
+                                                                            ),
+                                                                        ),
+                                                                    ],
+                                                                ),
+                                                            ),
+                                                        ),
+                                                    ],
+                                                ),
+                                            ),
+                                            Constr(
+                                                Constr {
+                                                    tag: 121,
+                                                    any_constructor: None,
+                                                    fields: [],
+                                                },
+                                            ),
+                                            Constr(
+                                                Constr {
+                                                    tag: 122,
+                                                    any_constructor: None,
+                                                    fields: [],
+                                                },
+                                            ),
+                                        ],
+                                    },
+                                ),
+                                Constr(
+                                    Constr {
+                                        tag: 121,
+                                        any_constructor: None,
+                                        fields: [
+                                            Constr(
+                                                Constr {
+                                                    tag: 121,
+                                                    any_constructor: None,
+                                                    fields: [
+                                                        Constr(
+                                                            Constr {
+                                                                tag: 122,
+                                                                any_constructor: None,
+                                                                fields: [
+                                                                    BoundedBytes(
+                                                                        BoundedBytes(
+                                                                            [
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                                17,
+                                                                            ],
+                                                                        ),
+                                                                    ),
+                                                                ],
+                                                            },
+                                                        ),
+                                                        Constr(
+                                                            Constr {
+                                                                tag: 121,
+                                                                any_constructor: None,
+                                                                fields: [
+                                                                    Constr(
+                                                                        Constr {
+                                                                            tag: 122,
+                                                                            any_constructor: None,
+                                                                            fields: [
+                                                                                BigInt(
+                                                                                    Int(
+                                                                                        Int(
+                                                                                            Int {
+                                                                                                neg: false,
+                                                                                                val: 2498243,
+                                                                                            },
+                                                                                        ),
+                                                                                    ),
+                                                                                ),
+                                                                                BigInt(
+                                                                                    Int(
+                                                                                        Int(
+                                                                                            Int {
+                                                                                                neg: false,
+                                                                                                val: 27,
+                                                                                            },
+                                                                                        ),
+                                                                                    ),
+                                                                                ),
+                                                                                BigInt(
+                                                                                    Int(
+                                                                                        Int(
+                                                                                            Int {
+                                                                                                neg: false,
+                                                                                                val: 3,
+                                                                                            },
+                                                                                        ),
+                                                                                    ),
+                                                                                ),
+                                                                            ],
+                                                                        },
+                                                                    ),
+                                                                ],
+                                                            },
+                                                        ),
+                                                    ],
+                                                },
+                                            ),
+                                            Map(
+                                                Def(
+                                                    [
+                                                        (
+                                                            BoundedBytes(
+                                                                BoundedBytes(
+                                                                    [],
+                                                                ),
+                                                            ),
+                                                            Map(
+                                                                Def(
+                                                                    [
+                                                                        (
+                                                                            BoundedBytes(
+                                                                                BoundedBytes(
+                                                                                    [],
+                                                                                ),
+                                                                            ),
+                                                                            BigInt(
+                                                                                Int(
+                                                                                    Int(
+                                                                                        Int {
+                                                                                            neg: false,
+                                                                                            val: 1000000,
+                                                                                        },
+                                                                                    ),
+                                                                                ),
+                                                                            ),
+                                                                        ),
+                                                                    ],
+                                                                ),
+                                                            ),
+                                                        ),
+                                                    ],
+                                                ),
+                                            ),
+                                            Constr(
+                                                Constr {
+                                                    tag: 121,
+                                                    any_constructor: None,
+                                                    fields: [],
+                                                },
+                                            ),
+                                            Constr(
+                                                Constr {
+                                                    tag: 122,
+                                                    any_constructor: None,
+                                                    fields: [],
+                                                },
+                                            ),
+                                        ],
+                                    },
+                                ),
+                            ],
+                        ),
+                        BigInt(
+                            Int(
+                                Int(
+                                    Int {
+                                        neg: false,
+                                        val: 42,
+                                    },
+                                ),
+                            ),
+                        ),
+                        Map(
+                            Def(
+                                [],
+                            ),
+                        ),
+                        Array(
+                            [],
+                        ),
+                        Map(
+                            Def(
+                                [
+                                    (
+                                        Constr(
+                                            Constr {
+                                                tag: 122,
+                                                any_constructor: None,
+                                                fields: [
+                                                    BoundedBytes(
+                                                        BoundedBytes(
+                                                            [
+                                                                4,
+                                                                3,
+                                                                110,
+                                                                236,
+                                                                173,
+                                                                194,
+                                                                241,
+                                                                158,
+                                                                149,
+                                                                248,
+                                                                49,
+                                                                180,
+                                                                188,
+                                                                8,
+                                                                145,
+                                                                156,
+                                                                222,
+                                                                29,
+                                                                16,
+                                                                136,
+                                                                215,
+                                                                70,
+                                                                2,
+                                                                189,
+                                                                61,
+                                                                205,
+                                                                120,
+                                                                162,
+                                                            ],
+                                                        ),
+                                                    ),
+                                                ],
+                                            },
+                                        ),
+                                        BigInt(
+                                            Int(
+                                                Int(
+                                                    Int {
+                                                        neg: false,
+                                                        val: 0,
+                                                    },
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        ),
+                        Constr(
+                            Constr {
+                                tag: 121,
+                                any_constructor: None,
+                                fields: [
+                                    Constr(
+                                        Constr {
+                                            tag: 121,
+                                            any_constructor: None,
+                                            fields: [
+                                                Constr(
+                                                    Constr {
+                                                        tag: 121,
+                                                        any_constructor: None,
+                                                        fields: [],
+                                                    },
+                                                ),
+                                                Constr(
+                                                    Constr {
+                                                        tag: 122,
+                                                        any_constructor: None,
+                                                        fields: [],
+                                                    },
+                                                ),
+                                            ],
+                                        },
+                                    ),
+                                    Constr(
+                                        Constr {
+                                            tag: 121,
+                                            any_constructor: None,
+                                            fields: [
+                                                Constr(
+                                                    Constr {
+                                                        tag: 122,
+                                                        any_constructor: None,
+                                                        fields: [
+                                                            BigInt(
+                                                                Int(
+                                                                    Int(
+                                                                        Int {
+                                                                            neg: false,
+                                                                            val: 1596059092000,
+                                                                        },
+                                                                    ),
+                                                                ),
+                                                            ),
+                                                        ],
+                                                    },
+                                                ),
+                                                Constr(
+                                                    Constr {
+                                                        tag: 121,
+                                                        any_constructor: None,
+                                                        fields: [],
+                                                    },
+                                                ),
+                                            ],
+                                        },
+                                    ),
+                                ],
+                            },
+                        ),
+                        Array(
+                            [
+                                BoundedBytes(
+                                    BoundedBytes(
+                                        [
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                        ],
+                                    ),
+                                ),
+                            ],
+                        ),
+                        Map(
+                            Def(
+                                [
+                                    (
+                                        Constr(
+                                            Constr {
+                                                tag: 122,
+                                                any_constructor: None,
+                                                fields: [
+                                                    Constr(
+                                                        Constr {
+                                                            tag: 121,
+                                                            any_constructor: None,
+                                                            fields: [
+                                                                BoundedBytes(
+                                                                    BoundedBytes(
+                                                                        [
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                            0,
+                                                                        ],
+                                                                    ),
+                                                                ),
+                                                                BigInt(
+                                                                    Int(
+                                                                        Int(
+                                                                            Int {
+                                                                                neg: false,
+                                                                                val: 0,
+                                                                            },
+                                                                        ),
+                                                                    ),
+                                                                ),
+                                                            ],
+                                                        },
+                                                    ),
+                                                ],
+                                            },
+                                        ),
+                                        Constr(
+                                            Constr {
+                                                tag: 122,
+                                                any_constructor: None,
+                                                fields: [
+                                                    Constr(
+                                                        Constr {
+                                                            tag: 121,
+                                                            any_constructor: None,
+                                                            fields: [],
+                                                        },
+                                                    ),
+                                                ],
+                                            },
+                                        ),
+                                    ),
+                                    (
+                                        Constr(
+                                            Constr {
+                                                tag: 123,
+                                                any_constructor: None,
+                                                fields: [
+                                                    Constr(
+                                                        Constr {
+                                                            tag: 122,
+                                                            any_constructor: None,
+                                                            fields: [
+                                                                BoundedBytes(
+                                                                    BoundedBytes(
+                                                                        [
+                                                                            4,
+                                                                            3,
+                                                                            110,
+                                                                            236,
+                                                                            173,
+                                                                            194,
+                                                                            241,
+                                                                            158,
+                                                                            149,
+                                                                            248,
+                                                                            49,
+                                                                            180,
+                                                                            188,
+                                                                            8,
+                                                                            145,
+                                                                            156,
+                                                                            222,
+                                                                            29,
+                                                                            16,
+                                                                            136,
+                                                                            215,
+                                                                            70,
+                                                                            2,
+                                                                            189,
+                                                                            61,
+                                                                            205,
+                                                                            120,
+                                                                            162,
+                                                                        ],
+                                                                    ),
+                                                                ),
+                                                            ],
+                                                        },
+                                                    ),
+                                                ],
+                                            },
+                                        ),
+                                        Constr(
+                                            Constr {
+                                                tag: 121,
+                                                any_constructor: None,
+                                                fields: [],
+                                            },
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        ),
+                        Map(
+                            Def(
+                                [],
+                            ),
+                        ),
+                        BoundedBytes(
+                            BoundedBytes(
+                                [
+                                    64,
+                                    190,
+                                    227,
+                                    178,
+                                    90,
+                                    88,
+                                    90,
+                                    133,
+                                    79,
+                                    231,
+                                    63,
+                                    52,
+                                    72,
+                                    166,
+                                    246,
+                                    180,
+                                    23,
+                                    254,
+                                    102,
+                                    156,
+                                    129,
+                                    58,
+                                    24,
+                                    129,
+                                    230,
+                                    101,
+                                    151,
+                                    31,
+                                    52,
+                                    169,
+                                    233,
+                                    132,
+                                ],
+                            ),
+                        ),
+                        Map(
+                            Def(
+                                [],
+                            ),
+                        ),
+                        Array(
+                            [],
+                        ),
+                        Constr(
+                            Constr {
+                                tag: 122,
+                                any_constructor: None,
+                                fields: [],
+                            },
+                        ),
+                        Constr(
+                            Constr {
+                                tag: 121,
+                                any_constructor: None,
+                                fields: [
+                                    BigInt(
+                                        Int(
+                                            Int(
+                                                Int {
+                                                    neg: false,
+                                                    val: 1,
+                                                },
+                                            ),
+                                        ),
+                                    ),
+                                ],
+                            },
+                        ),
+                    ],
+                },
+            ),
+            Constr(
+                Constr {
+                    tag: 121,
+                    any_constructor: None,
+                    fields: [],
+                },
+            ),
+            Constr(
+                Constr {
+                    tag: 123,
+                    any_constructor: None,
+                    fields: [
+                        Constr(
+                            Constr {
+                                tag: 122,
+                                any_constructor: None,
+                                fields: [
+                                    BoundedBytes(
+                                        BoundedBytes(
+                                            [
+                                                4,
+                                                3,
+                                                110,
+                                                236,
+                                                173,
+                                                194,
+                                                241,
+                                                158,
+                                                149,
+                                                248,
+                                                49,
+                                                180,
+                                                188,
+                                                8,
+                                                145,
+                                                156,
+                                                222,
+                                                29,
+                                                16,
+                                                136,
+                                                215,
+                                                70,
+                                                2,
+                                                189,
+                                                61,
+                                                205,
+                                                120,
+                                                162,
+                                            ],
+                                        ),
+                                    ),
+                                ],
+                            },
+                        ),
+                    ],
+                },
+            ),
+        ],
+    },
+)

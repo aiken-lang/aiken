@@ -13,9 +13,19 @@ pub enum Error {
     OpenTermEvaluated(Term<NamedDeBruijn>),
     #[error("The validator crashed / exited prematurely")]
     EvaluationFailure,
-    #[error("Attempted to instantiate a non-polymorphic term:\n\n{0:#?}")]
+    #[error(
+        "Attempted to instantiate a non-polymorphic term\n{:>13} {}",
+        "Term",
+        indent(redacted(format!("{:#?}", .0), 10)),
+    )]
     NonPolymorphicInstantiation(Value),
-    #[error("Attempted to apply a non-function:\n\n{0:#?} to argument:\n\n{1:#?}")]
+    #[error(
+      "Attempted to apply an argument to a non-function\n{:>13} {}\n{:>13} {}",
+      "Thing",
+      indent(redacted(format!("{:#?}", .0), 5)),
+      "Argument",
+      indent(redacted(format!("{:#?}", .1), 5)),
+    )]
     NonFunctionalApplication(Value, Value),
     #[error("Attempted to case a non-const:\n\n{0:#?}")]
     NonConstrScrutinized(Value),
@@ -61,7 +71,10 @@ pub enum Error {
     UnexpectedEd25519PublicKeyLength(usize),
     #[error("Ed25519S Signature should be 64 bytes but it was {0}")]
     UnexpectedEd25519SignatureLength(usize),
-    #[error("Failed to deserialise PlutusData using {0}:\n\n{1:#?}")]
+    #[error(
+      "Failed to deserialise PlutusData using {0}:\n\n{}",
+      redacted(format!("{:#?}", .1), 10),
+    )]
     DeserialisationError(String, Value),
     #[error("Integer overflow")]
     OverflowError,
@@ -82,4 +95,22 @@ impl From<k256::ecdsa::Error> for Error {
     fn from(error: k256::ecdsa::Error) -> Error {
         Error::K256Error(format!("K256 error: {}", error))
     }
+}
+
+/// Print only the first n lines of possibly long output, and redact the rest if longer.
+fn redacted(s: String, max_rows: usize) -> String {
+    let rows = s.lines();
+
+    if rows.count() > max_rows {
+        let last_line = s.lines().last().unwrap();
+        let mut s = s.lines().take(max_rows).collect::<Vec<_>>().join("\n");
+        s.push_str(&format!("\n    ...redacted...\n{last_line}"));
+        s
+    } else {
+        s
+    }
+}
+
+fn indent(s: String) -> String {
+    s.lines().collect::<Vec<_>>().join(&format!("\n{:>14}", ""))
 }

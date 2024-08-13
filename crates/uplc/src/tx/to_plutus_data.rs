@@ -736,127 +736,34 @@ impl ToPlutusData for PlutusData {
 
 impl ToPlutusData for TimeRange {
     fn to_plutus_data(&self) -> PlutusData {
-        match &self {
-            TimeRange {
-                lower_bound: Some(lower_bound),
-                upper_bound: None,
-            } => {
-                wrap_multiple_with_constr(
+        fn bound(bound: Option<u64>, is_lower: bool) -> PlutusData {
+            match bound {
+                Some(x) => wrap_multiple_with_constr(
                     0,
                     vec![
-                        // LowerBound
-                        wrap_multiple_with_constr(
-                            0,
-                            vec![
-                                // Finite
-                                wrap_with_constr(1, lower_bound.to_plutus_data()),
-                                // Closure
-                                true.to_plutus_data(),
-                            ],
-                        ), //UpperBound
-                        wrap_multiple_with_constr(
-                            0,
-                            vec![
-                                // PosInf
-                                empty_constr(2),
-                                // Closure
-                                true.to_plutus_data(),
-                            ],
-                        ),
+                        wrap_with_constr(1, x.to_plutus_data()),
+                        // NOTE: Finite lower bounds are always inclusive, unlike upper bounds.
+                        is_lower.to_plutus_data(),
                     ],
-                )
-            }
-            TimeRange {
-                lower_bound: None,
-                upper_bound: Some(upper_bound),
-            } => {
-                wrap_multiple_with_constr(
+                ),
+                None => wrap_multiple_with_constr(
                     0,
                     vec![
-                        // LowerBound
-                        wrap_multiple_with_constr(
-                            0,
-                            vec![
-                                // NegInf
-                                empty_constr(0),
-                                // Closure
-                                true.to_plutus_data(),
-                            ],
-                        ),
-                        //UpperBound
-                        wrap_multiple_with_constr(
-                            0,
-                            vec![
-                                // Finite
-                                wrap_with_constr(1, upper_bound.to_plutus_data()),
-                                // Closure
-                                true.to_plutus_data(),
-                            ],
-                        ),
+                        empty_constr(if is_lower { 0 } else { 2 }),
+                        // NOTE: Infinite bounds are always exclusive, by convention.
+                        true.to_plutus_data(),
                     ],
-                )
-            }
-            TimeRange {
-                lower_bound: Some(lower_bound),
-                upper_bound: Some(upper_bound),
-            } => {
-                wrap_multiple_with_constr(
-                    0,
-                    vec![
-                        // LowerBound
-                        wrap_multiple_with_constr(
-                            0,
-                            vec![
-                                // Finite
-                                wrap_with_constr(1, lower_bound.to_plutus_data()),
-                                // Closure
-                                true.to_plutus_data(),
-                            ],
-                        ),
-                        //UpperBound
-                        wrap_multiple_with_constr(
-                            0,
-                            vec![
-                                // Finite
-                                wrap_with_constr(1, upper_bound.to_plutus_data()),
-                                // Closure
-                                false.to_plutus_data(),
-                            ],
-                        ),
-                    ],
-                )
-            }
-            TimeRange {
-                lower_bound: None,
-                upper_bound: None,
-            } => {
-                wrap_multiple_with_constr(
-                    0,
-                    vec![
-                        // LowerBound
-                        wrap_multiple_with_constr(
-                            0,
-                            vec![
-                                // NegInf
-                                empty_constr(0),
-                                // Closure
-                                true.to_plutus_data(),
-                            ],
-                        ),
-                        //UpperBound
-                        wrap_multiple_with_constr(
-                            0,
-                            vec![
-                                // PosInf
-                                empty_constr(2),
-                                // Closure
-                                true.to_plutus_data(),
-                            ],
-                        ),
-                    ],
-                )
+                ),
             }
         }
+
+        wrap_multiple_with_constr(
+            0,
+            vec![
+                bound(self.lower_bound, true),
+                bound(self.upper_bound, false),
+            ],
+        )
     }
 }
 

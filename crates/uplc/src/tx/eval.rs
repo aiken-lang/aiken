@@ -4,15 +4,16 @@ use super::{
     Error,
 };
 use crate::{
-    ast::{Data, FakeNamedDeBruijn, NamedDeBruijn, Program},
+    ast::{FakeNamedDeBruijn, NamedDeBruijn, Program},
     machine::cost_model::ExBudget,
-    tx::script_context::{DataLookupTable, ScriptVersion, TxInfoV1, TxInfoV2, TxInfoV3},
+    tx::{
+        phase_one::redeemer_tag_to_string,
+        script_context::{DataLookupTable, ScriptVersion, TxInfoV1, TxInfoV2, TxInfoV3},
+    },
     PlutusData,
 };
 use pallas_codec::utils::Bytes;
-use pallas_primitives::conway::{
-    CostMdls, CostModel, ExUnits, Language, MintedTx, Redeemer, RedeemerTag,
-};
+use pallas_primitives::conway::{CostMdls, CostModel, ExUnits, Language, MintedTx, Redeemer};
 
 pub fn eval_redeemer(
     tx: &MintedTx,
@@ -44,21 +45,16 @@ pub fn eval_redeemer(
             }
             .apply_data(redeemer.data.clone())
             .apply_data(script_context.to_plutus_data()),
-            ScriptContext::V3 { .. } if datum.is_some() => {
+
+            // FIXME: Temporary, but needed until https://github.com/aiken-lang/aiken/pull/977
+            // is implemented.
+            ScriptContext::V3 { .. } => if let Some(datum) = datum {
+                program.apply_data(datum)
+            } else {
                 program
-                    // FIXME: Temporary, but needed until https://github.com/aiken-lang/aiken/pull/977
-                    // is implemented.
-                    .apply_data(Data::constr(0, vec![]))
-                    .apply_data(Data::constr(0, vec![]))
-                    .apply_data(script_context.to_plutus_data())
             }
-            ScriptContext::V3 { .. } => {
-                program
-                    // FIXME: Temporary, but needed until https://github.com/aiken-lang/aiken/pull/977
-                    // is implemented.
-                    .apply_data(Data::constr(0, vec![]))
-                    .apply_data(script_context.to_plutus_data())
-            }
+            .apply_data(redeemer.data.clone())
+            .apply_data(script_context.to_plutus_data()),
         };
 
         let mut eval_result = if let Some(costs) = cost_mdl_opt {
@@ -153,16 +149,4 @@ pub fn eval_redeemer(
         index: redeemer.index,
         err: Box::new(err),
     })
-}
-
-fn redeemer_tag_to_string(redeemer_tag: &RedeemerTag) -> String {
-    match redeemer_tag {
-        RedeemerTag::Spend => "Spend",
-        RedeemerTag::Mint => "Mint",
-        RedeemerTag::Reward => "Withdraw",
-        RedeemerTag::Cert => "Publish",
-        RedeemerTag::Propose => "Propose",
-        RedeemerTag::Vote => "Vote",
-    }
-    .to_string()
 }

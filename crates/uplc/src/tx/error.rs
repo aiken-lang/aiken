@@ -99,4 +99,6 @@ pub enum Error {
     MissingScriptForRedeemer,
     #[error("failed to apply parameters to Plutus script")]
     ApplyParamsError,
+    #[error("validity start or end too far in the past")]
+    SlotTooFarInThePast { oldest_allowed: u64 },
 }

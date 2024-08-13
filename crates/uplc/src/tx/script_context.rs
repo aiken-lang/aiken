@@ -1,8 +1,8 @@
 use super::{to_plutus_data::MintValue, Error};
 use itertools::Itertools;
-use pallas_addresses::{Address, StakePayload};
+use pallas_addresses::{Address, Network, StakePayload};
 use pallas_codec::utils::{
-    KeyValuePairs, NonEmptyKeyValuePairs, NonEmptySet, Nullable, PositiveCoin,
+    Bytes, KeyValuePairs, NonEmptyKeyValuePairs, NonEmptySet, Nullable, PositiveCoin,
 };
 use pallas_crypto::hash::Hash;
 use pallas_primitives::{
@@ -217,7 +217,7 @@ impl TxInfoV1 {
         let inputs = get_tx_in_info_v1(&tx.transaction_body.inputs, utxos)?;
         let certificates = get_certificates_info(&tx.transaction_body.certificates);
         let withdrawals =
-            KeyValuePairs::from(get_withdrawal_info(&tx.transaction_body.withdrawals));
+            KeyValuePairs::from(get_withdrawals_info(&tx.transaction_body.withdrawals));
         let mint = get_mint_info(&tx.transaction_body.mint);
 
         let redeemers = get_redeemers_info(
@@ -232,7 +232,7 @@ impl TxInfoV1 {
             mint,
             certificates,
             withdrawals: withdrawals.into(),
-            valid_range: get_validity_range_info(&tx.transaction_body, slot_config),
+            valid_range: get_validity_range_info(&tx.transaction_body, slot_config)?,
             signatories: get_signatories_info(&tx.transaction_body.required_signers),
             data: get_data_info(&tx.transaction_witness_set),
             redeemers,
@@ -266,7 +266,7 @@ impl TxInfoV2 {
         let inputs = get_tx_in_info_v2(&tx.transaction_body.inputs, utxos)?;
         let certificates = get_certificates_info(&tx.transaction_body.certificates);
         let withdrawals =
-            KeyValuePairs::from(get_withdrawal_info(&tx.transaction_body.withdrawals));
+            KeyValuePairs::from(get_withdrawals_info(&tx.transaction_body.withdrawals));
         let mint = get_mint_info(&tx.transaction_body.mint);
 
         let redeemers = get_redeemers_info(
@@ -290,7 +290,7 @@ impl TxInfoV2 {
             mint,
             certificates,
             withdrawals,
-            valid_range: get_validity_range_info(&tx.transaction_body, slot_config),
+            valid_range: get_validity_range_info(&tx.transaction_body, slot_config)?,
             signatories: get_signatories_info(&tx.transaction_body.required_signers),
             data: KeyValuePairs::from(get_data_info(&tx.transaction_witness_set)),
             redeemers,
@@ -330,7 +330,7 @@ impl TxInfoV3 {
         let certificates = get_certificates_info(&tx.transaction_body.certificates);
 
         let withdrawals =
-            KeyValuePairs::from(get_withdrawal_info(&tx.transaction_body.withdrawals));
+            KeyValuePairs::from(get_withdrawals_info(&tx.transaction_body.withdrawals));
 
         let mint = get_mint_info(&tx.transaction_body.mint);
 
@@ -367,7 +367,7 @@ impl TxInfoV3 {
             mint,
             certificates,
             withdrawals,
-            valid_range: get_validity_range_info(&tx.transaction_body, slot_config),
+            valid_range: get_validity_range_info(&tx.transaction_body, slot_config)?,
             signatories: get_signatories_info(&tx.transaction_body.required_signers),
             data: KeyValuePairs::from(get_data_info(&tx.transaction_witness_set)),
             redeemers,
@@ -626,14 +626,14 @@ pub fn get_proposal_procedures_info(
         .unwrap_or_default()
 }
 
-pub fn get_withdrawal_info(
+pub fn get_withdrawals_info(
     withdrawals: &Option<NonEmptyKeyValuePairs<RewardAccount, Coin>>,
 ) -> Vec<(Address, Coin)> {
     withdrawals
         .clone()
         .map(|w| {
             w.into_iter()
-                .sorted()
+                .sorted_by(|(accnt_a, _), (accnt_b, _)| sort_reward_accounts(accnt_a, accnt_b))
                 .map(|(reward_account, coin)| (Address::from_bytes(&reward_account).unwrap(), coin))
                 .collect()
         })
@@ -643,21 +643,31 @@ pub fn get_withdrawal_info(
 pub fn get_validity_range_info(
     body: &MintedTransactionBody,
     slot_config: &SlotConfig,
-) -> TimeRange {
-    fn slot_to_begin_posix_time(slot: u64, sc: &SlotConfig) -> u64 {
+) -> Result<TimeRange, Error> {
+    fn slot_to_begin_posix_time(slot: u64, sc: &SlotConfig) -> Result<u64, Error> {
+        if slot < sc.zero_slot {
+            return Err(Error::SlotTooFarInThePast {
+                oldest_allowed: sc.zero_slot,
+            });
+        }
         let ms_after_begin = (slot - sc.zero_slot) * sc.slot_length as u64;
-        sc.zero_time + ms_after_begin
+        Ok(sc.zero_time + ms_after_begin)
     }
 
-    fn slot_range_to_posix_time_range(slot_range: TimeRange, sc: &SlotConfig) -> TimeRange {
-        TimeRange {
+    fn slot_range_to_posix_time_range(
+        slot_range: TimeRange,
+        sc: &SlotConfig,
+    ) -> Result<TimeRange, Error> {
+        Ok(TimeRange {
             lower_bound: slot_range
                 .lower_bound
-                .map(|lower_bound| slot_to_begin_posix_time(lower_bound, sc)),
+                .map(|lower_bound| slot_to_begin_posix_time(lower_bound, sc))
+                .transpose()?,
             upper_bound: slot_range
                 .upper_bound
-                .map(|upper_bound| slot_to_begin_posix_time(upper_bound, sc)),
-        }
+                .map(|upper_bound| slot_to_begin_posix_time(upper_bound, sc))
+                .transpose()?,
+        })
     }
 
     slot_range_to_posix_time_range(
@@ -841,7 +851,7 @@ pub fn find_script(
                 lookup_script(&hash)
             }),
 
-        RedeemerTag::Reward => get_withdrawal_info(&tx.transaction_body.withdrawals)
+        RedeemerTag::Reward => get_withdrawals_info(&tx.transaction_body.withdrawals)
             .get(redeemer.index as usize)
             .ok_or(Error::MissingScriptForRedeemer)
             .and_then(|(addr, _)| {
@@ -1083,6 +1093,34 @@ fn sort_gov_action_id(a: &GovActionId, b: &GovActionId) -> Ordering {
         a.action_index.cmp(&b.action_index)
     } else {
         a.transaction_id.cmp(&b.transaction_id)
+    }
+}
+
+pub fn sort_reward_accounts(a: &Bytes, b: &Bytes) -> Ordering {
+    let addr_a = Address::from_bytes(a).expect("invalid reward address in withdrawals.");
+    let addr_b = Address::from_bytes(b).expect("invalid reward address in withdrawals.");
+
+    fn network_tag(network: Network) -> u8 {
+        match network {
+            Network::Testnet => 0,
+            Network::Mainnet => 1,
+            Network::Other(tag) => tag,
+        }
+    }
+
+    if let (Address::Stake(accnt_a), Address::Stake(accnt_b)) = (addr_a, addr_b) {
+        if accnt_a.network() != accnt_b.network() {
+            return network_tag(accnt_a.network()).cmp(&network_tag(accnt_b.network()));
+        }
+
+        match (accnt_a.payload(), accnt_b.payload()) {
+            (StakePayload::Script(..), StakePayload::Stake(..)) => Ordering::Less,
+            (StakePayload::Stake(..), StakePayload::Script(..)) => Ordering::Greater,
+            (StakePayload::Script(hash_a), StakePayload::Script(hash_b)) => hash_a.cmp(hash_b),
+            (StakePayload::Stake(hash_a), StakePayload::Stake(hash_b)) => hash_a.cmp(hash_b),
+        }
+    } else {
+        unreachable!("invalid reward address in withdrawals.");
     }
 }
 
@@ -1468,6 +1506,64 @@ mod tests {
              0000000000",
             "81a200581d600000000000000000000000000000000000000000000000000000\
              0000011a000f4240",
+        )
+        .into_script_context(&redeemer, None)
+        .unwrap();
+
+        // NOTE: The initial snapshot has been generated using the Haskell
+        // implementation of the ledger library for that same serialized
+        // transactions. It is meant to control that our construction of the
+        // script context and its serialization matches exactly those
+        // from the Haskell ledger / cardano node.
+        insta::assert_debug_snapshot!(script_context.to_plutus_data());
+    }
+
+    #[test]
+    fn script_context_withdraw() {
+        let redeemer = Redeemer {
+            tag: RedeemerTag::Reward,
+            index: 0,
+            data: Data::constr(0, vec![]),
+            ex_units: ExUnits {
+                mem: 1000000,
+                steps: 100000000,
+            },
+        };
+
+        // NOTE: The transaction also contains treasury donation and current treasury amount
+        let script_context = fixture_tx_info(
+            "84a7008182582000000000000000000000000000000000000000000000000000\
+             00000000000000000183a2005839200000000000000000000000000000000000\
+             0000000000000000000000111111111111111111111111111111111111111111\
+             11111111111111011a000f4240a2005823400000000000000000000000000000\
+             00000000000000000000000000008198bd431b03011a000f4240a20058235011\
+             1111111111111111111111111111111111111111111111111111118198bd431b\
+             03011a000f424002182a031a00448e0105a1581df004036eecadc2f19e95f831\
+             b4bc08919cde1d1088d74602bd3dcd78a2000e81581c00000000000000000000\
+             0000000000000000000000000000000000001601a10582840000d87a81d87980\
+             821a000f42401a05f5e100840300d87980821a000f42401a05f5e100f5f6",
+            "8182582000000000000000000000000000000000000000000000000000000000\
+             0000000000",
+            "81a40058393004036eecadc2f19e95f831b4bc08919cde1d1088d74602bd3dcd\
+             78a204036eecadc2f19e95f831b4bc08919cde1d1088d74602bd3dcd78a2011a\
+             000f4240028201d81843d8798003d818590221820359021c5902190101003232\
+             323232323232322232533333300c00215323330073001300937540062a660109\
+             211c52756e6e696e672032206172672076616c696461746f72206d696e740013\
+             533333300d004153330073001300937540082a66601660146ea8010494ccc021\
+             288a4c2a660129211856616c696461746f722072657475726e65642066616c73\
+             65001365600600600600600600600315330084911d52756e6e696e6720332061\
+             72672076616c696461746f72207370656e640013533333300d00415333007300\
+             1300937540082a66601660146ea8010494cccccc03800454ccc020c008c028dd\
+             50008a99980618059baa0011253330094a22930a998052491856616c69646174\
+             6f722072657475726e65642066616c7365001365600600600600600600600600\
+             6006006006006300c300a37540066e1d20001533007001161533007001161533\
+             00700116153300700116490191496e636f72726563742072656465656d657220\
+             7479706520666f722076616c696461746f72207370656e642e0a202020202020\
+             2020202020202020202020202020446f75626c6520636865636b20796f752068\
+             6176652077726170706564207468652072656465656d65722074797065206173\
+             2073706563696669656420696e20796f757220706c757475732e6a736f6e0015\
+             330034910b5f746d70313a20566f6964001615330024910b5f746d70303a2056\
+             6f696400165734ae7155ceaab9e5573eae855d21",
         )
         .into_script_context(&redeemer, None)
         .unwrap();
