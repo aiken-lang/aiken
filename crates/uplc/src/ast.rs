@@ -878,8 +878,12 @@ impl Program<NamedDeBruijn> {
 impl Program<DeBruijn> {
     pub fn eval(&self, initial_budget: ExBudget) -> EvalResult {
         let program: Program<NamedDeBruijn> = self.clone().into();
-
         program.eval(initial_budget)
+    }
+
+    pub fn eval_version(self, initial_budget: ExBudget, version: &Language) -> EvalResult {
+        let program: Program<NamedDeBruijn> = self.clone().into();
+        program.eval_version(initial_budget, version)
     }
 }
 
