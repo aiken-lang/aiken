@@ -60,7 +60,7 @@ echo $RESOLVED_INPUTS | cbor-diag --to hex --from diag > ctx/$TITLE/resolved_inp
 
 echo $TRANSACTION | cbor-diag --to hex --from diag > ctx/$TITLE/tx.cbor
 
-$AIKEN tx simulate 1>$TITLE.log 2>&1 \
+$AIKEN tx simulate \
   ctx/$TITLE/tx.cbor \
   ctx/inputs.cbor \
   ctx/$TITLE/resolved_inputs.cbor
