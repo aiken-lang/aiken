@@ -20,6 +20,8 @@
 
 - **aiken-project**: warning on compiler version mismatch. See [de870e2](https://github.com/aiken-lang/aiken/commit/de870e2529eb2336957e228cd30d4850ec2619a2). @rvcas
 
+- **uplc**: support evaluation of Plutus V3 transactions, including new purposes introduced in Conway. @KtorZ
+
 ### Changed
 
 - **aiken-lang**: fix zero-arg builtins `mk_nil_data` and `mk_nil_pair_data` invokation. @KtorZ
