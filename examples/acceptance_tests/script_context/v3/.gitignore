@@ -5,4 +5,5 @@ build/
 # Aiken's default documentation export
 docs/
 *.cbor
+!ctx/inputs.cbor
 *.log
