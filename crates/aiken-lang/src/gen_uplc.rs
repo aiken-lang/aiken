@@ -17,7 +17,10 @@ use crate::{
         FunctionAccessKey, OnTestFailure, Pattern, Span, TraceLevel, Tracing, TypedArg,
         TypedClause, TypedDataType, TypedFunction, TypedPattern, TypedValidator, UnOp,
     },
-    builtins::{bool, byte_array, data, int, list, option, pair, void, PRELUDE},
+    builtins::{
+        bool, byte_array, data, function, int, list, option, pair, script_context, script_purpose,
+        void, PRELUDE, SCRIPT_PURPOSE_MINT, SCRIPT_PURPOSE_SPEND,
+    },
     expr::TypedExpr,
     gen_uplc::{
         air::ExpectLevel,
@@ -142,7 +145,7 @@ impl<'a> CodeGenerator<'a> {
                 expressions: vec![
                     TypedExpr::Assignment {
                         location: Span::empty(),
-                        tipo: data(),
+                        tipo: script_context(),
                         value: TypedExpr::Var {
                             location: Span::empty(),
                             constructor: ValueConstructor {
@@ -150,7 +153,7 @@ impl<'a> CodeGenerator<'a> {
                                 variant: ValueConstructorVariant::LocalVariable {
                                     location: Span::empty(),
                                 },
-                                tipo: data(),
+                                tipo: script_context(),
                             },
                             name: "__context__".to_string(),
                         }
@@ -165,7 +168,7 @@ impl<'a> CodeGenerator<'a> {
                                     location: Span::empty(),
                                     value: TypedPattern::Var {
                                         location: Span::empty(),
-                                        name: "__purpose__".to_string(),
+                                        name: "__transaction__".to_string(),
                                     },
                                 },
                                 CallArg {
@@ -173,7 +176,15 @@ impl<'a> CodeGenerator<'a> {
                                     location: Span::empty(),
                                     value: TypedPattern::Var {
                                         location: Span::empty(),
-                                        name: "__transaction__".to_string(),
+                                        name: "__redeemer__".to_string(),
+                                    },
+                                },
+                                CallArg {
+                                    label: None,
+                                    location: Span::empty(),
+                                    value: TypedPattern::Var {
+                                        location: Span::empty(),
+                                        name: "__purpose__".to_string(),
                                     },
                                 },
                             ],
@@ -183,7 +194,7 @@ impl<'a> CodeGenerator<'a> {
                                 field_map: None,
                             },
                             spread_location: None,
-                            tipo: data(),
+                            tipo: function(vec![data(), data(), script_purpose()], data()),
                         },
                         kind: AssignmentKind::let_(),
                     },
@@ -197,37 +208,31 @@ impl<'a> CodeGenerator<'a> {
                                 variant: ValueConstructorVariant::LocalVariable {
                                     location: Span::empty(),
                                 },
-                                tipo: data(),
+                                tipo: script_purpose(),
                             },
                             name: "__purpose__".to_string(),
                         }
                         .into(),
                         clauses: handlers
                             .iter()
-                            .chain(std::iter::once(fallback))
                             .map(|handler| {
-                                let mut arguments = vec![];
+                                let datum = if handler.name.as_str() == "spend" {
+                                    handler.arguments.first()
+                                } else {
+                                    None
+                                };
 
-                                for i in 0..(handler.arguments.len() - 1) {
-                                    let argument = &handler.arguments[i];
+                                let redeemer = handler
+                                    .arguments
+                                    .get(if datum.is_some() { 1 } else { 0 })
+                                    .unwrap();
 
-                                    arguments.push(CallArg {
-                                        label: None,
-                                        location: Span::empty(),
-                                        value: argument
-                                            .get_variable_name()
-                                            .map(|name| TypedPattern::Var {
-                                                location: Span::empty(),
-                                                name: name.to_string(),
-                                            })
-                                            .unwrap_or(TypedPattern::Discard {
-                                                name: "_".to_string(),
-                                                location: Span::empty(),
-                                            }),
-                                    });
-                                }
+                                let purpose_arg = handler.arguments.iter().nth_back(1).unwrap();
+
+                                let transaction = handler.arguments.last().unwrap();
 
                                 // handler
+                                //
                                 // spend(datum: Option<Datum>, redeemer, oref, anything) => Spend(datum, redeemer, oref, transaction)
                                 // spend(datum: Datum) => Spend(datum, redeemer, oref, transaction)
                                 // spend(redeemer) => Spend(__datum__, redeemer, oref, transaction)
@@ -236,59 +241,133 @@ impl<'a> CodeGenerator<'a> {
                                     "spend" => TypedPattern::Constructor {
                                         is_record: false,
                                         location: Span::empty(),
-                                        name: "Spend".to_string(),
-                                        arguments: if handler.arguments.len() == 4 {
-                                            arguments
-                                        } else {
-                                            vec![CallArg {
+                                        name: SCRIPT_PURPOSE_SPEND.to_string(),
+                                        arguments: vec![
+                                            CallArg {
+                                                label: None,
+                                                location: Span::empty(),
+                                                value: TypedPattern::Var {
+                                                    name: "__purpose_arg__".to_string(),
+                                                    location: Span::empty(),
+                                                },
+                                            },
+                                            CallArg {
                                                 label: None,
                                                 location: Span::empty(),
                                                 value: TypedPattern::Var {
                                                     name: "__datum__".to_string(),
                                                     location: Span::empty(),
                                                 },
-                                            }]
-                                            .into_iter()
-                                            .chain(arguments)
-                                            .collect()
-                                        },
+                                            },
+                                        ],
                                         module: None,
                                         constructor: PatternConstructor::Record {
-                                            name: "Spend".to_string(),
+                                            name: SCRIPT_PURPOSE_SPEND.to_string(),
                                             field_map: None,
                                         },
                                         spread_location: None,
-                                        tipo: data(),
+                                        tipo: function(
+                                            vec![data(), option(data())],
+                                            script_purpose(),
+                                        ),
                                     },
 
                                     "mint" => TypedPattern::Constructor {
                                         is_record: false,
                                         location: Span::empty(),
-                                        name: "Mint".to_string(),
-                                        arguments,
+                                        name: SCRIPT_PURPOSE_MINT.to_string(),
+                                        arguments: vec![CallArg {
+                                            label: None,
+                                            location: Span::empty(),
+                                            value: TypedPattern::Var {
+                                                name: "__purpose_arg__".to_string(),
+                                                location: Span::empty(),
+                                            },
+                                        }],
                                         module: None,
                                         constructor: PatternConstructor::Record {
-                                            name: "Mint".to_string(),
+                                            name: SCRIPT_PURPOSE_MINT.to_string(),
                                             field_map: None,
                                         },
                                         spread_location: None,
-                                        tipo: data(),
+                                        tipo: function(vec![data()], script_purpose()),
                                     },
-                                    _ => TypedPattern::Var {
-                                        location: Span::empty(),
-                                        name: "__context__".to_string(),
-                                    },
+
+                                    purpose => {
+                                        unreachable!("unexpected/unknown purpose: {:?}", purpose)
+                                    }
                                 };
 
                                 let mut then = vec![];
 
-                                let last_arg = handler.arguments.last().unwrap();
+                                // expect redeemer: tipo = __redeemer__
+                                then.push(TypedExpr::Assignment {
+                                    location: Span::empty(),
+                                    tipo: redeemer.tipo.clone(),
+                                    value: TypedExpr::Var {
+                                        location: Span::empty(),
+                                        constructor: ValueConstructor {
+                                            public: true,
+                                            variant: ValueConstructorVariant::LocalVariable {
+                                                location: Span::empty(),
+                                            },
+                                            tipo: data(),
+                                        },
+                                        name: "__redeemer__".to_string(),
+                                    }
+                                    .into(),
+                                    pattern: TypedPattern::Var {
+                                        location: Span::empty(),
+                                        name: redeemer
+                                            .get_variable_name()
+                                            .unwrap_or("_")
+                                            .to_string(),
+                                    },
+                                    kind: if redeemer.tipo.is_data() {
+                                        AssignmentKind::let_()
+                                    } else {
+                                        AssignmentKind::expect()
+                                    },
+                                });
 
-                                // let last_arg_name = __transaction__
-                                if let Some(last_arg_name) = last_arg.get_variable_name() {
+                                // Cast the datum, if any
+                                if let Some(datum) = datum {
+                                    // expect datum: tipo = __datum__
                                     then.push(TypedExpr::Assignment {
                                         location: Span::empty(),
-                                        tipo: data(),
+                                        tipo: datum.tipo.clone(),
+                                        value: TypedExpr::Var {
+                                            location: Span::empty(),
+                                            constructor: ValueConstructor {
+                                                public: true,
+                                                variant: ValueConstructorVariant::LocalVariable {
+                                                    location: Span::empty(),
+                                                },
+                                                tipo: option(data()),
+                                            },
+                                            name: "__datum__".to_string(),
+                                        }
+                                        .into(),
+                                        pattern: TypedPattern::Var {
+                                            location: Span::empty(),
+                                            name: datum
+                                                .get_variable_name()
+                                                .unwrap_or("_")
+                                                .to_string(),
+                                        },
+                                        kind: if redeemer.tipo.is_data() {
+                                            AssignmentKind::let_()
+                                        } else {
+                                            AssignmentKind::expect()
+                                        },
+                                    });
+                                }
+
+                                // let last_arg_name = __transaction__
+                                if let Some(arg_name) = transaction.get_variable_name() {
+                                    then.push(TypedExpr::Assignment {
+                                        location: Span::empty(),
+                                        tipo: purpose_arg.tipo.clone(),
                                         value: TypedExpr::Var {
                                             location: Span::empty(),
                                             constructor: ValueConstructor {
@@ -303,95 +382,10 @@ impl<'a> CodeGenerator<'a> {
                                         .into(),
                                         pattern: TypedPattern::Var {
                                             location: Span::empty(),
-                                            name: last_arg_name.to_string(),
+                                            name: arg_name.to_string(),
                                         },
                                         kind: AssignmentKind::let_(),
                                     });
-                                }
-
-                                let first_arg = handler.arguments.first().unwrap();
-
-                                if handler.name.as_str() == "spend" {
-                                    if handler.arguments.len() == 3 {
-                                        // implicit None
-                                        then.push(TypedExpr::Assignment {
-                                            location: Span::empty(),
-                                            tipo: option(data()),
-                                            value: TypedExpr::Var {
-                                                location: Span::empty(),
-                                                constructor: ValueConstructor {
-                                                    public: true,
-                                                    variant:
-                                                        ValueConstructorVariant::LocalVariable {
-                                                            location: Span::empty(),
-                                                        },
-                                                    tipo: option(data()),
-                                                },
-                                                name: "__datum__".to_string(),
-                                            }
-                                            .into(),
-                                            pattern: TypedPattern::Constructor {
-                                                is_record: false,
-                                                location: Span::empty(),
-                                                name: "None".to_string(),
-                                                arguments: vec![],
-                                                module: None,
-                                                constructor: PatternConstructor::Record {
-                                                    name: "None".to_string(),
-                                                    field_map: None,
-                                                },
-                                                spread_location: None,
-                                                tipo: option(data()),
-                                            },
-                                            kind: AssignmentKind::expect(),
-                                        })
-                                    } else if !first_arg.tipo.is_option() {
-                                        // implicit Some
-                                        then.push(TypedExpr::Assignment {
-                                            location: Span::empty(),
-                                            tipo: option(data()),
-                                            value: TypedExpr::Var {
-                                                location: Span::empty(),
-                                                constructor: ValueConstructor {
-                                                    public: true,
-                                                    variant:
-                                                        ValueConstructorVariant::LocalVariable {
-                                                            location: Span::empty(),
-                                                        },
-                                                    tipo: option(data()),
-                                                },
-                                                name: first_arg.get_name(),
-                                            }
-                                            .into(),
-                                            pattern: TypedPattern::Constructor {
-                                                is_record: false,
-                                                location: Span::empty(),
-                                                name: "Some".to_string(),
-                                                arguments: vec![CallArg {
-                                                    label: None,
-                                                    location: Span::empty(),
-                                                    value: first_arg
-                                                        .get_variable_name()
-                                                        .map(|name| TypedPattern::Var {
-                                                            location: Span::empty(),
-                                                            name: name.to_string(),
-                                                        })
-                                                        .unwrap_or(TypedPattern::Discard {
-                                                            name: "_".to_string(),
-                                                            location: Span::empty(),
-                                                        }),
-                                                }],
-                                                module: None,
-                                                constructor: PatternConstructor::Record {
-                                                    name: "Some".to_string(),
-                                                    field_map: None,
-                                                },
-                                                spread_location: None,
-                                                tipo: option(first_arg.tipo.clone()),
-                                            },
-                                            kind: AssignmentKind::expect(),
-                                        })
-                                    }
                                 }
 
                                 then.push(handler.body.clone());
@@ -405,6 +399,56 @@ impl<'a> CodeGenerator<'a> {
                                     },
                                 }
                             })
+                            // FIXME: This is only needed if there's non-exhaustive patterns
+                            // above.
+                            .chain(std::iter::once(fallback).map(|fallback| {
+                                let pattern = TypedPattern::Var {
+                                    location: Span::empty(),
+                                    name: "__context__".to_string(),
+                                };
+
+                                let arg = fallback.arguments.first().unwrap();
+
+                                let then = vec![
+                                    TypedExpr::Assignment {
+                                        location: Span::empty(),
+                                        tipo: arg.tipo.clone(),
+                                        value: TypedExpr::Var {
+                                            location: Span::empty(),
+                                            constructor: ValueConstructor {
+                                                public: true,
+                                                variant: ValueConstructorVariant::LocalVariable {
+                                                    location: Span::empty(),
+                                                },
+                                                tipo: arg.tipo.clone(),
+                                            },
+                                            name: "__context__".to_string(),
+                                        }
+                                        .into(),
+                                        pattern: arg
+                                            .get_variable_name()
+                                            .map(|name| TypedPattern::Var {
+                                                location: Span::empty(),
+                                                name: name.to_string(),
+                                            })
+                                            .unwrap_or(TypedPattern::Discard {
+                                                name: "__context__".to_string(),
+                                                location: Span::empty(),
+                                            }),
+                                        kind: AssignmentKind::let_(),
+                                    },
+                                    fallback.body.clone(),
+                                ];
+
+                                TypedClause {
+                                    location: Span::empty(),
+                                    pattern,
+                                    then: TypedExpr::Sequence {
+                                        location: Span::empty(),
+                                        expressions: then,
+                                    },
+                                }
+                            }))
                             .collect(),
                     },
                 ],
@@ -419,16 +463,15 @@ impl<'a> CodeGenerator<'a> {
             on_test_failure: OnTestFailure::FailImmediately,
         };
 
-        let mut air_tree_fun = self.build(&fun.body, module_name, &[]);
+        let mut air_tree_fun = AirTree::anon_func(
+            vec!["__context__".to_string()],
+            self.build(&fun.body, module_name, &[]),
+            true,
+        );
 
         air_tree_fun = wrap_validator_condition(air_tree_fun, self.tracing);
 
-        let (src_code, lines) = self.module_src.get(module_name).unwrap();
-
-        let mut validator_args_tree =
-            self.check_validator_args(&fun.arguments, true, air_tree_fun, src_code, lines);
-
-        validator_args_tree = AirTree::no_op(validator_args_tree);
+        let validator_args_tree = AirTree::no_op(air_tree_fun);
 
         let full_tree = self.hoist_functions_to_validator(validator_args_tree);
 
@@ -1624,7 +1667,13 @@ impl<'a> CodeGenerator<'a> {
                     type_map.insert(index, field_type);
                 }
 
-                assert!(type_map.len() >= arguments.len());
+                assert!(
+                    type_map.len() >= arguments.len(),
+                    "type map len: {}, arguments len: {}; for constructor {:?}",
+                    type_map.len(),
+                    arguments.len(),
+                    name,
+                );
 
                 let mut fields = vec![];
 
@@ -1752,7 +1801,10 @@ impl<'a> CodeGenerator<'a> {
                 } else {
                     assert!(
                         data_type.constructors.len() == 1,
-                        "data_type={data_type:#?}"
+                        "attempted expect on a type with more or less than 1 constructor: \nis_expect? {}\nfull_check? {}\ndata_type={data_type:#?}\n{}",
+                        props.kind.is_expect(),
+                        props.full_check,
+                        name,
                     );
                     then
                 };
@@ -3030,7 +3082,11 @@ impl<'a> CodeGenerator<'a> {
                         )
                     });
 
-                assert!(!data_type.constructors.is_empty());
+                assert!(
+                    !data_type.constructors.is_empty(),
+                    "{}\n{constructor:#?}\n{data_type:#?}",
+                    subject_tipo.to_pretty(0)
+                );
 
                 let (constr_index, _) = data_type
                     .constructors

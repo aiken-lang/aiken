@@ -37,6 +37,16 @@ pub const REDEEMER_WRAPPER: &str = "RedeemerWrapper";
 pub const PRNG: &str = "PRNG";
 pub const FUZZER: &str = "Fuzzer";
 
+pub const SCRIPT_PURPOSE: &str = "__ScriptPurpose";
+pub const SCRIPT_PURPOSE_SPEND: &str = "__Spend";
+pub const SCRIPT_PURPOSE_MINT: &str = "__Mint";
+pub const SCRIPT_PURPOSES_COUNT: u16 = 6;
+
+pub const SCRIPT_CONTEXT: &str = "__ScriptContext";
+pub const SCRIPT_CONTEXT_TRANSACTION: &str = "__Transaction";
+pub const SCRIPT_CONTEXT_REDEEMER: &str = "__Redeemer";
+pub const SCRIPT_CONTEXT_PURPOSE: &str = "__ScriptPurpose";
+
 /// Build a prelude that can be injected
 /// into a compiler pipeline
 pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
@@ -627,6 +637,77 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
             tipo: map(alist_key, alist_value),
             module: "".to_string(),
             public: true,
+        },
+    );
+
+    // Cardano ScriptContext
+    prelude.types_constructors.insert(
+        SCRIPT_CONTEXT.to_string(),
+        vec![
+            SCRIPT_CONTEXT_TRANSACTION.to_string(),
+            SCRIPT_CONTEXT_REDEEMER.to_string(),
+            SCRIPT_CONTEXT_PURPOSE.to_string(),
+        ],
+    );
+
+    prelude.types.insert(
+        SCRIPT_CONTEXT.to_string(),
+        TypeConstructor {
+            location: Span::empty(),
+            public: true,
+            module: "".to_string(),
+            parameters: vec![],
+            tipo: script_context(),
+        },
+    );
+
+    // Cardano ScriptPurpose
+    prelude.types_constructors.insert(
+        SCRIPT_PURPOSE.to_string(),
+        vec![
+            SCRIPT_PURPOSE_SPEND.to_string(),
+            SCRIPT_PURPOSE_MINT.to_string(),
+        ],
+    );
+
+    prelude.values.insert(
+        SCRIPT_PURPOSE_SPEND.to_string(),
+        ValueConstructor::public(
+            function(vec![data(), option(data())], script_purpose()),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: SCRIPT_PURPOSE_SPEND.to_string(),
+                field_map: None::<FieldMap>,
+                arity: 2,
+                location: Span::empty(),
+                constructors_count: SCRIPT_PURPOSES_COUNT,
+            },
+        ),
+    );
+
+    prelude.values.insert(
+        SCRIPT_PURPOSE_MINT.to_string(),
+        ValueConstructor::public(
+            function(vec![data()], script_purpose()),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: SCRIPT_PURPOSE_MINT.to_string(),
+                field_map: None::<FieldMap>,
+                arity: 1,
+                location: Span::empty(),
+                constructors_count: SCRIPT_PURPOSES_COUNT,
+            },
+        ),
+    );
+
+    prelude.types.insert(
+        SCRIPT_PURPOSE.to_string(),
+        TypeConstructor {
+            location: Span::empty(),
+            public: true,
+            module: "".to_string(),
+            parameters: vec![],
+            tipo: script_purpose(),
         },
     );
 
@@ -1619,6 +1700,26 @@ pub fn prelude_data_types(id_gen: &IdGenerator) -> IndexMap<DataTypeKey, TypedDa
         prng_data_type,
     );
 
+    // __ScriptPurpose
+    let script_purpose_data_type = TypedDataType::script_purpose();
+    data_types.insert(
+        DataTypeKey {
+            module_name: "".to_string(),
+            defined_type: SCRIPT_PURPOSE.to_string(),
+        },
+        script_purpose_data_type,
+    );
+
+    // __ScriptContext
+    let script_context_data_type = TypedDataType::script_context();
+    data_types.insert(
+        DataTypeKey {
+            module_name: "".to_string(),
+            defined_type: SCRIPT_CONTEXT.to_string(),
+        },
+        script_context_data_type,
+    );
+
     data_types
 }
 
@@ -1706,6 +1807,28 @@ pub fn bool() -> Rc<Type> {
         public: true,
         contains_opaque: false,
         name: BOOL.to_string(),
+        module: "".to_string(),
+        alias: None,
+    })
+}
+
+pub fn script_purpose() -> Rc<Type> {
+    Rc::new(Type::App {
+        args: vec![],
+        public: true,
+        contains_opaque: false,
+        name: SCRIPT_PURPOSE.to_string(),
+        module: "".to_string(),
+        alias: None,
+    })
+}
+
+pub fn script_context() -> Rc<Type> {
+    Rc::new(Type::App {
+        args: vec![],
+        public: true,
+        contains_opaque: false,
+        name: SCRIPT_CONTEXT.to_string(),
         module: "".to_string(),
         alias: None,
     })

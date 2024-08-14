@@ -294,7 +294,7 @@ mod tests {
 
             let validators = Validator::from_checked_module(&modules, &mut generator, validator, def, &PlutusVersion::default());
 
-            if validators.len() > 1 {
+            if validators.len() > 2 {
                 panic!("Multi-validator given to test bench. Don't do that.")
             }
 
@@ -395,7 +395,7 @@ mod tests {
         assert_validator!(
             r#"
             validator thing {
-              mint(redeemer: Data, ctx: Data) {
+              mint(redeemer: Data, policy_id: Data, transaction: Data) {
                 True
               }
             }
