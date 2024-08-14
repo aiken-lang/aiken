@@ -111,38 +111,99 @@ where
     }
 }
 
-impl Serialize for Program<DeBruijn> {
+#[derive(Debug, Clone, PartialEq)]
+pub enum SerializableProgram {
+    PlutusV1Program(Program<DeBruijn>),
+    PlutusV2Program(Program<DeBruijn>),
+    PlutusV3Program(Program<DeBruijn>),
+}
+
+impl SerializableProgram {
+    pub fn inner(&self) -> &Program<DeBruijn> {
+        use SerializableProgram::*;
+
+        match self {
+            PlutusV1Program(program) => program,
+            PlutusV2Program(program) => program,
+            PlutusV3Program(program) => program,
+        }
+    }
+
+    pub fn map<F>(self, f: F) -> Self
+    where
+        F: FnOnce(Program<DeBruijn>) -> Program<DeBruijn>,
+    {
+        use SerializableProgram::*;
+
+        match self {
+            PlutusV1Program(program) => PlutusV1Program(f(program)),
+            PlutusV2Program(program) => PlutusV2Program(f(program)),
+            PlutusV3Program(program) => PlutusV3Program(f(program)),
+        }
+    }
+
+    pub fn compiled_code_and_hash(&self) -> (String, pallas_crypto::hash::Hash<28>) {
+        use SerializableProgram::*;
+
+        match self {
+            PlutusV1Program(pgrm) => {
+                let cbor = pgrm.to_cbor().unwrap();
+                let compiled_code = hex::encode(&cbor);
+                let hash = conway::PlutusV1Script(cbor.into()).compute_hash();
+                (compiled_code, hash)
+            }
+
+            PlutusV2Program(pgrm) => {
+                let cbor = pgrm.to_cbor().unwrap();
+                let compiled_code = hex::encode(&cbor);
+                let hash = conway::PlutusV2Script(cbor.into()).compute_hash();
+                (compiled_code, hash)
+            }
+
+            PlutusV3Program(pgrm) => {
+                let cbor = pgrm.to_cbor().unwrap();
+                let compiled_code = hex::encode(&cbor);
+                let hash = conway::PlutusV3Script(cbor.into()).compute_hash();
+                (compiled_code, hash)
+            }
+        }
+    }
+}
+
+impl Serialize for SerializableProgram {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let cbor = self.to_cbor().unwrap();
+        let (compiled_code, hash) = self.compiled_code_and_hash();
         let mut s = serializer.serialize_struct("Program<DeBruijn>", 2)?;
-        s.serialize_field("compiledCode", &hex::encode(&cbor))?;
-        s.serialize_field("hash", &conway::PlutusV2Script(cbor.into()).compute_hash())?;
+        s.serialize_field("compiledCode", &compiled_code)?;
+        s.serialize_field("hash", &hash)?;
         s.end()
     }
 }
 
-impl<'a> Deserialize<'a> for Program<DeBruijn> {
+impl<'a> Deserialize<'a> for SerializableProgram {
     fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
         #[derive(serde::Deserialize)]
         #[serde(field_identifier, rename_all = "camelCase")]
         enum Fields {
             CompiledCode,
+            Hash,
         }
 
         struct ProgramVisitor;
 
         impl<'a> Visitor<'a> for ProgramVisitor {
-            type Value = Program<DeBruijn>;
+            type Value = SerializableProgram;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("Program<Visitor>")
+                formatter.write_str("validator")
             }
 
-            fn visit_map<V>(self, mut map: V) -> Result<Program<DeBruijn>, V::Error>
+            fn visit_map<V>(self, mut map: V) -> Result<SerializableProgram, V::Error>
             where
                 V: MapAccess<'a>,
             {
                 let mut compiled_code: Option<String> = None;
+                let mut hash: Option<String> = None;
                 while let Some(key) = map.next_key()? {
                     match key {
                         Fields::CompiledCode => {
@@ -151,10 +212,19 @@ impl<'a> Deserialize<'a> for Program<DeBruijn> {
                             }
                             compiled_code = Some(map.next_value()?);
                         }
+
+                        Fields::Hash => {
+                            if hash.is_some() {
+                                return Err(de::Error::duplicate_field("hash"));
+                            }
+                            hash = Some(map.next_value()?);
+                        }
                     }
                 }
                 let compiled_code =
                     compiled_code.ok_or_else(|| de::Error::missing_field("compiledCode"))?;
+
+                let hash = hash.ok_or_else(|| de::Error::missing_field("hash"))?;
 
                 let mut cbor_buffer = Vec::new();
                 let mut flat_buffer = Vec::new();
@@ -166,10 +236,29 @@ impl<'a> Deserialize<'a> for Program<DeBruijn> {
                             &"a base16-encoded CBOR-serialized UPLC program",
                         )
                     })
+                    .and_then(|program| {
+                        let cbor = || program.to_cbor().unwrap().into();
+
+                        if conway::PlutusV3Script(cbor()).compute_hash().to_string() == hash {
+                            return Ok(SerializableProgram::PlutusV3Program(program));
+                        }
+
+                        if conway::PlutusV2Script(cbor()).compute_hash().to_string() == hash {
+                            return Ok(SerializableProgram::PlutusV2Program(program));
+                        }
+
+                        if conway::PlutusV1Script(cbor()).compute_hash().to_string() == hash {
+                            return Ok(SerializableProgram::PlutusV1Program(program));
+                        }
+
+                        Err(de::Error::custom(
+                            "hash doesn't match any recognisable Plutus version.",
+                        ))
+                    })
             }
         }
 
-        const FIELDS: &[&str] = &["compiledCode"];
+        const FIELDS: &[&str] = &["compiledCode", "hash"];
         deserializer.deserialize_struct("Program<DeBruijn>", FIELDS, ProgramVisitor)
     }
 }
@@ -789,8 +878,12 @@ impl Program<NamedDeBruijn> {
 impl Program<DeBruijn> {
     pub fn eval(&self, initial_budget: ExBudget) -> EvalResult {
         let program: Program<NamedDeBruijn> = self.clone().into();
-
         program.eval(initial_budget)
+    }
+
+    pub fn eval_version(self, initial_budget: ExBudget, version: &Language) -> EvalResult {
+        let program: Program<NamedDeBruijn> = self.clone().into();
+        program.eval_version(initial_budget, version)
     }
 }
 

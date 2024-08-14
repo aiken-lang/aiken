@@ -13,13 +13,14 @@ for p in ${TESTS[@]}; do
   exit_codes+=("$?")
 done
 
-
-for interaction in $(find script_context/validators -type f); do
-  title=$(basename $interaction)
-  title="${title%.*}"
-  cd script_context && ./test.sh $title
-  exit_codes+=("$?")
-  cd -
+for lang in $(ls script_context); do
+  for interaction in $(find script_context/$lang/validators -type f); do
+    title=$(basename $interaction)
+    title="${title%.*}"
+    cd script_context/$lang && ./test.sh $title
+    exit_codes+=("$?")
+    cd -
+  done
 done
 
 for code in ${exit_codes[@]}; do

@@ -1,0 +1,10 @@
+name = "script_context/v2"
+version = "0.0.0"
+plutus = "v2"
+license = "Apache-2.0"
+description = "Aiken contracts for project 'script_context/v2'"
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "main"
+source = "github"

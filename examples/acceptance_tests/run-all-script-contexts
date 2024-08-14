@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+
+AIKEN=${1:-"cargo run -r --quiet --"}
+
+TESTS=()
+for lang in $(ls script_context); do
+  for interaction in $(find script_context/$lang/validators -type f); do
+    title=$(basename $interaction)
+    title="${title%.*}"
+    cd script_context/$lang
+    echo "running $lang/$title..."
+    ./test.sh $title "$AIKEN"
+    TESTS+=("$title,$lang,$?")
+    cd - 1>/dev/null
+  done
+done
+
+for args in ${TESTS[@]}; do
+  IFS=',' read title lang code <<< "${args}"
+  log="script_context/$lang/$title.log"
+  if [ $code -ne 0 ]; then
+    echo "=== $lang/$title ❌ (code=$code)"
+    cat $log && rm -f $log
+    exit $code
+  else
+    echo "=== $lang/$title ✅"
+    cat $log && rm -f $log
+  fi
+  echo ""
+done

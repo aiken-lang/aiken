@@ -1,14 +1,12 @@
-use std::{collections::VecDeque, mem::size_of, ops::Deref, rc::Rc};
-
+use super::{runtime::BuiltinRuntime, Error};
 use crate::{
     ast::{Constant, NamedDeBruijn, Term, Type},
     builtins::DefaultFunction,
 };
 use num_bigint::BigInt;
 use num_traits::{Signed, ToPrimitive, Zero};
-use pallas_primitives::babbage::{self, PlutusData};
-
-use super::{runtime::BuiltinRuntime, Error};
+use pallas_primitives::conway::{self, PlutusData};
+use std::{collections::VecDeque, mem::size_of, ops::Deref, rc::Rc};
 
 pub(super) type Env = Rc<Vec<Value>>;
 
@@ -398,44 +396,41 @@ pub fn integer_log2(i: BigInt) -> i64 {
     }
 }
 
-pub fn from_pallas_bigint(n: &babbage::BigInt) -> BigInt {
+pub fn from_pallas_bigint(n: &conway::BigInt) -> BigInt {
     match n {
-        babbage::BigInt::Int(i) => i128::from(*i).into(),
-        babbage::BigInt::BigUInt(bytes) => BigInt::from_bytes_be(num_bigint::Sign::Plus, bytes),
-        babbage::BigInt::BigNInt(bytes) => {
-            BigInt::from_bytes_be(num_bigint::Sign::Minus, bytes) - 1
-        }
+        conway::BigInt::Int(i) => i128::from(*i).into(),
+        conway::BigInt::BigUInt(bytes) => BigInt::from_bytes_be(num_bigint::Sign::Plus, bytes),
+        conway::BigInt::BigNInt(bytes) => BigInt::from_bytes_be(num_bigint::Sign::Minus, bytes) - 1,
     }
 }
 
-pub fn to_pallas_bigint(n: &BigInt) -> babbage::BigInt {
+pub fn to_pallas_bigint(n: &BigInt) -> conway::BigInt {
     if let Some(i) = n.to_i128() {
         if let Ok(i) = i.try_into() {
             let pallas_int: pallas_codec::utils::Int = i;
-            return babbage::BigInt::Int(pallas_int);
+            return conway::BigInt::Int(pallas_int);
         }
     }
 
     if n.is_positive() {
         let (_, bytes) = n.to_bytes_be();
-        babbage::BigInt::BigUInt(bytes.into())
+        conway::BigInt::BigUInt(bytes.into())
     } else {
         // Note that this would break if n == 0
         // BUT n == 0 always fits into 64bits and hence would end up in the first branch.
         let n: BigInt = n + 1;
         let (_, bytes) = n.to_bytes_be();
-        babbage::BigInt::BigNInt(bytes.into())
+        conway::BigInt::BigNInt(bytes.into())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use num_bigint::BigInt;
-
     use crate::{
         ast::Constant,
         machine::value::{integer_log2, Value},
     };
+    use num_bigint::BigInt;
 
     #[test]
     fn to_ex_mem_bigint() {

@@ -1,16 +1,13 @@
-use std::{ops::Neg, rc::Rc, str::FromStr};
-
 use crate::{
     ast::{Constant, Name, Program, Term, Type},
     builtins::DefaultFunction,
-    machine::runtime::Compressable,
-    machine::value::to_pallas_bigint,
+    machine::{runtime::Compressable, value::to_pallas_bigint},
 };
-
 use interner::Interner;
 use num_bigint::BigInt;
 use pallas_primitives::alonzo::PlutusData;
 use peg::{error::ParseError, str::LineCol};
+use std::{ops::Neg, rc::Rc, str::FromStr};
 
 pub mod interner;
 
@@ -195,10 +192,10 @@ peg::parser! {
           = n:$(['0'..='9']+) {? n.parse().or(Err("usize")) }
 
         rule number() -> isize
-          = n:$("-"* ['0'..='9']+) {? n.parse().or(Err("isize")) }
+          = n:$(("-"/"+")* ['0'..='9']+) {? n.parse().or(Err("isize")) }
 
         rule big_number() -> BigInt
-          = n:$("-"* ['0'..='9']+) {? (if n.starts_with('-') { BigInt::parse_bytes(&n.as_bytes()[1..], 10).map(|i| i.neg()) } else { BigInt::parse_bytes(n.as_bytes(), 10) }).ok_or("BigInt") }
+          = n:$(("-"/"+")* ['0'..='9']+) {? (if n.starts_with('-') { BigInt::parse_bytes(&n.as_bytes()[1..], 10).map(|i| i.neg()) } else { BigInt::parse_bytes(n.as_bytes(), 10) }).ok_or("BigInt") }
 
         rule boolean() -> bool
           = b:$("True" / "False") { b == "True" }
@@ -375,11 +372,12 @@ peg::parser! {
 
 #[cfg(test)]
 mod tests {
+    use crate::{
+        ast::{Constant, Name, Program, Term, Type, Unique},
+        builtins::DefaultFunction,
+    };
     use num_bigint::BigInt;
     use pretty_assertions::assert_eq;
-
-    use crate::ast::{Constant, Name, Program, Term, Type, Unique};
-    use crate::builtins::DefaultFunction;
     use std::rc::Rc;
 
     #[test]

@@ -9,13 +9,14 @@ use crate::module::{CheckedModule, CheckedModules};
 use aiken_lang::{
     ast::{Annotation, TypedArg, TypedFunction, TypedValidator},
     gen_uplc::CodeGenerator,
+    plutus_version::PlutusVersion,
     tipo::Type,
 };
 use miette::NamedSource;
 use serde;
 use std::borrow::Borrow;
 use uplc::{
-    ast::{Constant, DeBruijn, Program},
+    ast::{Constant, SerializableProgram},
     PlutusData,
 };
 
@@ -36,7 +37,7 @@ pub struct Validator {
     pub parameters: Vec<Parameter>,
 
     #[serde(flatten)]
-    pub program: Program<DeBruijn>,
+    pub program: SerializableProgram,
 
     #[serde(skip_serializing_if = "Definitions::is_empty")]
     #[serde(default)]
@@ -49,6 +50,7 @@ impl Validator {
         generator: &mut CodeGenerator,
         module: &CheckedModule,
         def: &TypedValidator,
+        plutus_version: &PlutusVersion,
     ) -> Vec<Result<Validator, Error>> {
         let is_multi_validator = def.other_fun.is_some();
 
@@ -62,6 +64,7 @@ impl Validator {
             &def.fun,
             is_multi_validator,
             &mut program,
+            plutus_version,
         )];
 
         if let Some(ref other_func) = def.other_fun {
@@ -73,12 +76,14 @@ impl Validator {
                 other_func,
                 is_multi_validator,
                 &mut program,
+                plutus_version,
             ));
         }
 
         validators
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn create_validator_blueprint(
         generator: &mut CodeGenerator,
         modules: &CheckedModules,
@@ -87,6 +92,7 @@ impl Validator {
         func: &TypedFunction,
         is_multi_validator: bool,
         program: &mut MemoProgram,
+        plutus_version: &PlutusVersion,
     ) -> Result<Validator, Error> {
         let mut args = func.arguments.iter().rev();
         let (_, redeemer, datum) = (args.next(), args.next().unwrap(), args.next());
@@ -168,7 +174,11 @@ impl Validator {
             parameters,
             datum,
             redeemer,
-            program: program.get(generator, def, &module.name),
+            program: match plutus_version {
+                PlutusVersion::V1 => SerializableProgram::PlutusV1Program,
+                PlutusVersion::V2 => SerializableProgram::PlutusV2Program,
+                PlutusVersion::V3 => SerializableProgram::PlutusV3Program,
+            }(program.get(generator, def, &module.name)),
             definitions,
         })
     }
@@ -208,7 +218,7 @@ impl Validator {
             Some((head, tail)) => {
                 head.validate(definitions, &Constant::Data(arg.clone()))?;
                 Ok(Self {
-                    program: self.program.apply_data(arg.clone()),
+                    program: self.program.map(|program| program.apply_data(arg.clone())),
                     parameters: tail.to_vec(),
                     ..self
                 })
@@ -284,7 +294,7 @@ mod tests {
                 .next()
                 .expect("source code did no yield any validator");
 
-            let validators = Validator::from_checked_module(&modules, &mut generator, validator, def);
+            let validators = Validator::from_checked_module(&modules, &mut generator, validator, def, &PlutusVersion::default());
 
             if validators.len() > 1 {
                 panic!("Multi-validator given to test bench. Don't do that.")

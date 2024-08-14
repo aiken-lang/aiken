@@ -6,10 +6,10 @@ use crate::{
 };
 
 pub fn parser(
-    expression: Recursive<'_, Token, UntypedPattern, ParseError>,
+    pattern: Recursive<'_, Token, UntypedPattern, ParseError>,
 ) -> impl Parser<Token, UntypedPattern, Error = ParseError> + '_ {
     select! {Token::UpName { name } => name}
-        .then(args(expression))
+        .then(args(pattern))
         .map_with_span(
             |(name, (arguments, spread_location, is_record)), location| {
                 UntypedPattern::Constructor {
@@ -27,13 +27,13 @@ pub fn parser(
 }
 
 pub(crate) fn args(
-    expression: Recursive<'_, Token, UntypedPattern, ParseError>,
+    pattern: Recursive<'_, Token, UntypedPattern, ParseError>,
 ) -> impl Parser<Token, (Vec<CallArg<UntypedPattern>>, Option<Span>, bool), Error = ParseError> + '_
 {
     let record_constructor_pattern_arg_parser = choice((
         select! {Token::Name {name} => name}
             .then_ignore(just(Token::Colon))
-            .then(expression.clone())
+            .then(pattern.clone())
             .map_with_span(|(name, pattern), span| CallArg {
                 location: span,
                 label: Some(name),
@@ -59,7 +59,7 @@ pub(crate) fn args(
     )
     .delimited_by(just(Token::LeftBrace), just(Token::RightBrace));
 
-    let tuple_constructor_pattern_arg_parser = expression
+    let tuple_constructor_pattern_arg_parser = pattern
         .clone()
         .map(|pattern| CallArg {
             location: pattern.location(),
