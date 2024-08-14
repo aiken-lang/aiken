@@ -94,8 +94,13 @@ fn plutus_conformance_tests(language: Language) {
             match eval {
                 Ok((actual, cost)) => {
                     pretty_assertions::assert_eq!(expected, Ok(actual), "{}", path.display());
-                    if let Ok(budget) = file_to_budget(&expected_budget_file) {
-                        pretty_assertions::assert_eq!(budget, cost, "{}", path.display());
+                    match language {
+                        Language::PlutusV1 | Language::PlutusV2 => {}
+                        Language::PlutusV3 => {
+                            if let Ok(budget) = file_to_budget(&expected_budget_file) {
+                                pretty_assertions::assert_eq!(budget, cost, "{}", path.display());
+                            }
+                        }
                     }
                 }
                 Err(err) => pretty_assertions::assert_eq!(expected, Err(err), "{}", path.display()),

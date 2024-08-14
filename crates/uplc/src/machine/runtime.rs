@@ -485,8 +485,8 @@ impl DefaultFunction {
                         wrap.try_into().unwrap()
                     }
                     BuiltinSemantics::V2 => {
-                        if *arg1 > 255.into() {
-                            return Err(Error::ByteStringConsBiggerThanOneByte(arg1.clone()));
+                        if *arg1 > 255.into() || *arg1 < 0.into() {
+                            return Err(Error::ByteStringConsNotAByte(arg1.clone()));
                         }
 
                         arg1.try_into().unwrap()

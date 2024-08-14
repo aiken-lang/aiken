@@ -1320,116 +1320,84 @@ impl BuiltinCosts {
                     intercept: 0,
                     slope: 1,
                 }),
-                cpu: TwoArguments::AddedSizes(AddedSizes {
+                cpu: TwoArguments::MultipliedSizes(MultipliedSizes {
                     intercept: 90434,
                     slope: 519,
                 }),
             },
-            // FIXME: Costing function for divide_integer has changed in v3
-            //
-            // "divideInteger-cpu-arguments-constant": 85848,
-            // "divideInteger-cpu-arguments-model-arguments-c00": 123203,
-            // "divideInteger-cpu-arguments-model-arguments-c01": 7305,
-            // "divideInteger-cpu-arguments-model-arguments-c02": -900,
-            // "divideInteger-cpu-arguments-model-arguments-c10": 1716,
-            // "divideInteger-cpu-arguments-model-arguments-c11": 549,
-            // "divideInteger-cpu-arguments-model-arguments-c20": 57,
-            // "divideInteger-cpu-arguments-model-arguments-minimum": 85848,
-            // "divideInteger-memory-arguments-intercept": 0,
-            // "divideInteger-memory-arguments-minimum": 1,
-            // "divideInteger-memory-arguments-slope": 1,
             divide_integer: CostingFun {
                 mem: TwoArguments::SubtractedSizes(SubtractedSizes {
                     intercept: 0,
                     slope: 1,
                     minimum: 1,
                 }),
-                cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
-                    constant: 196500,
-                    model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
-                        intercept: 453240,
-                        slope: 220,
-                    })),
-                }),
+                cpu: TwoArguments::ConstAboveDiagonalIntoQuadraticXAndY(
+                    85848,
+                    TwoArgumentsQuadraticFunction {
+                        minimum: 85848,
+                        coeff_00: 123203,
+                        coeff_01: 7305,
+                        coeff_02: -900,
+                        coeff_10: 1716,
+                        coeff_11: 549,
+                        coeff_20: 57,
+                    },
+                ),
             },
-            // FIXME Costing function for quotient_integer has changed in v3
-            //
-            // "quotientInteger-cpu-arguments-constant": 85848,
-            // "quotientInteger-cpu-arguments-model-arguments-c00": 123203,
-            // "quotientInteger-cpu-arguments-model-arguments-c01": 7305,
-            // "quotientInteger-cpu-arguments-model-arguments-c02": -900,
-            // "quotientInteger-cpu-arguments-model-arguments-c10": 1716,
-            // "quotientInteger-cpu-arguments-model-arguments-c11": 549,
-            // "quotientInteger-cpu-arguments-model-arguments-c20": 57,
-            // "quotientInteger-cpu-arguments-model-arguments-minimum": 85848,
-            // "quotientInteger-memory-arguments-intercept": 0,
-            // "quotientInteger-memory-arguments-minimum": 1,
-            // "quotientInteger-memory-arguments-slope": 1,
             quotient_integer: CostingFun {
                 mem: TwoArguments::SubtractedSizes(SubtractedSizes {
                     intercept: 0,
                     slope: 1,
                     minimum: 1,
                 }),
-                cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
-                    constant: 196500,
-                    model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
-                        intercept: 453240,
-                        slope: 220,
-                    })),
-                }),
+                cpu: TwoArguments::ConstAboveDiagonalIntoQuadraticXAndY(
+                    85848,
+                    TwoArgumentsQuadraticFunction {
+                        minimum: 85848,
+                        coeff_00: 123203,
+                        coeff_01: 7305,
+                        coeff_02: -900,
+                        coeff_10: 1716,
+                        coeff_11: 549,
+                        coeff_20: 57,
+                    },
+                ),
             },
-            // FIXME Costing function for remainder_integer has changed in v3
-            //
-            // "remainderInteger-cpu-arguments-constant": 85848,
-            // "remainderInteger-cpu-arguments-model-arguments-c00": 123203,
-            // "remainderInteger-cpu-arguments-model-arguments-c01": 7305,
-            // "remainderInteger-cpu-arguments-model-arguments-c02": -900,
-            // "remainderInteger-cpu-arguments-model-arguments-c10": 1716,
-            // "remainderInteger-cpu-arguments-model-arguments-c11": 549,
-            // "remainderInteger-cpu-arguments-model-arguments-c20": 57,
-            // "remainderInteger-cpu-arguments-model-arguments-minimum": 85848,
-            // "remainderInteger-memory-arguments-intercept": 0,
-            // "remainderInteger-memory-arguments-slope": 1,
             remainder_integer: CostingFun {
-                mem: TwoArguments::SubtractedSizes(SubtractedSizes {
+                mem: TwoArguments::LinearInY(LinearSize {
                     intercept: 0,
                     slope: 1,
-                    minimum: 1,
                 }),
-                cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
-                    constant: 196500,
-                    model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
-                        intercept: 453240,
-                        slope: 220,
-                    })),
-                }),
+                cpu: TwoArguments::ConstAboveDiagonalIntoQuadraticXAndY(
+                    85848,
+                    TwoArgumentsQuadraticFunction {
+                        minimum: 85848,
+                        coeff_00: 123203,
+                        coeff_01: 7305,
+                        coeff_02: -900,
+                        coeff_10: 1716,
+                        coeff_11: 549,
+                        coeff_20: 57,
+                    },
+                ),
             },
-            // FIXME: Costing function for mod_integer has changed in v3
-            //
-            // "modInteger-cpu-arguments-constant": 85848,
-            // "modInteger-cpu-arguments-model-arguments-c00": 123203,
-            // "modInteger-cpu-arguments-model-arguments-c01": 7305,
-            // "modInteger-cpu-arguments-model-arguments-c02": -900,
-            // "modInteger-cpu-arguments-model-arguments-c10": 1716,
-            // "modInteger-cpu-arguments-model-arguments-c11": 549,
-            // "modInteger-cpu-arguments-model-arguments-c20": 57,
-            // "modInteger-cpu-arguments-model-arguments-minimum": 85848,
-            // "modInteger-memory-arguments-intercept": 0,
-            // "modInteger-memory-arguments-slope": 1,
             mod_integer: CostingFun {
-                mem: TwoArguments::SubtractedSizes(SubtractedSizes {
+                mem: TwoArguments::LinearInY(LinearSize {
                     intercept: 0,
                     slope: 1,
-                    minimum: 1,
                 }),
-                cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
-                    constant: 196500,
-                    model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
-                        intercept: 453240,
-                        slope: 220,
-                    })),
-                }),
+                cpu: TwoArguments::ConstAboveDiagonalIntoQuadraticXAndY(
+                    85848,
+                    TwoArgumentsQuadraticFunction {
+                        minimum: 85848,
+                        coeff_00: 123203,
+                        coeff_01: 7305,
+                        coeff_02: -900,
+                        coeff_10: 1716,
+                        coeff_11: 549,
+                        coeff_20: 57,
+                    },
+                ),
             },
             equals_integer: CostingFun {
                 mem: TwoArguments::ConstantCost(1),
@@ -1479,7 +1447,7 @@ impl BuiltinCosts {
                 }),
                 cpu: ThreeArguments::LinearInZ(LinearSize {
                     intercept: 20467,
-                    slope: 0,
+                    slope: 1,
                 }),
             },
             length_of_byte_string: CostingFun {
@@ -1535,7 +1503,7 @@ impl BuiltinCosts {
             },
             verify_ed25519_signature: CostingFun {
                 mem: ThreeArguments::ConstantCost(10),
-                cpu: ThreeArguments::LinearInZ(LinearSize {
+                cpu: ThreeArguments::LinearInY(LinearSize {
                     intercept: 53384111,
                     slope: 14333,
                 }),
@@ -3158,14 +3126,26 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                         .get("multiply_integer-mem-arguments-slope")
                         .unwrap_or(&30000000000),
                 }),
-                cpu: TwoArguments::AddedSizes(AddedSizes {
-                    intercept: *cost_map
-                        .get("multiply_integer-cpu-arguments-intercept")
-                        .unwrap_or(&30000000000),
-                    slope: *cost_map
-                        .get("multiply_integer-cpu-arguments-slope")
-                        .unwrap_or(&30000000000),
-                }),
+                cpu: match version {
+                    Language::PlutusV1 | Language::PlutusV2 => {
+                        TwoArguments::AddedSizes(AddedSizes {
+                            intercept: *cost_map
+                                .get("multiply_integer-cpu-arguments-intercept")
+                                .unwrap_or(&30000000000),
+                            slope: *cost_map
+                                .get("multiply_integer-cpu-arguments-slope")
+                                .unwrap_or(&30000000000),
+                        })
+                    }
+                    Language::PlutusV3 => TwoArguments::MultipliedSizes(MultipliedSizes {
+                        intercept: *cost_map
+                            .get("multiply_integer-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("multiply_integer-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                },
             },
             divide_integer: CostingFun {
                 mem: TwoArguments::SubtractedSizes(SubtractedSizes {
@@ -3179,19 +3159,51 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                         .get("divide_integer-mem-arguments-minimum")
                         .unwrap_or(&30000000000),
                 }),
-                cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
-                    constant: *cost_map
-                        .get("divide_integer-cpu-arguments-constant")
-                        .unwrap_or(&30000000000),
-                    model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
-                        intercept: *cost_map
-                            .get("divide_integer-cpu-arguments-model-arguments-intercept")
+                cpu: match version {
+                    Language::PlutusV1 | Language::PlutusV2 => {
+                        TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
+                            constant: *cost_map
+                                .get("divide_integer-cpu-arguments-constant")
+                                .unwrap_or(&30000000000),
+                            model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
+                                intercept: *cost_map
+                                    .get("divide_integer-cpu-arguments-model-arguments-intercept")
+                                    .unwrap_or(&30000000000),
+                                slope: *cost_map
+                                    .get("divide_integer-cpu-arguments-model-arguments-slope")
+                                    .unwrap_or(&30000000000),
+                            })),
+                        })
+                    }
+                    Language::PlutusV3 => TwoArguments::ConstAboveDiagonalIntoQuadraticXAndY(
+                        *cost_map
+                            .get("divide_integer-cpu-arguments-constant")
                             .unwrap_or(&30000000000),
-                        slope: *cost_map
-                            .get("divide_integer-cpu-arguments-model-arguments-slope")
-                            .unwrap_or(&30000000000),
-                    })),
-                }),
+                        TwoArgumentsQuadraticFunction {
+                            minimum: *cost_map
+                                .get("divide_integer-cpu-arguments-minimum")
+                                .unwrap_or(&30000000000),
+                            coeff_00: *cost_map
+                                .get("divide_integer-cpu-arguments-c00")
+                                .unwrap_or(&30000000000),
+                            coeff_10: *cost_map
+                                .get("divide_integer-cpu-arguments-c10")
+                                .unwrap_or(&30000000000),
+                            coeff_01: *cost_map
+                                .get("divide_integer-cpu-arguments-c01")
+                                .unwrap_or(&30000000000),
+                            coeff_20: *cost_map
+                                .get("divide_integer-cpu-arguments-c20")
+                                .unwrap_or(&30000000000),
+                            coeff_11: *cost_map
+                                .get("divide_integer-cpu-arguments-c11")
+                                .unwrap_or(&30000000000),
+                            coeff_02: *cost_map
+                                .get("divide_integer-cpu-arguments-c02")
+                                .unwrap_or(&30000000000),
+                        },
+                    ),
+                },
             },
             quotient_integer: CostingFun {
                 mem: TwoArguments::SubtractedSizes(SubtractedSizes {
@@ -3205,71 +3217,193 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                         .get("quotient_integer-mem-arguments-minimum")
                         .unwrap_or(&30000000000),
                 }),
-                cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
-                    constant: *cost_map
-                        .get("quotient_integer-cpu-arguments-constant")
-                        .unwrap_or(&30000000000),
-                    model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
-                        intercept: *cost_map
-                            .get("quotient_integer-cpu-arguments-model-arguments-intercept")
+                cpu: match version {
+                    Language::PlutusV1 | Language::PlutusV2 => {
+                        TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
+                            constant: *cost_map
+                                .get("quotient_integer-cpu-arguments-constant")
+                                .unwrap_or(&30000000000),
+                            model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
+                                intercept: *cost_map
+                                    .get("quotient_integer-cpu-arguments-model-arguments-intercept")
+                                    .unwrap_or(&30000000000),
+                                slope: *cost_map
+                                    .get("quotient_integer-cpu-arguments-model-arguments-slope")
+                                    .unwrap_or(&30000000000),
+                            })),
+                        })
+                    }
+                    Language::PlutusV3 => TwoArguments::ConstAboveDiagonalIntoQuadraticXAndY(
+                        *cost_map
+                            .get("quotient_integer-cpu-arguments-constant")
                             .unwrap_or(&30000000000),
-                        slope: *cost_map
-                            .get("quotient_integer-cpu-arguments-model-arguments-slope")
-                            .unwrap_or(&30000000000),
-                    })),
-                }),
+                        TwoArgumentsQuadraticFunction {
+                            minimum: *cost_map
+                                .get("quotient_integer-cpu-arguments-minimum")
+                                .unwrap_or(&30000000000),
+                            coeff_00: *cost_map
+                                .get("quotient_integer-cpu-arguments-c00")
+                                .unwrap_or(&30000000000),
+                            coeff_10: *cost_map
+                                .get("quotient_integer-cpu-arguments-c10")
+                                .unwrap_or(&30000000000),
+                            coeff_01: *cost_map
+                                .get("quotient_integer-cpu-arguments-c01")
+                                .unwrap_or(&30000000000),
+                            coeff_20: *cost_map
+                                .get("quotient_integer-cpu-arguments-c20")
+                                .unwrap_or(&30000000000),
+                            coeff_11: *cost_map
+                                .get("quotient_integer-cpu-arguments-c11")
+                                .unwrap_or(&30000000000),
+                            coeff_02: *cost_map
+                                .get("quotient_integer-cpu-arguments-c02")
+                                .unwrap_or(&30000000000),
+                        },
+                    ),
+                },
             },
             remainder_integer: CostingFun {
-                mem: TwoArguments::SubtractedSizes(SubtractedSizes {
-                    intercept: *cost_map
-                        .get("remainder_integer-mem-arguments-intercept")
-                        .unwrap_or(&30000000000),
-                    slope: *cost_map
-                        .get("remainder_integer-mem-arguments-slope")
-                        .unwrap_or(&30000000000),
-                    minimum: *cost_map
-                        .get("remainder_integer-mem-arguments-minimum")
-                        .unwrap_or(&30000000000),
-                }),
-                cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
-                    constant: *cost_map
-                        .get("remainder_integer-cpu-arguments-constant")
-                        .unwrap_or(&30000000000),
-                    model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
+                mem: match version {
+                    Language::PlutusV1 | Language::PlutusV2 => {
+                        TwoArguments::SubtractedSizes(SubtractedSizes {
+                            intercept: *cost_map
+                                .get("remainder_integer-mem-arguments-intercept")
+                                .unwrap_or(&30000000000),
+                            slope: *cost_map
+                                .get("remainder_integer-mem-arguments-slope")
+                                .unwrap_or(&30000000000),
+                            minimum: *cost_map
+                                .get("remainder_integer-mem-arguments-minimum")
+                                .unwrap_or(&30000000000),
+                        })
+                    }
+                    Language::PlutusV3 => TwoArguments::LinearInY(LinearSize {
                         intercept: *cost_map
-                            .get("remainder_integer-cpu-arguments-model-arguments-intercept")
+                            .get("remainder_integer-mem-arguments-intercept")
                             .unwrap_or(&30000000000),
                         slope: *cost_map
-                            .get("remainder_integer-cpu-arguments-model-arguments-slope")
+                            .get("remainder_integer-mem-arguments-slope")
                             .unwrap_or(&30000000000),
-                    })),
-                }),
+                    }),
+                },
+                cpu: match version {
+                    Language::PlutusV1 | Language::PlutusV2 => {
+                        TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
+                            constant: *cost_map
+                                .get("remainder_integer-cpu-arguments-constant")
+                                .unwrap_or(&30000000000),
+                            model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
+                                intercept: *cost_map
+                                    .get(
+                                        "remainder_integer-cpu-arguments-model-arguments-intercept",
+                                    )
+                                    .unwrap_or(&30000000000),
+                                slope: *cost_map
+                                    .get("remainder_integer-cpu-arguments-model-arguments-slope")
+                                    .unwrap_or(&30000000000),
+                            })),
+                        })
+                    }
+                    Language::PlutusV3 => TwoArguments::ConstAboveDiagonalIntoQuadraticXAndY(
+                        *cost_map
+                            .get("remainder_integer-cpu-arguments-constant")
+                            .unwrap_or(&30000000000),
+                        TwoArgumentsQuadraticFunction {
+                            minimum: *cost_map
+                                .get("remainder_integer-cpu-arguments-minimum")
+                                .unwrap_or(&30000000000),
+                            coeff_00: *cost_map
+                                .get("remainder_integer-cpu-arguments-c00")
+                                .unwrap_or(&30000000000),
+                            coeff_10: *cost_map
+                                .get("remainder_integer-cpu-arguments-c10")
+                                .unwrap_or(&30000000000),
+                            coeff_01: *cost_map
+                                .get("remainder_integer-cpu-arguments-c01")
+                                .unwrap_or(&30000000000),
+                            coeff_20: *cost_map
+                                .get("remainder_integer-cpu-arguments-c20")
+                                .unwrap_or(&30000000000),
+                            coeff_11: *cost_map
+                                .get("remainder_integer-cpu-arguments-c11")
+                                .unwrap_or(&30000000000),
+                            coeff_02: *cost_map
+                                .get("remainder_integer-cpu-arguments-c02")
+                                .unwrap_or(&30000000000),
+                        },
+                    ),
+                },
             },
             mod_integer: CostingFun {
-                mem: TwoArguments::SubtractedSizes(SubtractedSizes {
-                    intercept: *cost_map
-                        .get("mod_integer-mem-arguments-intercept")
-                        .unwrap_or(&30000000000),
-                    slope: *cost_map
-                        .get("mod_integer-mem-arguments-slope")
-                        .unwrap_or(&30000000000),
-                    minimum: *cost_map
-                        .get("mod_integer-mem-arguments-minimum")
-                        .unwrap_or(&30000000000),
-                }),
-                cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
-                    constant: *cost_map
-                        .get("mod_integer-cpu-arguments-constant")
-                        .unwrap_or(&30000000000),
-                    model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
+                mem: match version {
+                    Language::PlutusV1 | Language::PlutusV2 => {
+                        TwoArguments::SubtractedSizes(SubtractedSizes {
+                            intercept: *cost_map
+                                .get("mod_integer-mem-arguments-intercept")
+                                .unwrap_or(&30000000000),
+                            slope: *cost_map
+                                .get("mod_integer-mem-arguments-slope")
+                                .unwrap_or(&30000000000),
+                            minimum: *cost_map
+                                .get("mod_integer-mem-arguments-minimum")
+                                .unwrap_or(&30000000000),
+                        })
+                    }
+                    Language::PlutusV3 => TwoArguments::LinearInY(LinearSize {
                         intercept: *cost_map
-                            .get("mod_integer-cpu-arguments-model-arguments-intercept")
+                            .get("mod_integer-mem-arguments-intercept")
                             .unwrap_or(&30000000000),
                         slope: *cost_map
-                            .get("mod_integer-cpu-arguments-model-arguments-slope")
+                            .get("mod_integer-mem-arguments-slope")
                             .unwrap_or(&30000000000),
-                    })),
-                }),
+                    }),
+                },
+                cpu: match version {
+                    Language::PlutusV1 | Language::PlutusV2 => {
+                        TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
+                            constant: *cost_map
+                                .get("mod_integer-cpu-arguments-constant")
+                                .unwrap_or(&30000000000),
+                            model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
+                                intercept: *cost_map
+                                    .get("mod_integer-cpu-arguments-model-arguments-intercept")
+                                    .unwrap_or(&30000000000),
+                                slope: *cost_map
+                                    .get("mod_integer-cpu-arguments-model-arguments-slope")
+                                    .unwrap_or(&30000000000),
+                            })),
+                        })
+                    }
+                    Language::PlutusV3 => TwoArguments::ConstAboveDiagonalIntoQuadraticXAndY(
+                        *cost_map
+                            .get("mod_integer-cpu-arguments-constant")
+                            .unwrap_or(&30000000000),
+                        TwoArgumentsQuadraticFunction {
+                            minimum: *cost_map
+                                .get("mod_integer-cpu-arguments-minimum")
+                                .unwrap_or(&30000000000),
+                            coeff_00: *cost_map
+                                .get("mod_integer-cpu-arguments-c00")
+                                .unwrap_or(&30000000000),
+                            coeff_10: *cost_map
+                                .get("mod_integer-cpu-arguments-c10")
+                                .unwrap_or(&30000000000),
+                            coeff_01: *cost_map
+                                .get("mod_integer-cpu-arguments-c01")
+                                .unwrap_or(&30000000000),
+                            coeff_20: *cost_map
+                                .get("mod_integer-cpu-arguments-c20")
+                                .unwrap_or(&30000000000),
+                            coeff_11: *cost_map
+                                .get("mod_integer-cpu-arguments-c11")
+                                .unwrap_or(&30000000000),
+                            coeff_02: *cost_map
+                                .get("mod_integer-cpu-arguments-c02")
+                                .unwrap_or(&30000000000),
+                        },
+                    ),
+                },
             },
             equals_integer: CostingFun {
                 mem: TwoArguments::ConstantCost(
@@ -3493,14 +3627,21 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                         .get("verify_ed25519_signature-mem-arguments")
                         .unwrap_or(&30000000000),
                 ),
-                cpu: ThreeArguments::LinearInZ(LinearSize {
-                    intercept: *cost_map
-                        .get("verify_ed25519_signature-cpu-arguments-intercept")
-                        .unwrap_or(&30000000000),
-                    slope: *cost_map
-                        .get("verify_ed25519_signature-cpu-arguments-slope")
-                        .unwrap_or(&30000000000),
-                }),
+                cpu: {
+                    let sizes = LinearSize {
+                        intercept: *cost_map
+                            .get("verify_ed25519_signature-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("verify_ed25519_signature-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    };
+
+                    match version {
+                        Language::PlutusV1 | Language::PlutusV2 => ThreeArguments::LinearInZ(sizes),
+                        Language::PlutusV3 => ThreeArguments::LinearInY(sizes),
+                    }
+                },
             },
             verify_ecdsa_secp256k1_signature: CostingFun {
                 mem: ThreeArguments::ConstantCost(
@@ -4238,6 +4379,7 @@ pub enum TwoArguments {
     ConstAboveDiagonal(ConstantOrTwoArguments),
     ConstBelowDiagonal(ConstantOrTwoArguments),
     QuadraticInY(QuadraticFunction),
+    ConstAboveDiagonalIntoQuadraticXAndY(i64, TwoArgumentsQuadraticFunction),
 }
 
 impl TwoArguments {
@@ -4275,6 +4417,21 @@ impl TwoArguments {
                 }
             }
             TwoArguments::QuadraticInY(q) => q.coeff_0 + (q.coeff_1 * y) + (q.coeff_2 * y * y),
+            TwoArguments::ConstAboveDiagonalIntoQuadraticXAndY(constant, q) => {
+                if x < y {
+                    *constant
+                } else {
+                    std::cmp::max(
+                        q.minimum,
+                        q.coeff_00
+                            + q.coeff_10 * x
+                            + q.coeff_01 * y
+                            + q.coeff_20 * x * x
+                            + q.coeff_11 * x * y
+                            + q.coeff_02 * y * y,
+                    )
+                }
+            }
         }
     }
 }
@@ -4378,6 +4535,17 @@ pub struct QuadraticFunction {
     coeff_0: i64,
     coeff_1: i64,
     coeff_2: i64,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct TwoArgumentsQuadraticFunction {
+    minimum: i64,
+    coeff_00: i64,
+    coeff_10: i64,
+    coeff_01: i64,
+    coeff_20: i64,
+    coeff_11: i64,
+    coeff_02: i64,
 }
 
 #[repr(u8)]

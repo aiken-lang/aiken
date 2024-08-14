@@ -63,8 +63,8 @@ pub enum Error {
     Utf8(#[from] FromUtf8Error),
     #[error("Out of Bounds\n\nindex: {}\nbytestring: {}\npossible: 0 - {}", .0, hex::encode(.1), .1.len() - 1)]
     ByteStringOutOfBounds(BigInt, Vec<u8>),
-    #[error("Attempt to consByteString something bigger than one byte {0}")]
-    ByteStringConsBiggerThanOneByte(BigInt),
+    #[error("Attempt to consByteString something than isn't a byte between [0-255]: {0}")]
+    ByteStringConsNotAByte(BigInt),
     #[error("Divide By Zero\n\n{0} / {1}")]
     DivideByZero(BigInt, BigInt),
     #[error("Ed25519S PublicKey should be 32 bytes but it was {0}")]
