@@ -46,15 +46,7 @@ pub fn eval_redeemer(
             .apply_data(redeemer.data.clone())
             .apply_data(script_context.to_plutus_data()),
 
-            // FIXME: Temporary, but needed until https://github.com/aiken-lang/aiken/pull/977
-            // is implemented.
-            ScriptContext::V3 { .. } => if let Some(datum) = datum {
-                program.apply_data(datum)
-            } else {
-                program
-            }
-            .apply_data(redeemer.data.clone())
-            .apply_data(script_context.to_plutus_data()),
+            ScriptContext::V3 { .. } => program.apply_data(script_context.to_plutus_data()),
         };
 
         let mut eval_result = if let Some(costs) = cost_mdl_opt {

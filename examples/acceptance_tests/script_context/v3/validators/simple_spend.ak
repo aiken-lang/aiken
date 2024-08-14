@@ -3,30 +3,39 @@ use cardano/assets
 use cardano/credential.{Address, Script}
 use cardano/transaction.{
   InlineDatum, Input, Output, OutputReference, ScriptContext, ScriptInfo,
-  ScriptPurpose, Spend, Spending,
+  ScriptPurpose, Spend, Spending, Transaction,
 }
 
-validator {
-  fn spend(_tmp1: Void, _tmp2: Void, ctx: ScriptContext) {
-    assert_transaction_id(ctx.transaction.id)
+validator simple_spend {
+  spend(
+    _datum: Option<Void>,
+    _redeemer: Void,
+    output_ref: OutputReference,
+    transaction: Transaction,
+  ) {
+    assert_transaction_id(transaction.id)
 
-    assert_script_info(ctx.info)
+    assert_script_info(output_ref)
 
-    assert_inputs(ctx.transaction.inputs)
+    assert_inputs(transaction.inputs)
 
-    expect [] = ctx.transaction.outputs
+    expect [] = transaction.outputs
 
-    expect [] = ctx.transaction.reference_inputs
+    expect [] = transaction.reference_inputs
 
-    expect [] = ctx.transaction.extra_signatories
+    expect [] = transaction.extra_signatories
 
-    expect 42 == ctx.transaction.fee
+    expect 42 == transaction.fee
 
-    assert_redeemers(ctx.transaction.redeemers)
+    assert_redeemers(transaction.redeemers)
 
-    expect [] == dict.to_pairs(ctx.transaction.datums)
+    expect [] == dict.to_pairs(transaction.datums)
 
     True
+  }
+
+  else(_ctx) {
+    fail
   }
 }
 
@@ -36,15 +45,12 @@ fn assert_transaction_id(id: ByteArray) {
   Void
 }
 
-fn assert_script_info(info: ScriptInfo) {
+fn assert_script_info(info: OutputReference) {
   expect
-    Spending(
-      OutputReference {
-        transaction_id: #"0000000000000000000000000000000000000000000000000000000000000000",
-        output_index: 0,
-      },
-      Some(void()),
-    ) == info
+    OutputReference {
+      transaction_id: #"0000000000000000000000000000000000000000000000000000000000000000",
+      output_index: 0,
+    } == info
   Void
 }
 
