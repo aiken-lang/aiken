@@ -9,7 +9,7 @@ use crate::{
     ast::{
         Annotation, ArgName, ArgVia, DataType, Definition, Function, ModuleConstant, ModuleKind,
         RecordConstructor, RecordConstructorArg, Tracing, TypeAlias, TypedArg, TypedDefinition,
-        TypedModule, UntypedArg, UntypedDefinition, UntypedModule, Use, Validator,
+        TypedModule, TypedValidator, UntypedArg, UntypedDefinition, UntypedModule, Use, Validator,
     },
     builtins::{self, fuzzer, generic_var},
     tipo::{expr::infer_function, Span, Type, TypeVar},
@@ -209,7 +209,15 @@ fn infer_definition(
 
                         typed_fun.arguments.drain(0..params_length);
 
-                        // TODO: the expected number of args comes from the script purpose
+                        if !typed_fun.has_valid_purpose_name() {
+                            return Err(Error::UnknownPurpose {
+                                location: typed_fun
+                                    .location
+                                    .map(|start, _end| (start, start + typed_fun.name.len())),
+                                available_purposes: TypedValidator::available_purposes(),
+                            });
+                        }
+
                         if typed_fun.arguments.len() != typed_fun.validator_arity() {
                             return Err(Error::IncorrectValidatorArity {
                                 count: typed_fun.arguments.len() as u32,

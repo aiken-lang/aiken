@@ -23,16 +23,18 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
         .then(
             select! {Token::Name {name} => name}
                 .then(args_and_body())
-                .map(|(name, mut function)| {
+                .map_with_span(|(name, mut function), span| {
                     function.name = name;
+                    function.location.start = span.start;
 
                     function
                 })
                 .repeated()
                 .then(
                     just(Token::Else)
-                        .ignore_then(args_and_body().map(|mut function| {
+                        .ignore_then(args_and_body().map_with_span(|mut function, span| {
                             function.name = "else".to_string();
+                            function.location.start = span.start;
 
                             function
                         }))

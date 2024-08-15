@@ -277,6 +277,15 @@ impl TypedFunction {
             })
     }
 
+    pub fn has_valid_purpose_name(&self) -> bool {
+        self.name == PURPOSE_SPEND
+            || self.name == PURPOSE_PUBLISH
+            || self.name == PURPOSE_PROPOSE
+            || self.name == PURPOSE_MINT
+            || self.name == PURPOSE_WITHDRAW
+            || self.name == PURPOSE_VOTE
+    }
+
     pub fn validator_arity(&self) -> usize {
         if self.name == PURPOSE_SPEND
             || self.name == PURPOSE_PUBLISH
@@ -628,6 +637,17 @@ pub struct Validator<T, Arg, Expr> {
 }
 
 impl TypedValidator {
+    pub fn available_purposes() -> Vec<String> {
+        vec![
+            PURPOSE_SPEND.to_string(),
+            PURPOSE_MINT.to_string(),
+            PURPOSE_WITHDRAW.to_string(),
+            PURPOSE_PUBLISH.to_string(),
+            PURPOSE_VOTE.to_string(),
+            PURPOSE_PROPOSE.to_string(),
+        ]
+    }
+
     pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
         self.params
             .iter()

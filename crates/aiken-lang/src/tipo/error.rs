@@ -8,6 +8,7 @@ use crate::{
     pretty::Documentable,
 };
 use indoc::formatdoc;
+use itertools::Itertools;
 use miette::{Diagnostic, LabeledSpan};
 use ordinal::Ordinal;
 use owo_colors::{
@@ -1070,6 +1071,21 @@ The best thing to do from here is to remove it."#))]
         function: UntypedFunction,
         location: Span,
     },
+
+    #[error("I found a validator handler referring to an unknown purpose.\n")]
+    #[diagnostic(code("unknown::purpose"))]
+    #[diagnostic(help(
+        "Handler must be named after a known purpose. Here is a list of available purposes:\n{}",
+        available_purposes
+          .iter()
+          .map(|p| format!("-> {}", p.if_supports_color(Stdout, |s| s.green())))
+          .join("\n")
+    ))]
+    UnknownPurpose {
+        #[label("unknown purpose")]
+        location: Span,
+        available_purposes: Vec<String>,
+    },
 }
 
 impl ExtraData for Error {
@@ -1129,6 +1145,7 @@ impl ExtraData for Error {
             | Error::UnexpectedMultiPatternAssignment { .. }
             | Error::ExpectOnOpaqueType { .. }
             | Error::ValidatorMustReturnBool { .. }
+            | Error::UnknownPurpose { .. }
             | Error::MustInferFirst { .. } => None,
 
             Error::UnknownType { name, .. }
