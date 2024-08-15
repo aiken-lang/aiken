@@ -19,7 +19,7 @@ use crate::{
     },
     builtins::{
         bool, byte_array, data, function, int, list, option, pair, script_context, script_purpose,
-        void, PRELUDE, SCRIPT_PURPOSE_MINT, SCRIPT_PURPOSE_SPEND,
+        void, PRELUDE, SCRIPT_PURPOSE_MINT, SCRIPT_PURPOSE_SPEND, SCRIPT_PURPOSE_WITHDRAW,
     },
     expr::TypedExpr,
     gen_uplc::{
@@ -291,6 +291,27 @@ impl<'a> CodeGenerator<'a> {
                                         },
                                         spread_location: None,
                                         tipo: function(vec![byte_array()], script_purpose()),
+                                    },
+
+                                    "withdraw" => TypedPattern::Constructor {
+                                        is_record: false,
+                                        location: Span::empty(),
+                                        name: SCRIPT_PURPOSE_WITHDRAW.to_string(),
+                                        arguments: vec![CallArg {
+                                            label: None,
+                                            location: Span::empty(),
+                                            value: TypedPattern::Var {
+                                                name: "__purpose_arg__".to_string(),
+                                                location: Span::empty(),
+                                            },
+                                        }],
+                                        module: None,
+                                        constructor: PatternConstructor::Record {
+                                            name: SCRIPT_PURPOSE_WITHDRAW.to_string(),
+                                            field_map: None,
+                                        },
+                                        spread_location: None,
+                                        tipo: function(vec![data()], script_purpose()),
                                     },
 
                                     purpose => {

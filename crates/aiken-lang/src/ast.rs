@@ -1,5 +1,8 @@
 use crate::{
-    builtins::{self, g1_element, g2_element},
+    builtins::{
+        self, g1_element, g2_element, SCRIPT_CONTEXT, SCRIPT_PURPOSE, SCRIPT_PURPOSE_MINT,
+        SCRIPT_PURPOSE_SPEND, SCRIPT_PURPOSE_WITHDRAW,
+    },
     expr::{TypedExpr, UntypedExpr},
     line_numbers::LineNumbers,
     parser::token::{Base, Token},
@@ -429,14 +432,21 @@ impl TypedDataType {
             constructors: vec![
                 RecordConstructor {
                     location: Span::empty(),
-                    name: "__Mint".to_string(),
+                    name: SCRIPT_PURPOSE_MINT.to_string(),
                     arguments: vec![],
                     doc: None,
                     sugar: false,
                 },
                 RecordConstructor {
                     location: Span::empty(),
-                    name: "__Spend".to_string(),
+                    name: SCRIPT_PURPOSE_SPEND.to_string(),
+                    arguments: vec![],
+                    doc: None,
+                    sugar: false,
+                },
+                RecordConstructor {
+                    location: Span::empty(),
+                    name: SCRIPT_PURPOSE_WITHDRAW.to_string(),
                     arguments: vec![],
                     doc: None,
                     sugar: false,
@@ -444,7 +454,7 @@ impl TypedDataType {
             ],
             doc: None,
             location: Span::empty(),
-            name: "__ScriptPurpose".to_string(),
+            name: SCRIPT_PURPOSE.to_string(),
             opaque: false,
             parameters: vec![],
             public: true,
@@ -456,14 +466,14 @@ impl TypedDataType {
         DataType {
             constructors: vec![RecordConstructor {
                 location: Span::empty(),
-                name: "__ScriptContext".to_string(),
+                name: SCRIPT_CONTEXT.to_string(),
                 arguments: vec![],
                 doc: None,
                 sugar: false,
             }],
             doc: None,
             location: Span::empty(),
-            name: "__ScriptContext".to_string(),
+            name: SCRIPT_CONTEXT.to_string(),
             opaque: false,
             parameters: vec![],
             public: true,
