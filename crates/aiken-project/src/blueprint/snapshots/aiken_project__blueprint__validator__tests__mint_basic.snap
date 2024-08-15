@@ -1,9 +1,9 @@
 ---
 source: crates/aiken-project/src/blueprint/validator.rs
-description: "Code:\n\nvalidator {\n  fn mint(redeemer: Data, ctx: Data) {\n    True\n  }\n}\n// "
+description: "Code:\n\nvalidator thing {\n  mint(redeemer: Data, policy_id: Data, transaction: Data) {\n    True\n  }\n}\n// "
 ---
 {
-  "title": "test_module.mint",
+  "title": "test_module.thing_mint",
   "redeemer": {
     "title": "redeemer",
     "schema": {
