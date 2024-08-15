@@ -9,7 +9,10 @@ pub enum Error {
     OutOfExError(ExBudget),
     #[error("Invalid Stepkind: {0}")]
     InvalidStepKind(u8),
-    #[error("Cannot evaluate an open term:\\n\\n{}", .0.to_pretty())]
+    #[error(
+        "Cannot evaluate an open term:\\n{}",
+        indent(redacted(.0.to_pretty(), 10)),
+    )]
     OpenTermEvaluated(Term<NamedDeBruijn>),
     #[error("The validator crashed / exited prematurely")]
     EvaluationFailure,
@@ -47,7 +50,11 @@ pub enum Error {
         "A builtin expected a term argument, but something else was received:\n\n{0}\n\nYou probably have an extra force wrapped around a builtin"
     )]
     BuiltinTermArgumentExpected(Term<NamedDeBruijn>),
-    #[error("Unable to unlift value because it is not a constant:\n\n{0:#?}")]
+    #[error(
+        "Unable to unlift value because it is not a constant\n{:>13} {}",
+        "Value",
+        indent(redacted(format!("{:#?}", .0), 10)),
+    )]
     NotAConstant(Value),
     #[error("The evaluation never reached a final state")]
     MachineNeverReachedDone,
