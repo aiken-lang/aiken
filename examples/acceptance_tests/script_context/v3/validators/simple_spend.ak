@@ -2,8 +2,7 @@ use aiken/collection/dict
 use cardano/assets
 use cardano/credential.{Address, Script}
 use cardano/transaction.{
-  InlineDatum, Input, Output, OutputReference, ScriptContext, ScriptInfo,
-  ScriptPurpose, Spend, Spending, Transaction,
+  InlineDatum, Input, Output, OutputReference, ScriptPurpose, Spend, Transaction,
 }
 
 validator simple_spend {
