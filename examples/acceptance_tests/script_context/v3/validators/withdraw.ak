@@ -1,24 +1,25 @@
 use aiken/collection/list
 use aiken/interval
-use cardano/credential.{Address, Inline, Pointer, Script, VerificationKey}
-use cardano/transaction.{ScriptContext, Withdrawing}
+use cardano/credential.{
+  Address, Credential, Inline, Pointer, Script, VerificationKey,
+}
+use cardano/transaction.{Transaction}
 
 const only0s = #"00000000000000000000000000000000000000000000000000000000"
 
 const only1s = #"11111111111111111111111111111111111111111111111111111111"
 
-validator {
-  fn spend(_tmp0: Void, _tmp1: Void, _ctx: Data) {
+validator thing {
+  spend(_datum: Option<Void>, _rdmr: Void, _oref: Data, _tx: Data) {
     True
   }
 
-  fn withdraw(_tmp0: Void, ctx: ScriptContext) {
-    expect Withdrawing(Script(my_script_hash)) = ctx.info
+  withdraw(_rdmr: Void, credential: Credential, transaction: Transaction) {
+    expect Script(my_script_hash) = credential
 
-    expect
-      interval.entirely_before(1596059092000) == ctx.transaction.validity_range
+    expect interval.entirely_before(1596059092000) == transaction.validity_range
 
-    let addresses = list.map(ctx.transaction.outputs, fn(out) { out.address })
+    let addresses = list.map(transaction.outputs, fn(out) { out.address })
 
     expect
       Some(
@@ -45,8 +46,12 @@ validator {
       ) == list.at(addresses, 2)
 
     expect
-      [Pair(Script(my_script_hash), 0), Pair(VerificationKey(only0s), 14)] == ctx.transaction.withdrawals
+      [Pair(Script(my_script_hash), 0), Pair(VerificationKey(only0s), 14)] == transaction.withdrawals
 
     True
+  }
+
+  else(_ctx) {
+    fail
   }
 }

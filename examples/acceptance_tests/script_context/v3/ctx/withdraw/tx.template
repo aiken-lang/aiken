@@ -23,7 +23,7 @@
 
     , 5:
       { h'E000000000000000000000000000000000000000000000000000000000': 14
-      , h'F0{{ withdraw.withdraw.hash }}': 0
+      , h'F0{{ withdraw.thing_withdraw.hash }}': 0
       }
 
     , 14:
