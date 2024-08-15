@@ -210,10 +210,10 @@ fn infer_definition(
                         typed_fun.arguments.drain(0..params_length);
 
                         // TODO: the expected number of args comes from the script purpose
-                        if typed_fun.arguments.len() < 2 || typed_fun.arguments.len() > 3 {
+                        if typed_fun.arguments.len() != typed_fun.validator_arity() {
                             return Err(Error::IncorrectValidatorArity {
                                 count: typed_fun.arguments.len() as u32,
-                                expected: 3,
+                                expected: typed_fun.validator_arity() as u32,
                                 location: typed_fun.location,
                             });
                         }
