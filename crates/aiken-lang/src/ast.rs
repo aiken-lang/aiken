@@ -25,6 +25,13 @@ pub const ENV_MODULE: &str = "env";
 pub const CONFIG_MODULE: &str = "config";
 pub const DEFAULT_ENV_MODULE: &str = "default";
 
+pub const PURPOSE_SPEND: &str = "spend";
+pub const PURPOSE_MINT: &str = "mint";
+pub const PURPOSE_WITHDRAW: &str = "withdraw";
+pub const PURPOSE_PUBLISH: &str = "publish";
+pub const PURPOSE_VOTE: &str = "vote";
+pub const PURPOSE_PROPOSE: &str = "propose";
+
 pub type TypedModule = Module<TypeInfo, TypedDefinition>;
 pub type UntypedModule = Module<(), UntypedDefinition>;
 
@@ -268,6 +275,25 @@ impl TypedFunction {
                     .as_ref()
                     .and_then(|a| a.find_node(byte_index))
             })
+    }
+
+    pub fn validator_arity(&self) -> usize {
+        if self.name == PURPOSE_SPEND
+            || self.name == PURPOSE_PUBLISH
+            || self.name == PURPOSE_PROPOSE
+        {
+            4
+        } else if self.name == PURPOSE_MINT
+            || self.name == PURPOSE_WITHDRAW
+            || self.name == PURPOSE_VOTE
+        {
+            3
+        } else {
+            panic!(
+                "tried to get validator arity of a non-validator function {}",
+                &self.name
+            );
+        }
     }
 }
 
@@ -579,6 +605,16 @@ pub struct ModuleConstant<T> {
 
 pub type TypedValidator = Validator<Rc<Type>, TypedArg, TypedExpr>;
 pub type UntypedValidator = Validator<(), UntypedArg, UntypedExpr>;
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum Purpose {
+    Spend,
+    Mint,
+    Withdraw,
+    Publish,
+    Propose,
+    Vote,
+}
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Validator<T, Arg, Expr> {
