@@ -290,7 +290,7 @@ impl<'a> CodeGenerator<'a> {
                                             field_map: None,
                                         },
                                         spread_location: None,
-                                        tipo: function(vec![data()], script_purpose()),
+                                        tipo: function(vec![byte_array()], script_purpose()),
                                     },
 
                                     purpose => {
