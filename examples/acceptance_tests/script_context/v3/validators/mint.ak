@@ -3,8 +3,8 @@ use aiken/collection/list
 use cardano/assets.{PolicyId, Value}
 use cardano/credential
 use cardano/transaction.{
-  DatumHash, Input, Mint, Minting, NoDatum, Output, OutputReference,
-  ScriptContext, ScriptInfo, ScriptPurpose, Transaction
+  DatumHash, Input, Mint, NoDatum, Output, OutputReference, ScriptPurpose,
+  Transaction,
 }
 
 const null28 = #"00000000000000000000000000000000000000000000000000000000"
@@ -53,7 +53,6 @@ fn assert_reference_inputs(inputs: List<Input>) -> Void {
     ] == inputs
   Void
 }
-
 
 fn assert_redeemers(redeemers: Pairs<ScriptPurpose, Data>) -> PolicyId {
   expect [Pair(Mint(other_policy_id), data), _] = redeemers
@@ -125,8 +124,12 @@ fn assert_mint(mint: Value, our_policy_id: PolicyId, other_policy_id: PolicyId) 
 }
 
 validator test_2 {
-  mint(_tmp2: Void, _policy_id: PolicyId, _ctx: ScriptContext) {
+  mint(_tmp2: Void, _policy_id: PolicyId, _transaction: Transaction) {
     trace @"_____mint_2_____"
     True
+  }
+
+  else(_ctx) {
+    fail
   }
 }
