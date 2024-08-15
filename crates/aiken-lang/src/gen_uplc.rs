@@ -488,13 +488,10 @@ impl<'a> CodeGenerator<'a> {
             on_test_failure: OnTestFailure::FailImmediately,
         };
 
-        let mut air_tree_fun = AirTree::anon_func(
-            vec!["__context__".to_string()],
-            self.build(&fun.body, module_name, &[]),
-            true,
-        );
+        let air_tree_fun =
+            wrap_validator_condition(self.build(&fun.body, module_name, &[]), self.tracing);
 
-        air_tree_fun = wrap_validator_condition(air_tree_fun, self.tracing);
+        let air_tree_fun = AirTree::anon_func(vec!["__context__".to_string()], air_tree_fun, true);
 
         let validator_args_tree = AirTree::no_op(air_tree_fun);
 
@@ -504,9 +501,9 @@ impl<'a> CodeGenerator<'a> {
 
         let full_vec = full_tree.to_vec();
 
-        let mut term = self.uplc_code_gen(full_vec);
+        let term = self.uplc_code_gen(full_vec);
 
-        term = cast_validator_args(term, params);
+        let term = cast_validator_args(term, params);
 
         self.finalize(term)
     }
