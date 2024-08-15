@@ -363,11 +363,36 @@ impl<'a> CodeGenerator<'a> {
                                     });
                                 }
 
+                                // let purpose_arg = __purpose_arg__
+                                if let Some(arg_name) = purpose_arg.get_variable_name() {
+                                    then.push(TypedExpr::Assignment {
+                                        location: Span::empty(),
+                                        tipo: purpose_arg.tipo.clone(),
+                                        value: TypedExpr::Var {
+                                            location: Span::empty(),
+                                            constructor: ValueConstructor {
+                                                public: true,
+                                                variant: ValueConstructorVariant::LocalVariable {
+                                                    location: Span::empty(),
+                                                },
+                                                tipo: data(),
+                                            },
+                                            name: "__purpose_arg__".to_string(),
+                                        }
+                                        .into(),
+                                        pattern: TypedPattern::Var {
+                                            location: Span::empty(),
+                                            name: arg_name.to_string(),
+                                        },
+                                        kind: AssignmentKind::let_(),
+                                    });
+                                }
+
                                 // let last_arg_name = __transaction__
                                 if let Some(arg_name) = transaction.get_variable_name() {
                                     then.push(TypedExpr::Assignment {
                                         location: Span::empty(),
-                                        tipo: purpose_arg.tipo.clone(),
+                                        tipo: transaction.tipo.clone(),
                                         value: TypedExpr::Var {
                                             location: Span::empty(),
                                             constructor: ValueConstructor {
