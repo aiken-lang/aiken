@@ -4,7 +4,7 @@ use cardano/assets.{PolicyId, Value}
 use cardano/credential
 use cardano/transaction.{
   DatumHash, Input, Mint, Minting, NoDatum, Output, OutputReference,
-  ScriptContext, ScriptInfo, ScriptPurpose,
+  ScriptContext, ScriptInfo, ScriptPurpose, Transaction
 }
 
 const null28 = #"00000000000000000000000000000000000000000000000000000000"
@@ -15,15 +15,23 @@ const null32 =
 const void_hash =
   #"923918e403bf43c34b4ef6b48eb2ee04babed17320d8d1b9ff9ad086e86f44ec"
 
-validator {
-  fn mint_1(_tmp2: Data, ctx: ScriptContext) {
-    let our_policy_id = assert_script_info(ctx.info)
-    let other_policy_id = assert_redeemers(ctx.transaction.redeemers)
-    assert_outputs(ctx.transaction.outputs, our_policy_id, other_policy_id)
-    assert_mint(ctx.transaction.mint, our_policy_id, other_policy_id)
-    assert_reference_inputs(ctx.transaction.reference_inputs)
-    assert_datums(ctx.transaction.datums)
+validator test_1 {
+  mint(_rdmr: Data, our_policy_id: PolicyId, transaction: Transaction) {
+    let other_policy_id = assert_redeemers(transaction.redeemers)
+
+    assert_outputs(transaction.outputs, our_policy_id, other_policy_id)
+
+    assert_mint(transaction.mint, our_policy_id, other_policy_id)
+
+    assert_reference_inputs(transaction.reference_inputs)
+
+    assert_datums(transaction.datums)
+
     True
+  }
+
+  else(_ctx) {
+    fail
   }
 }
 
@@ -46,10 +54,6 @@ fn assert_reference_inputs(inputs: List<Input>) -> Void {
   Void
 }
 
-fn assert_script_info(info: ScriptInfo) -> PolicyId {
-  expect Minting(policy_id) = info
-  policy_id
-}
 
 fn assert_redeemers(redeemers: Pairs<ScriptPurpose, Data>) -> PolicyId {
   expect [Pair(Mint(other_policy_id), data), _] = redeemers
@@ -120,8 +124,8 @@ fn assert_mint(mint: Value, our_policy_id: PolicyId, other_policy_id: PolicyId) 
   Void
 }
 
-validator {
-  fn mint_2(_tmp2: Void, _ctx: ScriptContext) {
+validator test_2 {
+  mint(_tmp2: Void, _policy_id: PolicyId, _ctx: ScriptContext) {
     trace @"_____mint_2_____"
     True
   }
