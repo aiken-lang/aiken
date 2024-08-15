@@ -40,6 +40,10 @@ pub const FUZZER: &str = "Fuzzer";
 pub const SCRIPT_PURPOSE: &str = "__ScriptPurpose";
 pub const SCRIPT_PURPOSE_SPEND: &str = "__Spend";
 pub const SCRIPT_PURPOSE_MINT: &str = "__Mint";
+pub const SCRIPT_PURPOSE_WITHDRAW: &str = "__Withdraw";
+pub const SCRIPT_PURPOSE_PUBLISH: &str = "__Publish";
+pub const SCRIPT_PURPOSE_VOTE: &str = "__Vote";
+pub const SCRIPT_PURPOSE_PROPOSE: &str = "__Propose";
 pub const SCRIPT_PURPOSES_COUNT: u16 = 6;
 
 pub const SCRIPT_CONTEXT: &str = "__ScriptContext";
