@@ -665,24 +665,9 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     prelude.types_constructors.insert(
         SCRIPT_PURPOSE.to_string(),
         vec![
-            SCRIPT_PURPOSE_SPEND.to_string(),
             SCRIPT_PURPOSE_MINT.to_string(),
+            SCRIPT_PURPOSE_SPEND.to_string(),
         ],
-    );
-
-    prelude.values.insert(
-        SCRIPT_PURPOSE_SPEND.to_string(),
-        ValueConstructor::public(
-            function(vec![data(), option(data())], script_purpose()),
-            ValueConstructorVariant::Record {
-                module: "".into(),
-                name: SCRIPT_PURPOSE_SPEND.to_string(),
-                field_map: None::<FieldMap>,
-                arity: 2,
-                location: Span::empty(),
-                constructors_count: SCRIPT_PURPOSES_COUNT,
-            },
-        ),
     );
 
     prelude.values.insert(
@@ -694,6 +679,21 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
                 name: SCRIPT_PURPOSE_MINT.to_string(),
                 field_map: None::<FieldMap>,
                 arity: 1,
+                location: Span::empty(),
+                constructors_count: SCRIPT_PURPOSES_COUNT,
+            },
+        ),
+    );
+
+    prelude.values.insert(
+        SCRIPT_PURPOSE_SPEND.to_string(),
+        ValueConstructor::public(
+            function(vec![data(), option(data())], script_purpose()),
+            ValueConstructorVariant::Record {
+                module: "".into(),
+                name: SCRIPT_PURPOSE_SPEND.to_string(),
+                field_map: None::<FieldMap>,
+                arity: 2,
                 location: Span::empty(),
                 constructors_count: SCRIPT_PURPOSES_COUNT,
             },

@@ -429,14 +429,14 @@ impl TypedDataType {
             constructors: vec![
                 RecordConstructor {
                     location: Span::empty(),
-                    name: "__Spend".to_string(),
+                    name: "__Mint".to_string(),
                     arguments: vec![],
                     doc: None,
                     sugar: false,
                 },
                 RecordConstructor {
                     location: Span::empty(),
-                    name: "__Mint".to_string(),
+                    name: "__Spend".to_string(),
                     arguments: vec![],
                     doc: None,
                     sugar: false,
