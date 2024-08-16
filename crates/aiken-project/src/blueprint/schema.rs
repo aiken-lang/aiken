@@ -4,7 +4,6 @@ use crate::{
 };
 use aiken_lang::{
     ast::{Definition, TypedDataType, TypedDefinition},
-    builtins::wrapped_redeemer,
     tipo::{pretty, Type, TypeVar},
 };
 use owo_colors::{OwoColorize, Stream::Stdout};
@@ -142,7 +141,7 @@ impl Annotated<Schema> {
     ) -> Reference {
         definitions
             .register(
-                &wrapped_redeemer(type_info),
+                &Type::wrapped_redeemer(type_info),
                 &HashMap::new(),
                 |_| {
                     Ok::<_, Error>(Annotated {

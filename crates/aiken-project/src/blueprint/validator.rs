@@ -272,7 +272,7 @@ mod tests {
     use aiken_lang::{
         self,
         ast::{TraceLevel, Tracing},
-        builtins,
+        tipo::Type,
     };
     use std::collections::HashMap;
     use uplc::ast as uplc_ast;
@@ -336,7 +336,7 @@ mod tests {
         //   "dataType": "integer"
         // }
         definitions
-            .register::<_, Error>(&builtins::int(), &HashMap::new(), |_| {
+            .register::<_, Error>(&Type::int(), &HashMap::new(), |_| {
                 Ok(Schema::Data(Data::Integer).into())
             })
             .unwrap();
@@ -347,7 +347,7 @@ mod tests {
         //   "dataType": "bytes"
         // }
         definitions
-            .register::<_, Error>(&builtins::byte_array(), &HashMap::new(), |_| {
+            .register::<_, Error>(&Type::byte_array(), &HashMap::new(), |_| {
                 Ok(Schema::Data(Data::Bytes).into())
             })
             .unwrap();

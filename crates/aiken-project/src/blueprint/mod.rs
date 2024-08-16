@@ -153,7 +153,7 @@ impl From<&Config> for Preamble {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aiken_lang::builtins;
+    use aiken_lang::tipo::Type;
     use schema::{Data, Declaration, Items, Schema};
     use serde_json::{self, json};
     use std::collections::HashMap;
@@ -225,17 +225,17 @@ mod tests {
     fn serialize_with_definitions() {
         let mut definitions = Definitions::new();
         definitions
-            .register::<_, Error>(&builtins::int(), &HashMap::new(), |_| {
+            .register::<_, Error>(&Type::int(), &HashMap::new(), |_| {
                 Ok(Schema::Data(Data::Integer).into())
             })
             .unwrap();
         definitions
             .register::<_, Error>(
-                &builtins::list(builtins::byte_array()),
+                &Type::list(Type::byte_array()),
                 &HashMap::new(),
                 |definitions| {
                     let ref_bytes = definitions.register::<_, Error>(
-                        &builtins::byte_array(),
+                        &Type::byte_array(),
                         &HashMap::new(),
                         |_| Ok(Schema::Data(Data::Bytes).into()),
                     )?;
