@@ -1132,7 +1132,7 @@ impl ValueConstructor {
         tipo: Rc<Type>,
         constructors: &[&str],
     ) -> Vec<String> {
-        for constructor in &constructors[..] {
+        for constructor in constructors {
             values.insert(
                 constructor.to_string(),
                 ValueConstructor::public(
@@ -1143,7 +1143,7 @@ impl ValueConstructor {
         }
 
         constructors
-            .into_iter()
+            .iter()
             .map(|constructor| constructor.to_string())
             .collect()
     }
@@ -1152,7 +1152,7 @@ impl ValueConstructor {
         values: &mut HashMap<String, Self>,
         constructors: &[(&str, Rc<Type>)],
     ) -> Vec<String> {
-        for (constructor, tipo) in &constructors[..] {
+        for (constructor, tipo) in constructors {
             values.insert(
                 constructor.to_string(),
                 ValueConstructor::public(
@@ -1167,7 +1167,7 @@ impl ValueConstructor {
         }
 
         constructors
-            .into_iter()
+            .iter()
             .map(|(constructor, _)| constructor.to_string())
             .collect()
     }
