@@ -288,14 +288,13 @@ impl TypedFunction {
     }
 
     pub fn validator_arity(&self) -> usize {
-        if self.name == HANDLER_SPEND
-            || self.name == HANDLER_PUBLISH
-            || self.name == HANDLER_PROPOSE
-        {
+        if self.name == HANDLER_SPEND {
             4
         } else if self.name == HANDLER_MINT
             || self.name == HANDLER_WITHDRAW
             || self.name == HANDLER_VOTE
+            || self.name == HANDLER_PUBLISH
+            || self.name == HANDLER_PROPOSE
         {
             3
         } else {

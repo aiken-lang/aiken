@@ -2,9 +2,9 @@ use aiken/collection/list
 use cardano/credential.{Script, VerificationKey}
 use cardano/governance.{
   Abstain, ConstitutionalCommitteeMember, DelegateRepresentative,
-  GovernanceActionId, No, StakePool, Yes,
+  GovernanceActionId, No, StakePool, Voter, Yes,
 }
-use cardano/transaction.{ScriptContext}
+use cardano/transaction.{Transaction}
 
 type Foo {
   Foo(Int)
@@ -21,11 +21,11 @@ const only8s =
 const only9s =
   #"9999999999999999999999999999999999999999999999999999999999999999"
 
-validator {
-  fn script(_tmp0: Data, ctx: ScriptContext) {
-    assert_redeemer(ctx.redeemer)
+validator purposes {
+  vote(redeemer: Data, _voter: Voter, transaction: Transaction) {
+    assert_redeemer(redeemer)
 
-    let votes = ctx.transaction.votes
+    let votes = transaction.votes
 
     expect Some(
       Pair(ConstitutionalCommitteeMember(Script(..)),
@@ -35,14 +35,18 @@ validator {
 
     expect
       Some(
-        Pair(ConstitutionalCommitteeMember(VerificationKey(only0s)),
-        [
-          Pair(GovernanceActionId {
-            transaction: only9s,
-            proposal_procedure: 152,
-          },
-          No),
-        ]),
+        Pair(
+          ConstitutionalCommitteeMember(VerificationKey(only0s)),
+          [
+            Pair(
+              GovernanceActionId {
+                transaction: only9s,
+                proposal_procedure: 152,
+              },
+              No,
+            ),
+          ],
+        ),
       ) == list.at(votes, 1)
 
     expect Some(Pair(DelegateRepresentative(Script(..)), [_, ..])) =
@@ -50,21 +54,33 @@ validator {
 
     expect
       Some(
-        Pair(DelegateRepresentative(VerificationKey(only0s)),
-        [
-          Pair(GovernanceActionId { transaction: only7s, proposal_procedure: 2 },
-          Abstain),
-          Pair(GovernanceActionId { transaction: only8s, proposal_procedure: 1 },
-          Abstain),
-          Pair(GovernanceActionId { transaction: only9s, proposal_procedure: 0 },
-          Abstain),
-        ]),
+        Pair(
+          DelegateRepresentative(VerificationKey(only0s)),
+          [
+            Pair(
+              GovernanceActionId { transaction: only7s, proposal_procedure: 2 },
+              Abstain,
+            ),
+            Pair(
+              GovernanceActionId { transaction: only8s, proposal_procedure: 1 },
+              Abstain,
+            ),
+            Pair(
+              GovernanceActionId { transaction: only9s, proposal_procedure: 0 },
+              Abstain,
+            ),
+          ],
+        ),
       ) == list.at(votes, 3)
 
     expect Some(Pair(StakePool(pool_id), [_, ..])) = list.at(votes, 4)
     expect pool_id == only0s
 
     True
+  }
+
+  else(_ctx) {
+    fail
   }
 }
 

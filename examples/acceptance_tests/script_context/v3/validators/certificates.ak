@@ -1,14 +1,14 @@
 use aiken/collection/list
 use cardano/certificate.{
   AlwaysAbstain, AlwaysNoConfidence, AuthorizeConstitutionalCommitteeProxy,
-  DelegateBlockProduction, DelegateBoth, DelegateCredential, DelegateVote,
-  RegisterAndDelegateCredential, RegisterCredential,
+  Certificate, DelegateBlockProduction, DelegateBoth, DelegateCredential,
+  DelegateVote, RegisterAndDelegateCredential, RegisterCredential,
   RegisterDelegateRepresentative, RegisterStakePool, Registered,
   RetireFromConstitutionalCommittee, RetireStakePool, UnregisterCredential,
   UnregisterDelegateRepresentative, UpdateDelegateRepresentative,
 }
 use cardano/credential.{Script, VerificationKey}
-use cardano/transaction.{Publishing, ScriptContext, ScriptInfo}
+use cardano/transaction.{Transaction}
 
 const only0s = #"00000000000000000000000000000000000000000000000000000000"
 
@@ -19,15 +19,19 @@ const only2s = #"22222222222222222222222222222222222222222222222222222222"
 const only9s =
   #"9999999999999999999999999999999999999999999999999999999999999999"
 
-validator {
-  fn script(_tmp1: Void, ctx: ScriptContext) -> Bool {
-    assert_script_info(ctx.info)
+validator purposes {
+  publish(
+    _redeemer: Void,
+    certificate: Certificate,
+    transaction: Transaction,
+  ) -> Bool {
+    assert_script_info(certificate)
 
-    let certificates = ctx.transaction.certificates
+    let certificates = transaction.certificates
 
-    expect Some(10_000_000) = ctx.transaction.current_treasury_amount
+    expect Some(10_000_000) = transaction.current_treasury_amount
 
-    expect Some(14) = ctx.transaction.treasury_donation
+    expect Some(14) = transaction.treasury_donation
 
     expect
       Some(RegisterCredential { credential: Script(only2s), deposit: None }) == list.at(
@@ -197,10 +201,14 @@ validator {
 
     True
   }
+
+  else(_ctx) {
+    fail
+  }
 }
 
-fn assert_script_info(info: ScriptInfo) {
-  expect Publishing(20, DelegateCredential { credential, delegate }) = info
+fn assert_script_info(certificate: Certificate) {
+  expect DelegateCredential { credential, delegate } = certificate
   expect DelegateBlockProduction { stake_pool: only1s } == delegate
   expect Script(..) = credential
   Void
