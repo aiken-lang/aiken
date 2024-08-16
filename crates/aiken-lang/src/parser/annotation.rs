@@ -1,7 +1,7 @@
 use super::{error::ParseError, token::Token};
 use crate::{
-    ast,
-    builtins::{PAIR, PRELUDE},
+    ast::{self, well_known},
+    builtins::PRELUDE,
 };
 use chumsky::prelude::*;
 
@@ -19,7 +19,7 @@ pub fn parser() -> impl Parser<Token, ast::Annotation, Error = ParseError> {
             select! {Token::Name { name } if name == PRELUDE => name}
                 .then_ignore(just(Token::Dot))
                 .or_not()
-                .then_ignore(select! {Token::UpName { name } if name == PAIR => name})
+                .then_ignore(select! {Token::UpName { name } if name == well_known::PAIR => name})
                 .ignore_then(
                     expression
                         .clone()

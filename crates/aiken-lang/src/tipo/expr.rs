@@ -17,10 +17,7 @@ use crate::{
         UnOp, UntypedArg, UntypedAssignmentKind, UntypedClause, UntypedFunction, UntypedIfBranch,
         UntypedPattern, UntypedRecordUpdateArg,
     },
-    builtins::{
-        bool, byte_array, data, from_default_function, function, g1_element, g2_element, int, list,
-        pair, string, tuple, void, BUILTIN,
-    },
+    builtins::{from_default_function, BUILTIN},
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
     tipo::{fields::FieldMap, DefaultFunction, PatternConstructor, TypeVar},
@@ -163,7 +160,7 @@ pub(crate) fn infer_function(
 
     let args_types = arguments.iter().map(|a| a.tipo.clone()).collect();
 
-    let tipo = function(args_types, return_type);
+    let tipo = Type::function(args_types, return_type);
 
     let safe_to_generalise = !expr_typer.ungeneralised_function_used;
 
@@ -594,15 +591,15 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         Ok(TypedExpr::ByteArray {
             location,
             bytes,
-            tipo: byte_array(),
+            tipo: Type::byte_array(),
         })
     }
 
     fn infer_curve_point(&mut self, curve: Curve, location: Span) -> Result<TypedExpr, Error> {
         let tipo = match curve {
             Curve::Bls12_381(point) => match point {
-                Bls12_381Point::G1(_) => g1_element(),
-                Bls12_381Point::G2(_) => g2_element(),
+                Bls12_381Point::G1(_) => Type::g1_element(),
+                Bls12_381Point::G2(_) => Type::g2_element(),
             },
         };
 
@@ -631,7 +628,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     module: String::new(),
                     constructors_count: 2,
                 },
-                tipo: bool(),
+                tipo: Type::bool(),
             },
         };
 
@@ -648,14 +645,14 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     module: String::new(),
                     constructors_count: 2,
                 },
-                tipo: bool(),
+                tipo: Type::bool(),
             },
         };
 
         let text = match self.tracing.trace_level(false) {
             TraceLevel::Verbose => Some(TypedExpr::String {
                 location,
-                tipo: string(),
+                tipo: Type::string(),
                 value: format!(
                     "{} ? False",
                     format::Formatter::new()
@@ -668,7 +665,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         let typed_value = self.infer(value)?;
 
-        self.unify(bool(), typed_value.tipo(), typed_value.location(), false)?;
+        self.unify(
+            Type::bool(),
+            typed_value.tipo(),
+            typed_value.location(),
+            false,
+        )?;
 
         match text {
             None => Ok(typed_value),
@@ -682,11 +684,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 }],
                 final_else: Box::new(TypedExpr::Trace {
                     location,
-                    tipo: bool(),
+                    tipo: Type::bool(),
                     text: Box::new(text),
                     then: Box::new(var_false),
                 }),
-                tipo: bool(),
+                tipo: Type::bool(),
             }),
         }
     }
@@ -714,22 +716,22 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 return Ok(TypedExpr::BinOp {
                     location,
                     name,
-                    tipo: bool(),
+                    tipo: Type::bool(),
                     left: Box::new(left),
                     right: Box::new(right),
                 });
             }
-            BinOp::And => (bool(), bool()),
-            BinOp::Or => (bool(), bool()),
-            BinOp::LtInt => (int(), bool()),
-            BinOp::LtEqInt => (int(), bool()),
-            BinOp::GtEqInt => (int(), bool()),
-            BinOp::GtInt => (int(), bool()),
-            BinOp::AddInt => (int(), int()),
-            BinOp::SubInt => (int(), int()),
-            BinOp::MultInt => (int(), int()),
-            BinOp::DivInt => (int(), int()),
-            BinOp::ModInt => (int(), int()),
+            BinOp::And => (Type::bool(), Type::bool()),
+            BinOp::Or => (Type::bool(), Type::bool()),
+            BinOp::LtInt => (Type::int(), Type::bool()),
+            BinOp::LtEqInt => (Type::int(), Type::bool()),
+            BinOp::GtEqInt => (Type::int(), Type::bool()),
+            BinOp::GtInt => (Type::int(), Type::bool()),
+            BinOp::AddInt => (Type::int(), Type::int()),
+            BinOp::SubInt => (Type::int(), Type::int()),
+            BinOp::MultInt => (Type::int(), Type::int()),
+            BinOp::DivInt => (Type::int(), Type::int()),
+            BinOp::ModInt => (Type::int(), Type::int()),
         };
 
         let left = self.infer(left)?;
@@ -896,8 +898,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let value = self.infer(value)?;
 
         let tipo = match op {
-            UnOp::Not => bool(),
-            UnOp::Negate => int(),
+            UnOp::Not => Type::bool(),
+            UnOp::Negate => Type::int(),
         };
 
         self.unify(tipo.clone(), value.tipo(), value.location(), false)?;
@@ -1603,7 +1605,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 let condition = self.infer(branch.condition.clone())?;
 
                 self.unify(
-                    bool(),
+                    Type::bool(),
                     condition.tipo(),
                     condition.type_defining_location(),
                     false,
@@ -1647,7 +1649,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         let args_types = args.iter().map(|a| a.tipo.clone()).collect();
 
-        let tipo = function(args_types, return_type);
+        let tipo = Type::function(args_types, return_type);
 
         Ok(TypedExpr::Fn {
             location,
@@ -1745,7 +1747,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         TypedExpr::UInt {
             location,
             value,
-            tipo: int(),
+            tipo: Type::int(),
         }
     }
 
@@ -1772,7 +1774,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         ensure_serialisable(false, tipo.clone(), location)?;
 
         // Type check the ..tail, if there is one
-        let tipo = list(tipo);
+        let tipo = Type::list(tipo);
 
         let tail = match tail {
             Some(tail) => {
@@ -1807,7 +1809,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             let typed_expression = self.infer(expression)?;
 
             self.unify(
-                bool(),
+                Type::bool(),
                 typed_expression.tipo(),
                 typed_expression.location(),
                 false,
@@ -1831,7 +1833,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             .rev()
             .reduce(|acc, typed_expression| TypedExpr::BinOp {
                 location,
-                tipo: bool(),
+                tipo: Type::bool(),
                 name,
                 left: typed_expression.into(),
                 right: acc.into(),
@@ -2151,7 +2153,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         TypedExpr::String {
             location,
             value,
-            tipo: string(),
+            tipo: Type::string(),
         }
     }
 
@@ -2169,7 +2171,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         Ok(TypedExpr::Pair {
             location,
-            tipo: pair(typed_fst.tipo(), typed_snd.tipo()),
+            tipo: Type::pair(typed_fst.tipo(), typed_snd.tipo()),
             fst: typed_fst.into(),
             snd: typed_snd.into(),
         })
@@ -2187,7 +2189,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             typed_elems.push(typed_elem);
         }
 
-        let tipo = tuple(typed_elems.iter().map(|e| e.tipo()).collect());
+        let tipo = Type::tuple(typed_elems.iter().map(|e| e.tipo()).collect());
 
         Ok(TypedExpr::Tuple {
             location,
@@ -2255,9 +2257,14 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
     fn infer_trace_arg(&mut self, arg: UntypedExpr) -> Result<TypedExpr, Error> {
         let typed_arg = self.infer(arg)?;
-        match self.unify(string(), typed_arg.tipo(), typed_arg.location(), false) {
+        match self.unify(
+            Type::string(),
+            typed_arg.tipo(),
+            typed_arg.location(),
+            false,
+        ) {
             Err(_) => {
-                self.unify(data(), typed_arg.tipo(), typed_arg.location(), true)?;
+                self.unify(Type::data(), typed_arg.tipo(), typed_arg.location(), true)?;
                 Ok(diagnose_expr(typed_arg))
             }
             Ok(()) => Ok(typed_arg),
@@ -2291,7 +2298,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             TraceLevel::Silent => Ok(then),
             TraceLevel::Compact => {
                 let text = self.infer(label)?;
-                self.unify(string(), text.tipo(), text.location(), false)?;
+                self.unify(Type::string(), text.tipo(), text.location(), false)?;
                 Ok(TypedExpr::Trace {
                     location,
                     tipo,
@@ -2307,7 +2314,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 } else {
                     let delimiter = |ix| TypedExpr::String {
                         location: Span::empty(),
-                        tipo: string(),
+                        tipo: Type::string(),
                         value: if ix == 0 { ": " } else { ", " }.to_string(),
                     };
                     typed_arguments
@@ -2594,7 +2601,7 @@ fn assert_assignment(expr: TypedExpr) -> Result<TypedExpr, Error> {
         if expr.tipo().is_void() {
             return Ok(TypedExpr::Assignment {
                 location: expr.location(),
-                tipo: void(),
+                tipo: Type::void(),
                 value: expr.clone().into(),
                 pattern: Pattern::Constructor {
                     is_record: false,
@@ -2607,7 +2614,7 @@ fn assert_assignment(expr: TypedExpr) -> Result<TypedExpr, Error> {
                     arguments: vec![],
                     module: None,
                     spread_location: None,
-                    tipo: void(),
+                    tipo: Type::void(),
                 },
                 kind: AssignmentKind::let_(),
             });
@@ -2713,7 +2720,7 @@ fn diagnose_expr(expr: TypedExpr) -> TypedExpr {
         name: "diagnostic".to_string(),
         constructor: ValueConstructor {
             public: true,
-            tipo: function(vec![data(), byte_array()], byte_array()),
+            tipo: Type::function(vec![Type::data(), Type::byte_array()], Type::byte_array()),
             variant: ValueConstructorVariant::ModuleFn {
                 name: "diagnostic".to_string(),
                 field_map: None,
@@ -2728,13 +2735,13 @@ fn diagnose_expr(expr: TypedExpr) -> TypedExpr {
     let location = expr.location();
 
     TypedExpr::Call {
-        tipo: string(),
+        tipo: Type::string(),
         fun: Box::new(decode_utf8.clone()),
         args: vec![CallArg {
             label: None,
             location: expr.location(),
             value: TypedExpr::Call {
-                tipo: byte_array(),
+                tipo: Type::byte_array(),
                 fun: Box::new(diagnostic.clone()),
                 args: vec![
                     CallArg {
@@ -2746,7 +2753,7 @@ fn diagnose_expr(expr: TypedExpr) -> TypedExpr {
                         label: None,
                         location,
                         value: TypedExpr::ByteArray {
-                            tipo: byte_array(),
+                            tipo: Type::byte_array(),
                             bytes: vec![],
                             location,
                         },
@@ -2785,7 +2792,7 @@ fn append_string_expr(left: TypedExpr, right: TypedExpr) -> TypedExpr {
 
     TypedExpr::Call {
         location: Span::empty(),
-        tipo: string(),
+        tipo: Type::string(),
         fun: Box::new(append_string.clone()),
         args: vec![
             CallArg {

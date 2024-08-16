@@ -1,7 +1,6 @@
 use super::air::{Air, ExpectLevel};
 use crate::{
     ast::{BinOp, Curve, Span, UnOp},
-    builtins::{bool, byte_array, data, int, list, string, void},
     tipo::{Type, ValueConstructor, ValueConstructorVariant},
 };
 use indexmap::IndexSet;
@@ -113,7 +112,7 @@ pub enum AirMsg {
 impl AirMsg {
     pub fn to_air_tree(&self) -> AirTree {
         match self {
-            AirMsg::LocalVar(name) => AirTree::local_var(name, string()),
+            AirMsg::LocalVar(name) => AirTree::local_var(name, Type::string()),
             AirMsg::Msg(msg) => AirTree::string(msg),
         }
     }
@@ -862,8 +861,8 @@ impl AirTree {
                 AirTree::var(
                     ValueConstructor::public(
                         Type::Fn {
-                            args: vec![list(data())],
-                            ret: data(),
+                            args: vec![Type::list(Type::data())],
+                            ret: Type::data(),
                             alias: None,
                         }
                         .into(),
@@ -879,7 +878,7 @@ impl AirTree {
                     function_name,
                     "",
                 ),
-                data(),
+                Type::data(),
                 vec![list_of_fields],
             ),
             tipo.clone(),
@@ -984,7 +983,7 @@ impl AirTree {
                 } else {
                     DefaultFunction::SndPair
                 },
-                data(),
+                Type::data(),
                 vec![tuple],
             ),
             tipo.clone(),
@@ -1039,9 +1038,9 @@ impl AirTree {
     }
 
     pub fn expect_on_list2() -> AirTree {
-        let inner_expect_on_list = AirTree::local_var(INNER_EXPECT_ON_LIST, void());
+        let inner_expect_on_list = AirTree::local_var(INNER_EXPECT_ON_LIST, Type::void());
 
-        let list_var = AirTree::local_var("__list_to_check", list(data()));
+        let list_var = AirTree::local_var("__list_to_check", Type::list(Type::data()));
 
         AirTree::let_assignment(
             INNER_EXPECT_ON_LIST,
@@ -1051,13 +1050,13 @@ impl AirTree {
                     "__list_to_check".to_string(),
                 ],
                 AirTree::call(
-                    AirTree::local_var("__check_with", void()),
-                    void(),
+                    AirTree::local_var("__check_with", Type::void()),
+                    Type::void(),
                     vec![
                         list_var.clone(),
                         AirTree::call(
                             inner_expect_on_list.clone(),
-                            void(),
+                            Type::void(),
                             vec![inner_expect_on_list.clone()],
                         ),
                     ],
@@ -1066,27 +1065,27 @@ impl AirTree {
             ),
             AirTree::call(
                 inner_expect_on_list.clone(),
-                void(),
+                Type::void(),
                 vec![inner_expect_on_list, list_var],
             ),
         )
     }
 
     pub fn expect_on_list() -> AirTree {
-        let list_var = AirTree::local_var("__list_to_check", list(data()));
+        let list_var = AirTree::local_var("__list_to_check", Type::list(Type::data()));
 
-        let head_list = AirTree::builtin(DefaultFunction::HeadList, data(), vec![list_var]);
+        let head_list = AirTree::builtin(DefaultFunction::HeadList, Type::data(), vec![list_var]);
 
         let expect_on_head = AirTree::call(
-            AirTree::local_var("__check_with", void()),
-            void(),
+            AirTree::local_var("__check_with", Type::void()),
+            Type::void(),
             vec![head_list],
         );
 
         let next_call = AirTree::call(
             AirTree::var(
                 ValueConstructor::public(
-                    void(),
+                    Type::void(),
                     ValueConstructorVariant::ModuleFn {
                         name: EXPECT_ON_LIST.to_string(),
                         field_map: None,
@@ -1099,14 +1098,17 @@ impl AirTree {
                 EXPECT_ON_LIST,
                 "",
             ),
-            void(),
+            Type::void(),
             vec![
                 AirTree::builtin(
                     DefaultFunction::TailList,
-                    list(data()),
-                    vec![AirTree::local_var("__list_to_check", list(data()))],
+                    Type::list(Type::data()),
+                    vec![AirTree::local_var(
+                        "__list_to_check",
+                        Type::list(Type::data()),
+                    )],
                 ),
-                AirTree::local_var("__check_with", void()),
+                AirTree::local_var("__check_with", Type::void()),
             ],
         );
 
@@ -1114,7 +1116,7 @@ impl AirTree {
 
         AirTree::list_clause(
             "__list_to_check",
-            void(),
+            Type::void(),
             AirTree::void(),
             assign,
             None,
@@ -1675,10 +1677,10 @@ impl AirTree {
 
     pub fn return_type(&self) -> Rc<Type> {
         match self {
-            AirTree::Int { .. } => int(),
-            AirTree::String { .. } => string(),
-            AirTree::ByteArray { .. } => byte_array(),
-            AirTree::Bool { .. } => bool(),
+            AirTree::Int { .. } => Type::int(),
+            AirTree::String { .. } => Type::string(),
+            AirTree::ByteArray { .. } => Type::byte_array(),
+            AirTree::Bool { .. } => Type::bool(),
             AirTree::CurvePoint { point } => point.tipo(),
             AirTree::List { tipo, .. }
             | AirTree::Tuple { tipo, .. }
@@ -1693,14 +1695,14 @@ impl AirTree {
             | AirTree::RecordUpdate { tipo, .. }
             | AirTree::ErrorTerm { tipo, .. }
             | AirTree::Trace { tipo, .. } => tipo.clone(),
-            AirTree::Void => void(),
+            AirTree::Void => Type::void(),
             AirTree::Var { constructor, .. } => constructor.tipo.clone(),
             AirTree::Fn { func_body, .. } => func_body.return_type(),
             AirTree::UnOp { op, .. } => match op {
-                UnOp::Not => bool(),
-                UnOp::Negate => int(),
+                UnOp::Not => Type::bool(),
+                UnOp::Negate => Type::int(),
             },
-            AirTree::CastToData { .. } => data(),
+            AirTree::CastToData { .. } => Type::data(),
             AirTree::Clause { then, .. }
             | AirTree::ListClause { then, .. }
             | AirTree::WrapClause { then, .. }
@@ -1725,7 +1727,7 @@ impl AirTree {
             | AirTree::FieldsEmpty { then, .. }
             | AirTree::ListEmpty { then, .. }
             | AirTree::NoOp { then } => then.return_type(),
-            AirTree::MultiValidator { .. } => void(),
+            AirTree::MultiValidator { .. } => Type::void(),
         }
     }
 

@@ -1,6 +1,5 @@
 use crate::{
-    ast::UntypedPattern,
-    builtins::PAIR,
+    ast::{well_known, UntypedPattern},
     parser::{error::ParseError, token::Token},
 };
 use chumsky::prelude::*;
@@ -8,7 +7,7 @@ use chumsky::prelude::*;
 pub fn parser(
     pattern: Recursive<'_, Token, UntypedPattern, ParseError>,
 ) -> impl Parser<Token, UntypedPattern, Error = ParseError> + '_ {
-    select! {Token::UpName { name } if name == PAIR => name}
+    select! {Token::UpName { name } if name == well_known::PAIR => name}
         .ignore_then(choice((
             just(Token::LeftParen),
             just(Token::NewLineLeftParen),

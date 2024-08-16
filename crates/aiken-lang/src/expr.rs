@@ -1,4 +1,3 @@
-use crate::tipo::ValueConstructorVariant;
 pub(crate) use crate::{
     ast::{
         self, Annotation, ArgBy, ArgName, AssignmentPattern, BinOp, Bls12_381Point,
@@ -8,7 +7,6 @@ pub(crate) use crate::{
         TypedDataType, TypedIfBranch, TypedRecordUpdateArg, UnOp, UntypedArg,
         UntypedAssignmentKind, UntypedClause, UntypedIfBranch, UntypedRecordUpdateArg,
     },
-    builtins::void,
     parser::token::Base,
     tipo::{
         check_replaceable_opaque_type, convert_opaque_type, lookup_data_type_by_tipo,
@@ -224,9 +222,10 @@ impl TypedExpr {
             | Self::RecordAccess { tipo, .. }
             | Self::RecordUpdate { tipo, .. }
             | Self::CurvePoint { tipo, .. } => tipo.clone(),
-            Self::Pipeline { expressions, .. } | Self::Sequence { expressions, .. } => {
-                expressions.last().map(TypedExpr::tipo).unwrap_or_else(void)
-            }
+            Self::Pipeline { expressions, .. } | Self::Sequence { expressions, .. } => expressions
+                .last()
+                .map(TypedExpr::tipo)
+                .unwrap_or_else(Type::void),
         }
     }
 
@@ -491,7 +490,7 @@ impl TypedExpr {
                     module: String::new(),
                     constructors_count: 1,
                 },
-                tipo: void(),
+                tipo: Type::void(),
             },
             location,
         }

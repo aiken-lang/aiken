@@ -12,7 +12,6 @@ use crate::{
         TypedPattern, UnqualifiedImport, UntypedArg, UntypedDefinition, UntypedFunction, Use,
         Validator, PIPE_VARIABLE,
     },
-    builtins::{function, generic_var, pair, tuple, unbound_var},
     tipo::{fields::FieldMap, TypeAliasAnnotation},
     IdGenerator,
 };
@@ -183,7 +182,7 @@ impl<'a> Environment<'a> {
 
             if let Some((args, ret)) = new_value {
                 *tipo.borrow_mut() = TypeVar::Link {
-                    tipo: function(args.clone(), ret.clone()),
+                    tipo: Type::function(args.clone(), ret.clone()),
                 };
 
                 return Ok((args, Type::with_alias(ret, alias.clone())));
@@ -690,7 +689,7 @@ impl<'a> Environment<'a> {
             }
 
             Type::Fn { args, ret, alias } => Type::with_alias(
-                function(
+                Type::function(
                     args.iter()
                         .map(|t| self.instantiate(t.clone(), ids, hydrator))
                         .collect(),
@@ -700,7 +699,7 @@ impl<'a> Environment<'a> {
             ),
 
             Type::Tuple { elems, alias } => Type::with_alias(
-                tuple(
+                Type::tuple(
                     elems
                         .iter()
                         .map(|t| self.instantiate(t.clone(), ids, hydrator))
@@ -709,7 +708,7 @@ impl<'a> Environment<'a> {
                 alias.clone(),
             ),
             Type::Pair { fst, snd, alias } => Type::with_alias(
-                pair(
+                Type::pair(
                     self.instantiate(fst.clone(), ids, hydrator),
                     self.instantiate(snd.clone(), ids, hydrator),
                 ),
@@ -795,13 +794,13 @@ impl<'a> Environment<'a> {
 
     /// Create a new generic type that can stand in for any type.
     pub fn new_generic_var(&mut self) -> Rc<Type> {
-        generic_var(self.next_uid())
+        Type::generic_var(self.next_uid())
     }
 
     /// Create a new unbound type that is a specific type, we just don't
     /// know which one yet.
     pub fn new_unbound_var(&mut self) -> Rc<Type> {
-        unbound_var(self.next_uid())
+        Type::unbound_var(self.next_uid())
     }
 
     pub fn next_uid(&mut self) -> u64 {
@@ -1214,7 +1213,7 @@ impl<'a> Environment<'a> {
 
         let return_type = hydrator.type_from_option_annotation(return_annotation, self)?;
 
-        let tipo = function(arg_types, return_type);
+        let tipo = Type::function(arg_types, return_type);
 
         // Keep track of which types we create from annotations so we can know
         // which generic types not to instantiate later when performing
@@ -1415,7 +1414,7 @@ impl<'a> Environment<'a> {
                     // Insert constructor function into module scope
                     let typ = match constructor.arguments.len() {
                         0 => typ.clone(),
-                        _ => function(args_types, typ.clone()),
+                        _ => Type::function(args_types, typ.clone()),
                     };
 
                     let constructor_info = ValueConstructorVariant::Record {
@@ -2013,7 +2012,7 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
     match t.deref() {
         Type::Var { tipo, alias } => Type::with_alias(
             match tipo.borrow().deref() {
-                TypeVar::Unbound { id } => generic_var(*id),
+                TypeVar::Unbound { id } => Type::generic_var(*id),
                 TypeVar::Link { tipo } => generalise(tipo.clone(), ctx_level),
                 TypeVar::Generic { .. } => Rc::new(Type::Var {
                     tipo: tipo.clone(),
@@ -2047,7 +2046,7 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
         }
 
         Type::Fn { args, ret, alias } => Type::with_alias(
-            function(
+            Type::function(
                 args.iter()
                     .map(|t| generalise(t.clone(), ctx_level))
                     .collect(),
@@ -2057,7 +2056,7 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
         ),
 
         Type::Tuple { elems, alias } => Type::with_alias(
-            tuple(
+            Type::tuple(
                 elems
                     .iter()
                     .map(|t| generalise(t.clone(), ctx_level))
@@ -2066,7 +2065,7 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
             alias.clone(),
         ),
         Type::Pair { fst, snd, alias } => Type::with_alias(
-            pair(
+            Type::pair(
                 generalise(fst.clone(), ctx_level),
                 generalise(snd.clone(), ctx_level),
             ),

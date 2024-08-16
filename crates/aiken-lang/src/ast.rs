@@ -1,8 +1,6 @@
+pub mod well_known;
+
 use crate::{
-    builtins::{
-        self, g1_element, g2_element, SCRIPT_CONTEXT, SCRIPT_PURPOSE, SCRIPT_PURPOSE_MINT,
-        SCRIPT_PURPOSE_SPEND, SCRIPT_PURPOSE_WITHDRAW,
-    },
     expr::{TypedExpr, UntypedExpr},
     line_numbers::LineNumbers,
     parser::token::{Base, Token},
@@ -28,12 +26,12 @@ pub const ENV_MODULE: &str = "env";
 pub const CONFIG_MODULE: &str = "config";
 pub const DEFAULT_ENV_MODULE: &str = "default";
 
-pub const PURPOSE_SPEND: &str = "spend";
-pub const PURPOSE_MINT: &str = "mint";
-pub const PURPOSE_WITHDRAW: &str = "withdraw";
-pub const PURPOSE_PUBLISH: &str = "publish";
-pub const PURPOSE_VOTE: &str = "vote";
-pub const PURPOSE_PROPOSE: &str = "propose";
+pub const HANDLER_SPEND: &str = "spend";
+pub const HANDLER_MINT: &str = "mint";
+pub const HANDLER_WITHDRAW: &str = "withdraw";
+pub const HANDLER_PUBLISH: &str = "publish";
+pub const HANDLER_VOTE: &str = "vote";
+pub const HANDLER_PROPOSE: &str = "propose";
 
 pub type TypedModule = Module<TypeInfo, TypedDefinition>;
 pub type UntypedModule = Module<(), UntypedDefinition>;
@@ -281,23 +279,23 @@ impl TypedFunction {
     }
 
     pub fn has_valid_purpose_name(&self) -> bool {
-        self.name == PURPOSE_SPEND
-            || self.name == PURPOSE_PUBLISH
-            || self.name == PURPOSE_PROPOSE
-            || self.name == PURPOSE_MINT
-            || self.name == PURPOSE_WITHDRAW
-            || self.name == PURPOSE_VOTE
+        self.name == HANDLER_SPEND
+            || self.name == HANDLER_PUBLISH
+            || self.name == HANDLER_PROPOSE
+            || self.name == HANDLER_MINT
+            || self.name == HANDLER_WITHDRAW
+            || self.name == HANDLER_VOTE
     }
 
     pub fn validator_arity(&self) -> usize {
-        if self.name == PURPOSE_SPEND
-            || self.name == PURPOSE_PUBLISH
-            || self.name == PURPOSE_PROPOSE
+        if self.name == HANDLER_SPEND
+            || self.name == HANDLER_PUBLISH
+            || self.name == HANDLER_PROPOSE
         {
             4
-        } else if self.name == PURPOSE_MINT
-            || self.name == PURPOSE_WITHDRAW
-            || self.name == PURPOSE_VOTE
+        } else if self.name == HANDLER_MINT
+            || self.name == HANDLER_WITHDRAW
+            || self.name == HANDLER_VOTE
         {
             3
         } else {
@@ -383,206 +381,23 @@ pub struct FunctionAccessKey {
     pub function_name: String,
 }
 
+pub type UntypedDataType = DataType<()>;
 pub type TypedDataType = DataType<Rc<Type>>;
 
 impl TypedDataType {
-    pub fn data() -> Self {
-        DataType {
-            constructors: vec![],
-            doc: None,
+    pub fn known_enum(name: &str, constructors: &[&str]) -> Self {
+        Self {
+            name: name.to_string(),
+            constructors: RecordConstructor::known_enum(constructors),
             location: Span::empty(),
-            name: "Data".to_string(),
             opaque: false,
+            public: true,
             parameters: vec![],
-            public: true,
             typed_parameters: vec![],
-        }
-    }
-
-    pub fn bool() -> Self {
-        DataType {
-            constructors: vec![
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "False".to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "True".to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-            ],
             doc: None,
-            location: Span::empty(),
-            name: "Bool".to_string(),
-            opaque: false,
-            parameters: vec![],
-            public: true,
-            typed_parameters: vec![],
-        }
-    }
-
-    pub fn script_purpose() -> Self {
-        DataType {
-            constructors: vec![
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: SCRIPT_PURPOSE_MINT.to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: SCRIPT_PURPOSE_SPEND.to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: SCRIPT_PURPOSE_WITHDRAW.to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-            ],
-            doc: None,
-            location: Span::empty(),
-            name: SCRIPT_PURPOSE.to_string(),
-            opaque: false,
-            parameters: vec![],
-            public: true,
-            typed_parameters: vec![],
-        }
-    }
-
-    pub fn script_context() -> Self {
-        DataType {
-            constructors: vec![RecordConstructor {
-                location: Span::empty(),
-                name: SCRIPT_CONTEXT.to_string(),
-                arguments: vec![],
-                doc: None,
-                sugar: false,
-            }],
-            doc: None,
-            location: Span::empty(),
-            name: SCRIPT_CONTEXT.to_string(),
-            opaque: false,
-            parameters: vec![],
-            public: true,
-            typed_parameters: vec![],
-        }
-    }
-
-    pub fn prng() -> Self {
-        DataType {
-            constructors: vec![
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "Seeded".to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "Replayed".to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-            ],
-            doc: None,
-            location: Span::empty(),
-            name: "PRNG".to_string(),
-            opaque: false,
-            parameters: vec![],
-            public: true,
-            typed_parameters: vec![],
-        }
-    }
-
-    pub fn ordering() -> Self {
-        DataType {
-            constructors: vec![
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "Less".to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "Equal".to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "Greater".to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-            ],
-            doc: None,
-            location: Span::empty(),
-            name: "Ordering".to_string(),
-            opaque: false,
-            parameters: vec![],
-            public: true,
-            typed_parameters: vec![],
-        }
-    }
-
-    pub fn option(tipo: Rc<Type>) -> Self {
-        DataType {
-            constructors: vec![
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "Some".to_string(),
-                    arguments: vec![RecordConstructorArg {
-                        label: None,
-                        annotation: Annotation::Var {
-                            location: Span::empty(),
-                            name: "a".to_string(),
-                        },
-                        location: Span::empty(),
-                        tipo: tipo.clone(),
-                        doc: None,
-                    }],
-                    doc: None,
-                    sugar: false,
-                },
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "None".to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-            ],
-            doc: None,
-            location: Span::empty(),
-            name: "Option".to_string(),
-            opaque: false,
-            parameters: vec!["a".to_string()],
-            public: true,
-            typed_parameters: vec![tipo],
         }
     }
 }
-
-pub type UntypedDataType = DataType<()>;
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DataType<T> {
@@ -647,14 +462,14 @@ pub struct Validator<T, Arg, Expr> {
 }
 
 impl TypedValidator {
-    pub fn available_purposes() -> Vec<String> {
+    pub fn available_handler_names() -> Vec<String> {
         vec![
-            PURPOSE_SPEND.to_string(),
-            PURPOSE_MINT.to_string(),
-            PURPOSE_WITHDRAW.to_string(),
-            PURPOSE_PUBLISH.to_string(),
-            PURPOSE_VOTE.to_string(),
-            PURPOSE_PROPOSE.to_string(),
+            HANDLER_SPEND.to_string(),
+            HANDLER_MINT.to_string(),
+            HANDLER_WITHDRAW.to_string(),
+            HANDLER_PUBLISH.to_string(),
+            HANDLER_VOTE.to_string(),
+            HANDLER_PROPOSE.to_string(),
         ]
     }
 
@@ -838,12 +653,12 @@ pub enum Constant {
 impl Constant {
     pub fn tipo(&self) -> Rc<Type> {
         match self {
-            Constant::Int { .. } => builtins::int(),
-            Constant::String { .. } => builtins::string(),
-            Constant::ByteArray { .. } => builtins::byte_array(),
+            Constant::Int { .. } => Type::int(),
+            Constant::String { .. } => Type::string(),
+            Constant::ByteArray { .. } => Type::byte_array(),
             Constant::CurvePoint { point, .. } => match point.as_ref() {
-                Curve::Bls12_381(Bls12_381Point::G1(_)) => builtins::g1_element(),
-                Curve::Bls12_381(Bls12_381Point::G2(_)) => builtins::g2_element(),
+                Curve::Bls12_381(Bls12_381Point::G1(_)) => Type::g1_element(),
+                Curve::Bls12_381(Bls12_381Point::G2(_)) => Type::g2_element(),
             },
         }
     }
@@ -895,6 +710,19 @@ pub struct RecordConstructor<T> {
 impl<A> RecordConstructor<A> {
     pub fn put_doc(&mut self, new_doc: String) {
         self.doc = Some(new_doc);
+    }
+
+    pub fn known_enum(names: &[&str]) -> Vec<RecordConstructor<A>> {
+        names
+            .iter()
+            .map(|name| RecordConstructor {
+                location: Span::empty(),
+                name: name.to_string(),
+                arguments: vec![],
+                doc: None,
+                sugar: false,
+            })
+            .collect()
     }
 }
 
@@ -1601,8 +1429,8 @@ impl TypedPattern {
     // TODO: This function definition is weird, see where this is used and how.
     pub fn tipo(&self, value: &TypedExpr) -> Option<Rc<Type>> {
         match self {
-            Pattern::Int { .. } => Some(builtins::int()),
-            Pattern::ByteArray { .. } => Some(builtins::byte_array()),
+            Pattern::Int { .. } => Some(Type::int()),
+            Pattern::ByteArray { .. } => Some(Type::byte_array()),
             Pattern::Constructor { tipo, .. } => Some(tipo.clone()),
             Pattern::Var { .. } | Pattern::Assign { .. } | Pattern::Discard { .. } => {
                 Some(value.tipo())
@@ -1800,8 +1628,8 @@ impl<'de> serde::Deserialize<'de> for Bls12_381Point {
 impl Bls12_381Point {
     pub fn tipo(&self) -> Rc<Type> {
         match self {
-            Bls12_381Point::G1(_) => g1_element(),
-            Bls12_381Point::G2(_) => g2_element(),
+            Bls12_381Point::G1(_) => Type::g1_element(),
+            Bls12_381Point::G2(_) => Type::g2_element(),
         }
     }
 }

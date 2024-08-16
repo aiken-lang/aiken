@@ -11,7 +11,6 @@ use crate::{
         RecordConstructor, RecordConstructorArg, Tracing, TypeAlias, TypedArg, TypedDefinition,
         TypedModule, TypedValidator, UntypedArg, UntypedDefinition, UntypedModule, Use, Validator,
     },
-    builtins::{self, fuzzer, generic_var},
     tipo::{expr::infer_function, Span, Type, TypeVar},
     IdGenerator,
 };
@@ -214,7 +213,7 @@ fn infer_definition(
                                 location: typed_fun
                                     .location
                                     .map(|start, _end| (start, start + typed_fun.name.len())),
-                                available_purposes: TypedValidator::available_purposes(),
+                                available_purposes: TypedValidator::available_handler_names(),
                             });
                         }
 
@@ -228,7 +227,7 @@ fn infer_definition(
 
                         for arg in typed_fun.arguments.iter_mut() {
                             if arg.tipo.is_unbound() {
-                                arg.tipo = builtins::data();
+                                arg.tipo = Type::data();
                             }
                         }
 
@@ -263,7 +262,7 @@ fn infer_definition(
                         .drain(0..params_length)
                         .map(|mut arg| {
                             if arg.tipo.is_unbound() {
-                                arg.tipo = builtins::data();
+                                arg.tipo = Type::data();
                             }
 
                             arg
@@ -280,7 +279,7 @@ fn infer_definition(
 
                     for arg in typed_fallback.arguments.iter_mut() {
                         if arg.tipo.is_unbound() {
-                            arg.tipo = builtins::data();
+                            arg.tipo = Type::data();
                         }
                     }
 
@@ -383,14 +382,14 @@ fn infer_definition(
 
             let is_bool = environment.unify(
                 typed_f.return_type.clone(),
-                builtins::bool(),
+                Type::bool(),
                 typed_f.location,
                 false,
             );
 
             let is_void = environment.unify(
                 typed_f.return_type.clone(),
-                builtins::void(),
+                Type::void(),
                 typed_f.location,
                 false,
             );
@@ -642,10 +641,10 @@ fn infer_fuzzer(
 ) -> Result<(Annotation, Rc<Type>), Error> {
     let could_not_unify = || Error::CouldNotUnify {
         location: *location,
-        expected: fuzzer(
+        expected: Type::fuzzer(
             expected_inner_type
                 .clone()
-                .unwrap_or_else(|| generic_var(0)),
+                .unwrap_or_else(|| Type::generic_var(0)),
         ),
         given: tipo.clone(),
         situation: None,
@@ -681,7 +680,7 @@ fn infer_fuzzer(
                         // `unify` now that we have figured out the type carried by the fuzzer.
                         environment.unify(
                             tipo.clone(),
-                            fuzzer(wrapped.clone()),
+                            Type::fuzzer(wrapped.clone()),
                             *location,
                             false,
                         )?;

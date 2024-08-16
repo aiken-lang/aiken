@@ -1,7 +1,6 @@
 use crate::{
     ast,
-    builtins::{self},
-    tipo::{self, environment::Environment, error::Error},
+    tipo::{self, environment::Environment, error::Error, Type},
 };
 use itertools::Itertools;
 use std::{collections::BTreeMap, iter, ops::Deref};
@@ -500,8 +499,8 @@ fn pretty_tail(tail: Pattern) -> String {
 }
 
 fn list_constructors() -> Vec<tipo::ValueConstructor> {
-    let list_parameter = builtins::generic_var(0);
-    let list_type = builtins::list(list_parameter);
+    let list_parameter = Type::generic_var(0);
+    let list_type = Type::list(list_parameter);
 
     vec![
         tipo::ValueConstructor {

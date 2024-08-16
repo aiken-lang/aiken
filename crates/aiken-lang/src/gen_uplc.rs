@@ -13,14 +13,11 @@ use self::{
 };
 use crate::{
     ast::{
-        ArgName, AssignmentKind, BinOp, Bls12_381Point, CallArg, Curve, DataTypeKey,
+        well_known, ArgName, AssignmentKind, BinOp, Bls12_381Point, CallArg, Curve, DataTypeKey,
         FunctionAccessKey, OnTestFailure, Pattern, Span, TraceLevel, Tracing, TypedArg,
         TypedClause, TypedDataType, TypedFunction, TypedPattern, TypedValidator, UnOp,
     },
-    builtins::{
-        bool, byte_array, data, function, int, list, option, pair, script_context, script_purpose,
-        void, PRELUDE, SCRIPT_PURPOSE_MINT, SCRIPT_PURPOSE_SPEND, SCRIPT_PURPOSE_WITHDRAW,
-    },
+    builtins::PRELUDE,
     expr::TypedExpr,
     gen_uplc::{
         air::ExpectLevel,
@@ -138,14 +135,14 @@ impl<'a> CodeGenerator<'a> {
                 annotation: None,
                 doc: None,
                 is_validator_param: false,
-                tipo: data(),
+                tipo: Type::data(),
             }],
             body: TypedExpr::Sequence {
                 location: Span::empty(),
                 expressions: vec![
                     TypedExpr::Assignment {
                         location: Span::empty(),
-                        tipo: script_context(),
+                        tipo: Type::script_context(),
                         value: TypedExpr::Var {
                             location: Span::empty(),
                             constructor: ValueConstructor {
@@ -153,7 +150,7 @@ impl<'a> CodeGenerator<'a> {
                                 variant: ValueConstructorVariant::LocalVariable {
                                     location: Span::empty(),
                                 },
-                                tipo: script_context(),
+                                tipo: Type::script_context(),
                             },
                             name: "__context__".to_string(),
                         }
@@ -194,13 +191,16 @@ impl<'a> CodeGenerator<'a> {
                                 field_map: None,
                             },
                             spread_location: None,
-                            tipo: function(vec![data(), data(), script_purpose()], data()),
+                            tipo: Type::function(
+                                vec![Type::data(), Type::data(), Type::script_purpose()],
+                                Type::data(),
+                            ),
                         },
                         kind: AssignmentKind::let_(),
                     },
                     TypedExpr::When {
                         location: Span::empty(),
-                        tipo: bool(),
+                        tipo: Type::bool(),
                         subject: TypedExpr::Var {
                             location: Span::empty(),
                             constructor: ValueConstructor {
@@ -208,7 +208,7 @@ impl<'a> CodeGenerator<'a> {
                                 variant: ValueConstructorVariant::LocalVariable {
                                     location: Span::empty(),
                                 },
-                                tipo: script_purpose(),
+                                tipo: Type::script_purpose(),
                             },
                             name: "__purpose__".to_string(),
                         }
@@ -241,7 +241,7 @@ impl<'a> CodeGenerator<'a> {
                                     "spend" => TypedPattern::Constructor {
                                         is_record: false,
                                         location: Span::empty(),
-                                        name: SCRIPT_PURPOSE_SPEND.to_string(),
+                                        name: well_known::SCRIPT_PURPOSE_SPEND.to_string(),
                                         arguments: vec![
                                             CallArg {
                                                 label: None,
@@ -262,20 +262,20 @@ impl<'a> CodeGenerator<'a> {
                                         ],
                                         module: None,
                                         constructor: PatternConstructor::Record {
-                                            name: SCRIPT_PURPOSE_SPEND.to_string(),
+                                            name: well_known::SCRIPT_PURPOSE_SPEND.to_string(),
                                             field_map: None,
                                         },
                                         spread_location: None,
-                                        tipo: function(
-                                            vec![data(), option(data())],
-                                            script_purpose(),
+                                        tipo: Type::function(
+                                            vec![Type::data(), Type::option(Type::data())],
+                                            Type::script_purpose(),
                                         ),
                                     },
 
                                     "mint" => TypedPattern::Constructor {
                                         is_record: false,
                                         location: Span::empty(),
-                                        name: SCRIPT_PURPOSE_MINT.to_string(),
+                                        name: well_known::SCRIPT_PURPOSE_MINT.to_string(),
                                         arguments: vec![CallArg {
                                             label: None,
                                             location: Span::empty(),
@@ -286,17 +286,20 @@ impl<'a> CodeGenerator<'a> {
                                         }],
                                         module: None,
                                         constructor: PatternConstructor::Record {
-                                            name: SCRIPT_PURPOSE_MINT.to_string(),
+                                            name: well_known::SCRIPT_PURPOSE_MINT.to_string(),
                                             field_map: None,
                                         },
                                         spread_location: None,
-                                        tipo: function(vec![byte_array()], script_purpose()),
+                                        tipo: Type::function(
+                                            vec![Type::byte_array()],
+                                            Type::script_purpose(),
+                                        ),
                                     },
 
                                     "withdraw" => TypedPattern::Constructor {
                                         is_record: false,
                                         location: Span::empty(),
-                                        name: SCRIPT_PURPOSE_WITHDRAW.to_string(),
+                                        name: well_known::SCRIPT_PURPOSE_WITHDRAW.to_string(),
                                         arguments: vec![CallArg {
                                             label: None,
                                             location: Span::empty(),
@@ -307,11 +310,14 @@ impl<'a> CodeGenerator<'a> {
                                         }],
                                         module: None,
                                         constructor: PatternConstructor::Record {
-                                            name: SCRIPT_PURPOSE_WITHDRAW.to_string(),
+                                            name: well_known::SCRIPT_PURPOSE_WITHDRAW.to_string(),
                                             field_map: None,
                                         },
                                         spread_location: None,
-                                        tipo: function(vec![data()], script_purpose()),
+                                        tipo: Type::function(
+                                            vec![Type::data()],
+                                            Type::script_purpose(),
+                                        ),
                                     },
 
                                     purpose => {
@@ -332,7 +338,7 @@ impl<'a> CodeGenerator<'a> {
                                             variant: ValueConstructorVariant::LocalVariable {
                                                 location: Span::empty(),
                                             },
-                                            tipo: data(),
+                                            tipo: Type::data(),
                                         },
                                         name: "__redeemer__".to_string(),
                                     }
@@ -364,7 +370,7 @@ impl<'a> CodeGenerator<'a> {
                                                 variant: ValueConstructorVariant::LocalVariable {
                                                     location: Span::empty(),
                                                 },
-                                                tipo: option(data()),
+                                                tipo: Type::option(Type::data()),
                                             },
                                             name: "__datum__".to_string(),
                                         }
@@ -396,7 +402,7 @@ impl<'a> CodeGenerator<'a> {
                                                 variant: ValueConstructorVariant::LocalVariable {
                                                     location: Span::empty(),
                                                 },
-                                                tipo: data(),
+                                                tipo: Type::data(),
                                             },
                                             name: "__purpose_arg__".to_string(),
                                         }
@@ -421,7 +427,7 @@ impl<'a> CodeGenerator<'a> {
                                                 variant: ValueConstructorVariant::LocalVariable {
                                                     location: Span::empty(),
                                                 },
-                                                tipo: data(),
+                                                tipo: Type::data(),
                                             },
                                             name: "__transaction__".to_string(),
                                         }
@@ -504,7 +510,7 @@ impl<'a> CodeGenerator<'a> {
             name: "wrapper_validator".to_string(),
             public: true,
             return_annotation: None,
-            return_type: bool(),
+            return_type: Type::bool(),
             end_position: 0,
             on_test_failure: OnTestFailure::FailImmediately,
         };
@@ -619,7 +625,7 @@ impl<'a> CodeGenerator<'a> {
                     self.special_functions.insert_new_function(
                         msg_func_name.clone(),
                         Term::Error.delayed_trace(Term::string(msg)).delay(),
-                        void(),
+                        Type::void(),
                     );
                     Some(self.special_functions.use_function_tree(msg_func_name))
                 }
@@ -1024,17 +1030,21 @@ impl<'a> CodeGenerator<'a> {
                         let function_name = format!("__access_index_{}", *index);
 
                         if self.code_gen_functions.get(&function_name).is_none() {
-                            let mut body = AirTree::local_var("__fields", list(data()));
+                            let mut body = AirTree::local_var("__fields", Type::list(Type::data()));
 
                             for _ in 0..*index {
                                 body = AirTree::builtin(
                                     DefaultFunction::TailList,
-                                    list(data()),
+                                    Type::list(Type::data()),
                                     vec![body],
                                 )
                             }
 
-                            body = AirTree::builtin(DefaultFunction::HeadList, data(), vec![body]);
+                            body = AirTree::builtin(
+                                DefaultFunction::HeadList,
+                                Type::data(),
+                                vec![body],
+                            );
 
                             self.code_gen_functions.insert(
                                 function_name.clone(),
@@ -1048,7 +1058,7 @@ impl<'a> CodeGenerator<'a> {
                         let list_of_fields = AirTree::call(
                             self.special_functions
                                 .use_function_tree(CONSTR_FIELDS_EXPOSER.to_string()),
-                            list(data()),
+                            Type::list(Type::data()),
                             vec![self.build(record, module_build_name, &[])],
                         );
 
@@ -1163,17 +1173,21 @@ impl<'a> CodeGenerator<'a> {
                         let function_name = format!("__access_index_{}", *index);
 
                         if self.code_gen_functions.get(&function_name).is_none() {
-                            let mut body = AirTree::local_var("__fields", list(data()));
+                            let mut body = AirTree::local_var("__fields", Type::list(Type::data()));
 
                             for _ in 0..*index {
                                 body = AirTree::builtin(
                                     DefaultFunction::TailList,
-                                    list(data()),
+                                    Type::list(Type::data()),
                                     vec![body],
                                 )
                             }
 
-                            body = AirTree::builtin(DefaultFunction::HeadList, data(), vec![body]);
+                            body = AirTree::builtin(
+                                DefaultFunction::HeadList,
+                                Type::data(),
+                                vec![body],
+                            );
 
                             self.code_gen_functions.insert(
                                 function_name.clone(),
@@ -1282,7 +1296,7 @@ impl<'a> CodeGenerator<'a> {
         let otherwise = match &props.otherwise {
             Some(x) => x.clone(),
             // (delay (error ))
-            None => AirTree::anon_func(vec![], AirTree::error(void(), false), true),
+            None => AirTree::anon_func(vec![], AirTree::error(Type::void(), false), true),
         };
 
         match pattern {
@@ -1298,10 +1312,10 @@ impl<'a> CodeGenerator<'a> {
 
                 let expect = AirTree::binop(
                     BinOp::Eq,
-                    bool(),
+                    Type::bool(),
                     AirTree::int(expected_int),
-                    AirTree::local_var(&name, int()),
-                    int(),
+                    AirTree::local_var(&name, Type::int()),
+                    Type::int(),
                 );
 
                 assign_casted_value(
@@ -1320,10 +1334,10 @@ impl<'a> CodeGenerator<'a> {
 
                 let expect = AirTree::binop(
                     BinOp::Eq,
-                    bool(),
+                    Type::bool(),
                     AirTree::byte_array(expected_bytes.clone()),
-                    AirTree::local_var(&name, byte_array()),
-                    byte_array(),
+                    AirTree::local_var(&name, Type::byte_array()),
+                    Type::byte_array(),
                 );
 
                 assign_casted_value(
@@ -1831,7 +1845,7 @@ impl<'a> CodeGenerator<'a> {
 
                     AirTree::when(
                         &subject_name,
-                        void(),
+                        Type::void(),
                         tipo.clone(),
                         AirTree::local_var(&constructor_name, tipo.clone()),
                         AirTree::assert_constr_index(
@@ -2000,11 +2014,14 @@ impl<'a> CodeGenerator<'a> {
                     defined_data_types,
                     location,
                     AirTree::call(
-                        AirTree::local_var(format!("__curried_expect_on_list_{}", depth), void()),
-                        void(),
+                        AirTree::local_var(
+                            format!("__curried_expect_on_list_{}", depth),
+                            Type::void(),
+                        ),
+                        Type::void(),
                         vec![AirTree::builtin(
                             DefaultFunction::TailList,
-                            list(data()),
+                            Type::list(Type::data()),
                             vec![AirTree::local_var(
                                 format!("__list_{}", depth),
                                 tipo.clone(),
@@ -2039,7 +2056,7 @@ impl<'a> CodeGenerator<'a> {
                                 &pair_name,
                                 AirTree::builtin(
                                     DefaultFunction::HeadList,
-                                    pair(data(), data()),
+                                    Type::pair(Type::data(), Type::data()),
                                     vec![AirTree::local_var(
                                         format!("__list_{}", depth),
                                         tipo.clone(),
@@ -2083,7 +2100,7 @@ impl<'a> CodeGenerator<'a> {
                 let func_call = AirTree::call(
                     AirTree::var(
                         ValueConstructor::public(
-                            void(),
+                            Type::void(),
                             ValueConstructorVariant::ModuleFn {
                                 name: EXPECT_ON_LIST.to_string(),
                                 field_map: None,
@@ -2096,7 +2113,7 @@ impl<'a> CodeGenerator<'a> {
                         EXPECT_ON_LIST,
                         "",
                     ),
-                    void(),
+                    Type::void(),
                     vec![AirTree::local_var(&map_name, tipo.clone()), unwrap_function],
                 );
 
@@ -2176,7 +2193,7 @@ impl<'a> CodeGenerator<'a> {
                                     &item_name,
                                     AirTree::builtin(
                                         DefaultFunction::HeadList,
-                                        data(),
+                                        Type::data(),
                                         vec![AirTree::local_var(
                                             format!("__list_{}", depth),
                                             tipo.clone(),
@@ -2185,7 +2202,7 @@ impl<'a> CodeGenerator<'a> {
                                     AirTree::soft_cast_assignment(
                                         &item_name,
                                         inner_list_type.clone(),
-                                        AirTree::local_var(&item_name, data()),
+                                        AirTree::local_var(&item_name, Type::data()),
                                         self.expect_type_assign(
                                             inner_list_type,
                                             AirTree::local_var(&item_name, inner_list_type.clone()),
@@ -2194,12 +2211,12 @@ impl<'a> CodeGenerator<'a> {
                                             AirTree::call(
                                                 AirTree::local_var(
                                                     format!("__curried_expect_on_list_{}", depth),
-                                                    void(),
+                                                    Type::void(),
                                                 ),
-                                                void(),
+                                                Type::void(),
                                                 vec![AirTree::builtin(
                                                     DefaultFunction::TailList,
-                                                    list(data()),
+                                                    Type::list(Type::data()),
                                                     vec![AirTree::local_var(
                                                         format!("__list_{}", depth),
                                                         tipo.clone(),
@@ -2243,7 +2260,7 @@ impl<'a> CodeGenerator<'a> {
                     let func_call = AirTree::call(
                         AirTree::var(
                             ValueConstructor::public(
-                                void(),
+                                Type::void(),
                                 ValueConstructorVariant::ModuleFn {
                                     name: EXPECT_ON_LIST.to_string(),
                                     field_map: None,
@@ -2256,7 +2273,7 @@ impl<'a> CodeGenerator<'a> {
                             EXPECT_ON_LIST,
                             "",
                         ),
-                        void(),
+                        Type::void(),
                         vec![
                             AirTree::local_var(&list_name, tipo.clone()),
                             unwrap_function,
@@ -2347,10 +2364,13 @@ impl<'a> CodeGenerator<'a> {
                     let current_defined = defined_data_types.clone();
                     let mut diff_defined_types = vec![];
 
-                    let var_then =
-                        AirTree::call(AirTree::local_var("then_delayed", void()), void(), vec![]);
+                    let var_then = AirTree::call(
+                        AirTree::local_var("then_delayed", Type::void()),
+                        Type::void(),
+                        vec![],
+                    );
 
-                    let otherwise_delayed = AirTree::local_var("otherwise_delayed", void());
+                    let otherwise_delayed = AirTree::local_var("otherwise_delayed", Type::void());
 
                     let constr_clauses = data_type.constructors.iter().enumerate().rfold(
                         otherwise_delayed.clone(),
@@ -2431,13 +2451,13 @@ impl<'a> CodeGenerator<'a> {
 
                     let when_expr = AirTree::when(
                         format!("__subject_span_{}_{}", location.start, location.end),
-                        void(),
+                        Type::void(),
                         tipo.clone(),
                         AirTree::local_var(
                             format!("__constr_var_span_{}_{}", location.start, location.end),
                             tipo.clone(),
                         ),
-                        AirTree::call(constr_clauses, void(), vec![]),
+                        AirTree::call(constr_clauses, Type::void(), vec![]),
                     );
 
                     let func_body = AirTree::let_assignment(
@@ -2490,7 +2510,7 @@ impl<'a> CodeGenerator<'a> {
                     "",
                 );
 
-                AirTree::call(func_var, void(), args)
+                AirTree::call(func_var, Type::void(), args)
             }
         }
     }
@@ -3014,7 +3034,7 @@ impl<'a> CodeGenerator<'a> {
                         // Since check_last_item is false this will never get added to the final uplc anyway
                         ExpectLevel::None,
                         elems_then,
-                        AirTree::error(void(), false),
+                        AirTree::error(Type::void(), false),
                     )
                 } else {
                     assert!(defined_tails.len() >= elems.len());
@@ -3095,7 +3115,7 @@ impl<'a> CodeGenerator<'a> {
                         AirTree::local_var(props.clause_var_name.clone(), subject_tipo.clone()),
                         false,
                         next_then,
-                        AirTree::error(void(), false),
+                        AirTree::error(Type::void(), false),
                     )
                 };
 
@@ -3226,7 +3246,7 @@ impl<'a> CodeGenerator<'a> {
                         AirTree::local_var(props.clause_var_name.clone(), subject_tipo.clone()),
                         false,
                         next_then,
-                        AirTree::error(void(), false),
+                        AirTree::error(Type::void(), false),
                     )
                 };
 
@@ -3355,7 +3375,7 @@ impl<'a> CodeGenerator<'a> {
                             AirTree::local_var(&props.clause_var_name, subject_tipo.clone()),
                             false,
                             tuple_name_assigns,
-                            AirTree::error(void(), false),
+                            AirTree::error(Type::void(), false),
                         ),
                     )
                 } else {
@@ -3383,7 +3403,7 @@ impl<'a> CodeGenerator<'a> {
                     AirTree::clause_guard(
                         &props.original_subject_name,
                         AirTree::int(value),
-                        int(),
+                        Type::int(),
                         then,
                     )
                 }
@@ -3392,7 +3412,7 @@ impl<'a> CodeGenerator<'a> {
                     AirTree::clause_guard(
                         &props.original_subject_name,
                         AirTree::byte_array(value.clone()),
-                        byte_array(),
+                        Type::byte_array(),
                         then,
                     )
                 }
@@ -3517,14 +3537,14 @@ impl<'a> CodeGenerator<'a> {
                         AirTree::clause_guard(
                             &props.original_subject_name,
                             AirTree::bool(constr_name == "True"),
-                            bool(),
+                            Type::bool(),
                             then,
                         )
                     } else if subject_tipo.is_void() {
                         AirTree::clause_guard(
                             &props.original_subject_name,
                             AirTree::void(),
-                            void(),
+                            Type::void(),
                             then,
                         )
                     } else {
@@ -3596,7 +3616,7 @@ impl<'a> CodeGenerator<'a> {
 
                     arg_names.push(arg_name.clone());
 
-                    let param = AirTree::local_var(&arg_name, data());
+                    let param = AirTree::local_var(&arg_name, Type::data());
 
                     let actual_type = convert_opaque_type(&arg.tipo, &self.data_types, true);
 
@@ -3621,7 +3641,7 @@ impl<'a> CodeGenerator<'a> {
                             self.special_functions.insert_new_function(
                                 msg_func_name.clone(),
                                 Term::Error.delayed_trace(Term::string(msg)).delay(),
-                                void(),
+                                Type::void(),
                             );
 
                             Some(self.special_functions.use_function_tree(msg_func_name))
@@ -3637,7 +3657,7 @@ impl<'a> CodeGenerator<'a> {
                         inner_then,
                         &actual_type,
                         AssignmentProperties {
-                            value_type: data(),
+                            value_type: Type::data(),
                             kind: AssignmentKind::expect(),
                             remove_unused: false,
                             full_check: true,
