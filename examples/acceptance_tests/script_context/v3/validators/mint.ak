@@ -123,9 +123,18 @@ fn assert_mint(mint: Value, our_policy_id: PolicyId, other_policy_id: PolicyId) 
   Void
 }
 
+// NOTE: It is imperative that test2 has a lower hash value than test1; as
+// otherwise the redeemer will point to the wrong redeemer. So the trace
+// below is meant to generate a small-enough hash... If this test fails
+// after some code-gen changes, it's probably because the new hash is
+// larger.
+///
+// How to fix?
+//   Change the traced string down below in hope to get a
+//   smaller hash.
 validator test_2 {
   mint(_tmp2: Void, _policy_id: PolicyId, _transaction: Transaction) {
-    trace @"_____mint_2_____"
+    trace @"slfhioer7w8yru"
     True
   }
 

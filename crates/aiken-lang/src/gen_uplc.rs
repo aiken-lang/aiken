@@ -320,6 +320,78 @@ impl<'a> CodeGenerator<'a> {
                                         ),
                                     },
 
+                                    "publish" => TypedPattern::Constructor {
+                                        is_record: false,
+                                        location: Span::empty(),
+                                        name: well_known::SCRIPT_PURPOSE_PUBLISH.to_string(),
+                                        arguments: vec![CallArg {
+                                            label: None,
+                                            location: Span::empty(),
+                                            value: TypedPattern::Var {
+                                                name: "__purpose_arg__".to_string(),
+                                                location: Span::empty(),
+                                            },
+                                        }],
+                                        module: None,
+                                        constructor: PatternConstructor::Record {
+                                            name: well_known::SCRIPT_PURPOSE_PUBLISH.to_string(),
+                                            field_map: None,
+                                        },
+                                        spread_location: None,
+                                        tipo: Type::function(
+                                            vec![Type::data()],
+                                            Type::script_purpose(),
+                                        ),
+                                    },
+
+                                    "vote" => TypedPattern::Constructor {
+                                        is_record: false,
+                                        location: Span::empty(),
+                                        name: well_known::SCRIPT_PURPOSE_VOTE.to_string(),
+                                        arguments: vec![CallArg {
+                                            label: None,
+                                            location: Span::empty(),
+                                            value: TypedPattern::Var {
+                                                name: "__purpose_arg__".to_string(),
+                                                location: Span::empty(),
+                                            },
+                                        }],
+                                        module: None,
+                                        constructor: PatternConstructor::Record {
+                                            name: well_known::SCRIPT_PURPOSE_VOTE.to_string(),
+                                            field_map: None,
+                                        },
+                                        spread_location: None,
+                                        tipo: Type::function(
+                                            vec![Type::data()],
+                                            Type::script_purpose(),
+                                        ),
+                                    },
+
+                                    "propose" => TypedPattern::Constructor {
+                                        is_record: false,
+                                        location: Span::empty(),
+                                        name: well_known::SCRIPT_PURPOSE_PROPOSE.to_string(),
+                                        arguments: vec![CallArg {
+                                            label: None,
+                                            location: Span::empty(),
+                                            value: TypedPattern::Var {
+                                                name: "__purpose_arg__".to_string(),
+                                                location: Span::empty(),
+                                            },
+                                        }],
+                                        module: None,
+                                        constructor: PatternConstructor::Record {
+                                            name: well_known::SCRIPT_PURPOSE_PROPOSE.to_string(),
+                                            field_map: None,
+                                        },
+                                        spread_location: None,
+                                        tipo: Type::function(
+                                            vec![Type::data()],
+                                            Type::script_purpose(),
+                                        ),
+                                    },
+
                                     purpose => {
                                         unreachable!("unexpected/unknown purpose: {:?}", purpose)
                                     }

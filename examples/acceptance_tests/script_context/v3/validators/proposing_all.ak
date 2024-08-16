@@ -6,18 +6,22 @@ use cardano/governance.{
   HardFork, NewConstitution, NicePoll, NoConfidence, ProposalProcedure,
   ProtocolVersion, TreasuryWithdrawal,
 }
-use cardano/transaction.{Propose, Redeemer, ScriptContext, ScriptPurpose}
+use cardano/transaction.{Propose, Redeemer, ScriptPurpose, Transaction}
 
 const null28 = #"00000000000000000000000000000000000000000000000000000000"
 
 const null32 =
   #"0000000000000000000000000000000000000000000000000000000000000000"
 
-validator {
-  fn guardrails(_tmp1: Void, ctx: ScriptContext) -> Bool {
-    let procedures = ctx.transaction.proposal_procedures
+validator guardrails {
+  propose(
+    _redeemer: Void,
+    _: ProposalProcedure,
+    transaction: Transaction,
+  ) -> Bool {
+    let procedures = transaction.proposal_procedures
 
-    assert_redeemers(ctx.transaction.redeemers)
+    assert_redeemers(transaction.redeemers)
 
     assert_proposal_procedure(
       list.at(procedures, 0),
@@ -117,6 +121,10 @@ validator {
     assert_last_proposal_procedure(list.at(procedures, 8))
 
     True
+  }
+
+  else(_ctx) {
+    fail
   }
 }
 
