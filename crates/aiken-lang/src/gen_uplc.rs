@@ -324,14 +324,24 @@ impl<'a> CodeGenerator<'a> {
                                         is_record: false,
                                         location: Span::empty(),
                                         name: well_known::SCRIPT_PURPOSE_PUBLISH.to_string(),
-                                        arguments: vec![CallArg {
-                                            label: None,
-                                            location: Span::empty(),
-                                            value: TypedPattern::Var {
-                                                name: "__purpose_arg__".to_string(),
+                                        arguments: vec![
+                                            CallArg {
+                                                label: None,
                                                 location: Span::empty(),
+                                                value: TypedPattern::Var {
+                                                    name: "__purpose_arg_ix__".to_string(),
+                                                    location: Span::empty(),
+                                                },
                                             },
-                                        }],
+                                            CallArg {
+                                                label: None,
+                                                location: Span::empty(),
+                                                value: TypedPattern::Var {
+                                                    name: "__purpose_arg__".to_string(),
+                                                    location: Span::empty(),
+                                                },
+                                            },
+                                        ],
                                         module: None,
                                         constructor: PatternConstructor::Record {
                                             name: well_known::SCRIPT_PURPOSE_PUBLISH.to_string(),
@@ -339,7 +349,7 @@ impl<'a> CodeGenerator<'a> {
                                         },
                                         spread_location: None,
                                         tipo: Type::function(
-                                            vec![Type::data()],
+                                            vec![Type::int(), Type::data()],
                                             Type::script_purpose(),
                                         ),
                                     },
@@ -372,14 +382,24 @@ impl<'a> CodeGenerator<'a> {
                                         is_record: false,
                                         location: Span::empty(),
                                         name: well_known::SCRIPT_PURPOSE_PROPOSE.to_string(),
-                                        arguments: vec![CallArg {
-                                            label: None,
-                                            location: Span::empty(),
-                                            value: TypedPattern::Var {
-                                                name: "__purpose_arg__".to_string(),
+                                        arguments: vec![
+                                            CallArg {
+                                                label: None,
                                                 location: Span::empty(),
+                                                value: TypedPattern::Var {
+                                                    name: "__purpose_arg_ix__".to_string(),
+                                                    location: Span::empty(),
+                                                },
                                             },
-                                        }],
+                                            CallArg {
+                                                label: None,
+                                                location: Span::empty(),
+                                                value: TypedPattern::Var {
+                                                    name: "__purpose_arg__".to_string(),
+                                                    location: Span::empty(),
+                                                },
+                                            },
+                                        ],
                                         module: None,
                                         constructor: PatternConstructor::Record {
                                             name: well_known::SCRIPT_PURPOSE_PROPOSE.to_string(),
@@ -387,7 +407,7 @@ impl<'a> CodeGenerator<'a> {
                                         },
                                         spread_location: None,
                                         tipo: Type::function(
-                                            vec![Type::data()],
+                                            vec![Type::int(), Type::data()],
                                             Type::script_purpose(),
                                         ),
                                     },
