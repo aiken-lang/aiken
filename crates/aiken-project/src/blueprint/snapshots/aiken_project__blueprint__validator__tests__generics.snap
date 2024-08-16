@@ -1,9 +1,15 @@
 ---
 source: crates/aiken-project/src/blueprint/validator.rs
-description: "Code:\n\ntype Either<left, right> {\n    Left(left)\n    Right(right)\n}\n\ntype Interval<a> {\n    Finite(a)\n    Infinite\n}\n\nvalidator {\n  fn generics(redeemer: Either<ByteArray, Interval<Int>>, ctx: Void) {\n    True\n  }\n}\n"
+description: "Code:\n\npub type Either<left, right> {\n    Left(left)\n    Right(right)\n}\n\npub type Interval<a> {\n    Finite(a)\n    Infinite\n}\n\nvalidator generics {\n  spend(datum: Option<Data>, redeemer: Either<ByteArray, Interval<Int>>, output_reference: Data, transaction: Data) {\n    True\n  }\n}\n"
 ---
 {
-  "title": "test_module.generics",
+  "title": "test_module.generics_spend",
+  "datum": {
+    "title": "datum",
+    "schema": {
+      "$ref": "#/definitions/Data"
+    }
+  },
   "redeemer": {
     "title": "redeemer",
     "schema": {
@@ -15,6 +21,10 @@ description: "Code:\n\ntype Either<left, right> {\n    Left(left)\n    Right(rig
   "definitions": {
     "ByteArray": {
       "dataType": "bytes"
+    },
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
     },
     "Int": {
       "dataType": "integer"
