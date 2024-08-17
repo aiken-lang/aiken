@@ -812,7 +812,9 @@ where
                     &mut self.data_types,
                 )?;
 
-                if our_modules.contains(checked_module.name.as_str()) {
+                if our_modules.contains(checked_module.name.as_str())
+                    && checked_module.name.as_str() != ast::CONFIG_MODULE
+                {
                     self.warnings.extend(warnings);
                 }
 
