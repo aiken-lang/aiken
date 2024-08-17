@@ -30,6 +30,7 @@ pub enum TypedExpr {
         location: Span,
         tipo: Rc<Type>,
         value: String,
+        base: Base,
     },
 
     String {
@@ -42,12 +43,14 @@ pub enum TypedExpr {
         location: Span,
         tipo: Rc<Type>,
         bytes: Vec<u8>,
+        preferred_format: ByteArrayFormatPreference,
     },
 
     CurvePoint {
         location: Span,
         tipo: Rc<Type>,
         point: Box<Curve>,
+        preferred_format: ByteArrayFormatPreference,
     },
 
     Sequence {

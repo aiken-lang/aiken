@@ -1,9 +1,8 @@
-use chumsky::prelude::*;
-
 use crate::{
     expr::UntypedExpr,
     parser::{error::ParseError, token::Token},
 };
+use chumsky::prelude::*;
 
 pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
     recursive(|sequence| {

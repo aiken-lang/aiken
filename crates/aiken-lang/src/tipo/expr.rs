@@ -20,6 +20,7 @@ use crate::{
     builtins::{from_default_function, BUILTIN},
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
+    parser::token::Base,
     tipo::{fields::FieldMap, DefaultFunction, PatternConstructor, TypeVar},
     IdGenerator,
 };
@@ -434,8 +435,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             UntypedExpr::UInt {
                 location,
                 value,
-                base: _,
-            } => Ok(self.infer_uint(value, location)),
+                base,
+            } => Ok(self.infer_uint(value, base, location)),
 
             UntypedExpr::Sequence {
                 expressions,
@@ -550,8 +551,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             UntypedExpr::CurvePoint {
                 location,
                 point,
-                preferred_format: _,
-            } => self.infer_curve_point(*point, location),
+                preferred_format,
+            } => self.infer_curve_point(*point, preferred_format, location),
 
             UntypedExpr::RecordUpdate {
                 location,
@@ -592,10 +593,16 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             location,
             bytes,
             tipo: Type::byte_array(),
+            preferred_format,
         })
     }
 
-    fn infer_curve_point(&mut self, curve: Curve, location: Span) -> Result<TypedExpr, Error> {
+    fn infer_curve_point(
+        &mut self,
+        curve: Curve,
+        preferred_format: ByteArrayFormatPreference,
+        location: Span,
+    ) -> Result<TypedExpr, Error> {
         let tipo = match curve {
             Curve::Bls12_381(point) => match point {
                 Bls12_381Point::G1(_) => Type::g1_element(),
@@ -607,6 +614,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             location,
             point: curve.into(),
             tipo,
+            preferred_format,
         })
     }
 
@@ -1707,11 +1715,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         Ok((args, body, return_type))
     }
 
-    fn infer_uint(&mut self, value: String, location: Span) -> TypedExpr {
+    fn infer_uint(&mut self, value: String, base: Base, location: Span) -> TypedExpr {
         TypedExpr::UInt {
             location,
             value,
             tipo: Type::int(),
+            base,
         }
     }
 
@@ -2720,6 +2729,7 @@ fn diagnose_expr(expr: TypedExpr) -> TypedExpr {
                             tipo: Type::byte_array(),
                             bytes: vec![],
                             location,
+                            preferred_format: ByteArrayFormatPreference::HexadecimalString,
                         },
                     },
                 ],

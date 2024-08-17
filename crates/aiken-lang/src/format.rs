@@ -340,12 +340,53 @@ impl<'comments> Formatter<'comments> {
 
     pub fn docs_const_expr<'a>(&mut self, name: &'a str, value: &'a TypedExpr) -> Document<'a> {
         let mut printer = tipo::pretty::Printer::new();
-        name.to_doc()
+        let doc = name
+            .to_doc()
             .append(": ")
-            .append(printer.print(&value.tipo()))
-        // TODO: Show full expression in docs when simple enough
-        // .append(" = ")
-        // .append(self.const_expr(value))
+            .append(printer.print(&value.tipo()));
+
+        // NOTE: Only display the full value for simple expressions.
+        let value = self.const_expr(value);
+        if value.is_empty() {
+            doc
+        } else {
+            doc.append(" = ").append(value)
+        }
+    }
+
+    pub fn const_expr<'a>(&mut self, value: &'a TypedExpr) -> Document<'a> {
+        match value {
+            TypedExpr::UInt { value, base, .. } => self.int(value, base),
+            TypedExpr::String { value, .. } => self.string(value),
+            TypedExpr::ByteArray {
+                bytes,
+                preferred_format,
+                ..
+            } => self.bytearray(bytes, None, preferred_format),
+            TypedExpr::CurvePoint {
+                point,
+                preferred_format,
+                ..
+            } => self.bytearray(
+                &point.compress(),
+                Some(point.as_ref().into()),
+                preferred_format,
+            ),
+            TypedExpr::Tuple { elems, .. } => {
+                wrap_args(elems.iter().map(|e| (self.const_expr(e), false))).group()
+            }
+            TypedExpr::Pair { fst, snd, .. } => {
+                let elems = [fst, snd];
+                "Pair"
+                    .to_doc()
+                    .append(wrap_args(elems.iter().map(|e| (self.const_expr(e), false))).group())
+            }
+            TypedExpr::List { elements, .. } => {
+                wrap_args(elements.iter().map(|e| (self.const_expr(e), false))).group()
+            }
+            TypedExpr::Var { name, .. } => name.to_doc(),
+            _ => Document::Str(""),
+        }
     }
 
     fn documented_definition<'a>(&mut self, s: &'a UntypedDefinition) -> Document<'a> {
