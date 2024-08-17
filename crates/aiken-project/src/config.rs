@@ -45,7 +45,7 @@ pub enum SimpleExpr {
 }
 
 impl SimpleExpr {
-    pub fn as_untyped_expr(&self) -> UntypedExpr {
+    pub fn as_untyped_expr(&self, annotation: &Annotation) -> UntypedExpr {
         match self {
             SimpleExpr::Bool(b) => UntypedExpr::Var {
                 location: Span::empty(),
@@ -63,38 +63,73 @@ impl SimpleExpr {
                 bytes: bs.to_vec(),
                 preferred_format: *preferred_format,
             },
-            SimpleExpr::List(es) => UntypedExpr::List {
-                location: Span::empty(),
-                elements: es.iter().map(|e| e.as_untyped_expr()).collect(),
-                tail: None,
+            SimpleExpr::List(es) => match annotation {
+                Annotation::Tuple { elems, .. } => UntypedExpr::Tuple {
+                    location: Span::empty(),
+                    elems: es
+                        .iter()
+                        .zip(elems)
+                        .map(|(e, ann)| e.as_untyped_expr(ann))
+                        .collect(),
+                },
+                Annotation::Constructor {
+                    module,
+                    name,
+                    arguments,
+                    ..
+                } if name == "List" && module.is_none() => UntypedExpr::List {
+                    location: Span::empty(),
+                    elements: es
+                        .iter()
+                        .map(|e| e.as_untyped_expr(arguments.first().unwrap()))
+                        .collect(),
+                    tail: None,
+                },
+                _ => unreachable!(
+                    "unexpected annotation for simple list expression: {annotation:#?}"
+                ),
             },
         }
     }
 
-    pub fn as_definition(&self, identifier: &str) -> UntypedDefinition {
+    pub fn as_annotation(&self) -> Annotation {
         let location = Span::empty();
+        match self {
+            SimpleExpr::Bool(..) => Annotation::boolean(location),
+            SimpleExpr::Int(_) => Annotation::int(location),
+            SimpleExpr::ByteArray(_, _) => Annotation::bytearray(location),
+            SimpleExpr::List(elems) => {
+                let elems = elems.iter().map(|e| e.as_annotation()).collect::<Vec<_>>();
 
-        let (value, annotation) = match self {
-            SimpleExpr::Bool(..) => todo!("requires https://github.com/aiken-lang/aiken/pull/992"),
-            SimpleExpr::Int(_) => (
-                // TODO: Replace with 'self.as_untyped_expr()' after https://github.com/aiken-lang/aiken/pull/992
-                self.as_untyped_expr(),
-                Some(Annotation::int(location)),
-            ),
-            SimpleExpr::ByteArray(_, _) => (
-                // TODO: Replace with 'self.as_untyped_expr()' after https://github.com/aiken-lang/aiken/pull/992
-                self.as_untyped_expr(),
-                Some(Annotation::bytearray(location)),
-            ),
-            SimpleExpr::List(..) => todo!("requires https://github.com/aiken-lang/aiken/pull/992"),
-        };
+                let (is_uniform, inner) =
+                    elems
+                        .iter()
+                        .fold((true, None), |(matches, ann), a| match ann {
+                            None => (matches, Some(a)),
+                            Some(b) => (matches && a == b, ann),
+                        });
 
+                if is_uniform {
+                    Annotation::list(
+                        inner.cloned().unwrap_or_else(|| Annotation::data(location)),
+                        location,
+                    )
+                } else {
+                    Annotation::tuple(elems, location)
+                }
+            }
+        }
+    }
+
+    pub fn as_definition(&self, identifier: &str) -> UntypedDefinition {
+        let annotation = self.as_annotation();
+        let value = self.as_untyped_expr(&annotation);
         UntypedDefinition::ModuleConstant(ModuleConstant {
             location: Span::empty(),
             doc: None,
             public: true,
             name: identifier.to_string(),
-            annotation,
+            annotation: Some(annotation),
             value,
         })
     }

@@ -1259,6 +1259,19 @@ impl Annotation {
         }
     }
 
+    pub fn list(inner: Annotation, location: Span) -> Self {
+        Annotation::Constructor {
+            name: "List".to_string(),
+            module: None,
+            arguments: vec![inner],
+            location,
+        }
+    }
+
+    pub fn tuple(elems: Vec<Annotation>, location: Span) -> Self {
+        Annotation::Tuple { elems, location }
+    }
+
     pub fn is_logically_equal(&self, other: &Annotation) -> bool {
         match self {
             Annotation::Constructor {
