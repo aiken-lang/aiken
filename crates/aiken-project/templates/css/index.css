@@ -510,8 +510,30 @@ body.drawer-open .label-closed {
   color: var(--color-background-accent);
 }
 
+.constructor-item-docs hr {
+  color: var(--color-text-accent);
+}
+
+.constructor-item-docs hr:last-child {
+  display: none;
+}
+
 .constructor-item-docs p {
   margin: 0;
+}
+
+.constructor-item-docs h4 {
+  margin-bottom: 1rem;
+  display: inline-block;
+}
+
+.constructor-item-docs h4 > code {
+  padding: 0.5rem;
+}
+
+.constructor-item-docs h4 ~ p {
+  padding-left: 0.5rem;
+  display: inline-block;
 }
 
 .constructor-name {

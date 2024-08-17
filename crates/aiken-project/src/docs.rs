@@ -553,6 +553,15 @@ struct DocTypeConstructor {
 
 impl DocTypeConstructor {
     fn from_record_constructor(constructor: &RecordConstructor<Rc<Type>>) -> Self {
+        let doc_args = constructor
+            .arguments
+            .iter()
+            .filter_map(|arg| match (arg.label.as_deref(), arg.doc.as_deref()) {
+                (Some(label), Some(doc)) => Some(format!("#### `.{label}`\n{doc}\n<hr/>\n",)),
+                _ => None,
+            })
+            .join("\n");
+
         DocTypeConstructor {
             definition: format::Formatter::new()
                 .docs_record_constructor(constructor)
@@ -560,7 +569,7 @@ impl DocTypeConstructor {
             documentation: constructor
                 .doc
                 .as_deref()
-                .map(render_markdown)
+                .map(|doc| render_markdown(&format!("{doc}\n{doc_args}")))
                 .unwrap_or_default(),
             raw_documentation: constructor.doc.as_deref().unwrap_or_default().to_string(),
         }
