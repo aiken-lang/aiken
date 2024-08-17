@@ -295,7 +295,7 @@ impl<'comments> Formatter<'comments> {
 
                 head.append(" =")
                     .append(break_("", " "))
-                    .append(self.const_expr(value))
+                    .append(self.expr(value, true))
                     .nest(INDENT)
                     .group()
             }
@@ -336,12 +336,6 @@ impl<'comments> Formatter<'comments> {
             } else {
                 nil()
             })
-    }
-
-    fn const_expr<'a>(&mut self, _value: &'a UntypedExpr) -> Document<'a> {
-        todo!(
-            "format const_expr: surround complex expressions with a block, and leave simple expression without"
-        );
     }
 
     pub fn docs_const_expr<'a>(&mut self, name: &'a str, value: &'a TypedExpr) -> Document<'a> {
