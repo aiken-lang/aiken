@@ -1,1 +1,3 @@
 build/
+aiken.lock
+**/plutus.json

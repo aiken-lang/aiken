@@ -1,8 +1,0 @@
-{
-  "preamble": {
-    "title": "aiken-lang/acceptance_test_072",
-    "version": "0.0.0",
-    "plutusVersion": "v2"
-  },
-  "validators": []
-}

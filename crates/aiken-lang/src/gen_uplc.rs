@@ -3530,17 +3530,15 @@ impl<'a> CodeGenerator<'a> {
                 .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
 
             match function {
-                HoistableFunction::Function { deps, params, .. } => {
-                    if !params.is_empty() {
-                        for (dep_generic_func, dep_variant) in deps.iter() {
-                            if !(dep_generic_func == &generic_func && dep_variant == &variant) {
-                                validator_hoistable
-                                    .insert(0, (dep_generic_func.clone(), dep_variant.clone()));
+                HoistableFunction::Function { deps, .. } => {
+                    for (dep_generic_func, dep_variant) in deps.iter() {
+                        if !(dep_generic_func == &generic_func && dep_variant == &variant) {
+                            validator_hoistable
+                                .insert(0, (dep_generic_func.clone(), dep_variant.clone()));
 
-                                sorted_function_vec.retain(|(generic_func, variant)| {
-                                    !(generic_func == dep_generic_func && variant == dep_variant)
-                                });
-                            }
+                            sorted_function_vec.retain(|(generic_func, variant)| {
+                                !(generic_func == dep_generic_func && variant == dep_variant)
+                            });
                         }
                     }
 
@@ -3790,18 +3788,17 @@ impl<'a> CodeGenerator<'a> {
                 .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
 
             match function {
-                HoistableFunction::Function { deps, params, .. } => {
-                    if !params.is_empty() {
-                        for (dep_generic_func, dep_variant) in deps.iter() {
-                            if !(dep_generic_func == &dep.0 && dep_variant == &dep.1) {
-                                sorted_dep_vec.retain(|(generic_func, variant)| {
-                                    !(generic_func == dep_generic_func && variant == dep_variant)
-                                });
+                HoistableFunction::Function { deps, .. } => {
+                    for (dep_generic_func, dep_variant) in deps.iter() {
+                        if !(dep_generic_func == &dep.0 && dep_variant == &dep.1) {
+                            sorted_dep_vec.retain(|(generic_func, variant)| {
+                                !(generic_func == dep_generic_func && variant == dep_variant)
+                            });
 
-                                deps_vec.insert(0, (dep_generic_func.clone(), dep_variant.clone()));
-                            }
+                            deps_vec.insert(0, (dep_generic_func.clone(), dep_variant.clone()));
                         }
                     }
+
                     sorted_dep_vec.push((dep.0.clone(), dep.1.clone()));
                 }
                 HoistableFunction::CyclicFunction { deps, .. } => {
@@ -3861,11 +3858,6 @@ impl<'a> CodeGenerator<'a> {
                             deps: dependency_deps,
                             params: dependent_params,
                         } => {
-                            if dependent_params.is_empty() {
-                                // continue for zero arg functions. They are treated like global hoists.
-                                return then;
-                            }
-
                             let is_dependent_recursive = dependency_deps
                                 .iter()
                                 .any(|(key, variant)| &dep_key == key && &dep_variant == variant);
@@ -4027,6 +4019,7 @@ impl<'a> CodeGenerator<'a> {
                             let (path, _) = func_variants.get_mut("").unwrap();
                             *path = path.common_ancestor(tree_path);
                         } else {
+                            // Shortcut path for compiler generated functions
                             let CodeGenFunction::Function { body, params } = code_gen_func else {
                                 unreachable!()
                             };
@@ -4610,8 +4603,6 @@ impl<'a> CodeGenerator<'a> {
                 } else {
                     let term = arg_stack.pop().unwrap();
 
-                    // How we handle zero arg anon functions has changed
-                    // We now delay zero arg anon functions and force them on a call operation
                     match term.pierce_no_inlines() {
                         Term::Var(_) => Some(term.force()),
                         Term::Delay(inner_term) => Some(inner_term.as_ref().clone()),
@@ -4801,6 +4792,10 @@ impl<'a> CodeGenerator<'a> {
                 // each time
                 for param in recursive_nonstatic_params.iter().rev() {
                     func_body = func_body.lambda(param.clone());
+                }
+
+                if params.is_empty() {
+                    func_body = func_body.delay();
                 }
 
                 if !recursive {
