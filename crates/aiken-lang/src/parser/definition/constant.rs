@@ -14,8 +14,10 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                 .or_not(),
         )
         .then_ignore(just(Token::Equal))
-        .then(recursive(|expression| {
-            recursive(|sequence| pure_expression(sequence, expression))
+        .then(recursive(|sequence| {
+            recursive(|expression| pure_expression(sequence.clone(), expression))
+                .then(sequence.repeated())
+                .foldl(|current, next| current.append_in_sequence(next))
         }))
         .map_with_span(|(((public, name), annotation), value), span| {
             ast::UntypedDefinition::ModuleConstant(ast::ModuleConstant {
