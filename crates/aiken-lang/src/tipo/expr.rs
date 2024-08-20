@@ -1397,9 +1397,16 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let (then, typed_patterns) = self.in_new_scope(|scope| {
             let typed_patterns = scope.infer_clause_pattern(patterns, subject, &location)?;
 
-            assert_no_assignment(&then)?;
-
-            let then = scope.infer(then)?;
+            let then = if let Some(filler) =
+                recover_from_no_assignment(assert_no_assignment(&then), then.location())?
+            {
+                TypedExpr::Sequence {
+                    location,
+                    expressions: vec![scope.infer(then)?, filler],
+                }
+            } else {
+                scope.infer(then)?
+            };
 
             Ok::<_, Error>((then, typed_patterns))
         })?;
@@ -1521,8 +1528,16 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             typed_branches.push(typed_branch);
         }
 
-        assert_no_assignment(&final_else)?;
-        let typed_final_else = self.infer(final_else)?;
+        let typed_final_else = if let Some(filler) =
+            recover_from_no_assignment(assert_no_assignment(&final_else), final_else.location())?
+        {
+            TypedExpr::Sequence {
+                location: final_else.location(),
+                expressions: vec![self.infer(final_else)?, filler],
+            }
+        } else {
+            self.infer(final_else)?
+        };
 
         self.unify(
             first_body_type.clone(),
@@ -1569,8 +1584,18 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         location: branch.condition.location().union(location),
                     })
                 }
-                assert_no_assignment(&branch.body)?;
-                let body = typer.infer(branch.body.clone())?;
+
+                let body = if let Some(filler) = recover_from_no_assignment(
+                    assert_no_assignment(&branch.body),
+                    branch.body.location(),
+                )? {
+                    TypedExpr::Sequence {
+                        location: branch.body.location(),
+                        expressions: vec![typer.infer(branch.body.clone())?, filler],
+                    }
+                } else {
+                    typer.infer(branch.body.clone())?
+                };
 
                 Ok((*value, body, Some((pattern, tipo))))
             })?,
@@ -1584,8 +1609,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     false,
                 )?;
 
-                assert_no_assignment(&branch.body)?;
-                let body = self.infer(branch.body.clone())?;
+                let body = if let Some(filler) = recover_from_no_assignment(
+                    assert_no_assignment(&branch.body),
+                    branch.body.location(),
+                )? {
+                    TypedExpr::Sequence {
+                        location: branch.body.location(),
+                        expressions: vec![self.infer(branch.body.clone())?, filler],
+                    }
+                } else {
+                    self.infer(branch.body.clone())?
+                };
 
                 (condition, body, None)
             }
@@ -1631,7 +1665,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         body: UntypedExpr,
         return_type: Option<Rc<Type>>,
     ) -> Result<(Vec<TypedArg>, TypedExpr, Rc<Type>), Error> {
-        assert_no_assignment(&body)?;
+        let location = body.location();
+
+        let no_assignment = assert_no_assignment(&body);
 
         let (body_rigid_names, body_infer) = self.in_new_scope(|body_typer| {
             let mut argument_names = HashMap::with_capacity(args.len());
@@ -1668,7 +1704,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             Ok((body_typer.hydrator.rigid_names(), body_typer.infer(body)))
         })?;
 
-        let body = body_infer.map_err(|e| e.with_unify_error_rigid_names(&body_rigid_names))?;
+        let inferred_body =
+            body_infer.map_err(|e| e.with_unify_error_rigid_names(&body_rigid_names));
+
+        let body = if let Some(filler) = recover_from_no_assignment(no_assignment, location)? {
+            TypedExpr::Sequence {
+                location,
+                expressions: vec![inferred_body?, filler],
+            }
+        } else {
+            inferred_body?
+        };
 
         // Check that any return type is accurate.
         let return_type = match return_type {
@@ -1757,9 +1803,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let mut typed_expressions = vec![];
 
         for expression in expressions {
-            assert_no_assignment(&expression)?;
-
-            let typed_expression = self.infer(expression)?;
+            let typed_expression = if let Some(filler) = recover_from_no_assignment(
+                assert_no_assignment(&expression),
+                expression.location(),
+            )? {
+                TypedExpr::Sequence {
+                    location: expression.location(),
+                    expressions: vec![self.infer(expression)?, filler],
+                }
+            } else {
+                self.infer(expression)?
+            };
 
             self.unify(
                 bool(),
@@ -2046,21 +2100,29 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
                 let typed_expression = scope.infer(expression)?;
 
-                expressions.push(match i.cmp(&(count - 1)) {
+                match i.cmp(&(count - 1)) {
                     // When the expression is the last in a sequence, we enforce it is NOT
                     // an assignment (kind of treat assignments like statements).
                     Ordering::Equal => {
-                        no_assignment?;
-                        typed_expression
+                        if let Some(filler) =
+                            recover_from_no_assignment(no_assignment, typed_expression.location())?
+                        {
+                            expressions.push(typed_expression);
+                            expressions.push(filler);
+                        } else {
+                            expressions.push(typed_expression);
+                        }
                     }
 
                     // This isn't the final expression in the sequence, so it *must*
                     // be a let-binding; we do not allow anything else.
-                    Ordering::Less => assert_assignment(typed_expression)?,
+                    Ordering::Less => {
+                        expressions.push(assert_assignment(typed_expression)?);
+                    }
 
                     // Can't actually happen
-                    Ordering::Greater => typed_expression,
-                })
+                    Ordering::Greater => unreachable!(),
+                }
             }
 
             Ok(expressions)
@@ -2479,11 +2541,28 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     }
 }
 
+fn recover_from_no_assignment(
+    result: Result<(), Error>,
+    span: Span,
+) -> Result<Option<TypedExpr>, Error> {
+    if let Err(Error::LastExpressionIsAssignment { patterns, .. }) = result {
+        match patterns.first().pattern.get_bool() {
+            Some(expected) if patterns.len() == 1 => Ok(Some(TypedExpr::bool(expected, span))),
+            _ => Ok(Some(TypedExpr::void(span))),
+        }
+    } else {
+        result.map(|()| None)
+    }
+}
+
 fn assert_no_assignment(expr: &UntypedExpr) -> Result<(), Error> {
     match expr {
-        UntypedExpr::Assignment { value, .. } => Err(Error::LastExpressionIsAssignment {
+        UntypedExpr::Assignment {
+            value, patterns, ..
+        } => Err(Error::LastExpressionIsAssignment {
             location: expr.location(),
             expr: *value.clone(),
+            patterns: patterns.clone(),
         }),
         UntypedExpr::Trace { then, .. } => assert_no_assignment(then),
         UntypedExpr::Fn { .. }

@@ -1,4 +1,5 @@
-use crate::{
+use crate::tipo::ValueConstructorVariant;
+pub(crate) use crate::{
     ast::{
         self, Annotation, ArgBy, ArgName, AssignmentPattern, BinOp, Bls12_381Point,
         ByteArrayFormatPreference, CallArg, Curve, DataType, DataTypeKey, DefinitionLocation,
@@ -7,7 +8,7 @@ use crate::{
         TypedDataType, TypedIfBranch, TypedRecordUpdateArg, UnOp, UntypedArg,
         UntypedAssignmentKind, UntypedClause, UntypedIfBranch, UntypedRecordUpdateArg,
     },
-    builtins::void,
+    builtins::{bool, void},
     parser::token::Base,
     tipo::{
         check_replaceable_opaque_type, convert_opaque_type, lookup_data_type_by_tipo,
@@ -470,6 +471,44 @@ impl TypedExpr {
             TypedExpr::UnOp { value, .. } => value
                 .find_node(byte_index)
                 .or(Some(Located::Expression(self))),
+        }
+    }
+
+    pub fn void(location: Span) -> Self {
+        TypedExpr::Var {
+            name: "Void".to_string(),
+            constructor: ValueConstructor {
+                public: true,
+                variant: ValueConstructorVariant::Record {
+                    name: "Void".to_string(),
+                    arity: 0,
+                    field_map: None,
+                    location: Span::empty(),
+                    module: String::new(),
+                    constructors_count: 1,
+                },
+                tipo: void(),
+            },
+            location,
+        }
+    }
+
+    pub fn bool(value: bool, location: Span) -> Self {
+        TypedExpr::Var {
+            name: "Bool".to_string(),
+            constructor: ValueConstructor {
+                public: true,
+                variant: ValueConstructorVariant::Record {
+                    name: if value { "True" } else { "False" }.to_string(),
+                    arity: 0,
+                    field_map: None,
+                    location: Span::empty(),
+                    module: String::new(),
+                    constructors_count: 2,
+                },
+                tipo: bool(),
+            },
+            location,
         }
     }
 }
