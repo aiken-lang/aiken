@@ -2184,23 +2184,101 @@ fn acceptance_test_23_to_list() {
         }
     "#;
 
+    let do_insert = Term::var("elems")
+        .delayed_choose_list(
+            Term::mk_cons()
+                .apply(
+                    Term::mk_pair_data()
+                        .apply(Term::b_data().apply(Term::var("k")))
+                        .apply(Term::i_data().apply(Term::var("v"))),
+                )
+                .apply(Term::empty_map()),
+            Term::head_list()
+                .apply(Term::var("elems"))
+                .as_var("elem_0", |elem_0| {
+                    Term::tail_list()
+                        .apply(Term::var("elems"))
+                        .as_var("rest", |rest| {
+                            Term::un_b_data()
+                                .apply(Term::fst_pair().apply(Term::Var(elem_0.clone())))
+                                .as_var("k2", |k2| {
+                                    Term::un_i_data()
+                                        .apply(Term::snd_pair().apply(Term::Var(elem_0.clone())))
+                                        .as_var("v2", |v2| {
+                                            Term::equals_bytestring()
+                                                .apply(Term::var("k"))
+                                                .apply(Term::Var(k2.clone()))
+                                                .delayed_if_then_else(
+                                                    Term::mk_cons()
+                                                        .apply(
+                                                            Term::mk_pair_data()
+                                                                .apply(
+                                                                    Term::b_data()
+                                                                        .apply(Term::var("k")),
+                                                                )
+                                                                .apply(
+                                                                    Term::i_data()
+                                                                        .apply(Term::var("v")),
+                                                                ),
+                                                        )
+                                                        .apply(Term::Var(rest.clone())),
+                                                    Term::mk_cons()
+                                                        .apply(
+                                                            Term::mk_pair_data()
+                                                                .apply(
+                                                                    Term::b_data()
+                                                                        .apply(Term::Var(k2)),
+                                                                )
+                                                                .apply(
+                                                                    Term::i_data()
+                                                                        .apply(Term::Var(v2)),
+                                                                ),
+                                                        )
+                                                        .apply(
+                                                            Term::var("do_insert")
+                                                                .apply(Term::var("do_insert"))
+                                                                .apply(Term::Var(rest)),
+                                                        ),
+                                                )
+                                        })
+                                })
+                        })
+                }),
+        )
+        .lambda("elems")
+        .lambda("do_insert");
+
+    let insert = do_insert
+        .as_var("do_insert", |do_insert| {
+            Term::Var(do_insert.clone())
+                .apply(Term::Var(do_insert))
+                .apply(Term::var("m"))
+        })
+        .lambda("v")
+        .lambda("k")
+        .lambda("m");
+
     assert_uplc(
         src,
         Term::equals_data()
-            .apply(Term::map_data().apply(Term::map_values(vec![
-                Constant::ProtoPair(
-                    Type::Data,
-                    Type::Data,
-                    Constant::Data(Data::bytestring("foo".as_bytes().to_vec())).into(),
-                    Constant::Data(Data::integer(42.into())).into(),
+            .apply(
+                Term::map_data().apply(
+                    insert
+                        .as_var("insert", |insert| {
+                            Term::Var(insert.clone())
+                                .apply(
+                                    Term::Var(insert)
+                                        .apply(Term::empty_map())
+                                        .apply(Term::byte_string("foo".as_bytes().to_vec()))
+                                        .apply(Term::integer(42.into())),
+                                )
+                                .apply(Term::byte_string("bar".as_bytes().to_vec()))
+                                .apply(Term::integer(14.into()))
+                                .delay()
+                        })
+                        .force(),
                 ),
-                Constant::ProtoPair(
-                    Type::Data,
-                    Type::Data,
-                    Constant::Data(Data::bytestring("bar".as_bytes().to_vec())).into(),
-                    Constant::Data(Data::integer(14.into())).into(),
-                ),
-            ])))
+            )
             .apply(Term::map_data().apply(Term::map_values(vec![
                 Constant::ProtoPair(
                     Type::Data,
@@ -3090,76 +3168,30 @@ fn acceptance_test_29_union_pair() {
 
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::map_data().apply(
-                    Term::var("union")
-                        .lambda("union")
-                        .apply(
-                            Term::var("do_union")
-                                .apply(Term::var("left"))
-                                .apply(Term::var("right"))
-                                .lambda("right")
-                                .lambda("left"),
-                        )
-                        .lambda("do_union")
-                        .apply(Term::var("do_union").apply(Term::var("do_union")))
-                        .lambda("do_union")
-                        .apply(
-                            Term::var("left")
-                                .delayed_choose_list(
-                                    Term::var("right"),
-                                    Term::var("do_union")
-                                        .apply(Term::var("do_union"))
-                                        .apply(Term::var("rest"))
-                                        .apply(
-                                            Term::var("do_insert")
-                                                .apply(Term::var("right"))
-                                                .apply(Term::var("k"))
-                                                .apply(Term::var("v")),
-                                        )
-                                        .lambda("v")
-                                        .apply(
-                                            Term::un_i_data()
-                                                .apply(Term::snd_pair().apply(Term::var("pair"))),
-                                        )
-                                        .lambda("k")
-                                        .apply(
-                                            Term::un_b_data()
-                                                .apply(Term::fst_pair().apply(Term::var("pair"))),
-                                        )
-                                        .lambda("rest")
-                                        .apply(Term::tail_list().apply(Term::var("left")))
-                                        .lambda("pair")
-                                        .apply(Term::head_list().apply(Term::var("left"))),
-                                )
-                                .lambda("right")
-                                .lambda("left")
-                                .lambda("do_union"),
-                        )
-                        .lambda("do_insert")
-                        .apply(
-                            Term::var("do_insert")
-                                .apply(Term::var("do_insert"))
-                                .apply(Term::var("elems"))
-                                .lambda("do_insert")
-                                .apply(
-                                    Term::var("elems")
-                                        .delayed_choose_list(
-                                            Term::mk_cons()
-                                                .apply(
-                                                    Term::mk_pair_data()
-                                                        .apply(Term::b_data().apply(Term::var("k")))
-                                                        .apply(
-                                                            Term::i_data().apply(Term::var("v")),
-                                                        ),
-                                                )
-                                                .apply(Term::empty_map()),
+    let do_insert = Term::var("elems")
+        .delayed_choose_list(
+            Term::mk_cons()
+                .apply(
+                    Term::mk_pair_data()
+                        .apply(Term::b_data().apply(Term::var("k")))
+                        .apply(Term::i_data().apply(Term::var("v"))),
+                )
+                .apply(Term::empty_map()),
+            Term::head_list()
+                .apply(Term::var("elems"))
+                .as_var("elem_0", |elem_0| {
+                    Term::tail_list()
+                        .apply(Term::var("elems"))
+                        .as_var("rest", |rest| {
+                            Term::un_b_data()
+                                .apply(Term::fst_pair().apply(Term::Var(elem_0.clone())))
+                                .as_var("k2", |k2| {
+                                    Term::un_i_data()
+                                        .apply(Term::snd_pair().apply(Term::Var(elem_0.clone())))
+                                        .as_var("v2", |v2| {
                                             Term::equals_bytestring()
                                                 .apply(Term::var("k"))
-                                                .apply(Term::var("k2"))
+                                                .apply(Term::Var(k2.clone()))
                                                 .delayed_if_then_else(
                                                     Term::mk_cons()
                                                         .apply(
@@ -3173,72 +3205,109 @@ fn acceptance_test_29_union_pair() {
                                                                         .apply(Term::var("v")),
                                                                 ),
                                                         )
-                                                        .apply(Term::var("rest")),
+                                                        .apply(Term::Var(rest.clone())),
                                                     Term::mk_cons()
                                                         .apply(
                                                             Term::mk_pair_data()
                                                                 .apply(
                                                                     Term::b_data()
-                                                                        .apply(Term::var("k2")),
+                                                                        .apply(Term::Var(k2)),
                                                                 )
                                                                 .apply(
                                                                     Term::i_data()
-                                                                        .apply(Term::var("v2")),
+                                                                        .apply(Term::Var(v2)),
                                                                 ),
                                                         )
                                                         .apply(
                                                             Term::var("do_insert")
                                                                 .apply(Term::var("do_insert"))
-                                                                .apply(Term::var("rest")),
+                                                                .apply(Term::Var(rest)),
                                                         ),
                                                 )
-                                                .lambda("v2")
-                                                .apply(Term::un_i_data().apply(
-                                                    Term::snd_pair().apply(Term::var("pair")),
-                                                ))
-                                                .lambda("k2")
-                                                .apply(Term::un_b_data().apply(
-                                                    Term::fst_pair().apply(Term::var("pair")),
-                                                ))
-                                                .lambda("rest")
-                                                .apply(Term::tail_list().apply(Term::var("elems")))
-                                                .lambda("pair")
-                                                .apply(Term::head_list().apply(Term::var("elems"))),
-                                        )
-                                        .lambda("elems")
-                                        .lambda("do_insert"),
+                                        })
+                                })
+                        })
+                }),
+        )
+        .lambda("elems")
+        .lambda("do_insert");
+
+    let do_insert_recurse = do_insert
+        .as_var("do_insert", |do_insert| {
+            Term::Var(do_insert.clone())
+                .apply(Term::Var(do_insert))
+                .apply(Term::var("elems"))
+        })
+        .lambda("v")
+        .lambda("k")
+        .lambda("elems");
+
+    let insert = Term::var("do_insert")
+        .apply(Term::var("m"))
+        .apply(Term::var("k"))
+        .apply(Term::var("v"))
+        .lambda("v")
+        .lambda("k")
+        .lambda("m");
+
+    let fixture = Term::var("insert")
+        .apply(
+            Term::var("insert")
+                .apply(Term::var("new").force())
+                .apply(Term::byte_string("foo".as_bytes().to_vec()))
+                .apply(Term::integer(42.into())),
+        )
+        .apply(Term::byte_string("bar".as_bytes().to_vec()))
+        .apply(Term::integer(14.into()))
+        .delay();
+
+    let do_union = Term::var("left")
+        .delayed_choose_list(
+            Term::var("right"),
+            Term::head_list()
+                .apply(Term::var("left"))
+                .as_var("elem_0", |elem_0| {
+                    Term::var("do_union")
+                        .apply(Term::var("do_union"))
+                        .apply(Term::tail_list().apply(Term::var("left")))
+                        .apply(
+                            Term::var("do_insert")
+                                .apply(Term::var("right"))
+                                .apply(
+                                    Term::un_b_data()
+                                        .apply(Term::fst_pair().apply(Term::Var(elem_0.clone()))),
                                 )
-                                .lambda("v")
-                                .lambda("k")
-                                .lambda("elems"),
+                                .apply(
+                                    Term::un_i_data()
+                                        .apply(Term::snd_pair().apply(Term::Var(elem_0))),
+                                ),
                         )
-                        .apply(Term::map_values(vec![
-                            Constant::ProtoPair(
-                                Type::Data,
-                                Type::Data,
-                                Constant::Data(Data::bytestring("foo".as_bytes().to_vec())).into(),
-                                Constant::Data(Data::integer(42.into())).into(),
-                            ),
-                            Constant::ProtoPair(
-                                Type::Data,
-                                Type::Data,
-                                Constant::Data(Data::bytestring("bar".as_bytes().to_vec())).into(),
-                                Constant::Data(Data::integer(14.into())).into(),
-                            ),
-                        ]))
-                        .apply(Term::empty_map()),
-                ),
+                }),
+        )
+        .lambda("right")
+        .lambda("left")
+        .lambda("do_union");
+
+    assert_uplc(
+        src,
+        Term::equals_data()
+            .apply(
+                Term::map_data().apply(do_union.as_var("do_union", |do_union| {
+                    Term::Var(do_union.clone())
+                        .apply(Term::Var(do_union))
+                        .apply(Term::var("fixture").force())
+                        .apply(Term::var("new").force())
+                })),
             )
-            .apply(Term::data(Data::map(vec![
-                (
-                    Data::bytestring("foo".as_bytes().to_vec()),
-                    Data::integer(42.into()),
-                ),
-                (
-                    Data::bytestring("bar".as_bytes().to_vec()),
-                    Data::integer(14.into()),
-                ),
-            ]))),
+            .apply(Term::map_data().apply(Term::var("fixture").force()))
+            .lambda("fixture")
+            .apply(fixture)
+            .lambda("insert")
+            .apply(insert)
+            .lambda("new")
+            .apply(Term::empty_map().delay())
+            .lambda("do_insert")
+            .apply(do_insert_recurse),
         false,
     );
 }
