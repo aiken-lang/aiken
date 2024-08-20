@@ -2,7 +2,7 @@ use super::Type;
 use crate::{
     ast::{Annotation, BinOp, CallArg, LogicalOpChainKind, Span, UntypedFunction, UntypedPattern},
     error::ExtraData,
-    expr::{self, UntypedExpr},
+    expr::{self, AssignmentPattern, UntypedExpr},
     format::Formatter,
     levenshtein,
     pretty::Documentable,
@@ -15,6 +15,7 @@ use owo_colors::{
     Stream::{Stderr, Stdout},
 };
 use std::{collections::HashMap, fmt::Display, rc::Rc};
+use vec1::Vec1;
 
 #[derive(Debug, Clone, thiserror::Error)]
 #[error(
@@ -470,6 +471,7 @@ If you really meant to return that last expression, try to replace it with the f
         #[label("let-binding as last expression")]
         location: Span,
         expr: expr::UntypedExpr,
+        patterns: Vec1<AssignmentPattern>,
     },
 
     #[error(

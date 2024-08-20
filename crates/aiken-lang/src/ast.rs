@@ -1423,6 +1423,26 @@ impl UntypedPattern {
             is_record: false,
         }
     }
+
+    /// Returns Some(<bool>) if the pattern is a [`Boolean`] literal,
+    /// holding the target value. None if it isn't a bool pattern.
+    pub fn get_bool(&self) -> Option<bool> {
+        match self {
+            Self::Constructor {
+                module: None,
+                name,
+                constructor: (),
+                ..
+            } if name == "True" => Some(true),
+            Self::Constructor {
+                module: None,
+                name,
+                constructor: (),
+                ..
+            } if name == "False" => Some(false),
+            _ => None,
+        }
+    }
 }
 
 impl TypedPattern {

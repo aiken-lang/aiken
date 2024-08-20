@@ -1010,85 +1010,6 @@ fn anonymous_function_dupicate_args() {
 }
 
 #[test]
-fn assignement_last_expr_when() {
-    let source_code = r#"
-        pub fn foo() {
-          let bar = None
-
-          when bar is {
-            Some(_) -> {
-              let wow = 1
-            }
-            None -> {
-              2
-            }
-          }
-        }
-    "#;
-
-    assert!(matches!(
-        check(parse(source_code)),
-        Err((_, Error::LastExpressionIsAssignment { .. }))
-    ))
-}
-
-#[test]
-fn assignement_last_expr_if_first_branch() {
-    let source_code = r#"
-        pub fn foo() {
-          if True {
-            let thing = 1
-          } else {
-            1
-          }
-        }
-    "#;
-
-    assert!(matches!(
-        check(parse(source_code)),
-        Err((_, Error::LastExpressionIsAssignment { .. }))
-    ))
-}
-
-#[test]
-fn assignement_last_expr_if_branches() {
-    let source_code = r#"
-        pub fn foo() {
-          if True {
-            2
-          } else if False {
-            let thing = 1
-          } else {
-            1
-          }
-        }
-    "#;
-
-    assert!(matches!(
-        check(parse(source_code)),
-        Err((_, Error::LastExpressionIsAssignment { .. }))
-    ))
-}
-
-#[test]
-fn assignement_last_expr_if_final_else() {
-    let source_code = r#"
-        pub fn foo() {
-          if True {
-            1
-          } else {
-            let thing = 1
-          }
-        }
-    "#;
-
-    assert!(matches!(
-        check(parse(source_code)),
-        Err((_, Error::LastExpressionIsAssignment { .. }))
-    ))
-}
-
-#[test]
 fn if_scoping() {
     let source_code = r#"
         pub fn foo(c) {
@@ -2955,4 +2876,80 @@ fn pattern_bytearray_not_unify_subject() {
         check(parse(source_code)),
         Err((_, Error::CouldNotUnify { .. }))
     ))
+}
+
+#[test]
+fn recover_no_assignment_sequence() {
+    let source_code = r#"
+        pub fn main() {
+            let result = 42
+            expect result + 1 == 43
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn recover_no_assignment_fn_body() {
+    let source_code = r#"
+        pub fn is_bool(foo: Data) -> Void {
+            expect _: Bool = foo
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn recover_no_assignment_when_clause() {
+    let source_code = r#"
+        pub fn main(foo) {
+            when foo is {
+                [] -> let bar = foo
+                [x, ..] -> expect _: Int = x
+            }
+        }
+    "#;
+
+    let (warnings, _) = check(parse(source_code)).unwrap();
+
+    assert!(matches!(
+        &warnings[..],
+        [Warning::UnusedVariable { name, .. }] if name == "bar",
+    ))
+}
+
+#[test]
+fn recover_no_assignment_fn_if_then_else() {
+    let source_code = r#"
+        pub fn foo(weird_maths) -> Bool {
+            if weird_maths {
+                expect 1 == 2
+            } else {
+                expect 1 + 1 == 2
+            }
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn recover_no_assignment_logical_chain_op() {
+    let source_code = r#"
+        pub fn foo() -> Bool {
+            and {
+                expect 1 + 1 == 2,
+                True,
+                2 > 0,
+                or {
+                    expect True,
+                    False,
+                }
+            }
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
 }
