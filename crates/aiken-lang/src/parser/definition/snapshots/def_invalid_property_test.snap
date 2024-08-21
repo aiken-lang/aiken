@@ -52,14 +52,7 @@ Test(
         location: 0..26,
         name: "foo",
         public: false,
-        return_annotation: Some(
-            Constructor {
-                location: 0..39,
-                module: None,
-                name: "Bool",
-                arguments: [],
-            },
-        ),
+        return_annotation: None,
         return_type: (),
         end_position: 38,
         on_test_failure: FailImmediately,

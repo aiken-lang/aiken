@@ -8,7 +8,7 @@ pub(crate) use crate::{
         TypedDataType, TypedIfBranch, TypedRecordUpdateArg, UnOp, UntypedArg,
         UntypedAssignmentKind, UntypedClause, UntypedIfBranch, UntypedRecordUpdateArg,
     },
-    builtins::{bool, void},
+    builtins::void,
     parser::token::Base,
     tipo::{
         check_replaceable_opaque_type, convert_opaque_type, lookup_data_type_by_tipo,
@@ -488,25 +488,6 @@ impl TypedExpr {
                     constructors_count: 1,
                 },
                 tipo: void(),
-            },
-            location,
-        }
-    }
-
-    pub fn bool(value: bool, location: Span) -> Self {
-        TypedExpr::Var {
-            name: "Bool".to_string(),
-            constructor: ValueConstructor {
-                public: true,
-                variant: ValueConstructorVariant::Record {
-                    name: if value { "True" } else { "False" }.to_string(),
-                    arity: 0,
-                    field_map: None,
-                    location: Span::empty(),
-                    module: String::new(),
-                    constructors_count: 2,
-                },
-                tipo: bool(),
             },
             location,
         }

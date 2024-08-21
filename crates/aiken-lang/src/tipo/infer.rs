@@ -392,12 +392,25 @@ fn infer_definition(
 
             let typed_f = infer_function(&f.into(), module_name, hydrators, environment, tracing)?;
 
-            environment.unify(
+            let is_bool = environment.unify(
                 typed_f.return_type.clone(),
                 builtins::bool(),
                 typed_f.location,
                 false,
-            )?;
+            );
+
+            let is_void = environment.unify(
+                typed_f.return_type.clone(),
+                builtins::void(),
+                typed_f.location,
+                false,
+            );
+
+            if is_bool.or(is_void).is_err() {
+                return Err(Error::IllegalTestType {
+                    location: typed_f.location,
+                });
+            }
 
             Ok(Definition::Test(Function {
                 doc: typed_f.doc,

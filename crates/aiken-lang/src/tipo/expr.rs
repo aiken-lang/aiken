@@ -1803,17 +1803,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let mut typed_expressions = vec![];
 
         for expression in expressions {
-            let typed_expression = if let Some(filler) = recover_from_no_assignment(
-                assert_no_assignment(&expression),
-                expression.location(),
-            )? {
-                TypedExpr::Sequence {
-                    location: expression.location(),
-                    expressions: vec![self.infer(expression)?, filler],
-                }
-            } else {
-                self.infer(expression)?
-            };
+            assert_no_assignment(&expression)?;
+            let typed_expression = self.infer(expression)?;
 
             self.unify(
                 bool(),
@@ -2545,24 +2536,32 @@ fn recover_from_no_assignment(
     result: Result<(), Error>,
     span: Span,
 ) -> Result<Option<TypedExpr>, Error> {
-    if let Err(Error::LastExpressionIsAssignment { patterns, .. }) = result {
-        match patterns.first().pattern.get_bool() {
-            Some(expected) if patterns.len() == 1 => Ok(Some(TypedExpr::bool(expected, span))),
-            _ => Ok(Some(TypedExpr::void(span))),
+    if let Err(Error::LastExpressionIsAssignment {
+        ref patterns,
+        ref kind,
+        ..
+    }) = result
+    {
+        if matches!(kind, AssignmentKind::Expect { ..} if patterns.len() == 1) {
+            return Ok(Some(TypedExpr::void(span)));
         }
-    } else {
-        result.map(|()| None)
     }
+
+    result.map(|()| None)
 }
 
 fn assert_no_assignment(expr: &UntypedExpr) -> Result<(), Error> {
     match expr {
         UntypedExpr::Assignment {
-            value, patterns, ..
+            value,
+            patterns,
+            kind,
+            ..
         } => Err(Error::LastExpressionIsAssignment {
             location: expr.location(),
             expr: *value.clone(),
             patterns: patterns.clone(),
+            kind: *kind,
         }),
         UntypedExpr::Trace { then, .. } => assert_no_assignment(then),
         UntypedExpr::Fn { .. }
