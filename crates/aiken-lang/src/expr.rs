@@ -492,25 +492,6 @@ impl TypedExpr {
             location,
         }
     }
-
-    pub fn bool(value: bool, location: Span) -> Self {
-        TypedExpr::Var {
-            name: "Bool".to_string(),
-            constructor: ValueConstructor {
-                public: true,
-                variant: ValueConstructorVariant::Record {
-                    name: if value { "True" } else { "False" }.to_string(),
-                    arity: 0,
-                    field_map: None,
-                    location: Span::empty(),
-                    module: String::new(),
-                    constructors_count: 2,
-                },
-                tipo: bool(),
-            },
-            location,
-        }
-    }
 }
 
 // Represent how a function was written so that we can format it back.
