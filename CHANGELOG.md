@@ -30,6 +30,10 @@
 
 - **aiken-lang**: remove warning on discarded expect, allowing to keep 'side-effects' when necessary. See [#967](https://github.com/aiken-lang/aiken/pull/967). @KtorZ
 
+- **aiken-lang**: allow expect as last (or only) expression in function body, when clauses and if branches. Such expressions unify with `Void`. See [#1000](https://github.com/aiken-lang/aiken/pull/1000). @KtorZ
+
+- **aiken-lang**: allow tests to return `Void`. Tests that return `Void` are treated the same as tests that return `True`. See [#1000](https://github.com/aiken-lang/aiken/pull/1000). @KtorZ
+
 - **aiken-lang**: rework traces to be (1) variadic, (2) generic in its arguments and (3) structured. @KtorZ
 
   In more details:
