@@ -127,6 +127,10 @@ pub fn generate_all(root: &Path, config: &Config, modules: Vec<&CheckedModule>) 
     let mut search_indexes: Vec<SearchIndex> = vec![];
 
     for module in &modules {
+        if module.skip_doc_generation() {
+            continue;
+        }
+
         let (indexes, file) = generate_module(config, module, &modules_links, &source, &timestamp);
         if !indexes.is_empty() {
             search_indexes.extend(indexes);
@@ -356,15 +360,16 @@ fn generate_modules_links(modules: &[&CheckedModule]) -> Vec<DocLink> {
     let non_empty_modules = modules
         .iter()
         .filter(|module| {
-            module.ast.definitions.iter().any(|def| {
-                matches!(
-                    def,
-                    Definition::Fn(Function { public: true, .. })
-                        | Definition::DataType(DataType { public: true, .. })
-                        | Definition::TypeAlias(TypeAlias { public: true, .. })
-                        | Definition::ModuleConstant(ModuleConstant { public: true, .. })
-                )
-            })
+            !module.skip_doc_generation()
+                && module.ast.definitions.iter().any(|def| {
+                    matches!(
+                        def,
+                        Definition::Fn(Function { public: true, .. })
+                            | Definition::DataType(DataType { public: true, .. })
+                            | Definition::TypeAlias(TypeAlias { public: true, .. })
+                            | Definition::ModuleConstant(ModuleConstant { public: true, .. })
+                    )
+                })
         })
         .sorted_by(|a, b| a.name.cmp(&b.name))
         .collect_vec();

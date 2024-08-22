@@ -291,6 +291,15 @@ pub struct CheckedModule {
 }
 
 impl CheckedModule {
+    pub fn skip_doc_generation(&self) -> bool {
+        self.ast
+            .docs
+            .first()
+            .map(|s| s.as_str().trim())
+            .unwrap_or_default()
+            == "@hidden"
+    }
+
     pub fn to_cbor(&self) -> Vec<u8> {
         let mut module_bytes = vec![];
 
