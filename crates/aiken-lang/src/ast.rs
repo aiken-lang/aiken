@@ -278,6 +278,10 @@ impl TypedFunction {
             })
     }
 
+    pub fn is_spend(&self) -> bool {
+        self.name == HANDLER_SPEND
+    }
+
     pub fn has_valid_purpose_name(&self) -> bool {
         self.name == HANDLER_SPEND
             || self.name == HANDLER_PUBLISH
