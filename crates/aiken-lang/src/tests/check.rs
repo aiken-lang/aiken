@@ -358,7 +358,7 @@ fn expect_multi_patterns() {
 fn validator_correct_form() {
     let source_code = r#"
       validator foo {
-        spend(d, r, c) {
+        spend(d, r, oref, c) {
           True
         }
       }
@@ -389,11 +389,11 @@ fn validator_in_lib_warning() {
 fn multi_validator() {
     let source_code = r#"
       validator foo(foo: ByteArray, bar: Int) {
-        spend(_d, _r, _c) {
+        spend(_d, _r, _oref, _c) {
           foo == #"aabb"
         }
 
-        mint(_r, _c) {
+        mint(_r, _p, _c) {
           bar == 0
         }
       }
@@ -408,11 +408,11 @@ fn multi_validator() {
 fn multi_validator_warning() {
     let source_code = r#"
       validator foo(foo: ByteArray, bar: Int) {
-        spend(_d, _r, _c) {
+        spend(_d, _r, _oref, _c) {
           foo == #"aabb"
         }
 
-        mint(_r, _c) {
+        mint(_r, _p, _c) {
           True
         }
       }
@@ -458,7 +458,7 @@ fn exhaustiveness_simple() {
 fn validator_args_no_annotation() {
     let source_code = r#"
       validator hello(d) {
-        spend(a, b, c) {
+        spend(a, b, oref, c) {
           True
         }
       }
@@ -2471,7 +2471,7 @@ fn validator_private_type_leak() {
         }
 
         validator bar {
-          spend(datum: Datum, redeemer: Redeemer, _ctx) {
+          spend(datum: Datum, redeemer: Redeemer, _oref, _ctx) {
             datum.foo == redeemer.bar
           }
         }
@@ -2495,7 +2495,7 @@ fn validator_public() {
         }
 
         validator bar {
-          spend(datum: Datum, redeemer: Redeemer, _ctx) {
+          spend(datum: Datum, redeemer: Redeemer, _oref, _ctx) {
             datum.foo == redeemer.bar
           }
         }
