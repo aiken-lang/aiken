@@ -131,6 +131,7 @@ dependencies = [
  "askama",
  "blst",
  "built",
+ "camino",
  "ciborium",
  "cryptoxide",
  "dirs",
@@ -462,6 +463,12 @@ dependencies = [
  "libc",
  "pkg-config",
 ]
+
+[[package]]
+name = "camino"
+version = "1.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b96ec4966b5813e2c0507c1f86115c8c5abaadc3980879c3424042a02fd1ad3"
 
 [[package]]
 name = "cc"

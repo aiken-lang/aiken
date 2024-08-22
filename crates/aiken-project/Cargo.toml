@@ -16,7 +16,8 @@ build = "build.rs"
 
 [dependencies]
 aiken-lang = { path = "../aiken-lang", version = "1.0.31-alpha" }
-askama = "0.12.0"
+askama = { version = "0.12.0", features = ["urlencode"] }
+camino = "1.1.9"
 ciborium = "0.2.2"
 cryptoxide = "0.4.4"
 dirs = "4.0.0"

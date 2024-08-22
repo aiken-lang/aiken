@@ -20,6 +20,12 @@
 
 - **aiken-project**: warning on compiler version mismatch. See [de870e2](https://github.com/aiken-lang/aiken/commit/de870e2529eb2336957e228cd30d4850ec2619a2). @rvcas
 
+- **aiken-project**: source links to generated documentation for types, constants and functions. @KtorZ
+
+- **aiken-project**: comments containing Markdown section headings (`#`, `##`, `###` etc.) will now be preserved and rendered in generated documentation. @KtorZ
+
+- **aiken-project**: modules starting with `@hidden` in their docs will be skipped from docs generation. @KtorZ
+
 - **uplc**: support evaluation of Plutus V3 transactions, including new purposes introduced in Conway. @KtorZ
 
 ### Changed
@@ -74,6 +80,10 @@
 - **aiken-project**: fix blueprint's apply truncating last character of outputs. See [#987](https://github.com/aiken-lang/aiken/issues/987). @KtorZ
 
 - **aiken-project**: provide better error (include input ref) when inputs are missing during transaction evaluation. See [#974](https://github.com/aiken-lang/aiken/issues/974). @KtorZ
+
+- **aiken-project**: module inhabitants are no longer alphabetically sorted when generating documentation. Instead, the order in which they are defined in the module is used. @KtorZ
+
+- **aiken-project**: the sidebar links to modules within a package is now fully hierarchical and (hopefully) better-looking. @KtorZ
 
 ### Removed
 
