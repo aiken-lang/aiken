@@ -97,10 +97,11 @@ impl EventListener for Terminal {
                 root,
             } => {
                 eprintln!(
-                    "{} {} {} ({})",
-                    "   Generating documentation"
+                    "{} {} for {} {} ({})",
+                    "   Generating"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
+                    "documentation".if_supports_color(Stderr, |s| s.bold()),
                     name.if_supports_color(Stderr, |s| s.bold()),
                     version,
                     root.to_str()
@@ -140,10 +141,11 @@ impl EventListener for Terminal {
             }
             Event::GeneratingDocFiles { output_path } => {
                 eprintln!(
-                    "{} in {}",
-                    "   Generating documentation files"
+                    "{} {} to {}",
+                    "      Writing"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
+                    "documentation files".if_supports_color(Stderr, |s| s.bold()),
                     output_path
                         .to_str()
                         .unwrap_or("")
