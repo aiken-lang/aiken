@@ -159,7 +159,6 @@ fn generate_module(
         .definitions
         .iter()
         .flat_map(DocFunction::from_definition)
-        .sorted()
         .collect();
     functions
         .iter()
@@ -171,7 +170,6 @@ fn generate_module(
         .definitions
         .iter()
         .flat_map(DocType::from_definition)
-        .sorted()
         .collect();
     types
         .iter()
@@ -183,7 +181,6 @@ fn generate_module(
         .definitions
         .iter()
         .flat_map(DocConstant::from_definition)
-        .sorted()
         .collect();
     constants
         .iter()
