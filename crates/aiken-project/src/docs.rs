@@ -26,6 +26,7 @@ const MAX_COLUMNS: isize = 999;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 mod link_tree;
+mod source_links;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct DocFile {
@@ -131,7 +132,8 @@ pub fn generate_all(root: &Path, config: &Config, modules: Vec<&CheckedModule>) 
             continue;
         }
 
-        let (indexes, file) = generate_module(config, module, &modules_links, &source, &timestamp);
+        let (indexes, file) =
+            generate_module(root, config, module, &modules_links, &source, &timestamp);
         if !indexes.is_empty() {
             search_indexes.extend(indexes);
             output_files.push(file);
@@ -151,6 +153,7 @@ pub fn generate_all(root: &Path, config: &Config, modules: Vec<&CheckedModule>) 
 }
 
 fn generate_module(
+    root: &Path,
     config: &Config,
     module: &CheckedModule,
     modules: &[DocLink],
@@ -158,6 +161,8 @@ fn generate_module(
     timestamp: &Duration,
 ) -> (Vec<SearchIndex>, DocFile) {
     let mut search_indexes = vec![];
+
+    let source_linker = source_links::SourceLinker::new(root, config, module);
 
     // Section headers
     let mut section_headers = module
@@ -189,7 +194,7 @@ fn generate_module(
         .ast
         .definitions
         .iter()
-        .flat_map(DocFunction::from_definition)
+        .flat_map(|def| DocFunction::from_definition(def, &source_linker))
         .collect();
 
     functions.iter().for_each(|(_, function)| {
@@ -221,7 +226,7 @@ fn generate_module(
         .ast
         .definitions
         .iter()
-        .flat_map(DocType::from_definition)
+        .flat_map(|def| DocType::from_definition(def, &source_linker))
         .collect();
     types
         .iter()
@@ -232,7 +237,7 @@ fn generate_module(
         .ast
         .definitions
         .iter()
-        .flat_map(DocConstant::from_definition)
+        .flat_map(|def| DocConstant::from_definition(def, &source_linker))
         .collect();
     constants
         .iter()
@@ -465,7 +470,10 @@ struct DocFunction {
 }
 
 impl DocFunction {
-    fn from_definition(def: &TypedDefinition) -> Option<(Span, Self)> {
+    fn from_definition(
+        def: &TypedDefinition,
+        source_linker: &source_links::SourceLinker,
+    ) -> Option<(Span, Self)> {
         match def {
             Definition::Fn(func_def) if func_def.public => Some((
                 func_def.location,
@@ -485,7 +493,8 @@ impl DocFunction {
                             func_def.return_type.clone(),
                         )
                         .to_pretty_string(MAX_COLUMNS),
-                    source_url: "#todo".to_string(),
+                    source_url: source_linker
+                        .url(func_def.location.map_end(|_| func_def.end_position)),
                 },
             )),
             _ => None,
@@ -503,7 +512,10 @@ struct DocConstant {
 }
 
 impl DocConstant {
-    fn from_definition(def: &TypedDefinition) -> Option<Self> {
+    fn from_definition(
+        def: &TypedDefinition,
+        source_linker: &source_links::SourceLinker,
+    ) -> Option<Self> {
         match def {
             Definition::ModuleConstant(const_def) if const_def.public => Some(DocConstant {
                 name: const_def.name.clone(),
@@ -516,7 +528,7 @@ impl DocConstant {
                 definition: format::Formatter::new()
                     .docs_const_expr(&const_def.name, &const_def.value)
                     .to_pretty_string(MAX_COLUMNS),
-                source_url: "#todo".to_string(),
+                source_url: source_linker.url(const_def.location),
             }),
             _ => None,
         }
@@ -536,7 +548,10 @@ struct DocType {
 }
 
 impl DocType {
-    fn from_definition(def: &TypedDefinition) -> Option<Self> {
+    fn from_definition(
+        def: &TypedDefinition,
+        source_linker: &source_links::SourceLinker,
+    ) -> Option<Self> {
         match def {
             Definition::TypeAlias(info) if info.public => Some(DocType {
                 name: info.alias.clone(),
@@ -548,7 +563,7 @@ impl DocType {
                 constructors: vec![],
                 parameters: info.parameters.clone(),
                 opaque: false,
-                source_url: "#todo".to_string(),
+                source_url: source_linker.url(info.location),
             }),
 
             Definition::DataType(info) if info.public && !info.opaque => Some(DocType {
@@ -570,7 +585,7 @@ impl DocType {
                     .collect(),
                 parameters: info.parameters.clone(),
                 opaque: info.opaque,
-                source_url: "#todo".to_string(),
+                source_url: source_linker.url(info.location),
             }),
 
             Definition::DataType(info) if info.public && info.opaque => Some(DocType {
@@ -583,7 +598,7 @@ impl DocType {
                 constructors: vec![],
                 parameters: info.parameters.clone(),
                 opaque: info.opaque,
-                source_url: "#todo".to_string(),
+                source_url: source_linker.url(info.location),
             }),
 
             _ => None,

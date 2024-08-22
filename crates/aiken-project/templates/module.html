@@ -56,11 +56,7 @@
         </a>
       </h2>
       {% if !type_info.source_url.is_empty() %}
-      <!-- TODO: support source linking
-      <a class="member-source" alt="View Source" title="View Source" href="{{ type_info.source_url|safe }}">
-        &lt;/&gt;
-      </a>
-      -->
+        <a class="member-source" alt="view source" title="view source" target="_blank" href="{{ type_info.source_url|safe }}"></a>
       {% endif %}
     </div>
     <div class="custom-type-constructors">
@@ -106,11 +102,7 @@
     <div class="member-name">
       <h2 id="{{ constant.name }}"><pre class="hljs language-aiken">{{ constant.definition }}</pre></h2>
       {% if !constant.source_url.is_empty() %}
-      <!-- TODO: support source linking
-      <a class="member-source" alt="View Source" title="View Source" href="{{ constant.source_url|safe }}">
-        &lt;/&gt;
-      </a>
-      -->
+        <a class="member-source" alt="view source" title="view source" target="_blank" href="{{ constant.source_url|safe }}"></a>
       {% endif %}
     </div>
     <div class="rendered-markdown">{{ constant.documentation|safe }}</div>
@@ -131,11 +123,7 @@
         <div class="member-name">
           <h2 id="{{ function.name }}"><pre class="hljs language-aiken">{{ function.signature }}</pre></h2>
           {% if !function.source_url.is_empty() %}
-          <!-- TODO: support source linking
-          <a class="member-source" alt="View Source" title="View Source" href="{{ function.source_url|safe }}">
-            &lt;/&gt;
-          </a>
-          -->
+      	    <a class="member-source" alt="view source" title="view source" target="_blank" href="{{ function.source_url|safe }}"></a>
           {% endif %}
         </div>
         <div class="rendered-markdown">{{ function.documentation|safe }}</div>

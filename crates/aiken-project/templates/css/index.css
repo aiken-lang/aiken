@@ -464,6 +464,22 @@ body.drawer-open .label-closed {
   margin: 0 0 0 var(--small-gap);
 }
 
+a.member-source,
+a.member-source:hover,
+a.member-source:visited {
+  text-decoration: none;
+  color: var(--color-text-accent);
+}
+
+a.member-source::before {
+  content: '{ ... }';
+  transition: all 0.5s ease-out;
+}
+
+a.member-source:hover::before {
+  content: '{ view source }';
+}
+
 /* Custom type constructors */
 
 .constructor-list {
