@@ -507,10 +507,8 @@ impl Prng {
         fn as_prng(cst: &PlutusData) -> Prng {
             if let PlutusData::Constr(Constr { tag, fields, .. }) = cst {
                 if *tag == 121 + Prng::SEEDED {
-                    if let [
-                        PlutusData::BoundedBytes(bytes),
-                        PlutusData::BoundedBytes(choices),
-                    ] = &fields[..]
+                    if let [PlutusData::BoundedBytes(bytes), PlutusData::BoundedBytes(choices)] =
+                        &fields[..]
                     {
                         return Prng::Seeded {
                             choices: choices.to_vec(),
@@ -1089,11 +1087,9 @@ impl TryFrom<TypedExpr> for Assertion<TypedExpr> {
                 final_else,
                 ..
             } => {
-                if let [
-                    IfBranch {
-                        condition, body, ..
-                    },
-                ] = &branches[..]
+                if let [IfBranch {
+                    condition, body, ..
+                }] = &branches[..]
                 {
                     let then_is_true = match body {
                         TypedExpr::Var {
@@ -1513,14 +1509,13 @@ mod test {
             }
         "#});
 
-        assert!(
-            prop.run::<()>(
+        assert!(prop
+            .run::<()>(
                 42,
                 PropertyTest::DEFAULT_MAX_SUCCESS,
                 &PlutusVersion::default()
             )
-            .is_success()
-        );
+            .is_success());
     }
 
     #[test]
