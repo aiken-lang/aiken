@@ -358,7 +358,7 @@ fn expect_multi_patterns() {
 fn validator_correct_form() {
     let source_code = r#"
       validator foo {
-        spend(d, r, oref, c) {
+        spend(d: Option<Data>, r, oref, c) {
           True
         }
       }
@@ -389,7 +389,7 @@ fn validator_in_lib_warning() {
 fn multi_validator() {
     let source_code = r#"
       validator foo(foo: ByteArray, bar: Int) {
-        spend(_d, _r, _oref, _c) {
+        spend(_d: Option<Data>, _r, _oref, _c) {
           foo == #"aabb"
         }
 
@@ -408,7 +408,7 @@ fn multi_validator() {
 fn multi_validator_warning() {
     let source_code = r#"
       validator foo(foo: ByteArray, bar: Int) {
-        spend(_d, _r, _oref, _c) {
+        spend(_d: Option<Data>, _r, _oref, _c) {
           foo == #"aabb"
         }
 
@@ -458,7 +458,7 @@ fn exhaustiveness_simple() {
 fn validator_args_no_annotation() {
     let source_code = r#"
       validator hello(d) {
-        spend(a, b, oref, c) {
+        spend(a: Option<Data>, b, oref, c) {
           True
         }
       }
@@ -475,9 +475,13 @@ fn validator_args_no_annotation() {
             assert!(param.tipo.is_data());
         });
 
-        validator.handlers[0].arguments.iter().for_each(|arg| {
-            assert!(arg.tipo.is_data());
-        })
+        validator.handlers[0]
+            .arguments
+            .iter()
+            .skip(1)
+            .for_each(|arg| {
+                assert!(arg.tipo.is_data());
+            })
     })
 }
 
@@ -2471,8 +2475,10 @@ fn validator_private_type_leak() {
         }
 
         validator bar {
-          spend(datum: Datum, redeemer: Redeemer, _oref, _ctx) {
-            datum.foo == redeemer.bar
+          spend(datum: Option<Datum>, redeemer: Redeemer, _oref, _ctx) {
+            expect Some(d) = datum
+
+            d.foo == redeemer.bar
           }
         }
     "#;
@@ -2495,8 +2501,10 @@ fn validator_public() {
         }
 
         validator bar {
-          spend(datum: Datum, redeemer: Redeemer, _oref, _ctx) {
-            datum.foo == redeemer.bar
+          spend(datum: Option<Datum>, redeemer: Redeemer, _oref, _ctx) {
+            expect Some(d) = datum
+
+            d.foo == redeemer.bar
           }
         }
     "#;

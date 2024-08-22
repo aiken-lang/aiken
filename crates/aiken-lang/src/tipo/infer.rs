@@ -225,6 +225,16 @@ fn infer_definition(
                             });
                         }
 
+                        if typed_fun.is_spend() && !typed_fun.arguments[0].tipo.is_option() {
+                            return Err(Error::CouldNotUnify {
+                                location: typed_fun.arguments[0].location,
+                                expected: Type::option(typed_fun.arguments[0].tipo.clone()),
+                                given: typed_fun.arguments[0].tipo.clone(),
+                                situation: None,
+                                rigid_type_names: Default::default(),
+                            });
+                        }
+
                         for arg in typed_fun.arguments.iter_mut() {
                             if arg.tipo.is_unbound() {
                                 arg.tipo = Type::data();
