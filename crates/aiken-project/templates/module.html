@@ -22,8 +22,14 @@
 {% if !functions.is_empty() %}
 <h2>Functions</h2>
 <ul>
-  {% for function in functions %}
-  <li><a href="#{{ function.name }}">{{ function.name }}</a></li>
+  {% for function_or_section in functions %}
+    {% match function_or_section %}
+      {% when Interspersed::Function with (function) %}
+        <li><a href="#{{ function.name }}">{{ function.name }}</a></li>
+
+      {% when Interspersed::Section with (section) %}
+        <li data-heading="{{ section.heading }}"><a href="#{{ section.title|urlencode }}">{{ section.title }}</a></li>
+    {% endmatch %}
   {% endfor %}
 </ul>
 {% endif %}
@@ -118,20 +124,33 @@
   <h1 id="module-functions" class="module-member-kind">
     <a href="#module-functions">Functions</a>
   </h1>
-  {% for function in functions %}
-  <div class="member">
-    <div class="member-name">
-      <h2 id="{{ function.name }}"><pre class="hljs language-aiken">{{ function.signature }}</pre></h2>
-      {% if !function.source_url.is_empty() %}
-      <!-- TODO: support source linking
-      <a class="member-source" alt="View Source" title="View Source" href="{{ function.source_url|safe }}">
-        &lt;/&gt;
-      </a>
-      -->
+  {% for function_or_section in functions %}
+  {% match function_or_section %}
+    {% when Interspersed::Function with (function) %}
+      <div class="member">
+        <div class="member-name">
+          <h2 id="{{ function.name }}"><pre class="hljs language-aiken">{{ function.signature }}</pre></h2>
+          {% if !function.source_url.is_empty() %}
+          <!-- TODO: support source linking
+          <a class="member-source" alt="View Source" title="View Source" href="{{ function.source_url|safe }}">
+            &lt;/&gt;
+          </a>
+          -->
+          {% endif %}
+        </div>
+        <div class="rendered-markdown">{{ function.documentation|safe }}</div>
+      </div>
+    {% when Interspersed::Section with (section) %}
+      {% if section.heading == 1 %}
+        <h2 id="{{ section.title|urlencode }}" class="module-heading"><a href="#{{ section.title|urlencode }}">{{ section.title }}</a></h2>
+      {% else if section.heading == 2 %}
+        <h2 id="{{ section.title|urlencode }}" class="module-heading"><a href="#{{ section.title|urlencode }}">{{ section.title }}</a></h3>
+      {% else if section.heading == 3 %}
+        <h3 id="{{ section.title|urlencode }}" class="module-heading"><a href="#{{ section.title|urlencode }}">{{ section.title }}</a></h4>
+      {% else %}
+        <h4 id="{{ section.title|urlencode }}" class="module-heading"><a href="#{{ section.title|urlencode }}">{{ section.title }}</a></h5>
       {% endif %}
-    </div>
-    <div class="rendered-markdown">{{ function.documentation|safe }}</div>
-  </div>
+  {% endmatch %}
   {% endfor %}
 </section>
 {% endif %}

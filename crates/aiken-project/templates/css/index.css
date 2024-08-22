@@ -290,11 +290,13 @@ p code {
 /* Module doc */
 
 .module-name > a,
+.module-heading > a,
 .module-member-kind > a {
   color: inherit;
 }
 
 .module-name > a:hover,
+.module-heading > a:hover,
 .module-member-kind > a:hover {
   text-decoration: none;
 }
@@ -328,6 +330,7 @@ p code {
 .sidebar h2 {
   margin: 0;
   color: var(--color-link-accent);
+  font-size: 1.75em;
 }
 
 .sidebar h3.modules-prefix {
@@ -407,6 +410,10 @@ body.drawer-open .label-closed {
 
 .module-member-kind {
   font-size: 2rem;
+}
+
+.module-heading,
+.module-member-kind {
   color: var(--color-text);
 }
 
@@ -1113,3 +1120,29 @@ body.theme-dark {
 .sidebar li[data-indent="1"]::before { padding-left: 1rem; }
 .sidebar li[data-indent="2"]::before { padding-left: 2rem; }
 .sidebar li[data-indent="3"]::before { padding-left: 3rem; }
+
+.sidebar li[data-heading] {
+  font-weight: bold;
+  font-size: 1em;
+  color: var(--color-link-accent);
+}
+
+.sidebar li[data-heading="1"] {
+  margin-top: 1.5rem;
+  font-size: 1.4em;
+}
+
+.sidebar li[data-heading="2"] {
+  margin-top: 1rem;
+  font-size: 1.2em;
+}
+
+.sidebar li[data-heading="3"] {
+  margin-top: 0.5rem;
+  font-size: 1.1em;
+}
+
+.sidebar li[data-heading]:first-child,
+.sidebar li[data-heading] + li[data-heading] {
+  margin-top: 0;
+}

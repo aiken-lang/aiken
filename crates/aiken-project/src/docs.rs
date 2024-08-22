@@ -4,10 +4,11 @@ use crate::{
 };
 use aiken_lang::{
     ast::{
-        DataType, Definition, Function, ModuleConstant, RecordConstructor, TypeAlias,
+        DataType, Definition, Function, ModuleConstant, RecordConstructor, Span, TypeAlias,
         TypedDefinition,
     },
     format,
+    parser::extra::Comment,
     tipo::Type,
 };
 use askama::Template;
@@ -42,7 +43,7 @@ struct ModuleTemplate<'a> {
     project_name: &'a str,
     project_version: &'a str,
     modules: &'a [DocLink],
-    functions: Vec<DocFunction>,
+    functions: Vec<Interspersed>,
     types: Vec<DocType>,
     constants: Vec<DocConstant>,
     documentation: String,
@@ -154,16 +155,62 @@ fn generate_module(
 ) -> (Vec<SearchIndex>, DocFile) {
     let mut search_indexes = vec![];
 
+    // Section headers
+    let mut section_headers = module
+        .extra
+        .comments
+        .iter()
+        .filter_map(|span| {
+            let comment = Comment::from((span, module.code.as_str()))
+                .content
+                .trim_start();
+            if comment.starts_with("#") {
+                let trimmed = comment.trim_start_matches("#");
+                let heading = comment.len() - trimmed.len();
+                Some((
+                    span,
+                    DocSection {
+                        heading,
+                        title: trimmed.trim_start().to_string(),
+                    },
+                ))
+            } else {
+                None
+            }
+        })
+        .collect_vec();
+
     // Functions
-    let functions: Vec<DocFunction> = module
+    let functions: Vec<(Span, DocFunction)> = module
         .ast
         .definitions
         .iter()
         .flat_map(DocFunction::from_definition)
         .collect();
-    functions
-        .iter()
-        .for_each(|function| search_indexes.push(SearchIndex::from_function(module, function)));
+
+    functions.iter().for_each(|(_, function)| {
+        search_indexes.push(SearchIndex::from_function(module, function))
+    });
+
+    let no_functions = functions.is_empty();
+
+    let mut functions_and_headers = Vec::new();
+
+    for (span_fn, function) in functions {
+        let mut to_remove = vec![];
+        for (ix, (span_h, header)) in section_headers.iter().enumerate() {
+            if span_h.start < span_fn.start {
+                functions_and_headers.push(Interspersed::Section(header.clone()));
+                to_remove.push(ix);
+            }
+        }
+
+        for ix in to_remove.iter().rev() {
+            section_headers.remove(*ix);
+        }
+
+        functions_and_headers.push(Interspersed::Function(function))
+    }
 
     // Types
     let types: Vec<DocType> = module
@@ -187,7 +234,7 @@ fn generate_module(
         .iter()
         .for_each(|constant| search_indexes.push(SearchIndex::from_constant(module, constant)));
 
-    let is_empty = functions.is_empty() && types.is_empty() && constants.is_empty();
+    let is_empty = no_functions && types.is_empty() && constants.is_empty();
 
     // Module
     if !is_empty {
@@ -203,7 +250,7 @@ fn generate_module(
         page_title: &format!("{} - {}", module.name, config.name),
         module_name: module.name.clone(),
         project_version: &config.version.to_string(),
-        functions,
+        functions: functions_and_headers,
         types,
         constants,
         source,
@@ -391,7 +438,19 @@ impl SearchIndex {
     }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Interspersed {
+    Section(DocSection),
+    Function(DocFunction),
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+struct DocSection {
+    heading: usize,
+    title: String,
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct DocFunction {
     name: String,
     signature: String,
@@ -401,26 +460,29 @@ struct DocFunction {
 }
 
 impl DocFunction {
-    fn from_definition(def: &TypedDefinition) -> Option<Self> {
+    fn from_definition(def: &TypedDefinition) -> Option<(Span, Self)> {
         match def {
-            Definition::Fn(func_def) if func_def.public => Some(DocFunction {
-                name: func_def.name.clone(),
-                documentation: func_def
-                    .doc
-                    .as_deref()
-                    .map(render_markdown)
-                    .unwrap_or_default(),
-                raw_documentation: func_def.doc.as_deref().unwrap_or_default().to_string(),
-                signature: format::Formatter::new()
-                    .docs_fn_signature(
-                        &func_def.name,
-                        &func_def.arguments,
-                        &func_def.return_annotation,
-                        func_def.return_type.clone(),
-                    )
-                    .to_pretty_string(MAX_COLUMNS),
-                source_url: "#todo".to_string(),
-            }),
+            Definition::Fn(func_def) if func_def.public => Some((
+                func_def.location,
+                DocFunction {
+                    name: func_def.name.clone(),
+                    documentation: func_def
+                        .doc
+                        .as_deref()
+                        .map(render_markdown)
+                        .unwrap_or_default(),
+                    raw_documentation: func_def.doc.as_deref().unwrap_or_default().to_string(),
+                    signature: format::Formatter::new()
+                        .docs_fn_signature(
+                            &func_def.name,
+                            &func_def.arguments,
+                            &func_def.return_annotation,
+                            func_def.return_type.clone(),
+                        )
+                        .to_pretty_string(MAX_COLUMNS),
+                    source_url: "#todo".to_string(),
+                },
+            )),
             _ => None,
         }
     }
