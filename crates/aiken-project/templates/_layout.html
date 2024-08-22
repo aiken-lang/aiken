@@ -186,23 +186,26 @@
         </ul>
         {% endif %}
 
+        {% block sidebar_content %}{% endblock %}
+
         <h2>Modules</h2>
-	{% if !modules_prefix.is_empty() %}
-	<h3 class="modules-prefix">{{ modules_prefix }}/</h3>
-	{% endif %}
         <ul>
         {% for module in modules %}
-	  <li><a href="{{ breadcrumbs }}/{{ module.path }}">
-	  {% if self.is_current_module(module) %}
-	  <strong>{{ module.name }}</strong>
+	  {% if module.is_separator() %}
+	    <li data-indent="{{ module.indent }}"><span>{{ module.name }}</span></li>
 	  {% else %}
-	  {{ module.name }}
+	    {% if self.is_current_module(module) %}
+	      <li data-indent="{{ module.indent }}" data-current><a href="{{ breadcrumbs }}/{{ module.path }}">
+	      <strong>{{ module.name }}</strong>
+	      </a></li>
+	    {% else %}
+	      <li data-indent="{{ module.indent }}"><a href="{{ breadcrumbs }}/{{ module.path }}">
+	      {{ module.name }}
+	      </a></li>
+	    {% endif %}
 	  {% endif %}
-	  </a></li>
         {% endfor %}
         </ul>
-
-        {% block sidebar_content %}{% endblock %}
       </nav>
 
       <main class="content">
@@ -276,9 +279,35 @@
 	el.prepend(a);
       });
     </script>
+    <script src="https://unpkg.com/@popperjs/core@2"></script>
+    <script src="https://unpkg.com/tippy.js@6"></script>
     <script src="{{ breadcrumbs }}/js/lunr.min.js?v={{ aiken_version }}"></script>
     <script src="{{ breadcrumbs }}/js/index.js?v={{ timestamp }}"></script>
     <!-- Load the search index using JSONP to avoid CORS issues -->
     <script src="{{ breadcrumbs }}/search-data.js?v={{ timestamp }}"></script>
+    <script>
+      void function() {
+        if (typeof tippy !== "undefined") {
+	  const overflowed = Array.from(document
+            .querySelectorAll('.sidebar li:not([data-indent])'))
+	    .filter(x => x.offsetWidth < x.scrollWidth);
+
+	  tippy(overflowed, {
+	    arrow: true,
+  	    placement: 'right',
+	    content: (el) => el.children[0]?.innerText,
+          });
+
+	  tippy('.sidebar li[data-indent] a', {
+	    arrow: true,
+  	    placement: 'right',
+	    content: (el) => el
+	      .getAttribute('href')
+	      .replaceAll(/\.?\.\//g, '')
+	      .replace('.html', ''),
+	  });
+	}
+      }();
+    </script>
   </body>
 </html>

@@ -5,7 +5,7 @@
   --search-width: 680px;
   --header-height: 60px;
   --hash-offset: calc(var(--header-height) * 1.67);
-  --sidebar-width: 240px;
+  --sidebar-width: 260px;
   --gap: 24px;
   --small-gap: calc(var(--gap) / 2);
   --tiny-gap: calc(var(--small-gap) / 2);
@@ -58,6 +58,15 @@ html {
 html {
   /* This is necessary so hash targets appear below the fixed header */
   scroll-padding-top: var(--hash-offset);
+}
+
+.tippy-box {
+  background-color: var(--color-text);
+  color: var(--color-background);
+}
+
+.tippy-arrow {
+  color: var(--color-text);
 }
 
 a,
@@ -303,10 +312,7 @@ p code {
   font-size: 0.95rem;
   max-height: calc(100vh - var(--header-height));
   overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-top: var(--gap);
-  padding-bottom: var(--gap);
-  padding-left: var(--gap);
+  padding: var(--gap) var(--small-gap);
   position: fixed;
   top: var(--header-height);
   transition: transform 0.5s ease;
@@ -315,6 +321,8 @@ p code {
   height: 100%;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
+  word-break: normal;
 }
 
 .sidebar h2 {
@@ -340,17 +348,9 @@ p code {
 .sidebar li {
   line-height: 1.2;
   margin-bottom: 4px;
-}
-
-.sidebar ul li a > strong {
-  font-weight: 900;
-  color: var(--color-link);
-}
-
-.sidebar ul li a > strong::before {
-  font-size: 0.75em;
-  content: 'ᐅ ';
-  padding-right: 0.1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sidebar .sidebar-toggle {
@@ -1059,3 +1059,57 @@ body.theme-dark {
     padding-top: 0;
   }
 }
+
+.sidebar li[data-indent] {
+  margin-bottom: unset;
+  display: flex;
+  flex-direction: row;
+  color: var(--color-background-accent);
+}
+
+.sidebar li[data-indent] span,
+.sidebar li[data-indent] a {
+  display: flex;
+  width: 100%;
+  position: relative;
+  left: -0.5rem;
+  padding-left: 0.75rem;
+}
+
+.sidebar li[data-indent] a:hover,
+.sidebar li[data-current] a,
+.sidebar li[data-current] a:visited {
+  padding-right: 0.25rem;
+  text-decoration: none;
+  color: var(--color-text-accent);
+  background:
+    linear-gradient(
+      115deg,
+      transparent 0.5rem,
+      var(--color-background-accent) 0.5rem
+    );
+}
+
+.sidebar li[data-indent="0"] {
+  font-size: 1.1em;
+}
+
+.sidebar li[data-indent="0"]:not(first-child) {
+  margin-top: 0.5rem;
+}
+
+.sidebar li[data-indent]::before {
+  content: '/';
+  font-size: 1.05em;
+  font-family: monospace;
+  padding-left: 0.25rem;
+  letter-spacing: -0.1rem;
+  padding-left: 4rem;
+  display: flex;
+  color: var(--color-background-accent);
+}
+
+.sidebar li[data-indent="0"]::before { display: none; }
+.sidebar li[data-indent="1"]::before { padding-left: 1rem; }
+.sidebar li[data-indent="2"]::before { padding-left: 2rem; }
+.sidebar li[data-indent="3"]::before { padding-left: 3rem; }
