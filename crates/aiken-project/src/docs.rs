@@ -25,8 +25,8 @@ use std::{
 const MAX_COLUMNS: isize = 999;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-mod link_tree;
-mod source_links;
+pub mod link_tree;
+pub mod source_links;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct DocFile {
@@ -82,7 +82,7 @@ impl<'a> PageTemplate<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-struct DocLink {
+pub struct DocLink {
     indent: usize,
     name: String,
     path: String,

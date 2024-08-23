@@ -424,21 +424,23 @@ fn link_tree_5() {
 
 /// Find the common module prefix between two module path, if any.
 ///
-/// ```rust
+/// ```
+/// use aiken_project::docs::link_tree::common_prefix;
+///
 /// assert_eq!(
 ///   common_prefix("foo", "foo"),
 ///   Some("foo".to_string()),
-/// )
+/// );
 ///
 /// assert_eq!(
 ///   common_prefix("aiken/list", "aiken/bytearray"),
 ///   Some("aiken".to_string()),
-/// )
+/// );
 ///
 /// assert_eq!(
 ///   common_prefix("aiken/list", "cardano/asset"),
 ///   None,
-/// )
+/// );
 /// ```
 pub fn common_prefix(left: &str, right: &str) -> Option<String> {
     let mut prefix = vec![];
