@@ -10,7 +10,7 @@ use aiken_lang::{
     ast::{well_known, Annotation, TypedArg, TypedFunction, TypedValidator},
     gen_uplc::CodeGenerator,
     plutus_version::PlutusVersion,
-    tipo::Type,
+    tipo::{collapse_links, Type},
 };
 use miette::NamedSource;
 use serde;
@@ -126,12 +126,16 @@ impl Validator {
             .map(|datum| {
                 match datum.tipo.as_ref() {
                     Type::App { module: module_name, name, args, .. } if module_name.is_empty() && name == well_known::OPTION => {
+                        let Some(Annotation::Constructor { arguments, .. }) = datum.annotation.as_ref() else {
+                          panic!("Datum isn't an option but should be; this should have been caught by the type-checker!");
+                        };
+
                         Annotated::from_type(
                             modules.into(),
                             tipo_or_annotation(module, &TypedArg {
                                 arg_name: datum.arg_name.clone(),
                                 location: datum.location,
-                                annotation: datum.annotation.clone(),
+                                annotation: arguments.first().cloned(),
                                 doc: datum.doc.clone(),
                                 is_validator_param: datum.is_validator_param,
                                 tipo:  args.first().expect("Option always have a single type argument.").clone()
@@ -204,7 +208,7 @@ impl Validator {
 }
 
 pub fn tipo_or_annotation<'a>(module: &'a CheckedModule, arg: &'a TypedArg) -> &'a Type {
-    match *arg.tipo.borrow() {
+    match collapse_links(arg.tipo.clone()).borrow() {
         Type::App {
             module: ref module_name,
             name: ref type_name,
