@@ -365,7 +365,12 @@ fn link_tree_4() {
             },
             DocLink {
                 indent: 0,
-                name: "cardano/foo".to_string(),
+                name: "cardano".to_string(),
+                path: "".to_string(),
+            },
+            DocLink {
+                indent: 1,
+                name: "foo".to_string(),
                 path: "cardano/foo.html".to_string(),
             }
         ]
