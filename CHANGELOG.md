@@ -32,6 +32,14 @@
 
 - **aiken-lang**: fix zero-arg builtins `mk_nil_data` and `mk_nil_pair_data` invokation. @KtorZ
 
+- **aiken-lang**: rename some builtins. @KtorZ
+
+  | old name           | new name    |
+  | ---                | ---         |
+  | `mk_nil_data`      | `new_list`  |
+  | `mk_pair_data`     | `new_pair`  |
+  | `mk_nil_pair_data` | `new_pairs` |
+
 - **aiken-lang**: duplicate import lines are now automatically merged instead of raising a warning. However, imports can no longer appear anywhere in the file and must come as the first definitions. @KtorZ
 
 - **aiken-lang**: remove warning on discarded expect, allowing to keep 'side-effects' when necessary. See [#967](https://github.com/aiken-lang/aiken/pull/967). @KtorZ
