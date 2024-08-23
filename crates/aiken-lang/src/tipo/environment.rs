@@ -1967,7 +1967,7 @@ pub(super) fn assert_no_labeled_arguments<A>(args: &[CallArg<A>]) -> Option<(Spa
     None
 }
 
-pub(super) fn collapse_links(t: Rc<Type>) -> Rc<Type> {
+pub fn collapse_links(t: Rc<Type>) -> Rc<Type> {
     if let Type::Var { tipo, alias } = t.deref() {
         if let TypeVar::Link { tipo } = tipo.borrow().deref() {
             return Type::with_alias(tipo.clone(), alias.clone());

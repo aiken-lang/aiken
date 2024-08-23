@@ -22,6 +22,8 @@ mod pattern;
 mod pipe;
 pub mod pretty;
 
+pub use environment::collapse_links;
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TypeAliasAnnotation {
     pub alias: String,
@@ -1099,13 +1101,11 @@ impl TypeVar {
             Self::Link { tipo } => tipo.get_inner_types(),
             Self::Unbound { .. } => vec![],
             var => {
-                vec![
-                    Type::Var {
-                        tipo: RefCell::new(var.clone()).into(),
-                        alias: None,
-                    }
-                    .into(),
-                ]
+                vec![Type::Var {
+                    tipo: RefCell::new(var.clone()).into(),
+                    alias: None,
+                }
+                .into()]
             }
         }
     }
