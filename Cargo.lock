@@ -1948,9 +1948,8 @@ checksum = "caff54706df99d2a78a5a4e3455ff45448d81ef1bb63c22cd14052ca0e993a3f"
 
 [[package]]
 name = "pallas-addresses"
-version = "0.30.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1659716de2b4e26cbef0fd7ff14aaf97491cea38b61b6659368aaf2b73be4b35"
+version = "0.29.0"
+source = "git+https://github.com/KtorZ/pallas.git?rev=454b3bcf32cdc238aba65e4c3e4656a352480ec1#454b3bcf32cdc238aba65e4c3e4656a352480ec1"
 dependencies = [
  "base58",
  "bech32",
@@ -1964,9 +1963,8 @@ dependencies = [
 
 [[package]]
 name = "pallas-codec"
-version = "0.30.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5eaf6270dbf928c57e348fe317e3c29524274f57e1b46c5aa5f7c0e91709180c"
+version = "0.29.0"
+source = "git+https://github.com/KtorZ/pallas.git?rev=454b3bcf32cdc238aba65e4c3e4656a352480ec1#454b3bcf32cdc238aba65e4c3e4656a352480ec1"
 dependencies = [
  "hex",
  "minicbor",
@@ -1977,9 +1975,8 @@ dependencies = [
 
 [[package]]
 name = "pallas-crypto"
-version = "0.30.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8563598b51b66b5f29ddce468b25c56984ef3d0ba6184b5106c9642f8cb5bb11"
+version = "0.29.0"
+source = "git+https://github.com/KtorZ/pallas.git?rev=454b3bcf32cdc238aba65e4c3e4656a352480ec1#454b3bcf32cdc238aba65e4c3e4656a352480ec1"
 dependencies = [
  "cryptoxide",
  "hex",
@@ -1991,9 +1988,8 @@ dependencies = [
 
 [[package]]
 name = "pallas-primitives"
-version = "0.30.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c9458b82f0203aaadfb4bf996a7dbc5407caf8e31f035f5268be1f10e174578"
+version = "0.29.0"
+source = "git+https://github.com/KtorZ/pallas.git?rev=454b3bcf32cdc238aba65e4c3e4656a352480ec1#454b3bcf32cdc238aba65e4c3e4656a352480ec1"
 dependencies = [
  "base58",
  "bech32",
@@ -2007,9 +2003,8 @@ dependencies = [
 
 [[package]]
 name = "pallas-traverse"
-version = "0.30.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b2781b2bf2a69371c874abcb6b24e5105875c8017b9a9713f9a987fa9c6d12a"
+version = "0.29.0"
+source = "git+https://github.com/KtorZ/pallas.git?rev=454b3bcf32cdc238aba65e4c3e4656a352480ec1#454b3bcf32cdc238aba65e4c3e4656a352480ec1"
 dependencies = [
  "hex",
  "itertools 0.13.0",
