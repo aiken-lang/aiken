@@ -1089,6 +1089,28 @@ fn assignement_last_expr_if_final_else() {
 }
 
 #[test]
+fn assignment_last_expr_logical_chain() {
+    let source_code = r#"
+        pub fn foo() -> Bool {
+            and {
+                expect 1 + 1 == 2,
+                True,
+                2 > 0,
+                or {
+                    expect True,
+                    False,
+                }
+            }
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::LastExpressionIsAssignment { .. }))
+    ))
+}
+
+#[test]
 fn if_scoping() {
     let source_code = r#"
         pub fn foo(c) {
@@ -1747,8 +1769,7 @@ fn pipe_wrong_arity_fully_saturated_return_fn() {
 fn fuzzer_ok_basic() {
     let source_code = r#"
         fn int() -> Fuzzer<Int> { todo }
-
-        test prop(n via int()) { todo }
+        test prop(n via int()) { True }
     "#;
 
     assert!(check(parse(source_code)).is_ok());
@@ -1758,8 +1779,7 @@ fn fuzzer_ok_basic() {
 fn fuzzer_ok_explicit() {
     let source_code = r#"
         fn int(prng: PRNG) -> Option<(PRNG, Int)> { todo }
-
-        test prop(n via int) { todo }
+        test prop(n via int) { Void }
     "#;
 
     assert!(check(parse(source_code)).is_ok());
@@ -1771,7 +1791,7 @@ fn fuzzer_ok_list() {
         fn int() -> Fuzzer<Int> { todo }
         fn list(a: Fuzzer<a>) -> Fuzzer<List<a>> { todo }
 
-        test prop(xs via list(int())) { todo }
+        test prop(xs via list(int())) { True }
     "#;
 
     assert!(check(parse(source_code)).is_ok());
@@ -2954,5 +2974,94 @@ fn pattern_bytearray_not_unify_subject() {
     assert!(matches!(
         check(parse(source_code)),
         Err((_, Error::CouldNotUnify { .. }))
+    ))
+}
+
+#[test]
+fn recover_no_assignment_sequence() {
+    let source_code = r#"
+        pub fn main() {
+            let result = 42
+            expect result + 1 == 43
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn recover_no_assignment_fn_body() {
+    let source_code = r#"
+        pub fn is_bool(foo: Data) -> Void {
+            expect _: Bool = foo
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn recover_no_assignment_when_clause() {
+    let source_code = r#"
+        pub fn main(foo) {
+            when foo is {
+                [] -> Void
+                [x, ..] -> expect _: Int = x
+            }
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn recover_no_assignment_fn_if_then_else() {
+    let source_code = r#"
+        pub fn foo(weird_maths) -> Void {
+            if weird_maths {
+                expect 1 == 2
+            } else {
+                expect 1 + 1 == 2
+            }
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn test_return_explicit_void() {
+    let source_code = r#"
+        test foo() {
+            Void
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn test_return_implicit_void() {
+    let source_code = r#"
+        test foo() {
+            let data: Data = 42
+            expect _: Int = data
+        }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn test_return_illegal() {
+    let source_code = r#"
+        test foo() {
+            42
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::IllegalTestType { .. }))
     ))
 }

@@ -1,4 +1,5 @@
-use crate::{
+use crate::tipo::ValueConstructorVariant;
+pub(crate) use crate::{
     ast::{
         self, Annotation, ArgBy, ArgName, AssignmentPattern, BinOp, Bls12_381Point,
         ByteArrayFormatPreference, CallArg, Curve, DataType, DataTypeKey, DefinitionLocation,
@@ -470,6 +471,25 @@ impl TypedExpr {
             TypedExpr::UnOp { value, .. } => value
                 .find_node(byte_index)
                 .or(Some(Located::Expression(self))),
+        }
+    }
+
+    pub fn void(location: Span) -> Self {
+        TypedExpr::Var {
+            name: "Void".to_string(),
+            constructor: ValueConstructor {
+                public: true,
+                variant: ValueConstructorVariant::Record {
+                    name: "Void".to_string(),
+                    arity: 0,
+                    field_map: None,
+                    location: Span::empty(),
+                    module: String::new(),
+                    constructors_count: 1,
+                },
+                tipo: void(),
+            },
+            location,
         }
     }
 }

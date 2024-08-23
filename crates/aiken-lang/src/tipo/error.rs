@@ -2,7 +2,7 @@ use super::Type;
 use crate::{
     ast::{Annotation, BinOp, CallArg, LogicalOpChainKind, Span, UntypedFunction, UntypedPattern},
     error::ExtraData,
-    expr::{self, UntypedExpr},
+    expr::{self, AssignmentPattern, UntypedAssignmentKind, UntypedExpr},
     format::Formatter,
     levenshtein,
     pretty::Documentable,
@@ -15,6 +15,7 @@ use owo_colors::{
     Stream::{Stderr, Stdout},
 };
 use std::{collections::HashMap, fmt::Display, rc::Rc};
+use vec1::Vec1;
 
 #[derive(Debug, Clone, thiserror::Error)]
 #[error(
@@ -470,6 +471,8 @@ If you really meant to return that last expression, try to replace it with the f
         #[label("let-binding as last expression")]
         location: Span,
         expr: expr::UntypedExpr,
+        patterns: Vec1<AssignmentPattern>,
+        kind: UntypedAssignmentKind,
     },
 
     #[error(
@@ -1023,13 +1026,25 @@ The best thing to do from here is to remove it."#))]
     },
 
     #[error("I caught a test with too many arguments.\n")]
-    #[diagnostic(code("illegal::test_arity"))]
+    #[diagnostic(code("illegal::test::arity"))]
     #[diagnostic(help(
         "Tests are allowed to have 0 or 1 argument, but no more. Here I've found a test definition with {count} arguments. If you need to provide multiple values to a test, use a Record or a Tuple.",
     ))]
     IncorrectTestArity {
         count: usize,
         #[label("too many arguments")]
+        location: Span,
+    },
+
+    #[error("I caught a test with an illegal return type.\n")]
+    #[diagnostic(code("illegal::test::return"))]
+    #[diagnostic(help(
+        "Tests must return either {Bool} or {Void}. Note that `expect` assignment are implicitly typed {Void} (and thus, may be the last expression of a test).",
+        Bool = "Bool".if_supports_color(Stderr, |s| s.cyan()),
+        Void = "Void".if_supports_color(Stderr, |s| s.cyan()),
+    ))]
+    IllegalTestType {
+        #[label("expected Bool or Void")]
         location: Span,
     },
 
@@ -1102,6 +1117,7 @@ impl ExtraData for Error {
             | Error::UpdateMultiConstructorType { .. }
             | Error::ValidatorImported { .. }
             | Error::IncorrectTestArity { .. }
+            | Error::IllegalTestType { .. }
             | Error::GenericLeftAtBoundary { .. }
             | Error::UnexpectedMultiPatternAssignment { .. }
             | Error::ExpectOnOpaqueType { .. }

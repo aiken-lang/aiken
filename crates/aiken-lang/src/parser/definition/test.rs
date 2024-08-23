@@ -45,7 +45,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                 end_position: span.end - 1,
                 name,
                 public: false,
-                return_annotation: Some(ast::Annotation::boolean(span)),
+                return_annotation: None,
                 return_type: (),
                 on_test_failure: fail.unwrap_or(OnTestFailure::FailImmediately),
             })
