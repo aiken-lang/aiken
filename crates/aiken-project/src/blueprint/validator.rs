@@ -179,7 +179,16 @@ impl Validator {
             });
 
         Ok(Validator {
-            title: format!("{}.{}_{}", &module.name, &def.name, &func.name),
+            title: format!(
+                "{}.{}_{}",
+                &module.name,
+                &def.name,
+                if func.name == "else" {
+                    "__fallback"
+                } else {
+                    &func.name
+                }
+            ),
             description: func.doc.clone(),
             parameters,
             datum,
@@ -858,13 +867,11 @@ mod tests {
         let mut definitions = fixture_definitions();
         definitions.insert(
             &schema,
-            Schema::Data(Data::AnyOf(vec![
-                Constructor {
-                    index: 0,
-                    fields: vec![Declaration::Referenced(Reference::new("Bool")).into()],
-                }
-                .into(),
-            ]))
+            Schema::Data(Data::AnyOf(vec![Constructor {
+                index: 0,
+                fields: vec![Declaration::Referenced(Reference::new("Bool")).into()],
+            }
+            .into()]))
             .into(),
         );
 
