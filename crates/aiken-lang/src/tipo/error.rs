@@ -831,11 +831,23 @@ Perhaps, try the following:
     #[diagnostic(code("unknown::module_value"))]
     #[diagnostic(help(
         "{}",
-        suggest_neighbor(
-            name,
-            value_constructors.iter(),
-            &suggest_make_public()
-        )
+        if ["mk_nil_data", "mk_pair_data", "mk_nil_pair_data"].contains(&.name.as_str()) {
+            format!(
+                "It seems like you're looking for a builtin function that has been (recently) renamed. Sorry about that, but take notes of the new names of the following functions:\n\n{:<16} -> {}\n{:<16} -> {}\n{:<16} -> {}",
+                "mk_nil_data".if_supports_color(Stderr, |s| s.red()),
+                "new_list".if_supports_color(Stderr, |s| s.green()),
+                "mk_pair_data".if_supports_color(Stderr, |s| s.red()),
+                "new_pair".if_supports_color(Stderr, |s| s.green()),
+                "mk_nil_pair_data".if_supports_color(Stderr, |s| s.red()),
+                "new_pairs".if_supports_color(Stderr, |s| s.green()),
+            )
+        } else {
+            suggest_neighbor(
+                name,
+                value_constructors.iter(),
+                &suggest_make_public()
+            )
+        }
     ))]
     UnknownModuleValue {
         #[label]

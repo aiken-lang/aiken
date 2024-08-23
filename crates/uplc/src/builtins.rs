@@ -1,9 +1,7 @@
-use std::{fmt::Display, rc::Rc, str::FromStr};
-
-use pallas_codec::flat::de;
-use strum_macros::EnumIter;
-
 use crate::ast::Term;
+use pallas_codec::flat::de;
+use std::{fmt::Display, rc::Rc, str::FromStr};
+use strum_macros::EnumIter;
 
 /// All the possible builtin functions in Untyped Plutus Core.
 #[repr(u8)]
@@ -516,9 +514,9 @@ impl DefaultFunction {
             UnBData => "un_b_data",
             EqualsData => "equals_data",
             SerialiseData => "serialise_data",
-            MkPairData => "mk_pair_data",
-            MkNilData => "mk_nil_data",
-            MkNilPairData => "mk_nil_pair_data",
+            MkPairData => "new_pair",
+            MkNilData => "new_list",
+            MkNilPairData => "new_pairs",
             Bls12_381_G1_Add => "bls12_381_g1_add",
             Bls12_381_G1_Neg => "bls12_381_g1_neg",
             Bls12_381_G1_ScalarMul => "bls12_381_g1_scalar_mul",
