@@ -227,6 +227,7 @@ fn generate_module(
         .definitions
         .iter()
         .flat_map(|def| DocType::from_definition(def, &source_linker))
+        .sorted()
         .collect();
     types
         .iter()
@@ -238,6 +239,7 @@ fn generate_module(
         .definitions
         .iter()
         .flat_map(|def| DocConstant::from_definition(def, &source_linker))
+        .sorted()
         .collect();
     constants
         .iter()
