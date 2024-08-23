@@ -6393,10 +6393,10 @@ fn mk_cons_direct_invoke_2() {
 #[test]
 fn mk_cons_direct_invoke_3() {
     let src = r#"
-        use aiken/builtin.{cons_list, i_data, mk_nil_pair_data}
+        use aiken/builtin.{cons_list, i_data, new_pairs}
 
         test mk_cons_3() {
-          cons_list(Pair(i_data(1), i_data(1)), mk_nil_pair_data()) == [
+          cons_list(Pair(i_data(1), i_data(1)), new_pairs()) == [
             Pair(i_data(1), i_data(1)),
           ]
         }
@@ -6431,10 +6431,10 @@ fn mk_cons_direct_invoke_3() {
 #[test]
 fn mk_nil_pair_data() {
     let src = r#"
-        use aiken/builtin.{mk_nil_pair_data}
+        use aiken/builtin.{new_pairs}
 
         test nil_equals() {
-            mk_nil_pair_data() == mk_nil_pair_data()
+            new_pairs() == new_pairs()
         }
     "#;
 
@@ -6450,10 +6450,10 @@ fn mk_nil_pair_data() {
 #[test]
 fn mk_nil_list_data() {
     let src = r#"
-        use aiken/builtin.{mk_nil_data}
+        use aiken/builtin.{new_list}
 
         test nil_equals() {
-            mk_nil_data() == mk_nil_data()
+            new_list() == new_list()
         }
     "#;
 
@@ -6472,7 +6472,7 @@ fn mk_pair_data() {
         use aiken/builtin.{i_data}
 
         test nil_equals() {
-            builtin.mk_pair_data(i_data(1), i_data(2)).1st == i_data(1)
+            builtin.new_pair(i_data(1), i_data(2)).1st == i_data(1)
         }
     "#;
 
