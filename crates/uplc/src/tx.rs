@@ -90,7 +90,7 @@ pub fn eval_phase_two(
 pub fn eval_phase_two_raw(
     tx_bytes: &[u8],
     utxos_bytes: &[(Vec<u8>, Vec<u8>)],
-    cost_mdls_bytes: &[u8],
+    cost_mdls_bytes: Option<&[u8]>,
     initial_budget: (u64, u64),
     slot_config: (u64, u64, u32),
     run_phase_one: bool,
@@ -100,7 +100,7 @@ pub fn eval_phase_two_raw(
         .or_else(|_| MultiEraTx::decode_for_era(Era::Babbage, tx_bytes))
         .or_else(|_| MultiEraTx::decode_for_era(Era::Alonzo, tx_bytes))?;
 
-    let cost_mdls = CostMdls::decode_fragment(cost_mdls_bytes)?;
+    let cost_mdls = cost_mdls_bytes.map(|x| CostMdls::decode_fragment(x)).transpose()?;
 
     let budget = ExBudget {
         cpu: initial_budget.0 as i64,
@@ -127,7 +127,7 @@ pub fn eval_phase_two_raw(
             match eval_phase_two(
                 &tx,
                 &utxos,
-                Some(&cost_mdls),
+                cost_mdls.as_ref(),
                 Some(&budget),
                 &sc,
                 run_phase_one,
