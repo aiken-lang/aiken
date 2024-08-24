@@ -3682,53 +3682,51 @@ fn always_true_validator() {
 
     let mint = |purpose: Rc<Name>| {
         Term::bool(true).lambda("__purpose_arg__").apply(
-            Term::un_b_data().apply(
-                Term::head_list().apply(
-                    Term::snd_pair()
-                        .apply(Term::unconstr_data().apply(Term::Var(purpose)))
-                ),
-            ),
+            Term::un_b_data()
+                .apply(Term::head_list().apply(
+                    Term::snd_pair().apply(Term::unconstr_data().apply(Term::Var(purpose))),
+                )),
         )
     };
 
     let when = |purpose: Rc<Name>| {
-            Term::equals_integer()
-                .apply(Term::integer(0.into()))
-                .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::Var(purpose))))
-        };
-
+        Term::equals_integer()
+            .apply(Term::integer(0.into()))
+            .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::Var(purpose))))
+    };
 
     let validator = {
         let context = "__context__";
-        Term::snd_pair().apply(Term::unconstr_data().apply(Term::var(context)))
+        Term::snd_pair()
+            .apply(Term::unconstr_data().apply(Term::var(context)))
             .as_var("tail_id_2", |tail_id_2| {
                 Term::head_list()
                     .apply(Term::Var(tail_id_2.clone()))
                     .as_var("__transaction__", |_transaction| {
-                        Term::tail_list()
-                            .apply(Term::Var(tail_id_2))
-                            .as_var("tail_id_3", |tail_id_3| {
+                        Term::tail_list().apply(Term::Var(tail_id_2)).as_var(
+                            "tail_id_3",
+                            |tail_id_3| {
                                 Term::head_list()
                                     .apply(Term::Var(tail_id_3.clone()))
                                     .as_var("__redeemer__", |_redeemer| {
                                         Term::head_list()
                                             .apply(Term::tail_list().apply(Term::Var(tail_id_3)))
                                             .as_var("__purpose__", |purpose| {
-                                                when(purpose.clone())
-                                                    .delayed_if_then_else(
-                                                        mint(purpose),
-                                                        Term::Error,
-                                                    )
+                                                when(purpose.clone()).delayed_if_then_else(
+                                                    mint(purpose),
+                                                    Term::Error,
+                                                )
                                             })
                                     })
-                            })
+                            },
+                        )
                     })
             })
             .delayed_if_then_else(
                 Term::unit(),
                 Term::Error
                     .apply(Term::Error.force())
-                    .delayed_trace(Term::string("Validator returned false"))
+                    .delayed_trace(Term::string("Validator returned false")),
             )
             .lambda(context)
     };
@@ -4124,200 +4122,201 @@ fn generic_validator_type_test() {
       }
     "#;
 
-    let otherwise_r_a_b = Term::Error.delayed_trace(Term::string("r: A<B>")).delay();
-
-    let otherwise_var = &Term::var("otherwise_delayed");
-
-    let then_delayed = Term::equals_integer()
-        .apply(Term::integer(0.into()))
-        .apply(Term::var("subject"))
-        .delayed_if_then_else(
-            Term::bool(false),
-            Term::choose_unit(
-                Term::var("something"),
-                Term::choose_unit(Term::unit(), Term::bool(true)),
+    let body = |redeemer: Rc<Name>| {
+        Term::equals_integer()
+            .apply(Term::integer(0.into()))
+            .apply(Term::var("subject"))
+            .delayed_if_then_else(
+                Term::bool(false),
+                Term::choose_unit(
+                    Term::var("something"),
+                    Term::choose_unit(Term::unit(), Term::bool(true)),
+                )
+                .lambda("something")
+                .apply(
+                    Term::unit()
+                        .lambda("_")
+                        .apply(Term::head_list().apply(Term::var("B_fields"))),
+                )
+                .lambda("B_fields")
+                .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("field_B")))
+                .lambda("field_B")
+                .apply(Term::head_list().apply(Term::var("tail_1")))
+                .lambda("tail_1")
+                .apply(Term::tail_list().apply(Term::var("r_fields")))
+                .lambda("r_fields")
+                .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::Var(redeemer.clone()))),
             )
-            .lambda("something")
-            .apply(
-                Term::unit()
-                    .lambda("_")
-                    .apply(Term::head_list().apply(Term::var("B_fields"))),
-            )
-            .lambda("B_fields")
-            .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("field_B")))
-            .lambda("field_B")
-            .apply(Term::head_list().apply(Term::var("tail_1")))
-            .lambda("tail_1")
-            .apply(Term::tail_list().apply(Term::var("r_fields")))
-            .lambda("r_fields")
-            .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("r"))),
-        )
-        .lambda("subject")
-        .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("r")))
-        // Validator level if then else
-        // which is why you have [(error) (force (error))]
-        .delayed_if_then_else(
-            Term::unit(),
-            Term::Error
-                .apply(Term::Error.force())
-                .delayed_trace(Term::string("Validator returned false")),
-        )
-        .lambda("_")
-        .delay();
-
-    let call_expect_b = |tail_2: Term<Name>, field_1| {
-        tail_2.delay_empty_choose_list(
-            Term::var("__expect_B_")
-                .apply(field_1)
-                .apply(Term::var("then_delayed"))
-                .apply(otherwise_var.clone()),
-            otherwise_var.clone(),
-        )
+            .lambda("subject")
+            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::Var(redeemer)))
     };
 
-    let some_a_fields_check = Term::var(CONSTR_FIELDS_EXPOSER)
-        .apply(Term::var("__param_0"))
-        .as_var("tail_id_5", |fields| {
-            Term::unwrap_tail_or(
-                fields.clone(),
-                |tail| {
-                    Term::head_list()
-                        .apply(Term::Var(fields))
-                        .as_var("__val", |val| {
-                            Term::choose_data_constr(
-                                val,
-                                |val| {
-                                    val.unwrap_void_or(
-                                        |unit| {
-                                            unit.as_var("__field_0", |_| {
-                                                tail.as_var("tail_id_6", |other_field| {
-                                                    Term::unwrap_tail_or(
-                                                        other_field.clone(),
-                                                        |tail_2| {
-                                                            Term::head_list()
-                                                                .apply(Term::Var(other_field))
-                                                                .as_var("__val", |val_2| {
-                                                                    Term::choose_data_constr(
-                                                                        val_2,
-                                                                        |field_1| {
-                                                                            call_expect_b(
-                                                                                tail_2, field_1,
-                                                                            )
-                                                                        },
-                                                                        otherwise_var,
-                                                                    )
-                                                                })
-                                                        },
-                                                        otherwise_var,
-                                                    )
-                                                })
-                                            })
-                                        },
-                                        otherwise_var,
-                                    )
-                                },
-                                otherwise_var,
-                            )
-                        })
-                },
-                otherwise_var,
+    let expect_void = |target: Rc<Name>, then: Term<Name>| {
+        Term::equals_integer()
+            .apply(Term::integer(0.into()))
+            .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::Var(target.clone()))))
+            .delayed_if_then_else(
+                Term::snd_pair()
+                    .apply(Term::unconstr_data().apply(Term::Var(target)))
+                    .delay_filled_choose_list(then, Term::Error),
+                Term::Error,
             )
-        });
+    };
 
-    let expect_a_b = Term::var(CONSTR_INDEX_EXPOSER)
-        .apply(Term::var("__param_0"))
-        .as_var("subject", |subject| {
-            Term::equals_integer()
-                .apply(Term::integer(0.into()))
-                .apply(Term::Var(subject.clone()))
-                .delayed_if_then_else(
-                    Term::var(CONSTR_FIELDS_EXPOSER)
-                        .apply(Term::var("__param_0"))
-                        .delay_empty_choose_list(
-                            Term::var("then_delayed").force(),
-                            otherwise_var.clone(),
-                        ),
-                    Term::equals_integer()
-                        .apply(Term::integer(1.into()))
-                        .apply(Term::Var(subject))
-                        .delay_true_if_then_else(some_a_fields_check, otherwise_var.clone()),
-                )
-        })
-        .lambda("otherwise_delayed")
-        .lambda("then_delayed")
-        .lambda("__param_0");
+    let expect_no_a = |redeemer: Rc<Name>, then_delayed: Rc<Name>| {
+        Term::snd_pair()
+            .apply(Term::unconstr_data().apply(Term::Var(redeemer)))
+            .delayed_choose_list(Term::Var(then_delayed.clone()).force(), Term::Error)
+    };
 
-    let expect_b = Term::var(CONSTR_INDEX_EXPOSER)
-        .apply(Term::var("__param_0"))
-        .as_var("subject", |subject| {
-            Term::equals_integer()
-                .apply(Term::integer(0.into()))
-                .apply(Term::Var(subject.clone()))
-                .delay_true_if_then_else(
-                    Term::var(CONSTR_FIELDS_EXPOSER)
-                        .apply(Term::var("__param_0"))
-                        .as_var("fields", |fields| {
-                            Term::unwrap_tail_or(
-                                fields.clone(),
-                                |tail| {
-                                    Term::head_list().apply(Term::Var(fields)).as_var(
-                                        "field_void",
-                                        |field_void| {
-                                            Term::choose_data_constr(
-                                                field_void,
-                                                |void| {
-                                                    void.unwrap_void_or(
-                                                        |unit| {
-                                                            unit.as_var("something", |_| {
-                                                                tail.delay_empty_choose_list(
-                                                                    Term::var("then_delayed")
-                                                                        .force(),
-                                                                    otherwise_var.clone(),
-                                                                )
-                                                            })
-                                                        },
-                                                        otherwise_var,
+    let expect_b = |target: Rc<Name>, then: Term<Name>| {
+        Term::equals_integer()
+            .apply(Term::integer(0.into()))
+            .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::Var(target.clone()))))
+            .delayed_if_then_else(
+                Term::snd_pair()
+                    .apply(Term::unconstr_data().apply(Term::Var(target)))
+                    .as_var("tail_id_8", |tail_id_8| {
+                        Term::Var(tail_id_8.clone()).delay_empty_choose_list(
+                            Term::Error,
+                            Term::head_list()
+                                .apply(Term::Var(tail_id_8.clone()))
+                                .as_var("__val", |val| {
+                                    expect_void(
+                                        val,
+                                        Term::Var(tail_id_8)
+                                            .delay_filled_choose_list(then, Term::Error),
+                                    )
+                                }),
+                        )
+                    }),
+                Term::Error,
+            )
+    };
+
+    let expect_some_a = |redeemer: Rc<Name>, then_delayed: Rc<Name>| {
+        Term::snd_pair()
+            .apply(Term::unconstr_data().apply(Term::Var(redeemer)))
+            .as_var("tail_id_5", |tail_id_5| {
+                Term::Var(tail_id_5.clone()).delayed_choose_list(
+                    Term::Error,
+                    Term::head_list()
+                        .apply(Term::Var(tail_id_5.clone()))
+                        .as_var("__val", |val| {
+                            expect_void(
+                                val,
+                                Term::tail_list().apply(Term::Var(tail_id_5)).as_var(
+                                    "tail_id_6",
+                                    |tail_id_6| {
+                                        Term::Var(tail_id_6.clone()).delay_empty_choose_list(
+                                            Term::Error,
+                                            Term::head_list().apply(Term::Var(tail_id_6)).as_var(
+                                                "__val",
+                                                |val| {
+                                                    Term::choose_data_constr(
+                                                        val.clone(),
+                                                        |_| expect_b(val, Term::Var(then_delayed)),
+                                                        &Term::Error.delay(),
                                                     )
                                                 },
-                                                otherwise_var,
-                                            )
-                                        },
-                                    )
-                                },
-                                otherwise_var,
+                                            ),
+                                        )
+                                    },
+                                ),
                             )
                         }),
-                    otherwise_var.clone(),
-                )
-        })
-        .lambda("otherwise_delayed")
-        .lambda("then_delayed")
-        .lambda("__param_0");
-
-    assert_uplc(
-        src,
-        Term::var("r")
-            .as_var("__val", |r| {
-                Term::choose_data_constr(
-                    r,
-                    |val| {
-                        Term::var("__expect_A_B_")
-                            .lambda("__expect_A_B_")
-                            .apply(expect_a_b)
-                            .lambda("__expect_B_")
-                            .apply(expect_b)
-                            .apply(val)
-                            .apply(then_delayed)
-                            .apply(Term::var("r:A<B>"))
-                    },
-                    &Term::var("r:A<B>"),
                 )
             })
-            .lambda("r")
-            .lambda("r:A<B>")
-            .apply(otherwise_r_a_b),
-        false,
-    );
+    };
+
+    let when_constr_arity_2 = |redeemer: Rc<Name>, then_1st: Term<Name>, then_2nd: Term<Name>| {
+        Term::fst_pair()
+            .apply(Term::unconstr_data().apply(Term::Var(redeemer.clone())))
+            .as_var("__subject_span_0_0", |subject_span_0_0| {
+                let when_constructor = |ix: usize| {
+                    Term::equals_integer()
+                        .apply(Term::integer(ix.into()))
+                        .apply(Term::Var(subject_span_0_0.clone()))
+                };
+
+                when_constructor(0).delayed_if_then_else(
+                    then_1st,
+                    when_constructor(1).delayed_if_then_else(then_2nd, Term::Error),
+                )
+            })
+    };
+
+    let choose_purpose = |redeemer: Rc<Name>, purpose: Rc<Name>| {
+        Term::equals_integer()
+            .apply(Term::integer(1.into()))
+            .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::Var(purpose.clone()))))
+            .delayed_if_then_else(
+                Term::snd_pair()
+                    .apply(Term::unconstr_data().apply(Term::Var(purpose)))
+                    .as_var("tail_id_10", |tail_id_10| {
+                        Term::head_list()
+                            .apply(Term::Var(tail_id_10.clone()))
+                            .as_var("__purpose_arg__", |purpose_arg| {
+                                Term::head_list()
+                                    .apply(Term::tail_list().apply(Term::Var(tail_id_10.clone())))
+                                    .as_var("__datum__", |datum| {
+                                        body(redeemer.clone()).delay().as_var(
+                                            "then_delayed",
+                                            |then_delayed| {
+                                                when_constr_arity_2(
+                                                    redeemer.clone(),
+                                                    expect_no_a(
+                                                        redeemer.clone(),
+                                                        then_delayed.clone(),
+                                                    ),
+                                                    expect_some_a(
+                                                        redeemer.clone(),
+                                                        then_delayed.clone(),
+                                                    ),
+                                                )
+                                            },
+                                        )
+                                    })
+                            })
+                    }),
+                Term::Error,
+            )
+    };
+
+    let validator = {
+        let context = "__context__";
+        Term::snd_pair()
+            .apply(Term::unconstr_data().apply(Term::var(context)))
+            .as_var("tail_id_13", |tail_id_13| {
+                Term::head_list()
+                    .apply(Term::Var(tail_id_13.clone()))
+                    .as_var("__transaction__", |_transaction| {
+                        Term::tail_list().apply(Term::Var(tail_id_13)).as_var(
+                            "tail_id_14",
+                            |tail_id_14| {
+                                Term::head_list()
+                                    .apply(Term::Var(tail_id_14.clone()))
+                                    .as_var("__redeemer__", |redeemer| {
+                                        Term::head_list()
+                                            .apply(Term::tail_list().apply(Term::Var(tail_id_14)))
+                                            .as_var("__purpose__", |purpose| {
+                                                choose_purpose(redeemer, purpose)
+                                            })
+                                    })
+                            },
+                        )
+                    })
+            })
+            .delayed_if_then_else(
+                Term::unit(),
+                Term::Error
+                    .apply(Term::Error.force())
+                    .delayed_trace(Term::string("Validator returned false")),
+            )
+            .lambda(context)
+    };
+
+    assert_uplc(src, validator, false);
 }
 
 #[test]
