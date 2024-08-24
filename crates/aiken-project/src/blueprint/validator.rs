@@ -69,15 +69,21 @@ impl Validator {
             ));
         }
 
-        validators.push(Validator::create_validator_blueprint(
-            generator,
-            modules,
-            module,
-            def,
-            &def.fallback,
-            &mut program,
-            plutus_version,
-        ));
+        // NOTE: Only push the fallback if all other validators have been successfully
+        // generated. Otherwise, we may fall into scenarios where we cannot generate validators
+        // (e.g. due to the presence of generics in datum/redeemer), which won't be caught by
+        // the else branch since it lacks arguments.
+        if validators.iter().all(|v| v.is_ok()) {
+            validators.push(Validator::create_validator_blueprint(
+                generator,
+                modules,
+                module,
+                def,
+                &def.fallback,
+                &mut program,
+                plutus_version,
+            ));
+        }
 
         validators
     }
@@ -92,10 +98,6 @@ impl Validator {
         program: &mut MemoProgram,
         plutus_version: &PlutusVersion,
     ) -> Result<Validator, Error> {
-        let mut args = func.arguments.iter().rev();
-
-        let (_, _, redeemer, datum) = (args.next(), args.next(), args.next(), args.next());
-
         let mut definitions = Definitions::new();
 
         let parameters = def
@@ -122,72 +124,83 @@ impl Validator {
             })
             .collect::<Result<_, _>>()?;
 
-        let datum = datum
-            .map(|datum| {
-                match datum.tipo.as_ref() {
-                    Type::App { module: module_name, name, args, .. } if module_name.is_empty() && name == well_known::OPTION => {
-                        let Some(Annotation::Constructor { arguments, .. }) = datum.annotation.as_ref() else {
-                          panic!("Datum isn't an option but should be; this should have been caught by the type-checker!");
-                        };
+        let (datum, redeemer) = if func.name == well_known::VALIDATOR_ELSE {
+            (None, None)
+        } else {
+            let mut args = func.arguments.iter().rev();
 
-                        Annotated::from_type(
-                            modules.into(),
-                            tipo_or_annotation(module, &TypedArg {
-                                arg_name: datum.arg_name.clone(),
+            let (_, _, redeemer, datum) = (
+                args.next(),
+                args.next(),
+                args.next().expect("redeemer is always present"),
+                args.next(),
+            );
+
+            let datum = datum
+                .map(|datum| {
+                    match datum.tipo.as_ref() {
+                        Type::App { module: module_name, name, args, .. } if module_name.is_empty() && name == well_known::OPTION => {
+                            let Some(Annotation::Constructor { arguments, .. }) = datum.annotation.as_ref() else {
+                              panic!("Datum isn't an option but should be; this should have been caught by the type-checker!");
+                            };
+
+                            Annotated::from_type(
+                                modules.into(),
+                                tipo_or_annotation(module, &TypedArg {
+                                    arg_name: datum.arg_name.clone(),
+                                    location: datum.location,
+                                    annotation: arguments.first().cloned(),
+                                    doc: datum.doc.clone(),
+                                    is_validator_param: datum.is_validator_param,
+                                    tipo:  args.first().expect("Option always have a single type argument.").clone()
+                                }),
+                                &mut definitions,
+                            )
+                            .map_err(|error| Error::Schema {
+                                error,
                                 location: datum.location,
-                                annotation: arguments.first().cloned(),
-                                doc: datum.doc.clone(),
-                                is_validator_param: datum.is_validator_param,
-                                tipo:  args.first().expect("Option always have a single type argument.").clone()
-                            }),
-                            &mut definitions,
-                        )
-                        .map_err(|error| Error::Schema {
-                            error,
-                            location: datum.location,
-                            source_code: NamedSource::new(
-                                module.input_path.display().to_string(),
-                                module.code.clone(),
-                            ),
-                        })
-                    },
-                    _ => panic!("Datum isn't an option but should be; this should have been caught by the type-checker!"),
-                }
-            })
-            .transpose()?
-            .map(|schema| Parameter {
-                title: datum.map(|datum| datum.arg_name.get_label()),
-                schema,
-            });
-
-        let redeemer = redeemer
-            .map(|redeemer| {
-                Annotated::from_type(
-                    modules.into(),
-                    tipo_or_annotation(module, redeemer),
-                    &mut definitions,
-                )
-                .map_err(|error| Error::Schema {
-                    error,
-                    location: redeemer.location,
-                    source_code: NamedSource::new(
-                        module.input_path.display().to_string(),
-                        module.code.clone(),
-                    ),
+                                source_code: NamedSource::new(
+                                    module.input_path.display().to_string(),
+                                    module.code.clone(),
+                                ),
+                            })
+                        },
+                        _ => panic!("Datum isn't an option but should be; this should have been caught by the type-checker!"),
+                    }
                 })
+                .transpose()?
+                .map(|schema| Parameter {
+                    title: datum.map(|datum| datum.arg_name.get_label()),
+                    schema,
+                });
+
+            let redeemer = Annotated::from_type(
+                modules.into(),
+                tipo_or_annotation(module, redeemer),
+                &mut definitions,
+            )
+            .map_err(|error| Error::Schema {
+                error,
+                location: redeemer.location,
+                source_code: NamedSource::new(
+                    module.input_path.display().to_string(),
+                    module.code.clone(),
+                ),
             })
-            .transpose()?
             .map(|schema| Parameter {
-                title: redeemer.map(|redeemer| redeemer.arg_name.get_label()),
+                title: Some(redeemer.arg_name.get_label()),
                 schema,
-            });
+            })?;
+
+            (datum, Some(redeemer))
+        };
 
         Ok(Validator {
             title: format!(
                 "{}.{}_{}",
                 &module.name,
                 &def.name,
-                if func.name == "else" {
+                if func.name == well_known::VALIDATOR_ELSE {
                     "__fallback"
                 } else {
                     &func.name
