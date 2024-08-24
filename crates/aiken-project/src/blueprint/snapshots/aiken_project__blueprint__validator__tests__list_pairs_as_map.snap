@@ -1,9 +1,15 @@
 ---
 source: crates/aiken-project/src/blueprint/validator.rs
-description: "Code:\n\ntype Dict<key, value> {\n    inner: List<Pair<ByteArray, value>>\n}\n\ntype UUID { UUID }\n\nvalidator {\n  fn list_pairs_as_map(redeemer: Dict<UUID, Int>, ctx: Void) {\n    True\n  }\n}\n"
+description: "Code:\n\npub type Dict<key, value> {\n    inner: List<Pair<ByteArray, value>>\n}\n\npub type UUID { UUID }\n\nvalidator list_pairs_as_map {\n  spend(datum: Option<Data>, redeemer: Dict<UUID, Int>, _output_reference: Data, transaction: Data) {\n    True\n  }\n}\n"
 ---
 {
-  "title": "test_module.list_pairs_as_map",
+  "title": "test_module.list_pairs_as_map_spend",
+  "datum": {
+    "title": "datum",
+    "schema": {
+      "$ref": "#/definitions/Data"
+    }
+  },
   "redeemer": {
     "title": "redeemer",
     "schema": {
@@ -15,6 +21,10 @@ description: "Code:\n\ntype Dict<key, value> {\n    inner: List<Pair<ByteArray, 
   "definitions": {
     "ByteArray": {
       "dataType": "bytes"
+    },
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
     },
     "Int": {
       "dataType": "integer"

@@ -576,7 +576,7 @@ mod tests {
             pub type UUID { UUID }
 
             validator list_pairs_as_map {
-              spend(datum: Option<Data>, redeemer: Dict<UUID, Int>, ctx: Void) {
+              spend(datum: Option<Data>, redeemer: Dict<UUID, Int>, _output_reference: Data, transaction: Data) {
                 True
               }
             }
