@@ -3,7 +3,7 @@ source: crates/aiken-project/src/blueprint/validator.rs
 description: "Code:\n\npub type Foo {\n    foo: Data\n}\n\nvalidator nested_data {\n  spend(datum: Option<Foo>, redeemer: Int, output_reference: Data, transaction: Data) {\n    True\n  }\n}\n"
 ---
 {
-  "title": "test_module.nested_data_spend",
+  "title": "test_module.nested_data.spend",
   "datum": {
     "title": "datum",
     "schema": {

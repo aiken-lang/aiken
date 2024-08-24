@@ -196,16 +196,7 @@ impl Validator {
         };
 
         Ok(Validator {
-            title: format!(
-                "{}.{}_{}",
-                &module.name,
-                &def.name,
-                if func.name == well_known::VALIDATOR_ELSE {
-                    "__fallback"
-                } else {
-                    &func.name
-                }
-            ),
+            title: format!("{}.{}.{}", &module.name, &def.name, &func.name,),
             description: func.doc.clone(),
             parameters,
             datum,

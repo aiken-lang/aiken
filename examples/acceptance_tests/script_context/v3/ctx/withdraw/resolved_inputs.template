@@ -1,7 +1,7 @@
 [
-  { 0: h'30{{ withdraw.thing_spend.hash }}{{ withdraw.thing_spend.hash }}'
+  { 0: h'30{{ withdraw.thing.spend.hash }}{{ withdraw.thing.spend.hash }}'
   , 1: 1000000
   , 2: [1, 24(h'd87980')]
-  , 3: 24(h'8203{{ withdraw.thing_spend.cbor }}')
+  , 3: 24(h'8203{{ withdraw.thing.spend.cbor }}')
   }
 ]
