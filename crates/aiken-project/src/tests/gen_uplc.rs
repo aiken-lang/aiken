@@ -1,9 +1,8 @@
-use std::rc::Rc;
-
 use super::TestProject;
 use crate::module::CheckedModules;
 use aiken_lang::ast::{Definition, Function, TraceLevel, Tracing, TypedTest, TypedValidator};
 use pretty_assertions::assert_eq;
+use std::rc::Rc;
 use uplc::{
     ast::{Constant, Data, DeBruijn, Name, Program, Term, Type},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
@@ -3671,6 +3670,73 @@ fn when_bool_is_false() {
 }
 
 #[test]
+fn always_true_validator() {
+    let src = r#"
+        validator foo {
+            mint(_redeemer: Data, _policy_id: ByteArray, _transaction: Data) {
+                True
+            }
+        }
+
+    "#;
+
+    let mint = |purpose: Rc<Name>| {
+        Term::bool(true).lambda("__purpose_arg__").apply(
+            Term::un_b_data().apply(
+                Term::head_list().apply(
+                    Term::snd_pair()
+                        .apply(Term::unconstr_data().apply(Term::Var(purpose)))
+                ),
+            ),
+        )
+    };
+
+    let when = |purpose: Rc<Name>| {
+            Term::equals_integer()
+                .apply(Term::integer(0.into()))
+                .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::Var(purpose))))
+        };
+
+
+    let validator = {
+        let context = "__context__";
+        Term::snd_pair().apply(Term::unconstr_data().apply(Term::var(context)))
+            .as_var("tail_id_2", |tail_id_2| {
+                Term::head_list()
+                    .apply(Term::Var(tail_id_2.clone()))
+                    .as_var("__transaction__", |_transaction| {
+                        Term::tail_list()
+                            .apply(Term::Var(tail_id_2))
+                            .as_var("tail_id_3", |tail_id_3| {
+                                Term::head_list()
+                                    .apply(Term::Var(tail_id_3.clone()))
+                                    .as_var("__redeemer__", |_redeemer| {
+                                        Term::head_list()
+                                            .apply(Term::tail_list().apply(Term::Var(tail_id_3)))
+                                            .as_var("__purpose__", |purpose| {
+                                                when(purpose.clone())
+                                                    .delayed_if_then_else(
+                                                        mint(purpose),
+                                                        Term::Error,
+                                                    )
+                                            })
+                                    })
+                            })
+                    })
+            })
+            .delayed_if_then_else(
+                Term::unit(),
+                Term::Error
+                    .apply(Term::Error.force())
+                    .delayed_trace(Term::string("Validator returned false"))
+            )
+            .lambda(context)
+    };
+
+    assert_uplc(src, validator, false);
+}
+
+#[test]
 fn when_tuple_deconstruction() {
     let src = r#"
       pub type Thing {
@@ -3688,7 +3754,7 @@ fn when_tuple_deconstruction() {
       }
 
       validator thing {
-        spend(dat: Datum, red: RedSpend, ctx: Data) {
+        spend(dat: Datum, red: RedSpend, output_reference: Data, transaction: Data) {
           when (dat, red) is {
             (A(a), Spend(x)) ->
               (a.idx == x)?
@@ -4047,7 +4113,7 @@ fn generic_validator_type_test() {
       }
 
       validator err_example {
-        spend(r: A<B>, _ctx: Data) -> Bool {
+        spend(_datum: Option<Data>, r: A<B>, _output_ref: Data, _transaction: Data) -> Bool {
           when r is {
             NoA ->
               False
@@ -5563,7 +5629,7 @@ fn opaque_value_in_datum() {
 
 
       validator foo {
-        spend(dat: Dat, red: Data, ctx: Data) {
+        spend(dat: Dat, red: Data, output_reference: Data, transaction: Data) {
           let val = dat.a
 
           expect [Pair(_, amount)] = val.inner.inner
