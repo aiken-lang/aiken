@@ -1575,7 +1575,11 @@ impl<'a> CodeGenerator<'a> {
         otherwise: AirTree,
         depth: usize,
     ) -> AirTree {
-        assert!(tipo.get_generic().is_none());
+        assert!(
+            tipo.get_generic().is_none(),
+            "left-hand side of expect is generic: {}",
+            tipo.to_pretty(0)
+        );
         // Shouldn't be needed but still here just in case
         // this function is called from anywhere else besides assignment
         let tipo = &convert_opaque_type(tipo, &self.data_types, true);

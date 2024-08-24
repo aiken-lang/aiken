@@ -49,6 +49,8 @@ pub const SCRIPT_PURPOSE_CONSTRUCTORS: &[&str] = &[
     SCRIPT_PURPOSE_PROPOSE,
 ];
 
+pub const VALIDATOR_ELSE: &str = "else";
+
 // ----------------------------------------------------------------------------
 // Types
 
