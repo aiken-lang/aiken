@@ -3,7 +3,7 @@ source: crates/aiken-project/src/blueprint/validator.rs
 description: "Code:\n\npub type Expr {\n  Val(Int)\n  Sum(Expr, Expr)\n  Mul(Expr, Expr)\n}\n\nvalidator recursive_types {\n  spend(datum: Option<Data>, redeemer: Expr, output_reference: Data, transaction: Data) {\n    True\n  }\n}\n"
 ---
 {
-  "title": "test_module.recursive_types_spend",
+  "title": "test_module.recursive_types.spend",
   "datum": {
     "title": "datum",
     "schema": {

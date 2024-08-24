@@ -3,7 +3,7 @@ source: crates/aiken-project/src/blueprint/validator.rs
 description: "Code:\n\npub type Either<left, right> {\n    Left(left)\n    Right(right)\n}\n\npub type Interval<a> {\n    Finite(a)\n    Infinite\n}\n\nvalidator generics {\n  spend(datum: Option<Data>, redeemer: Either<ByteArray, Interval<Int>>, output_reference: Data, transaction: Data) {\n    True\n  }\n}\n"
 ---
 {
-  "title": "test_module.generics_spend",
+  "title": "test_module.generics.spend",
   "datum": {
     "title": "datum",
     "schema": {

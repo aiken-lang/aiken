@@ -23,7 +23,7 @@
 
     { 5: [[0, 0, 121([]), [1000000, 100000000]]]
 
-    , 7: [h'{{ simple_spend.simple_spend_spend.cbor }}']
+    , 7: [h'{{ simple_spend.simple_spend.spend.cbor }}']
 
     },
 

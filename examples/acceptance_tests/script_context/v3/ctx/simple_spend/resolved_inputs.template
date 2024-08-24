@@ -1,5 +1,5 @@
 [
-  { 0: h'70{{ simple_spend.simple_spend_spend.hash }}'
+  { 0: h'70{{ simple_spend.simple_spend.spend.hash }}'
   , 1: 1000000000
   , 2: [1, 24(h'd87980')]
   }

@@ -3,7 +3,7 @@ source: crates/aiken-project/src/blueprint/validator.rs
 description: "Code:\n\nvalidator tuples {\n  spend(datum: Option<(Int, ByteArray)>, redeemer: (Int, Int, Int), output_reference: Data, transaction: Data) {\n    True\n  }\n}\n"
 ---
 {
-  "title": "test_module.tuples_spend",
+  "title": "test_module.tuples.spend",
   "datum": {
     "title": "datum",
     "schema": {
