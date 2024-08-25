@@ -259,8 +259,7 @@ fn infer_definition(
 
                     typed_fallback.name = old_name;
 
-                    if !typed_fallback.body.is_error_term() && !typed_fallback.return_type.is_bool()
-                    {
+                    if !typed_fallback.return_type.is_bool() {
                         return Err(Error::ValidatorMustReturnBool {
                             return_type: typed_fallback.return_type.clone(),
                             location: typed_fallback.location,

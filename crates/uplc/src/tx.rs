@@ -100,9 +100,7 @@ pub fn eval_phase_two_raw(
         .or_else(|_| MultiEraTx::decode_for_era(Era::Babbage, tx_bytes))
         .or_else(|_| MultiEraTx::decode_for_era(Era::Alonzo, tx_bytes))?;
 
-    let cost_mdls = cost_mdls_bytes
-        .map(|x| CostMdls::decode_fragment(x))
-        .transpose()?;
+    let cost_mdls = cost_mdls_bytes.map(CostMdls::decode_fragment).transpose()?;
 
     let budget = ExBudget {
         cpu: initial_budget.0 as i64,

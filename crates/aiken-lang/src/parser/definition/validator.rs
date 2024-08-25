@@ -1,12 +1,10 @@
-use chumsky::prelude::*;
-
+use super::function::param;
 use crate::{
     ast::{self, ArgBy, ArgName},
     expr::UntypedExpr,
     parser::{annotation, error::ParseError, expr, token::Token},
 };
-
-use super::function::param;
+use chumsky::prelude::*;
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
     just(Token::Validator)
@@ -52,36 +50,38 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                     },
                 ));
 
+                let location = ast::Span {
+                    start: span.start,
+                    // capture the span from the optional params
+                    end: params_span.end,
+                };
+
                 ast::UntypedDefinition::Validator(ast::Validator {
                     doc: None,
                     name,
                     handlers,
-                    location: ast::Span {
-                        start: span.start,
-                        // capture the span from the optional params
-                        end: params_span.end,
-                    },
+                    location,
                     params,
                     end_position: span.end - 1,
                     fallback: opt_catch_all.unwrap_or(ast::Function {
                         arguments: vec![ast::UntypedArg {
                             by: ArgBy::ByName(ArgName::Discarded {
-                                name: "_ctx".to_string(),
-                                label: "_ctx".to_string(),
-                                location: ast::Span::empty(),
+                                name: "_".to_string(),
+                                label: "_".to_string(),
+                                location,
                             }),
-                            location: ast::Span::empty(),
+                            location,
                             annotation: None,
                             doc: None,
                             is_validator_param: false,
                         }],
-                        body: UntypedExpr::fail(None, ast::Span::empty()),
+                        body: UntypedExpr::fail(None, location),
                         doc: None,
-                        location: ast::Span::empty(),
-                        end_position: span.end - 1,
+                        location,
+                        end_position: location.end - 1,
                         name: "else".to_string(),
                         public: true,
-                        return_annotation: None,
+                        return_annotation: Some(ast::Annotation::boolean(location)),
                         return_type: (),
                         on_test_failure: ast::OnTestFailure::FailImmediately,
                     }),
@@ -103,23 +103,28 @@ pub fn args_and_body() -> impl Parser<Token, ast::UntypedFunction, Error = Parse
                 .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
         )
         .map_with_span(
-            |(((arguments, args_span), return_annotation), body), span| ast::Function {
-                arguments,
-                body: body.unwrap_or_else(|| UntypedExpr::todo(None, span)),
-                doc: None,
-                location: ast::Span {
+            |(((arguments, args_span), return_annotation), body), span| {
+                let location = ast::Span {
                     start: span.start,
                     end: return_annotation
                         .as_ref()
                         .map(|l| l.location().end)
                         .unwrap_or_else(|| args_span.end),
-                },
-                end_position: span.end - 1,
-                name: "temp".to_string(),
-                public: true,
-                return_annotation,
-                return_type: (),
-                on_test_failure: ast::OnTestFailure::FailImmediately,
+                };
+
+                ast::Function {
+                    arguments,
+                    body: body.unwrap_or_else(|| UntypedExpr::todo(None, span)),
+                    doc: None,
+                    location,
+                    end_position: span.end - 1,
+                    name: "temp".to_string(),
+                    public: true,
+                    return_annotation: return_annotation
+                        .or(Some(ast::Annotation::boolean(location))),
+                    return_type: (),
+                    on_test_failure: ast::OnTestFailure::FailImmediately,
+                }
             },
         )
 }
