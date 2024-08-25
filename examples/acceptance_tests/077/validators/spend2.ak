@@ -1,15 +1,20 @@
-use aiken/list
-use aiken/transaction.{Output, ScriptContext}
+use aiken/collection/list
+use cardano/transaction.{Output, Transaction}
 
 validator {
-  fn backtrace(_datum: Void, _redeemer: Void, context: ScriptContext) -> Bool {
-    expect Some(_) = list.find(context.transaction.outputs, fn(_) { True })
-    let _ = find_stuff(context)
+  spend(
+    _datum: Void,
+    _redeemer: Void,
+    _ref: Data,
+    transaction: Transaction,
+  ) -> Bool {
+    expect Some(_) = list.find(transaction.outputs, fn(_) { True })
+    let _ = find_stuff(transaction)
     True
   }
 }
 
-fn find_stuff(context: ScriptContext) -> Output {
-  expect Some(stuff) = list.find(context.transaction.outputs, fn(_) { True })
+fn find_stuff(transaction: Transaction) -> Output {
+  expect Some(stuff) = list.find(transaction.outputs, fn(_) { True })
   stuff
 }

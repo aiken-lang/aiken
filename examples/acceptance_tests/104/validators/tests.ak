@@ -1,6 +1,6 @@
 use aiken/fuzz
 
-type Foo {
+pub type Foo {
   a0: Int,
   a1: Bool,
 }
@@ -17,8 +17,8 @@ fn foo_2(Foo { a0, a1 } as foo) -> Int {
   }
 }
 
-validator(Foo { a0, .. }: Foo) {
-  fn foo_3(_data, _redeemer) {
+validator foo_3(Foo { a0, .. }: Foo) {
+  mint(_redeemer, _policy_, _tx) {
     a0 == 1
   }
 }
@@ -32,7 +32,7 @@ test example_2() {
 }
 
 test example_3() {
-  foo_3(Foo { a0: 1, a1: False }, "", "")
+  foo_3_mint(Foo { a0: 1, a1: False }, "", "", "")
 }
 
 test example_4() {
