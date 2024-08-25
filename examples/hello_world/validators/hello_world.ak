@@ -1,10 +1,9 @@
-use aiken/hash.{Blake2b_224, Hash}
-use aiken/list
-use aiken/transaction.{ScriptContext}
-use aiken/transaction/credential.{VerificationKey}
+use aiken/collection/list
+use cardano/credential.{VerificationKeyHash}
+use cardano/transaction.{OutputReference, Transaction}
 
 pub type Datum {
-  owner: Hash<Blake2b_224, VerificationKey>,
+  owner: VerificationKeyHash,
 }
 
 pub type Redeemer {
@@ -12,16 +11,22 @@ pub type Redeemer {
 }
 
 validator hello_world {
-  spend(datum: Datum, redeemer: Redeemer, context: ScriptContext) -> Bool {
+  spend(
+    datum: Option<Datum>,
+    redeemer: Redeemer,
+    _: OutputReference,
+    transaction: Transaction,
+  ) -> Bool {
     let must_say_hello = redeemer.msg == "Hello, World!"
 
-    let must_be_signed =
-      list.has(context.transaction.extra_signatories, datum.owner)
+    expect Some(Datum { owner }) = datum
+
+    let must_be_signed = list.has(transaction.extra_signatories, owner)
 
     must_say_hello && must_be_signed
   }
 
-  else(_ctx) {
+  else(_) {
     fail
   }
 }
