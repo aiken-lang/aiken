@@ -90,7 +90,7 @@ pub fn validate_pool_borrow(
   True
 }
 
-validator {
+validator foo {
   spend(datum: PoolDatum, redeemer: PoolRedeemer, output_ref: OutputReference, transaction: Transaction) {
     when redeemer.action is {
       PoolWithdraw(_) -> True

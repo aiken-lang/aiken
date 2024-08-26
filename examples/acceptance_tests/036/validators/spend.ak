@@ -12,15 +12,15 @@ pub fn has_policy_id(self: Output, policy_id: PolicyId) -> Bool {
     |> not
 }
 
-validator {
-  fn spend(_datum: Data, _redeemer: Data, ctx: ScriptContext) -> Bool {
+validator foo {
+  spend(_datum: Data, _redeemer: Data, o_ref: Data, tx: Transaction) -> Bool {
     ctx.transaction.outputs
       |> list.any(has_policy_id(_, my_policy_id))
   }
 }
 
-validator(output_reference: OutputReference) {
-  fn mint(_redeemer: Void, ctx: ScriptContext) -> Bool {
+validator bar(output_reference: OutputReference) {
+  mint(_redeemer: Void, _policy_id: Data, tx: Transaction) -> Bool {
     when
       list.find(
         ctx.transaction.inputs,

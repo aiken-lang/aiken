@@ -8,7 +8,7 @@ type Action {
   Burn
 }
 
-validator(token_name: ByteArray, utxo_ref: OutputReference) {
+validator foo(token_name: ByteArray, utxo_ref: OutputReference) {
   mint(rdmr: Action, policy_id: PolicyId, transaction: Transaction) -> Bool {
     let Transaction { inputs, mint, .. } = transaction
     expect [Pair(asset_name, amount)] =

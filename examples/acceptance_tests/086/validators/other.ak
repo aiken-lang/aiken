@@ -1,4 +1,4 @@
-use aiken/transaction.{ScriptContext}
+use aiken/transaction.{Transaction}
 use aiken/transaction/credential.{Address}
 
 type TestData {
@@ -9,8 +9,8 @@ type TestDatum {
   data: Option<TestData>,
 }
 
-validator {
-  fn validate(raw_datum: Data, _redeemer: Data, _context: ScriptContext) -> Bool {
+validator validate {
+  spend(raw_datum: Option<Data>, _redeemer: Data, oref: Data, _tx: Transaction) -> Bool {
     expect datum: TestDatum = raw_datum
     let TestDatum { data } = datum
     when data is {

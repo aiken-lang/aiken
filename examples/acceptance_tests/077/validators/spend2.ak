@@ -1,7 +1,7 @@
 use aiken/collection/list
 use cardano/transaction.{Output, Transaction}
 
-validator {
+validator foo {
   spend(
     _datum: Void,
     _redeemer: Void,

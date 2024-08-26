@@ -25,8 +25,8 @@ pub fn keyhash_address(keyhash: ByteArray) {
   }
 }
 
-validator(utxo_ref: OutputReference) {
-  fn simple_oneshot(_r: Void, ctx: ScriptContext) -> Bool {
+validator simple_oneshot(utxo_ref: OutputReference) {
+  mint(_r: Void, oref: Data, ctx: ScriptContext) -> Bool {
     let ScriptContext { transaction, purpose } = ctx
     let Transaction { inputs, .. } = transaction
 
