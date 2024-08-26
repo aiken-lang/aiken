@@ -8,8 +8,8 @@ type Action {
   Burn
 }
 
-validator(token_name: ByteArray, utxo_ref: OutputReference) {
-  fn gift_card(rdmr: Action, ctx: ScriptContext) -> Bool {
+validator gift_card(token_name: ByteArray, utxo_ref: OutputReference) {
+  mint(rdmr: Action, ctx: ScriptContext) -> Bool {
     let ScriptContext { transaction, purpose } = ctx
 
     expect tx.Mint(policy_id) = purpose
@@ -33,8 +33,8 @@ validator(token_name: ByteArray, utxo_ref: OutputReference) {
   }
 }
 
-validator(token_name: ByteArray, policy_id: ByteArray) {
-  fn redeem(_d: Data, _r: Data, ctx: ScriptContext) -> Bool {
+validator redeem(token_name: ByteArray, policy_id: ByteArray) {
+  spend(_d: Data, _r: Data, ctx: ScriptContext) -> Bool {
     let ScriptContext { transaction, .. } = ctx
 
     let Transaction { mint, .. } = transaction

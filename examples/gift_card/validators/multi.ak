@@ -17,8 +17,8 @@ type Action {
 type SpendTokenName =
   ByteArray
 
-validator(creator: ByteArray) {
-  fn redeem(
+validator redeem(creator: ByteArray) {
+  spend(
     // Each spend input checks for a token name matching the datum being burned
     datum: SpendTokenName,
     _r: Data,
@@ -47,7 +47,7 @@ validator(creator: ByteArray) {
     ) == -1
   }
 
-  fn gift_card(rdmr: Action, ctx: ScriptContext) -> Bool {
+  mint(rdmr: Action, ctx: ScriptContext) -> Bool {
     // get values from transaction and purpose
     let ScriptContext { transaction, purpose } = ctx
 
