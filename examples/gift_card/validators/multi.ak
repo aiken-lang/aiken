@@ -22,13 +22,10 @@ validator redeem(creator: ByteArray) {
     // Each spend input checks for a token name matching the datum being burned
     datum: SpendTokenName,
     _r: Data,
-    ctx: ScriptContext,
+    own_ref: OutputReference,
+    transaction: Transaction,
   ) {
-    let ScriptContext { transaction, purpose } = ctx
-
     let Transaction { inputs, mint, .. } = transaction
-
-    expect Spend(own_ref) = purpose
 
     expect Some(own_input) =
       list.find(inputs, fn(input) { input.output_reference == own_ref })
@@ -47,12 +44,7 @@ validator redeem(creator: ByteArray) {
     ) == -1
   }
 
-  mint(rdmr: Action, ctx: ScriptContext) -> Bool {
-    // get values from transaction and purpose
-    let ScriptContext { transaction, purpose } = ctx
-
-    expect tx.Mint(policy_id) = purpose
-
+  mint(rdmr: Action, policy_id: PolicyId, transaction: Transaction) -> Bool {
     let Transaction { inputs, mint, extra_signatories, outputs, .. } =
       transaction
 
@@ -65,14 +57,18 @@ validator redeem(creator: ByteArray) {
     when rdmr is {
       Mint(total) -> {
         expect [input, ..] = inputs
+
         // Base is created from serializing a utxo ref being spent. Thus this guarantees a unique base
         let base = builtin.serialise_data(input.output_reference)
+
         // Create a list of expected token names
         let expected_minted_token_names =
           create_expected_minted_nfts(base, total, [])
+
         // Check contract creator is a signer of this tx
         let signature_check =
           list.any(extra_signatories, fn(n) { creator == n })
+
         // Support multiple gift card creation by allowing a
         // 'number of tokens minted' == 'outputs with datum being token name'
         signature_check && check_mint_and_outputs(

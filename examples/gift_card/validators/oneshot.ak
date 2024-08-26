@@ -9,11 +9,7 @@ type Action {
 }
 
 validator gift_card(token_name: ByteArray, utxo_ref: OutputReference) {
-  mint(rdmr: Action, ctx: ScriptContext) -> Bool {
-    let ScriptContext { transaction, purpose } = ctx
-
-    expect tx.Mint(policy_id) = purpose
-
+  mint(rdmr: Action, policy_id: PolicyId, transaction: Transaction) -> Bool {
     let Transaction { inputs, mint, .. } = transaction
 
     expect [Pair(asset_name, amount)] =
@@ -26,6 +22,7 @@ validator gift_card(token_name: ByteArray, utxo_ref: OutputReference) {
       Mint -> {
         expect Some(_input) =
           list.find(inputs, fn(input) { input.output_reference == utxo_ref })
+
         amount == 1 && asset_name == token_name
       }
       Burn -> amount == -1 && asset_name == token_name
@@ -34,9 +31,7 @@ validator gift_card(token_name: ByteArray, utxo_ref: OutputReference) {
 }
 
 validator redeem(token_name: ByteArray, policy_id: ByteArray) {
-  spend(_d: Data, _r: Data, ctx: ScriptContext) -> Bool {
-    let ScriptContext { transaction, .. } = ctx
-
+  spend(_d: Data, _r: Data, _o_ref: Data, transaction: Transaction) -> Bool {
     let Transaction { mint, .. } = transaction
 
     expect [Pair(asset_name, amount)] =
