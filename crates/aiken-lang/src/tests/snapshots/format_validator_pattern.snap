@@ -7,7 +7,7 @@ validator foo(Foo { a, b, .. }) {
     todo
   }
 
-  else(_ctx) {
+  else(_) {
     fail
   }
 }
@@ -17,7 +17,7 @@ validator foo([Bar]: List<Bar>) {
     todo
   }
 
-  else(_ctx) {
+  else(_) {
     fail
   }
 }
@@ -27,7 +27,7 @@ validator foo((Baz, Baz) as x) {
     todo
   }
 
-  else(_ctx) {
+  else(_) {
     fail
   }
 }
@@ -37,7 +37,7 @@ validator fiz((fst, snd) as x: Pair<Int, Int>) {
     todo
   }
 
-  else(_ctx) {
+  else(_) {
     fail
   }
 }

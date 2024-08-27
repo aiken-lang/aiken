@@ -57,7 +57,14 @@ Validator(
                 location: 20..44,
                 name: "spend",
                 public: true,
-                return_annotation: None,
+                return_annotation: Some(
+                    Constructor {
+                        location: 26..44,
+                        module: None,
+                        name: "Bool",
+                        arguments: [],
+                    },
+                ),
                 return_type: (),
                 end_position: 58,
                 on_test_failure: FailImmediately,
@@ -99,7 +106,14 @@ Validator(
                 location: 63..79,
                 name: "mint",
                 public: true,
-                return_annotation: None,
+                return_annotation: Some(
+                    Constructor {
+                        location: 68..79,
+                        module: None,
+                        name: "Bool",
+                        arguments: [],
+                    },
+                ),
                 return_type: (),
                 end_position: 93,
                 on_test_failure: FailImmediately,
@@ -131,7 +145,14 @@ Validator(
             location: 103..106,
             name: "else",
             public: true,
-            return_annotation: None,
+            return_annotation: Some(
+                Constructor {
+                    location: 103..106,
+                    module: None,
+                    name: "Bool",
+                    arguments: [],
+                },
+            ),
             return_type: (),
             end_position: 120,
             on_test_failure: FailImmediately,

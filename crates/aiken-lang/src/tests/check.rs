@@ -112,7 +112,7 @@ fn bls12_381_ml_result_in_data_type() {
 fn validator_illegal_return_type() {
     let source_code = r#"
       validator foo {
-        spend(d, r, c) {
+        spend(d, r, c) -> Int {
           1
         }
       }

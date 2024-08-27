@@ -536,7 +536,14 @@ impl<'comments> Formatter<'comments> {
 
         // Add return annotation
         let head = match return_annotation {
-            Some(anno) => head.append(" -> ").append(self.annotation(anno)),
+            Some(anno) => {
+                let is_bool = anno.is_logically_equal(&Annotation::boolean(Span::empty()));
+                if is_validator && is_bool {
+                    head
+                } else {
+                    head.append(" -> ").append(self.annotation(anno))
+                }
+            }
             None => head,
         }
         .group();

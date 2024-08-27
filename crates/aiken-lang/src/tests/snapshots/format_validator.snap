@@ -5,11 +5,11 @@ description: "Code:\n\nvalidator thing ( ) {\n// What is the purpose of life\n\n
 validator thing {
   // What is the purpose of life
 
-  spend(d: Datum, r: Redeemer, ctx: ScriptContext) -> Bool {
+  spend(d: Datum, r: Redeemer, ctx: ScriptContext) {
     True
   }
 
-  else(_ctx) {
+  else(_) {
     fail
   }
 }
@@ -21,8 +21,9 @@ validator foo {
     Void
   }
 
-  else(_ctx) {
+  else(_) {
     fail
-    // I am lost
   }
+
+  // I am lost
 }
