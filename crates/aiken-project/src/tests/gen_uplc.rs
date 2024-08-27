@@ -83,9 +83,11 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
                 format!("{:#?}", eval.logs())
             );
 
-            if !should_fail {
-                assert_eq!(eval.result().unwrap(), Term::bool(true));
-            }
+            assert!(if should_fail {
+                eval.failed(false)
+            } else {
+                !eval.failed(false)
+            });
         }
         TestType::Validator(func) => {
             let program = generator.generate(func, &script.1);
@@ -6134,6 +6136,54 @@ fn pattern_bytearray() {
         // Not sure what this extra lambda is or do?
         .lambda("???")
         .apply(Term::Error.delay());
+
+    assert_uplc(src, program, false)
+}
+
+#[test]
+fn cast_never() {
+    let src = r#"
+        test never_ok_cast() {
+          let none: Option<Void> = None
+          let data: Data = none
+          expect _: Never = data
+        }
+    "#;
+
+    let none_or_never = || Term::Constant(Constant::Data(Data::constr(1, vec![])).into());
+
+    let expect_otherwise = Term::Error
+        .delayed_trace(Term::string("expect _: Never = data"))
+        .delay();
+
+    let assert_constr_index = Term::equals_integer()
+        .apply(Term::integer(1.into()))
+        .apply(Term::fst_pair().apply(Term::unconstr_data().apply(none_or_never())));
+
+    let assert_empty_fields = |then: Term<Name>, expect_otherwise: Rc<Name>| {
+        Term::snd_pair()
+            .apply(Term::unconstr_data().apply(none_or_never()))
+            .delay_empty_choose_list(then, Term::Var(expect_otherwise))
+    };
+
+    let program = expect_otherwise.as_var("expect_:Never=data", |expect_otherwise| {
+        let otherwise = Term::Var(expect_otherwise.clone());
+
+        let when_constr = assert_constr_index.delay_true_if_then_else(
+            assert_empty_fields(Term::unit(), expect_otherwise.clone()),
+            Term::Var(expect_otherwise),
+        );
+
+        none_or_never()
+            .choose_data(
+                when_constr.delay(),
+                otherwise.clone(),
+                otherwise.clone(),
+                otherwise.clone(),
+                otherwise,
+            )
+            .force()
+    });
 
     assert_uplc(src, program, false)
 }

@@ -168,6 +168,19 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         ),
     );
 
+    // Never
+    prelude.types.insert(
+        well_known::NEVER.to_string(),
+        TypeConstructor::primitive(Type::never()),
+    );
+    prelude.types_constructors.insert(
+        well_known::NEVER.to_string(),
+        ValueConstructor::known_adt(
+            &mut prelude.values,
+            &[(well_known::NEVER_CONSTRUCTORS[1], Type::never())],
+        ),
+    );
+
     // Cardano ScriptContext
     prelude.types.insert(
         well_known::SCRIPT_CONTEXT.to_string(),
@@ -1503,6 +1516,15 @@ pub fn prelude_data_types(id_gen: &IdGenerator) -> IndexMap<DataTypeKey, TypedDa
         option_data_type,
     );
 
+    // Never
+    data_types.insert(
+        DataTypeKey {
+            module_name: "".to_string(),
+            defined_type: well_known::NEVER.to_string(),
+        },
+        TypedDataType::never(),
+    );
+
     // PRNG
     let prng_data_type = TypedDataType::prng();
     data_types.insert(
@@ -1608,5 +1630,9 @@ impl TypedDataType {
             public: true,
             typed_parameters: vec![tipo],
         }
+    }
+
+    pub fn never() -> Self {
+        DataType::known_enum(well_known::NEVER, well_known::NEVER_CONSTRUCTORS)
     }
 }

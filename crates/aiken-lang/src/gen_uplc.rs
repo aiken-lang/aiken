@@ -1434,7 +1434,9 @@ impl<'a> CodeGenerator<'a> {
                     .unwrap_or_else(|| unreachable!("Failed to find definition for {}", name));
 
                 let then = if props.kind.is_expect()
-                    && (data_type.constructors.len() > 1 || props.full_check)
+                    && (data_type.constructors.len() > 1
+                        || props.full_check
+                        || data_type.is_never())
                 {
                     let (index, _) = data_type
                         .constructors
@@ -1459,8 +1461,8 @@ impl<'a> CodeGenerator<'a> {
                     )
                 } else {
                     assert!(
-                        data_type.constructors.len() == 1,
-                        "attempted expect on a type with more or less than 1 constructor: \nis_expect? {}\nfull_check? {}\ndata_type={data_type:#?}\n{}",
+                        data_type.constructors.len() == 1 || data_type.is_never(),
+                        "attempted let-assignment on a type with more or less than 1 constructor: \nis_expect? {}\nfull_check? {}\ndata_type={data_type:#?}\n{}",
                         props.kind.is_expect(),
                         props.full_check,
                         name,
@@ -1978,9 +1980,20 @@ impl<'a> CodeGenerator<'a> {
 
                     let otherwise_delayed = AirTree::local_var("otherwise_delayed", Type::void());
 
+                    let is_never = data_type.is_never();
+
                     let constr_clauses = data_type.constructors.iter().enumerate().rfold(
                         otherwise_delayed.clone(),
                         |acc, (index, constr)| {
+                            // NOTE: For the Never type, we have an placeholder first constructor
+                            // that must be ignored. The Never type is considered to have only one
+                            // constructor starting at index 1 so it shouldn't be possible to
+                            // cast from Data into the first constructor. There's virtually no
+                            // constructor at index 0.
+                            if is_never && index == 0 {
+                                return acc;
+                            }
+
                             let mut constr_args = vec![];
 
                             let constr_then = constr.arguments.iter().enumerate().rfold(
@@ -2169,7 +2182,7 @@ impl<'a> CodeGenerator<'a> {
                             ),
                         )
                     } else if let Some(data_type) = data_type {
-                        if data_type.constructors.len() > 1 {
+                        if data_type.constructors.len() > 1 && !data_type.is_never() {
                             AirTree::clause(
                                 &props.original_subject_name,
                                 clause_cond,
@@ -5584,8 +5597,18 @@ impl<'a> CodeGenerator<'a> {
             } => {
                 let tail_name_prefix = "__tail_index";
 
-                let data_type = lookup_data_type_by_tipo(&self.data_types, &tipo)
-                    .unwrap_or_else(|| panic!("HOW DID YOU DO THIS ON BOOL OR VOID"));
+                let data_type =
+                    lookup_data_type_by_tipo(&self.data_types, &tipo).unwrap_or_else(|| {
+                        panic!(
+                            "Attempted record update on an unknown type!\ntype: {:#?}",
+                            tipo
+                        )
+                    });
+
+                assert!(
+                    !data_type.is_never(),
+                    "Attempted record update on a Never type.",
+                );
 
                 let constructor_field_count = data_type.constructors[0].arguments.len();
                 let record = arg_stack.pop().unwrap();

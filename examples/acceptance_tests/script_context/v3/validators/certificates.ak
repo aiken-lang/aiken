@@ -71,7 +71,7 @@ validator purposes {
       Some(
         RegisterCredential {
           credential: VerificationKey(only0s),
-          deposit: Some(3_000_000),
+          deposit: None,
         },
       ) == list.at(certificates, 5)
 
@@ -79,7 +79,7 @@ validator purposes {
       Some(
         UnregisterCredential {
           credential: VerificationKey(only0s),
-          refund: Some(3_000_000),
+          refund: None,
         },
       ) == list.at(certificates, 6)
 

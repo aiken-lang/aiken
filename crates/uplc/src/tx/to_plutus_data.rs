@@ -52,6 +52,8 @@ struct WithArrayRational<'a, T>(&'a T);
 
 struct WithPartialCertificates<'a, T>(&'a T);
 
+struct WithNeverRegistrationDeposit<'a, T>(&'a T);
+
 pub trait ToPlutusData {
     fn to_plutus_data(&self) -> PlutusData;
 }
@@ -196,6 +198,29 @@ impl<'a> ToPlutusData for WithWrappedTransactionId<'a, KeyValuePairs<ScriptPurpo
         for (key, value) in self.0.iter() {
             data_vec.push((
                 WithWrappedTransactionId(key).to_plutus_data(),
+                value.to_plutus_data(),
+            ))
+        }
+        PlutusData::Map(KeyValuePairs::Def(data_vec))
+    }
+}
+
+impl<'a> ToPlutusData for WithNeverRegistrationDeposit<'a, Vec<Certificate>> {
+    fn to_plutus_data(&self) -> PlutusData {
+        self.0
+            .iter()
+            .map(WithNeverRegistrationDeposit)
+            .collect::<Vec<_>>()
+            .to_plutus_data()
+    }
+}
+
+impl<'a> ToPlutusData for WithNeverRegistrationDeposit<'a, KeyValuePairs<ScriptPurpose, Redeemer>> {
+    fn to_plutus_data(&self) -> PlutusData {
+        let mut data_vec: Vec<(PlutusData, PlutusData)> = vec![];
+        for (key, value) in self.0.iter() {
+            data_vec.push((
+                WithNeverRegistrationDeposit(key).to_plutus_data(),
                 value.to_plutus_data(),
             ))
         }
@@ -549,14 +574,16 @@ impl<'a> ToPlutusData for WithPartialCertificates<'a, Certificate> {
                 vec![pool_keyhash.to_plutus_data(), epoch.to_plutus_data()],
             ),
 
-            certificate => unreachable!("unexpected in V1/V2 script context: {certificate:?}"),
+            certificate => {
+                unreachable!("unexpected certificate type in V1/V2 script context: {certificate:?}")
+            }
         }
     }
 }
 
-impl ToPlutusData for Certificate {
+impl<'a> ToPlutusData for WithNeverRegistrationDeposit<'a, Certificate> {
     fn to_plutus_data(&self) -> PlutusData {
-        match self {
+        match self.0 {
             Certificate::StakeRegistration(stake_credential) => wrap_multiple_with_constr(
                 0,
                 vec![
@@ -565,11 +592,11 @@ impl ToPlutusData for Certificate {
                 ],
             ),
 
-            Certificate::Reg(stake_credential, deposit) => wrap_multiple_with_constr(
+            Certificate::Reg(stake_credential, _) => wrap_multiple_with_constr(
                 0,
                 vec![
                     stake_credential.to_plutus_data(),
-                    Some(*deposit).to_plutus_data(),
+                    None::<PlutusData>.to_plutus_data(),
                 ],
             ),
 
@@ -581,11 +608,11 @@ impl ToPlutusData for Certificate {
                 ],
             ),
 
-            Certificate::UnReg(stake_credential, deposit) => wrap_multiple_with_constr(
+            Certificate::UnReg(stake_credential, _) => wrap_multiple_with_constr(
                 1,
                 vec![
                     stake_credential.to_plutus_data(),
-                    Some(*deposit).to_plutus_data(),
+                    None::<PlutusData>.to_plutus_data(),
                 ],
             ),
 
@@ -835,32 +862,44 @@ impl ToPlutusData for TxInInfo {
     }
 }
 
+// NOTE: This is a _small_ abuse of the 'WithWrappedTransactionId'. We know the wrapped
+// is needed for V1 and V2, and it also appears that for V1 and V2, the certifying
+// purpose mustn't include the certificate index. So, we also short-circuit it here.
 impl<'a> ToPlutusData for WithWrappedTransactionId<'a, ScriptPurpose> {
     fn to_plutus_data(&self) -> PlutusData {
         match self.0 {
+            ScriptPurpose::Minting(policy_id) => wrap_with_constr(0, policy_id.to_plutus_data()),
             ScriptPurpose::Spending(out_ref, ()) => {
                 wrap_with_constr(1, WithWrappedTransactionId(out_ref).to_plutus_data())
             }
-            // NOTE: This is a _small_ abuse of the 'WithWrappedTransactionId'. We know the wrapped
-            // is needed for V1 and V2, and it also appears that for V1 and V2, the certifying
-            // purpose mustn't include the certificate index. So, we also short-circuit it here.
-            ScriptPurpose::Certifying(_, dcert) => wrap_with_constr(3, dcert.to_plutus_data()),
-            otherwise => otherwise.to_plutus_data(),
+            ScriptPurpose::Rewarding(stake_credential) => {
+                wrap_with_constr(2, stake_credential.to_plutus_data())
+            }
+            ScriptPurpose::Certifying(_, dcert) => {
+                wrap_with_constr(3, WithPartialCertificates(dcert).to_plutus_data())
+            }
+            purpose => {
+                unreachable!("unsupported purpose for V1 or V2 script context: {purpose:?}")
+            }
         }
     }
 }
 
-impl ToPlutusData for ScriptPurpose {
+impl<'a> ToPlutusData for WithNeverRegistrationDeposit<'a, ScriptPurpose> {
     fn to_plutus_data(&self) -> PlutusData {
-        match self {
+        match self.0 {
             ScriptPurpose::Minting(policy_id) => wrap_with_constr(0, policy_id.to_plutus_data()),
             ScriptPurpose::Spending(out_ref, ()) => wrap_with_constr(1, out_ref.to_plutus_data()),
             ScriptPurpose::Rewarding(stake_credential) => {
                 wrap_with_constr(2, stake_credential.to_plutus_data())
             }
-            ScriptPurpose::Certifying(ix, dcert) => {
-                wrap_multiple_with_constr(3, vec![ix.to_plutus_data(), dcert.to_plutus_data()])
-            }
+            ScriptPurpose::Certifying(ix, dcert) => wrap_multiple_with_constr(
+                3,
+                vec![
+                    ix.to_plutus_data(),
+                    WithNeverRegistrationDeposit(dcert).to_plutus_data(),
+                ],
+            ),
             ScriptPurpose::Voting(voter) => {
                 wrap_multiple_with_constr(4, vec![voter.to_plutus_data()])
             }
@@ -1240,12 +1279,12 @@ impl ToPlutusData for Vote {
     }
 }
 
-impl<T> ToPlutusData for ScriptInfo<T>
+impl<'a, T> ToPlutusData for WithNeverRegistrationDeposit<'a, ScriptInfo<T>>
 where
     T: ToPlutusData,
 {
     fn to_plutus_data(&self) -> PlutusData {
-        match self {
+        match self.0 {
             ScriptInfo::Minting(policy_id) => wrap_with_constr(0, policy_id.to_plutus_data()),
             ScriptInfo::Spending(out_ref, datum) => {
                 wrap_multiple_with_constr(1, vec![out_ref.to_plutus_data(), datum.to_plutus_data()])
@@ -1253,9 +1292,13 @@ where
             ScriptInfo::Rewarding(stake_credential) => {
                 wrap_with_constr(2, stake_credential.to_plutus_data())
             }
-            ScriptInfo::Certifying(ix, dcert) => {
-                wrap_multiple_with_constr(3, vec![ix.to_plutus_data(), dcert.to_plutus_data()])
-            }
+            ScriptInfo::Certifying(ix, dcert) => wrap_multiple_with_constr(
+                3,
+                vec![
+                    ix.to_plutus_data(),
+                    WithNeverRegistrationDeposit(dcert).to_plutus_data(),
+                ],
+            ),
             ScriptInfo::Voting(voter) => wrap_multiple_with_constr(4, vec![voter.to_plutus_data()]),
             ScriptInfo::Proposing(ix, procedure) => {
                 wrap_multiple_with_constr(5, vec![ix.to_plutus_data(), procedure.to_plutus_data()])
@@ -1311,11 +1354,11 @@ impl ToPlutusData for TxInfo {
                     tx_info.outputs.to_plutus_data(),
                     tx_info.fee.to_plutus_data(),
                     tx_info.mint.to_plutus_data(),
-                    tx_info.certificates.to_plutus_data(),
+                    WithNeverRegistrationDeposit(&tx_info.certificates).to_plutus_data(),
                     tx_info.withdrawals.to_plutus_data(),
                     tx_info.valid_range.to_plutus_data(),
                     tx_info.signatories.to_plutus_data(),
-                    tx_info.redeemers.to_plutus_data(),
+                    WithNeverRegistrationDeposit(&tx_info.redeemers).to_plutus_data(),
                     tx_info.data.to_plutus_data(),
                     tx_info.id.to_plutus_data(),
                     tx_info.votes.to_plutus_data(),
@@ -1347,7 +1390,7 @@ impl ToPlutusData for ScriptContext {
                 vec![
                     tx_info.to_plutus_data(),
                     redeemer.to_plutus_data(),
-                    purpose.to_plutus_data(),
+                    WithNeverRegistrationDeposit(purpose).to_plutus_data(),
                 ],
             ),
         }

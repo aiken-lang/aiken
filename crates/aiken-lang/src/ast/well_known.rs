@@ -16,6 +16,8 @@ pub const LIST: &str = "List";
 pub const MILLER_LOOP_RESULT: &str = "MillerLoopResult";
 pub const OPTION: &str = "Option";
 pub const OPTION_CONSTRUCTORS: &[&str] = &["Some", "None"];
+pub const NEVER: &str = "Never";
+pub const NEVER_CONSTRUCTORS: &[&str] = &["__hole", "Never"];
 pub const ORDERING: &str = "Ordering";
 pub const ORDERING_CONSTRUCTORS: &[&str] = &["Less", "Equal", "Greater"];
 pub const PAIR: &str = "Pair";
@@ -293,6 +295,17 @@ impl Type {
             name: OPTION.to_string(),
             module: "".to_string(),
             args: vec![a],
+            alias: None,
+        })
+    }
+
+    pub fn never() -> Rc<Type> {
+        Rc::new(Type::App {
+            public: true,
+            contains_opaque: false,
+            name: NEVER.to_string(),
+            module: "".to_string(),
+            args: vec![],
             alias: None,
         })
     }

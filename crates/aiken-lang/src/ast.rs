@@ -400,6 +400,19 @@ impl TypedDataType {
             doc: None,
         }
     }
+
+    pub fn is_never(&self) -> bool {
+        self.name == well_known::NEVER
+            && self.constructors.len() == well_known::NEVER_CONSTRUCTORS.len()
+            && self.location == Span::empty()
+            && self
+                .constructors
+                .iter()
+                .zip(well_known::NEVER_CONSTRUCTORS)
+                .all(|(constructor, name)| {
+                    name == &constructor.name && constructor.arguments.is_empty()
+                })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
