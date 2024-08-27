@@ -266,6 +266,16 @@ pub struct Function<T, Expr, Arg> {
     pub on_test_failure: OnTestFailure,
 }
 
+impl<T, Expr, Arg> Function<T, Expr, Arg> {
+    pub fn is_spend(&self) -> bool {
+        self.name == HANDLER_SPEND
+    }
+
+    pub fn is_mint(&self) -> bool {
+        self.name == HANDLER_MINT
+    }
+}
+
 impl TypedFunction {
     pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
         self.arguments
@@ -277,10 +287,6 @@ impl TypedFunction {
                     .as_ref()
                     .and_then(|a| a.find_node(byte_index))
             })
-    }
-
-    pub fn is_spend(&self) -> bool {
-        self.name == HANDLER_SPEND
     }
 
     pub fn has_valid_purpose_name(&self) -> bool {
@@ -1242,6 +1248,15 @@ impl Annotation {
             module: None,
             arguments: vec![],
             location,
+        }
+    }
+
+    pub fn option(inner: Annotation) -> Self {
+        Annotation::Constructor {
+            name: "Option".to_string(),
+            module: None,
+            location: inner.location(),
+            arguments: vec![inner],
         }
     }
 

@@ -1275,10 +1275,9 @@ impl<'a> Environment<'a> {
                 location,
                 end_position: _,
             }) if kind.is_validator() => {
-                let default_annotation = |mut arg: UntypedArg| {
+                let default_annotation = |mut arg: UntypedArg, ann: Annotation| {
                     if arg.annotation.is_none() {
-                        arg.annotation = Some(Annotation::data(arg.location));
-
+                        arg.annotation = Some(ann);
                         arg
                     } else {
                         arg
@@ -1287,12 +1286,29 @@ impl<'a> Environment<'a> {
 
                 let mut handler_names = vec![];
 
+                let params_len = params.len();
+
                 for handler in handlers {
                     let temp_params: Vec<UntypedArg> = params
                         .iter()
                         .cloned()
                         .chain(handler.arguments.clone())
-                        .map(default_annotation)
+                        .enumerate()
+                        .map(|(ix, arg)| {
+                            let is_datum = handler.is_spend() && ix == params_len;
+                            let is_mint_policy = handler.is_mint() && ix == params_len + 1;
+                            let location = arg.location;
+                            default_annotation(
+                                arg,
+                                if is_datum {
+                                    Annotation::option(Annotation::data(location))
+                                } else if is_mint_policy {
+                                    Annotation::bytearray(location)
+                                } else {
+                                    Annotation::data(location)
+                                },
+                            )
+                        })
                         .collect();
 
                     handler_names.push(handler.name.clone());
@@ -1312,7 +1328,10 @@ impl<'a> Environment<'a> {
                     .iter()
                     .cloned()
                     .chain(fallback.arguments.clone())
-                    .map(default_annotation)
+                    .map(|arg| {
+                        let location = arg.location;
+                        default_annotation(arg, Annotation::data(location))
+                    })
                     .collect();
 
                 self.register_function(
