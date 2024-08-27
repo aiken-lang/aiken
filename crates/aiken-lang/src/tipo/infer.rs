@@ -178,7 +178,7 @@ fn infer_definition(
             let params_length = params.len();
 
             environment.in_new_scope(|environment| {
-                let fallback_name = format!("{}_{}", &name, &fallback.name);
+                let fallback_name = TypedValidator::handler_name(&name, &fallback.name);
 
                 put_params_in_scope(&fallback_name, environment, &params);
 
@@ -189,7 +189,7 @@ fn infer_definition(
                         let temp_params = params.iter().cloned().chain(handler.arguments);
                         handler.arguments = temp_params.collect();
 
-                        let handler_name = format!("{}_{}", &name, &handler.name);
+                        let handler_name = TypedValidator::handler_name(&name, &handler.name);
 
                         let old_name = handler.name;
                         handler.name = handler_name;

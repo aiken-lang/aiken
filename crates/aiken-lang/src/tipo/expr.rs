@@ -14,8 +14,8 @@ use crate::{
         ByteArrayFormatPreference, CallArg, Constant, Curve, Function, IfBranch,
         LogicalOpChainKind, Pattern, RecordUpdateSpread, Span, TraceKind, TraceLevel, Tracing,
         TypedArg, TypedCallArg, TypedClause, TypedIfBranch, TypedPattern, TypedRecordUpdateArg,
-        UnOp, UntypedArg, UntypedAssignmentKind, UntypedClause, UntypedFunction, UntypedIfBranch,
-        UntypedPattern, UntypedRecordUpdateArg,
+        TypedValidator, UnOp, UntypedArg, UntypedAssignmentKind, UntypedClause, UntypedFunction,
+        UntypedIfBranch, UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{from_default_function, BUILTIN},
     expr::{FnStyle, TypedExpr, UntypedExpr},
@@ -918,6 +918,28 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         label: String,
         access_location: Span,
     ) -> Result<TypedExpr, Error> {
+        if let UntypedExpr::Var { ref name, location } = container {
+            if let Some((_, available_handlers)) = self
+                .environment
+                .module_validators
+                .get(name.as_str())
+                .cloned()
+            {
+                return self
+                    .infer_var(
+                        TypedValidator::handler_name(name.as_str(), label.as_str()),
+                        location,
+                    )
+                    .map_err(|err| match err {
+                        Error::UnknownVariable { .. } => Error::UnknownValidatorHandler {
+                            location: access_location.map(|_start, end| (location.end, end)),
+                            available_handlers,
+                        },
+                        _ => err,
+                    });
+            }
+        }
+
         // Attempt to infer the container as a record access. If that fails, we may be shadowing the name
         // of an imported module, so attempt to infer the container as a module access.
         // TODO: Remove this cloning

@@ -9,8 +9,8 @@ use crate::{
     ast::{
         self, Annotation, CallArg, DataType, Definition, Function, ModuleConstant, ModuleKind,
         RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition, TypedFunction,
-        TypedPattern, UnqualifiedImport, UntypedArg, UntypedDefinition, UntypedFunction, Use,
-        Validator, PIPE_VARIABLE,
+        TypedPattern, TypedValidator, UnqualifiedImport, UntypedArg, UntypedDefinition,
+        UntypedFunction, Use, Validator, PIPE_VARIABLE,
     },
     tipo::{fields::FieldMap, TypeAliasAnnotation},
     IdGenerator,
@@ -56,6 +56,9 @@ pub struct Environment<'a> {
 
     /// Top-level function definitions from the module
     pub module_functions: HashMap<String, &'a UntypedFunction>,
+
+    /// Top-level validator definitions from the module
+    pub module_validators: HashMap<String, (Span, Vec<String>)>,
 
     /// Top-level functions that have been inferred
     pub inferred_functions: HashMap<String, TypedFunction>,
@@ -315,7 +318,7 @@ impl<'a> Environment<'a> {
                 let handlers = handlers
                     .into_iter()
                     .map(|mut fun| {
-                        let handler_name = format!("{}_{}", &name, &fun.name);
+                        let handler_name = TypedValidator::handler_name(&name, &fun.name);
 
                         let old_name = fun.name;
                         fun.name = handler_name;
@@ -332,7 +335,7 @@ impl<'a> Environment<'a> {
                     })
                     .collect();
 
-                let fallback_name = format!("{}_{}", &name, &fallback.name);
+                let fallback_name = TypedValidator::handler_name(&name, &fallback.name);
 
                 let old_name = fallback.name;
                 fallback.name = fallback_name;
@@ -776,6 +779,7 @@ impl<'a> Environment<'a> {
             module_types_constructors: prelude.types_constructors.clone(),
             module_values: HashMap::new(),
             module_functions: HashMap::new(),
+            module_validators: HashMap::new(),
             imported_modules: HashMap::new(),
             unused_modules: HashMap::new(),
             unqualified_imported_names: HashMap::new(),
@@ -833,9 +837,7 @@ impl<'a> Environment<'a> {
                 let module_info = self.find_module(module, *location)?;
 
                 if module_info.kind.is_validator()
-                    && (self.current_kind.is_lib()
-                        || self.current_kind.is_env()
-                        || !self.current_module.starts_with("tests"))
+                    && (self.current_kind.is_lib() || self.current_kind.is_env())
                 {
                     return Err(Error::ValidatorImported {
                         location: *location,
@@ -1270,7 +1272,7 @@ impl<'a> Environment<'a> {
                 params,
                 name,
                 doc: _,
-                location: _,
+                location,
                 end_position: _,
             }) if kind.is_validator() => {
                 let default_annotation = |mut arg: UntypedArg| {
@@ -1283,6 +1285,8 @@ impl<'a> Environment<'a> {
                     }
                 };
 
+                let mut handler_names = vec![];
+
                 for handler in handlers {
                     let temp_params: Vec<UntypedArg> = params
                         .iter()
@@ -1291,8 +1295,10 @@ impl<'a> Environment<'a> {
                         .map(default_annotation)
                         .collect();
 
+                    handler_names.push(handler.name.clone());
+
                     self.register_function(
-                        &format!("{}_{}", name, handler.name),
+                        &TypedValidator::handler_name(name.as_str(), handler.name.as_str()),
                         &temp_params,
                         &handler.return_annotation,
                         module_name,
@@ -1310,7 +1316,7 @@ impl<'a> Environment<'a> {
                     .collect();
 
                 self.register_function(
-                    &format!("{}_{}", name, fallback.name),
+                    &TypedValidator::handler_name(name.as_str(), fallback.name.as_str()),
                     &temp_params,
                     &fallback.return_annotation,
                     module_name,
@@ -1318,6 +1324,28 @@ impl<'a> Environment<'a> {
                     names,
                     &fallback.location,
                 )?;
+
+                handler_names.push(fallback.name.clone());
+
+                let err_duplicate_name = |previous_location: Span| {
+                    Err(Error::DuplicateName {
+                        name: name.to_string(),
+                        previous_location,
+                        location: location.map_end(|end| end + 1 + name.len()),
+                    })
+                };
+
+                if let Some((previous_location, _)) = self.imported_modules.get(name) {
+                    return err_duplicate_name(*previous_location);
+                }
+
+                match self
+                    .module_validators
+                    .insert(name.to_string(), (*location, handler_names))
+                {
+                    Some((previous_location, _)) => err_duplicate_name(previous_location),
+                    None => Ok(()),
+                }?
             }
 
             Definition::Validator(Validator { location, .. }) => {

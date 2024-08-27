@@ -1,6 +1,6 @@
 use super::function::param;
 use crate::{
-    ast::{self, ArgBy, ArgName},
+    ast::{self, well_known, ArgBy, ArgName},
     expr::UntypedExpr,
     parser::{annotation, error::ParseError, expr, token::Token},
 };
@@ -31,7 +31,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                 .then(
                     just(Token::Else)
                         .ignore_then(args_and_body().map_with_span(|mut function, span| {
-                            function.name = "else".to_string();
+                            function.name = well_known::VALIDATOR_ELSE.to_string();
                             function.location.start = span.start;
 
                             function
@@ -79,7 +79,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                         doc: None,
                         location,
                         end_position: location.end - 1,
-                        name: "else".to_string(),
+                        name: well_known::VALIDATOR_ELSE.to_string(),
                         public: true,
                         return_annotation: Some(ast::Annotation::boolean(location)),
                         return_type: (),

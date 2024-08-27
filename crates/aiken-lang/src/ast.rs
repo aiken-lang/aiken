@@ -1,6 +1,7 @@
 pub mod well_known;
 
 use crate::{
+    ast::well_known::VALIDATOR_ELSE,
     expr::{TypedExpr, UntypedExpr},
     line_numbers::LineNumbers,
     parser::token::{Base, Token},
@@ -477,6 +478,12 @@ pub struct Validator<T, Arg, Expr> {
     pub fallback: Function<T, Expr, Arg>,
 }
 
+impl<T, Arg, Expr> Validator<T, Arg, Expr> {
+    pub fn handler_name(validator: &str, handler: &str) -> String {
+        format!("{}.{}", validator, handler)
+    }
+}
+
 impl TypedValidator {
     pub fn available_handler_names() -> Vec<String> {
         vec![
@@ -486,6 +493,7 @@ impl TypedValidator {
             HANDLER_PUBLISH.to_string(),
             HANDLER_VOTE.to_string(),
             HANDLER_PROPOSE.to_string(),
+            VALIDATOR_ELSE.to_string(),
         ]
     }
 
@@ -669,7 +677,10 @@ impl TypedValidator {
                 (
                     FunctionAccessKey {
                         module_name: module_name.to_string(),
-                        function_name: handler.name.clone(),
+                        function_name: TypedValidator::handler_name(
+                            self.name.as_str(),
+                            handler.name.as_str(),
+                        ),
                     },
                     handler,
                 )

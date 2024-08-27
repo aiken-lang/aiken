@@ -4029,9 +4029,9 @@ impl<'a> CodeGenerator<'a> {
                             .get(&generic_function_key.function_name)
                             .unwrap_or_else(|| {
                                 panic!(
-                                    "Missing function definition for {}. Known definitions: {:?}",
+                                    "Missing function definition for {}. Known functions: {:?}",
                                     generic_function_key.function_name,
-                                    self.code_gen_functions.keys(),
+                                    self.functions.keys(),
                                 )
                             });
 

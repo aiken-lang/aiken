@@ -3050,3 +3050,100 @@ fn test_return_illegal() {
         Err((_, Error::IllegalTestType { .. }))
     ))
 }
+
+#[test]
+fn validator_by_name() {
+    let source_code = r#"
+        validator foo {
+            mint(_redeemer: Data, policy_id: ByteArray, _self: Data) {
+                policy_id == "foo"
+            }
+        }
+
+        test test_1() {
+            foo.mint(Void, "foo", Void)
+        }
+    "#;
+
+    assert!(check_validator(parse(source_code)).is_ok())
+}
+
+#[test]
+fn validator_by_name_unknown_handler() {
+    let source_code = r#"
+        validator foo {
+            mint(_redeemer: Data, policy_id: ByteArray, _self: Data) {
+                policy_id == "foo"
+            }
+        }
+
+        test foo() {
+            foo.bar(Void, "foo", Void)
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::UnknownValidatorHandler { .. }))
+    ))
+}
+
+#[test]
+fn validator_by_name_module_duplicate() {
+    let source_code = r#"
+        use aiken/builtin
+
+        validator builtin {
+            mint(_redeemer: Data, _policy_id: ByteArray, _self: Data) {
+                True
+            }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::DuplicateName { .. }))
+    ))
+}
+
+#[test]
+fn validator_by_name_validator_duplicate_1() {
+    let source_code = r#"
+        validator foo {
+            mint(_redeemer: Data, _policy_id: ByteArray, _self: Data) {
+                True
+            }
+        }
+
+        validator foo {
+            mint(_redeemer: Data, _policy_id: ByteArray, _self: Data) {
+                True
+            }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::DuplicateName { .. }))
+    ))
+}
+
+#[test]
+fn validator_by_name_validator_duplicate_2() {
+    let source_code = r#"
+        validator foo {
+            mint(_redeemer: Data, _policy_id: ByteArray, _self: Data) {
+                True
+            }
+
+            mint(_redeemer: Data, _policy_id: ByteArray, _self: Data) {
+                True
+            }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::DuplicateName { .. }))
+    ))
+}

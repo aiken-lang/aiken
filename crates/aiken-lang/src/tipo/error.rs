@@ -1086,6 +1086,21 @@ The best thing to do from here is to remove it."#))]
         location: Span,
         available_purposes: Vec<String>,
     },
+
+    #[error("I could not find an appropriate handler in the validator definition\n")]
+    #[diagnostic(code("unknown::handler"))]
+    #[diagnostic(help(
+        "When referring to a validator handler via record access, you must refer to one of the declared handlers:\n{}",
+        available_handlers
+          .iter()
+          .map(|p| format!("-> {}", p.if_supports_color(Stdout, |s| s.green())))
+          .join("\n")
+    ))]
+    UnknownValidatorHandler {
+        #[label("unknown validator handler")]
+        location: Span,
+        available_handlers: Vec<String>,
+    },
 }
 
 impl ExtraData for Error {
@@ -1146,6 +1161,7 @@ impl ExtraData for Error {
             | Error::ExpectOnOpaqueType { .. }
             | Error::ValidatorMustReturnBool { .. }
             | Error::UnknownPurpose { .. }
+            | Error::UnknownValidatorHandler { .. }
             | Error::MustInferFirst { .. } => None,
 
             Error::UnknownType { name, .. }
