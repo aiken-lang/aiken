@@ -3069,6 +3069,23 @@ fn validator_by_name() {
 }
 
 #[test]
+fn validator_by_name_with_params() {
+    let source_code = r#"
+        validator foo(_thing: Data) {
+            mint(_redeemer: Data, policy_id: ByteArray, _self: Data) {
+                policy_id == "foo"
+            }
+        }
+
+        test test_1() {
+            foo.mint(Void, Void, "foo", Void)
+        }
+    "#;
+
+    assert!(check_validator(parse(source_code)).is_ok())
+}
+
+#[test]
 fn validator_by_name_unknown_handler() {
     let source_code = r#"
         validator foo {
