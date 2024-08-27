@@ -322,7 +322,7 @@ test get_proof_4() {
   let h1: ByteArray = get_proof_item_value(p1)
   let h2: ByteArray = get_proof_item_value(p2)
 
-  size_match && ( h1 == hash_fn(cat) && h2 == right_node_hash )
+  size_match && h1 == hash_fn(cat) && h2 == right_node_hash
 }
 
 fn do_from_list(

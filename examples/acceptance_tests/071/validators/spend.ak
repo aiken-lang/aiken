@@ -1,16 +1,14 @@
+use aiken/collection/list
+use aiken/hash.{Blake2b_224, Hash}
 use aiken/interval.{Finite}
-use aiken/list
 use aiken/option
 use cardano/assets.{
   AssetName, PolicyId, Value, add, flatten, from_asset, negate, quantity_of,
 }
-use cardano/credential.{
-  Address, Script, ScriptCredential, VerificationKey, VerificationKeyCredential,
-}
-use cardano/hash.{Blake2b_224, Hash}
+use cardano/credential.{Address, Script, VerificationKey}
 use cardano/transaction.{
-  Datum, InlineDatum, Input, Output, OutputReference, Transaction,
-  TransactionId, ValidityRange,
+  Datum, InlineDatum, Input, Output, OutputReference, Transaction, TransactionId,
+  ValidityRange,
 }
 
 // Datum/Redeemer pool
@@ -20,7 +18,7 @@ pub type PoolDatum {
   lent_out: Int,
 }
 
-type PoolRedeemer {
+pub type PoolRedeemer {
   action: PoolRedeemerType,
 }
 
@@ -50,17 +48,11 @@ pub fn get_output(transaction: Transaction, address: Address) -> Option<Output> 
 }
 
 pub fn get_input(transaction: Transaction, address: Address) -> Option<Input> {
-  list.find(
-    transaction.inputs,
-    fn(input) { input.output.address == address },
-  )
+  list.find(transaction.inputs, fn(input) { input.output.address == address })
 }
 
 pub fn scripthash_address(scripthash: ByteArray) {
-  Address {
-    payment_credential: ScriptCredential(scripthash),
-    stake_credential: None,
-  }
+  Address { payment_credential: Script(scripthash), stake_credential: None }
 }
 
 pub fn validate_pool_deposit(
@@ -91,13 +83,33 @@ pub fn validate_pool_borrow(
 }
 
 validator foo {
-  spend(datum: PoolDatum, redeemer: PoolRedeemer, output_ref: OutputReference, transaction: Transaction) {
+  spend(
+    datum: Option<PoolDatum>,
+    redeemer: PoolRedeemer,
+    output_ref: OutputReference,
+    transaction: Transaction,
+  ) {
+    expect Some(datum) = datum
     when redeemer.action is {
       PoolWithdraw(_) -> True
       PoolDeposit(pool_deposit_redeemer) ->
-        validate_pool_deposit(transaction, output_ref, datum, pool_deposit_redeemer)
+        validate_pool_deposit(
+          transaction,
+          output_ref,
+          datum,
+          pool_deposit_redeemer,
+        )
       PoolBorrow(pool_borrow_redeemer) ->
-        validate_pool_borrow(transaction, output_ref, datum, pool_borrow_redeemer)
+        validate_pool_borrow(
+          transaction,
+          output_ref,
+          datum,
+          pool_borrow_redeemer,
+        )
     }
+  }
+
+  else(_) {
+    fail
   }
 }

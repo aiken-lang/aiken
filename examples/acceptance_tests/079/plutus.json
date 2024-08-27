@@ -5,12 +5,12 @@
     "plutusVersion": "v2",
     "compiler": {
       "name": "Aiken",
-      "version": "v1.0.31-alpha+6e4a16d"
+      "version": "v1.0.31-alpha+4003343"
     }
   },
   "validators": [
     {
-      "title": "foo.spend",
+      "title": "foo.foo.spend",
       "datum": {
         "title": "datum",
         "schema": {
@@ -20,42 +20,32 @@
       "redeemer": {
         "title": "redeemer",
         "schema": {
-          "$ref": "#/definitions/RedeemerWrapper$Int"
+          "$ref": "#/definitions/Int"
         }
       },
-      "compiledCode": "5850010000323232322253330033370e900018021baa001153330033370e6eb4009205414984d9584c8c894ccc018cdc399b800030024815052613656375a600e600c6ea8008dd68012b9a5573aaae795d09",
-      "hash": "dcac7ebcaf29721b4b48cc73775fa91939ad9015ea267b697e92b051"
+      "compiledCode": "589a01000032323232322533300232323232323253330083370e9001000899191919299980619b8748000c034dd5001099b87337006eb4c03cc038dd5001000a40a82c6eb4018c034c038008c030004c028dd50010a99980419b87480000044c8cdc39bad00448150dd7180598051baa00216300837540026012601400460100026010004600c00260086ea8004526136565734aae7555cf2ba15745",
+      "hash": "86f0253dd8dd836d6588f5794eb8f08edd4476df28b607553126846e"
     },
     {
-      "title": "foo.mint",
+      "title": "foo.foo.mint",
       "redeemer": {
         "title": "redeemer",
         "schema": {
           "$ref": "#/definitions/Int"
         }
       },
-      "compiledCode": "5850010000323232322253330033370e900018021baa001153330033370e6eb4009205414984d9584c8c894ccc018cdc399b800030024815052613656375a600e600c6ea8008dd68012b9a5573aaae795d09",
-      "hash": "dcac7ebcaf29721b4b48cc73775fa91939ad9015ea267b697e92b051"
+      "compiledCode": "589a01000032323232322533300232323232323253330083370e9001000899191919299980619b8748000c034dd5001099b87337006eb4c03cc038dd5001000a40a82c6eb4018c034c038008c030004c028dd50010a99980419b87480000044c8cdc39bad00448150dd7180598051baa00216300837540026012601400460100026010004600c00260086ea8004526136565734aae7555cf2ba15745",
+      "hash": "86f0253dd8dd836d6588f5794eb8f08edd4476df28b607553126846e"
+    },
+    {
+      "title": "foo.foo.else",
+      "compiledCode": "589a01000032323232322533300232323232323253330083370e9001000899191919299980619b8748000c034dd5001099b87337006eb4c03cc038dd5001000a40a82c6eb4018c034c038008c030004c028dd50010a99980419b87480000044c8cdc39bad00448150dd7180598051baa00216300837540026012601400460100026010004600c00260086ea8004526136565734aae7555cf2ba15745",
+      "hash": "86f0253dd8dd836d6588f5794eb8f08edd4476df28b607553126846e"
     }
   ],
   "definitions": {
     "Int": {
       "dataType": "integer"
-    },
-    "RedeemerWrapper$Int": {
-      "title": "Wrapped Redeemer",
-      "description": "A redeemer wrapped in an extra constructor to make multi-validator detection possible on-chain.",
-      "anyOf": [
-        {
-          "dataType": "constructor",
-          "index": 1,
-          "fields": [
-            {
-              "$ref": "#/definitions/Int"
-            }
-          ]
-        }
-      ]
     }
   }
 }

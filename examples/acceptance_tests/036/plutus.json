@@ -5,12 +5,12 @@
     "plutusVersion": "v2",
     "compiler": {
       "name": "Aiken",
-      "version": "v1.0.31-alpha+6e4a16d"
+      "version": "v1.0.31-alpha+4003343"
     }
   },
   "validators": [
     {
-      "title": "spend.mint",
+      "title": "spend.bar.mint",
       "redeemer": {
         "title": "_redeemer",
         "schema": {
@@ -21,15 +21,28 @@
         {
           "title": "output_reference",
           "schema": {
-            "$ref": "#/definitions/aiken~1transaction~1OutputReference"
+            "$ref": "#/definitions/cardano~1transaction~1OutputReference"
           }
         }
       ],
-      "compiledCode": "589e0100003232323232323222322533300553330053370e900018031baa3232330010013758600460126ea8c008c024dd50019129998058008a6103d87a800013232533300a3375e600a60186ea80080244cdd2a40006601c00497ae0133004004001300f002300d0012300b00114a229405261365653330033370e900018021baa00115333006300537540022930b0b2b9a5573aaae7955cfaba05742ae881",
-      "hash": "0241f73ef186e53566d1b5a81eca50049b0d86833e6b88fe26b1e4bc"
+      "compiledCode": "58c90100003232323232323222533300332323232325332330093001300a375400426464a666016600660186ea8c8c8cc004004dd6180118079baa00922533301100114c0103d87a80001323253330103375e600a60246ea800803c4cdd2a40006602800497ae0133004004001301500230130012301100114a229414ccc028c008c02cdd50020a99980698061baa00414985858dd7180718059baa002370e90000b1806180680118058009805801180480098029baa00114984d9595cd2ab9d5573caae7d5d02ba157441",
+      "hash": "2edaecec5a072cd65b12395410ce6da7cafaffdf70506cbcb40b4df8"
     },
     {
-      "title": "spend.spend",
+      "title": "spend.bar.else",
+      "parameters": [
+        {
+          "title": "output_reference",
+          "schema": {
+            "$ref": "#/definitions/cardano~1transaction~1OutputReference"
+          }
+        }
+      ],
+      "compiledCode": "58c90100003232323232323222533300332323232325332330093001300a375400426464a666016600660186ea8c8c8cc004004dd6180118079baa00922533301100114c0103d87a80001323253330103375e600a60246ea800803c4cdd2a40006602800497ae0133004004001301500230130012301100114a229414ccc028c008c02cdd50020a99980698061baa00414985858dd7180718059baa002370e90000b1806180680118058009805801180480098029baa00114984d9595cd2ab9d5573caae7d5d02ba157441",
+      "hash": "2edaecec5a072cd65b12395410ce6da7cafaffdf70506cbcb40b4df8"
+    },
+    {
+      "title": "spend.foo.spend",
       "datum": {
         "title": "_datum",
         "schema": {
@@ -42,8 +55,13 @@
           "$ref": "#/definitions/Data"
         }
       },
-      "compiledCode": "58ef01000032323232323232222533300432330010013758601460166016600e6ea8c028c01cdd50011129998048008a501325333007333007533300a3253330083370e900118049baa00114bd6f7b63009bab300d300a375400264660020026eacc034c038c028dd518068019129998060008a60103d87a8000132323232533300d33722911050000000000000021533300d3371e91010500000000000000213374a9000198089ba60014bd700a6103d87a80001330060060033756601c0066eb8c030008c040008c0380045288a504a094452889980180180098060008a4c26cacae6955ceaab9e5573eae815d0aba21",
-      "hash": "f56561e01063b11146809755d9907147e79d3166aa5c65fba4040fd1"
+      "compiledCode": "5901230100003232323232323225333002323232323253330073370e900118041baa001132323232330010013758602060226022601a6ea8020894ccc03c0045280992999806999806a99980819299980719b8748008c03cdd50008a5eb7bdb1804dd5980998081baa001323300100137566026602860206ea8c04c00c894ccc048004530103d87a800013232323253330133372291105000000000000002153330133371e91010500000000000000213374a90001980b9ba60014bd700a6103d87a8000133006006003375660280066eb8c048008c058008c0500045288a504a0944528899801801800980900098071807801180680098049baa00116300b300c002300a001300a00230080013004375400229309b2b2b9a5573aaae7955cfaba05742ae881",
+      "hash": "cf024265a1ff4ab129cef178c64b8c4cab25d62129242e01e29bb3d1"
+    },
+    {
+      "title": "spend.foo.else",
+      "compiledCode": "5901230100003232323232323225333002323232323253330073370e900118041baa001132323232330010013758602060226022601a6ea8020894ccc03c0045280992999806999806a99980819299980719b8748008c03cdd50008a5eb7bdb1804dd5980998081baa001323300100137566026602860206ea8c04c00c894ccc048004530103d87a800013232323253330133372291105000000000000002153330133371e91010500000000000000213374a90001980b9ba60014bd700a6103d87a8000133006006003375660280066eb8c048008c058008c0500045288a504a0944528899801801800980900098071807801180680098049baa00116300b300c002300a001300a00230080013004375400229309b2b2b9a5573aaae7955cfaba05742ae881",
+      "hash": "cf024265a1ff4ab129cef178c64b8c4cab25d62129242e01e29bb3d1"
     }
   ],
   "definitions": {
@@ -68,7 +86,7 @@
         }
       ]
     },
-    "aiken/transaction/OutputReference": {
+    "cardano/transaction/OutputReference": {
       "title": "OutputReference",
       "description": "An `OutputReference` is a unique reference to an output on-chain. The `output_index`\n corresponds to the position in the output list of the transaction (identified by its id)\n that produced that output",
       "anyOf": [
@@ -79,28 +97,11 @@
           "fields": [
             {
               "title": "transaction_id",
-              "$ref": "#/definitions/aiken~1transaction~1TransactionId"
+              "$ref": "#/definitions/ByteArray"
             },
             {
               "title": "output_index",
               "$ref": "#/definitions/Int"
-            }
-          ]
-        }
-      ]
-    },
-    "aiken/transaction/TransactionId": {
-      "title": "TransactionId",
-      "description": "A unique transaction identifier, as the hash of a transaction body. Note that the transaction id\n isn't a direct hash of the `Transaction` as visible on-chain. Rather, they correspond to hash\n digests of transaction body as they are serialized on the network.",
-      "anyOf": [
-        {
-          "title": "TransactionId",
-          "dataType": "constructor",
-          "index": 0,
-          "fields": [
-            {
-              "title": "hash",
-              "$ref": "#/definitions/ByteArray"
             }
           ]
         }

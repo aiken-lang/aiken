@@ -1,7 +1,6 @@
-use aiken/cbor
-use aiken/transaction.{Datum, InlineDatum, NoDatum, Output}
-use aiken/transaction/credential.{Address, VerificationKeyCredential}
-use aiken/transaction/value.{from_lovelace}
+use cardano/assets.{from_lovelace}
+use cardano/credential.{Address, VerificationKey}
+use cardano/transaction.{Datum, InlineDatum, NoDatum, Output}
 
 type SmallOracleState {
   Thing(Int)
@@ -18,7 +17,7 @@ fn create_output(
   let x =
     Output {
       address: Address {
-        payment_credential: VerificationKeyCredential(payment_key),
+        payment_credential: VerificationKey(payment_key),
         stake_credential: None,
       },
       value: from_lovelace(value),

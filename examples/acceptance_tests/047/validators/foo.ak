@@ -1,6 +1,10 @@
 validator foo {
-  spend(_datum: Void, _redeemer: Void, oref: Data, _tx: Void) -> Bool {
+  spend(_datum: Option<Void>, _redeemer: Void, oref: Data, _tx: Void) {
     True
+  }
+
+  else(_) {
+    fail
   }
 }
 

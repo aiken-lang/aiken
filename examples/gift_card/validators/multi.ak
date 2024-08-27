@@ -1,26 +1,26 @@
 use aiken/builtin
-use aiken/bytearray
-use aiken/dict
+use aiken/collection/dict
+use aiken/collection/list
 use aiken/hash.{blake2b_256}
-use aiken/list
-use aiken/transaction.{
-  InlineDatum, Input, Output, ScriptContext, Spend, Transaction,
+use aiken/primitive/bytearray
+use cardano/assets.{PolicyId}
+use cardano/credential.{Address, PaymentCredential, Script}
+use cardano/transaction.{
+  InlineDatum, Input, Output, OutputReference, Transaction,
 } as tx
-use aiken/transaction/credential.{Address, PaymentCredential, ScriptCredential}
-use aiken/transaction/value
 
-type Action {
+pub type Action {
   Mint(Int)
   Burn
 }
 
-type SpendTokenName =
+pub type SpendTokenName =
   ByteArray
 
 validator redeem(creator: ByteArray) {
   spend(
     // Each spend input checks for a token name matching the datum being burned
-    datum: SpendTokenName,
+    datum: Option<SpendTokenName>,
     _r: Data,
     own_ref: OutputReference,
     transaction: Transaction,
@@ -35,23 +35,22 @@ validator redeem(creator: ByteArray) {
       ..
     } = own_input
 
-    expect ScriptCredential(own_validator_hash) = payment_credential
+    expect Script(own_validator_hash) = payment_credential
+    expect Some(datum) = datum
 
     (
       mint
-        |> value.from_minted_value
-        |> value.quantity_of(own_validator_hash, datum)
+        |> assets.quantity_of(own_validator_hash, datum)
     ) == -1
   }
 
-  mint(rdmr: Action, policy_id: PolicyId, transaction: Transaction) -> Bool {
+  mint(rdmr: Action, policy_id: PolicyId, transaction: Transaction) {
     let Transaction { inputs, mint, extra_signatories, outputs, .. } =
       transaction
 
     let minted_assets =
       mint
-        |> value.from_minted_value
-        |> value.tokens(policy_id)
+        |> assets.tokens(policy_id)
         |> dict.to_pairs()
 
     when rdmr is {
@@ -75,7 +74,7 @@ validator redeem(creator: ByteArray) {
           minted_assets,
           outputs,
           expected_minted_token_names,
-          ScriptCredential(policy_id),
+          Script(policy_id),
         )
       }
       Burn ->
@@ -87,6 +86,10 @@ validator redeem(creator: ByteArray) {
           },
         )
     }
+  }
+
+  else(_) {
+    fail
   }
 }
 

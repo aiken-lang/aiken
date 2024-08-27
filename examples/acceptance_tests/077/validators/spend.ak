@@ -1,15 +1,15 @@
 use aiken/collection/dict
 use aiken/collection/list.{find, foldr}
+use cardano/assets.{PolicyId, add, zero}
 use cardano/transaction.{Input, OutputReference, Transaction} as tx
-use cardano/transaction/assets.{add, zero}
 
-type Action {
+pub type Action {
   Mint
   Burn
 }
 
 validator foo(token_name: ByteArray, utxo_ref: OutputReference) {
-  mint(rdmr: Action, policy_id: PolicyId, transaction: Transaction) -> Bool {
+  mint(rdmr: Action, policy_id: PolicyId, transaction: Transaction) {
     let Transaction { inputs, mint, .. } = transaction
     expect [Pair(asset_name, amount)] =
       mint
@@ -23,5 +23,9 @@ validator foo(token_name: ByteArray, utxo_ref: OutputReference) {
       }
       Burn -> todo @"burn"
     }
+  }
+
+  else(_) {
+    fail
   }
 }
