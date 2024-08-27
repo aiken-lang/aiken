@@ -140,8 +140,10 @@ impl Validator {
                 .map(|datum| {
                     match datum.tipo.as_ref() {
                         Type::App { module: module_name, name, args, .. } if module_name.is_empty() && name == well_known::OPTION => {
-                            let Some(Annotation::Constructor { arguments, .. }) = datum.annotation.as_ref() else {
-                              panic!("Datum isn't an option but should be; this should have been caught by the type-checker!");
+                            let annotation = if let Some(Annotation::Constructor { arguments, .. }) = datum.annotation.as_ref() {
+                                arguments.first().cloned().expect("Datum isn't an option but should be; this should have been caught by the type-checker!")
+                            } else {
+                                Annotation::data(datum.location)
                             };
 
                             Annotated::from_type(
@@ -149,7 +151,7 @@ impl Validator {
                                 tipo_or_annotation(module, &TypedArg {
                                     arg_name: datum.arg_name.clone(),
                                     location: datum.location,
-                                    annotation: arguments.first().cloned(),
+                                    annotation: Some(annotation),
                                     doc: datum.doc.clone(),
                                     is_validator_param: datum.is_validator_param,
                                     tipo:  args.first().expect("Option always have a single type argument.").clone()
