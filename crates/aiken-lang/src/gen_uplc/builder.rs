@@ -7,7 +7,6 @@ use crate::{
         Constant, DataTypeKey, FunctionAccessKey, Pattern, Span, TraceLevel, TypedArg,
         TypedAssignmentKind, TypedClause, TypedDataType, TypedPattern,
     },
-    builtins::{data, function, int, list, void},
     expr::TypedExpr,
     line_numbers::{LineColumn, LineNumbers},
     tipo::{
@@ -212,7 +211,7 @@ impl CodeGenSpecialFuncs {
                 Term::snd_pair()
                     .apply(Term::unconstr_data().apply(Term::var("__constr_var")))
                     .lambda("__constr_var"),
-                function(vec![data()], list(data())),
+                Type::function(vec![Type::data()], Type::list(Type::data())),
             ),
         );
 
@@ -222,7 +221,7 @@ impl CodeGenSpecialFuncs {
                 Term::fst_pair()
                     .apply(Term::unconstr_data().apply(Term::var("__constr_var")))
                     .lambda("__constr_var"),
-                function(vec![data()], int()),
+                Type::function(vec![Type::data()], Type::int()),
             ),
         );
 
@@ -784,7 +783,7 @@ pub fn rearrange_list_clauses(
                 tipo: tipo.clone(),
                 text: Box::new(TypedExpr::String {
                     location: Span::empty(),
-                    tipo: crate::builtins::string(),
+                    tipo: Type::string(),
                     value: format!("Clause hole found for {index} elements."),
                 }),
                 then: Box::new(TypedExpr::ErrorTerm {
@@ -1688,15 +1687,15 @@ pub fn cast_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Nam
 
 pub fn wrap_validator_condition(air_tree: AirTree, trace: TraceLevel) -> AirTree {
     let otherwise = match trace {
-        TraceLevel::Silent | TraceLevel::Compact => AirTree::error(void(), true),
+        TraceLevel::Silent | TraceLevel::Compact => AirTree::error(Type::void(), true),
         TraceLevel::Verbose => AirTree::trace(
             AirTree::string("Validator returned false"),
-            void(),
-            AirTree::error(void(), true),
+            Type::void(),
+            AirTree::error(Type::void(), true),
         ),
     };
 
-    AirTree::if_branch(void(), air_tree, AirTree::void(), otherwise)
+    AirTree::if_branch(Type::void(), air_tree, AirTree::void(), otherwise)
 }
 
 pub fn extract_constant(term: &Term<Name>) -> Option<Rc<UplcConstant>> {

@@ -1,5 +1,7 @@
+pub mod well_known;
+
 use crate::{
-    builtins::{self, g1_element, g2_element},
+    ast::well_known::VALIDATOR_ELSE,
     expr::{TypedExpr, UntypedExpr},
     line_numbers::LineNumbers,
     parser::token::{Base, Token},
@@ -24,6 +26,13 @@ pub const PIPE_VARIABLE: &str = "_pipe";
 pub const ENV_MODULE: &str = "env";
 pub const CONFIG_MODULE: &str = "config";
 pub const DEFAULT_ENV_MODULE: &str = "default";
+
+pub const HANDLER_SPEND: &str = "spend";
+pub const HANDLER_MINT: &str = "mint";
+pub const HANDLER_WITHDRAW: &str = "withdraw";
+pub const HANDLER_PUBLISH: &str = "publish";
+pub const HANDLER_VOTE: &str = "vote";
+pub const HANDLER_PROPOSE: &str = "propose";
 
 pub type TypedModule = Module<TypeInfo, TypedDefinition>;
 pub type UntypedModule = Module<(), UntypedDefinition>;
@@ -189,11 +198,7 @@ impl TypedModule {
                 Definition::Validator(v) => {
                     let module_name = self.name.as_str();
 
-                    if let Some((k, v)) = v.into_function_definition(module_name, |f, _| Some(f)) {
-                        functions.insert(k, v);
-                    }
-
-                    if let Some((k, v)) = v.into_function_definition(module_name, |_, f| f) {
+                    for (k, v) in v.into_function_definitions(module_name) {
                         functions.insert(k, v);
                     }
                 }
@@ -237,6 +242,19 @@ fn str_to_keyword(word: &str) -> Option<Token> {
 pub type TypedFunction = Function<Rc<Type>, TypedExpr, TypedArg>;
 pub type UntypedFunction = Function<(), UntypedExpr, UntypedArg>;
 
+impl UntypedFunction {
+    pub fn is_default_fallback(&self) -> bool {
+        matches!(
+            &self.arguments[..],
+            [UntypedArg {
+                by: ArgBy::ByName(ArgName::Discarded { .. }),
+                ..
+            }]
+        ) && matches!(&self.body, UntypedExpr::ErrorTerm { .. })
+            && self.name.as_str() == well_known::VALIDATOR_ELSE
+    }
+}
+
 pub type TypedTest = Function<Rc<Type>, TypedExpr, TypedArgVia>;
 pub type UntypedTest = Function<(), UntypedExpr, UntypedArgVia>;
 
@@ -261,6 +279,16 @@ pub struct Function<T, Expr, Arg> {
     pub on_test_failure: OnTestFailure,
 }
 
+impl<T, Expr, Arg> Function<T, Expr, Arg> {
+    pub fn is_spend(&self) -> bool {
+        self.name == HANDLER_SPEND
+    }
+
+    pub fn is_mint(&self) -> bool {
+        self.name == HANDLER_MINT
+    }
+}
+
 impl TypedFunction {
     pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
         self.arguments
@@ -272,6 +300,33 @@ impl TypedFunction {
                     .as_ref()
                     .and_then(|a| a.find_node(byte_index))
             })
+    }
+
+    pub fn has_valid_purpose_name(&self) -> bool {
+        self.name == HANDLER_SPEND
+            || self.name == HANDLER_PUBLISH
+            || self.name == HANDLER_PROPOSE
+            || self.name == HANDLER_MINT
+            || self.name == HANDLER_WITHDRAW
+            || self.name == HANDLER_VOTE
+    }
+
+    pub fn validator_arity(&self) -> usize {
+        if self.name == HANDLER_SPEND {
+            4
+        } else if self.name == HANDLER_MINT
+            || self.name == HANDLER_WITHDRAW
+            || self.name == HANDLER_VOTE
+            || self.name == HANDLER_PUBLISH
+            || self.name == HANDLER_PROPOSE
+        {
+            3
+        } else {
+            panic!(
+                "tried to get validator arity of a non-validator function {}",
+                &self.name
+            );
+        }
     }
 }
 
@@ -349,152 +404,36 @@ pub struct FunctionAccessKey {
     pub function_name: String,
 }
 
+pub type UntypedDataType = DataType<()>;
 pub type TypedDataType = DataType<Rc<Type>>;
 
 impl TypedDataType {
-    pub fn data() -> Self {
-        DataType {
-            constructors: vec![],
-            doc: None,
+    pub fn known_enum(name: &str, constructors: &[&str]) -> Self {
+        Self {
+            name: name.to_string(),
+            constructors: RecordConstructor::known_enum(constructors),
             location: Span::empty(),
-            name: "Data".to_string(),
             opaque: false,
-            parameters: vec![],
             public: true,
+            parameters: vec![],
             typed_parameters: vec![],
+            doc: None,
         }
     }
 
-    pub fn bool() -> Self {
-        DataType {
-            constructors: vec![
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "False".to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "True".to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-            ],
-            doc: None,
-            location: Span::empty(),
-            name: "Bool".to_string(),
-            opaque: false,
-            parameters: vec![],
-            public: true,
-            typed_parameters: vec![],
-        }
-    }
-
-    pub fn prng() -> Self {
-        DataType {
-            constructors: vec![
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "Seeded".to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "Replayed".to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-            ],
-            doc: None,
-            location: Span::empty(),
-            name: "PRNG".to_string(),
-            opaque: false,
-            parameters: vec![],
-            public: true,
-            typed_parameters: vec![],
-        }
-    }
-
-    pub fn ordering() -> Self {
-        DataType {
-            constructors: vec![
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "Less".to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "Equal".to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "Greater".to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-            ],
-            doc: None,
-            location: Span::empty(),
-            name: "Ordering".to_string(),
-            opaque: false,
-            parameters: vec![],
-            public: true,
-            typed_parameters: vec![],
-        }
-    }
-
-    pub fn option(tipo: Rc<Type>) -> Self {
-        DataType {
-            constructors: vec![
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "Some".to_string(),
-                    arguments: vec![RecordConstructorArg {
-                        label: None,
-                        annotation: Annotation::Var {
-                            location: Span::empty(),
-                            name: "a".to_string(),
-                        },
-                        location: Span::empty(),
-                        tipo: tipo.clone(),
-                        doc: None,
-                    }],
-                    doc: None,
-                    sugar: false,
-                },
-                RecordConstructor {
-                    location: Span::empty(),
-                    name: "None".to_string(),
-                    arguments: vec![],
-                    doc: None,
-                    sugar: false,
-                },
-            ],
-            doc: None,
-            location: Span::empty(),
-            name: "Option".to_string(),
-            opaque: false,
-            parameters: vec!["a".to_string()],
-            public: true,
-            typed_parameters: vec![tipo],
-        }
+    pub fn is_never(&self) -> bool {
+        self.name == well_known::NEVER
+            && self.constructors.len() == well_known::NEVER_CONSTRUCTORS.len()
+            && self.location == Span::empty()
+            && self
+                .constructors
+                .iter()
+                .zip(well_known::NEVER_CONSTRUCTORS)
+                .all(|(constructor, name)| {
+                    name == &constructor.name && constructor.arguments.is_empty()
+                })
     }
 }
-
-pub type UntypedDataType = DataType<()>;
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DataType<T> {
@@ -538,57 +477,259 @@ pub type TypedValidator = Validator<Rc<Type>, TypedArg, TypedExpr>;
 pub type UntypedValidator = Validator<(), UntypedArg, UntypedExpr>;
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum Purpose {
+    Spend,
+    Mint,
+    Withdraw,
+    Publish,
+    Propose,
+    Vote,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Validator<T, Arg, Expr> {
     pub doc: Option<String>,
     pub end_position: usize,
-    pub fun: Function<T, Expr, Arg>,
-    pub other_fun: Option<Function<T, Expr, Arg>>,
+    pub handlers: Vec<Function<T, Expr, Arg>>,
     pub location: Span,
+    pub name: String,
     pub params: Vec<Arg>,
+    pub fallback: Function<T, Expr, Arg>,
+}
+
+impl<T, Arg, Expr> Validator<T, Arg, Expr> {
+    pub fn handler_name(validator: &str, handler: &str) -> String {
+        format!("{}.{}", validator, handler)
+    }
+}
+
+impl UntypedValidator {
+    pub fn default_fallback(location: Span) -> UntypedFunction {
+        Function {
+            arguments: vec![UntypedArg {
+                by: ArgBy::ByName(ArgName::Discarded {
+                    name: "_".to_string(),
+                    label: "_".to_string(),
+                    location,
+                }),
+                location,
+                annotation: None,
+                doc: None,
+                is_validator_param: false,
+            }],
+            body: UntypedExpr::fail(None, location),
+            doc: None,
+            location,
+            end_position: location.end - 1,
+            name: well_known::VALIDATOR_ELSE.to_string(),
+            public: true,
+            return_annotation: Some(Annotation::boolean(location)),
+            return_type: (),
+            on_test_failure: OnTestFailure::FailImmediately,
+        }
+    }
 }
 
 impl TypedValidator {
+    pub fn available_handler_names() -> Vec<String> {
+        vec![
+            HANDLER_SPEND.to_string(),
+            HANDLER_MINT.to_string(),
+            HANDLER_WITHDRAW.to_string(),
+            HANDLER_PUBLISH.to_string(),
+            HANDLER_VOTE.to_string(),
+            HANDLER_PROPOSE.to_string(),
+            VALIDATOR_ELSE.to_string(),
+        ]
+    }
+
+    // Define a validator wrapper extracting and matching on script purpose for
+    // users.
+    pub fn into_script_context_handler(&self) -> TypedExpr {
+        let var_context = "__context__";
+        let var_transaction = "__transaction__";
+        let var_redeemer = "__redeemer__";
+        let var_purpose = "__purpose__";
+        let var_purpose_arg = "__purpose_arg__";
+        let var_datum = "__datum__";
+
+        TypedExpr::sequence(&[
+            TypedExpr::let_(
+                TypedExpr::local_var(var_context, Type::script_context()),
+                TypedPattern::Constructor {
+                    is_record: false,
+                    location: Span::empty(),
+                    name: well_known::SCRIPT_CONTEXT_CONSTRUCTORS[0].to_string(),
+                    arguments: vec![
+                        CallArg::var(var_transaction),
+                        CallArg::var(var_redeemer),
+                        CallArg::var(var_purpose),
+                    ],
+                    module: None,
+                    constructor: PatternConstructor::Record {
+                        name: well_known::SCRIPT_CONTEXT_CONSTRUCTORS[0].to_string(),
+                        field_map: None,
+                    },
+                    spread_location: None,
+                    tipo: Type::function(
+                        vec![Type::data(), Type::data(), Type::script_purpose()],
+                        Type::data(),
+                    ),
+                },
+                Type::script_context(),
+            ),
+            TypedExpr::When {
+                location: Span::empty(),
+                tipo: Type::bool(),
+                subject: TypedExpr::local_var(var_purpose, Type::script_purpose()).into(),
+                clauses: self
+                    .handlers
+                    .iter()
+                    .map(|handler| {
+                        let datum = if handler.name.as_str() == "spend" {
+                            handler.arguments.first()
+                        } else {
+                            None
+                        };
+
+                        let redeemer = handler
+                            .arguments
+                            .get(if datum.is_some() { 1 } else { 0 })
+                            .unwrap();
+
+                        let purpose_arg = handler.arguments.iter().nth_back(1).unwrap();
+
+                        let transaction = handler.arguments.last().unwrap();
+
+                        let pattern = match handler.name.as_str() {
+                            "spend" => TypedPattern::spend_purpose(var_purpose_arg, var_datum),
+                            "mint" => TypedPattern::mint_purpose(var_purpose_arg),
+                            "withdraw" => TypedPattern::withdraw_purpose(var_purpose_arg),
+                            "publish" => TypedPattern::publish_purpose(var_purpose_arg),
+                            "propose" => TypedPattern::propose_purpose(var_purpose_arg),
+                            "vote" => TypedPattern::vote_purpose(var_purpose_arg),
+                            purpose => {
+                                unreachable!("unexpected/unknown purpose: {:?}", purpose)
+                            }
+                        };
+
+                        let mut then = vec![];
+
+                        // expect redeemer: tipo = __redeemer__
+                        then.push(TypedExpr::flexible_expect(
+                            TypedExpr::local_var(var_redeemer, Type::data()),
+                            TypedPattern::var(redeemer.get_variable_name().unwrap_or("_")),
+                            redeemer.tipo.clone(),
+                        ));
+
+                        // Cast the datum, if any
+                        if let Some(datum) = datum {
+                            // expect datum: tipo = __datum__
+                            then.push(TypedExpr::flexible_expect(
+                                TypedExpr::local_var(var_datum, Type::option(Type::data())),
+                                TypedPattern::var(datum.get_variable_name().unwrap_or("_")),
+                                datum.tipo.clone(),
+                            ))
+                        }
+
+                        // let purpose_arg = __purpose_arg__
+                        if let Some(arg_name) = purpose_arg.get_variable_name() {
+                            then.push(TypedExpr::let_(
+                                TypedExpr::local_var(var_purpose_arg, Type::data()),
+                                TypedPattern::var(arg_name),
+                                purpose_arg.tipo.clone(),
+                            ));
+                        }
+
+                        // let last_arg_name = __transaction__
+                        if let Some(arg_name) = transaction.get_variable_name() {
+                            then.push(TypedExpr::let_(
+                                TypedExpr::local_var(var_transaction, Type::data()),
+                                TypedPattern::var(arg_name),
+                                Type::data(),
+                            ));
+                        }
+
+                        then.push(handler.body.clone());
+
+                        TypedClause {
+                            location: Span::empty(),
+                            pattern,
+                            then: TypedExpr::Sequence {
+                                location: Span::empty(),
+                                expressions: then,
+                            },
+                        }
+                    })
+                    .chain(std::iter::once(&self.fallback).map(|fallback| {
+                        let arg = fallback.arguments.first().unwrap();
+
+                        let then = &[
+                            TypedExpr::let_(
+                                TypedExpr::local_var(var_context, arg.tipo.clone()),
+                                arg.get_variable_name().map(TypedPattern::var).unwrap_or(
+                                    TypedPattern::Discard {
+                                        name: var_context.to_string(),
+                                        location: Span::empty(),
+                                    },
+                                ),
+                                arg.tipo.clone(),
+                            ),
+                            fallback.body.clone(),
+                        ];
+
+                        TypedClause {
+                            location: Span::empty(),
+                            pattern: TypedPattern::var(var_context),
+                            then: TypedExpr::sequence(then),
+                        }
+                    }))
+                    .collect(),
+            },
+        ])
+    }
+
     pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
         self.params
             .iter()
             .find_map(|arg| arg.find_node(byte_index))
-            .or_else(|| self.fun.find_node(byte_index))
             .or_else(|| {
-                self.other_fun
-                    .as_ref()
-                    .and_then(|f| f.find_node(byte_index))
+                self.handlers
+                    .iter()
+                    .find_map(|func| func.find_node(byte_index))
             })
+            .or_else(|| self.fallback.find_node(byte_index))
     }
 
-    pub fn into_function_definition<'a, F>(
-        &'a self,
+    pub fn into_function_definitions(
+        &self,
         module_name: &str,
-        select: F,
-    ) -> Option<(FunctionAccessKey, TypedFunction)>
-    where
-        F: Fn(&'a TypedFunction, Option<&'a TypedFunction>) -> Option<&'a TypedFunction> + 'a,
-    {
-        match select(&self.fun, self.other_fun.as_ref()) {
-            None => None,
-            Some(fun) => {
-                let mut fun = fun.clone();
+    ) -> Vec<(FunctionAccessKey, TypedFunction)> {
+        self.handlers
+            .iter()
+            .chain(std::iter::once(&self.fallback))
+            .map(|handler| {
+                let mut handler = handler.clone();
 
-                fun.arguments = self
+                handler.arguments = self
                     .params
                     .clone()
                     .into_iter()
-                    .chain(fun.arguments)
+                    .chain(handler.arguments)
                     .collect();
 
-                Some((
+                (
                     FunctionAccessKey {
                         module_name: module_name.to_string(),
-                        function_name: fun.name.clone(),
+                        function_name: TypedValidator::handler_name(
+                            self.name.as_str(),
+                            handler.name.as_str(),
+                        ),
                     },
-                    fun,
-                ))
-            }
-        }
+                    handler,
+                )
+            })
+            .collect()
     }
 }
 
@@ -731,12 +872,12 @@ pub enum Constant {
 impl Constant {
     pub fn tipo(&self) -> Rc<Type> {
         match self {
-            Constant::Int { .. } => builtins::int(),
-            Constant::String { .. } => builtins::string(),
-            Constant::ByteArray { .. } => builtins::byte_array(),
+            Constant::Int { .. } => Type::int(),
+            Constant::String { .. } => Type::string(),
+            Constant::ByteArray { .. } => Type::byte_array(),
             Constant::CurvePoint { point, .. } => match point.as_ref() {
-                Curve::Bls12_381(Bls12_381Point::G1(_)) => builtins::g1_element(),
-                Curve::Bls12_381(Bls12_381Point::G2(_)) => builtins::g2_element(),
+                Curve::Bls12_381(Bls12_381Point::G1(_)) => Type::g1_element(),
+                Curve::Bls12_381(Bls12_381Point::G2(_)) => Type::g2_element(),
             },
         }
     }
@@ -776,6 +917,19 @@ impl TypedCallArg {
     }
 }
 
+impl CallArg<TypedPattern> {
+    pub fn var(name: &str) -> Self {
+        CallArg {
+            label: None,
+            location: Span::empty(),
+            value: TypedPattern::Var {
+                location: Span::empty(),
+                name: name.to_string(),
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RecordConstructor<T> {
     pub location: Span,
@@ -788,6 +942,19 @@ pub struct RecordConstructor<T> {
 impl<A> RecordConstructor<A> {
     pub fn put_doc(&mut self, new_doc: String) {
         self.doc = Some(new_doc);
+    }
+
+    pub fn known_enum(names: &[&str]) -> Vec<RecordConstructor<A>> {
+        names
+            .iter()
+            .map(|name| RecordConstructor {
+                location: Span::empty(),
+                name: name.to_string(),
+                arguments: vec![],
+                doc: None,
+                sugar: false,
+            })
+            .collect()
     }
 }
 
@@ -889,12 +1056,31 @@ pub struct TypedArg {
 }
 
 impl TypedArg {
+    pub fn new(name: &str, tipo: Rc<Type>) -> Self {
+        TypedArg {
+            arg_name: ArgName::Named {
+                name: name.to_string(),
+                label: name.to_string(),
+                location: Span::empty(),
+            },
+            location: Span::empty(),
+            annotation: None,
+            doc: None,
+            is_validator_param: false,
+            tipo: tipo.clone(),
+        }
+    }
+
     pub fn put_doc(&mut self, new_doc: String) {
         self.doc = Some(new_doc);
     }
 
     pub fn get_variable_name(&self) -> Option<&str> {
         self.arg_name.get_variable_name()
+    }
+
+    pub fn get_name(&self) -> String {
+        self.arg_name.get_name()
     }
 
     pub fn is_capture(&self) -> bool {
@@ -1103,6 +1289,15 @@ impl Annotation {
         }
     }
 
+    pub fn option(inner: Annotation) -> Self {
+        Annotation::Constructor {
+            name: "Option".to_string(),
+            module: None,
+            location: inner.location(),
+            arguments: vec![inner],
+        }
+    }
+
     pub fn is_logically_equal(&self, other: &Annotation) -> bool {
         match self {
             Annotation::Constructor {
@@ -1278,6 +1473,88 @@ impl BinOp {
 
 pub type UntypedPattern = Pattern<(), ()>;
 pub type TypedPattern = Pattern<PatternConstructor, Rc<Type>>;
+
+impl TypedPattern {
+    pub fn var(name: &str) -> Self {
+        TypedPattern::Var {
+            name: name.to_string(),
+            location: Span::empty(),
+        }
+    }
+
+    pub fn constructor(name: &str, arguments: &[CallArg<TypedPattern>], tipo: Rc<Type>) -> Self {
+        TypedPattern::Constructor {
+            is_record: false,
+            location: Span::empty(),
+            name: name.to_string(),
+            arguments: arguments.to_vec(),
+            module: None,
+            constructor: PatternConstructor::Record {
+                name: name.to_string(),
+                field_map: None,
+            },
+            spread_location: None,
+            tipo: tipo.clone(),
+        }
+    }
+
+    pub fn mint_purpose(var_purpose_arg: &str) -> Self {
+        TypedPattern::constructor(
+            well_known::SCRIPT_PURPOSE_MINT,
+            &[CallArg::var(var_purpose_arg)],
+            Type::function(vec![Type::byte_array()], Type::script_purpose()),
+        )
+    }
+
+    pub fn spend_purpose(var_purpose_arg: &str, var_datum: &str) -> Self {
+        TypedPattern::constructor(
+            well_known::SCRIPT_PURPOSE_SPEND,
+            &[CallArg::var(var_purpose_arg), CallArg::var(var_datum)],
+            Type::function(
+                vec![Type::data(), Type::option(Type::data())],
+                Type::script_purpose(),
+            ),
+        )
+    }
+
+    pub fn withdraw_purpose(var_purpose_arg: &str) -> Self {
+        TypedPattern::constructor(
+            well_known::SCRIPT_PURPOSE_WITHDRAW,
+            &[CallArg::var(var_purpose_arg)],
+            Type::function(vec![Type::data()], Type::script_purpose()),
+        )
+    }
+
+    pub fn publish_purpose(var_purpose_arg: &str) -> Self {
+        TypedPattern::constructor(
+            well_known::SCRIPT_PURPOSE_PUBLISH,
+            &[
+                CallArg::var("__discarded_purpose_ix__"),
+                CallArg::var(var_purpose_arg),
+            ],
+            Type::function(vec![Type::int(), Type::data()], Type::script_purpose()),
+        )
+    }
+
+    pub fn vote_purpose(var_purpose_arg: &str) -> Self {
+        TypedPattern::constructor(
+            well_known::SCRIPT_PURPOSE_VOTE,
+            &[CallArg::var(var_purpose_arg)],
+            Type::function(vec![Type::data()], Type::script_purpose()),
+        )
+    }
+
+    pub fn propose_purpose(var_purpose_arg: &str) -> Self {
+        TypedPattern::constructor(
+            well_known::SCRIPT_PURPOSE_PROPOSE,
+            &[
+                CallArg::var("__discarded_purpose_ix__"),
+                CallArg::var(var_purpose_arg),
+            ],
+            Type::function(vec![Type::int(), Type::data()], Type::script_purpose()),
+        )
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Pattern<Constructor, Type> {
@@ -1490,8 +1767,8 @@ impl TypedPattern {
     // TODO: This function definition is weird, see where this is used and how.
     pub fn tipo(&self, value: &TypedExpr) -> Option<Rc<Type>> {
         match self {
-            Pattern::Int { .. } => Some(builtins::int()),
-            Pattern::ByteArray { .. } => Some(builtins::byte_array()),
+            Pattern::Int { .. } => Some(Type::int()),
+            Pattern::ByteArray { .. } => Some(Type::byte_array()),
             Pattern::Constructor { tipo, .. } => Some(tipo.clone()),
             Pattern::Var { .. } | Pattern::Assign { .. } | Pattern::Discard { .. } => {
                 Some(value.tipo())
@@ -1689,8 +1966,8 @@ impl<'de> serde::Deserialize<'de> for Bls12_381Point {
 impl Bls12_381Point {
     pub fn tipo(&self) -> Rc<Type> {
         match self {
-            Bls12_381Point::G1(_) => g1_element(),
-            Bls12_381Point::G2(_) => g2_element(),
+            Bls12_381Point::G1(_) => Type::g1_element(),
+            Bls12_381Point::G2(_) => Type::g2_element(),
         }
     }
 }

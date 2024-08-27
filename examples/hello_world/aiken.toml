@@ -1,9 +1,10 @@
 name = "aiken-lang/hello_world"
 version = "1.0.0"
+plutusVersion = "v3"
 licences = ["Apache-2.0"]
 description = "Aiken contracts for project 'aiken-lang/hello_world'"
 
 [[dependencies]]
 name = "aiken-lang/stdlib"
-version = "main"
+version = "v2"
 source = "github"

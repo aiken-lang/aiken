@@ -93,7 +93,7 @@
 	]
       , [ 2
         , [ 1
-          , h'{{ certificates.script.hash }}'
+          , h'{{ certificates.purposes.publish.hash }}'
 	  ]
 	, h'11111111111111111111111111111111111111111111111111111111'
 	]
@@ -109,7 +109,7 @@
 
     { 5: [[2, 20, 121([]), [1000000, 100000000]]]
 
-    , 7: [h'{{ certificates.script.cbor }}']
+    , 7: [h'{{ certificates.purposes.publish.cbor }}']
     },
 
     true,

@@ -6,15 +6,15 @@
     "plutusVersion": "v2",
     "compiler": {
       "name": "Aiken",
-      "version": "v1.0.31-alpha+6e4a16d"
+      "version": "v1.0.31-alpha+4003343"
     },
     "license": "Apache-2.0"
   },
   "validators": [
     {
-      "title": "tests.foo_3",
+      "title": "tests.foo_3.mint",
       "redeemer": {
-        "title": "_data",
+        "title": "_redeemer",
         "schema": {
           "$ref": "#/definitions/Data"
         }
@@ -27,8 +27,21 @@
           }
         }
       ],
-      "compiledCode": "582401000032323222253330043370e6eb4c018c014dd5001a400429309b2b2b9a5573cae841",
-      "hash": "047dafbc61fb4a550a28398bde3680c48ff2000cf1022efc883124cd"
+      "compiledCode": "58670100003232323232225333003323232323253330083370e900018049baa0011323370e6eb4c030c02cdd5004240046eb8c02cc028dd500089931bad300b300a375400e6014601600460120026012004600e002600a6ea8004526136565734aae7555cf2ba15745",
+      "hash": "8d14659c82f8f0a1281c561b563283c30c43546d4215c9acafa78edf"
+    },
+    {
+      "title": "tests.foo_3.else",
+      "parameters": [
+        {
+          "title": "th_arg",
+          "schema": {
+            "$ref": "#/definitions/tests~1Foo"
+          }
+        }
+      ],
+      "compiledCode": "58670100003232323232225333003323232323253330083370e900018049baa0011323370e6eb4c030c02cdd5004240046eb8c02cc028dd500089931bad300b300a375400e6014601600460120026012004600e002600a6ea8004526136565734aae7555cf2ba15745",
+      "hash": "8d14659c82f8f0a1281c561b563283c30c43546d4215c9acafa78edf"
     }
   ],
   "definitions": {

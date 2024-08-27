@@ -1,9 +1,9 @@
 ---
 source: crates/aiken-project/src/blueprint/validator.rs
-description: "Code:\n\ntype Dict<key, value> {\n    inner: List<(ByteArray, value)>\n}\n\ntype UUID { UUID }\n\nvalidator {\n  fn list_2_tuples_as_list(redeemer: Dict<UUID, Int>, ctx: Void) {\n    True\n  }\n}\n"
+description: "Code:\n\npub type Dict<key, value> {\n    inner: List<(ByteArray, value)>\n}\n\npub type UUID { UUID }\n\nvalidator list_2_tuples_as_list {\n  mint(redeemer: Dict<UUID, Int>, policy_id: ByteArray, transaction: Data) {\n    True\n  }\n}\n"
 ---
 {
-  "title": "test_module.list_2_tuples_as_list",
+  "title": "test_module.list_2_tuples_as_list.mint",
   "redeemer": {
     "title": "redeemer",
     "schema": {

@@ -1,5 +1,6 @@
 use crate::{
-    builtins::{PAIR, PRELUDE},
+    ast::well_known,
+    builtins::PRELUDE,
     expr::UntypedExpr,
     parser::{error::ParseError, token::Token},
 };
@@ -11,7 +12,7 @@ pub fn parser(
     select! {Token::Name { name } if name == PRELUDE => name}
         .then_ignore(just(Token::Dot))
         .or_not()
-        .then_ignore(select! {Token::UpName { name } if name == PAIR => name})
+        .then_ignore(select! {Token::UpName { name } if name == well_known::PAIR => name})
         .ignore_then(
             r.clone()
                 .separated_by(just(Token::Comma))

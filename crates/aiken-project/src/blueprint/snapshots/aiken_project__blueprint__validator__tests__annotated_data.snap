@@ -1,9 +1,9 @@
 ---
 source: crates/aiken-project/src/blueprint/validator.rs
-description: "Code:\n\npub type Foo {\n    foo: Int\n}\n\nvalidator {\n    fn annotated_data(datum: Data<Foo>, redeemer: Data, ctx: Void) {\n        True\n    }\n}\n"
+description: "Code:\n\npub type Foo {\n    foo: Int\n}\n\nvalidator annotated_data {\n    spend(datum: Option<Data<Foo>>, redeemer: Data, output_reference: Data, transpose: Data) {\n        True\n    }\n}\n"
 ---
 {
-  "title": "test_module.annotated_data",
+  "title": "test_module.annotated_data.spend",
   "datum": {
     "title": "datum",
     "schema": {

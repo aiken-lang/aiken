@@ -570,20 +570,9 @@ Constr(
                                             ),
                                             Constr(
                                                 Constr {
-                                                    tag: 121,
+                                                    tag: 122,
                                                     any_constructor: None,
-                                                    fields: [
-                                                        BigInt(
-                                                            Int(
-                                                                Int(
-                                                                    Int {
-                                                                        neg: false,
-                                                                        val: 3000000,
-                                                                    },
-                                                                ),
-                                                            ),
-                                                        ),
-                                                    ],
+                                                    fields: [],
                                                 },
                                             ),
                                         ],
@@ -638,20 +627,9 @@ Constr(
                                             ),
                                             Constr(
                                                 Constr {
-                                                    tag: 121,
+                                                    tag: 122,
                                                     any_constructor: None,
-                                                    fields: [
-                                                        BigInt(
-                                                            Int(
-                                                                Int(
-                                                                    Int {
-                                                                        neg: false,
-                                                                        val: 3000000,
-                                                                    },
-                                                                ),
-                                                            ),
-                                                        ),
-                                                    ],
+                                                    fields: [],
                                                 },
                                             ),
                                         ],

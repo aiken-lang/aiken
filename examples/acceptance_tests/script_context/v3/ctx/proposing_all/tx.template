@@ -41,7 +41,7 @@
           , h'F000000000000000000000000000000000000000000000000000000000'
           , [ 2
 	    , { h'E022222222222222222222222222222222222222222222222222222222': 1000000 }
-	    , h'{{ proposing_all.guardrails.hash }}'
+	    , h'{{ proposing_all.guardrails.propose.hash }}'
 	    ]
           , [ "https://aiken-lang.org"
             , h'0000000000000000000000000000000000000000000000000000000000000000'
@@ -112,7 +112,7 @@
 
     { 5: [[5, 3, 121([]), [1000000, 100000000]]]
 
-    , 7: [h'{{ proposing_all.guardrails.cbor }}']
+    , 7: [h'{{ proposing_all.guardrails.propose.cbor }}']
     },
 
     true,

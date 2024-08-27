@@ -17,21 +17,22 @@ use cardano/governance/protocol_parameters.{
   stake_pool_operator_voting_thresholds, stake_pool_pledge_influence,
   stake_pool_retirement_horizon, treasury_expansion,
 }
-use cardano/transaction.{Proposing, ScriptContext}
+use cardano/transaction.{Transaction}
 
-validator {
-  fn guardrails(_tmp1: Void, ctx: ScriptContext) -> Bool {
-    expect Proposing(
-      0,
-      ProposalProcedure {
-        governance_action: ProtocolParameters {
-          ancestor: None,
-          guardrails: Some(..),
-          new_parameters,
-        },
-        ..
+validator guardrails {
+  propose(
+    _redeemer: Void,
+    proposal: ProposalProcedure,
+    _transaction: Transaction,
+  ) -> Bool {
+    expect ProposalProcedure {
+      governance_action: ProtocolParameters {
+        ancestor: None,
+        guardrails: Some(..),
+        new_parameters,
       },
-    ) = ctx.info
+      ..
+    } = proposal
 
     expect ( new_parameters |> min_fee_coefficient ) == Some(44)
 
@@ -126,6 +127,10 @@ validator {
       )
 
     True
+  }
+
+  else(_ctx) {
+    fail
   }
 }
 

@@ -9,10 +9,9 @@ use crate::{
     ast::{
         self, Annotation, CallArg, DataType, Definition, Function, ModuleConstant, ModuleKind,
         RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition, TypedFunction,
-        TypedPattern, UnqualifiedImport, UntypedArg, UntypedDefinition, UntypedFunction, Use,
-        Validator, PIPE_VARIABLE,
+        TypedPattern, TypedValidator, UnqualifiedImport, UntypedArg, UntypedDefinition,
+        UntypedFunction, Use, Validator, PIPE_VARIABLE,
     },
-    builtins::{function, generic_var, pair, tuple, unbound_var},
     tipo::{fields::FieldMap, TypeAliasAnnotation},
     IdGenerator,
 };
@@ -57,6 +56,9 @@ pub struct Environment<'a> {
 
     /// Top-level function definitions from the module
     pub module_functions: HashMap<String, &'a UntypedFunction>,
+
+    /// Top-level validator definitions from the module
+    pub module_validators: HashMap<String, (Span, Vec<String>)>,
 
     /// Top-level functions that have been inferred
     pub inferred_functions: HashMap<String, TypedFunction>,
@@ -183,7 +185,7 @@ impl<'a> Environment<'a> {
 
             if let Some((args, ret)) = new_value {
                 *tipo.borrow_mut() = TypeVar::Link {
-                    tipo: function(args.clone(), ret.clone()),
+                    tipo: Type::function(args.clone(), ret.clone()),
                 };
 
                 return Ok((args, Type::with_alias(ret, alias.clone())));
@@ -307,32 +309,51 @@ impl<'a> Environment<'a> {
             Definition::Validator(Validator {
                 doc,
                 end_position,
-                fun,
-                other_fun,
+                handlers,
+                name,
+                mut fallback,
                 location,
                 params,
             }) => {
-                let Definition::Fn(fun) =
-                    self.generalise_definition(Definition::Fn(fun), module_name)
+                let handlers = handlers
+                    .into_iter()
+                    .map(|mut fun| {
+                        let handler_name = TypedValidator::handler_name(&name, &fun.name);
+
+                        let old_name = fun.name;
+                        fun.name = handler_name;
+
+                        let Definition::Fn(mut fun) =
+                            self.generalise_definition(Definition::Fn(fun), module_name)
+                        else {
+                            unreachable!()
+                        };
+
+                        fun.name = old_name;
+
+                        fun
+                    })
+                    .collect();
+
+                let fallback_name = TypedValidator::handler_name(&name, &fallback.name);
+
+                let old_name = fallback.name;
+                fallback.name = fallback_name;
+
+                let Definition::Fn(mut fallback) =
+                    self.generalise_definition(Definition::Fn(fallback), module_name)
                 else {
                     unreachable!()
                 };
 
-                let other_fun = other_fun.map(|other_fun| {
-                    let Definition::Fn(other_fun) =
-                        self.generalise_definition(Definition::Fn(other_fun), module_name)
-                    else {
-                        unreachable!()
-                    };
-
-                    other_fun
-                });
+                fallback.name = old_name;
 
                 Definition::Validator(Validator {
                     doc,
+                    name,
                     end_position,
-                    fun,
-                    other_fun,
+                    handlers,
+                    fallback,
                     location,
                     params,
                 })
@@ -671,7 +692,7 @@ impl<'a> Environment<'a> {
             }
 
             Type::Fn { args, ret, alias } => Type::with_alias(
-                function(
+                Type::function(
                     args.iter()
                         .map(|t| self.instantiate(t.clone(), ids, hydrator))
                         .collect(),
@@ -681,7 +702,7 @@ impl<'a> Environment<'a> {
             ),
 
             Type::Tuple { elems, alias } => Type::with_alias(
-                tuple(
+                Type::tuple(
                     elems
                         .iter()
                         .map(|t| self.instantiate(t.clone(), ids, hydrator))
@@ -690,7 +711,7 @@ impl<'a> Environment<'a> {
                 alias.clone(),
             ),
             Type::Pair { fst, snd, alias } => Type::with_alias(
-                pair(
+                Type::pair(
                     self.instantiate(fst.clone(), ids, hydrator),
                     self.instantiate(snd.clone(), ids, hydrator),
                 ),
@@ -758,6 +779,7 @@ impl<'a> Environment<'a> {
             module_types_constructors: prelude.types_constructors.clone(),
             module_values: HashMap::new(),
             module_functions: HashMap::new(),
+            module_validators: HashMap::new(),
             imported_modules: HashMap::new(),
             unused_modules: HashMap::new(),
             unqualified_imported_names: HashMap::new(),
@@ -776,13 +798,13 @@ impl<'a> Environment<'a> {
 
     /// Create a new generic type that can stand in for any type.
     pub fn new_generic_var(&mut self) -> Rc<Type> {
-        generic_var(self.next_uid())
+        Type::generic_var(self.next_uid())
     }
 
     /// Create a new unbound type that is a specific type, we just don't
     /// know which one yet.
     pub fn new_unbound_var(&mut self) -> Rc<Type> {
-        unbound_var(self.next_uid())
+        Type::unbound_var(self.next_uid())
     }
 
     pub fn next_uid(&mut self) -> u64 {
@@ -815,9 +837,7 @@ impl<'a> Environment<'a> {
                 let module_info = self.find_module(module, *location)?;
 
                 if module_info.kind.is_validator()
-                    && (self.current_kind.is_lib()
-                        || self.current_kind.is_env()
-                        || !self.current_module.starts_with("tests"))
+                    && (self.current_kind.is_lib() || self.current_kind.is_env())
                 {
                     return Err(Error::ValidatorImported {
                         location: *location,
@@ -1162,12 +1182,12 @@ impl<'a> Environment<'a> {
     #[allow(clippy::too_many_arguments)]
     fn register_function(
         &mut self,
-        name: &'a str,
+        name: &str,
         arguments: &[UntypedArg],
         return_annotation: &Option<Annotation>,
         module_name: &String,
         hydrators: &mut HashMap<String, Hydrator>,
-        names: &mut HashMap<&'a str, &'a Span>,
+        names: &mut HashMap<String, &'a Span>,
         location: &'a Span,
     ) -> Result<(), Error> {
         assert_unique_value_name(names, name, location)?;
@@ -1195,7 +1215,7 @@ impl<'a> Environment<'a> {
 
         let return_type = hydrator.type_from_option_annotation(return_annotation, self)?;
 
-        let tipo = function(arg_types, return_type);
+        let tipo = Type::function(arg_types, return_type);
 
         // Keep track of which types we create from annotations so we can know
         // which generic types not to instantiate later when performing
@@ -1224,7 +1244,7 @@ impl<'a> Environment<'a> {
         def: &'a UntypedDefinition,
         module_name: &String,
         hydrators: &mut HashMap<String, Hydrator>,
-        names: &mut HashMap<&'a str, &'a Span>,
+        names: &mut HashMap<String, &'a Span>,
         kind: ModuleKind,
     ) -> Result<(), Error> {
         match def {
@@ -1247,58 +1267,104 @@ impl<'a> Environment<'a> {
             }
 
             Definition::Validator(Validator {
-                fun,
-                other_fun,
+                handlers,
+                fallback,
                 params,
+                name,
                 doc: _,
-                location: _,
+                location,
                 end_position: _,
             }) if kind.is_validator() => {
-                let default_annotation = |mut arg: UntypedArg| {
+                let default_annotation = |mut arg: UntypedArg, ann: Annotation| {
                     if arg.annotation.is_none() {
-                        arg.annotation = Some(Annotation::data(arg.location));
-
+                        arg.annotation = Some(ann);
                         arg
                     } else {
                         arg
                     }
                 };
 
-                let temp_params: Vec<UntypedArg> = params
-                    .iter()
-                    .cloned()
-                    .chain(fun.arguments.clone())
-                    .map(default_annotation)
-                    .collect();
+                let mut handler_names = vec![];
 
-                self.register_function(
-                    &fun.name,
-                    &temp_params,
-                    &fun.return_annotation,
-                    module_name,
-                    hydrators,
-                    names,
-                    &fun.location,
-                )?;
+                let params_len = params.len();
 
-                if let Some(other) = other_fun {
+                for handler in handlers {
                     let temp_params: Vec<UntypedArg> = params
                         .iter()
                         .cloned()
-                        .chain(other.arguments.clone())
-                        .map(default_annotation)
+                        .chain(handler.arguments.clone())
+                        .enumerate()
+                        .map(|(ix, arg)| {
+                            let is_datum = handler.is_spend() && ix == params_len;
+                            let is_mint_policy = handler.is_mint() && ix == params_len + 1;
+                            let location = arg.location;
+                            default_annotation(
+                                arg,
+                                if is_datum {
+                                    Annotation::option(Annotation::data(location))
+                                } else if is_mint_policy {
+                                    Annotation::bytearray(location)
+                                } else {
+                                    Annotation::data(location)
+                                },
+                            )
+                        })
                         .collect();
 
+                    handler_names.push(handler.name.clone());
+
                     self.register_function(
-                        &other.name,
+                        &TypedValidator::handler_name(name.as_str(), handler.name.as_str()),
                         &temp_params,
-                        &other.return_annotation,
+                        &handler.return_annotation,
                         module_name,
                         hydrators,
                         names,
-                        &other.location,
+                        &handler.location,
                     )?;
                 }
+
+                let temp_params: Vec<UntypedArg> = params
+                    .iter()
+                    .cloned()
+                    .chain(fallback.arguments.clone())
+                    .map(|arg| {
+                        let location = arg.location;
+                        default_annotation(arg, Annotation::data(location))
+                    })
+                    .collect();
+
+                self.register_function(
+                    &TypedValidator::handler_name(name.as_str(), fallback.name.as_str()),
+                    &temp_params,
+                    &fallback.return_annotation,
+                    module_name,
+                    hydrators,
+                    names,
+                    &fallback.location,
+                )?;
+
+                handler_names.push(fallback.name.clone());
+
+                let err_duplicate_name = |previous_location: Span| {
+                    Err(Error::DuplicateName {
+                        name: name.to_string(),
+                        previous_location,
+                        location: location.map_end(|end| end + 1 + name.len()),
+                    })
+                };
+
+                if let Some((previous_location, _)) = self.imported_modules.get(name) {
+                    return err_duplicate_name(*previous_location);
+                }
+
+                match self
+                    .module_validators
+                    .insert(name.to_string(), (*location, handler_names))
+                {
+                    Some((previous_location, _)) => err_duplicate_name(previous_location),
+                    None => Ok(()),
+                }?
             }
 
             Definition::Validator(Validator { location, .. }) => {
@@ -1395,7 +1461,7 @@ impl<'a> Environment<'a> {
                     // Insert constructor function into module scope
                     let typ = match constructor.arguments.len() {
                         0 => typ.clone(),
-                        _ => function(args_types, typ.clone()),
+                        _ => Type::function(args_types, typ.clone()),
                     };
 
                     let constructor_info = ValueConstructorVariant::Record {
@@ -1910,11 +1976,11 @@ fn assert_unique_type_name<'a>(
 }
 
 fn assert_unique_value_name<'a>(
-    names: &mut HashMap<&'a str, &'a Span>,
-    name: &'a str,
+    names: &mut HashMap<String, &'a Span>,
+    name: &str,
     location: &'a Span,
 ) -> Result<(), Error> {
-    match names.insert(name, location) {
+    match names.insert(name.to_string(), location) {
         Some(previous_location) => Err(Error::DuplicateName {
             name: name.to_string(),
             previous_location: *previous_location,
@@ -1925,11 +1991,11 @@ fn assert_unique_value_name<'a>(
 }
 
 fn assert_unique_const_name<'a>(
-    names: &mut HashMap<&'a str, &'a Span>,
-    name: &'a str,
+    names: &mut HashMap<String, &'a Span>,
+    name: &str,
     location: &'a Span,
 ) -> Result<(), Error> {
-    match names.insert(name, location) {
+    match names.insert(name.to_string(), location) {
         Some(previous_location) => Err(Error::DuplicateConstName {
             name: name.to_string(),
             previous_location: *previous_location,
@@ -1948,7 +2014,7 @@ pub(super) fn assert_no_labeled_arguments<A>(args: &[CallArg<A>]) -> Option<(Spa
     None
 }
 
-pub(super) fn collapse_links(t: Rc<Type>) -> Rc<Type> {
+pub fn collapse_links(t: Rc<Type>) -> Rc<Type> {
     if let Type::Var { tipo, alias } = t.deref() {
         if let TypeVar::Link { tipo } = tipo.borrow().deref() {
             return Type::with_alias(tipo.clone(), alias.clone());
@@ -1993,7 +2059,7 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
     match t.deref() {
         Type::Var { tipo, alias } => Type::with_alias(
             match tipo.borrow().deref() {
-                TypeVar::Unbound { id } => generic_var(*id),
+                TypeVar::Unbound { id } => Type::generic_var(*id),
                 TypeVar::Link { tipo } => generalise(tipo.clone(), ctx_level),
                 TypeVar::Generic { .. } => Rc::new(Type::Var {
                     tipo: tipo.clone(),
@@ -2027,7 +2093,7 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
         }
 
         Type::Fn { args, ret, alias } => Type::with_alias(
-            function(
+            Type::function(
                 args.iter()
                     .map(|t| generalise(t.clone(), ctx_level))
                     .collect(),
@@ -2037,7 +2103,7 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
         ),
 
         Type::Tuple { elems, alias } => Type::with_alias(
-            tuple(
+            Type::tuple(
                 elems
                     .iter()
                     .map(|t| generalise(t.clone(), ctx_level))
@@ -2046,7 +2112,7 @@ pub(crate) fn generalise(t: Rc<Type>, ctx_level: usize) -> Rc<Type> {
             alias.clone(),
         ),
         Type::Pair { fst, snd, alias } => Type::with_alias(
-            pair(
+            Type::pair(
                 generalise(fst.clone(), ctx_level),
                 generalise(snd.clone(), ctx_level),
             ),

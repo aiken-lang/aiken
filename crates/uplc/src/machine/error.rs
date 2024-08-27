@@ -5,78 +5,120 @@ use std::string::FromUtf8Error;
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error, miette::Diagnostic)]
 pub enum Error {
-    #[error("Over budget mem: {} & cpu: {}", .0.mem, .0.cpu)]
+    #[error("execution went over budget\n{:>13} {}\n{:>13} {}", "Mem", .0.mem, "CPU", .0.cpu)]
     OutOfExError(ExBudget),
-    #[error("Invalid Stepkind: {0}")]
+    #[error("invalid step kind: {0}")]
     InvalidStepKind(u8),
-    #[error("Cannot evaluate an open term:\\n\\n{}", .0.to_pretty())]
+    #[error(
+        "cannot evaluate an open term:\n{:>13} {}",
+        "Term",
+        indent(redacted(.0.to_pretty(), 10)),
+    )]
     OpenTermEvaluated(Term<NamedDeBruijn>),
-    #[error("The validator crashed / exited prematurely")]
+    #[error("the validator crashed / exited prematurely")]
     EvaluationFailure,
     #[error(
-        "Attempted to instantiate a non-polymorphic term\n{:>13} {}",
+        "attempted to instantiate a non-polymorphic term\n{:>13} {}",
         "Term",
         indent(redacted(format!("{:#?}", .0), 10)),
     )]
     NonPolymorphicInstantiation(Value),
     #[error(
-      "Attempted to apply an argument to a non-function\n{:>13} {}\n{:>13} {}",
+      "attempted to apply an argument to a non-function\n{:>13} {}\n{:>13} {}",
       "Thing",
       indent(redacted(format!("{:#?}", .0), 5)),
       "Argument",
       indent(redacted(format!("{:#?}", .1), 5)),
     )]
     NonFunctionalApplication(Value, Value),
-    #[error("Attempted to case a non-const:\n\n{0:#?}")]
+    #[error(
+        "attempted to case a non-const\n{:>13} {}",
+        "Value",
+        indent(redacted(format!("{:#?}", .0), 10)),
+    )]
     NonConstrScrutinized(Value),
     #[error("Cases: {0:#?}\n\n are missing branch for constr:\n\n{1:#?}")]
     MissingCaseBranch(Vec<Term<NamedDeBruijn>>, Value),
-    #[error("Type mismatch expected '{0}' got '{1}'")]
+    #[error("type mismatch\n{:>13} {0}\n{:>13} {1}", "Expected", "Got")]
     TypeMismatch(Type, Type),
-    #[error("Type mismatch expected '(list a)' got '{0}'")]
+    #[error("type mismatch\n{:>13} (list a)\n{:>13} {0}", "Expected", "Got")]
     ListTypeMismatch(Type),
-    #[error("Type mismatch expected '(pair a b)' got '{0}'")]
+    #[error("type mismatch\n{:>13}(pair a b)\n{:>13} {0}", "Expected", "Got")]
     PairTypeMismatch(Type),
-    #[error("Empty List:\n\n{0:#?}")]
+    #[error(
+        "unexpected empty list\n{:>13} {}",
+        "List",
+        indent(redacted(format!("{:#?}", .0), 10)),
+    )]
     EmptyList(Value),
     #[error(
-        "A builtin received a term argument when something else was expected:\n\n{0}\n\nYou probably forgot to wrap the builtin with a force."
+        "a builtin received a term argument when something else was expected\n{:>13} {}\n{:>13} You probably forgot to wrap the builtin with a force.",
+        "Term",
+        indent(redacted(format!("{:#?}", .0), 10)),
+        "Hint"
     )]
     UnexpectedBuiltinTermArgument(Term<NamedDeBruijn>),
     #[error(
-        "A builtin expected a term argument, but something else was received:\n\n{0}\n\nYou probably have an extra force wrapped around a builtin"
+        "a builtin expected a term argument, but something else was received:\n{:>13} {}\n{:>13} You probably have an extra force wrapped around a builtin",
+        "Term",
+        indent(redacted(format!("{:#?}", .0), 10)),
+        "Hint"
     )]
     BuiltinTermArgumentExpected(Term<NamedDeBruijn>),
-    #[error("Unable to unlift value because it is not a constant:\n\n{0:#?}")]
+    #[error(
+        "Unable to unlift value because it is not a constant\n{:>13} {}",
+        "Value",
+        indent(redacted(format!("{:#?}", .0), 10)),
+    )]
     NotAConstant(Value),
     #[error("The evaluation never reached a final state")]
     MachineNeverReachedDone,
-    #[error("integerToByteString encountered negative size {0}")]
+    #[error("integerToByteString encountered negative size\n{:>13} {0}", "Size")]
     IntegerToByteStringNegativeSize(BigInt),
-    #[error("integerToByteString encountered negative input {0}")]
+    #[error("integerToByteString encountered negative input\n{:>13} {0}", "Input")]
     IntegerToByteStringNegativeInput(BigInt),
-    #[error("integerToByteString encountered size {0} which is bigger than the max size of {1}")]
+    #[error(
+        "bytes size beyond limit when converting from integer\n{:>13} {0}\n{:>13} {1}",
+        "Size",
+        "Maximum"
+    )]
     IntegerToByteStringSizeTooBig(BigInt, i64),
-    #[error("integerToByteString encountered size {0} which is not enough space for {1} bytes")]
+    #[error(
+        "bytes size below limit when converting from integer\n{:>13} {0}\n{:>13} {1}",
+        "Size",
+        "Minimum"
+    )]
     IntegerToByteStringSizeTooSmall(BigInt, usize),
     #[error("Decoding utf8")]
     Utf8(#[from] FromUtf8Error),
-    #[error("Out of Bounds\n\nindex: {}\nbytestring: {}\npossible: 0 - {}", .0, hex::encode(.1), .1.len() - 1)]
+    #[error(
+        "Out of Bounds\n{:>13} {}\nb{:>13} {}\n{:>13} 0 - {}",
+        "Index",
+        .0,
+        "ByteArray",
+        hex::encode(.1),
+        "Allowed",
+        .1.len() - 1
+    )]
     ByteStringOutOfBounds(BigInt, Vec<u8>),
-    #[error("Attempt to consByteString something than isn't a byte between [0-255]: {0}")]
+    #[error(
+        "attempt to consByteString something than isn't a byte between [0-255]\n{:>13} {0}",
+        "Found"
+    )]
     ByteStringConsNotAByte(BigInt),
-    #[error("Divide By Zero\n\n{0} / {1}")]
+    #[error("divide By Zero: {0} / {1}")]
     DivideByZero(BigInt, BigInt),
     #[error("Ed25519S PublicKey should be 32 bytes but it was {0}")]
     UnexpectedEd25519PublicKeyLength(usize),
     #[error("Ed25519S Signature should be 64 bytes but it was {0}")]
     UnexpectedEd25519SignatureLength(usize),
     #[error(
-      "Failed to deserialise PlutusData using {0}:\n\n{}",
-      redacted(format!("{:#?}", .1), 10),
+      "failed to deserialise PlutusData using {0}\n{:>13} {}",
+      "Value",
+      indent(redacted(format!("{:#?}", .1), 10)),
     )]
     DeserialisationError(String, Value),
-    #[error("Integer overflow")]
+    #[error("integer overflow")]
     OverflowError,
     #[error("blst error {0:?}")]
     Blst(blst::BLST_ERROR),

@@ -29,7 +29,7 @@ test expect_ford1() {
       ],
     )
   expect Ford { owner, wheels, truck_bed_limit, .. }: Car = initial_car
-  owner == #"" && ( wheels == 4 && truck_bed_limit == 10000 )
+  owner == #"" && wheels == 4 && truck_bed_limit == 10000
 }
 
 test expect_ford2() {
@@ -42,14 +42,14 @@ test expect_ford2() {
       car_doors: [],
     }
   expect Ford { owner, wheels, remote_connect, .. } = initial_car
-  owner == #"2222222222" && ( wheels == 6 && remote_connect == #"" )
+  owner == #"2222222222" && wheels == 6 && remote_connect == #""
 }
 
 test expect_list1() {
   let initial_car =
     [5, 6, 7]
   expect [a, b, c] = initial_car
-  a == 5 && ( b == 6 && c == 7 )
+  a == 5 && b == 6 && c == 7
 }
 
 test expect_list2() {

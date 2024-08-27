@@ -6,13 +6,13 @@
     "plutusVersion": "v2",
     "compiler": {
       "name": "Aiken",
-      "version": "v1.0.31-alpha+6e4a16d"
+      "version": "v1.0.31-alpha+4003343"
     },
     "license": "Apache-2.0"
   },
   "validators": [
     {
-      "title": "foo.is_fourty_two",
+      "title": "foo.is_fourty_two.spend",
       "datum": {
         "title": "dat",
         "schema": {
@@ -25,8 +25,13 @@
           "$ref": "#/definitions/Data"
         }
       },
-      "compiledCode": "581c01000032222533300453330043375e00400629445280a4c26cacae69",
-      "hash": "8be8ae44ae022691acf356eae743ba402b8b7918f1e54092367ae0b7"
+      "compiledCode": "586d01000032323232323225333002323232323253330073370e900118041baa0011323253330093375e66e9520003300c0044bd70180698070010a5114a0601800260126ea800458c028c02c008c024004c024008c01c004c010dd50008a4c26cacae6955ceaab9e5740ae855d101",
+      "hash": "aa09f972cd22cf3bcbadb40dbe865d16dd4a50ff84022ef76a885d63"
+    },
+    {
+      "title": "foo.is_fourty_two.else",
+      "compiledCode": "586d01000032323232323225333002323232323253330073370e900118041baa0011323253330093375e66e9520003300c0044bd70180698070010a5114a0601800260126ea800458c028c02c008c024004c024008c01c004c010dd50008a4c26cacae6955ceaab9e5740ae855d101",
+      "hash": "aa09f972cd22cf3bcbadb40dbe865d16dd4a50ff84022ef76a885d63"
     }
   ],
   "definitions": {

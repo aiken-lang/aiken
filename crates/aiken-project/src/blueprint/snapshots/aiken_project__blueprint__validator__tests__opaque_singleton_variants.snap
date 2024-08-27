@@ -1,6 +1,6 @@
 ---
 source: crates/aiken-project/src/blueprint/validator.rs
-description: "Code:\n\npub opaque type Dict<key, value> {\n    inner: List<(ByteArray, value)>\n}\n\ntype UUID { UUID }\n\nvalidator {\n  fn opaque_singleton_variants(redeemer: Dict<UUID, Int>, ctx: Void) {\n    True\n  }\n}\n"
+description: "Code:\n\npub opaque type Dict<key, value> {\n    inner: List<(ByteArray, value)>\n}\n\npub type UUID { UUID }\n\nvalidator opaque_singleton_variants {\n  spend(datum: Option<Data>, redeemer: Dict<UUID, Int>, output_reference: Data, transaction: Data) {\n    True\n  }\n}\n"
 ---
 Schema {
     error: Error {
@@ -16,7 +16,7 @@ Schema {
                         tipo: RefCell {
                             value: Link {
                                 tipo: App {
-                                    public: false,
+                                    public: true,
                                     contains_opaque: false,
                                     module: "test_module",
                                     name: "UUID",
@@ -47,7 +47,7 @@ Schema {
             },
         ],
     },
-    location: 137..162,
+    location: 165..190,
     source_code: NamedSource {
         name: "",
         source: "<redacted>",

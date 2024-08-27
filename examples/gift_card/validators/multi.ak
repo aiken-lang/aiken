@@ -1,34 +1,31 @@
 use aiken/builtin
-use aiken/bytearray
-use aiken/dict
+use aiken/collection/dict
+use aiken/collection/list
 use aiken/hash.{blake2b_256}
-use aiken/list
-use aiken/transaction.{
-  InlineDatum, Input, Output, ScriptContext, Spend, Transaction,
+use aiken/primitive/bytearray
+use cardano/assets.{PolicyId}
+use cardano/credential.{Address, PaymentCredential, Script}
+use cardano/transaction.{
+  InlineDatum, Input, Output, OutputReference, Transaction,
 } as tx
-use aiken/transaction/credential.{Address, PaymentCredential, ScriptCredential}
-use aiken/transaction/value
 
-type Action {
+pub type Action {
   Mint(Int)
   Burn
 }
 
-type SpendTokenName =
+pub type SpendTokenName =
   ByteArray
 
-validator(creator: ByteArray) {
-  fn redeem(
+validator redeem(creator: ByteArray) {
+  spend(
     // Each spend input checks for a token name matching the datum being burned
-    datum: SpendTokenName,
+    datum: Option<SpendTokenName>,
     _r: Data,
-    ctx: ScriptContext,
+    own_ref: OutputReference,
+    transaction: Transaction,
   ) {
-    let ScriptContext { transaction, purpose } = ctx
-
     let Transaction { inputs, mint, .. } = transaction
-
-    expect Spend(own_ref) = purpose
 
     expect Some(own_input) =
       list.find(inputs, fn(input) { input.output_reference == own_ref })
@@ -38,48 +35,46 @@ validator(creator: ByteArray) {
       ..
     } = own_input
 
-    expect ScriptCredential(own_validator_hash) = payment_credential
+    expect Script(own_validator_hash) = payment_credential
+    expect Some(datum) = datum
 
     (
       mint
-        |> value.from_minted_value
-        |> value.quantity_of(own_validator_hash, datum)
+        |> assets.quantity_of(own_validator_hash, datum)
     ) == -1
   }
 
-  fn gift_card(rdmr: Action, ctx: ScriptContext) -> Bool {
-    // get values from transaction and purpose
-    let ScriptContext { transaction, purpose } = ctx
-
-    expect tx.Mint(policy_id) = purpose
-
+  mint(rdmr: Action, policy_id: PolicyId, transaction: Transaction) {
     let Transaction { inputs, mint, extra_signatories, outputs, .. } =
       transaction
 
     let minted_assets =
       mint
-        |> value.from_minted_value
-        |> value.tokens(policy_id)
+        |> assets.tokens(policy_id)
         |> dict.to_pairs()
 
     when rdmr is {
       Mint(total) -> {
         expect [input, ..] = inputs
+
         // Base is created from serializing a utxo ref being spent. Thus this guarantees a unique base
         let base = builtin.serialise_data(input.output_reference)
+
         // Create a list of expected token names
         let expected_minted_token_names =
           create_expected_minted_nfts(base, total, [])
+
         // Check contract creator is a signer of this tx
         let signature_check =
           list.any(extra_signatories, fn(n) { creator == n })
+
         // Support multiple gift card creation by allowing a
         // 'number of tokens minted' == 'outputs with datum being token name'
         signature_check && check_mint_and_outputs(
           minted_assets,
           outputs,
           expected_minted_token_names,
-          ScriptCredential(policy_id),
+          Script(policy_id),
         )
       }
       Burn ->
@@ -91,6 +86,10 @@ validator(creator: ByteArray) {
           },
         )
     }
+  }
+
+  else(_) {
+    fail
   }
 }
 

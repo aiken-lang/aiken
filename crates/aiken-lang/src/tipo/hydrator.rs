@@ -3,11 +3,7 @@ use super::{
     error::{Error, Warning},
     Type, TypeConstructor,
 };
-use crate::{
-    ast::Annotation,
-    builtins::{function, pair, tuple},
-    tipo::Span,
-};
+use crate::{ast::Annotation, tipo::Span};
 use std::{collections::HashMap, rc::Rc};
 
 /// The Hydrator takes an AST representing a type (i.e. a type annotation
@@ -201,7 +197,7 @@ impl Hydrator {
 
                 let ret = self.do_type_from_annotation(ret, environment, unbounds)?;
 
-                Ok(function(args, ret))
+                Ok(Type::function(args, ret))
             }
 
             Annotation::Var { name, location, .. } => match self.created_type_variables.get(name) {
@@ -244,13 +240,13 @@ impl Hydrator {
                     typed_elems.push(typed_elem)
                 }
 
-                Ok(tuple(typed_elems))
+                Ok(Type::tuple(typed_elems))
             }
             Annotation::Pair { fst, snd, .. } => {
                 let fst = self.do_type_from_annotation(fst, environment, unbounds)?;
                 let snd = self.do_type_from_annotation(snd, environment, unbounds)?;
 
-                Ok(pair(fst, snd))
+                Ok(Type::pair(fst, snd))
             }
         }?;
 

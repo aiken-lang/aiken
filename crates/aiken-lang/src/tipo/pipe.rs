@@ -5,7 +5,6 @@ use super::{
 };
 use crate::{
     ast::{AssignmentKind, CallArg, Pattern, Span, PIPE_VARIABLE},
-    builtins::function,
     expr::{TypedExpr, UntypedExpr},
 };
 use std::{ops::Deref, rc::Rc};
@@ -257,7 +256,7 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
             .environment
             .unify(
                 func.tipo(),
-                function(vec![self.argument_type.clone()], return_type.clone()),
+                Type::function(vec![self.argument_type.clone()], return_type.clone()),
                 func.location(),
                 if let Type::Fn { args, .. } = func.tipo().deref() {
                     if let Some(typ) = args.first() {

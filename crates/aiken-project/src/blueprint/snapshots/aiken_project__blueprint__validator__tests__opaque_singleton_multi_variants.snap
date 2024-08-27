@@ -1,6 +1,6 @@
 ---
 source: crates/aiken-project/src/blueprint/validator.rs
-description: "Code:\n\npub opaque type Rational {\n  numerator: Int,\n  denominator: Int,\n}\n\nvalidator {\n  fn opaque_singleton_multi_variants(redeemer: Rational, ctx: Void) {\n    True\n  }\n}\n"
+description: "Code:\n\npub opaque type Rational {\n  numerator: Int,\n  denominator: Int,\n}\n\nvalidator opaque_singleton_multi_variants {\n  spend(datum: Option<Data>, redeemer: Rational, oref: Data, transaction: Data) {\n    True\n  }\n}\n"
 ---
 Schema {
     error: Error {
@@ -16,7 +16,7 @@ Schema {
             },
         ],
     },
-    location: 117..135,
+    location: 141..159,
     source_code: NamedSource {
         name: "",
         source: "<redacted>",

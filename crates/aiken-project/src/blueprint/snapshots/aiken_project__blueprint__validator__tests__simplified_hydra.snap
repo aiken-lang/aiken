@@ -1,9 +1,9 @@
 ---
 source: crates/aiken-project/src/blueprint/validator.rs
-description: "Code:\n\n/// On-chain state\ntype State {\n    /// The contestation period as a number of seconds\n    contestationPeriod: ContestationPeriod,\n    /// List of public key hashes of all participants\n    parties: List<Party>,\n    utxoHash: Hash<Blake2b_256>,\n}\n\n/// A Hash digest for a given algorithm.\ntype Hash<alg> = ByteArray\n\ntype Blake2b_256 { Blake2b_256 }\n\n/// Whatever\ntype ContestationPeriod {\n  /// A positive, non-zero number of seconds.\n  ContestationPeriod(Int)\n}\n\ntype Party =\n  ByteArray\n\ntype Input {\n    CollectCom\n    Close\n    /// Abort a transaction\n    Abort\n}\n\nvalidator {\n  fn simplified_hydra(datum: State, redeemer: Input, ctx: Data) {\n    True\n  }\n}\n"
+description: "Code:\n\n/// On-chain state\npub type State {\n    /// The contestation period as a number of seconds\n    contestationPeriod: ContestationPeriod,\n    /// List of public key hashes of all participants\n    parties: List<Party>,\n    utxoHash: Hash<Blake2b_256>,\n}\n\n/// A Hash digest for a given algorithm.\npub type Hash<alg> = ByteArray\n\npub type Blake2b_256 { Blake2b_256 }\n\n/// Whatever\npub type ContestationPeriod {\n  /// A positive, non-zero number of seconds.\n  ContestationPeriod(Int)\n}\n\npub type Party =\n  ByteArray\n\npub type Input {\n    CollectCom\n    Close\n    /// Abort a transaction\n    Abort\n}\n\nvalidator simplified_hydra {\n  spend(datum: Option<State>, redeemer: Input, output_reference: Data, transaction: Data) {\n    True\n  }\n}\n"
 ---
 {
-  "title": "test_module.simplified_hydra",
+  "title": "test_module.simplified_hydra.spend",
   "datum": {
     "title": "datum",
     "schema": {

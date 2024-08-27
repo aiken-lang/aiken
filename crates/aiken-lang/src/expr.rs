@@ -1,18 +1,17 @@
-use crate::tipo::ValueConstructorVariant;
 pub(crate) use crate::{
     ast::{
-        self, Annotation, ArgBy, ArgName, AssignmentPattern, BinOp, Bls12_381Point,
+        self, Annotation, ArgBy, ArgName, AssignmentKind, AssignmentPattern, BinOp, Bls12_381Point,
         ByteArrayFormatPreference, CallArg, Curve, DataType, DataTypeKey, DefinitionLocation,
         Located, LogicalOpChainKind, ParsedCallArg, Pattern, RecordConstructorArg,
         RecordUpdateSpread, Span, TraceKind, TypedArg, TypedAssignmentKind, TypedClause,
-        TypedDataType, TypedIfBranch, TypedRecordUpdateArg, UnOp, UntypedArg,
+        TypedDataType, TypedIfBranch, TypedPattern, TypedRecordUpdateArg, UnOp, UntypedArg,
         UntypedAssignmentKind, UntypedClause, UntypedIfBranch, UntypedRecordUpdateArg,
     },
-    builtins::void,
     parser::token::Base,
     tipo::{
         check_replaceable_opaque_type, convert_opaque_type, lookup_data_type_by_tipo,
         ModuleValueConstructor, PatternConstructor, Type, TypeVar, ValueConstructor,
+        ValueConstructorVariant,
     },
 };
 use indexmap::IndexMap;
@@ -201,6 +200,52 @@ impl<T> From<Vec1Ref<T>> for Vec1<T> {
 }
 
 impl TypedExpr {
+    pub fn sequence(exprs: &[TypedExpr]) -> Self {
+        TypedExpr::Sequence {
+            location: Span::empty(),
+            expressions: exprs.to_vec(),
+        }
+    }
+
+    pub fn let_(value: Self, pattern: TypedPattern, tipo: Rc<Type>) -> Self {
+        TypedExpr::Assignment {
+            location: Span::empty(),
+            tipo: tipo.clone(),
+            value: value.into(),
+            pattern,
+            kind: AssignmentKind::let_(),
+        }
+    }
+
+    // Create an expect assignment, unless the target type is `Data`; then fallback to a let.
+    pub fn flexible_expect(value: Self, pattern: TypedPattern, tipo: Rc<Type>) -> Self {
+        TypedExpr::Assignment {
+            location: Span::empty(),
+            tipo: tipo.clone(),
+            value: value.into(),
+            pattern,
+            kind: if tipo.is_data() {
+                AssignmentKind::let_()
+            } else {
+                AssignmentKind::expect()
+            },
+        }
+    }
+
+    pub fn local_var(name: &str, tipo: Rc<Type>) -> Self {
+        TypedExpr::Var {
+            location: Span::empty(),
+            constructor: ValueConstructor {
+                public: true,
+                variant: ValueConstructorVariant::LocalVariable {
+                    location: Span::empty(),
+                },
+                tipo: tipo.clone(),
+            },
+            name: name.to_string(),
+        }
+    }
+
     pub fn tipo(&self) -> Rc<Type> {
         match self {
             Self::Var { constructor, .. } => constructor.tipo.clone(),
@@ -224,9 +269,10 @@ impl TypedExpr {
             | Self::RecordAccess { tipo, .. }
             | Self::RecordUpdate { tipo, .. }
             | Self::CurvePoint { tipo, .. } => tipo.clone(),
-            Self::Pipeline { expressions, .. } | Self::Sequence { expressions, .. } => {
-                expressions.last().map(TypedExpr::tipo).unwrap_or_else(void)
-            }
+            Self::Pipeline { expressions, .. } | Self::Sequence { expressions, .. } => expressions
+                .last()
+                .map(TypedExpr::tipo)
+                .unwrap_or_else(Type::void),
         }
     }
 
@@ -239,6 +285,10 @@ impl TypedExpr {
                 | Self::String { .. }
                 | Self::ByteArray { .. }
         )
+    }
+
+    pub fn is_error_term(&self) -> bool {
+        matches!(self, Self::ErrorTerm { .. })
     }
 
     /// Returns `true` if the typed expr is [`Assignment`].
@@ -487,7 +537,7 @@ impl TypedExpr {
                     module: String::new(),
                     constructors_count: 1,
                 },
-                tipo: void(),
+                tipo: Type::void(),
             },
             location,
         }

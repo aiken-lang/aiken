@@ -1,7 +1,11 @@
-use aiken/transaction.{ScriptContext}
+use cardano/transaction.{Transaction}
 
-validator {
-  fn is_fourty_two(dat, rdm, _ctx: ScriptContext) -> Bool {
-    rdm == dat && #"68656c6c6f20776f726c64" == #"68656c6c6f20776f726c64"
+validator is_fourty_two {
+  spend(dat, rdm, _oref, _ctx: Transaction) {
+    Some(rdm) == dat && #"68656c6c6f20776f726c64" == #"68656c6c6f20776f726c64"
+  }
+
+  else(_) {
+    fail
   }
 }

@@ -3,5 +3,5 @@ version = "0.0.0"
 
 [[dependencies]]
 name = 'aiken-lang/stdlib'
-version = 'main'
+version = 'v2'
 source = 'github'

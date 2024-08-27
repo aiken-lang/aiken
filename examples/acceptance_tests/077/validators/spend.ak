@@ -1,23 +1,19 @@
-use aiken/dict
-use aiken/list.{find, foldr}
-use aiken/transaction.{Input,
-  OutputReference, ScriptContext, Spend, Transaction} as tx
-use aiken/transaction/value.{add, zero}
+use aiken/collection/dict
+use aiken/collection/list.{find, foldr}
+use cardano/assets.{PolicyId, add, zero}
+use cardano/transaction.{Input, OutputReference, Transaction} as tx
 
-type Action {
+pub type Action {
   Mint
   Burn
 }
 
-validator(token_name: ByteArray, utxo_ref: OutputReference) {
-  fn gift_card(rdmr: Action, ctx: ScriptContext) -> Bool {
-    let ScriptContext { transaction, purpose } = ctx
-    expect tx.Mint(policy_id) = purpose
+validator foo(token_name: ByteArray, utxo_ref: OutputReference) {
+  mint(rdmr: Action, policy_id: PolicyId, transaction: Transaction) {
     let Transaction { inputs, mint, .. } = transaction
     expect [Pair(asset_name, amount)] =
       mint
-        |> value.from_minted_value
-        |> value.tokens(policy_id)
+        |> assets.tokens(policy_id)
         |> dict.to_pairs()
     when rdmr is {
       Mint -> {
@@ -27,5 +23,9 @@ validator(token_name: ByteArray, utxo_ref: OutputReference) {
       }
       Burn -> todo @"burn"
     }
+  }
+
+  else(_) {
+    fail
   }
 }

@@ -1,27 +1,43 @@
 ---
 source: crates/aiken-lang/src/tests/format.rs
-description: "Code:\n\nvalidator(Foo { a, b, .. }) {\n    fn foo() { todo }\n}\n\nvalidator([Bar] : List<Bar>) {\n    fn bar() { todo }\n}\n\nvalidator((Baz, Baz) as x) {\n    fn baz() { todo }\n}\n\nvalidator((fst, snd) as x: Pair<Int, Int>) {\n    fn fiz() { todo }\n}\n"
+description: "Code:\n\nvalidator foo(Foo { a, b, .. }) {\n    spend() { todo }\n}\n\nvalidator foo([Bar] : List<Bar>) {\n    spend() { todo }\n}\n\nvalidator foo((Baz, Baz) as x) {\n    mint() { todo }\n}\n\nvalidator fiz((fst, snd) as x: Pair<Int, Int>) {\n    spend() { todo }\n}\n"
 ---
-validator(Foo { a, b, .. }) {
-  fn foo() {
+validator foo(Foo { a, b, .. }) {
+  spend() {
     todo
+  }
+
+  else(_) {
+    fail
   }
 }
 
-validator([Bar]: List<Bar>) {
-  fn bar() {
+validator foo([Bar]: List<Bar>) {
+  spend() {
     todo
+  }
+
+  else(_) {
+    fail
   }
 }
 
-validator((Baz, Baz) as x) {
-  fn baz() {
+validator foo((Baz, Baz) as x) {
+  mint() {
     todo
+  }
+
+  else(_) {
+    fail
   }
 }
 
-validator((fst, snd) as x: Pair<Int, Int>) {
-  fn fiz() {
+validator fiz((fst, snd) as x: Pair<Int, Int>) {
+  spend() {
     todo
+  }
+
+  else(_) {
+    fail
   }
 }

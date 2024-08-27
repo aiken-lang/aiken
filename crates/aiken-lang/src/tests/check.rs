@@ -111,8 +111,8 @@ fn bls12_381_ml_result_in_data_type() {
 #[test]
 fn validator_illegal_return_type() {
     let source_code = r#"
-      validator {
-        fn foo(d, r, c) {
+      validator foo {
+        spend(d, r, c) -> Int {
           1
         }
       }
@@ -140,8 +140,8 @@ fn implicitly_discard_void() {
 #[test]
 fn validator_illegal_arity() {
     let source_code = r#"
-      validator {
-        fn foo(c) {
+      validator foo {
+        mint(c) {
           True
         }
       }
@@ -318,19 +318,17 @@ fn mark_constructors_as_used_via_field_access() {
         bar: Int,
       }
 
-      validator {
-        fn foo(d: Datum, _r, _c) {
-          when d is {
-            D0(params) -> params.foo == 1
-            D1(_params) -> False
-          }
+      fn spend(d: Datum, _r, _c) {
+        when d is {
+          D0(params) -> params.foo == 1
+          D1(_params) -> False
         }
       }
     "#;
 
-    let (warnings, _) = check_validator(parse(source_code)).unwrap();
+    let (warnings, _) = check(parse(source_code)).unwrap();
 
-    assert_eq!(warnings.len(), 1)
+    assert_eq!(warnings.len(), 2)
 }
 
 #[test]
@@ -359,8 +357,8 @@ fn expect_multi_patterns() {
 #[test]
 fn validator_correct_form() {
     let source_code = r#"
-      validator {
-        fn foo(d, r, c) {
+      validator foo {
+        spend(d: Option<Data>, r, oref, c) {
           True
         }
       }
@@ -372,8 +370,8 @@ fn validator_correct_form() {
 #[test]
 fn validator_in_lib_warning() {
     let source_code = r#"
-      validator {
-        fn foo(c) {
+      validator foo {
+        spend(c) {
           True
         }
       }
@@ -390,12 +388,12 @@ fn validator_in_lib_warning() {
 #[test]
 fn multi_validator() {
     let source_code = r#"
-      validator(foo: ByteArray, bar: Int) {
-        fn spend(_d, _r, _c) {
+      validator foo(foo: ByteArray, bar: Int) {
+        spend(_d: Option<Data>, _r, _oref, _c) {
           foo == #"aabb"
         }
 
-        fn mint(_r, _c) {
+        mint(_r, _p, _c) {
           bar == 0
         }
       }
@@ -409,12 +407,12 @@ fn multi_validator() {
 #[test]
 fn multi_validator_warning() {
     let source_code = r#"
-      validator(foo: ByteArray, bar: Int) {
-        fn spend(_d, _r, _c) {
+      validator foo(foo: ByteArray, bar: Int) {
+        spend(_d: Option<Data>, _r, _oref, _c) {
           foo == #"aabb"
         }
 
-        fn mint(_r, _c) {
+        mint(_r, _p, _c) {
           True
         }
       }
@@ -459,8 +457,8 @@ fn exhaustiveness_simple() {
 #[test]
 fn validator_args_no_annotation() {
     let source_code = r#"
-      validator(d) {
-        fn foo(a, b, c) {
+      validator hello(d) {
+        spend(a: Option<Data>, b, oref, c) {
           True
         }
       }
@@ -477,9 +475,13 @@ fn validator_args_no_annotation() {
             assert!(param.tipo.is_data());
         });
 
-        validator.fun.arguments.iter().for_each(|arg| {
-            assert!(arg.tipo.is_data());
-        })
+        validator.handlers[0]
+            .arguments
+            .iter()
+            .skip(1)
+            .for_each(|arg| {
+                assert!(arg.tipo.is_data());
+            })
     })
 }
 
@@ -2472,9 +2474,11 @@ fn validator_private_type_leak() {
           bar: Int,
         }
 
-        validator {
-          pub fn bar(datum: Datum, redeemer: Redeemer, _ctx) {
-            datum.foo == redeemer.bar
+        validator bar {
+          spend(datum: Option<Datum>, redeemer: Redeemer, _oref, _ctx) {
+            expect Some(d) = datum
+
+            d.foo == redeemer.bar
           }
         }
     "#;
@@ -2496,30 +2500,11 @@ fn validator_public() {
           bar: Int,
         }
 
-        validator {
-          pub fn bar(datum: Datum, redeemer: Redeemer, _ctx) {
-            datum.foo == redeemer.bar
-          }
-        }
-    "#;
+        validator bar {
+          spend(datum: Option<Datum>, redeemer: Redeemer, _oref, _ctx) {
+            expect Some(d) = datum
 
-    assert!(check_validator(parse(source_code)).is_ok())
-}
-
-#[test]
-fn validator_private_everything() {
-    let source_code = r#"
-        type Datum {
-          foo: Int,
-        }
-
-        type Redeemer {
-          bar: Int,
-        }
-
-        validator {
-          fn bar(datum: Datum, redeemer: Redeemer, _ctx) {
-            datum.foo == redeemer.bar
+            d.foo == redeemer.bar
           }
         }
     "#;
@@ -3063,5 +3048,175 @@ fn test_return_illegal() {
     assert!(matches!(
         check(parse(source_code)),
         Err((_, Error::IllegalTestType { .. }))
+    ))
+}
+
+#[test]
+fn validator_by_name() {
+    let source_code = r#"
+        validator foo {
+            mint(_redeemer: Data, policy_id: ByteArray, _self: Data) {
+                policy_id == "foo"
+            }
+        }
+
+        test test_1() {
+            foo.mint(Void, "foo", Void)
+        }
+    "#;
+
+    assert!(check_validator(parse(source_code)).is_ok())
+}
+
+#[test]
+fn validator_by_name_unknown_handler() {
+    let source_code = r#"
+        validator foo {
+            mint(_redeemer: Data, policy_id: ByteArray, _self: Data) {
+                policy_id == "foo"
+            }
+        }
+
+        test foo() {
+            foo.bar(Void, "foo", Void)
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::UnknownValidatorHandler { .. }))
+    ))
+}
+
+#[test]
+fn validator_by_name_module_duplicate() {
+    let source_code = r#"
+        use aiken/builtin
+
+        validator builtin {
+            mint(_redeemer: Data, _policy_id: ByteArray, _self: Data) {
+                True
+            }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::DuplicateName { .. }))
+    ))
+}
+
+#[test]
+fn validator_by_name_validator_duplicate_1() {
+    let source_code = r#"
+        validator foo {
+            mint(_redeemer: Data, _policy_id: ByteArray, _self: Data) {
+                True
+            }
+        }
+
+        validator foo {
+            mint(_redeemer: Data, _policy_id: ByteArray, _self: Data) {
+                True
+            }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::DuplicateName { .. }))
+    ))
+}
+
+#[test]
+fn validator_by_name_validator_duplicate_2() {
+    let source_code = r#"
+        validator foo {
+            mint(_redeemer: Data, _policy_id: ByteArray, _self: Data) {
+                True
+            }
+
+            mint(_redeemer: Data, _policy_id: ByteArray, _self: Data) {
+                True
+            }
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::DuplicateName { .. }))
+    ))
+}
+
+#[test]
+fn exhaustive_handlers() {
+    let source_code = r#"
+            validator foo {
+              mint(_redeemer, _policy_id, _self) {
+                True
+              }
+
+              spend(_datum, _redeemer, _policy_id, _self) {
+                True
+              }
+
+              withdraw(_redeemer, _account, _self) {
+                True
+              }
+
+              publish(_redeemer, _certificate, _self) {
+                True
+              }
+
+              vote(_redeemer, _voter, _self) {
+                True
+              }
+
+              propose(_redeemer, _proposal, _self) {
+                True
+              }
+            }
+        "#;
+
+    assert!(check_validator(parse(source_code)).is_ok())
+}
+
+#[test]
+fn extraneous_fallback_on_exhaustive_handlers() {
+    let source_code = r#"
+            validator foo {
+              mint(_redeemer, _policy_id, _self) {
+                True
+              }
+
+              spend(_datum, _redeemer, _policy_id, _self) {
+                True
+              }
+
+              withdraw(_redeemer, _account, _self) {
+                True
+              }
+
+              publish(_redeemer, _certificate, _self) {
+                True
+              }
+
+              vote(_redeemer, _voter, _self) {
+                True
+              }
+
+              propose(_redeemer, _proposal, _self) {
+                True
+              }
+
+              else (_) -> Bool {
+                fail
+              }
+            }
+        "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::UnexpectedValidatorFallback { .. }))
     ))
 }

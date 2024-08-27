@@ -3,10 +3,10 @@ use crate::{
         Annotation, ArgBy, ArgName, ArgVia, AssignmentKind, AssignmentPattern, BinOp,
         ByteArrayFormatPreference, CallArg, Constant, CurveType, DataType, Definition, Function,
         LogicalOpChainKind, ModuleConstant, OnTestFailure, Pattern, RecordConstructor,
-        RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg, UnOp,
-        UnqualifiedImport, UntypedArg, UntypedArgVia, UntypedAssignmentKind, UntypedClause,
-        UntypedDefinition, UntypedFunction, UntypedIfBranch, UntypedModule, UntypedPattern,
-        UntypedRecordUpdateArg, Use, Validator, CAPTURE_VARIABLE,
+        RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg,
+        TypedValidator, UnOp, UnqualifiedImport, UntypedArg, UntypedArgVia, UntypedAssignmentKind,
+        UntypedClause, UntypedDefinition, UntypedFunction, UntypedIfBranch, UntypedModule,
+        UntypedPattern, UntypedRecordUpdateArg, Use, Validator, CAPTURE_VARIABLE,
     },
     docvec,
     expr::{FnStyle, UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
@@ -232,15 +232,24 @@ impl<'comments> Formatter<'comments> {
                 return_annotation,
                 end_position,
                 ..
-            }) => self.definition_fn(public, name, args, return_annotation, body, *end_position),
+            }) => self.definition_fn(
+                public,
+                name,
+                args,
+                return_annotation,
+                body,
+                *end_position,
+                false,
+            ),
 
             Definition::Validator(Validator {
                 end_position,
-                fun,
-                other_fun,
+                handlers,
+                fallback,
                 params,
+                name,
                 ..
-            }) => self.definition_validator(params, fun, other_fun, *end_position),
+            }) => self.definition_validator(name, params, handlers, fallback, *end_position),
 
             Definition::Test(Function {
                 name,
@@ -512,16 +521,29 @@ impl<'comments> Formatter<'comments> {
         return_annotation: &'a Option<Annotation>,
         body: &'a UntypedExpr,
         end_location: usize,
+        is_validator: bool,
     ) -> Document<'a> {
         // Fn name and args
-        let head = pub_(*public)
-            .append("fn ")
-            .append(name)
-            .append(wrap_args(args.iter().map(|e| (self.fn_arg(e), false))));
+        let head = if !is_validator {
+            pub_(*public)
+                .append("fn ")
+                .append(name)
+                .append(wrap_args(args.iter().map(|e| (self.fn_arg(e), false))))
+        } else {
+            name.to_doc()
+                .append(wrap_args(args.iter().map(|e| (self.fn_arg(e), false))))
+        };
 
         // Add return annotation
         let head = match return_annotation {
-            Some(anno) => head.append(" -> ").append(self.annotation(anno)),
+            Some(anno) => {
+                let is_bool = anno.is_logically_equal(&Annotation::boolean(Span::empty()));
+                if is_validator && is_bool {
+                    head
+                } else {
+                    head.append(" -> ").append(self.annotation(anno))
+                }
+            }
             None => head,
         }
         .group();
@@ -581,57 +603,73 @@ impl<'comments> Formatter<'comments> {
 
     fn definition_validator<'a>(
         &mut self,
+        name: &'a str,
         params: &'a [UntypedArg],
-        fun: &'a UntypedFunction,
-        other_fun: &'a Option<UntypedFunction>,
+        handlers: &'a [UntypedFunction],
+        fallback: &'a UntypedFunction,
         end_position: usize,
     ) -> Document<'a> {
-        // validator(params)
-        let v_head = "validator".to_doc().append(if !params.is_empty() {
-            wrap_args(params.iter().map(|e| (self.fn_arg(e), false)))
-        } else {
-            nil()
-        });
+        // validator name(params)
+        let v_head = "validator"
+            .to_doc()
+            .append(" ")
+            .append(name)
+            .append(if !params.is_empty() {
+                wrap_args(params.iter().map(|e| (self.fn_arg(e), false)))
+            } else {
+                nil()
+            });
 
-        let fun_comments = self.pop_comments(fun.location.start);
-        let fun_doc_comments = self.doc_comments(fun.location.start);
-        let first_fn = self
-            .definition_fn(
-                &fun.public,
-                &fun.name,
-                &fun.arguments,
-                &fun.return_annotation,
-                &fun.body,
-                fun.end_position,
-            )
-            .group();
-        let first_fn = commented(fun_doc_comments.append(first_fn).group(), fun_comments);
+        let mut handler_docs = vec![];
 
-        let other_fn = match other_fun {
-            None => nil(),
-            Some(other) => {
-                let other_comments = self.pop_comments(other.location.start);
-                let other_doc_comments = self.doc_comments(other.location.start);
+        for handler in handlers.iter() {
+            let fun_comments = self.pop_comments(handler.location.start);
+            let fun_doc_comments = self.doc_comments(handler.location.start);
 
-                let other_fn = self
-                    .definition_fn(
-                        &other.public,
-                        &other.name,
-                        &other.arguments,
-                        &other.return_annotation,
-                        &other.body,
-                        other.end_position,
-                    )
-                    .group();
+            let first_fn = self
+                .definition_fn(
+                    &handler.public,
+                    &handler.name,
+                    &handler.arguments,
+                    &handler.return_annotation,
+                    &handler.body,
+                    handler.end_position,
+                    true,
+                )
+                .group();
 
-                commented(other_doc_comments.append(other_fn).group(), other_comments)
-            }
-        };
+            let first_fn = commented(fun_doc_comments.append(first_fn).group(), fun_comments);
 
-        let v_body = line()
-            .append(first_fn)
-            .append(if other_fun.is_some() { lines(2) } else { nil() })
-            .append(other_fn);
+            handler_docs.push(first_fn);
+        }
+
+        let is_exhaustive = handlers.len() >= TypedValidator::available_handler_names().len() - 1;
+
+        if !is_exhaustive || !fallback.is_default_fallback() {
+            let fallback_comments = self.pop_comments(fallback.location.start);
+            let fallback_doc_comments = self.doc_comments(fallback.location.start);
+
+            let fallback_fn = self
+                .definition_fn(
+                    &fallback.public,
+                    &fallback.name,
+                    &fallback.arguments,
+                    &fallback.return_annotation,
+                    &fallback.body,
+                    fallback.end_position,
+                    true,
+                )
+                .group();
+
+            let fallback_fn = commented(
+                fallback_doc_comments.append(fallback_fn).group(),
+                fallback_comments,
+            );
+
+            handler_docs.push(fallback_fn);
+        }
+
+        let v_body = line().append(join(handler_docs, lines(2)));
 
         let v_body = match printed_comments(self.pop_comments(end_position), false) {
             Some(comments) => v_body.append(lines(2)).append(comments).nest(INDENT),

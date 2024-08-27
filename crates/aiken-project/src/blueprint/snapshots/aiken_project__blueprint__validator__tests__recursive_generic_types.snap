@@ -1,9 +1,9 @@
 ---
 source: crates/aiken-project/src/blueprint/validator.rs
-description: "Code:\n\npub type LinkedList<a> {\n  Cons(a, LinkedList<a>)\n  Nil\n}\n\npub type Foo {\n    Foo {\n        foo: LinkedList<Bool>,\n    }\n    Bar {\n        bar: Int,\n        baz: (ByteArray, List<LinkedList<Int>>)\n    }\n}\n\nvalidator {\n  fn recursive_generic_types(datum: Foo, redeemer: LinkedList<Int>, ctx: Void) {\n    True\n  }\n}\n"
+description: "Code:\n\npub type LinkedList<a> {\n  Cons(a, LinkedList<a>)\n  Nil\n}\n\npub type Foo {\n    Foo {\n        foo: LinkedList<Bool>,\n    }\n    Bar {\n        bar: Int,\n        baz: (ByteArray, List<LinkedList<Int>>)\n    }\n}\n\nvalidator recursive_generic_types {\n  spend(datum: Option<Foo>, redeemer: LinkedList<Int>, output_reference: Data, transaction: Data) {\n    True\n  }\n}\n"
 ---
 {
-  "title": "test_module.recursive_generic_types",
+  "title": "test_module.recursive_generic_types.spend",
   "datum": {
     "title": "datum",
     "schema": {

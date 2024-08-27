@@ -1,50 +1,51 @@
-use aiken/dict
-use aiken/list
-use aiken/transaction.{OutputReference, ScriptContext, Transaction} as tx
-use aiken/transaction/value
+use aiken/collection/dict
+use aiken/collection/list
+use cardano/assets.{PolicyId}
+use cardano/transaction.{OutputReference, Transaction} as tx
 
-type Action {
+pub type Action {
   Mint
   Burn
 }
 
-validator(token_name: ByteArray, utxo_ref: OutputReference) {
-  fn gift_card(rdmr: Action, ctx: ScriptContext) -> Bool {
-    let ScriptContext { transaction, purpose } = ctx
-
-    expect tx.Mint(policy_id) = purpose
-
+validator gift_card(token_name: ByteArray, utxo_ref: OutputReference) {
+  mint(rdmr: Action, policy_id: PolicyId, transaction: Transaction) {
     let Transaction { inputs, mint, .. } = transaction
 
     expect [Pair(asset_name, amount)] =
       mint
-        |> value.from_minted_value
-        |> value.tokens(policy_id)
+        |> assets.tokens(policy_id)
         |> dict.to_pairs()
 
     when rdmr is {
       Mint -> {
         expect Some(_input) =
           list.find(inputs, fn(input) { input.output_reference == utxo_ref })
+
         amount == 1 && asset_name == token_name
       }
       Burn -> amount == -1 && asset_name == token_name
     }
   }
+
+  else(_) {
+    fail
+  }
 }
 
-validator(token_name: ByteArray, policy_id: ByteArray) {
-  fn redeem(_d: Data, _r: Data, ctx: ScriptContext) -> Bool {
-    let ScriptContext { transaction, .. } = ctx
-
+validator redeem(token_name: ByteArray, policy_id: ByteArray) {
+  spend(_d, _r, _o_ref: Data, transaction: Transaction) {
     let Transaction { mint, .. } = transaction
 
     expect [Pair(asset_name, amount)] =
       mint
-        |> value.from_minted_value
-        |> value.tokens(policy_id)
+        |> assets.tokens(policy_id)
         |> dict.to_pairs()
 
     amount == -1 && asset_name == token_name
+  }
+
+  else(_) {
+    fail
   }
 }

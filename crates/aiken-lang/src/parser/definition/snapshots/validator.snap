@@ -1,68 +1,112 @@
 ---
 source: crates/aiken-lang/src/parser/definition/validator.rs
-description: "Code:\n\nvalidator {\n  fn foo(datum, rdmr, ctx) {\n    True\n  }\n}\n"
+description: "Code:\n\nvalidator hello {\n  spend (datum, rdmr, ctx) {\n    True\n  }\n}\n"
 ---
 Validator(
     Validator {
         doc: None,
-        end_position: 54,
-        fun: Function {
+        end_position: 60,
+        handlers: [
+            Function {
+                arguments: [
+                    UntypedArg {
+                        by: ByName(
+                            Named {
+                                name: "datum",
+                                label: "datum",
+                                location: 27..32,
+                            },
+                        ),
+                        location: 27..32,
+                        annotation: None,
+                        doc: None,
+                        is_validator_param: false,
+                    },
+                    UntypedArg {
+                        by: ByName(
+                            Named {
+                                name: "rdmr",
+                                label: "rdmr",
+                                location: 34..38,
+                            },
+                        ),
+                        location: 34..38,
+                        annotation: None,
+                        doc: None,
+                        is_validator_param: false,
+                    },
+                    UntypedArg {
+                        by: ByName(
+                            Named {
+                                name: "ctx",
+                                label: "ctx",
+                                location: 40..43,
+                            },
+                        ),
+                        location: 40..43,
+                        annotation: None,
+                        doc: None,
+                        is_validator_param: false,
+                    },
+                ],
+                body: Var {
+                    location: 51..55,
+                    name: "True",
+                },
+                doc: None,
+                location: 20..44,
+                name: "spend",
+                public: true,
+                return_annotation: Some(
+                    Constructor {
+                        location: 26..44,
+                        module: None,
+                        name: "Bool",
+                        arguments: [],
+                    },
+                ),
+                return_type: (),
+                end_position: 58,
+                on_test_failure: FailImmediately,
+            },
+        ],
+        location: 0..9,
+        name: "hello",
+        params: [],
+        fallback: Function {
             arguments: [
                 UntypedArg {
                     by: ByName(
-                        Named {
-                            name: "datum",
-                            label: "datum",
-                            location: 21..26,
+                        Discarded {
+                            name: "_",
+                            label: "_",
+                            location: 0..9,
                         },
                     ),
-                    location: 21..26,
-                    annotation: None,
-                    doc: None,
-                    is_validator_param: false,
-                },
-                UntypedArg {
-                    by: ByName(
-                        Named {
-                            name: "rdmr",
-                            label: "rdmr",
-                            location: 28..32,
-                        },
-                    ),
-                    location: 28..32,
-                    annotation: None,
-                    doc: None,
-                    is_validator_param: false,
-                },
-                UntypedArg {
-                    by: ByName(
-                        Named {
-                            name: "ctx",
-                            label: "ctx",
-                            location: 34..37,
-                        },
-                    ),
-                    location: 34..37,
+                    location: 0..9,
                     annotation: None,
                     doc: None,
                     is_validator_param: false,
                 },
             ],
-            body: Var {
-                location: 45..49,
-                name: "True",
+            body: ErrorTerm {
+                location: 0..9,
             },
             doc: None,
-            location: 14..38,
-            name: "foo",
-            public: false,
-            return_annotation: None,
+            location: 0..9,
+            name: "else",
+            public: true,
+            return_annotation: Some(
+                Constructor {
+                    location: 0..9,
+                    module: None,
+                    name: "Bool",
+                    arguments: [],
+                },
+            ),
             return_type: (),
-            end_position: 52,
+            end_position: 8,
             on_test_failure: FailImmediately,
         },
-        other_fun: None,
-        location: 0..9,
-        params: [],
     },
 )

@@ -8,6 +8,7 @@ use crate::{
     pretty::Documentable,
 };
 use indoc::formatdoc;
+use itertools::Itertools;
 use miette::{Diagnostic, LabeledSpan};
 use ordinal::Ordinal;
 use owo_colors::{
@@ -489,15 +490,21 @@ If you really meant to return that last expression, try to replace it with the f
         name: String,
     },
 
-    #[error("I found a multi-validator where both take the same number of arguments.\n")]
-    #[diagnostic(code("illegal::multi_validator"))]
-    #[diagnostic(help("Multi-validators cannot take the same number of arguments. One must take 3 arguments\nand the other must take 2 arguments. Both of these take {} arguments.", count.to_string().purple()))]
-    MultiValidatorEqualArgs {
-        #[label("{} here", count)]
+    #[error(
+        "I stumbled upon an invalid (non-local) clause guard '{}'.\n",
+        name.if_supports_color(Stdout, |s| s.purple())
+    )]
+    #[diagnostic(url(
+        "https://aiken-lang.org/language-tour/control-flow#checking-equality-and-ordering-in-patterns"
+    ))]
+    #[diagnostic(code("illegal::clause_guard"))]
+    #[diagnostic(help(
+        "There are some conditions regarding what can be used in a guard. Values must be either local to the function, or defined as module constants. You can't use functions or records in there."
+    ))]
+    NonLocalClauseGuardVariable {
+        #[label]
         location: Span,
-        #[label("and {} here", count)]
-        other_location: Span,
-        count: usize,
+        name: String,
     },
 
     #[error("I tripped over an attempt to access elements on something that isn't indexable.\n")]
@@ -1021,7 +1028,8 @@ The best thing to do from here is to remove it."#))]
     ))]
     IncorrectValidatorArity {
         count: u32,
-        #[label("{} arguments", if *count < 2 { "not enough" } else { "too many" })]
+        expected: u32,
+        #[label("{} arguments", if count < expected { "not enough" } else { "too many" })]
         location: Span,
     },
 
@@ -1063,6 +1071,46 @@ The best thing to do from here is to remove it."#))]
         function: UntypedFunction,
         location: Span,
     },
+
+    #[error("I found a validator handler referring to an unknown purpose.\n")]
+    #[diagnostic(code("unknown::purpose"))]
+    #[diagnostic(help(
+        "Handler must be named after a known purpose. Here is a list of available purposes:\n{}",
+        available_purposes
+          .iter()
+          .map(|p| format!("-> {}", p.if_supports_color(Stdout, |s| s.green())))
+          .join("\n")
+    ))]
+    UnknownPurpose {
+        #[label("unknown purpose")]
+        location: Span,
+        available_purposes: Vec<String>,
+    },
+
+    #[error("I could not find an appropriate handler in the validator definition\n")]
+    #[diagnostic(code("unknown::handler"))]
+    #[diagnostic(help(
+        "When referring to a validator handler via record access, you must refer to one of the declared handlers:\n{}",
+        available_handlers
+          .iter()
+          .map(|p| format!("-> {}", p.if_supports_color(Stdout, |s| s.green())))
+          .join("\n")
+    ))]
+    UnknownValidatorHandler {
+        #[label("unknown validator handler")]
+        location: Span,
+        available_handlers: Vec<String>,
+    },
+
+    #[error("I caught an extraneous fallback handler in an already exhaustive validator\n")]
+    #[diagnostic(code("extraneous::fallback"))]
+    #[diagnostic(help(
+        "Validator handlers must be exhaustive and either cover all purposes, or provide a fallback handler. Here, you have successfully covered all script purposes with your handler, but left an extraneous fallback branch. I cannot let that happen, but removing it for you would probably be deemed rude. So please, remove the fallback."
+    ))]
+    UnexpectedValidatorFallback {
+        #[label("redundant fallback handler")]
+        fallback: Span,
+    },
 }
 
 impl ExtraData for Error {
@@ -1093,7 +1141,7 @@ impl ExtraData for Error {
             | Error::LastExpressionIsAssignment { .. }
             | Error::LogicalOpChainMissingExpr { .. }
             | Error::MissingVarInAlternativePattern { .. }
-            | Error::MultiValidatorEqualArgs { .. }
+            | Error::NonLocalClauseGuardVariable { .. }
             | Error::NotIndexable { .. }
             | Error::NotExhaustivePatternMatch { .. }
             | Error::NotFn { .. }
@@ -1122,6 +1170,9 @@ impl ExtraData for Error {
             | Error::UnexpectedMultiPatternAssignment { .. }
             | Error::ExpectOnOpaqueType { .. }
             | Error::ValidatorMustReturnBool { .. }
+            | Error::UnknownPurpose { .. }
+            | Error::UnknownValidatorHandler { .. }
+            | Error::UnexpectedValidatorFallback { .. }
             | Error::MustInferFirst { .. } => None,
 
             Error::UnknownType { name, .. }

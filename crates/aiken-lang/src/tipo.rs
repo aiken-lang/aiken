@@ -1,10 +1,9 @@
 use self::{environment::Environment, pretty::Printer};
 use crate::{
     ast::{
-        Annotation, Constant, DataType, DataTypeKey, DefinitionLocation, ModuleKind, Span,
-        TypedDataType,
+        well_known, Annotation, Constant, DataType, DataTypeKey, DefinitionLocation, ModuleKind,
+        Span, TypedDataType,
     },
-    builtins::{G1_ELEMENT, G2_ELEMENT, MILLER_LOOP_RESULT},
     tipo::fields::FieldMap,
 };
 use indexmap::IndexMap;
@@ -22,6 +21,8 @@ mod infer;
 mod pattern;
 mod pipe;
 pub mod pretty;
+
+pub use environment::collapse_links;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TypeAliasAnnotation {
@@ -304,7 +305,7 @@ impl Type {
 
     pub fn is_int(&self) -> bool {
         match self {
-            Self::App { module, name, .. } if "Int" == name && module.is_empty() => true,
+            Self::App { module, name, .. } if well_known::INT == name && module.is_empty() => true,
             Self::Var { tipo, .. } => tipo.borrow().is_int(),
             _ => false,
         }
@@ -312,7 +313,11 @@ impl Type {
 
     pub fn is_bytearray(&self) -> bool {
         match self {
-            Self::App { module, name, .. } if "ByteArray" == name && module.is_empty() => true,
+            Self::App { module, name, .. }
+                if well_known::BYTE_ARRAY == name && module.is_empty() =>
+            {
+                true
+            }
             Self::Var { tipo, .. } => tipo.borrow().is_bytearray(),
             _ => false,
         }
@@ -320,7 +325,7 @@ impl Type {
 
     pub fn is_bls381_12_g1(&self) -> bool {
         match self {
-            Self::App { module, name, .. } => G1_ELEMENT == name && module.is_empty(),
+            Self::App { module, name, .. } => well_known::G1_ELEMENT == name && module.is_empty(),
 
             Self::Var { tipo, .. } => tipo.borrow().is_bls381_12_g1(),
             _ => false,
@@ -329,7 +334,7 @@ impl Type {
 
     pub fn is_bls381_12_g2(&self) -> bool {
         match self {
-            Self::App { module, name, .. } => G2_ELEMENT == name && module.is_empty(),
+            Self::App { module, name, .. } => well_known::G2_ELEMENT == name && module.is_empty(),
 
             Self::Var { tipo, .. } => tipo.borrow().is_bls381_12_g2(),
             _ => false,
@@ -338,7 +343,9 @@ impl Type {
 
     pub fn is_ml_result(&self) -> bool {
         match self {
-            Self::App { module, name, .. } => MILLER_LOOP_RESULT == name && module.is_empty(),
+            Self::App { module, name, .. } => {
+                well_known::MILLER_LOOP_RESULT == name && module.is_empty()
+            }
 
             Self::Var { tipo, .. } => tipo.borrow().is_ml_result(),
             _ => false,
@@ -422,31 +429,33 @@ impl Type {
     }
 
     pub fn is_generic(&self) -> bool {
-        match self {
-            Self::App { args, .. } => {
-                let mut is_a_generic = false;
-                for arg in args {
-                    is_a_generic = is_a_generic || arg.is_generic();
-                }
-                is_a_generic
-            }
+        !self.collect_generics().is_empty()
+    }
 
-            Self::Var { tipo, .. } => tipo.borrow().is_generic(),
-            Self::Tuple { elems, .. } => {
-                let mut is_a_generic = false;
-                for elem in elems {
-                    is_a_generic = is_a_generic || elem.is_generic();
+    pub fn collect_generics(&self) -> Vec<Rc<Type>> {
+        match self {
+            Self::App { args, .. } => args.iter().flat_map(|arg| arg.collect_generics()).collect(),
+            Self::Var { tipo, .. } => {
+                if tipo.borrow().is_generic() {
+                    vec![self.clone().into()]
+                } else {
+                    Vec::new()
                 }
-                is_a_generic
             }
-            Self::Fn { args, ret, .. } => {
-                let mut is_a_generic = false;
-                for arg in args {
-                    is_a_generic = is_a_generic || arg.is_generic();
-                }
-                is_a_generic || ret.is_generic()
+            Self::Tuple { elems, .. } => elems
+                .iter()
+                .flat_map(|arg| arg.collect_generics())
+                .collect(),
+            Self::Fn { args, ret, .. } => args
+                .iter()
+                .chain(std::iter::once(ret))
+                .flat_map(|arg| arg.collect_generics())
+                .collect(),
+            Self::Pair { fst, snd, .. } => {
+                let mut generics = fst.collect_generics();
+                generics.extend(snd.collect_generics());
+                generics
             }
-            Self::Pair { fst, snd, .. } => fst.is_generic() || snd.is_generic(),
         }
     }
 
@@ -1068,7 +1077,7 @@ impl TypeVar {
         match self {
             TypeVar::Generic { .. } => true,
             TypeVar::Link { tipo } => tipo.is_generic(),
-            _ => false,
+            TypeVar::Unbound { .. } => false,
         }
     }
 
@@ -1116,6 +1125,51 @@ impl ValueConstructor {
             variant,
             tipo,
         }
+    }
+
+    pub fn known_enum(
+        values: &mut HashMap<String, Self>,
+        tipo: Rc<Type>,
+        constructors: &[&str],
+    ) -> Vec<String> {
+        for constructor in constructors {
+            values.insert(
+                constructor.to_string(),
+                ValueConstructor::public(
+                    tipo.clone(),
+                    ValueConstructorVariant::known_enum_variant(constructor, constructors.len(), 0),
+                ),
+            );
+        }
+
+        constructors
+            .iter()
+            .map(|constructor| constructor.to_string())
+            .collect()
+    }
+
+    pub fn known_adt(
+        values: &mut HashMap<String, Self>,
+        constructors: &[(&str, Rc<Type>)],
+    ) -> Vec<String> {
+        for (constructor, tipo) in constructors {
+            values.insert(
+                constructor.to_string(),
+                ValueConstructor::public(
+                    tipo.clone(),
+                    ValueConstructorVariant::known_enum_variant(
+                        constructor,
+                        constructors.len(),
+                        tipo.fn_arity().unwrap_or(0),
+                    ),
+                ),
+            );
+        }
+
+        constructors
+            .iter()
+            .map(|(constructor, _)| constructor.to_string())
+            .collect()
     }
 
     fn field_map(&self) -> Option<&FieldMap> {
@@ -1248,6 +1302,17 @@ impl ValueConstructorVariant {
     pub fn is_local_variable(&self) -> bool {
         matches!(self, Self::LocalVariable { .. })
     }
+
+    pub fn known_enum_variant(name: &str, constructors_count: usize, arity: usize) -> Self {
+        ValueConstructorVariant::Record {
+            module: "".into(),
+            name: name.to_string(),
+            field_map: None::<FieldMap>,
+            arity,
+            location: Span::empty(),
+            constructors_count: constructors_count as u16,
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -1269,6 +1334,18 @@ pub struct TypeConstructor {
     pub module: String,
     pub parameters: Vec<Rc<Type>>,
     pub tipo: Rc<Type>,
+}
+
+impl TypeConstructor {
+    pub fn primitive(tipo: Rc<Type>) -> Self {
+        TypeConstructor {
+            location: Span::empty(),
+            parameters: tipo.collect_generics(),
+            tipo,
+            module: "".to_string(),
+            public: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

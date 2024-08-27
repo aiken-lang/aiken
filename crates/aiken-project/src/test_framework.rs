@@ -1,7 +1,6 @@
 use aiken_lang::ast::OnTestFailure;
 pub(crate) use aiken_lang::{
     ast::{BinOp, DataTypeKey, IfBranch, Span, TypedArg, TypedDataType, TypedTest},
-    builtins::bool,
     expr::{TypedExpr, UntypedExpr},
     format::Formatter,
     gen_uplc::CodeGenerator,
@@ -1056,7 +1055,7 @@ impl TryFrom<TypedExpr> for Assertion<TypedExpr> {
                 left,
                 right,
                 ..
-            } if tipo == bool() => {
+            } if tipo == Type::bool() => {
                 // 'and' and 'or' are left-associative operators.
                 match (*right).clone().try_into() {
                     Ok(Assertion {
@@ -1094,7 +1093,7 @@ impl TryFrom<TypedExpr> for Assertion<TypedExpr> {
                     let then_is_true = match body {
                         TypedExpr::Var {
                             name, constructor, ..
-                        } => name == "True" && constructor.tipo == bool(),
+                        } => name == "True" && constructor.tipo == Type::bool(),
                         _ => false,
                     };
 
@@ -1102,7 +1101,7 @@ impl TryFrom<TypedExpr> for Assertion<TypedExpr> {
                         TypedExpr::Trace { then, .. } => match *then {
                             TypedExpr::Var {
                                 name, constructor, ..
-                            } => name == "False" && constructor.tipo == bool(),
+                            } => name == "False" && constructor.tipo == Type::bool(),
                             _ => false,
                         },
                         _ => false,
