@@ -3147,3 +3147,76 @@ fn validator_by_name_validator_duplicate_2() {
         Err((_, Error::DuplicateName { .. }))
     ))
 }
+
+#[test]
+fn exhaustive_handlers() {
+    let source_code = r#"
+            validator foo {
+              mint(_redeemer, _policy_id, _self) {
+                True
+              }
+
+              spend(_datum, _redeemer, _policy_id, _self) {
+                True
+              }
+
+              withdraw(_redeemer, _account, _self) {
+                True
+              }
+
+              publish(_redeemer, _certificate, _self) {
+                True
+              }
+
+              vote(_redeemer, _voter, _self) {
+                True
+              }
+
+              propose(_redeemer, _proposal, _self) {
+                True
+              }
+            }
+        "#;
+
+    assert!(check_validator(parse(source_code)).is_ok())
+}
+
+#[test]
+fn extraneous_fallback_on_exhaustive_handlers() {
+    let source_code = r#"
+            validator foo {
+              mint(_redeemer, _policy_id, _self) {
+                True
+              }
+
+              spend(_datum, _redeemer, _policy_id, _self) {
+                True
+              }
+
+              withdraw(_redeemer, _account, _self) {
+                True
+              }
+
+              publish(_redeemer, _certificate, _self) {
+                True
+              }
+
+              vote(_redeemer, _voter, _self) {
+                True
+              }
+
+              propose(_redeemer, _proposal, _self) {
+                True
+              }
+
+              else (_) -> Bool {
+                fail
+              }
+            }
+        "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::UnexpectedValidatorFallback { .. }))
+    ))
+}

@@ -1,6 +1,6 @@
 use super::function::param;
 use crate::{
-    ast::{self, well_known, ArgBy, ArgName},
+    ast::{self, well_known},
     expr::UntypedExpr,
     parser::{annotation, error::ParseError, expr, token::Token},
 };
@@ -63,28 +63,8 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                     location,
                     params,
                     end_position: span.end - 1,
-                    fallback: opt_catch_all.unwrap_or(ast::Function {
-                        arguments: vec![ast::UntypedArg {
-                            by: ArgBy::ByName(ArgName::Discarded {
-                                name: "_".to_string(),
-                                label: "_".to_string(),
-                                location,
-                            }),
-                            location,
-                            annotation: None,
-                            doc: None,
-                            is_validator_param: false,
-                        }],
-                        body: UntypedExpr::fail(None, location),
-                        doc: None,
-                        location,
-                        end_position: location.end - 1,
-                        name: well_known::VALIDATOR_ELSE.to_string(),
-                        public: true,
-                        return_annotation: Some(ast::Annotation::boolean(location)),
-                        return_type: (),
-                        on_test_failure: ast::OnTestFailure::FailImmediately,
-                    }),
+                    fallback: opt_catch_all
+                        .unwrap_or(ast::UntypedValidator::default_fallback(location)),
                 })
             },
         )

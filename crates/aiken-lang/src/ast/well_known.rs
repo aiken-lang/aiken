@@ -256,8 +256,7 @@ impl Type {
     pub fn list(t: Rc<Type>) -> Rc<Type> {
         Rc::new(Type::App {
             public: true,
-            // FIXME: We should probably have t.contains_opaque here?
-            contains_opaque: false,
+            contains_opaque: t.contains_opaque(),
             name: LIST.to_string(),
             module: "".to_string(),
             args: vec![t],
@@ -290,8 +289,7 @@ impl Type {
     pub fn option(a: Rc<Type>) -> Rc<Type> {
         Rc::new(Type::App {
             public: true,
-            // FIXME: We should probably have t.contains_opaque here?
-            contains_opaque: false,
+            contains_opaque: a.contains_opaque(),
             name: OPTION.to_string(),
             module: "".to_string(),
             args: vec![a],

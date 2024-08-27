@@ -9,7 +9,8 @@ use crate::{
     ast::{
         Annotation, ArgName, ArgVia, DataType, Definition, Function, ModuleConstant, ModuleKind,
         RecordConstructor, RecordConstructorArg, Tracing, TypeAlias, TypedArg, TypedDefinition,
-        TypedModule, TypedValidator, UntypedArg, UntypedDefinition, UntypedModule, Use, Validator,
+        TypedModule, TypedValidator, UntypedArg, UntypedDefinition, UntypedModule,
+        UntypedValidator, Use, Validator,
     },
     tipo::{expr::infer_function, Span, Type, TypeVar},
     IdGenerator,
@@ -245,6 +246,20 @@ fn infer_definition(
                     })?;
 
                     typed_handlers.push(typed_fun);
+                }
+
+                // NOTE: Duplicates are handled when registering handler names. So if we have N
+                // typed handlers, they are different. The -1 represents takes out the fallback
+                // handler name.
+                let is_exhaustive =
+                    typed_handlers.len() >= TypedValidator::available_handler_names().len() - 1;
+
+                if is_exhaustive
+                    && fallback != UntypedValidator::default_fallback(fallback.location)
+                {
+                    return Err(Error::UnexpectedValidatorFallback {
+                        fallback: fallback.location,
+                    });
                 }
 
                 let (typed_params, typed_fallback) = environment.in_new_scope(|environment| {

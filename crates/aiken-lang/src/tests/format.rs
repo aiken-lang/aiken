@@ -1140,3 +1140,110 @@ fn format_long_pair() {
         "#
     );
 }
+
+#[test]
+fn format_validator_exhaustive_handlers() {
+    assert_format!(
+        r#"
+            validator foo {
+              mint(_redeemer, _policy_id, _self) {
+                True
+              }
+
+              spend(_datum, _redeemer, _policy_id, _self) {
+                True
+              }
+
+              withdraw(_redeemer, _account, _self) {
+                True
+              }
+
+              publish(_redeemer, _certificate, _self) {
+                True
+              }
+
+              vote(_redeemer, _voter, _self) {
+                True
+              }
+
+              propose(_redeemer, _proposal, _self) {
+                True
+              }
+            }
+        "#
+    );
+}
+
+#[test]
+fn format_validator_exhaustive_handlers_extra_default_fallback() {
+    assert_format!(
+        r#"
+            validator foo {
+              mint(_redeemer, _policy_id, _self) {
+                True
+              }
+
+              spend(_datum, _redeemer, _policy_id, _self) {
+                True
+              }
+
+              withdraw(_redeemer, _account, _self) {
+                True
+              }
+
+              publish(_redeemer, _certificate, _self) {
+                True
+              }
+
+              vote(_redeemer, _voter, _self) {
+                True
+              }
+
+              propose(_redeemer, _proposal, _self) {
+                True
+              }
+
+              else(_) {
+                fail
+              }
+            }
+        "#
+    );
+}
+
+#[test]
+fn format_validator_exhaustive_handlers_extra_non_default_fallback() {
+    assert_format!(
+        r#"
+            validator foo {
+              mint(_redeemer, _policy_id, _self) {
+                True
+              }
+
+              spend(_datum, _redeemer, _policy_id, _self) {
+                True
+              }
+
+              withdraw(_redeemer, _account, _self) {
+                True
+              }
+
+              publish(_redeemer, _certificate, _self) {
+                True
+              }
+
+              vote(_redeemer, _voter, _self) {
+                True
+              }
+
+              propose(_redeemer, _proposal, _self) {
+                True
+              }
+
+              else(_) {
+                True
+              }
+            }
+        "#
+    );
+}

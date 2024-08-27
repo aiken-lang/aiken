@@ -1101,6 +1101,16 @@ The best thing to do from here is to remove it."#))]
         location: Span,
         available_handlers: Vec<String>,
     },
+
+    #[error("I caught an extraneous fallback handler in an already exhaustive validator\n")]
+    #[diagnostic(code("extraneous::fallback"))]
+    #[diagnostic(help(
+        "Validator handlers must be exhaustive and either cover all purposes, or provide a fallback handler. Here, you have successfully covered all script purposes with your handler, but left an extraneous fallback branch. I cannot let that happen, but removing it for you would probably be deemed rude. So please, remove the fallback."
+    ))]
+    UnexpectedValidatorFallback {
+        #[label("redundant fallback handler")]
+        fallback: Span,
+    },
 }
 
 impl ExtraData for Error {
@@ -1162,6 +1172,7 @@ impl ExtraData for Error {
             | Error::ValidatorMustReturnBool { .. }
             | Error::UnknownPurpose { .. }
             | Error::UnknownValidatorHandler { .. }
+            | Error::UnexpectedValidatorFallback { .. }
             | Error::MustInferFirst { .. } => None,
 
             Error::UnknownType { name, .. }

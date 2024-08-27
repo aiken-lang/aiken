@@ -1,0 +1,29 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nvalidator foo {\n  mint(_redeemer, _policy_id, _self) {\n    True\n  }\n\n  spend(_datum, _redeemer, _policy_id, _self) {\n    True\n  }\n\n  withdraw(_redeemer, _account, _self) {\n    True\n  }\n\n  publish(_redeemer, _certificate, _self) {\n    True\n  }\n\n  vote(_redeemer, _voter, _self) {\n    True\n  }\n\n  propose(_redeemer, _proposal, _self) {\n    True\n  }\n}\n"
+---
+validator foo {
+  mint(_redeemer, _policy_id, _self) {
+    True
+  }
+
+  spend(_datum, _redeemer, _policy_id, _self) {
+    True
+  }
+
+  withdraw(_redeemer, _account, _self) {
+    True
+  }
+
+  publish(_redeemer, _certificate, _self) {
+    True
+  }
+
+  vote(_redeemer, _voter, _self) {
+    True
+  }
+
+  propose(_redeemer, _proposal, _self) {
+    True
+  }
+}

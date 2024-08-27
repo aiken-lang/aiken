@@ -3,10 +3,10 @@ use crate::{
         Annotation, ArgBy, ArgName, ArgVia, AssignmentKind, AssignmentPattern, BinOp,
         ByteArrayFormatPreference, CallArg, Constant, CurveType, DataType, Definition, Function,
         LogicalOpChainKind, ModuleConstant, OnTestFailure, Pattern, RecordConstructor,
-        RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg, UnOp,
-        UnqualifiedImport, UntypedArg, UntypedArgVia, UntypedAssignmentKind, UntypedClause,
-        UntypedDefinition, UntypedFunction, UntypedIfBranch, UntypedModule, UntypedPattern,
-        UntypedRecordUpdateArg, Use, Validator, CAPTURE_VARIABLE,
+        RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg,
+        TypedValidator, UnOp, UnqualifiedImport, UntypedArg, UntypedArgVia, UntypedAssignmentKind,
+        UntypedClause, UntypedDefinition, UntypedFunction, UntypedIfBranch, UntypedModule,
+        UntypedPattern, UntypedRecordUpdateArg, Use, Validator, CAPTURE_VARIABLE,
     },
     docvec,
     expr::{FnStyle, UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
@@ -643,27 +643,31 @@ impl<'comments> Formatter<'comments> {
             handler_docs.push(first_fn);
         }
 
-        let fallback_comments = self.pop_comments(fallback.location.start);
-        let fallback_doc_comments = self.doc_comments(fallback.location.start);
+        let is_exhaustive = handlers.len() >= TypedValidator::available_handler_names().len() - 1;
 
-        let fallback_fn = self
-            .definition_fn(
-                &fallback.public,
-                &fallback.name,
-                &fallback.arguments,
-                &fallback.return_annotation,
-                &fallback.body,
-                fallback.end_position,
-                true,
-            )
-            .group();
+        if !is_exhaustive || !fallback.is_default_fallback() {
+            let fallback_comments = self.pop_comments(fallback.location.start);
+            let fallback_doc_comments = self.doc_comments(fallback.location.start);
 
-        let fallback_fn = commented(
-            fallback_doc_comments.append(fallback_fn).group(),
-            fallback_comments,
-        );
+            let fallback_fn = self
+                .definition_fn(
+                    &fallback.public,
+                    &fallback.name,
+                    &fallback.arguments,
+                    &fallback.return_annotation,
+                    &fallback.body,
+                    fallback.end_position,
+                    true,
+                )
+                .group();
 
-        handler_docs.push(fallback_fn);
+            let fallback_fn = commented(
+                fallback_doc_comments.append(fallback_fn).group(),
+                fallback_comments,
+            );
+
+            handler_docs.push(fallback_fn);
+        }
 
         let v_body = line().append(join(handler_docs, lines(2)));
 

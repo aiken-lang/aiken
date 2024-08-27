@@ -242,6 +242,19 @@ fn str_to_keyword(word: &str) -> Option<Token> {
 pub type TypedFunction = Function<Rc<Type>, TypedExpr, TypedArg>;
 pub type UntypedFunction = Function<(), UntypedExpr, UntypedArg>;
 
+impl UntypedFunction {
+    pub fn is_default_fallback(&self) -> bool {
+        matches!(
+            &self.arguments[..],
+            [UntypedArg {
+                by: ArgBy::ByName(ArgName::Discarded { .. }),
+                ..
+            }]
+        ) && matches!(&self.body, UntypedExpr::ErrorTerm { .. })
+            && self.name.as_str() == well_known::VALIDATOR_ELSE
+    }
+}
+
 pub type TypedTest = Function<Rc<Type>, TypedExpr, TypedArgVia>;
 pub type UntypedTest = Function<(), UntypedExpr, UntypedArgVia>;
 
@@ -490,6 +503,33 @@ impl<T, Arg, Expr> Validator<T, Arg, Expr> {
     }
 }
 
+impl UntypedValidator {
+    pub fn default_fallback(location: Span) -> UntypedFunction {
+        Function {
+            arguments: vec![UntypedArg {
+                by: ArgBy::ByName(ArgName::Discarded {
+                    name: "_".to_string(),
+                    label: "_".to_string(),
+                    location,
+                }),
+                location,
+                annotation: None,
+                doc: None,
+                is_validator_param: false,
+            }],
+            body: UntypedExpr::fail(None, location),
+            doc: None,
+            location,
+            end_position: location.end - 1,
+            name: well_known::VALIDATOR_ELSE.to_string(),
+            public: true,
+            return_annotation: Some(Annotation::boolean(location)),
+            return_type: (),
+            on_test_failure: OnTestFailure::FailImmediately,
+        }
+    }
+}
+
 impl TypedValidator {
     pub fn available_handler_names() -> Vec<String> {
         vec![
@@ -621,8 +661,6 @@ impl TypedValidator {
                             },
                         }
                     })
-                    // FIXME: This is only needed if there's non-exhaustive patterns
-                    // above.
                     .chain(std::iter::once(&self.fallback).map(|fallback| {
                         let arg = fallback.arguments.first().unwrap();
 
