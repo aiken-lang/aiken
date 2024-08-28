@@ -1,6 +1,6 @@
 use aiken/collection/list
 use cardano/assets
-use cardano/credential.{Address, VerificationKey}
+use cardano/address.{Address, VerificationKey}
 use cardano/transaction.{Input, NoDatum, Output, OutputReference, Transaction}
 
 pub const own_hash = #"01020304050607080910111213140102030405060708091011121314"

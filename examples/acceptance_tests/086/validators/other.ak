@@ -1,4 +1,4 @@
-use cardano/credential.{Address}
+use cardano/address.{Address}
 use cardano/transaction.{Transaction}
 
 type TestData {

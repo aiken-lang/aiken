@@ -1,5 +1,5 @@
 use aiken/collection/list
-use cardano/credential.{Script, VerificationKey}
+use cardano/address.{Script, VerificationKey}
 use cardano/governance.{
   Abstain, ConstitutionalCommitteeMember, DelegateRepresentative,
   GovernanceActionId, No, StakePool, Voter, Yes,

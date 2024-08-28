@@ -1,5 +1,5 @@
+use cardano/address.{Address, VerificationKey}
 use cardano/assets.{from_lovelace}
-use cardano/credential.{Address, VerificationKey}
 use cardano/transaction.{Datum, InlineDatum, NoDatum, Output}
 
 type SmallOracleState {

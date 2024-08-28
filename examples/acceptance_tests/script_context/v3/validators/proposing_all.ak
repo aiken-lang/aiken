@@ -1,6 +1,6 @@
 use aiken/collection/list
 use aiken/math/rational
-use cardano/credential.{Script, VerificationKey}
+use cardano/address.{Script, VerificationKey}
 use cardano/governance.{
   Constitution, ConstitutionalCommittee, GovernanceAction, GovernanceActionId,
   HardFork, NewConstitution, NicePoll, NoConfidence, ProposalProcedure,

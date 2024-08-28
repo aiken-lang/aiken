@@ -7,7 +7,7 @@ use cardano/certificate.{
   RetireFromConstitutionalCommittee, RetireStakePool, UnregisterCredential,
   UnregisterDelegateRepresentative, UpdateDelegateRepresentative,
 }
-use cardano/credential.{Script, VerificationKey}
+use cardano/address.{Script, VerificationKey}
 use cardano/transaction.{Transaction}
 
 const only0s = #"00000000000000000000000000000000000000000000000000000000"
@@ -34,7 +34,7 @@ validator purposes {
     expect Some(14) = transaction.treasury_donation
 
     expect
-      Some(RegisterCredential { credential: Script(only2s), deposit: None }) == list.at(
+      Some(RegisterCredential { credential: Script(only2s), deposit: Never }) == list.at(
         certificates,
         0,
       )
@@ -43,7 +43,7 @@ validator purposes {
       Some(
         RegisterCredential {
           credential: VerificationKey(only0s),
-          deposit: None,
+          deposit: Never,
         },
       ) == list.at(certificates, 1)
 
@@ -51,7 +51,7 @@ validator purposes {
       Some(
         UnregisterCredential {
           credential: VerificationKey(only0s),
-          refund: None,
+          refund: Never,
         },
       ) == list.at(certificates, 2)
 
@@ -71,7 +71,7 @@ validator purposes {
       Some(
         RegisterCredential {
           credential: VerificationKey(only0s),
-          deposit: None,
+          deposit: Never,
         },
       ) == list.at(certificates, 5)
 
@@ -79,7 +79,7 @@ validator purposes {
       Some(
         UnregisterCredential {
           credential: VerificationKey(only0s),
-          refund: None,
+          refund: Never,
         },
       ) == list.at(certificates, 6)
 

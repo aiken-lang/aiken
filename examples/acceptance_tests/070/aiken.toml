@@ -4,5 +4,5 @@ description = ''
 
 [[dependencies]]
 name = 'aiken-lang/stdlib'
-version = 'main'
+version = '1.9.0'
 source = 'github'

@@ -1,6 +1,6 @@
 use aiken/collection/list
 use aiken/interval
-use cardano/credential.{
+use cardano/address.{
   Address, Credential, Inline, Pointer, Script, VerificationKey,
 }
 use cardano/transaction.{Transaction}

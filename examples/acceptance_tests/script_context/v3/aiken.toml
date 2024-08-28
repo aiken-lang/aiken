@@ -1,11 +1,10 @@
 name = "script_context/v3"
 version = "0.0.0"
-compiler = "v1.0.31-alpha"
 plutus = "v3"
 license = "Apache-2.0"
 description = "End-to-end testing of standard lib script context, for Plutus v3"
 
 [[dependencies]]
 name = "aiken-lang/stdlib"
-version = "v2"
+version = "main"
 source = "github"

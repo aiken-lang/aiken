@@ -3,14 +3,14 @@
 
 [[requirements]]
 name = "aiken-lang/stdlib"
-version = "v2"
+version = "main"
 source = "github"
 
 [[packages]]
 name = "aiken-lang/stdlib"
-version = "v2"
+version = "main"
 requirements = []
 source = "github"
 
 [etags]
-"aiken-lang/stdlib@v2" = [{ secs_since_epoch = 1724776982, nanos_since_epoch = 146951000 }, "cdbbce58b61deb385e7ea787a2e0fc2dc8fe94db9999e0e6275bc9c70e5796be"]
+"aiken-lang/stdlib@main" = [{ secs_since_epoch = 1724859226, nanos_since_epoch = 911810000 }, "2d9c3cdf2746778c8bbe6d49721186b66a33e0ce9cf295ac4cb2976b887a971c"]

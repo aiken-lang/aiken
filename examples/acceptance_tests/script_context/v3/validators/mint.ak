@@ -1,7 +1,7 @@
 use aiken/collection/dict.{Dict}
 use aiken/collection/list
 use cardano/assets.{PolicyId, Value}
-use cardano/credential
+use cardano/address
 use cardano/transaction.{
   DatumHash, Input, Mint, NoDatum, Output, OutputReference, ScriptPurpose,
   Transaction,
@@ -44,7 +44,7 @@ fn assert_reference_inputs(inputs: List<Input>) -> Void {
           output_index: 0,
         },
         output: Output {
-          address: credential.from_verification_key(null28),
+          address: address.from_verification_key(null28),
           value: assets.from_lovelace(1_000_000),
           datum: NoDatum,
           reference_script: None,
@@ -76,7 +76,7 @@ fn assert_outputs(
   expect
     Some(
       Output {
-        address: credential.from_verification_key(null28),
+        address: address.from_verification_key(null28),
         value: assets.from_lovelace(1_000_000),
         datum: DatumHash(void_hash),
         reference_script: None,
@@ -86,8 +86,8 @@ fn assert_outputs(
   expect
     Some(
       Output {
-        address: credential.from_verification_key(null28)
-          |> credential.with_delegation_key(null28),
+        address: address.from_verification_key(null28)
+          |> address.with_delegation_key(null28),
         value: assets.from_lovelace(1_000_000)
           |> assets.add(our_policy_id, "tuna", 100000000000000)
           |> assets.add(other_policy_id, "aiken", 42),
@@ -99,8 +99,8 @@ fn assert_outputs(
   expect
     Some(
       Output {
-        address: credential.from_script(null28)
-          |> credential.with_delegation_key(null28),
+        address: address.from_script(null28)
+          |> address.with_delegation_key(null28),
         value: assets.from_lovelace(1_000_000)
           |> assets.add(other_policy_id, "cardano", 1),
         datum: NoDatum,

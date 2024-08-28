@@ -1,11 +1,11 @@
 use aiken/collection/list
-use aiken/hash.{Blake2b_224, Hash}
+use aiken/crypto.{Blake2b_224, Hash}
 use aiken/interval.{Finite}
 use aiken/option
 use cardano/assets.{
   AssetName, PolicyId, Value, add, flatten, from_asset, negate, quantity_of,
 }
-use cardano/credential.{Address, Script, VerificationKey}
+use cardano/address.{Address, Script, VerificationKey}
 use cardano/transaction.{
   Datum, InlineDatum, Input, Output, OutputReference, Transaction, TransactionId,
   ValidityRange,
