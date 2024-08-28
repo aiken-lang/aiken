@@ -634,6 +634,11 @@ impl DocTypeConstructor {
                 .doc
                 .as_deref()
                 .map(|doc| render_markdown(&format!("{doc}\n{doc_args}")))
+                .or(if doc_args.is_empty() {
+                    None
+                } else {
+                    Some(render_markdown(&format!("\n{doc_args}")))
+                })
                 .unwrap_or_default(),
             raw_documentation: constructor.doc.as_deref().unwrap_or_default().to_string(),
         }

@@ -29,6 +29,13 @@
   --color-table-border: #ea76cb;
   --color-code-background: #dce0e8;
 
+  /* Blockquote tags */
+  --color-note: #0984e3;
+  --color-tip: #00b894;
+  --color-important: #e84393;
+  --color-warning: #f9ca24;
+  --color-caution: #e17055;
+
   /* etc */
   --nav-shadow: 0 0 6px 2px rgba(0, 0, 0, 0.1);
   --shadow:
@@ -329,7 +336,7 @@ p code {
 
 .sidebar h2 {
   margin: 0;
-  color: var(--color-link-accent);
+  color: var(--color-text);
   font-size: 1.75em;
 }
 
@@ -521,16 +528,23 @@ a.member-source:hover::before {
 .constructor-item-docs {
   margin-left: var(--large-gap);
   margin-bottom: var(--gap);
-  padding-left: 1.5rem;
-  margin-top: -1em;
 }
 
-.constructor-item-docs::before {
+.constructor-item-docs > p {
+  padding-left: 1.5rem;
+}
+
+.constructor-item-docs > p:first-child {
+  padding-top: 0.5rem;
+}
+
+.constructor-item-docs > p:first-child::before {
   content: '↳';
   position: relative;
   margin-left: -1.5rem;
-  top: 1.5em;
   color: var(--color-background-accent);
+  width: 1.5rem;
+  display: inline-block;
 }
 
 .constructor-item-docs hr {
@@ -1137,10 +1151,12 @@ body.theme-dark {
 .sidebar li[data-indent="2"]::before { padding-left: 2rem; }
 .sidebar li[data-indent="3"]::before { padding-left: 3rem; }
 
+.sidebar li[data-heading] > a,
+.sidebar li[data-heading] > a:visited,
 .sidebar li[data-heading] {
   font-weight: bold;
   font-size: 1em;
-  color: var(--color-link-accent);
+  color: var(--color-text);
 }
 
 .sidebar li[data-heading="1"] {
@@ -1154,11 +1170,81 @@ body.theme-dark {
 }
 
 .sidebar li[data-heading="3"] {
+  margin-top: 0.75rem;
+  font-size: 1.1em;
+}
+
+.sidebar li[data-heading="4"] {
   margin-top: 0.5rem;
   font-size: 1.1em;
 }
 
-.sidebar li[data-heading]:first-child,
-.sidebar li[data-heading] + li[data-heading] {
+.sidebar li[data-heading]:first-child {
   margin-top: 0;
+}
+
+/* Blockquote tags */
+
+blockquote.markdown-alert-note {
+  --color-alert: var(--color-note);
+  --text-alert: "Note";
+}
+
+blockquote.markdown-alert-tip {
+  --color-alert: var(--color-tip);
+  --text-alert: "Tip";
+}
+
+
+blockquote.markdown-alert-important {
+  --color-alert: var(--color-important);
+  --text-alert: "Important";
+}
+
+
+blockquote.markdown-alert-warning {
+  --color-alert: var(--color-warning);
+  --text-alert: "Warning";
+}
+
+
+blockquote.markdown-alert-caution {
+  --color-alert: var(--color-caution);
+  --text-alert: "Caution";
+}
+
+blockquote.markdown-alert-note,
+blockquote.markdown-alert-tip,
+blockquote.markdown-alert-important,
+blockquote.markdown-alert-warning,
+blockquote.markdown-alert-caution {
+  border-left: 4px solid var(--color-alert);
+  padding-left: 1rem;
+  margin: 0;
+}
+
+blockquote.markdown-alert-note > span.icon-group > svg.icon,
+blockquote.markdown-alert-tip > span.icon-group > svg.icon,
+blockquote.markdown-alert-important > span.icon-group > svg.icon,
+blockquote.markdown-alert-warning > span.icon-group > svg.icon,
+blockquote.markdown-alert-caution > span.icon-group > svg.icon {
+  width: 1em;
+  height: 1em;
+  display: inline-block;
+  position: relative;
+  top: 0.15rem;
+  margin-right: 0.25rem;
+}
+
+blockquote.markdown-alert-note > span.icon-group,
+blockquote.markdown-alert-tip > span.icon-group,
+blockquote.markdown-alert-important > span.icon-group,
+blockquote.markdown-alert-warning > span.icon-group,
+blockquote.markdown-alert-caution > span.icon-group {
+  font-weight: bold;
+  font-variant: small-caps;
+  color: var(--color-alert);
+  display: inline-block;
+  width: 100%;
+  padding-bottom: 0.5rem;
 }
