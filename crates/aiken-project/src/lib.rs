@@ -12,9 +12,9 @@ pub mod package_name;
 pub mod paths;
 pub mod pretty;
 pub mod telemetry;
-pub mod test_framework;
-pub mod utils;
 pub mod watch;
+
+mod test_framework;
 
 #[cfg(test)]
 mod tests;
@@ -40,8 +40,9 @@ use aiken_lang::{
     format::{Formatter, MAX_COLUMNS},
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
+    test_framework::{Test, TestResult},
     tipo::{Type, TypeInfo},
-    IdGenerator,
+    utils, IdGenerator,
 };
 use export::Export;
 use indexmap::IndexMap;
@@ -58,7 +59,6 @@ use std::{
     rc::Rc,
 };
 use telemetry::EventListener;
-use test_framework::{Test, TestResult};
 use uplc::{
     ast::{Constant, Name, Program},
     PlutusData,
@@ -419,7 +419,7 @@ where
                         if e.is_success() {
                             None
                         } else {
-                            Some(e.into_error(verbose))
+                            Some(Error::from_test_result(e, verbose))
                         }
                     })
                     .collect();

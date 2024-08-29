@@ -1,9 +1,9 @@
 use super::build::{filter_traces_parser, trace_level_parser};
-use aiken_lang::ast::{TraceLevel, Tracing};
-use aiken_project::{
+use aiken_lang::{
+    ast::{TraceLevel, Tracing},
     test_framework::PropertyTest,
-    watch::{self, watch_project, with_project},
 };
+use aiken_project::watch::{self, watch_project, with_project};
 use rand::prelude::*;
 use std::{path::PathBuf, process};
 

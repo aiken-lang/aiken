@@ -1,8 +1,10 @@
-use crate::{
-    pretty,
+use crate::pretty;
+use aiken_lang::{
+    ast::OnTestFailure,
+    expr::UntypedExpr,
+    format::Formatter,
     test_framework::{PropertyTestResult, TestResult, UnitTestResult},
 };
-use aiken_lang::{ast::OnTestFailure, expr::UntypedExpr, format::Formatter};
 use owo_colors::{OwoColorize, Stream::Stderr};
 use std::{collections::BTreeMap, fmt::Display, path::PathBuf};
 use uplc::machine::cost_model::ExBudget;

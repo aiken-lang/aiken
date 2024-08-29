@@ -3,6 +3,7 @@ use aiken_lang::{
     ast::{self, Span},
     error::ExtraData,
     parser::error::ParseError,
+    test_framework::{PropertyTestResult, TestResult, UnitTestResult},
     tipo,
 };
 use miette::{
@@ -161,6 +162,28 @@ impl Error {
         }
 
         errors
+    }
+
+    pub fn from_test_result<U, T>(result: &TestResult<U, T>, verbose: bool) -> Self {
+        let (name, path, src) = match result {
+            TestResult::UnitTestResult(UnitTestResult { test, .. }) => (
+                test.name.to_string(),
+                test.input_path.to_path_buf(),
+                test.program.to_pretty(),
+            ),
+            TestResult::PropertyTestResult(PropertyTestResult { test, .. }) => (
+                test.name.to_string(),
+                test.input_path.to_path_buf(),
+                test.program.to_pretty(),
+            ),
+        };
+
+        Error::TestFailure {
+            name,
+            path,
+            src,
+            verbose,
+        }
     }
 }
 

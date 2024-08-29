@@ -1,8 +1,5 @@
-use aiken_lang::{ast::Tracing, line_numbers::LineNumbers};
-use aiken_project::{
-    config::Config, error::Error as ProjectError, module::CheckedModule,
-    test_framework::PropertyTest, Project,
-};
+use aiken_lang::{ast::Tracing, line_numbers::LineNumbers, test_framework::PropertyTest};
+use aiken_project::{config::Config, error::Error as ProjectError, module::CheckedModule, Project};
 use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Debug)]

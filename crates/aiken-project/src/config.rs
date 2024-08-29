@@ -1,5 +1,4 @@
 use crate::{github::repo::LatestRelease, package_name::PackageName, paths, Error};
-pub use aiken_lang::plutus_version::PlutusVersion;
 use aiken_lang::{
     ast::{
         Annotation, ByteArrayFormatPreference, Constant, ModuleConstant, Span, UntypedDefinition,
@@ -7,6 +6,7 @@ use aiken_lang::{
     expr::UntypedExpr,
     parser::token::Base,
 };
+pub use aiken_lang::{plutus_version::PlutusVersion, version::compiler_version};
 use miette::NamedSource;
 use semver::Version;
 use serde::{
@@ -353,18 +353,6 @@ impl Config {
 
 mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
-}
-
-pub fn compiler_version(include_commit_hash: bool) -> String {
-    if include_commit_hash {
-        format!(
-            "v{}+{}",
-            built_info::PKG_VERSION,
-            built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown")
-        )
-    } else {
-        format!("v{}", built_info::PKG_VERSION,)
-    }
 }
 
 pub fn compiler_info() -> String {

@@ -19,7 +19,6 @@ aiken-lang = { path = "../aiken-lang", version = "1.0.31-alpha" }
 askama = { version = "0.12.0", features = ["urlencode"] }
 camino = "1.1.9"
 ciborium = "0.2.2"
-cryptoxide = "0.4.4"
 dirs = "4.0.0"
 fslock = "0.2.1"
 futures = "0.3.26"
@@ -27,7 +26,7 @@ hex = "0.4.3"
 ignore = "0.4.20"
 indexmap = "1.9.2"
 itertools = "0.10.5"
-miette.workspace = true
+miette = { version = "7.2.0", features = ["fancy"] }
 notify = "6.1.1"
 num-bigint = "0.4.4"
 owo-colors = { version = "3.5.0", features = ["supports-colors"] }
@@ -36,7 +35,6 @@ pallas-codec.workspace = true
 pallas-crypto.workspace = true
 pallas-primitives.workspace = true
 pallas-traverse.workspace = true
-patricia_tree = "0.8.0"
 petgraph = "0.6.3"
 pulldown-cmark = { version = "0.12.0", default-features = false, features = ["html"] }
 rayon = "1.7.0"
