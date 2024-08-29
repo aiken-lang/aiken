@@ -12,6 +12,7 @@ authors = [
     "KtorZ <matthias.benkort@gmail.com>",
 ]
 rust-version = "1.66.1"
+build = "build.rs"
 
 [dependencies]
 blst = "0.3.11"

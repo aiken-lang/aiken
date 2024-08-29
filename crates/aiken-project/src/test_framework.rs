@@ -5,98 +5,103 @@ mod test {
         utils,
     };
     use aiken_lang::{
-        ast::{Definition, ModuleKind, TraceLevel, Tracing},
+        ast::{DataTypeKey, Definition, ModuleKind, TraceLevel, Tracing, TypedDataType},
         builtins,
+        expr::UntypedExpr,
         format::Formatter,
+        gen_uplc::CodeGenerator,
         line_numbers::LineNumbers,
         parser::{self, extra::ModuleExtra},
         plutus_version::PlutusVersion,
         test_framework::*,
         IdGenerator,
     };
+    use indexmap::IndexMap;
     use indoc::indoc;
-    use std::collections::HashMap;
+    use std::{
+        collections::{BTreeMap, HashMap},
+        path::PathBuf,
+    };
+    use uplc::PlutusData;
 
     const TEST_KIND: ModuleKind = ModuleKind::Lib;
 
-    impl Test {
-        pub fn from_source(src: &str) -> (Self, IndexMap<DataTypeKey, TypedDataType>) {
-            let id_gen = IdGenerator::new();
+    pub fn test_from_source(src: &str) -> (Test, IndexMap<DataTypeKey, TypedDataType>) {
+        let id_gen = IdGenerator::new();
 
-            let module_name = "";
+        let module_name = "";
 
-            let mut module_types = HashMap::new();
-            module_types.insert("aiken".to_string(), builtins::prelude(&id_gen));
-            module_types.insert("aiken/builtin".to_string(), builtins::plutus(&id_gen));
+        let mut module_types = HashMap::new();
+        module_types.insert("aiken".to_string(), builtins::prelude(&id_gen));
+        module_types.insert("aiken/builtin".to_string(), builtins::plutus(&id_gen));
 
-            let mut warnings = vec![];
-            let (ast, _) = parser::module(src, TEST_KIND).expect("Failed to parse module");
-            let ast = ast
-                .infer(
-                    &id_gen,
-                    TEST_KIND,
-                    module_name,
-                    &module_types,
-                    Tracing::All(TraceLevel::Verbose),
-                    &mut warnings,
-                    None,
-                )
-                .expect("Failed to type-check module.");
-
-            module_types.insert(module_name.to_string(), ast.type_info.clone());
-
-            let test = ast
-                .definitions()
-                .filter_map(|def| match def {
-                    Definition::Test(test) => Some(test.clone()),
-                    _ => None,
-                })
-                .last()
-                .expect("No test found in declared src?");
-
-            let mut functions = builtins::prelude_functions(&id_gen, &module_types);
-            let mut data_types = builtins::prelude_data_types(&id_gen);
-            ast.register_definitions(&mut functions, &mut data_types);
-
-            let mut module_sources = HashMap::new();
-            module_sources.insert(
-                module_name.to_string(),
-                (src.to_string(), LineNumbers::new(src)),
-            );
-
-            let mut modules = CheckedModules::default();
-            modules.insert(
-                module_name.to_string(),
-                CheckedModule {
-                    kind: TEST_KIND,
-                    extra: ModuleExtra::default(),
-                    name: module_name.to_string(),
-                    code: src.to_string(),
-                    ast,
-                    package: String::new(),
-                    input_path: PathBuf::new(),
-                },
-            );
-
-            let mut generator = CodeGenerator::new(
-                PlutusVersion::default(),
-                utils::indexmap::as_ref_values(&functions),
-                utils::indexmap::as_ref_values(&data_types),
-                utils::indexmap::as_str_ref_values(&module_types),
-                utils::indexmap::as_str_ref_values(&module_sources),
+        let mut warnings = vec![];
+        let (ast, _) = parser::module(src, TEST_KIND).expect("Failed to parse module");
+        let ast = ast
+            .infer(
+                &id_gen,
+                TEST_KIND,
+                module_name,
+                &module_types,
                 Tracing::All(TraceLevel::Verbose),
-            );
-
-            (
-                Self::from_function_definition(
-                    &mut generator,
-                    test.to_owned(),
-                    module_name.to_string(),
-                    PathBuf::new(),
-                ),
-                data_types,
+                &mut warnings,
+                None,
             )
-        }
+            .expect("Failed to type-check module.");
+
+        module_types.insert(module_name.to_string(), ast.type_info.clone());
+
+        let test = ast
+            .definitions()
+            .filter_map(|def| match def {
+                Definition::Test(test) => Some(test.clone()),
+                _ => None,
+            })
+            .last()
+            .expect("No test found in declared src?");
+
+        let mut functions = builtins::prelude_functions(&id_gen, &module_types);
+        let mut data_types = builtins::prelude_data_types(&id_gen);
+        ast.register_definitions(&mut functions, &mut data_types);
+
+        let mut module_sources = HashMap::new();
+        module_sources.insert(
+            module_name.to_string(),
+            (src.to_string(), LineNumbers::new(src)),
+        );
+
+        let mut modules = CheckedModules::default();
+        modules.insert(
+            module_name.to_string(),
+            CheckedModule {
+                kind: TEST_KIND,
+                extra: ModuleExtra::default(),
+                name: module_name.to_string(),
+                code: src.to_string(),
+                ast,
+                package: String::new(),
+                input_path: PathBuf::new(),
+            },
+        );
+
+        let mut generator = CodeGenerator::new(
+            PlutusVersion::default(),
+            utils::indexmap::as_ref_values(&functions),
+            utils::indexmap::as_ref_values(&data_types),
+            utils::indexmap::as_str_ref_values(&module_types),
+            utils::indexmap::as_str_ref_values(&module_sources),
+            Tracing::All(TraceLevel::Verbose),
+        );
+
+        (
+            Test::from_function_definition(
+                &mut generator,
+                test.to_owned(),
+                module_name.to_string(),
+                PathBuf::new(),
+            ),
+            data_types,
+        )
     }
 
     fn property(src: &str) -> (PropertyTest, impl Fn(PlutusData) -> String) {
@@ -191,7 +196,7 @@ mod test {
 
         let src = format!("{prelude}\n{src}");
 
-        match Test::from_source(&src) {
+        match test_from_source(&src) {
             (Test::PropertyTest(test), data_types) => {
                 let type_info = test.fuzzer.type_info.clone();
 
@@ -210,19 +215,20 @@ mod test {
         }
     }
 
-    impl PropertyTest {
-        fn expect_failure<'a>(&'a self, plutus_version: &'a PlutusVersion) -> Counterexample<'a> {
-            let mut labels = BTreeMap::new();
-            let mut remaining = PropertyTest::DEFAULT_MAX_SUCCESS;
-            match self.run_n_times(
-                &mut remaining,
-                Prng::from_seed(42),
-                &mut labels,
-                plutus_version,
-            ) {
-                Ok(Some(counterexample)) => counterexample,
-                _ => panic!("expected property to fail but it didn't."),
-            }
+    fn expect_failure<'a>(
+        prop: &'a PropertyTest,
+        plutus_version: &'a PlutusVersion,
+    ) -> Counterexample<'a> {
+        let mut labels = BTreeMap::new();
+        let mut remaining = PropertyTest::DEFAULT_MAX_SUCCESS;
+        match prop.run_n_times(
+            &mut remaining,
+            Prng::from_seed(42),
+            &mut labels,
+            plutus_version,
+        ) {
+            Ok(Some(counterexample)) => counterexample,
+            _ => panic!("expected property to fail but it didn't."),
         }
     }
 
@@ -290,7 +296,7 @@ mod test {
         "#});
 
         let plutus_version = PlutusVersion::default();
-        let mut counterexample = prop.expect_failure(&plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version);
 
         counterexample.simplify();
 
@@ -318,7 +324,7 @@ mod test {
         "#});
 
         let plutus_version = PlutusVersion::default();
-        let mut counterexample = prop.expect_failure(&plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version);
 
         counterexample.simplify();
 
@@ -335,7 +341,7 @@ mod test {
         "#});
 
         let plutus_version = PlutusVersion::default();
-        let mut counterexample = prop.expect_failure(&plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version);
 
         counterexample.simplify();
 
@@ -363,7 +369,7 @@ mod test {
         "#});
 
         let plutus_version = PlutusVersion::default();
-        let mut counterexample = prop.expect_failure(&plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version);
 
         counterexample.simplify();
 
@@ -391,7 +397,7 @@ mod test {
         "#});
 
         let plutus_version = PlutusVersion::default();
-        let mut counterexample = prop.expect_failure(&plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version);
 
         counterexample.simplify();
 
@@ -422,7 +428,7 @@ mod test {
         "#});
 
         let plutus_version = PlutusVersion::default();
-        let mut counterexample = prop.expect_failure(&plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version);
 
         counterexample.simplify();
 
@@ -458,7 +464,7 @@ mod test {
 
         let plutus_version = PlutusVersion::default();
 
-        let mut counterexample = prop.expect_failure(&plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version);
 
         counterexample.simplify();
 
@@ -493,7 +499,7 @@ mod test {
         "#});
 
         let plutus_version = PlutusVersion::default();
-        let mut counterexample = prop.expect_failure(&plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version);
 
         counterexample.simplify();
 
@@ -528,7 +534,7 @@ mod test {
         "#});
 
         let plutus_version = PlutusVersion::default();
-        let mut counterexample = prop.expect_failure(&plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version);
 
         counterexample.simplify();
 

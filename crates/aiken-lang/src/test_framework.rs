@@ -274,7 +274,7 @@ impl PropertyTest {
         })
     }
 
-    fn run_n_times<'a>(
+    pub fn run_n_times<'a>(
         &'a self,
         remaining: &mut usize,
         initial_prng: Prng,
@@ -617,7 +617,7 @@ impl<'a> Counterexample<'a> {
     /// - Sorting chunks in ascending order
     /// - Swapping nearby pairs
     /// - Redistributing values between nearby pairs
-    fn simplify(&mut self) {
+    pub fn simplify(&mut self) {
         let mut prev;
 
         loop {
