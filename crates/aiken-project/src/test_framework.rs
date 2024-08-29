@@ -242,14 +242,13 @@ mod test {
             }
         "#});
 
-        assert!(
-            prop.run::<()>(
+        assert!(prop
+            .run::<()>(
                 42,
                 PropertyTest::DEFAULT_MAX_SUCCESS,
                 &PlutusVersion::default()
             )
-            .is_success()
-        );
+            .is_success());
     }
 
     #[test]
