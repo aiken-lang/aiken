@@ -163,17 +163,19 @@ impl<'a> CodeGenerator<'a> {
         self.finalize(term)
     }
 
-    fn finalize(&mut self, mut term: Term<Name>) -> Program<Name> {
-        term = self.special_functions.apply_used_functions(term);
-
+    fn new_program<T>(&self, term: Term<T>) -> Program<T> {
         let version = match self.plutus_version {
             PlutusVersion::V1 | PlutusVersion::V2 => (1, 0, 0),
             PlutusVersion::V3 => (1, 1, 0),
         };
 
-        let mut program = Program { version, term };
+        Program { version, term }
+    }
 
-        program = aiken_optimize_and_intern(program);
+    fn finalize(&mut self, mut term: Term<Name>) -> Program<Name> {
+        term = self.special_functions.apply_used_functions(term);
+
+        let program = aiken_optimize_and_intern(self.new_program(term));
 
         // This is very important to call here.
         // If this isn't done, re-using the same instance
@@ -4245,10 +4247,8 @@ impl<'a> CodeGenerator<'a> {
                         .constr_fields_exposer()
                         .constr_index_exposer();
 
-                    let mut program: Program<Name> = Program {
-                        version: (1, 0, 0),
-                        term: self.special_functions.apply_used_functions(term),
-                    };
+                    let mut program =
+                        self.new_program(self.special_functions.apply_used_functions(term));
 
                     let mut interner = CodeGenInterner::new();
 
@@ -4358,10 +4358,7 @@ impl<'a> CodeGenerator<'a> {
                                 .apply(Term::integer(constr_index.into()))
                                 .apply(term);
 
-                            let mut program: Program<Name> = Program {
-                                version: (1, 0, 0),
-                                term,
-                            };
+                            let mut program = self.new_program(term);
 
                             let mut interner = CodeGenInterner::new();
 
@@ -4914,10 +4911,7 @@ impl<'a> CodeGenerator<'a> {
                 };
 
                 if extract_constant(term.pierce_no_inlines()).is_some() {
-                    let mut program: Program<Name> = Program {
-                        version: (1, 0, 0),
-                        term,
-                    };
+                    let mut program = self.new_program(term);
 
                     let mut interner = CodeGenInterner::new();
 
@@ -4942,10 +4936,7 @@ impl<'a> CodeGenerator<'a> {
                 if extract_constant(term.pierce_no_inlines()).is_some() {
                     term = builder::convert_type_to_data(term, &tipo);
 
-                    let mut program: Program<Name> = Program {
-                        version: (1, 0, 0),
-                        term,
-                    };
+                    let mut program = self.new_program(term);
 
                     let mut interner = CodeGenInterner::new();
 
@@ -5391,10 +5382,7 @@ impl<'a> CodeGenerator<'a> {
                     let maybe_const = extract_constant(item.pierce_no_inlines());
                     maybe_const.is_some()
                 }) {
-                    let mut program: Program<Name> = Program {
-                        version: (1, 0, 0),
-                        term,
-                    };
+                    let mut program = self.new_program(term);
 
                     let mut interner = CodeGenInterner::new();
 

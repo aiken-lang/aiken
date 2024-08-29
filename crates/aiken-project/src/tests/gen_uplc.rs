@@ -57,7 +57,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
             let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
 
             let expected = Program {
-                version: (1, 0, 0),
+                version: (1, 1, 0),
                 term: expected,
             };
 
@@ -97,7 +97,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
             let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
 
             let expected = Program {
-                version: (1, 0, 0),
+                version: (1, 1, 0),
                 term: expected,
             };
 
