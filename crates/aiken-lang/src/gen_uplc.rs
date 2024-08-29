@@ -7,7 +7,7 @@ use self::{
     builder::{
         cast_validator_args, convert_type_to_data, extract_constant, modify_cyclic_calls,
         modify_self_calls, rearrange_list_clauses, AssignmentProperties, ClauseProperties,
-        CodeGenSpecialFuncs, CycleFunctionNames, HoistableFunction, Variant,
+        CodeGenSpecialFuncs, CycleFunctionNames, Hoistable, Variant,
     },
     tree::{AirTree, TreePath},
 };
@@ -3297,6 +3297,7 @@ impl<'a> CodeGenerator<'a> {
 
     fn hoist_functions_to_validator(&mut self, mut air_tree: AirTree) -> AirTree {
         let mut functions_to_hoist = IndexMap::new();
+        let mut constants_to_hoist = IndexMap::new();
         let mut used_functions = vec![];
         let mut defined_functions = vec![];
         let mut hoisted_functions = vec![];
@@ -3313,6 +3314,7 @@ impl<'a> CodeGenerator<'a> {
         self.find_function_vars_and_depth(
             &mut air_tree,
             &mut functions_to_hoist,
+            &mut constants_to_hoist,
             &mut used_functions,
             &mut TreePath::new(),
             0,
@@ -3333,7 +3335,7 @@ impl<'a> CodeGenerator<'a> {
                 .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
 
             match function {
-                HoistableFunction::Function { body, deps, params } => {
+                Hoistable::Function { body, deps, params } => {
                     let mut hoist_body = body.clone();
                     let mut hoist_deps = deps.clone();
                     let params = params.clone();
@@ -3342,6 +3344,7 @@ impl<'a> CodeGenerator<'a> {
                     self.define_dependent_functions(
                         &mut hoist_body,
                         &mut functions_to_hoist,
+                        &mut constants_to_hoist,
                         &mut used_functions,
                         &defined_functions,
                         &mut hoist_deps,
@@ -3360,13 +3363,12 @@ impl<'a> CodeGenerator<'a> {
                         validator_hoistable.push((key, variant_name));
                     }
 
-                    *function = HoistableFunction::Function {
+                    *function = Hoistable::Function {
                         body: hoist_body,
                         deps: hoist_deps,
                         params,
                     };
                 }
-                HoistableFunction::Link(_) => todo!("Deal with Link later"),
                 _ => unreachable!(),
             }
         }
@@ -3381,7 +3383,7 @@ impl<'a> CodeGenerator<'a> {
             .flat_map(|(function_name, val)| {
                 val.into_iter()
                     .map(|(variant, (_, function))| {
-                        if let HoistableFunction::Function { deps, .. } = function {
+                        if let Hoistable::Function { deps, .. } = function {
                             ((function_name.clone(), variant.clone()), deps)
                         } else {
                             todo!("Deal with Link later")
@@ -3470,7 +3472,7 @@ impl<'a> CodeGenerator<'a> {
                     .expect("Missing Function Variant Definition");
 
                 match func {
-                    HoistableFunction::Function { params, body, deps } => {
+                    Hoistable::Function { params, body, deps } => {
                         cycle_of_functions.push((params.clone(), body.clone()));
                         cycle_deps.push(deps.clone());
                     }
@@ -3486,10 +3488,10 @@ impl<'a> CodeGenerator<'a> {
 
                 // Here we change function to be link so all functions that depend on it know its a
                 // cyclic function
-                *func = HoistableFunction::CyclicLink(function_key.clone());
+                *func = Hoistable::CyclicLink(function_key.clone());
             }
 
-            let cyclic_function = HoistableFunction::CyclicFunction {
+            let cyclic_function = Hoistable::CyclicFunction {
                 functions: cycle_of_functions,
                 deps: cycle_deps
                     .into_iter()
@@ -3532,7 +3534,8 @@ impl<'a> CodeGenerator<'a> {
                 .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
 
             match function {
-                HoistableFunction::Function { deps, .. } => {
+                Hoistable::Constant { .. } => (),
+                Hoistable::Function { deps, .. } => {
                     for (dep_generic_func, dep_variant) in deps.iter() {
                         if !(dep_generic_func == &generic_func && dep_variant == &variant) {
                             validator_hoistable
@@ -3563,8 +3566,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                     sorted_function_vec.push((generic_func, variant));
                 }
-                HoistableFunction::Link(_) => todo!("Deal with Link later"),
-                HoistableFunction::CyclicLink(cyclic_name) => {
+                Hoistable::CyclicLink(cyclic_name) => {
                     validator_hoistable.insert(0, (cyclic_name.clone(), "".to_string()));
 
                     sorted_function_vec.retain(|(generic_func, variant)| {
@@ -3586,7 +3588,7 @@ impl<'a> CodeGenerator<'a> {
 
                     *dep_path = func_tree_path.common_ancestor(dep_path);
                 }
-                HoistableFunction::CyclicFunction { deps, .. } => {
+                Hoistable::CyclicFunction { deps, .. } => {
                     for (dep_generic_func, dep_variant) in deps.iter() {
                         if !(dep_generic_func == &generic_func && dep_variant == &variant) {
                             validator_hoistable
@@ -3623,8 +3625,14 @@ impl<'a> CodeGenerator<'a> {
         }
         sorted_function_vec.dedup();
 
+        let mut sorted_hoistable = constants_to_hoist
+            .keys()
+            .map(|k| (k.to_owned(), "".to_string()))
+            .collect::<Vec<_>>();
+        sorted_hoistable.extend(sorted_function_vec);
+
         // Now we need to hoist the functions to the top of the validator
-        for (key, variant) in sorted_function_vec {
+        for (key, variant) in sorted_hoistable {
             if hoisted_functions
                 .iter()
                 .any(|(func_key, func_variant)| func_key == &key && func_variant == &variant)
@@ -3646,6 +3654,7 @@ impl<'a> CodeGenerator<'a> {
                 function,
                 (&key, &variant),
                 &functions_to_hoist,
+                &constants_to_hoist,
                 &mut hoisted_functions,
             );
         }
@@ -3657,16 +3666,15 @@ impl<'a> CodeGenerator<'a> {
         &mut self,
         air_tree: &mut AirTree,
         tree_path: &TreePath,
-        function: &HoistableFunction,
+        hoistable: &Hoistable,
         key_var: (&FunctionAccessKey, &String),
-        functions_to_hoist: &IndexMap<
-            FunctionAccessKey,
-            IndexMap<String, (TreePath, HoistableFunction)>,
-        >,
+        functions_to_hoist: &IndexMap<FunctionAccessKey, IndexMap<String, (TreePath, Hoistable)>>,
+        constants_to_hoist: &IndexMap<FunctionAccessKey, (TreePath, Hoistable)>,
         hoisted_functions: &mut Vec<(FunctionAccessKey, String)>,
     ) {
-        match function {
-            HoistableFunction::Function {
+        match hoistable {
+            Hoistable::Constant { .. } => {}
+            Hoistable::Function {
                 body,
                 deps: func_deps,
                 params,
@@ -3717,7 +3725,7 @@ impl<'a> CodeGenerator<'a> {
 
                 hoisted_functions.push((key.clone(), variant.clone()));
             }
-            HoistableFunction::CyclicFunction {
+            Hoistable::CyclicFunction {
                 functions,
                 deps: func_deps,
             } => {
@@ -3754,10 +3762,7 @@ impl<'a> CodeGenerator<'a> {
 
                 hoisted_functions.push((key.clone(), variant.clone()));
             }
-            HoistableFunction::Link(_) => {
-                todo!("This should probably be unreachable when I get to it")
-            }
-            HoistableFunction::CyclicLink(_) => {
+            Hoistable::CyclicLink(_) => {
                 unreachable!("Sorted functions should not contain cyclic links")
             }
         }
@@ -3768,10 +3773,7 @@ impl<'a> CodeGenerator<'a> {
         deps: (&TreePath, Vec<(FunctionAccessKey, String)>),
         func_key_variant: (&FunctionAccessKey, &Variant),
         hoisted_functions: &mut Vec<(FunctionAccessKey, String)>,
-        functions_to_hoist: &IndexMap<
-            FunctionAccessKey,
-            IndexMap<String, (TreePath, HoistableFunction)>,
-        >,
+        functions_to_hoist: &IndexMap<FunctionAccessKey, IndexMap<String, (TreePath, Hoistable)>>,
         air_tree: AirTree,
     ) -> AirTree {
         let (key, variant) = func_key_variant;
@@ -3790,7 +3792,8 @@ impl<'a> CodeGenerator<'a> {
                 .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
 
             match function {
-                HoistableFunction::Function { deps, .. } => {
+                Hoistable::Constant { .. } => todo!("Hoistable constant handler."),
+                Hoistable::Function { deps, .. } => {
                     for (dep_generic_func, dep_variant) in deps.iter() {
                         if !(dep_generic_func == &dep.0 && dep_variant == &dep.1) {
                             sorted_dep_vec.retain(|(generic_func, variant)| {
@@ -3803,7 +3806,7 @@ impl<'a> CodeGenerator<'a> {
 
                     sorted_dep_vec.push((dep.0.clone(), dep.1.clone()));
                 }
-                HoistableFunction::CyclicFunction { deps, .. } => {
+                Hoistable::CyclicFunction { deps, .. } => {
                     for (dep_generic_func, dep_variant) in deps.iter() {
                         if !(dep_generic_func == &dep.0 && dep_variant == &dep.1) {
                             sorted_dep_vec.retain(|(generic_func, variant)| {
@@ -3815,8 +3818,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                     sorted_dep_vec.push((dep.0.clone(), dep.1.clone()));
                 }
-                HoistableFunction::Link(_) => todo!("Deal with Link later"),
-                HoistableFunction::CyclicLink(cyclic_func) => {
+                Hoistable::CyclicLink(cyclic_func) => {
                     sorted_dep_vec.retain(|(generic_func, variant)| {
                         !(generic_func == cyclic_func && variant.is_empty())
                     });
@@ -3855,7 +3857,8 @@ impl<'a> CodeGenerator<'a> {
                 // if we are going to hoist it
                 if &dep_path.common_ancestor(func_path) == func_path {
                     match dep_function.clone() {
-                        HoistableFunction::Function {
+                        Hoistable::Constant { .. } => todo!("Hoistable constant handler."),
+                        Hoistable::Function {
                             body: mut dep_air_tree,
                             deps: dependency_deps,
                             params: dependent_params,
@@ -3888,7 +3891,7 @@ impl<'a> CodeGenerator<'a> {
                                 then,
                             )
                         }
-                        HoistableFunction::CyclicFunction { functions, .. } => {
+                        Hoistable::CyclicFunction { functions, .. } => {
                             let mut functions = functions.clone();
 
                             for (_, body) in functions.iter_mut() {
@@ -3905,8 +3908,7 @@ impl<'a> CodeGenerator<'a> {
                                 then,
                             )
                         }
-                        HoistableFunction::Link(_) => unreachable!(),
-                        HoistableFunction::CyclicLink(_) => unreachable!(),
+                        Hoistable::CyclicLink(_) => unreachable!(),
                     }
                 } else {
                     then
@@ -3917,10 +3919,8 @@ impl<'a> CodeGenerator<'a> {
     fn define_dependent_functions(
         &mut self,
         air_tree: &mut AirTree,
-        function_usage: &mut IndexMap<
-            FunctionAccessKey,
-            IndexMap<String, (TreePath, HoistableFunction)>,
-        >,
+        function_usage: &mut IndexMap<FunctionAccessKey, IndexMap<String, (TreePath, Hoistable)>>,
+        constant_usage: &mut IndexMap<FunctionAccessKey, (TreePath, Hoistable)>,
         used_functions: &mut Vec<(FunctionAccessKey, String)>,
         defined_functions: &[(FunctionAccessKey, String)],
         current_function_deps: &mut Vec<(FunctionAccessKey, String)>,
@@ -3935,6 +3935,7 @@ impl<'a> CodeGenerator<'a> {
         self.find_function_vars_and_depth(
             air_tree,
             function_usage,
+            constant_usage,
             current_function_deps,
             &mut function_tree_path,
             depth + 1,
@@ -3957,10 +3958,8 @@ impl<'a> CodeGenerator<'a> {
     fn find_function_vars_and_depth(
         &mut self,
         air_tree: &mut AirTree,
-        function_usage: &mut IndexMap<
-            FunctionAccessKey,
-            IndexMap<String, (TreePath, HoistableFunction)>,
-        >,
+        function_usage: &mut IndexMap<FunctionAccessKey, IndexMap<String, (TreePath, Hoistable)>>,
+        constant_usage: &mut IndexMap<FunctionAccessKey, (TreePath, Hoistable)>,
         dependency_functions: &mut Vec<(FunctionAccessKey, String)>,
         path: &mut TreePath,
         current_depth: usize,
@@ -3977,206 +3976,266 @@ impl<'a> CodeGenerator<'a> {
                     ..
                 } = air_tree
                 {
-                    let ValueConstructorVariant::ModuleFn {
-                        name: func_name,
-                        module,
-                        builtin: None,
-                        ..
-                    } = &constructor.variant
-                    else {
-                        return;
-                    };
-
-                    let function_var_tipo = &constructor.tipo;
-
-                    let generic_function_key = FunctionAccessKey {
-                        module_name: module.clone(),
-                        function_name: func_name.clone(),
-                    };
-
-                    let function_def = self.functions.get(&generic_function_key);
-
-                    let Some(function_def) = function_def else {
-                        let code_gen_func = self
-                            .code_gen_functions
-                            .get(&generic_function_key.function_name)
-                            .unwrap_or_else(|| {
-                                panic!(
-                                    "Missing function definition for {}. Known functions: {:?}",
-                                    generic_function_key.function_name,
-                                    self.functions.keys(),
-                                )
-                            });
-
-                        if !dependency_functions
-                            .iter()
-                            .any(|(key, name)| key == &generic_function_key && name.is_empty())
-                        {
-                            dependency_functions
-                                .push((generic_function_key.clone(), "".to_string()));
-                        }
-
-                        // Code gen functions are already monomorphized
-                        if let Some(func_variants) = function_usage.get_mut(&generic_function_key) {
-                            let (path, _) = func_variants.get_mut("").unwrap();
-                            *path = path.common_ancestor(tree_path);
-                        } else {
-                            // Shortcut path for compiler generated functions
-                            let CodeGenFunction::Function { body, params } = code_gen_func else {
-                                unreachable!()
+                    match &constructor.variant {
+                        ValueConstructorVariant::ModuleConstant { module, name, .. } => {
+                            let access_key = FunctionAccessKey {
+                                module_name: module.clone(),
+                                function_name: name.clone(),
                             };
 
-                            let mut function_variant_path = IndexMap::new();
+                            if let Some((path, _)) = constant_usage.get_mut(&access_key) {
+                                *path = path.common_ancestor(tree_path);
+                            } else {
+                                let definition = self
+                                    .constants
+                                    .get(&access_key)
+                                    .unwrap_or_else(|| panic!("unknown constant {module}.{name}"));
 
-                            let mut body = AirTree::no_op(body.clone());
+                                let mut value =
+                                    AirTree::no_op(self.build(definition, &access_key.module_name, &[]));
 
-                            body.traverse_tree_with(
-                                &mut |air_tree, _| {
-                                    erase_opaque_type_operations(air_tree, &self.data_types);
-                                },
-                                true,
-                            );
-
-                            function_variant_path.insert(
-                                "".to_string(),
-                                (
-                                    tree_path.clone(),
-                                    HoistableFunction::Function {
-                                        body,
-                                        deps: vec![],
-                                        params: params.clone(),
+                                value.traverse_tree_with(
+                                    &mut |air_tree, _| {
+                                        erase_opaque_type_operations(air_tree, &self.data_types);
                                     },
-                                ),
+                                    true,
+                                );
+
+                                value = self.hoist_functions_to_validator(value);
+
+                                let term = self
+                                    .uplc_code_gen(value.to_vec())
+                                    .constr_fields_exposer()
+                                    .constr_index_exposer();
+
+                                let mut program =
+                                    self.new_program(self.special_functions.apply_used_functions(term));
+
+                                let mut interner = CodeGenInterner::new();
+
+                                interner.program(&mut program);
+
+                                let eval_program: Program<NamedDeBruijn> =
+                                    program.remove_no_inlines().try_into().unwrap();
+
+                                let value = eval_program
+                                        .eval(ExBudget::max())
+                                        .result()
+                                        .unwrap_or_else(|e| panic!("Failed to evaluate constant: {e:#?}"))
+                                        .try_into()
+                                        .unwrap();
+
+                                constant_usage.insert(
+                                    access_key,
+                                    (
+                                        tree_path.clone(),
+                                        Hoistable::Constant {
+                                            value,
+                                        },
+                                    ),
+                                );
+                            }
+                        },
+
+                        ValueConstructorVariant::ModuleFn {
+                            name: func_name,
+                            module,
+                            builtin: None,
+                            ..
+                        } => {
+                            let function_var_tipo = &constructor.tipo;
+
+                            let generic_function_key = FunctionAccessKey {
+                                module_name: module.clone(),
+                                function_name: func_name.clone(),
+                            };
+
+                            let function_def = self.functions.get(&generic_function_key);
+
+                            let Some(function_def) = function_def else {
+                                let code_gen_func = self
+                                    .code_gen_functions
+                                    .get(&generic_function_key.function_name)
+                                    .unwrap_or_else(|| {
+                                        panic!(
+                                            "Missing function definition for {}. Known functions: {:?}",
+                                            generic_function_key.function_name,
+                                            self.functions.keys(),
+                                        )
+                                    });
+
+                                if !dependency_functions
+                                    .iter()
+                                    .any(|(key, name)| key == &generic_function_key && name.is_empty())
+                                {
+                                    dependency_functions
+                                        .push((generic_function_key.clone(), "".to_string()));
+                                }
+
+                                // Code gen functions are already monomorphized
+                                if let Some(func_variants) = function_usage.get_mut(&generic_function_key) {
+                                    let (path, _) = func_variants.get_mut("").unwrap();
+                                    *path = path.common_ancestor(tree_path);
+                                } else {
+                                    // Shortcut path for compiler generated functions
+                                    let CodeGenFunction::Function { body, params } = code_gen_func else {
+                                        unreachable!()
+                                    };
+
+                                    let mut function_variant_path = IndexMap::new();
+
+                                    let mut body = AirTree::no_op(body.clone());
+
+                                    body.traverse_tree_with(
+                                        &mut |air_tree, _| {
+                                            erase_opaque_type_operations(air_tree, &self.data_types);
+                                        },
+                                        true,
+                                    );
+
+                                    function_variant_path.insert(
+                                        "".to_string(),
+                                        (
+                                            tree_path.clone(),
+                                            Hoistable::Function {
+                                                body,
+                                                deps: vec![],
+                                                params: params.clone(),
+                                            },
+                                        ),
+                                    );
+
+                                    function_usage.insert(generic_function_key, function_variant_path);
+                                }
+                                return;
+                            };
+
+                            let mut function_var_types = function_var_tipo
+                                .arg_types()
+                                .unwrap_or_else(|| panic!("Expected a function tipo with arg types"));
+
+                            function_var_types.push(
+                                function_var_tipo
+                                    .return_type()
+                                    .unwrap_or_else(|| panic!("Should have return type")),
                             );
 
-                            function_usage.insert(generic_function_key, function_variant_path);
-                        }
-                        return;
-                    };
-
-                    let mut function_var_types = function_var_tipo
-                        .arg_types()
-                        .unwrap_or_else(|| panic!("Expected a function tipo with arg types"));
-
-                    function_var_types.push(
-                        function_var_tipo
-                            .return_type()
-                            .unwrap_or_else(|| panic!("Should have return type")),
-                    );
-
-                    let mut function_def_types = function_def
-                        .arguments
-                        .iter()
-                        .map(|arg| convert_opaque_type(&arg.tipo, &self.data_types, true))
-                        .collect_vec();
-
-                    function_def_types.push(convert_opaque_type(
-                        &function_def.return_type,
-                        &self.data_types,
-                        true,
-                    ));
-
-                    let mono_types: IndexMap<u64, Rc<Type>> = if !function_def_types.is_empty() {
-                        function_def_types
-                            .iter()
-                            .zip(function_var_types.iter())
-                            .flat_map(|(func_tipo, var_tipo)| {
-                                get_generic_id_and_type(func_tipo, var_tipo)
-                            })
-                            .collect()
-                    } else {
-                        IndexMap::new()
-                    };
-
-                    // Don't sort here. Mono types map is already in argument order.
-                    let variant = mono_types
-                        .iter()
-                        .map(|(_, tipo)| get_generic_variant_name(tipo))
-                        .join("");
-
-                    variant_name.clone_from(&variant);
-
-                    if !dependency_functions
-                        .iter()
-                        .any(|(key, name)| key == &generic_function_key && name == &variant)
-                    {
-                        dependency_functions.push((generic_function_key.clone(), variant.clone()));
-                    }
-
-                    if let Some(func_variants) = function_usage.get_mut(&generic_function_key) {
-                        if let Some((path, _)) = func_variants.get_mut(&variant) {
-                            *path = path.common_ancestor(tree_path);
-                        } else {
-                            let params = function_def
+                            let mut function_def_types = function_def
                                 .arguments
                                 .iter()
-                                .map(|arg| {
-                                    arg.arg_name.get_variable_name().unwrap_or("_").to_string()
-                                })
+                                .map(|arg| convert_opaque_type(&arg.tipo, &self.data_types, true))
                                 .collect_vec();
 
-                            let mut function_air_tree_body = AirTree::no_op(self.build(
-                                &function_def.body,
-                                &generic_function_key.module_name,
-                                &[],
+                            function_def_types.push(convert_opaque_type(
+                                &function_def.return_type,
+                                &self.data_types,
+                                true,
                             ));
 
-                            function_air_tree_body.traverse_tree_with(
-                                &mut |air_tree, _| {
-                                    erase_opaque_type_operations(air_tree, &self.data_types);
-                                    monomorphize(air_tree, &mono_types);
-                                },
-                                true,
-                            );
+                            let mono_types: IndexMap<u64, Rc<Type>> = if !function_def_types.is_empty() {
+                                function_def_types
+                                    .iter()
+                                    .zip(function_var_types.iter())
+                                    .flat_map(|(func_tipo, var_tipo)| {
+                                        get_generic_id_and_type(func_tipo, var_tipo)
+                                    })
+                                    .collect()
+                            } else {
+                                IndexMap::new()
+                            };
 
-                            func_variants.insert(
-                                variant,
-                                (
-                                    tree_path.clone(),
-                                    HoistableFunction::Function {
-                                        body: function_air_tree_body,
-                                        deps: vec![],
-                                        params,
+                            // Don't sort here. Mono types map is already in argument order.
+                            let variant = mono_types
+                                .iter()
+                                .map(|(_, tipo)| get_generic_variant_name(tipo))
+                                .join("");
+
+                            variant_name.clone_from(&variant);
+
+                            if !dependency_functions
+                                .iter()
+                                .any(|(key, name)| key == &generic_function_key && name == &variant)
+                            {
+                                dependency_functions.push((generic_function_key.clone(), variant.clone()));
+                            }
+
+                            if let Some(func_variants) = function_usage.get_mut(&generic_function_key) {
+                                if let Some((path, _)) = func_variants.get_mut(&variant) {
+                                    *path = path.common_ancestor(tree_path);
+                                } else {
+                                    let params = function_def
+                                        .arguments
+                                        .iter()
+                                        .map(|arg| {
+                                            arg.arg_name.get_variable_name().unwrap_or("_").to_string()
+                                        })
+                                        .collect_vec();
+
+                                    let mut function_air_tree_body = AirTree::no_op(self.build(
+                                        &function_def.body,
+                                        &generic_function_key.module_name,
+                                        &[],
+                                    ));
+
+                                    function_air_tree_body.traverse_tree_with(
+                                        &mut |air_tree, _| {
+                                            erase_opaque_type_operations(air_tree, &self.data_types);
+                                            monomorphize(air_tree, &mono_types);
+                                        },
+                                        true,
+                                    );
+
+                                    func_variants.insert(
+                                        variant,
+                                        (
+                                            tree_path.clone(),
+                                            Hoistable::Function {
+                                                body: function_air_tree_body,
+                                                deps: vec![],
+                                                params,
+                                            },
+                                        ),
+                                    );
+                                }
+                            } else {
+                                let params = function_def
+                                    .arguments
+                                    .iter()
+                                    .map(|arg| arg.arg_name.get_variable_name().unwrap_or("_").to_string())
+                                    .collect_vec();
+
+                                let mut function_air_tree_body = AirTree::no_op(self.build(
+                                    &function_def.body,
+                                    &generic_function_key.module_name,
+                                    &[],
+                                ));
+
+                                function_air_tree_body.traverse_tree_with(
+                                    &mut |air_tree, _| {
+                                        erase_opaque_type_operations(air_tree, &self.data_types);
+                                        monomorphize(air_tree, &mono_types);
                                     },
-                                ),
-                            );
+                                    true,
+                                );
+
+                                let mut function_variant_path = IndexMap::new();
+
+                                function_variant_path.insert(
+                                    variant,
+                                    (
+                                        tree_path.clone(),
+                                        Hoistable::Function {
+                                            body: function_air_tree_body,
+                                            deps: vec![],
+                                            params,
+                                        },
+                                    ),
+                                );
+
+                                function_usage.insert(generic_function_key, function_variant_path);
+                            }
                         }
-                    } else {
-                        let params = function_def
-                            .arguments
-                            .iter()
-                            .map(|arg| arg.arg_name.get_variable_name().unwrap_or("_").to_string())
-                            .collect_vec();
-
-                        let mut function_air_tree_body = AirTree::no_op(self.build(
-                            &function_def.body,
-                            &generic_function_key.module_name,
-                            &[],
-                        ));
-
-                        function_air_tree_body.traverse_tree_with(
-                            &mut |air_tree, _| {
-                                erase_opaque_type_operations(air_tree, &self.data_types);
-                                monomorphize(air_tree, &mono_types);
-                            },
-                            true,
-                        );
-
-                        let mut function_variant_path = IndexMap::new();
-
-                        function_variant_path.insert(
-                            variant,
-                            (
-                                tree_path.clone(),
-                                HoistableFunction::Function {
-                                    body: function_air_tree_body,
-                                    deps: vec![],
-                                    params,
-                                },
-                            ),
-                        );
-
-                        function_usage.insert(generic_function_key, function_variant_path);
+                        _ => (),
                     }
                 }
             },
@@ -4219,53 +4278,13 @@ impl<'a> CodeGenerator<'a> {
                     }
                     .into(),
                 )),
-                ValueConstructorVariant::ModuleConstant { module, name, .. } => {
-                    let access_key = FunctionAccessKey {
-                        module_name: module.clone(),
-                        function_name: name.clone(),
-                    };
-
-                    let definition = self
-                        .constants
-                        .get(&access_key)
-                        .unwrap_or_else(|| panic!("unknown constant {module}.{name}"));
-
-                    let mut value =
-                        AirTree::no_op(self.build(definition, &access_key.module_name, &[]));
-
-                    value.traverse_tree_with(
-                        &mut |air_tree, _| {
-                            erase_opaque_type_operations(air_tree, &self.data_types);
-                        },
-                        true,
-                    );
-
-                    value = self.hoist_functions_to_validator(value);
-
-                    let term = self
-                        .uplc_code_gen(value.to_vec())
-                        .constr_fields_exposer()
-                        .constr_index_exposer();
-
-                    let mut program =
-                        self.new_program(self.special_functions.apply_used_functions(term));
-
-                    let mut interner = CodeGenInterner::new();
-
-                    interner.program(&mut program);
-
-                    let eval_program: Program<NamedDeBruijn> =
-                        program.remove_no_inlines().try_into().unwrap();
-
-                    Some(
-                        eval_program
-                            .eval(ExBudget::max())
-                            .result()
-                            .unwrap_or_else(|e| panic!("Failed to evaluate constant: {e:#?}"))
-                            .try_into()
-                            .unwrap(),
-                    )
-                }
+                ValueConstructorVariant::ModuleConstant { module, name, .. } => Some(Term::Var(
+                    Name {
+                        text: format!("{module}_{name}"),
+                        unique: 0.into(),
+                    }
+                    .into(),
+                )),
                 ValueConstructorVariant::ModuleFn {
                     name: func_name,
                     module,

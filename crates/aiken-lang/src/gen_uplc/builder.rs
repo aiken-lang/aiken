@@ -49,17 +49,19 @@ pub enum CodeGenFunction {
 }
 
 #[derive(Clone, Debug)]
-pub enum HoistableFunction {
+pub enum Hoistable {
     Function {
         body: AirTree,
         deps: Vec<(FunctionAccessKey, Variant)>,
         params: Params,
     },
+    Constant {
+        value: Term<Name>,
+    },
     CyclicFunction {
         functions: Vec<(Params, AirTree)>,
         deps: Vec<(FunctionAccessKey, Variant)>,
     },
-    Link((FunctionAccessKey, Variant)),
     CyclicLink(FunctionAccessKey),
 }
 
