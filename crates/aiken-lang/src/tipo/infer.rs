@@ -632,6 +632,14 @@ fn infer_definition(
                 location,
             )?;
 
+            // NOTE: The assignment above is only a convenient way to create the TypedExpression
+            // that will be reduced at compile-time. We must increment its usage to not
+            // automatically trigger a warning since we are virtually creating a block with a
+            // single assignment that is then left unused.
+            //
+            // The usage of the constant is tracked through different means.
+            environment.increment_usage(&name);
+
             let typed_expr = match typed_assignment {
                 TypedExpr::Assignment { value, .. } => value,
                 _ => unreachable!("infer_assignment inferred something else than an assignment?"),
