@@ -61,7 +61,7 @@ pub enum Error {
     ))]
     LogicalOpChainMissingExpr {
         op: LogicalOpChainKind,
-        #[label]
+        #[label("not enough operands")]
         location: Span,
         missing: u8,
     },
@@ -109,9 +109,9 @@ pub enum Error {
         discard = "_".if_supports_color(Stdout, |s| s.yellow())
     ))]
     DuplicateArgument {
-        #[label]
+        #[label("found here")]
         location: Span,
-        #[label]
+        #[label("found here again")]
         duplicate_location: Span,
         label: String,
     },
@@ -153,9 +153,9 @@ For example:
         , variant_Point = "Point".if_supports_color(Stdout, |s| s.green())
     ))]
     DuplicateField {
-        #[label]
+        #[label("found here")]
         location: Span,
-        #[label]
+        #[label("found here again")]
         duplicate_location: Span,
         label: String,
     },
@@ -202,9 +202,9 @@ You can use '{discard}' and numbers to distinguish between similar names.
         discard = "_".if_supports_color(Stdout, |s| s.yellow())
     ))]
     DuplicateName {
-        #[label]
+        #[label("also defined here")]
         location: Span,
-        #[label]
+        #[label("originally defined here")]
         previous_location: Span,
         name: String,
     },
@@ -219,9 +219,9 @@ You can use '{discard}' and numbers to distinguish between similar names.
         cannot = "cannot".if_supports_color(Stdout, |s| s.red())
     ))]
     DuplicateTypeName {
-        #[label]
+        #[label("also defined here")]
         location: Span,
-        #[label]
+        #[label("originally defined here")]
         previous_location: Span,
         name: String,
     },
@@ -235,7 +235,7 @@ You can use '{discard}' and numbers to distinguish between similar names.
     ))]
     #[diagnostic(code("duplicate::pattern"))]
     DuplicateVarInPattern {
-        #[label]
+        #[label("duplicate identifier")]
         location: Span,
         name: String,
     },
@@ -249,7 +249,7 @@ You can use '{discard}' and numbers to distinguish between similar names.
     ))]
     #[diagnostic(code("unexpected::variable"))]
     ExtraVarInAlternativePattern {
-        #[label]
+        #[label("unexpected variable")]
         location: Span,
         name: String,
     },
@@ -273,7 +273,7 @@ You can use '{discard}' and numbers to distinguish between similar names.
         "Data-types can't hold functions. If you want to define method-like functions, group the type definition and the methods under a common namespace in a standalone module."
     ))]
     FunctionTypeInData {
-        #[label]
+        #[label("non-serialisable inhabitants")]
         location: Span,
     },
 
@@ -313,7 +313,7 @@ You can use '{discard}' and numbers to distinguish between similar names.
         discard = "_".if_supports_color(Stdout, |s| s.yellow())
     ))]
     ImplicitlyDiscardedExpression {
-        #[label]
+        #[label("implicitly discarded")]
         location: Span,
     },
 
@@ -326,7 +326,7 @@ You can use '{discard}' and numbers to distinguish between similar names.
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types"))]
     #[diagnostic(code("arity::constructor"))]
     IncorrectFieldsArity {
-        #[label]
+        #[label("{}", if given < expected { "missing fields" } else { "extraneous fields" })]
         location: Span,
         expected: usize,
         given: usize,
@@ -363,7 +363,7 @@ From there, you can define 'increment', a function that takes a single argument 
         , type_Int = "Int".if_supports_color(Stdout, |s| s.green())
     ))]
     IncorrectFunctionCallArity {
-        #[label]
+        #[label("{}", if given < expected { "missing arguments" } else { "extraneous arguments" })]
         location: Span,
         expected: usize,
         given: usize,
@@ -403,7 +403,7 @@ From there, you can define 'increment', a function that takes a single argument 
         discard = "_".if_supports_color(Stdout, |s| s.yellow())
     ))]
     IncorrectTupleArity {
-        #[label]
+        #[label("{}", if given < expected { "missing elements" } else { "extraneous elements" })]
         location: Span,
         expected: usize,
         given: usize,
@@ -485,24 +485,7 @@ If you really meant to return that last expression, try to replace it with the f
     ))]
     #[diagnostic(code("missing::variable"))]
     MissingVarInAlternativePattern {
-        #[label]
-        location: Span,
-        name: String,
-    },
-
-    #[error(
-        "I stumbled upon an invalid (non-local) clause guard '{}'.\n",
-        name.if_supports_color(Stdout, |s| s.purple())
-    )]
-    #[diagnostic(url(
-        "https://aiken-lang.org/language-tour/control-flow#checking-equality-and-ordering-in-patterns"
-    ))]
-    #[diagnostic(code("illegal::clause_guard"))]
-    #[diagnostic(help(
-        "There are some conditions regarding what can be used in a guard. Values must be either local to the function, or defined as module constants. You can't use functions or records in there."
-    ))]
-    NonLocalClauseGuardVariable {
-        #[label]
+        #[label("missing case")]
         location: Span,
         name: String,
     },
@@ -517,7 +500,7 @@ If you really meant to return that last expression, try to replace it with the f
         type_info = tipo.to_pretty(0).if_supports_color(Stdout, |s| s.red())
     ))]
     NotIndexable {
-        #[label]
+        #[label("not indexable")]
         location: Span,
         tipo: Rc<Type>,
     },
@@ -564,7 +547,7 @@ In this particular instance, the following cases are unmatched:
         inference = tipo.to_pretty(0)
     ))]
     NotFn {
-        #[label]
+        #[label("not a function")]
         location: Span,
         tipo: Rc<Type>,
     },
@@ -576,8 +559,9 @@ In this particular instance, the following cases are unmatched:
 
 To fix this, you'll need to either turn that argument as a labeled argument, or make the next one positional."#))]
     PositionalArgumentAfterLabeled {
-        #[label]
+        #[label("by position")]
         location: Span,
+        #[label("by label")]
         labeled_arg_location: Span,
     },
 
@@ -595,7 +579,7 @@ Maybe you meant to turn it public using the '{keyword_pub}' keyword?"#
         , keyword_pub = "pub".if_supports_color(Stdout, |s| s.bright_blue())
     ))]
     PrivateTypeLeak {
-        #[label]
+        #[label("private type leak")]
         location: Span,
         leaked: Type,
     },
@@ -649,7 +633,7 @@ You can help me by providing a type-annotation for 'x', as such:
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#record-updates"))]
     #[diagnostic(code("illegal::record_update"))]
     RecordUpdateInvalidConstructor {
-        #[label]
+        #[label("invalid constructor")]
         location: Span,
     },
 
@@ -660,7 +644,7 @@ You can help me by providing a type-annotation for 'x', as such:
         "I have several aptitudes, but inferring recursive types isn't one them. It is still possible to define recursive types just fine, but I will need a little help in the form of type annotation to infer their types should they show up."
     ))]
     RecursiveType {
-        #[label]
+        #[label("infinite recursion")]
         location: Span,
     },
 
@@ -698,7 +682,7 @@ You can help me by providing a type-annotation for 'x', as such:
     #[diagnostic(url("https://aiken-lang.org/language-tour/functions#labeled-arguments"))]
     #[diagnostic(code("unexpected::module_name"))]
     UnexpectedLabeledArg {
-        #[label]
+        #[label("unexpected labeled args")]
         location: Span,
         label: String,
     },
@@ -721,7 +705,7 @@ Perhaps, try the following:
         , suggestion = suggest_constructor_pattern(name, args, module, *spread_location)
     ))]
     UnexpectedLabeledArgInPattern {
-        #[label]
+        #[label("unexpected labeled arg")]
         location: Span,
         label: String,
         name: String,
@@ -757,7 +741,7 @@ Perhaps, try the following:
         suggest_neighbor(name, known_modules.iter(), "Did you forget to add a package as dependency?")
     ))]
     UnknownModule {
-        #[label]
+        #[label("unknown module")]
         location: Span,
         name: String,
         known_modules: Vec<String>,
@@ -804,7 +788,7 @@ Perhaps, try the following:
         )
     ))]
     UnknownModuleField {
-        #[label]
+        #[label("unknown import")]
         location: Span,
         name: String,
         module_name: String,
@@ -827,7 +811,7 @@ Perhaps, try the following:
         )
     ))]
     UnknownModuleType {
-        #[label]
+        #[label("unknown import")]
         location: Span,
         name: String,
         module_name: String,
@@ -860,7 +844,7 @@ Perhaps, try the following:
         }
     ))]
     UnknownModuleValue {
-        #[label]
+        #[label("unknown import")]
         location: Span,
         name: String,
         module_name: String,
@@ -878,7 +862,7 @@ Perhaps, try the following:
         suggest_neighbor(label, fields.iter(), "Did you forget to make it public?\nNote also that record access is only supported on types with a single constructor.")
     ))]
     UnknownRecordField {
-        #[label]
+        #[label("unknown field")]
         location: Span,
         typ: Rc<Type>,
         label: String,
@@ -943,7 +927,7 @@ Perhaps, try the following:
 
 The best thing to do from here is to remove it."#))]
     UnnecessarySpreadOperator {
-        #[label]
+        #[label("unnecessary spread")]
         location: Span,
         arity: usize,
     },
@@ -952,7 +936,7 @@ The best thing to do from here is to remove it."#))]
     #[diagnostic(url("https://aiken-lang.org/language-tour/custom-types#record-updates"))]
     #[diagnostic(code("illegal::record_update"))]
     UpdateMultiConstructorType {
-        #[label]
+        #[label("more than one constructor")]
         location: Span,
     },
 
@@ -966,7 +950,7 @@ The best thing to do from here is to remove it."#))]
         "lib/".if_supports_color(Stdout, |s| s.purple()))
     )]
     ValidatorImported {
-        #[label]
+        #[label("validator")]
         location: Span,
         name: String,
     },
@@ -1141,7 +1125,6 @@ impl ExtraData for Error {
             | Error::LastExpressionIsAssignment { .. }
             | Error::LogicalOpChainMissingExpr { .. }
             | Error::MissingVarInAlternativePattern { .. }
-            | Error::NonLocalClauseGuardVariable { .. }
             | Error::NotIndexable { .. }
             | Error::NotExhaustivePatternMatch { .. }
             | Error::NotFn { .. }
