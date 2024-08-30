@@ -18,8 +18,8 @@ description: "Code:\n\npub fn add(a: Int, b: Int) -> Int {\n    a + b\n}\n"
       }
     }
   ],
-  "compiledCode": "500100002322337000046eb4004dd68009",
-  "hash": "bcd6700b4dba798a7d19c5769ef3deb21423f8809594a6942860dd1f",
+  "compiledCode": "500101002322337000046eb4004dd68009",
+  "hash": "b8374597a772cef80d891b7f6a03588e10cc19b780251228ba4ce9c6",
   "definitions": {
     "Int": {
       "dataType": "integer"

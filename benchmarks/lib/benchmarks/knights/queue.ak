@@ -1,12 +1,10 @@
-use aiken/list
+use aiken/collection/list
 
 pub opaque type Queue<a> {
   inner: List<a>,
 }
 
-pub fn new() -> Queue<a> {
-  [] |> Queue
-}
+pub const empty: Queue<a> = [] |> Queue
 
 pub fn to_list(self: Queue<a>) -> List<a> {
   self.inner

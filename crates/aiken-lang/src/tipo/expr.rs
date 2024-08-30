@@ -11,15 +11,16 @@ use super::{
 use crate::{
     ast::{
         self, Annotation, ArgName, AssignmentKind, AssignmentPattern, BinOp, Bls12_381Point,
-        ByteArrayFormatPreference, CallArg, Constant, Curve, Function, IfBranch,
-        LogicalOpChainKind, Pattern, RecordUpdateSpread, Span, TraceKind, TraceLevel, Tracing,
-        TypedArg, TypedCallArg, TypedClause, TypedIfBranch, TypedPattern, TypedRecordUpdateArg,
-        TypedValidator, UnOp, UntypedArg, UntypedAssignmentKind, UntypedClause, UntypedFunction,
-        UntypedIfBranch, UntypedPattern, UntypedRecordUpdateArg,
+        ByteArrayFormatPreference, CallArg, Curve, Function, IfBranch, LogicalOpChainKind, Pattern,
+        RecordUpdateSpread, Span, TraceKind, TraceLevel, Tracing, TypedArg, TypedCallArg,
+        TypedClause, TypedIfBranch, TypedPattern, TypedRecordUpdateArg, TypedValidator, UnOp,
+        UntypedArg, UntypedAssignmentKind, UntypedClause, UntypedFunction, UntypedIfBranch,
+        UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{from_default_function, BUILTIN},
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
+    parser::token::Base,
     tipo::{fields::FieldMap, DefaultFunction, PatternConstructor, TypeVar},
     IdGenerator,
 };
@@ -434,8 +435,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             UntypedExpr::UInt {
                 location,
                 value,
-                base: _,
-            } => Ok(self.infer_uint(value, location)),
+                base,
+            } => Ok(self.infer_uint(value, base, location)),
 
             UntypedExpr::Sequence {
                 expressions,
@@ -550,8 +551,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             UntypedExpr::CurvePoint {
                 location,
                 point,
-                preferred_format: _,
-            } => self.infer_curve_point(*point, location),
+                preferred_format,
+            } => self.infer_curve_point(*point, preferred_format, location),
 
             UntypedExpr::RecordUpdate {
                 location,
@@ -592,10 +593,16 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             location,
             bytes,
             tipo: Type::byte_array(),
+            preferred_format,
         })
     }
 
-    fn infer_curve_point(&mut self, curve: Curve, location: Span) -> Result<TypedExpr, Error> {
+    fn infer_curve_point(
+        &mut self,
+        curve: Curve,
+        preferred_format: ByteArrayFormatPreference,
+        location: Span,
+    ) -> Result<TypedExpr, Error> {
         let tipo = match curve {
             Curve::Bls12_381(point) => match point {
                 Bls12_381Point::G1(_) => Type::g1_element(),
@@ -607,6 +614,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             location,
             point: curve.into(),
             tipo,
+            preferred_format,
         })
     }
 
@@ -1176,7 +1184,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         Ok((typed_arg, extra_assignment))
     }
 
-    fn infer_assignment(
+    pub fn infer_assignment(
         &mut self,
         untyped_pattern: UntypedPattern,
         untyped_value: UntypedExpr,
@@ -1466,64 +1474,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         Ok(typed_patterns)
     }
 
-    // TODO: extract the type annotation checking into a infer_module_const
-    // function that uses this function internally
-    pub fn infer_const(
-        &mut self,
-        annotation: &Option<Annotation>,
-        value: Constant,
-    ) -> Result<Constant, Error> {
-        let inferred = match value {
-            Constant::Int {
-                location,
-                value,
-                base,
-            } => Ok(Constant::Int {
-                location,
-                value,
-                base,
-            }),
-
-            Constant::String { location, value } => Ok(Constant::String { location, value }),
-
-            Constant::ByteArray {
-                location,
-                bytes,
-                preferred_format,
-            } => {
-                let _ = self.infer_bytearray(bytes.clone(), preferred_format, location)?;
-                Ok(Constant::ByteArray {
-                    location,
-                    bytes,
-                    preferred_format,
-                })
-            }
-            Constant::CurvePoint {
-                location,
-                point,
-                preferred_format,
-            } => Ok(Constant::CurvePoint {
-                location,
-                point,
-                preferred_format,
-            }),
-        }?;
-
-        // Check type annotation is accurate.
-        if let Some(ann) = annotation {
-            let const_ann = self.type_from_annotation(ann)?;
-
-            self.unify(
-                const_ann.clone(),
-                inferred.tipo(),
-                inferred.location(),
-                const_ann.is_data(),
-            )?;
-        };
-
-        Ok(inferred)
-    }
-
     fn infer_if(
         &mut self,
         branches: Vec1<UntypedIfBranch>,
@@ -1765,11 +1715,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         Ok((args, body, return_type))
     }
 
-    fn infer_uint(&mut self, value: String, location: Span) -> TypedExpr {
+    fn infer_uint(&mut self, value: String, base: Base, location: Span) -> TypedExpr {
         TypedExpr::UInt {
             location,
             value,
             tipo: Type::int(),
+            base,
         }
     }
 
@@ -2778,6 +2729,7 @@ fn diagnose_expr(expr: TypedExpr) -> TypedExpr {
                             tipo: Type::byte_array(),
                             bytes: vec![],
                             location,
+                            preferred_format: ByteArrayFormatPreference::HexadecimalString,
                         },
                     },
                 ],

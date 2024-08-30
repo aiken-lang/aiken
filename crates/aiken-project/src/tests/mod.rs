@@ -9,6 +9,7 @@ use aiken_lang::{
         DataTypeKey, FunctionAccessKey, ModuleKind, TraceLevel, Tracing, TypedDataType,
         TypedFunction,
     },
+    expr::TypedExpr,
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
     parser,
@@ -28,6 +29,7 @@ pub struct TestProject {
     pub package: PackageName,
     pub id_gen: IdGenerator,
     pub functions: IndexMap<FunctionAccessKey, TypedFunction>,
+    pub constants: IndexMap<FunctionAccessKey, TypedExpr>,
     pub data_types: IndexMap<DataTypeKey, TypedDataType>,
     pub module_types: HashMap<String, TypeInfo>,
     pub module_sources: HashMap<String, (String, LineNumbers)>,
@@ -48,12 +50,14 @@ impl TestProject {
 
         let functions = builtins::prelude_functions(&id_gen, &module_types);
         let data_types = builtins::prelude_data_types(&id_gen);
+        let constants = IndexMap::new();
 
         TestProject {
             package,
             id_gen,
             module_types,
             functions,
+            constants,
             data_types,
             module_sources: HashMap::new(),
         }
@@ -63,6 +67,7 @@ impl TestProject {
         CodeGenerator::new(
             PlutusVersion::default(),
             utils::indexmap::as_ref_values(&self.functions),
+            utils::indexmap::as_ref_values(&self.constants),
             utils::indexmap::as_ref_values(&self.data_types),
             utils::indexmap::as_str_ref_values(&self.module_types),
             utils::indexmap::as_str_ref_values(&self.module_sources),
@@ -104,7 +109,11 @@ impl TestProject {
             .expect("Failed to type-check module");
 
         // Register function definitions & data-types for easier access later.
-        ast.register_definitions(&mut self.functions, &mut self.data_types);
+        ast.register_definitions(
+            &mut self.functions,
+            &mut self.constants,
+            &mut self.data_types,
+        );
 
         // Register module sources for an easier access later.
         self.module_sources.insert(

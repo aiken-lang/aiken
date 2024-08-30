@@ -1,8 +1,8 @@
 use self::{environment::Environment, pretty::Printer};
 use crate::{
     ast::{
-        well_known, Annotation, Constant, DataType, DataTypeKey, DefinitionLocation, ModuleKind,
-        Span, TypedDataType,
+        well_known, Annotation, DataType, DataTypeKey, DefinitionLocation, ModuleKind, Span,
+        TypedDataType,
     },
     tipo::fields::FieldMap,
 };
@@ -1216,7 +1216,7 @@ pub enum ValueConstructorVariant {
     ModuleConstant {
         location: Span,
         module: String,
-        literal: Constant,
+        name: String,
     },
 
     /// A function belonging to the module
@@ -1262,11 +1262,14 @@ impl ValueConstructorVariant {
                 location: *location,
             },
 
-            // TODO: remove this clone with an rc clone
             Self::ModuleConstant {
-                literal, location, ..
+                name,
+                module,
+                location,
+                ..
             } => ModuleValueConstructor::Constant {
-                literal: literal.clone(),
+                name: name.clone(),
+                module: module.clone(),
                 location: *location,
             },
 
@@ -1400,8 +1403,9 @@ pub enum ModuleValueConstructor {
     },
 
     Constant {
-        literal: Constant,
         location: Span,
+        module: String,
+        name: String,
     },
 }
 

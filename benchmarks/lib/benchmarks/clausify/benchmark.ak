@@ -1,5 +1,5 @@
-use aiken/int
-use aiken/list
+use aiken/collection/list
+use aiken/primitive/int
 
 // ------------------------------------------------------------------ Benchmarks
 

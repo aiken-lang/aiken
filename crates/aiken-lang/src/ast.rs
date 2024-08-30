@@ -161,6 +161,7 @@ impl TypedModule {
     pub fn register_definitions(
         &self,
         functions: &mut IndexMap<FunctionAccessKey, TypedFunction>,
+        constants: &mut IndexMap<FunctionAccessKey, TypedExpr>,
         data_types: &mut IndexMap<DataTypeKey, TypedDataType>,
     ) {
         for def in self.definitions() {
@@ -203,7 +204,17 @@ impl TypedModule {
                     }
                 }
 
-                Definition::TypeAlias(_) | Definition::ModuleConstant(_) | Definition::Use(_) => {}
+                Definition::ModuleConstant(ModuleConstant { name, value, .. }) => {
+                    constants.insert(
+                        FunctionAccessKey {
+                            module_name: self.name.clone(),
+                            function_name: name.clone(),
+                        },
+                        value.clone(),
+                    );
+                }
+
+                Definition::TypeAlias(_) | Definition::Use(_) => {}
             }
         }
     }
@@ -459,18 +470,17 @@ pub struct Use<PackageName> {
     pub unqualified: Vec<UnqualifiedImport>,
 }
 
-pub type TypedModuleConstant = ModuleConstant<Rc<Type>>;
-pub type UntypedModuleConstant = ModuleConstant<()>;
+pub type TypedModuleConstant = ModuleConstant<TypedExpr>;
+pub type UntypedModuleConstant = ModuleConstant<UntypedExpr>;
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct ModuleConstant<T> {
+pub struct ModuleConstant<Expr> {
     pub doc: Option<String>,
     pub location: Span,
     pub public: bool,
     pub name: String,
     pub annotation: Option<Annotation>,
-    pub value: Box<Constant>,
-    pub tipo: T,
+    pub value: Expr,
 }
 
 pub type TypedValidator = Validator<Rc<Type>, TypedArg, TypedExpr>;
@@ -746,7 +756,7 @@ pub enum Definition<T, Arg, Expr, PackageName> {
 
     Use(Use<PackageName>),
 
-    ModuleConstant(ModuleConstant<T>),
+    ModuleConstant(ModuleConstant<Expr>),
 
     Test(Function<T, Expr, ArgVia<Arg, Expr>>),
 
@@ -841,55 +851,6 @@ impl<'a> Located<'a> {
 pub struct DefinitionLocation<'module> {
     pub module: Option<&'module str>,
     pub span: Span,
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum Constant {
-    Int {
-        location: Span,
-        value: String,
-        base: Base,
-    },
-
-    String {
-        location: Span,
-        value: String,
-    },
-
-    ByteArray {
-        location: Span,
-        bytes: Vec<u8>,
-        preferred_format: ByteArrayFormatPreference,
-    },
-
-    CurvePoint {
-        location: Span,
-        point: Box<Curve>,
-        preferred_format: ByteArrayFormatPreference,
-    },
-}
-
-impl Constant {
-    pub fn tipo(&self) -> Rc<Type> {
-        match self {
-            Constant::Int { .. } => Type::int(),
-            Constant::String { .. } => Type::string(),
-            Constant::ByteArray { .. } => Type::byte_array(),
-            Constant::CurvePoint { point, .. } => match point.as_ref() {
-                Curve::Bls12_381(Bls12_381Point::G1(_)) => Type::g1_element(),
-                Curve::Bls12_381(Bls12_381Point::G2(_)) => Type::g2_element(),
-            },
-        }
-    }
-
-    pub fn location(&self) -> Span {
-        match self {
-            Constant::Int { location, .. }
-            | Constant::String { location, .. }
-            | Constant::ByteArray { location, .. }
-            | Constant::CurvePoint { location, .. } => *location,
-        }
-    }
 }
 
 pub type TypedCallArg = CallArg<TypedExpr>;
@@ -1296,6 +1257,19 @@ impl Annotation {
             location: inner.location(),
             arguments: vec![inner],
         }
+    }
+
+    pub fn list(inner: Annotation, location: Span) -> Self {
+        Annotation::Constructor {
+            name: "List".to_string(),
+            module: None,
+            arguments: vec![inner],
+            location,
+        }
+    }
+
+    pub fn tuple(elems: Vec<Annotation>, location: Span) -> Self {
+        Annotation::Tuple { elems, location }
     }
 
     pub fn is_logically_equal(&self, other: &Annotation) -> bool {

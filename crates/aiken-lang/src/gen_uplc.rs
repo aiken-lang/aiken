@@ -5,9 +5,9 @@ pub mod tree;
 use self::{
     air::Air,
     builder::{
-        cast_validator_args, constants_ir, convert_type_to_data, extract_constant,
-        modify_cyclic_calls, modify_self_calls, rearrange_list_clauses, AssignmentProperties,
-        ClauseProperties, CodeGenSpecialFuncs, CycleFunctionNames, HoistableFunction, Variant,
+        cast_validator_args, convert_type_to_data, extract_constant, modify_cyclic_calls,
+        modify_self_calls, rearrange_list_clauses, AssignmentProperties, ClauseProperties,
+        CodeGenSpecialFuncs, CycleFunctionNames, HoistableFunction, Variant,
     },
     tree::{AirTree, TreePath},
 };
@@ -58,6 +58,7 @@ pub struct CodeGenerator<'a> {
     plutus_version: PlutusVersion,
     /// immutable index maps
     functions: IndexMap<&'a FunctionAccessKey, &'a TypedFunction>,
+    constants: IndexMap<&'a FunctionAccessKey, &'a TypedExpr>,
     data_types: IndexMap<&'a DataTypeKey, &'a TypedDataType>,
     module_types: IndexMap<&'a str, &'a TypeInfo>,
     module_src: IndexMap<&'a str, &'a (String, LineNumbers)>,
@@ -67,7 +68,6 @@ pub struct CodeGenerator<'a> {
     defined_functions: IndexMap<FunctionAccessKey, ()>,
     special_functions: CodeGenSpecialFuncs,
     code_gen_functions: IndexMap<String, CodeGenFunction>,
-    zero_arg_functions: IndexMap<(FunctionAccessKey, Variant), Vec<Air>>,
     cyclic_functions:
         IndexMap<(FunctionAccessKey, Variant), (CycleFunctionNames, usize, FunctionAccessKey)>,
     /// mutable and reset as well
@@ -82,6 +82,7 @@ impl<'a> CodeGenerator<'a> {
     pub fn new(
         plutus_version: PlutusVersion,
         functions: IndexMap<&'a FunctionAccessKey, &'a TypedFunction>,
+        constants: IndexMap<&'a FunctionAccessKey, &'a TypedExpr>,
         data_types: IndexMap<&'a DataTypeKey, &'a TypedDataType>,
         module_types: IndexMap<&'a str, &'a TypeInfo>,
         module_src: IndexMap<&'a str, &'a (String, LineNumbers)>,
@@ -90,6 +91,7 @@ impl<'a> CodeGenerator<'a> {
         CodeGenerator {
             plutus_version,
             functions,
+            constants,
             data_types,
             module_types,
             module_src,
@@ -97,7 +99,6 @@ impl<'a> CodeGenerator<'a> {
             defined_functions: IndexMap::new(),
             special_functions: CodeGenSpecialFuncs::new(),
             code_gen_functions: IndexMap::new(),
-            zero_arg_functions: IndexMap::new(),
             cyclic_functions: IndexMap::new(),
             id_gen: IdGenerator::new(),
         }
@@ -105,7 +106,6 @@ impl<'a> CodeGenerator<'a> {
 
     pub fn reset(&mut self, reset_special_functions: bool) {
         self.code_gen_functions = IndexMap::new();
-        self.zero_arg_functions = IndexMap::new();
         self.defined_functions = IndexMap::new();
         self.cyclic_functions = IndexMap::new();
         self.id_gen = IdGenerator::new();
@@ -163,17 +163,19 @@ impl<'a> CodeGenerator<'a> {
         self.finalize(term)
     }
 
-    fn finalize(&mut self, mut term: Term<Name>) -> Program<Name> {
-        term = self.special_functions.apply_used_functions(term);
-
+    fn new_program<T>(&self, term: Term<T>) -> Program<T> {
         let version = match self.plutus_version {
             PlutusVersion::V1 | PlutusVersion::V2 => (1, 0, 0),
             PlutusVersion::V3 => (1, 1, 0),
         };
 
-        let mut program = Program { version, term };
+        Program { version, term }
+    }
 
-        program = aiken_optimize_and_intern(program);
+    fn finalize(&mut self, mut term: Term<Name>) -> Program<Name> {
+        term = self.special_functions.apply_used_functions(term);
+
+        let program = aiken_optimize_and_intern(self.new_program(term));
 
         // This is very important to call here.
         // If this isn't done, re-using the same instance
@@ -268,12 +270,7 @@ impl<'a> CodeGenerator<'a> {
 
                 TypedExpr::Var {
                     constructor, name, ..
-                } => match &constructor.variant {
-                    ValueConstructorVariant::ModuleConstant { literal, .. } => {
-                        constants_ir(literal)
-                    }
-                    _ => AirTree::var(constructor.clone(), name, ""),
-                },
+                } => AirTree::var(constructor.clone(), name, ""),
 
                 TypedExpr::Fn { args, body, .. } => AirTree::anon_func(
                     args.iter()
@@ -743,8 +740,16 @@ impl<'a> CodeGenerator<'a> {
                             AirTree::builtin(*builtin, tipo.clone(), vec![])
                         }
                     }
-                    ModuleValueConstructor::Constant { literal, .. } => {
-                        builder::constants_ir(literal)
+                    ModuleValueConstructor::Constant { module, name, .. } => {
+                        let type_info = self.module_types.get(module_name.as_str()).unwrap();
+
+                        let value = type_info.values.get(name).unwrap();
+
+                        AirTree::var(
+                            ValueConstructor::public(tipo.clone(), value.variant.clone()),
+                            format!("{module}_{name}"),
+                            "",
+                        )
                     }
                 },
 
@@ -3527,17 +3532,15 @@ impl<'a> CodeGenerator<'a> {
                 .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
 
             match function {
-                HoistableFunction::Function { deps, params, .. } => {
-                    if !params.is_empty() {
-                        for (dep_generic_func, dep_variant) in deps.iter() {
-                            if !(dep_generic_func == &generic_func && dep_variant == &variant) {
-                                validator_hoistable
-                                    .insert(0, (dep_generic_func.clone(), dep_variant.clone()));
+                HoistableFunction::Function { deps, .. } => {
+                    for (dep_generic_func, dep_variant) in deps.iter() {
+                        if !(dep_generic_func == &generic_func && dep_variant == &variant) {
+                            validator_hoistable
+                                .insert(0, (dep_generic_func.clone(), dep_variant.clone()));
 
-                                sorted_function_vec.retain(|(generic_func, variant)| {
-                                    !(generic_func == dep_generic_func && variant == dep_variant)
-                                });
-                            }
+                            sorted_function_vec.retain(|(generic_func, variant)| {
+                                !(generic_func == dep_generic_func && variant == dep_variant)
+                            });
                         }
                     }
 
@@ -3680,56 +3683,39 @@ impl<'a> CodeGenerator<'a> {
                 // first grab dependencies
                 let func_params = params;
 
-                let params_empty = func_params.is_empty();
-
                 let deps = (tree_path, func_deps.clone());
 
-                if !params_empty {
-                    let recursive_nonstatics = if is_recursive {
-                        modify_self_calls(&mut body, key, variant, func_params)
-                    } else {
-                        func_params.clone()
-                    };
-
-                    let node_to_edit = air_tree.find_air_tree_node(tree_path);
-
-                    let defined_function = AirTree::define_func(
-                        &key.function_name,
-                        &key.module_name,
-                        variant,
-                        func_params.clone(),
-                        is_recursive,
-                        recursive_nonstatics,
-                        body,
-                        node_to_edit.clone(),
-                    );
-
-                    let defined_dependencies = self.hoist_dependent_functions(
-                        deps,
-                        params_empty,
-                        (key, variant),
-                        hoisted_functions,
-                        functions_to_hoist,
-                        defined_function,
-                    );
-
-                    // now hoist full function onto validator tree
-                    *node_to_edit = defined_dependencies;
-
-                    hoisted_functions.push((key.clone(), variant.clone()));
+                let recursive_nonstatics = if is_recursive {
+                    modify_self_calls(&mut body, key, variant, func_params)
                 } else {
-                    let defined_func = self.hoist_dependent_functions(
-                        deps,
-                        params_empty,
-                        (key, variant),
-                        hoisted_functions,
-                        functions_to_hoist,
-                        body,
-                    );
+                    func_params.clone()
+                };
 
-                    self.zero_arg_functions
-                        .insert((key.clone(), variant.clone()), defined_func.to_vec());
-                }
+                let node_to_edit = air_tree.find_air_tree_node(tree_path);
+
+                let defined_function = AirTree::define_func(
+                    &key.function_name,
+                    &key.module_name,
+                    variant,
+                    func_params.clone(),
+                    is_recursive,
+                    recursive_nonstatics,
+                    body,
+                    node_to_edit.clone(),
+                );
+
+                let defined_dependencies = self.hoist_dependent_functions(
+                    deps,
+                    (key, variant),
+                    hoisted_functions,
+                    functions_to_hoist,
+                    defined_function,
+                );
+
+                // now hoist full function onto validator tree
+                *node_to_edit = defined_dependencies;
+
+                hoisted_functions.push((key.clone(), variant.clone()));
             }
             HoistableFunction::CyclicFunction {
                 functions,
@@ -3757,8 +3743,6 @@ impl<'a> CodeGenerator<'a> {
 
                 let defined_dependencies = self.hoist_dependent_functions(
                     deps,
-                    // cyclic functions always have params
-                    false,
                     (key, variant),
                     hoisted_functions,
                     functions_to_hoist,
@@ -3782,7 +3766,6 @@ impl<'a> CodeGenerator<'a> {
     fn hoist_dependent_functions(
         &mut self,
         deps: (&TreePath, Vec<(FunctionAccessKey, String)>),
-        params_empty: bool,
         func_key_variant: (&FunctionAccessKey, &Variant),
         hoisted_functions: &mut Vec<(FunctionAccessKey, String)>,
         functions_to_hoist: &IndexMap<
@@ -3807,18 +3790,17 @@ impl<'a> CodeGenerator<'a> {
                 .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
 
             match function {
-                HoistableFunction::Function { deps, params, .. } => {
-                    if !params.is_empty() {
-                        for (dep_generic_func, dep_variant) in deps.iter() {
-                            if !(dep_generic_func == &dep.0 && dep_variant == &dep.1) {
-                                sorted_dep_vec.retain(|(generic_func, variant)| {
-                                    !(generic_func == dep_generic_func && variant == dep_variant)
-                                });
+                HoistableFunction::Function { deps, .. } => {
+                    for (dep_generic_func, dep_variant) in deps.iter() {
+                        if !(dep_generic_func == &dep.0 && dep_variant == &dep.1) {
+                            sorted_dep_vec.retain(|(generic_func, variant)| {
+                                !(generic_func == dep_generic_func && variant == dep_variant)
+                            });
 
-                                deps_vec.insert(0, (dep_generic_func.clone(), dep_variant.clone()));
-                            }
+                            deps_vec.insert(0, (dep_generic_func.clone(), dep_variant.clone()));
                         }
                     }
+
                     sorted_dep_vec.push((dep.0.clone(), dep.1.clone()));
                 }
                 HoistableFunction::CyclicFunction { deps, .. } => {
@@ -3849,12 +3831,12 @@ impl<'a> CodeGenerator<'a> {
         sorted_dep_vec
             .into_iter()
             .fold(air_tree, |then, (dep_key, dep_variant)| {
-                if (!params_empty
-                    // if the dependency is the same as the function we're hoisting
-                    // or we hoisted it, then skip it
-                        && hoisted_functions.iter().any(|(generic, variant)| {
-                                generic == &dep_key && variant == &dep_variant
-                            }))
+                if
+                // if the dependency is the same as the function we're hoisting
+                // or we hoisted it, then skip it
+                hoisted_functions
+                    .iter()
+                    .any(|(generic, variant)| generic == &dep_key && variant == &dep_variant)
                     || (&dep_key == key && &dep_variant == variant)
                 {
                     return then;
@@ -3871,18 +3853,13 @@ impl<'a> CodeGenerator<'a> {
                 // In the case of zero args, we need to hoist the dependency function to the top of the zero arg function
                 // The dependency we are hoisting should have an equal path to the function we hoisted
                 // if we are going to hoist it
-                if &dep_path.common_ancestor(func_path) == func_path || params_empty {
+                if &dep_path.common_ancestor(func_path) == func_path {
                     match dep_function.clone() {
                         HoistableFunction::Function {
                             body: mut dep_air_tree,
                             deps: dependency_deps,
                             params: dependent_params,
                         } => {
-                            if dependent_params.is_empty() {
-                                // continue for zero arg functions. They are treated like global hoists.
-                                return then;
-                            }
-
                             let is_dependent_recursive = dependency_deps
                                 .iter()
                                 .any(|(key, variant)| &dep_key == key && &dep_variant == variant);
@@ -3898,9 +3875,7 @@ impl<'a> CodeGenerator<'a> {
                                 dependent_params.clone()
                             };
 
-                            if !params_empty {
-                                hoisted_functions.push((dep_key.clone(), dep_variant.clone()));
-                            }
+                            hoisted_functions.push((dep_key.clone(), dep_variant.clone()));
 
                             AirTree::define_func(
                                 &dep_key.function_name,
@@ -3920,9 +3895,7 @@ impl<'a> CodeGenerator<'a> {
                                 modify_cyclic_calls(body, &dep_key, &self.cyclic_functions);
                             }
 
-                            if !params_empty {
-                                hoisted_functions.push((dep_key.clone(), dep_variant.clone()));
-                            }
+                            hoisted_functions.push((dep_key.clone(), dep_variant.clone()));
 
                             AirTree::define_cyclic_func(
                                 &dep_key.function_name,
@@ -4048,6 +4021,7 @@ impl<'a> CodeGenerator<'a> {
                             let (path, _) = func_variants.get_mut("").unwrap();
                             *path = path.common_ancestor(tree_path);
                         } else {
+                            // Shortcut path for compiler generated functions
                             let CodeGenFunction::Function { body, params } = code_gen_func else {
                                 unreachable!()
                             };
@@ -4245,8 +4219,52 @@ impl<'a> CodeGenerator<'a> {
                     }
                     .into(),
                 )),
-                ValueConstructorVariant::ModuleConstant { .. } => {
-                    unreachable!("{:#?}, {}", constructor, name)
+                ValueConstructorVariant::ModuleConstant { module, name, .. } => {
+                    let access_key = FunctionAccessKey {
+                        module_name: module.clone(),
+                        function_name: name.clone(),
+                    };
+
+                    let definition = self
+                        .constants
+                        .get(&access_key)
+                        .unwrap_or_else(|| panic!("unknown constant {module}.{name}"));
+
+                    let mut value =
+                        AirTree::no_op(self.build(definition, &access_key.module_name, &[]));
+
+                    value.traverse_tree_with(
+                        &mut |air_tree, _| {
+                            erase_opaque_type_operations(air_tree, &self.data_types);
+                        },
+                        true,
+                    );
+
+                    value = self.hoist_functions_to_validator(value);
+
+                    let term = self
+                        .uplc_code_gen(value.to_vec())
+                        .constr_fields_exposer()
+                        .constr_index_exposer();
+
+                    let mut program =
+                        self.new_program(self.special_functions.apply_used_functions(term));
+
+                    let mut interner = CodeGenInterner::new();
+
+                    interner.program(&mut program);
+
+                    let eval_program: Program<NamedDeBruijn> =
+                        program.remove_no_inlines().try_into().unwrap();
+
+                    Some(
+                        eval_program
+                            .eval(ExBudget::max())
+                            .result()
+                            .unwrap_or_else(|e| panic!("Failed to evaluate constant: {e:#?}"))
+                            .try_into()
+                            .unwrap(),
+                    )
                 }
                 ValueConstructorVariant::ModuleFn {
                     name: func_name,
@@ -4340,10 +4358,7 @@ impl<'a> CodeGenerator<'a> {
                                 .apply(Term::integer(constr_index.into()))
                                 .apply(term);
 
-                            let mut program: Program<Name> = Program {
-                                version: (1, 0, 0),
-                                term,
-                            };
+                            let mut program = self.new_program(term);
 
                             let mut interner = CodeGenInterner::new();
 
@@ -4585,58 +4600,8 @@ impl<'a> CodeGenerator<'a> {
                 } else {
                     let term = arg_stack.pop().unwrap();
 
-                    // How we handle zero arg anon functions has changed
-                    // We now delay zero arg anon functions and force them on a call operation
                     match term.pierce_no_inlines() {
-                        Term::Var(name) => {
-                            let zero_arg_functions = self.zero_arg_functions.clone();
-                            let text = &name.text;
-
-                            if let Some((_, air_vec)) = zero_arg_functions.iter().find(
-                                |(
-                                    (
-                                        FunctionAccessKey {
-                                            module_name,
-                                            function_name,
-                                        },
-                                        variant,
-                                    ),
-                                    _,
-                                )| {
-                                    let name_module =
-                                        format!("{module_name}_{function_name}{variant}");
-                                    let name = format!("{function_name}{variant}");
-
-                                    text == &name || text == &name_module
-                                },
-                            ) {
-                                let mut term = self.uplc_code_gen(air_vec.clone());
-
-                                term = term.constr_fields_exposer().constr_index_exposer();
-
-                                let mut program: Program<Name> = Program {
-                                    version: (1, 0, 0),
-                                    term: self.special_functions.apply_used_functions(term),
-                                };
-
-                                let mut interner = CodeGenInterner::new();
-
-                                interner.program(&mut program);
-
-                                let eval_program: Program<NamedDeBruijn> =
-                                    program.remove_no_inlines().try_into().unwrap();
-
-                                let result = eval_program.eval(ExBudget::max()).result();
-
-                                let evaluated_term: Term<NamedDeBruijn> = result.unwrap_or_else(|e| {
-                                    panic!("Evaluated a zero argument function and received this error: {e:#?}")
-                                });
-
-                                Some(evaluated_term.try_into().unwrap())
-                            } else {
-                                Some(term.force())
-                            }
-                        }
+                        Term::Var(_) => Some(term.force()),
                         Term::Delay(inner_term) => Some(inner_term.as_ref().clone()),
                         Term::Apply { .. } => Some(term.force()),
                         _ => unreachable!(
@@ -4826,6 +4791,10 @@ impl<'a> CodeGenerator<'a> {
                     func_body = func_body.lambda(param.clone());
                 }
 
+                if params.is_empty() {
+                    func_body = func_body.delay();
+                }
+
                 if !recursive {
                     term = term.lambda(func_name).apply(func_body.lambda(NO_INLINE));
 
@@ -4942,10 +4911,7 @@ impl<'a> CodeGenerator<'a> {
                 };
 
                 if extract_constant(term.pierce_no_inlines()).is_some() {
-                    let mut program: Program<Name> = Program {
-                        version: (1, 0, 0),
-                        term,
-                    };
+                    let mut program = self.new_program(term);
 
                     let mut interner = CodeGenInterner::new();
 
@@ -4970,10 +4936,7 @@ impl<'a> CodeGenerator<'a> {
                 if extract_constant(term.pierce_no_inlines()).is_some() {
                     term = builder::convert_type_to_data(term, &tipo);
 
-                    let mut program: Program<Name> = Program {
-                        version: (1, 0, 0),
-                        term,
-                    };
+                    let mut program = self.new_program(term);
 
                     let mut interner = CodeGenInterner::new();
 
@@ -5419,10 +5382,7 @@ impl<'a> CodeGenerator<'a> {
                     let maybe_const = extract_constant(item.pierce_no_inlines());
                     maybe_const.is_some()
                 }) {
-                    let mut program: Program<Name> = Program {
-                        version: (1, 0, 0),
-                        term,
-                    };
+                    let mut program = self.new_program(term);
 
                     let mut interner = CodeGenInterner::new();
 
