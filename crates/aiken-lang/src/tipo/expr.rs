@@ -21,7 +21,7 @@ use crate::{
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
     parser::token::Base,
-    tipo::{fields::FieldMap, DefaultFunction, PatternConstructor, TypeVar},
+    tipo::{fields::FieldMap, DefaultFunction, ModuleKind, PatternConstructor, TypeVar},
     IdGenerator,
 };
 use std::{
@@ -920,32 +920,136 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         })
     }
 
+    fn infer_validator_handler_access(
+        &mut self,
+        container: &UntypedExpr,
+        label: &str,
+        access_location: Span,
+    ) -> Option<Result<TypedExpr, Error>> {
+        match container {
+            UntypedExpr::Var { name, location } => {
+                if let Some((_, available_handlers)) = self
+                    .environment
+                    .module_validators
+                    .get(name.as_str())
+                    .cloned()
+                {
+                    return Some(
+                        self.infer_var(
+                            TypedValidator::handler_name(name.as_str(), label),
+                            *location,
+                        )
+                        .map_err(|err| match err {
+                            Error::UnknownVariable { .. } => Error::UnknownValidatorHandler {
+                                location: access_location.map(|_start, end| (location.end, end)),
+                                available_handlers,
+                            },
+                            _ => err,
+                        }),
+                    );
+                }
+            }
+            UntypedExpr::FieldAccess {
+                label: name,
+                container,
+                location,
+            } => {
+                if let UntypedExpr::Var {
+                    name: ref module,
+                    location: module_location,
+                } = container.as_ref()
+                {
+                    match self.environment.imported_modules.get(module) {
+                        Some((_, info)) if info.kind == ModuleKind::Validator => {
+                            let has_validator = info
+                                .values
+                                .keys()
+                                .any(|k| k.split(".").next() == Some(name));
+
+                            let value_constructors = info
+                                .values
+                                .keys()
+                                .map(|k| k.split(".").next().unwrap_or(k).to_string())
+                                .collect::<Vec<_>>();
+
+                            return Some(
+                                self.infer_module_access(
+                                    module,
+                                    TypedValidator::handler_name(name, label),
+                                    location,
+                                    access_location,
+                                )
+                                .and_then(|access| {
+                                    let export_values = self
+                                        .environment
+                                        .module_values
+                                        .iter()
+                                        .any(|(_, constructor)| constructor.public);
+                                    let export_functions = self
+                                        .environment
+                                        .module_functions
+                                        .iter()
+                                        .any(|(_, function)| function.public);
+                                    let export_validators =
+                                        !self.environment.module_validators.is_empty();
+
+                                    if export_values || export_functions || export_validators {
+                                        return Err(Error::ValidatorImported {
+                                            location: location
+                                                .map(|_start, end| (module_location.end, end)),
+                                            name: name.to_string(),
+                                        });
+                                    }
+
+                                    Ok(access)
+                                })
+                                .map_err(|err| match err {
+                                    Error::UnknownModuleValue { .. } => {
+                                        if has_validator {
+                                            Error::UnknownValidatorHandler {
+                                                location: access_location
+                                                    .map(|_start, end| (location.end, end)),
+                                                available_handlers: Vec::new(),
+                                            }
+                                        } else {
+                                            Error::UnknownModuleValue {
+                                                location: location
+                                                    .map(|_start, end| (module_location.end, end)),
+                                                name: name.to_string(),
+                                                module_name: module.to_string(),
+                                                value_constructors,
+                                            }
+                                        }
+                                    }
+                                    _ => err,
+                                }),
+                            );
+                        }
+                        _ => (),
+                    }
+                }
+            }
+            _ => (),
+        }
+
+        None
+    }
+
     fn infer_field_access(
         &mut self,
         container: UntypedExpr,
         label: String,
         access_location: Span,
     ) -> Result<TypedExpr, Error> {
-        if let UntypedExpr::Var { ref name, location } = container {
-            if let Some((_, available_handlers)) = self
-                .environment
-                .module_validators
-                .get(name.as_str())
-                .cloned()
-            {
-                return self
-                    .infer_var(
-                        TypedValidator::handler_name(name.as_str(), label.as_str()),
-                        location,
-                    )
-                    .map_err(|err| match err {
-                        Error::UnknownVariable { .. } => Error::UnknownValidatorHandler {
-                            location: access_location.map(|_start, end| (location.end, end)),
-                            available_handlers,
-                        },
-                        _ => err,
-                    });
-            }
+        // NOTE: Before we actually resolve the field access, we try to short-circuit the access if
+        // we detect a validator handler access. This can happen in two cases:
+        //
+        // - Either it is a direct access from a validator in the same module.
+        // - Or it is an attempt to pull a handler from an imported validator module.
+        if let Some(shortcircuit) =
+            self.infer_validator_handler_access(&container, &label, access_location)
+        {
+            return shortcircuit;
         }
 
         // Attempt to infer the container as a record access. If that fails, we may be shadowing the name

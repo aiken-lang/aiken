@@ -844,7 +844,7 @@ Perhaps, try the following:
         }
     ))]
     UnknownModuleValue {
-        #[label("unknown import")]
+        #[label("not exported by {module_name}?")]
         location: Span,
         name: String,
         module_name: String,
@@ -941,16 +941,17 @@ The best thing to do from here is to remove it."#))]
     },
 
     #[error(
-        "I discovered an attempt to import a validator module: '{}'\n",
+        "I discovered an attempt to import a validator module in a library: '{}'\n",
         name.if_supports_color(Stdout, |s| s.purple())
     )]
     #[diagnostic(code("illegal::import"))]
     #[diagnostic(help(
-        "If you are trying to share code defined in a validator then move it to a library module under {}",
-        "lib/".if_supports_color(Stdout, |s| s.purple()))
-    )]
+        "If you are trying to share code defined in a validator then move it to a library module under {}.\nIf, however, you are trying to import a validator for testing, make sure that your test module doesn't export any definition using the {} keyword.",
+        "lib/".if_supports_color(Stdout, |s| s.purple()),
+        "pub".if_supports_color(Stdout, |s| s.cyan())
+    ))]
     ValidatorImported {
-        #[label("validator")]
+        #[label("imported validator")]
         location: Span,
         name: String,
     },
@@ -1074,7 +1075,8 @@ The best thing to do from here is to remove it."#))]
     #[error("I could not find an appropriate handler in the validator definition\n")]
     #[diagnostic(code("unknown::handler"))]
     #[diagnostic(help(
-        "When referring to a validator handler via record access, you must refer to one of the declared handlers:\n{}",
+        "When referring to a validator handler via record access, you must refer to one of the declared handlers{}{}",
+        if available_handlers.is_empty() { "." } else { ":\n" },
         available_handlers
           .iter()
           .map(|p| format!("-> {}", p.if_supports_color(Stdout, |s| s.green())))
