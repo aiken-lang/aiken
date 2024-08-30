@@ -182,11 +182,17 @@ impl UnitTest {
             OnTestFailure::FailImmediately => false,
         });
 
+        let mut traces = Vec::new();
+        if let Err(err) = eval_result.result() {
+            traces.push(format!("{err}"))
+        }
+        traces.extend(eval_result.logs());
+
         TestResult::UnitTestResult(UnitTestResult {
             success,
             test: self.to_owned(),
             spent_budget: eval_result.cost(),
-            traces: eval_result.logs(),
+            traces,
             assertion: self.assertion,
         })
     }
