@@ -1,4 +1,4 @@
-use aiken/list
+use aiken/collection/list
 use benchmarks/knights/heuristic.{descendants, start_tour, tour_finished}
 use benchmarks/knights/queue.{Queue}
 use benchmarks/knights/types.{ChessSet, Solution}
@@ -10,11 +10,11 @@ test bench_knights_100_4x4() {
 }
 
 test bench_knights_100_6x6() {
-  run_knights(100, 6) == solution_100_6x6()
+  run_knights(100, 6) == solution_100_6x6
 }
 
 test bench_knights_100_8x8() {
-  run_knights(100, 8) == solution_100_8x8()
+  run_knights(100, 8) == solution_100_8x8
 }
 
 // ----------------------------------------------------------------------- Setup
@@ -30,7 +30,7 @@ fn depth_search(
   done: fn(a) -> Bool,
 ) -> Queue<a> {
   if depth == 0 || queue.is_empty(xs) {
-    queue.new()
+    queue.empty
   } else if done(queue.head(xs)) {
     depth_search(depth - 1, queue.remove_front(xs), grow, done)
       |> queue.append_front(queue.head(xs))
@@ -41,7 +41,7 @@ fn depth_search(
 }
 
 fn root(size: Int) -> Queue<(Int, ChessSet)> {
-  queue.append_all_front(queue.new(), mk_starts(size))
+  queue.append_all_front(queue.empty, mk_starts(size))
 }
 
 fn mk_starts(size: Int) -> List<(Int, ChessSet)> {
@@ -79,7 +79,7 @@ fn done(item: (Int, ChessSet)) -> Bool {
 
 // ------------------------------------------------------------------ Fixtures
 
-fn solution_100_6x6() -> Solution {
+const solution_100_6x6: Solution =
   [
     (
       0,
@@ -266,9 +266,9 @@ fn solution_100_6x6() -> Solution {
       },
     ),
   ]
-}
 
-fn solution_100_8x8() -> Solution {
+
+const solution_100_8x8: Solution =
   [
     (
       0,
@@ -493,4 +493,3 @@ fn solution_100_8x8() -> Solution {
       },
     ),
   ]
-}

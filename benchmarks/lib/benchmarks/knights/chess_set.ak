@@ -1,4 +1,4 @@
-use aiken/list
+use aiken/collection/list
 use benchmarks/knights/types.{ChessSet, Tile}
 
 pub fn create_board(size: Int, init_square: Tile) -> ChessSet {
