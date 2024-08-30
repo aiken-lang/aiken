@@ -3623,7 +3623,6 @@ impl<'a> CodeGenerator<'a> {
 
             sorting_attempts += 1;
         }
-        sorted_function_vec.dedup();
 
         let mut sorted_hoistable = constants_to_hoist
             .keys()
@@ -3631,32 +3630,44 @@ impl<'a> CodeGenerator<'a> {
             .collect::<Vec<_>>();
         sorted_hoistable.extend(sorted_function_vec);
 
+        sorted_hoistable.dedup();
+
         // Now we need to hoist the functions to the top of the validator
         for (key, variant) in sorted_hoistable {
-            if hoisted_functions
-                .iter()
-                .any(|(func_key, func_variant)| func_key == &key && func_variant == &variant)
-            {
-                continue;
+            if let Some((tree_path, value)) = constants_to_hoist.get(&key) {
+                self.hoist_function(
+                    &mut air_tree,
+                    tree_path,
+                    value,
+                    (&key, &variant),
+                    &functions_to_hoist,
+                    &mut hoisted_functions,
+                );
+            } else {
+                if hoisted_functions
+                    .iter()
+                    .any(|(func_key, func_variant)| func_key == &key && func_variant == &variant)
+                {
+                    continue;
+                }
+
+                let function_variants = functions_to_hoist
+                    .get(&key)
+                    .unwrap_or_else(|| panic!("Missing Function Definition"));
+
+                let (tree_path, function) = function_variants
+                    .get(&variant)
+                    .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
+
+                self.hoist_function(
+                    &mut air_tree,
+                    tree_path,
+                    function,
+                    (&key, &variant),
+                    &functions_to_hoist,
+                    &mut hoisted_functions,
+                );
             }
-
-            let function_variants = functions_to_hoist
-                .get(&key)
-                .unwrap_or_else(|| panic!("Missing Function Definition"));
-
-            let (tree_path, function) = function_variants
-                .get(&variant)
-                .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
-
-            self.hoist_function(
-                &mut air_tree,
-                tree_path,
-                function,
-                (&key, &variant),
-                &functions_to_hoist,
-                &constants_to_hoist,
-                &mut hoisted_functions,
-            );
         }
 
         air_tree
@@ -3669,11 +3680,23 @@ impl<'a> CodeGenerator<'a> {
         hoistable: &Hoistable,
         key_var: (&FunctionAccessKey, &String),
         functions_to_hoist: &IndexMap<FunctionAccessKey, IndexMap<String, (TreePath, Hoistable)>>,
-        constants_to_hoist: &IndexMap<FunctionAccessKey, (TreePath, Hoistable)>,
         hoisted_functions: &mut Vec<(FunctionAccessKey, String)>,
     ) {
         match hoistable {
-            Hoistable::Constant { .. } => {}
+            Hoistable::Constant { value } => {
+                let access_key = key_var.0;
+
+                let node_to_edit = air_tree.find_air_tree_node(tree_path);
+
+                let defined_const = AirTree::define_hoisted_constant(
+                    &access_key.function_name,
+                    &access_key.module_name,
+                    value.clone(),
+                    std::mem::replace(node_to_edit, AirTree::void()),
+                );
+
+                *node_to_edit = defined_const;
+            }
             Hoistable::Function {
                 body,
                 deps: func_deps,
@@ -3709,7 +3732,7 @@ impl<'a> CodeGenerator<'a> {
                     is_recursive,
                     recursive_nonstatics,
                     body,
-                    node_to_edit.clone(),
+                    std::mem::replace(node_to_edit, AirTree::void()),
                 );
 
                 let defined_dependencies = self.hoist_dependent_functions(
@@ -3746,7 +3769,7 @@ impl<'a> CodeGenerator<'a> {
                     &key.module_name,
                     variant,
                     functions,
-                    node_to_edit.clone(),
+                    std::mem::replace(node_to_edit, AirTree::void()),
                 );
 
                 let defined_dependencies = self.hoist_dependent_functions(
@@ -3792,7 +3815,7 @@ impl<'a> CodeGenerator<'a> {
                 .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
 
             match function {
-                Hoistable::Constant { .. } => todo!("Hoistable constant handler."),
+                Hoistable::Constant { .. } => unreachable!(),
                 Hoistable::Function { deps, .. } => {
                     for (dep_generic_func, dep_variant) in deps.iter() {
                         if !(dep_generic_func == &dep.0 && dep_variant == &dep.1) {
@@ -4278,13 +4301,22 @@ impl<'a> CodeGenerator<'a> {
                     }
                     .into(),
                 )),
-                ValueConstructorVariant::ModuleConstant { module, name, .. } => Some(Term::Var(
-                    Name {
-                        text: format!("{module}_{name}"),
-                        unique: 0.into(),
-                    }
-                    .into(),
-                )),
+
+                ValueConstructorVariant::ModuleConstant { module, name, .. } => {
+                    let name = if module.is_empty() {
+                        name.to_string()
+                    } else {
+                        format!("{module}_{name}")
+                    };
+                    Some(Term::Var(
+                        Name {
+                            text: name,
+                            unique: 0.into(),
+                        }
+                        .into(),
+                    ))
+                }
+
                 ValueConstructorVariant::ModuleFn {
                     name: func_name,
                     module,
@@ -4855,6 +4887,21 @@ impl<'a> CodeGenerator<'a> {
 
                     Some(term)
                 }
+            }
+            Air::DefineConstant {
+                const_name,
+                module_name,
+                value,
+            } => {
+                let name = if module_name.is_empty() {
+                    const_name.to_string()
+                } else {
+                    format!("{module_name}_{const_name}")
+                };
+
+                let term = arg_stack.pop().unwrap();
+
+                Some(term.lambda(name).apply(value))
             }
             Air::DefineCyclicFuncs {
                 func_name,

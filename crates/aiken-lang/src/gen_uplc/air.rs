@@ -4,7 +4,10 @@ use crate::{
 };
 use indexmap::IndexSet;
 use std::rc::Rc;
-use uplc::builtins::DefaultFunction;
+use uplc::{
+    ast::{Name, Term},
+    builtins::DefaultFunction,
+};
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum ExpectLevel {
@@ -71,6 +74,11 @@ pub enum Air {
         recursive: bool,
         recursive_nonstatic_params: Vec<String>,
         variant_name: String,
+    },
+    DefineConstant {
+        const_name: String,
+        module_name: String,
+        value: Term<Name>,
     },
     DefineCyclicFuncs {
         func_name: String,

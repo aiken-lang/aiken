@@ -7,6 +7,7 @@ use indexmap::IndexSet;
 use itertools::Itertools;
 use std::{borrow::BorrowMut, rc::Rc, slice::Iter};
 use uplc::{
+    ast::{Name, Term},
     builder::{EXPECT_ON_LIST, INNER_EXPECT_ON_LIST},
     builtins::DefaultFunction,
 };
@@ -141,6 +142,12 @@ pub enum AirTree {
         recursive_nonstatic_params: Vec<String>,
         variant_name: String,
         func_body: Box<AirTree>,
+        then: Box<AirTree>,
+    },
+    DefineConstant {
+        const_name: String,
+        module_name: String,
+        value: Term<Name>,
         then: Box<AirTree>,
     },
     DefineCyclicFuncs {
@@ -533,6 +540,20 @@ impl AirTree {
             recursive_nonstatic_params,
             variant_name: variant_name.to_string(),
             func_body: func_body.into(),
+            then: then.into(),
+        }
+    }
+
+    pub fn define_hoisted_constant(
+        const_name: impl ToString,
+        module_name: impl ToString,
+        value: Term<Name>,
+        then: AirTree,
+    ) -> AirTree {
+        AirTree::DefineConstant {
+            const_name: const_name.to_string(),
+            module_name: module_name.to_string(),
+            value,
             then: then.into(),
         }
     }
@@ -1173,6 +1194,19 @@ impl AirTree {
                 func_body.create_air_vec(air_vec);
                 then.create_air_vec(air_vec);
             }
+            AirTree::DefineConstant {
+                const_name,
+                module_name,
+                value,
+                then,
+            } => {
+                air_vec.push(Air::DefineConstant {
+                    const_name: const_name.clone(),
+                    module_name: module_name.clone(),
+                    value: value.clone(),
+                });
+                then.create_air_vec(air_vec);
+            }
             AirTree::DefineCyclicFuncs {
                 func_name,
                 module_name,
@@ -1712,6 +1746,7 @@ impl AirTree {
             | AirTree::Let { then, .. }
             | AirTree::SoftCastLet { then, .. }
             | AirTree::DefineFunc { then, .. }
+            | AirTree::DefineConstant { then, .. }
             | AirTree::DefineCyclicFuncs { then, .. }
             | AirTree::AssertConstr { then, .. }
             | AirTree::AssertBool { then, .. }
@@ -1790,6 +1825,7 @@ impl AirTree {
             }
             AirTree::Let { .. }
             | AirTree::DefineFunc { .. }
+            | AirTree::DefineConstant { .. }
             | AirTree::DefineCyclicFuncs { .. }
             | AirTree::AssertConstr { .. }
             | AirTree::AssertBool { .. }
@@ -2129,6 +2165,7 @@ impl AirTree {
             }
 
             AirTree::DefineFunc { .. }
+            | AirTree::DefineConstant { .. }
             | AirTree::DefineCyclicFuncs { .. }
             | AirTree::ListClauseGuard { .. }
             | AirTree::TupleGuard { .. }
@@ -2580,6 +2617,18 @@ impl AirTree {
                     apply_with_func_last,
                 )
             }
+            AirTree::DefineConstant {
+                const_name: _,
+                module_name: _,
+                value: _,
+                then,
+            } => then.do_traverse_tree_with(
+                tree_path,
+                current_depth + 1,
+                Fields::FourthField,
+                with,
+                apply_with_func_last,
+            ),
             AirTree::DefineCyclicFuncs {
                 func_name: _,
                 module_name: _,
@@ -2873,7 +2922,10 @@ impl AirTree {
         tree_path_iter: &mut Iter<(usize, Fields)>,
     ) -> &'a mut AirTree {
         // For finding the air node we skip over the define func ops since those are added later on.
-        if let AirTree::DefineFunc { then, .. } | AirTree::DefineCyclicFuncs { then, .. } = self {
+        if let AirTree::DefineFunc { then, .. }
+        | AirTree::DefineCyclicFuncs { then, .. }
+        | AirTree::DefineConstant { then, .. } = self
+        {
             then.as_mut().do_find_air_tree_node(tree_path_iter)
         } else if let Some((_depth, field)) = tree_path_iter.next() {
             match self {
@@ -3029,7 +3081,9 @@ impl AirTree {
                     Fields::FirstField => then.as_mut().do_find_air_tree_node(tree_path_iter),
                     _ => panic!("Tree Path index outside tree children nodes"),
                 },
-                AirTree::DefineFunc { .. } | AirTree::DefineCyclicFuncs { .. } => unreachable!(),
+                AirTree::DefineFunc { .. }
+                | AirTree::DefineCyclicFuncs { .. }
+                | AirTree::DefineConstant { .. } => unreachable!(),
                 AirTree::FieldsEmpty {
                     constr,
                     then,
