@@ -30,6 +30,8 @@
 
 ### Changed
 
+- **aiken-lang**: zero-arg functions are **no longer** evaluated at compile-time. However, constants can now hold _any_ expression and are fully evaluated at compile-time. Use `const` whenever a zero-arg function was used, unless you do want to defer execution. @KtorZ @MicroProofs.
+
 - **aiken-lang**: fix zero-arg builtins `mk_nil_data` and `mk_nil_pair_data` invokation. @KtorZ
 
 - **aiken-lang**: rename some builtins. @KtorZ
