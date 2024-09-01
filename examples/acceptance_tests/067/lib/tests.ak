@@ -1,7 +1,7 @@
-use aiken/bytearray.{from_string}
-use aiken/hash.{Hash, Sha2_256, sha2_256}
-use aiken/list
+use aiken/collection/list
+use aiken/crypto.{Hash, Sha2_256, sha2_256}
 use aiken/option.{choice, is_none}
+use aiken/primitive/bytearray.{from_string}
 
 // Construction of the merkle tree shouldn't be done by hand, but via
 // 'from_list'.

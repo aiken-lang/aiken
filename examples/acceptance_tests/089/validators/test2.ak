@@ -1,6 +1,6 @@
 use aiken/collection/list
-use cardano/assets
 use cardano/address.{Address, VerificationKey}
+use cardano/assets
 use cardano/transaction.{Input, NoDatum, Output, OutputReference, Transaction}
 
 pub const own_hash = #"01020304050607080910111213140102030405060708091011121314"
@@ -46,7 +46,7 @@ test test_simple_oneshot() {
   let output =
     Output {
       address: beneficiary_address(),
-      value: assets.zero(),
+      value: assets.zero,
       datum: NoDatum,
       reference_script: None,
     }
@@ -59,7 +59,7 @@ test test_simple_oneshot() {
 
   let tx =
     Transaction {
-      ..transaction.placeholder(),
+      ..transaction.placeholder,
       mint: mint,
       extra_signatories: [other_hash],
       inputs: [input],

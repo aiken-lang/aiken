@@ -1,6 +1,6 @@
 use aiken/builtin.{snd_pair}
 use aiken/cbor
-use aiken/list
+use aiken/collection/list
 
 test tuple_when() {
   let items =

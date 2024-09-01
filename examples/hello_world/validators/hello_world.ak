@@ -1,5 +1,5 @@
 use aiken/collection/list
-use cardano/credential.{VerificationKeyHash}
+use aiken/crypto.{VerificationKeyHash}
 use cardano/transaction.{OutputReference, Transaction}
 
 pub type Datum {
@@ -16,7 +16,7 @@ validator hello_world {
     redeemer: Redeemer,
     _: OutputReference,
     transaction: Transaction,
-  ) -> Bool {
+  ) {
     let must_say_hello = redeemer.msg == "Hello, World!"
 
     expect Some(Datum { owner }) = datum

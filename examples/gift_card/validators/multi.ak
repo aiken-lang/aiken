@@ -1,10 +1,10 @@
 use aiken/builtin
 use aiken/collection/dict
 use aiken/collection/list
-use aiken/hash.{blake2b_256}
+use aiken/crypto.{blake2b_256}
 use aiken/primitive/bytearray
+use cardano/address.{Address, PaymentCredential, Script}
 use cardano/assets.{PolicyId}
-use cardano/credential.{Address, PaymentCredential, Script}
 use cardano/transaction.{
   InlineDatum, Input, Output, OutputReference, Transaction,
 } as tx

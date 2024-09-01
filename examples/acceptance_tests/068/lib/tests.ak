@@ -1,7 +1,6 @@
-use aiken/bytearray
-use aiken/dict.{Dict}
-use aiken/hash.{Blake2b_224, Hash}
-use aiken/transaction/credential.{Script}
+use aiken/collection/dict.{Dict}
+use aiken/crypto.{Blake2b_224, Hash, Script}
+use aiken/primitive/bytearray
 
 pub type PolicyId =
   Hash<Blake2b_224, Script>
@@ -13,9 +12,7 @@ pub opaque type Value {
   inner: Dict<PolicyId, Dict<AssetName, Int>>,
 }
 
-pub fn zero() -> Value {
-  Value { inner: dict.new() }
-}
+pub const zero: Value = Value { inner: dict.empty }
 
 pub fn from_asset(
   policy_id: PolicyId,
@@ -23,9 +20,9 @@ pub fn from_asset(
   quantity: Int,
 ) -> Value {
   let asset =
-    dict.new()
+    dict.empty
       |> dict.insert(asset_name, quantity)
-  dict.new()
+  dict.empty
     |> dict.insert(policy_id, asset)
     |> Value
 }
@@ -86,12 +83,12 @@ pub fn flatten_with(
 }
 
 test flatten_with_1() {
-  flatten_with(zero(), fn(p, a, q) { Some((p, a, q)) }) == []
+  flatten_with(zero, fn(p, a, q) { Some((p, a, q)) }) == []
 }
 
 test flatten_with_2() {
   let v =
-    zero()
+    zero
       |> add(from_asset("a", "1", 14))
       |> add(from_asset("b", "", 42))
       |> add(from_asset("a", "2", 42))

@@ -1,7 +1,7 @@
 use aiken/collection/dict
 use aiken/collection/list
+use cardano/address.{Script}
 use cardano/assets.{PolicyId}
-use cardano/credential.{Script}
 use cardano/transaction.{OutputReference, Transaction} as tx
 
 pub type Action {

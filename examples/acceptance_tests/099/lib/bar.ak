@@ -1,4 +1,4 @@
-use aiken/list.{count as my_count} as native_list
+use aiken/collection/list.{count as my_count} as native_list
 
 test thing_1() {
   let x =
