@@ -1,0 +1,16 @@
+---
+source: crates/aiken-lang/src/parser/chain/field_access.rs
+description: "Code:\n\nfoo.bar.else"
+---
+FieldAccess {
+    location: 0..12,
+    label: "else",
+    container: FieldAccess {
+        location: 0..7,
+        label: "bar",
+        container: Var {
+            location: 0..3,
+            name: "foo",
+        },
+    },
+}
