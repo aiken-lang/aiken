@@ -1616,10 +1616,17 @@ impl<'a> CodeGenerator<'a> {
 
                 assert!(inner_pair_types.len() == 2);
 
-                let map_name = format!("__map_span_{}_{}", location.start, location.end);
-                let pair_name = format!("__pair_span_{}_{}", location.start, location.end);
-                let fst_name = format!("__pair_fst_span_{}_{}", location.start, location.end);
-                let snd_name = format!("__pair_snd_span_{}_{}", location.start, location.end);
+                let map_name = format!("__map_{}_span_{}_{}", depth, location.start, location.end);
+                let pair_name =
+                    format!("__pair_{}_span_{}_{}", depth, location.start, location.end);
+                let fst_name = format!(
+                    "__pair_fst_{}_span_{}_{}",
+                    depth, location.start, location.end
+                );
+                let snd_name = format!(
+                    "__pair_snd_{}_span_{}_{}",
+                    depth, location.start, location.end
+                );
 
                 let expect_snd = self.expect_type_assign(
                     &inner_pair_types[1],
@@ -1738,7 +1745,8 @@ impl<'a> CodeGenerator<'a> {
 
                 assert!(!tuple_inner_types.is_empty());
 
-                let tuple_name = format!("__tuple_span_{}_{}", location.start, location.end);
+                let tuple_name =
+                    format!("__tuple_{}_span_{}_{}", depth, location.start, location.end);
 
                 let mut tuple_expect_items = vec![];
 
@@ -1748,8 +1756,8 @@ impl<'a> CodeGenerator<'a> {
                         .enumerate()
                         .rfold(then, |then, (index, arg)| {
                             let tuple_index_name = format!(
-                                "__tuple_index_{}_span_{}_{}",
-                                index, location.start, location.end
+                                "__tuple_{}_index_{}_span_{}_{}",
+                                depth, index, location.start, location.end
                             );
 
                             let expect_tuple_item = self.expect_type_assign(
@@ -1789,8 +1797,10 @@ impl<'a> CodeGenerator<'a> {
                 if inner_list_type.is_data() {
                     then
                 } else {
-                    let list_name = format!("__list_span_{}_{}", location.start, location.end);
-                    let item_name = format!("__item_span_{}_{}", location.start, location.end);
+                    let list_name =
+                        format!("__list_{}_span_{}_{}", depth, location.start, location.end);
+                    let item_name =
+                        format!("__item_{}_span_{}_{}", depth, location.start, location.end);
 
                     let unwrap_function = AirTree::anon_func(
                         vec![
@@ -1902,10 +1912,17 @@ impl<'a> CodeGenerator<'a> {
 
                 assert!(tuple_inner_types.len() == 2);
 
-                let pair_name = format!("__pair_span_{}_{}", location.start, location.end);
+                let pair_name =
+                    format!("__pair_{}_span_{}_{}", depth, location.start, location.end);
 
-                let fst_name = format!("__pair_fst_span_{}_{}", location.start, location.end);
-                let snd_name = format!("__pair_snd_span_{}_{}", location.start, location.end);
+                let fst_name = format!(
+                    "__pair_fst_{}_span_{}_{}",
+                    depth, location.start, location.end
+                );
+                let snd_name = format!(
+                    "__pair_snd_{}_span_{}_{}",
+                    depth, location.start, location.end
+                );
 
                 let expect_snd = self.expect_type_assign(
                     &tuple_inner_types[1],
