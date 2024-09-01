@@ -1,0 +1,9 @@
+name = "aiken-lang/acceptance_test_111"
+version = "0.0.0"
+license = "Apache-2.0"
+description = "Aiken contracts for project 'aiken-lang/111'"
+
+[repository]
+user = "aiken-lang"
+project = "111"
+platform = "github"

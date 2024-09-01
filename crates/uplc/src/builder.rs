@@ -10,7 +10,10 @@ pub const CONSTR_INDEX_EXPOSER: &str = "__constr_index_exposer";
 pub const EXPECT_ON_LIST: &str = "__expect_on_list";
 pub const INNER_EXPECT_ON_LIST: &str = "__inner_expect_on_list";
 
-impl<T> Term<T> {
+impl<T> Term<T>
+where
+    T: std::fmt::Debug,
+{
     // Terms
     pub fn apply(self, arg: Self) -> Self {
         Term::Apply {
@@ -391,7 +394,10 @@ impl<T> Term<T> {
     }
 }
 
-impl<T> Term<T> {
+impl<T> Term<T>
+where
+    T: std::fmt::Debug,
+{
     pub fn delayed_choose_data(
         self,
         constr_case: Self,
