@@ -52,6 +52,11 @@ use uplc::{
     optimize::{aiken_optimize_and_intern, interner::CodeGenInterner, shrinker::NO_INLINE},
 };
 
+type Otherwise = Option<AirTree>;
+
+const DELAY_ERROR: fn() -> AirTree =
+    || AirTree::anon_func(vec![], AirTree::error(Type::void(), false), true);
+
 #[derive(Clone)]
 pub struct CodeGenerator<'a> {
     #[allow(dead_code)]
@@ -974,7 +979,7 @@ impl<'a> CodeGenerator<'a> {
                                 &mut index_map,
                                 pattern.location(),
                                 then,
-                                otherwise,
+                                props.otherwise.clone(),
                                 0,
                             ),
                         )
@@ -1017,7 +1022,7 @@ impl<'a> CodeGenerator<'a> {
                                 &mut index_map,
                                 pattern.location(),
                                 then,
-                                otherwise,
+                                props.otherwise.clone(),
                                 0,
                             ),
                         )
@@ -1579,7 +1584,7 @@ impl<'a> CodeGenerator<'a> {
         defined_data_types: &mut IndexMap<String, u64>,
         location: Span,
         then: AirTree,
-        otherwise: AirTree,
+        otherwise: Otherwise,
         depth: usize,
     ) -> AirTree {
         assert!(
@@ -1689,7 +1694,7 @@ impl<'a> CodeGenerator<'a> {
                                     AirTree::local_var(&pair_name, inner_list_type.clone()),
                                     true,
                                     expect_fst,
-                                    otherwise.clone(),
+                                    otherwise.unwrap_or_else(DELAY_ERROR),
                                 ),
                             ),
                             true,
@@ -1783,7 +1788,7 @@ impl<'a> CodeGenerator<'a> {
                     AirTree::local_var(&tuple_name, tipo.clone()),
                     true,
                     then,
-                    otherwise,
+                    otherwise.unwrap_or_else(DELAY_ERROR),
                 );
 
                 AirTree::let_assignment(&tuple_name, value, tuple_access)
@@ -1849,7 +1854,7 @@ impl<'a> CodeGenerator<'a> {
                                             otherwise.clone(),
                                             depth + 1,
                                         ),
-                                        otherwise,
+                                        otherwise.unwrap_or_else(DELAY_ERROR),
                                     ),
                                 ),
                                 true,
@@ -1951,7 +1956,7 @@ impl<'a> CodeGenerator<'a> {
                     AirTree::local_var(&pair_name, tipo.clone()),
                     true,
                     expect_fst,
-                    otherwise,
+                    otherwise.unwrap_or_else(DELAY_ERROR),
                 );
 
                 AirTree::let_assignment(&pair_name, value, pair_access)
@@ -2000,12 +2005,14 @@ impl<'a> CodeGenerator<'a> {
                         vec![],
                     );
 
-                    let otherwise_delayed = AirTree::local_var("otherwise_delayed", Type::void());
+                    let otherwise_delayed = otherwise
+                        .as_ref()
+                        .map(|_| AirTree::local_var("otherwise_delayed", Type::void()));
 
                     let is_never = data_type.is_never();
 
                     let constr_clauses = data_type.constructors.iter().enumerate().rfold(
-                        otherwise_delayed.clone(),
+                        otherwise_delayed.clone().unwrap_or_else(DELAY_ERROR),
                         |acc, (index, constr)| {
                             // NOTE: For the Never type, we have an placeholder first constructor
                             // that must be ignored. The Never type is considered to have only one
@@ -2052,7 +2059,7 @@ impl<'a> CodeGenerator<'a> {
                                         tipo.clone(),
                                     ),
                                     constr_then,
-                                    otherwise_delayed.clone(),
+                                    otherwise_delayed.clone().unwrap_or_else(DELAY_ERROR),
                                 )
                             } else {
                                 AirTree::fields_expose(
@@ -2066,7 +2073,7 @@ impl<'a> CodeGenerator<'a> {
                                     ),
                                     true,
                                     constr_then,
-                                    otherwise_delayed.clone(),
+                                    otherwise_delayed.clone().unwrap_or_else(DELAY_ERROR),
                                 )
                             };
 
@@ -2119,11 +2126,15 @@ impl<'a> CodeGenerator<'a> {
 
                     let code_gen_func = CodeGenFunction::Function {
                         body: func_body,
-                        params: vec![
-                            "__param_0".to_string(),
-                            "then_delayed".to_string(),
-                            "otherwise_delayed".to_string(),
-                        ],
+                        params: if otherwise.is_some() {
+                            vec![
+                                "__param_0".to_string(),
+                                "then_delayed".to_string(),
+                                "otherwise_delayed".to_string(),
+                            ]
+                        } else {
+                            vec!["__param_0".to_string(), "then_delayed".to_string()]
+                        },
                     };
 
                     self.code_gen_functions
@@ -2134,7 +2145,11 @@ impl<'a> CodeGenerator<'a> {
                     defined_data_types.insert(data_type_name.to_string(), 1);
                 }
 
-                let args = vec![value, AirTree::anon_func(vec![], then, true), otherwise];
+                let args = if let Some(otherwise) = otherwise {
+                    vec![value, AirTree::anon_func(vec![], then, true), otherwise]
+                } else {
+                    vec![value, AirTree::anon_func(vec![], then, true)]
+                };
 
                 let module_fn = ValueConstructorVariant::ModuleFn {
                     name: data_type_name.to_string(),
