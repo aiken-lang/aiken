@@ -981,11 +981,9 @@ pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
             .lambda("__list_data")
             .apply(Term::unlist_data().apply(term)),
         Some(UplcType::Bool) => Term::unwrap_bool_or(term, |result| result, &Term::Error.delay()),
-        Some(UplcType::Unit) => Term::unwrap_void_or(
-            term.as_var("val", |val| Term::Var(val)),
-            |result| result,
-            &Term::Error.delay(),
-        ),
+        Some(UplcType::Unit) => term.as_var("val", |val| {
+            Term::Var(val).unwrap_void_or(|result| result, &Term::Error.delay())
+        }),
 
         Some(UplcType::Data) | None => term,
     }
