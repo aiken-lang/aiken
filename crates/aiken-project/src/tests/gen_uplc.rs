@@ -3981,159 +3981,188 @@ fn generic_validator_type_test() {
                         Term::fst_pair()
                             .apply(Term::unconstr_data().apply(Term::Var(target.clone()))),
                     )
-                    .delayed_if_then_else(
+                    .delay_true_if_then_else(
                         Term::snd_pair()
                             .apply(Term::unconstr_data().apply(Term::Var(target)))
-                            .delayed_choose_list(then, Term::Error),
-                        Term::Error,
+                            .delay_empty_choose_list(then, Term::var("r:A<B>")),
+                        Term::var("r:A<B>"),
                     )
             },
-            &Term::Error.delay(),
+            &Term::var("r:A<B>"),
         )
     };
 
-    let expect_void_no_trace = |target: Rc<Name>, then: Term<Name>| {
+    let expect_void_no_trace = |target: Term<Name>| {
         Term::equals_integer()
             .apply(Term::integer(0.into()))
-            .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::Var(target.clone()))))
+            .apply(Term::fst_pair().apply(Term::unconstr_data().apply(target.clone())))
             .delayed_if_then_else(
                 Term::snd_pair()
-                    .apply(Term::unconstr_data().apply(Term::Var(target)))
-                    .delayed_choose_list(then, Term::Error),
+                    .apply(Term::unconstr_data().apply(target))
+                    .delayed_choose_list(Term::unit(), Term::Error),
                 Term::Error,
             )
     };
 
-    let expect_no_a = |redeemer: Rc<Name>, then_delayed: Rc<Name>| {
+    let expect_no_a = |redeemer: Rc<Name>, then_delayed: Rc<Name>, trace: bool| {
         Term::snd_pair()
             .apply(Term::unconstr_data().apply(Term::Var(redeemer)))
-            .delayed_choose_list(Term::Var(then_delayed.clone()).force(), Term::Error)
+            .delay_empty_choose_list(
+                Term::Var(then_delayed.clone()).force(),
+                if trace {
+                    Term::var("r:A<B>")
+                } else {
+                    Term::Error.delay()
+                },
+            )
     };
 
     let expect_b = |target: Rc<Name>, then: Term<Name>, trace: bool| {
+        let error_trace = if trace {
+            Term::var("r:A<B>")
+        } else {
+            Term::Error.delay()
+        };
+
         Term::equals_integer()
             .apply(Term::integer(0.into()))
             .apply(Term::fst_pair().apply(Term::unconstr_data().apply(Term::Var(target.clone()))))
-            .delayed_if_then_else(
+            .delay_true_if_then_else(
                 Term::snd_pair()
                     .apply(Term::unconstr_data().apply(Term::Var(target)))
                     .as_var("tail_id_8", |tail_id_8| {
-                        Term::Var(tail_id_8.clone()).delayed_choose_list(
-                            Term::Error,
-                            Term::head_list()
-                                .apply(Term::Var(tail_id_8.clone()))
-                                .as_var("__val", |val| {
-                                    if trace {
+                        if trace {
+                            Term::Var(tail_id_8.clone()).delay_filled_choose_list(
+                                error_trace.clone(),
+                                Term::head_list()
+                                    .apply(Term::Var(tail_id_8.clone()))
+                                    .as_var("__val", |val| {
                                         expect_void(
                                             val,
                                             Term::tail_list()
                                                 .apply(Term::Var(tail_id_8))
-                                                .delayed_choose_list(then.force(), Term::Error),
+                                                .delay_empty_choose_list(
+                                                    then.force(),
+                                                    error_trace.clone(),
+                                                ),
                                         )
-                                    } else {
-                                        expect_void_no_trace(
-                                            val,
-                                            Term::tail_list()
-                                                .apply(Term::Var(tail_id_8))
-                                                .delayed_choose_list(then.force(), Term::Error),
-                                        )
-                                    }
-                                }),
-                        )
+                                    }),
+                            )
+                        } else {
+                            Term::head_list()
+                                .apply(Term::Var(tail_id_8.clone()))
+                                .as_var("__val", |val| expect_void_no_trace(Term::Var(val)))
+                                .as_var("something", |_| {
+                                    Term::tail_list()
+                                        .apply(Term::Var(tail_id_8))
+                                        .delayed_choose_list(then.force(), Term::Error)
+                                })
+                        }
                     }),
-                Term::Error,
+                error_trace,
             )
     };
 
     let expect_some_a = |redeemer: Rc<Name>, then_delayed: Rc<Name>, trace: bool| {
+        let trace_error = if trace {
+            Term::var("r:A<B>")
+        } else {
+            Term::Error.delay()
+        };
+
         Term::snd_pair()
             .apply(Term::unconstr_data().apply(Term::Var(redeemer)))
             .as_var("tail_id_5", |tail_id_5| {
-                Term::Var(tail_id_5.clone()).delayed_choose_list(
-                    Term::Error,
+                let inner = if trace {
+                    Term::head_list().apply(Term::Var(tail_id_5.clone()))
+                } else {
                     Term::head_list()
                         .apply(Term::Var(tail_id_5.clone()))
-                        .as_var("__val", |val| {
-                            if trace {
-                                expect_void(
-                                    val,
-                                    Term::tail_list().apply(Term::Var(tail_id_5)).as_var(
-                                        "tail_id_6",
-                                        |tail_id_6| {
-                                            Term::Var(tail_id_6.clone()).delayed_choose_list(
-                                                Term::Error,
-                                                Term::head_list()
-                                                    .apply(Term::Var(tail_id_6.clone()))
-                                                    .as_var("__val", |val| {
-                                                        Term::choose_data_constr(
-                                                            val.clone(),
-                                                            |_| {
-                                                                Term::tail_list()
-                                                                    .apply(Term::Var(tail_id_6))
-                                                                    .delayed_choose_list(
-                                                                        expect_b(
-                                                                            val,
-                                                                            Term::Var(then_delayed),
-                                                                            trace,
-                                                                        ),
-                                                                        Term::Error,
-                                                                    )
-                                                            },
-                                                            &Term::Error.delay(),
-                                                        )
-                                                    }),
-                                            )
-                                        },
-                                    ),
-                                )
-                            } else {
-                                expect_void_no_trace(
-                                    val,
-                                    Term::tail_list().apply(Term::Var(tail_id_5)).as_var(
-                                        "tail_id_6",
-                                        |tail_id_6| {
-                                            Term::Var(tail_id_6.clone()).delayed_choose_list(
-                                                Term::Error,
-                                                Term::head_list()
-                                                    .apply(Term::Var(tail_id_6.clone()))
-                                                    .as_var("__val", |val| {
+                        .as_var("val", |val| expect_void_no_trace(Term::Var(val)))
+                }
+                .as_var("__val", |val| {
+                    if trace {
+                        expect_void(
+                            val,
+                            Term::tail_list()
+                                .apply(Term::Var(tail_id_5.clone()))
+                                .as_var("tail_id_6", |tail_id_6| {
+                                    Term::Var(tail_id_6.clone()).delay_filled_choose_list(
+                                        trace_error.clone(),
+                                        Term::head_list()
+                                            .apply(Term::Var(tail_id_6.clone()))
+                                            .as_var("__val", |val| {
+                                                Term::choose_data_constr(
+                                                    val.clone(),
+                                                    |_| {
                                                         Term::tail_list()
                                                             .apply(Term::Var(tail_id_6))
-                                                            .delayed_choose_list(
+                                                            .delay_empty_choose_list(
                                                                 expect_b(
                                                                     val,
                                                                     Term::Var(then_delayed),
                                                                     trace,
                                                                 ),
-                                                                Term::Error,
+                                                                trace_error.clone(),
                                                             )
-                                                    }),
+                                                    },
+                                                    &trace_error,
+                                                )
+                                            }),
+                                    )
+                                }),
+                        )
+                    } else {
+                        Term::tail_list()
+                            .apply(Term::Var(tail_id_5.clone()))
+                            .as_var("tail_id_6", |tail_id_6| {
+                                Term::head_list()
+                                    .apply(Term::Var(tail_id_6.clone()))
+                                    .as_var("__val", |val| {
+                                        Term::tail_list()
+                                            .apply(Term::Var(tail_id_6))
+                                            .delayed_choose_list(
+                                                expect_b(val, Term::Var(then_delayed), trace),
+                                                Term::Error,
                                             )
-                                        },
-                                    ),
-                                )
-                            }
-                        }),
-                )
+                                    })
+                            })
+                    }
+                });
+
+                if trace {
+                    Term::Var(tail_id_5.clone())
+                        .delay_filled_choose_list(trace_error.clone(), inner)
+                } else {
+                    inner
+                }
             })
     };
 
-    let when_constr_arity_2 = |redeemer: Rc<Name>, then_1st: Term<Name>, then_2nd: Term<Name>| {
-        Term::fst_pair()
-            .apply(Term::unconstr_data().apply(Term::Var(redeemer.clone())))
-            .as_var("__subject_span_0_0", |subject_span_0_0| {
-                let when_constructor = |ix: usize| {
-                    Term::equals_integer()
-                        .apply(Term::integer(ix.into()))
-                        .apply(Term::Var(subject_span_0_0.clone()))
-                };
+    let when_constr_arity_2 =
+        |redeemer: Rc<Name>, then_1st: Term<Name>, then_2nd: Term<Name>, trace: bool| {
+            Term::fst_pair()
+                .apply(Term::unconstr_data().apply(Term::Var(redeemer.clone())))
+                .as_var("__subject_span_0_0", |subject_span_0_0| {
+                    let when_constructor = |ix: usize| {
+                        Term::equals_integer()
+                            .apply(Term::integer(ix.into()))
+                            .apply(Term::Var(subject_span_0_0.clone()))
+                    };
 
-                when_constructor(0).delayed_if_then_else(
-                    then_1st,
-                    when_constructor(1).delayed_if_then_else(then_2nd, Term::Error),
-                )
-            })
-    };
+                    when_constructor(0).delayed_if_then_else(
+                        then_1st,
+                        when_constructor(1).delay_true_if_then_else(
+                            then_2nd,
+                            if trace {
+                                Term::var("r:A<B>")
+                            } else {
+                                Term::Error.delay()
+                            },
+                        ),
+                    )
+                })
+        };
 
     let choose_purpose = |redeemer: Rc<Name>, purpose: Rc<Name>, trace: bool| {
         Term::equals_integer()
@@ -4149,7 +4178,7 @@ fn generic_validator_type_test() {
                                 Term::head_list()
                                     .apply(Term::tail_list().apply(Term::Var(tail_id_10.clone())))
                                     .as_var("__datum__", |_datum| {
-                                        body(redeemer.clone()).delay().as_var(
+                                        let body_part = body(redeemer.clone()).delay().as_var(
                                             "then_delayed",
                                             |then_delayed| {
                                                 when_constr_arity_2(
@@ -4157,15 +4186,27 @@ fn generic_validator_type_test() {
                                                     expect_no_a(
                                                         redeemer.clone(),
                                                         then_delayed.clone(),
+                                                        trace,
                                                     ),
                                                     expect_some_a(
                                                         redeemer.clone(),
                                                         then_delayed.clone(),
                                                         trace,
                                                     ),
+                                                    trace,
                                                 )
                                             },
-                                        )
+                                        );
+
+                                        if trace {
+                                            Term::choose_data_constr(
+                                                redeemer.clone(),
+                                                |_| body_part,
+                                                &Term::var("r:A<B>"),
+                                            )
+                                        } else {
+                                            body_part
+                                        }
                                     })
                             })
                     }),
@@ -4199,14 +4240,25 @@ fn generic_validator_type_test() {
             })
             .delayed_if_then_else(
                 Term::unit(),
-                Term::Error
-                    .apply(Term::Error.force())
-                    .delayed_trace(Term::string("Validator returned false")),
+                if trace {
+                    Term::Error
+                        .apply(Term::Error.force())
+                        .delayed_trace(Term::string("Validator returned false"))
+                } else {
+                    Term::Error.apply(Term::Error.force())
+                },
             )
             .lambda(context)
     };
 
-    assert_uplc(src, validator(true), false, true);
+    assert_uplc(
+        src,
+        validator(true)
+            .lambda("r:A<B>")
+            .apply(Term::Error.delayed_trace(Term::string("r: A<B>")).delay()),
+        false,
+        true,
+    );
 
     assert_uplc(src, validator(false), false, false);
 }
