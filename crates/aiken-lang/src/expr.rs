@@ -210,20 +210,24 @@ impl TypedExpr {
         }
     }
 
-    pub fn let_(value: Self, pattern: TypedPattern, tipo: Rc<Type>) -> Self {
+    pub fn let_(value: Self, pattern: TypedPattern, tipo: Rc<Type>, location: Span) -> Self {
         TypedExpr::Assignment {
-            location: Span::empty(),
             tipo: tipo.clone(),
             value: value.into(),
             pattern,
             kind: AssignmentKind::let_(),
+            location,
         }
     }
 
     // Create an expect assignment, unless the target type is `Data`; then fallback to a let.
-    pub fn flexible_expect(value: Self, pattern: TypedPattern, tipo: Rc<Type>) -> Self {
+    pub fn flexible_expect(
+        value: Self,
+        pattern: TypedPattern,
+        tipo: Rc<Type>,
+        location: Span,
+    ) -> Self {
         TypedExpr::Assignment {
-            location: Span::empty(),
             tipo: tipo.clone(),
             value: value.into(),
             pattern,
@@ -232,12 +236,12 @@ impl TypedExpr {
             } else {
                 AssignmentKind::expect()
             },
+            location,
         }
     }
 
-    pub fn local_var(name: &str, tipo: Rc<Type>) -> Self {
+    pub fn local_var(name: &str, tipo: Rc<Type>, location: Span) -> Self {
         TypedExpr::Var {
-            location: Span::empty(),
             constructor: ValueConstructor {
                 public: true,
                 variant: ValueConstructorVariant::LocalVariable {
@@ -246,6 +250,7 @@ impl TypedExpr {
                 tipo: tipo.clone(),
             },
             name: name.to_string(),
+            location,
         }
     }
 
