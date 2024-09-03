@@ -2824,82 +2824,81 @@ fn acceptance_test_28_unique_empty_list() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::list_data().apply(
-                    Term::var("unique")
-                        .lambda("unique")
-                        .apply(Term::var("unique").apply(Term::var("unique")))
-                        .lambda("unique")
-                        .apply(
-                            Term::var("xs")
-                                .delayed_choose_list(
-                                    Term::empty_list(),
-                                    Term::mk_cons()
-                                        .apply(Term::var("x"))
-                                        .apply(
-                                            Term::var("unique").apply(Term::var("unique")).apply(
-                                                Term::var("filter").apply(Term::var("rest")).apply(
-                                                    Term::equals_data()
-                                                        .apply(Term::var("y"))
-                                                        .apply(Term::var("x"))
-                                                        .if_then_else(
-                                                            Term::bool(false),
-                                                            Term::bool(true),
-                                                        )
-                                                        .lambda("y"),
-                                                ),
+    let uplc = Term::equals_data()
+        .apply(
+            Term::list_data().apply(
+                Term::var("unique")
+                    .lambda("unique")
+                    .apply(Term::var("unique").apply(Term::var("unique")))
+                    .lambda("unique")
+                    .apply(
+                        Term::var("xs")
+                            .delayed_choose_list(
+                                Term::empty_list(),
+                                Term::mk_cons()
+                                    .apply(Term::var("x"))
+                                    .apply(
+                                        Term::var("unique").apply(Term::var("unique")).apply(
+                                            Term::var("filter").apply(Term::var("rest")).apply(
+                                                Term::equals_data()
+                                                    .apply(Term::var("y"))
+                                                    .apply(Term::var("x"))
+                                                    .if_then_else(
+                                                        Term::bool(false),
+                                                        Term::bool(true),
+                                                    )
+                                                    .lambda("y"),
                                             ),
-                                        )
-                                        .lambda("rest")
-                                        .apply(Term::tail_list().apply(Term::var("xs")))
-                                        .lambda("x")
-                                        .apply(Term::head_list().apply(Term::var("xs"))),
-                                )
-                                .lambda("xs")
-                                .lambda("unique"),
-                        )
-                        .lambda("filter")
-                        .apply(
-                            Term::var("filter")
-                                .apply(Term::var("filter"))
-                                .apply(Term::var("xs"))
-                                .lambda("filter")
-                                .apply(
-                                    Term::var("xs")
-                                        .delayed_choose_list(
-                                            Term::empty_list(),
-                                            Term::var("f")
-                                                .apply(Term::var("x"))
-                                                .delayed_if_then_else(
-                                                    Term::mk_cons().apply(Term::var("x")).apply(
-                                                        Term::var("filter")
-                                                            .apply(Term::var("filter"))
-                                                            .apply(Term::var("rest")),
-                                                    ),
+                                        ),
+                                    )
+                                    .lambda("rest")
+                                    .apply(Term::tail_list().apply(Term::var("xs")))
+                                    .lambda("x")
+                                    .apply(Term::head_list().apply(Term::var("xs"))),
+                            )
+                            .lambda("xs")
+                            .lambda("unique"),
+                    )
+                    .lambda("filter")
+                    .apply(
+                        Term::var("filter")
+                            .apply(Term::var("filter"))
+                            .apply(Term::var("xs"))
+                            .lambda("filter")
+                            .apply(
+                                Term::var("xs")
+                                    .delayed_choose_list(
+                                        Term::empty_list(),
+                                        Term::var("f")
+                                            .apply(Term::var("x"))
+                                            .delayed_if_then_else(
+                                                Term::mk_cons().apply(Term::var("x")).apply(
                                                     Term::var("filter")
                                                         .apply(Term::var("filter"))
                                                         .apply(Term::var("rest")),
-                                                )
-                                                .lambda("rest")
-                                                .apply(Term::tail_list().apply(Term::var("xs")))
-                                                .lambda("x")
-                                                .apply(Term::head_list().apply(Term::var("xs"))),
-                                        )
-                                        .lambda("xs")
-                                        .lambda("filter"),
-                                )
-                                .lambda("f")
-                                .lambda("xs"),
-                        )
-                        .apply(Term::empty_list()),
-                ),
-            )
-            .apply(Term::data(Data::list(vec![]))),
-        false,
-    );
+                                                ),
+                                                Term::var("filter")
+                                                    .apply(Term::var("filter"))
+                                                    .apply(Term::var("rest")),
+                                            )
+                                            .lambda("rest")
+                                            .apply(Term::tail_list().apply(Term::var("xs")))
+                                            .lambda("x")
+                                            .apply(Term::head_list().apply(Term::var("xs"))),
+                                    )
+                                    .lambda("xs")
+                                    .lambda("filter"),
+                            )
+                            .lambda("f")
+                            .lambda("xs"),
+                    )
+                    .apply(Term::empty_list()),
+            ),
+        )
+        .apply(Term::data(Data::list(vec![])));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -2932,8 +2931,7 @@ fn acceptance_test_28_unique_list() {
       }
     "#;
 
-    assert_uplc(
-        src,
+    let uplc =
         Term::equals_data()
             .apply(
                 Term::list_data().apply(
@@ -3021,9 +3019,10 @@ fn acceptance_test_28_unique_list() {
                 Data::integer(1.into()),
                 Data::integer(2.into()),
                 Data::integer(3.into()),
-            ]))),
-        false,
-    );
+            ])));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -3243,24 +3242,23 @@ fn acceptance_test_29_union_pair() {
         .lambda("left")
         .lambda("do_union");
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::map_data().apply(do_union.as_var("do_union", |do_union| {
-                    Term::Var(do_union.clone())
-                        .apply(Term::Var(do_union))
-                        .apply(fixture_unwrapped)
-                        .apply(empty_list)
-                })),
-            )
-            .apply(fixture)
-            .lambda("insert")
-            .apply(insert)
-            .lambda("do_insert")
-            .apply(do_insert_recurse),
-        false,
-    );
+    let uplc = Term::equals_data()
+        .apply(
+            Term::map_data().apply(do_union.as_var("do_union", |do_union| {
+                Term::Var(do_union.clone())
+                    .apply(Term::Var(do_union))
+                    .apply(fixture_unwrapped)
+                    .apply(empty_list)
+            })),
+        )
+        .apply(fixture)
+        .lambda("insert")
+        .apply(insert)
+        .lambda("do_insert")
+        .apply(do_insert_recurse);
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -3337,195 +3335,184 @@ fn acceptance_test_29_union_tuple() {
 
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::list_data().apply(
-                    Term::var("union")
-                        .lambda("union")
-                        .apply(
-                            Term::var("do_union")
-                                .apply(Term::var("left"))
-                                .apply(Term::var("right"))
-                                .lambda("right")
-                                .lambda("left"),
-                        )
-                        .lambda("do_union")
-                        .apply(Term::var("do_union").apply(Term::var("do_union")))
-                        .lambda("do_union")
-                        .apply(
-                            Term::var("left")
-                                .delayed_choose_list(
-                                    Term::var("right"),
-                                    Term::var("do_union")
-                                        .apply(Term::var("do_union"))
-                                        .apply(Term::var("rest"))
-                                        .apply(
-                                            Term::var("do_insert")
-                                                .apply(Term::var("right"))
-                                                .apply(Term::var("k"))
-                                                .apply(Term::var("v")),
-                                        )
-                                        .lambda("v")
-                                        .apply(
-                                            Term::un_i_data().apply(Term::head_list().apply(
+    let uplc = Term::equals_data()
+        .apply(
+            Term::list_data().apply(
+                Term::var("union")
+                    .lambda("union")
+                    .apply(
+                        Term::var("do_union")
+                            .apply(Term::var("left"))
+                            .apply(Term::var("right"))
+                            .lambda("right")
+                            .lambda("left"),
+                    )
+                    .lambda("do_union")
+                    .apply(Term::var("do_union").apply(Term::var("do_union")))
+                    .lambda("do_union")
+                    .apply(
+                        Term::var("left")
+                            .delayed_choose_list(
+                                Term::var("right"),
+                                Term::var("do_union")
+                                    .apply(Term::var("do_union"))
+                                    .apply(Term::var("rest"))
+                                    .apply(
+                                        Term::var("do_insert")
+                                            .apply(Term::var("right"))
+                                            .apply(Term::var("k"))
+                                            .apply(Term::var("v")),
+                                    )
+                                    .lambda("v")
+                                    .apply(
+                                        Term::un_i_data()
+                                            .apply(Term::head_list().apply(
                                                 Term::tail_list().apply(Term::var("tuple")),
                                             )),
-                                        )
-                                        .lambda("k")
-                                        .apply(
-                                            Term::un_b_data()
-                                                .apply(Term::head_list().apply(Term::var("tuple"))),
-                                        )
-                                        .lambda("rest")
-                                        .apply(Term::tail_list().apply(Term::var("left")))
-                                        .lambda("tuple")
-                                        .apply(
-                                            Term::unlist_data()
-                                                .apply(Term::head_list().apply(Term::var("left"))),
-                                        ),
-                                )
-                                .lambda("right")
-                                .lambda("left")
-                                .lambda("do_union"),
-                        )
-                        .lambda("do_insert")
-                        .apply(
-                            Term::var("do_insert")
-                                .apply(Term::var("do_insert"))
-                                .apply(Term::var("elems"))
-                                .lambda("do_insert")
-                                .apply(
-                                    Term::var("elems")
-                                        .delayed_choose_list(
-                                            Term::mk_cons()
-                                                .apply(
-                                                    Term::list_data().apply(
-                                                        Term::mk_cons()
-                                                            .apply(
-                                                                Term::b_data()
-                                                                    .apply(Term::var("k")),
-                                                            )
-                                                            .apply(
-                                                                Term::mk_cons()
-                                                                    .apply(
-                                                                        Term::i_data()
-                                                                            .apply(Term::var("v")),
-                                                                    )
-                                                                    .apply(Term::empty_list()),
-                                                            ),
-                                                    ),
-                                                )
-                                                .apply(Term::empty_list()),
-                                            Term::equals_bytestring()
-                                                .apply(Term::var("k"))
-                                                .apply(Term::var("k2"))
-                                                .delayed_if_then_else(
+                                    )
+                                    .lambda("k")
+                                    .apply(
+                                        Term::un_b_data()
+                                            .apply(Term::head_list().apply(Term::var("tuple"))),
+                                    )
+                                    .lambda("rest")
+                                    .apply(Term::tail_list().apply(Term::var("left")))
+                                    .lambda("tuple")
+                                    .apply(
+                                        Term::unlist_data()
+                                            .apply(Term::head_list().apply(Term::var("left"))),
+                                    ),
+                            )
+                            .lambda("right")
+                            .lambda("left")
+                            .lambda("do_union"),
+                    )
+                    .lambda("do_insert")
+                    .apply(
+                        Term::var("do_insert")
+                            .apply(Term::var("do_insert"))
+                            .apply(Term::var("elems"))
+                            .lambda("do_insert")
+                            .apply(
+                                Term::var("elems")
+                                    .delayed_choose_list(
+                                        Term::mk_cons()
+                                            .apply(
+                                                Term::list_data().apply(
                                                     Term::mk_cons()
+                                                        .apply(Term::b_data().apply(Term::var("k")))
                                                         .apply(
-                                                            Term::list_data().apply(
-                                                                Term::mk_cons()
-                                                                    .apply(
-                                                                        Term::b_data()
-                                                                            .apply(Term::var("k")),
-                                                                    )
-                                                                    .apply(
-                                                                        Term::mk_cons()
-                                                                            .apply(
-                                                                                Term::i_data()
-                                                                                    .apply(
-                                                                                        Term::var(
-                                                                                            "v",
-                                                                                        ),
-                                                                                    ),
-                                                                            )
-                                                                            .apply(
-                                                                                Term::empty_list(),
-                                                                            ),
-                                                                    ),
-                                                            ),
-                                                        )
-                                                        .apply(Term::var("rest")),
-                                                    Term::mk_cons()
-                                                        .apply(
-                                                            Term::list_data().apply(
-                                                                Term::mk_cons()
-                                                                    .apply(
-                                                                        Term::b_data()
-                                                                            .apply(Term::var("k2")),
-                                                                    )
-                                                                    .apply(
-                                                                        Term::mk_cons()
-                                                                            .apply(
-                                                                                Term::i_data()
-                                                                                    .apply(
-                                                                                        Term::var(
-                                                                                            "v2",
-                                                                                        ),
-                                                                                    ),
-                                                                            )
-                                                                            .apply(
-                                                                                Term::empty_list(),
-                                                                            ),
-                                                                    ),
-                                                            ),
-                                                        )
-                                                        .apply(
-                                                            Term::var("do_insert")
-                                                                .apply(Term::var("do_insert"))
-                                                                .apply(Term::var("rest")),
+                                                            Term::mk_cons()
+                                                                .apply(
+                                                                    Term::i_data()
+                                                                        .apply(Term::var("v")),
+                                                                )
+                                                                .apply(Term::empty_list()),
                                                         ),
-                                                )
-                                                .lambda("v2")
-                                                .apply(Term::un_i_data().apply(
-                                                    Term::head_list().apply(
-                                                        Term::tail_list().apply(Term::var("tuple")),
+                                                ),
+                                            )
+                                            .apply(Term::empty_list()),
+                                        Term::equals_bytestring()
+                                            .apply(Term::var("k"))
+                                            .apply(Term::var("k2"))
+                                            .delayed_if_then_else(
+                                                Term::mk_cons()
+                                                    .apply(
+                                                        Term::list_data().apply(
+                                                            Term::mk_cons()
+                                                                .apply(
+                                                                    Term::b_data()
+                                                                        .apply(Term::var("k")),
+                                                                )
+                                                                .apply(
+                                                                    Term::mk_cons()
+                                                                        .apply(
+                                                                            Term::i_data().apply(
+                                                                                Term::var("v"),
+                                                                            ),
+                                                                        )
+                                                                        .apply(Term::empty_list()),
+                                                                ),
+                                                        ),
+                                                    )
+                                                    .apply(Term::var("rest")),
+                                                Term::mk_cons()
+                                                    .apply(
+                                                        Term::list_data().apply(
+                                                            Term::mk_cons()
+                                                                .apply(
+                                                                    Term::b_data()
+                                                                        .apply(Term::var("k2")),
+                                                                )
+                                                                .apply(
+                                                                    Term::mk_cons()
+                                                                        .apply(
+                                                                            Term::i_data().apply(
+                                                                                Term::var("v2"),
+                                                                            ),
+                                                                        )
+                                                                        .apply(Term::empty_list()),
+                                                                ),
+                                                        ),
+                                                    )
+                                                    .apply(
+                                                        Term::var("do_insert")
+                                                            .apply(Term::var("do_insert"))
+                                                            .apply(Term::var("rest")),
                                                     ),
-                                                ))
-                                                .lambda("k2")
-                                                .apply(Term::un_b_data().apply(
+                                            )
+                                            .lambda("v2")
+                                            .apply(Term::un_i_data().apply(
+                                                Term::head_list().apply(
+                                                    Term::tail_list().apply(Term::var("tuple")),
+                                                ),
+                                            ))
+                                            .lambda("k2")
+                                            .apply(
+                                                Term::un_b_data().apply(
                                                     Term::head_list().apply(Term::var("tuple")),
-                                                ))
-                                                .lambda("rest")
-                                                .apply(Term::tail_list().apply(Term::var("elems")))
-                                                .lambda("tuple")
-                                                .apply(Term::unlist_data().apply(
-                                                    Term::head_list().apply(Term::var("elems")),
-                                                )),
-                                        )
-                                        .lambda("elems")
-                                        .lambda("do_insert"),
-                                )
-                                .lambda("v")
-                                .lambda("k")
-                                .lambda("elems"),
-                        )
-                        .apply(Term::list_values(vec![
-                            Constant::Data(Data::list(vec![
-                                Data::bytestring("foo".as_bytes().to_vec()),
-                                Data::integer(42.into()),
-                            ])),
-                            Constant::Data(Data::list(vec![
-                                Data::bytestring("bar".as_bytes().to_vec()),
-                                Data::integer(14.into()),
-                            ])),
-                        ]))
-                        .apply(Term::empty_list()),
-                ),
-            )
-            .apply(Term::data(Data::list(vec![
-                Data::list(vec![
-                    Data::bytestring("foo".as_bytes().to_vec()),
-                    Data::integer(42.into()),
-                ]),
-                Data::list(vec![
-                    Data::bytestring("bar".as_bytes().to_vec()),
-                    Data::integer(14.into()),
-                ]),
-            ]))),
-        false,
-    );
+                                                ),
+                                            )
+                                            .lambda("rest")
+                                            .apply(Term::tail_list().apply(Term::var("elems")))
+                                            .lambda("tuple")
+                                            .apply(Term::unlist_data().apply(
+                                                Term::head_list().apply(Term::var("elems")),
+                                            )),
+                                    )
+                                    .lambda("elems")
+                                    .lambda("do_insert"),
+                            )
+                            .lambda("v")
+                            .lambda("k")
+                            .lambda("elems"),
+                    )
+                    .apply(Term::list_values(vec![
+                        Constant::Data(Data::list(vec![
+                            Data::bytestring("foo".as_bytes().to_vec()),
+                            Data::integer(42.into()),
+                        ])),
+                        Constant::Data(Data::list(vec![
+                            Data::bytestring("bar".as_bytes().to_vec()),
+                            Data::integer(14.into()),
+                        ])),
+                    ]))
+                    .apply(Term::empty_list()),
+            ),
+        )
+        .apply(Term::data(Data::list(vec![
+            Data::list(vec![
+                Data::bytestring("foo".as_bytes().to_vec()),
+                Data::integer(42.into()),
+            ]),
+            Data::list(vec![
+                Data::bytestring("bar".as_bytes().to_vec()),
+                Data::integer(14.into()),
+            ]),
+        ])));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -3544,29 +3531,28 @@ fn acceptance_test_30_abs() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_integer()
-            .apply(
-                Term::var("abs")
-                    .lambda("abs")
-                    .apply(
-                        Term::less_than_integer()
-                            .apply(Term::var("a"))
-                            .apply(Term::integer(0.into()))
-                            .delayed_if_then_else(
-                                Term::subtract_integer()
-                                    .apply(Term::integer(0.into()))
-                                    .apply(Term::var("a")),
-                                Term::var("a"),
-                            )
-                            .lambda("a"),
-                    )
-                    .apply(Term::integer((-14).into())),
-            )
-            .apply(Term::integer(14.into())),
-        false,
-    );
+    let uplc = Term::equals_integer()
+        .apply(
+            Term::var("abs")
+                .lambda("abs")
+                .apply(
+                    Term::less_than_integer()
+                        .apply(Term::var("a"))
+                        .apply(Term::integer(0.into()))
+                        .delayed_if_then_else(
+                            Term::subtract_integer()
+                                .apply(Term::integer(0.into()))
+                                .apply(Term::var("a")),
+                            Term::var("a"),
+                        )
+                        .lambda("a"),
+                )
+                .apply(Term::integer((-14).into())),
+        )
+        .apply(Term::integer(14.into()));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -3593,6 +3579,7 @@ fn expect_empty_list_on_filled_list() {
                 Constant::Data(Data::integer(2.into())),
             ])),
         true,
+        true,
     );
 }
 
@@ -3617,6 +3604,7 @@ fn expect_empty_list_on_new_list() {
             .lambda("x")
             .apply(Term::list_values(vec![])),
         false,
+        true,
     );
 }
 
@@ -3640,6 +3628,7 @@ fn when_bool_is_true() {
             .lambda("subject")
             .apply(Term::bool(true)),
         false,
+        true,
     );
 }
 
@@ -3663,6 +3652,7 @@ fn when_bool_is_true_switched_cases() {
             .lambda("subject")
             .apply(Term::bool(true)),
         false,
+        true,
     );
 }
 
@@ -3685,6 +3675,7 @@ fn when_bool_is_false() {
             .delayed_if_then_else(Term::bool(true), Term::Error)
             .lambda("subject")
             .apply(Term::bool(false)),
+        true,
         true,
     );
 }
@@ -3751,7 +3742,7 @@ fn always_true_validator() {
             .lambda(context)
     };
 
-    assert_uplc(src, validator, false);
+    assert_uplc(src, validator, false, true);
 }
 
 #[test]
@@ -3848,7 +3839,7 @@ fn when_tuple_deconstruction() {
             )
         });
 
-    assert_uplc(src, test, false);
+    assert_uplc(src, test, false, true);
 }
 
 #[test]
@@ -3923,6 +3914,7 @@ fn when_tuple_empty_lists() {
                 Constant::Data(Data::integer(3.into())),
             ])),
         false,
+        true,
     );
 }
 
@@ -4163,7 +4155,7 @@ fn generic_validator_type_test() {
             .lambda(context)
     };
 
-    assert_uplc(src, validator, false);
+    assert_uplc(src, validator, false, true);
 }
 
 #[test]
@@ -4225,6 +4217,7 @@ fn pass_constr_as_function() {
                     ),
             ),
         false,
+        true,
     );
 }
 
@@ -4327,6 +4320,7 @@ fn record_update_output_2_vals() {
             )))
             .constr_fields_exposer(),
         false,
+        true,
     );
 }
 
@@ -4428,6 +4422,7 @@ fn record_update_output_1_val() {
             )))
             .constr_fields_exposer(),
         false,
+        true,
     );
 }
 
@@ -4525,6 +4520,7 @@ fn record_update_output_first_last_val() {
             )))
             .constr_fields_exposer(),
         false,
+        true,
     );
 }
 
@@ -4590,6 +4586,7 @@ fn list_fields_unwrap() {
             )
             .constr_fields_exposer(),
         false,
+        true,
     );
 }
 
@@ -4758,6 +4755,7 @@ fn foldl_type_mismatch() {
             .constr_fields_exposer()
             .constr_index_exposer(),
         false,
+        true,
     );
 }
 
@@ -4791,6 +4789,7 @@ fn expect_head_discard_tail() {
             .lambda("expect[h,..]=a")
             .apply(Term::string("expect [h, ..] = a")),
         false,
+        true,
     );
 }
 
@@ -4832,6 +4831,7 @@ fn expect_head_no_tail() {
                     .delayed_trace(Term::string("expect [h] = a"))
                     .delay(),
             ),
+        true,
         true,
     );
 }
@@ -4909,6 +4909,7 @@ fn expect_head3_no_tail() {
                     .delay(),
             ),
         false,
+        true,
     );
 }
 
@@ -5031,6 +5032,7 @@ fn expect_head3_cast_data_no_tail() {
             .lambda("expect[h,i,j]:List<Int>=a")
             .apply(otherwise_msg),
         false,
+        true,
     );
 }
 
@@ -5102,6 +5104,7 @@ fn expect_head_cast_data_no_tail() {
                 .delayed_trace(Term::string("expect [h]: List<Int> = a"))
                 .delay(),
         ),
+        true,
         true,
     );
 }
@@ -5229,6 +5232,7 @@ fn expect_head_cast_data_with_tail() {
                 .delay(),
         ),
         false,
+        true,
     );
 }
 
@@ -5328,6 +5332,7 @@ fn test_init_3() {
                 ])],
             ))),
         false,
+        true,
     );
 }
 
@@ -5454,6 +5459,7 @@ fn list_clause_with_assign() {
             )])))
             .constr_index_exposer(),
         false,
+        true,
     );
 }
 
@@ -5552,6 +5558,7 @@ fn opaque_value_in_test() {
             .lambda("dat:Dat")
             .apply(Term::Error.delayed_trace(Term::string("dat: Dat")).delay()),
         false,
+        true,
     );
 }
 
@@ -5581,6 +5588,7 @@ fn expect_none() {
             ))
             .constr_index_exposer(),
         false,
+        true,
     );
 }
 
@@ -5631,6 +5639,7 @@ fn head_list_on_map() {
                 ),
             ])),
         false,
+        true,
     );
 }
 
@@ -5815,6 +5824,7 @@ fn tuple_2_match() {
             .constr_index_exposer()
             .constr_fields_exposer(),
         false,
+        true,
     );
 }
 
@@ -5866,6 +5876,7 @@ fn bls12_381_elements_to_data_conversion() {
         src,
         Term::equals_data().apply(constant.clone()).apply(constant),
         false,
+        true,
     )
 }
 
@@ -5931,6 +5942,7 @@ fn bls12_381_elements_from_data_conversion() {
             ))
             .apply(g1),
         false,
+        true,
     )
 }
 
@@ -5953,6 +5965,7 @@ fn qualified_prelude_functions() {
             .clone()
             .delayed_if_then_else(constant_true, constant_false),
         false,
+        true,
     )
 }
 
@@ -5978,6 +5991,7 @@ fn mk_cons_direct_invoke_1() {
             )
             .apply(Term::data(Data::list(vec![Data::integer(1.into())]))),
         false,
+        true,
     )
 }
 
@@ -6006,6 +6020,7 @@ fn mk_cons_direct_invoke_2() {
             )
             .apply(Term::data(Data::list(vec![some, none]))),
         false,
+        true,
     )
 }
 
@@ -6044,6 +6059,7 @@ fn mk_cons_direct_invoke_3() {
                 Data::integer(1.into()),
             )]))),
         false,
+        true,
     )
 }
 
@@ -6063,6 +6079,7 @@ fn mk_nil_pair_data() {
             .apply(Term::map_data().apply(Term::mk_nil_pair_data().apply(Term::unit())))
             .apply(Term::map_data().apply(Term::mk_nil_pair_data().apply(Term::unit()))),
         false,
+        true,
     )
 }
 
@@ -6082,6 +6099,7 @@ fn mk_nil_list_data() {
             .apply(Term::list_data().apply(Term::mk_nil_data().apply(Term::unit())))
             .apply(Term::list_data().apply(Term::mk_nil_data().apply(Term::unit()))),
         false,
+        true,
     )
 }
 
@@ -6113,6 +6131,7 @@ fn mk_pair_data() {
                 Constant::Data(Data::integer(1.into())).into(),
             )),
         false,
+        true,
     )
 }
 
@@ -6152,7 +6171,7 @@ fn pattern_bytearray() {
         .lambda("???")
         .apply(Term::Error.delay());
 
-    assert_uplc(src, program, false)
+    assert_uplc(src, program, false, true)
 }
 
 #[test]
@@ -6200,5 +6219,5 @@ fn cast_never() {
             .force()
     });
 
-    assert_uplc(src, program, false)
+    assert_uplc(src, program, false, true)
 }
