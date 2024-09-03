@@ -1003,9 +1003,8 @@ where
 
                 let path = d.into_path();
                 let keep = is_aiken_path(&path, dir);
-                let ext = path.extension();
 
-                if !keep && ext.unwrap_or_default() == "ak" {
+                if !keep {
                     self.warnings
                         .push(Warning::InvalidModuleName { path: path.clone() });
                 }
