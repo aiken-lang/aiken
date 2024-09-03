@@ -565,15 +565,15 @@ impl TypedValidator {
 
         TypedExpr::sequence(&[
             TypedExpr::let_(
-                TypedExpr::local_var(var_context, Type::script_context()),
+                TypedExpr::local_var(var_context, Type::script_context(), self.location),
                 TypedPattern::Constructor {
                     is_record: false,
                     location: Span::empty(),
                     name: well_known::SCRIPT_CONTEXT_CONSTRUCTORS[0].to_string(),
                     arguments: vec![
-                        CallArg::var(var_transaction),
-                        CallArg::var(var_redeemer),
-                        CallArg::var(var_purpose),
+                        CallArg::var(var_transaction, Span::empty()),
+                        CallArg::var(var_redeemer, Span::empty()),
+                        CallArg::var(var_purpose, Span::empty()),
                     ],
                     module: None,
                     constructor: PatternConstructor::Record {
@@ -587,11 +587,13 @@ impl TypedValidator {
                     ),
                 },
                 Type::script_context(),
+                Span::empty(),
             ),
             TypedExpr::When {
                 location: Span::empty(),
                 tipo: Type::bool(),
-                subject: TypedExpr::local_var(var_purpose, Type::script_purpose()).into(),
+                subject: TypedExpr::local_var(var_purpose, Type::script_purpose(), Span::empty())
+                    .into(),
                 clauses: self
                     .handlers
                     .iter()
@@ -611,13 +613,37 @@ impl TypedValidator {
 
                         let transaction = handler.arguments.last().unwrap();
 
+                        println!("REDEEMER SPAN: {:?}", redeemer.location);
+
                         let pattern = match handler.name.as_str() {
-                            "spend" => TypedPattern::spend_purpose(var_purpose_arg, var_datum),
-                            "mint" => TypedPattern::mint_purpose(var_purpose_arg),
-                            "withdraw" => TypedPattern::withdraw_purpose(var_purpose_arg),
-                            "publish" => TypedPattern::publish_purpose(var_purpose_arg),
-                            "propose" => TypedPattern::propose_purpose(var_purpose_arg),
-                            "vote" => TypedPattern::vote_purpose(var_purpose_arg),
+                            "spend" => TypedPattern::spend_purpose(
+                                (var_purpose_arg, purpose_arg.location),
+                                (
+                                    var_datum,
+                                    datum.map(|x| x.location).unwrap_or(Span::empty()),
+                                ),
+                                redeemer.location,
+                            ),
+                            "mint" => TypedPattern::mint_purpose(
+                                (var_purpose_arg, purpose_arg.location),
+                                redeemer.location,
+                            ),
+                            "withdraw" => TypedPattern::withdraw_purpose(
+                                (var_purpose_arg, purpose_arg.location),
+                                redeemer.location,
+                            ),
+                            "publish" => TypedPattern::publish_purpose(
+                                (var_purpose_arg, purpose_arg.location),
+                                redeemer.location,
+                            ),
+                            "propose" => TypedPattern::propose_purpose(
+                                (var_purpose_arg, purpose_arg.location),
+                                redeemer.location,
+                            ),
+                            "vote" => TypedPattern::vote_purpose(
+                                (var_purpose_arg, purpose_arg.location),
+                                redeemer.location,
+                            ),
                             purpose => {
                                 unreachable!("unexpected/unknown purpose: {:?}", purpose)
                             }
@@ -627,36 +653,52 @@ impl TypedValidator {
 
                         // expect redeemer: tipo = __redeemer__
                         then.push(TypedExpr::flexible_expect(
-                            TypedExpr::local_var(var_redeemer, Type::data()),
+                            TypedExpr::local_var(var_redeemer, Type::data(), redeemer.location),
                             TypedPattern::var(redeemer.get_variable_name().unwrap_or("_")),
                             redeemer.tipo.clone(),
+                            redeemer.location,
                         ));
 
                         // Cast the datum, if any
                         if let Some(datum) = datum {
                             // expect datum: tipo = __datum__
                             then.push(TypedExpr::flexible_expect(
-                                TypedExpr::local_var(var_datum, Type::option(Type::data())),
+                                TypedExpr::local_var(
+                                    var_datum,
+                                    Type::option(Type::data()),
+                                    datum.location,
+                                ),
                                 TypedPattern::var(datum.get_variable_name().unwrap_or("_")),
                                 datum.tipo.clone(),
+                                datum.location,
                             ))
                         }
 
                         // let purpose_arg = __purpose_arg__
                         if let Some(arg_name) = purpose_arg.get_variable_name() {
                             then.push(TypedExpr::let_(
-                                TypedExpr::local_var(var_purpose_arg, Type::data()),
+                                TypedExpr::local_var(
+                                    var_purpose_arg,
+                                    Type::data(),
+                                    purpose_arg.location,
+                                ),
                                 TypedPattern::var(arg_name),
                                 purpose_arg.tipo.clone(),
+                                purpose_arg.location,
                             ));
                         }
 
                         // let last_arg_name = __transaction__
                         if let Some(arg_name) = transaction.get_variable_name() {
                             then.push(TypedExpr::let_(
-                                TypedExpr::local_var(var_transaction, Type::data()),
+                                TypedExpr::local_var(
+                                    var_transaction,
+                                    Type::data(),
+                                    transaction.location,
+                                ),
                                 TypedPattern::var(arg_name),
                                 Type::data(),
+                                transaction.location,
                             ));
                         }
 
@@ -676,14 +718,15 @@ impl TypedValidator {
 
                         let then = &[
                             TypedExpr::let_(
-                                TypedExpr::local_var(var_context, arg.tipo.clone()),
+                                TypedExpr::local_var(var_context, arg.tipo.clone(), arg.location),
                                 arg.get_variable_name().map(TypedPattern::var).unwrap_or(
                                     TypedPattern::Discard {
                                         name: var_context.to_string(),
-                                        location: Span::empty(),
+                                        location: arg.location,
                                     },
                                 ),
                                 arg.tipo.clone(),
+                                arg.location,
                             ),
                             fallback.body.clone(),
                         ];
@@ -879,12 +922,12 @@ impl TypedCallArg {
 }
 
 impl CallArg<TypedPattern> {
-    pub fn var(name: &str) -> Self {
+    pub fn var(name: &str, location: Span) -> Self {
         CallArg {
             label: None,
             location: Span::empty(),
             value: TypedPattern::Var {
-                location: Span::empty(),
+                location,
                 name: name.to_string(),
             },
         }
@@ -1456,10 +1499,15 @@ impl TypedPattern {
         }
     }
 
-    pub fn constructor(name: &str, arguments: &[CallArg<TypedPattern>], tipo: Rc<Type>) -> Self {
+    pub fn constructor(
+        name: &str,
+        arguments: &[CallArg<TypedPattern>],
+        tipo: Rc<Type>,
+        location: Span,
+    ) -> Self {
         TypedPattern::Constructor {
             is_record: false,
-            location: Span::empty(),
+            location,
             name: name.to_string(),
             arguments: arguments.to_vec(),
             module: None,
@@ -1472,60 +1520,88 @@ impl TypedPattern {
         }
     }
 
-    pub fn mint_purpose(var_purpose_arg: &str) -> Self {
+    pub fn mint_purpose(
+        (var_purpose_arg, purpose_span): (&str, Span),
+        redeemer_span: Span,
+    ) -> Self {
         TypedPattern::constructor(
             well_known::SCRIPT_PURPOSE_MINT,
-            &[CallArg::var(var_purpose_arg)],
+            &[CallArg::var(var_purpose_arg, purpose_span)],
             Type::function(vec![Type::byte_array()], Type::script_purpose()),
+            redeemer_span,
         )
     }
 
-    pub fn spend_purpose(var_purpose_arg: &str, var_datum: &str) -> Self {
+    pub fn spend_purpose(
+        (var_purpose_arg, purpose_span): (&str, Span),
+        (var_datum, datum_span): (&str, Span),
+        redeemer_span: Span,
+    ) -> Self {
         TypedPattern::constructor(
             well_known::SCRIPT_PURPOSE_SPEND,
-            &[CallArg::var(var_purpose_arg), CallArg::var(var_datum)],
+            &[
+                CallArg::var(var_purpose_arg, purpose_span),
+                CallArg::var(var_datum, datum_span),
+            ],
             Type::function(
                 vec![Type::data(), Type::option(Type::data())],
                 Type::script_purpose(),
             ),
+            redeemer_span,
         )
     }
 
-    pub fn withdraw_purpose(var_purpose_arg: &str) -> Self {
+    pub fn withdraw_purpose(
+        (var_purpose_arg, purpose_span): (&str, Span),
+        redeemer_span: Span,
+    ) -> Self {
         TypedPattern::constructor(
             well_known::SCRIPT_PURPOSE_WITHDRAW,
-            &[CallArg::var(var_purpose_arg)],
+            &[CallArg::var(var_purpose_arg, purpose_span)],
             Type::function(vec![Type::data()], Type::script_purpose()),
+            redeemer_span,
         )
     }
 
-    pub fn publish_purpose(var_purpose_arg: &str) -> Self {
+    pub fn publish_purpose(
+        (var_purpose_arg, purpose_span): (&str, Span),
+        redeemer_span: Span,
+    ) -> Self {
         TypedPattern::constructor(
             well_known::SCRIPT_PURPOSE_PUBLISH,
             &[
-                CallArg::var("__discarded_purpose_ix__"),
-                CallArg::var(var_purpose_arg),
+                CallArg::var("__discarded_purpose_ix__", purpose_span),
+                CallArg::var(var_purpose_arg, purpose_span),
             ],
             Type::function(vec![Type::int(), Type::data()], Type::script_purpose()),
+            redeemer_span,
         )
     }
 
-    pub fn vote_purpose(var_purpose_arg: &str) -> Self {
+    pub fn vote_purpose(
+        (var_purpose_arg, purpose_span): (&str, Span),
+        redeemer_span: Span,
+    ) -> Self {
         TypedPattern::constructor(
             well_known::SCRIPT_PURPOSE_VOTE,
-            &[CallArg::var(var_purpose_arg)],
+            &[CallArg::var(var_purpose_arg, purpose_span)],
             Type::function(vec![Type::data()], Type::script_purpose()),
+            redeemer_span,
         )
     }
 
-    pub fn propose_purpose(var_purpose_arg: &str) -> Self {
+    pub fn propose_purpose(
+        (var_purpose_arg, purpose_span): (&str, Span),
+        redeemer_span: Span,
+    ) -> Self {
         TypedPattern::constructor(
             well_known::SCRIPT_PURPOSE_PROPOSE,
             &[
-                CallArg::var("__discarded_purpose_ix__"),
-                CallArg::var(var_purpose_arg),
+                CallArg::var("__discarded_purpose_ix__", purpose_span),
+                CallArg::var(var_purpose_arg, purpose_span),
             ],
             Type::function(vec![Type::int(), Type::data()], Type::script_purpose()),
+            redeemer_span,
         )
     }
 }

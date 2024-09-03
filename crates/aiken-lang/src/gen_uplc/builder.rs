@@ -1719,6 +1719,11 @@ pub fn get_src_code_by_span(
     span: &Span,
     module_src: &IndexMap<&str, &(String, LineNumbers)>,
 ) -> String {
+    assert!(
+        *span != Span::empty(),
+        "tried to lookup source code from empty location"
+    );
+
     let (src, _) = module_src
         .get(module_name)
         .unwrap_or_else(|| panic!("Missing module {module_name}"));
@@ -1733,6 +1738,11 @@ pub fn get_line_columns_by_span(
     span: &Span,
     module_src: &IndexMap<&str, &(String, LineNumbers)>,
 ) -> LineColumn {
+    assert!(
+        *span != Span::empty(),
+        "tried to lookup line & columns from empty location"
+    );
+
     let (_, lines) = module_src
         .get(module_name)
         .unwrap_or_else(|| panic!("Missing module {module_name}"));
