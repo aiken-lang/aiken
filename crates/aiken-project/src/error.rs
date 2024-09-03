@@ -24,7 +24,7 @@ use zip::result::ZipError;
 #[allow(dead_code)]
 #[derive(thiserror::Error)]
 pub enum Error {
-    #[error("I just found two modules with the same name: '{module}'")]
+    #[error("I just found two modules with the same name: '{}'", module.if_supports_color(Stderr, |s| s.yellow()))]
     DuplicateModule {
         module: String,
         first: PathBuf,
@@ -353,9 +353,9 @@ impl Diagnostic for Error {
     fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         match self {
             Error::DuplicateModule { first, second, .. } => Some(Box::new(format!(
-                "Rename either {} or {}",
-                first.display(),
-                second.display()
+                "Rename either of them:\n- {}\n- {}",
+                first.display().if_supports_color(Stderr, |s| s.yellow()),
+                second.display().if_supports_color(Stderr, |s| s.yellow()),
             ))),
             Error::FileIo { error, .. } => Some(Box::new(format!("{error}"))),
             Error::Blueprint(e) => e.help(),
