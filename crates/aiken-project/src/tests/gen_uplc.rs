@@ -15,12 +15,16 @@ enum TestType {
     Validator(TypedValidator),
 }
 
-fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool) {
+fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool, verbose_mode: bool) {
     let mut project = TestProject::new();
 
     let modules = CheckedModules::singleton(project.check(project.parse(source_code)));
 
-    let mut generator = project.new_generator(Tracing::All(TraceLevel::Verbose));
+    let mut generator = project.new_generator(if verbose_mode {
+        Tracing::All(TraceLevel::Verbose)
+    } else {
+        Tracing::All(TraceLevel::Silent)
+    });
 
     let Some(checked_module) = modules.values().next() else {
         unreachable!("There's got to be one right?")
@@ -134,40 +138,40 @@ fn acceptance_test_1_length() {
         }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_integer()
-            .apply(
-                Term::var("length")
-                    .lambda("length")
-                    .apply(Term::var("length").apply(Term::var("length")))
-                    .lambda("length")
-                    .apply(
-                        Term::var("xs")
-                            .delayed_choose_list(
-                                Term::integer(0.into()),
-                                Term::add_integer()
-                                    .apply(Term::integer(1.into()))
-                                    .apply(
-                                        Term::var("length")
-                                            .apply(Term::var("length"))
-                                            .apply(Term::var("rest")),
-                                    )
-                                    .lambda("rest")
-                                    .apply(Term::tail_list().apply(Term::var("xs"))),
-                            )
-                            .lambda("xs")
-                            .lambda("length"),
-                    )
-                    .apply(Term::list_values(vec![
-                        Constant::Data(Data::integer(1.into())),
-                        Constant::Data(Data::integer(2.into())),
-                        Constant::Data(Data::integer(3.into())),
-                    ])),
-            )
-            .apply(Term::integer(3.into())),
-        false,
-    );
+    let uplc = Term::equals_integer()
+        .apply(
+            Term::var("length")
+                .lambda("length")
+                .apply(Term::var("length").apply(Term::var("length")))
+                .lambda("length")
+                .apply(
+                    Term::var("xs")
+                        .delayed_choose_list(
+                            Term::integer(0.into()),
+                            Term::add_integer()
+                                .apply(Term::integer(1.into()))
+                                .apply(
+                                    Term::var("length")
+                                        .apply(Term::var("length"))
+                                        .apply(Term::var("rest")),
+                                )
+                                .lambda("rest")
+                                .apply(Term::tail_list().apply(Term::var("xs"))),
+                        )
+                        .lambda("xs")
+                        .lambda("length"),
+                )
+                .apply(Term::list_values(vec![
+                    Constant::Data(Data::integer(1.into())),
+                    Constant::Data(Data::integer(2.into())),
+                    Constant::Data(Data::integer(3.into())),
+                ])),
+        )
+        .apply(Term::integer(3.into()));
+
+    assert_uplc(src, uplc.clone(), false, true);
+
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -186,52 +190,52 @@ fn acceptance_test_2_repeat() {
         }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::list_data().apply(
-                    Term::var("repeat")
-                        .lambda("repeat")
-                        .apply(
-                            Term::var("repeat")
-                                .apply(Term::var("repeat"))
-                                .apply(Term::var("n"))
-                                .lambda("repeat")
-                                .apply(
-                                    Term::less_than_equals_integer()
-                                        .apply(Term::var("n"))
-                                        .apply(Term::integer(0.into()))
-                                        .delayed_if_then_else(
-                                            Term::empty_list(),
-                                            Term::mk_cons()
-                                                .apply(Term::b_data().apply(Term::var("x")))
-                                                .apply(
-                                                    Term::var("repeat")
-                                                        .apply(Term::var("repeat"))
-                                                        .apply(
-                                                            Term::subtract_integer()
-                                                                .apply(Term::var("n"))
-                                                                .apply(Term::integer(1.into())),
-                                                        ),
-                                                ),
-                                        )
-                                        .lambda("n")
-                                        .lambda("repeat"),
-                                )
-                                .lambda("n")
-                                .lambda("x"),
-                        )
-                        .apply(Term::byte_string("aiken".as_bytes().to_vec()))
-                        .apply(Term::integer(2.into())),
-                ),
-            )
-            .apply(Term::list_data().apply(Term::list_values(vec![
-                Constant::Data(Data::bytestring("aiken".as_bytes().to_vec())),
-                Constant::Data(Data::bytestring("aiken".as_bytes().to_vec())),
-            ]))),
-        false,
-    );
+    let uplc = Term::equals_data()
+        .apply(
+            Term::list_data().apply(
+                Term::var("repeat")
+                    .lambda("repeat")
+                    .apply(
+                        Term::var("repeat")
+                            .apply(Term::var("repeat"))
+                            .apply(Term::var("n"))
+                            .lambda("repeat")
+                            .apply(
+                                Term::less_than_equals_integer()
+                                    .apply(Term::var("n"))
+                                    .apply(Term::integer(0.into()))
+                                    .delayed_if_then_else(
+                                        Term::empty_list(),
+                                        Term::mk_cons()
+                                            .apply(Term::b_data().apply(Term::var("x")))
+                                            .apply(
+                                                Term::var("repeat")
+                                                    .apply(Term::var("repeat"))
+                                                    .apply(
+                                                        Term::subtract_integer()
+                                                            .apply(Term::var("n"))
+                                                            .apply(Term::integer(1.into())),
+                                                    ),
+                                            ),
+                                    )
+                                    .lambda("n")
+                                    .lambda("repeat"),
+                            )
+                            .lambda("n")
+                            .lambda("x"),
+                    )
+                    .apply(Term::byte_string("aiken".as_bytes().to_vec()))
+                    .apply(Term::integer(2.into())),
+            ),
+        )
+        .apply(Term::list_data().apply(Term::list_values(vec![
+            Constant::Data(Data::bytestring("aiken".as_bytes().to_vec())),
+            Constant::Data(Data::bytestring("aiken".as_bytes().to_vec())),
+        ])));
+
+    assert_uplc(src, uplc.clone(), false, true);
+
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -255,8 +259,7 @@ fn acceptance_test_3_concat() {
         }
     "#;
 
-    assert_uplc(
-        src,
+    let uplc =
         Term::equals_data()
             .apply(
                 Term::list_data().apply(
@@ -326,9 +329,11 @@ fn acceptance_test_3_concat() {
                 Constant::Data(Data::integer(4.into())),
                 Constant::Data(Data::integer(5.into())),
                 Constant::Data(Data::integer(6.into())),
-            ]))),
-        false,
-    );
+            ])));
+
+    assert_uplc(src, uplc.clone(), false, true);
+
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -356,8 +361,7 @@ fn acceptance_test_4_concat_no_anon_func() {
         }
     "#;
 
-    assert_uplc(
-        src,
+    let uplc =
         Term::equals_data()
             .apply(
                 Term::list_data().apply(
@@ -429,9 +433,11 @@ fn acceptance_test_4_concat_no_anon_func() {
                 Constant::Data(Data::integer(4.into())),
                 Constant::Data(Data::integer(5.into())),
                 Constant::Data(Data::integer(6.into())),
-            ]))),
-        false,
-    );
+            ])));
+
+    assert_uplc(src, uplc.clone(), false, true);
+
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -451,35 +457,34 @@ fn acceptance_test_5_direct_head() {
         }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::var("head")
-                    .lambda("head")
-                    .apply(
-                        Term::var("xs")
-                            .delayed_choose_list(
-                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
-                                Term::constr_data().apply(Term::integer(0.into())).apply(
-                                    Term::mk_cons()
-                                        .apply(Term::head_list().apply(Term::var("xs")))
-                                        .apply(Term::empty_list()),
-                                ),
-                            )
-                            .lambda("xs"),
-                    )
-                    .apply(Term::list_values(vec![
-                        Constant::Data(Data::integer(1.into())),
-                        Constant::Data(Data::integer(2.into())),
-                        Constant::Data(Data::integer(3.into())),
-                    ])),
-            )
-            .apply(Term::Constant(
-                Constant::Data(Data::constr(0, vec![Data::integer(1.into())])).into(),
-            )),
-        false,
-    );
+    let uplc = Term::equals_data()
+        .apply(
+            Term::var("head")
+                .lambda("head")
+                .apply(
+                    Term::var("xs")
+                        .delayed_choose_list(
+                            Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                            Term::constr_data().apply(Term::integer(0.into())).apply(
+                                Term::mk_cons()
+                                    .apply(Term::head_list().apply(Term::var("xs")))
+                                    .apply(Term::empty_list()),
+                            ),
+                        )
+                        .lambda("xs"),
+                )
+                .apply(Term::list_values(vec![
+                    Constant::Data(Data::integer(1.into())),
+                    Constant::Data(Data::integer(2.into())),
+                    Constant::Data(Data::integer(3.into())),
+                ])),
+        )
+        .apply(Term::Constant(
+            Constant::Data(Data::constr(0, vec![Data::integer(1.into())])).into(),
+        ));
+    assert_uplc(src, uplc.clone(), false, true);
+
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -500,89 +505,88 @@ fn acceptance_test_5_direct_2_heads() {
         }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::var("head")
-                    .lambda("head")
-                    .apply(
-                        Term::var("xs")
-                            .delayed_choose_list(
-                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
-                                Term::var("tail_1")
-                                    .delayed_choose_list(
-                                        Term::constr_data()
-                                            .apply(Term::integer(0.into()))
-                                            .apply(
-                                                Term::mk_cons()
-                                                    .apply(Term::list_data().apply(Term::var("xs")))
-                                                    .apply(Term::empty_list()),
-                                            )
-                                            .lambda("a")
-                                            .apply(
-                                                Term::un_i_data().apply(
-                                                    Term::head_list().apply(Term::var("xs")),
-                                                ),
-                                            ),
-                                        Term::constr_data()
-                                            .apply(Term::integer(0.into()))
-                                            .apply(
-                                                Term::mk_cons()
-                                                    .apply(
-                                                        Term::list_data().apply(
-                                                            Term::mk_cons()
-                                                                .apply(
-                                                                    Term::i_data()
-                                                                        .apply(Term::var("a")),
-                                                                )
-                                                                .apply(
-                                                                    Term::mk_cons()
-                                                                        .apply(
-                                                                            Term::i_data().apply(
-                                                                                Term::var("b"),
-                                                                            ),
-                                                                        )
-                                                                        .apply(Term::empty_list()),
-                                                                ),
-                                                        ),
-                                                    )
-                                                    .apply(Term::empty_list()),
-                                            )
-                                            .lambda("b")
-                                            .apply(Term::un_i_data().apply(
+    let uplc = Term::equals_data()
+        .apply(
+            Term::var("head")
+                .lambda("head")
+                .apply(
+                    Term::var("xs")
+                        .delayed_choose_list(
+                            Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                            Term::var("tail_1")
+                                .delayed_choose_list(
+                                    Term::constr_data()
+                                        .apply(Term::integer(0.into()))
+                                        .apply(
+                                            Term::mk_cons()
+                                                .apply(Term::list_data().apply(Term::var("xs")))
+                                                .apply(Term::empty_list()),
+                                        )
+                                        .lambda("a")
+                                        .apply(
+                                            Term::un_i_data()
+                                                .apply(Term::head_list().apply(Term::var("xs"))),
+                                        ),
+                                    Term::constr_data()
+                                        .apply(Term::integer(0.into()))
+                                        .apply(
+                                            Term::mk_cons()
+                                                .apply(
+                                                    Term::list_data().apply(
+                                                        Term::mk_cons()
+                                                            .apply(
+                                                                Term::i_data()
+                                                                    .apply(Term::var("a")),
+                                                            )
+                                                            .apply(
+                                                                Term::mk_cons()
+                                                                    .apply(
+                                                                        Term::i_data()
+                                                                            .apply(Term::var("b")),
+                                                                    )
+                                                                    .apply(Term::empty_list()),
+                                                            ),
+                                                    ),
+                                                )
+                                                .apply(Term::empty_list()),
+                                        )
+                                        .lambda("b")
+                                        .apply(
+                                            Term::un_i_data().apply(
                                                 Term::head_list().apply(Term::var("tail_1")),
-                                            ))
-                                            .lambda("a")
-                                            .apply(
-                                                Term::un_i_data().apply(
-                                                    Term::head_list().apply(Term::var("xs")),
-                                                ),
                                             ),
-                                    )
-                                    .lambda("tail_1")
-                                    .apply(Term::tail_list().apply(Term::var("xs"))),
-                            )
-                            .lambda("xs"),
-                    )
-                    .apply(Term::list_values(vec![
-                        Constant::Data(Data::integer(1.into())),
-                        Constant::Data(Data::integer(2.into())),
-                        Constant::Data(Data::integer(3.into())),
-                    ])),
-            )
-            .apply(Term::Constant(
-                Constant::Data(Data::constr(
-                    0,
-                    vec![Data::list(vec![
-                        Data::integer(1.into()),
-                        Data::integer(2.into()),
-                    ])],
-                ))
-                .into(),
-            )),
-        false,
-    );
+                                        )
+                                        .lambda("a")
+                                        .apply(
+                                            Term::un_i_data()
+                                                .apply(Term::head_list().apply(Term::var("xs"))),
+                                        ),
+                                )
+                                .lambda("tail_1")
+                                .apply(Term::tail_list().apply(Term::var("xs"))),
+                        )
+                        .lambda("xs"),
+                )
+                .apply(Term::list_values(vec![
+                    Constant::Data(Data::integer(1.into())),
+                    Constant::Data(Data::integer(2.into())),
+                    Constant::Data(Data::integer(3.into())),
+                ])),
+        )
+        .apply(Term::Constant(
+            Constant::Data(Data::constr(
+                0,
+                vec![Data::list(vec![
+                    Data::integer(1.into()),
+                    Data::integer(2.into()),
+                ])],
+            ))
+            .into(),
+        ));
+
+    assert_uplc(src, uplc.clone(), false, true);
+
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -602,35 +606,35 @@ fn acceptance_test_5_head_not_empty() {
         }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::var("head")
-                    .lambda("head")
-                    .apply(
-                        Term::var("xs")
-                            .delayed_choose_list(
-                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
-                                Term::constr_data().apply(Term::integer(0.into())).apply(
-                                    Term::mk_cons()
-                                        .apply(Term::head_list().apply(Term::var("xs")))
-                                        .apply(Term::empty_list()),
-                                ),
-                            )
-                            .lambda("xs"),
-                    )
-                    .apply(Term::list_values(vec![
-                        Constant::Data(Data::integer(1.into())),
-                        Constant::Data(Data::integer(2.into())),
-                        Constant::Data(Data::integer(3.into())),
-                    ])),
-            )
-            .apply(Term::Constant(
-                Constant::Data(Data::constr(0, vec![Data::integer(1.into())])).into(),
-            )),
-        false,
-    );
+    let uplc = Term::equals_data()
+        .apply(
+            Term::var("head")
+                .lambda("head")
+                .apply(
+                    Term::var("xs")
+                        .delayed_choose_list(
+                            Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                            Term::constr_data().apply(Term::integer(0.into())).apply(
+                                Term::mk_cons()
+                                    .apply(Term::head_list().apply(Term::var("xs")))
+                                    .apply(Term::empty_list()),
+                            ),
+                        )
+                        .lambda("xs"),
+                )
+                .apply(Term::list_values(vec![
+                    Constant::Data(Data::integer(1.into())),
+                    Constant::Data(Data::integer(2.into())),
+                    Constant::Data(Data::integer(3.into())),
+                ])),
+        )
+        .apply(Term::Constant(
+            Constant::Data(Data::constr(0, vec![Data::integer(1.into())])).into(),
+        ));
+
+    assert_uplc(src, uplc.clone(), false, true);
+
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -650,31 +654,30 @@ fn acceptance_test_5_head_empty() {
         }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::var("head")
-                    .lambda("head")
-                    .apply(
-                        Term::var("xs")
-                            .delayed_choose_list(
-                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
-                                Term::constr_data().apply(Term::integer(0.into())).apply(
-                                    Term::mk_cons()
-                                        .apply(Term::head_list().apply(Term::var("xs")))
-                                        .apply(Term::empty_list()),
-                                ),
-                            )
-                            .lambda("xs"),
-                    )
-                    .apply(Term::list_values(vec![])),
-            )
-            .apply(Term::Constant(
-                Constant::Data(Data::constr(1, vec![])).into(),
-            )),
-        false,
-    );
+    let uplc = Term::equals_data()
+        .apply(
+            Term::var("head")
+                .lambda("head")
+                .apply(
+                    Term::var("xs")
+                        .delayed_choose_list(
+                            Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                            Term::constr_data().apply(Term::integer(0.into())).apply(
+                                Term::mk_cons()
+                                    .apply(Term::head_list().apply(Term::var("xs")))
+                                    .apply(Term::empty_list()),
+                            ),
+                        )
+                        .lambda("xs"),
+                )
+                .apply(Term::list_values(vec![])),
+        )
+        .apply(Term::Constant(
+            Constant::Data(Data::constr(1, vec![])).into(),
+        ));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -690,14 +693,13 @@ fn acceptance_test_6_if_else() {
         }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_integer()
-            .apply(Term::integer(1.into()))
-            .apply(Term::integer(1.into()))
-            .delayed_if_then_else(Term::bool(true), Term::bool(false)),
-        false,
-    );
+    let uplc = Term::equals_integer()
+        .apply(Term::integer(1.into()))
+        .apply(Term::integer(1.into()))
+        .delayed_if_then_else(Term::bool(true), Term::bool(false));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -708,41 +710,40 @@ fn acceptance_test_6_equals_pair() {
         }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::map_data().apply(
-                    Term::mk_cons()
-                        .apply(Term::Constant(
-                            Constant::ProtoPair(
-                                Type::Data,
-                                Type::Data,
-                                Constant::Data(Data::integer(1.into())).into(),
-                                Constant::Data(Data::list(vec![])).into(),
-                            )
-                            .into(),
-                        ))
-                        .apply(Term::empty_map()),
-                ),
-            )
-            .apply(
-                Term::map_data().apply(
-                    Term::mk_cons()
-                        .apply(Term::Constant(
-                            Constant::ProtoPair(
-                                Type::Data,
-                                Type::Data,
-                                Constant::Data(Data::integer(1.into())).into(),
-                                Constant::Data(Data::list(vec![])).into(),
-                            )
-                            .into(),
-                        ))
-                        .apply(Term::empty_map()),
-                ),
+    let uplc = Term::equals_data()
+        .apply(
+            Term::map_data().apply(
+                Term::mk_cons()
+                    .apply(Term::Constant(
+                        Constant::ProtoPair(
+                            Type::Data,
+                            Type::Data,
+                            Constant::Data(Data::integer(1.into())).into(),
+                            Constant::Data(Data::list(vec![])).into(),
+                        )
+                        .into(),
+                    ))
+                    .apply(Term::empty_map()),
             ),
-        false,
-    );
+        )
+        .apply(
+            Term::map_data().apply(
+                Term::mk_cons()
+                    .apply(Term::Constant(
+                        Constant::ProtoPair(
+                            Type::Data,
+                            Type::Data,
+                            Constant::Data(Data::integer(1.into())).into(),
+                            Constant::Data(Data::list(vec![])).into(),
+                        )
+                        .into(),
+                    ))
+                    .apply(Term::empty_map()),
+            ),
+        );
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -753,35 +754,34 @@ fn acceptance_test_6_equals_tuple() {
         }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::list_data().apply(Term::Constant(
-                    Constant::ProtoList(
-                        Type::Data,
-                        vec![
-                            Constant::Data(Data::integer(1.into())),
-                            Constant::Data(Data::list(vec![])),
-                        ],
-                    )
-                    .into(),
-                )),
-            )
-            .apply(
-                Term::list_data().apply(Term::Constant(
-                    Constant::ProtoList(
-                        Type::Data,
-                        vec![
-                            Constant::Data(Data::integer(1.into())),
-                            Constant::Data(Data::list(vec![])),
-                        ],
-                    )
-                    .into(),
-                )),
-            ),
-        false,
-    );
+    let uplc = Term::equals_data()
+        .apply(
+            Term::list_data().apply(Term::Constant(
+                Constant::ProtoList(
+                    Type::Data,
+                    vec![
+                        Constant::Data(Data::integer(1.into())),
+                        Constant::Data(Data::list(vec![])),
+                    ],
+                )
+                .into(),
+            )),
+        )
+        .apply(
+            Term::list_data().apply(Term::Constant(
+                Constant::ProtoList(
+                    Type::Data,
+                    vec![
+                        Constant::Data(Data::integer(1.into())),
+                        Constant::Data(Data::list(vec![])),
+                    ],
+                )
+                .into(),
+            )),
+        );
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -804,8 +804,7 @@ fn acceptance_test_7_unzip_tuple() {
       }
     "#;
 
-    assert_uplc(
-        src,
+    let uplc =
         Term::equals_data()
             .apply(
                 Term::list_data().apply(
@@ -898,9 +897,10 @@ fn acceptance_test_7_unzip_tuple() {
                     Data::integer(4.into()),
                     Data::bytestring(vec![119, 153]),
                 ])),
-            ])),
-        false,
-    );
+            ]));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -925,113 +925,106 @@ fn acceptance_test_7_unzip_pair() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::map_data().apply(
-                    Term::mk_cons()
-                        .apply(
-                            Term::var("unzip")
-                                .lambda("unzip")
-                                .apply(Term::var("unzip").apply(Term::var("unzip")))
-                                .lambda("unzip")
-                                .apply(
-                                    Term::var("xs")
-                                        .delayed_choose_list(
-                                            Term::pair_values(
-                                                Constant::Data(Data::list(vec![])),
-                                                Constant::Data(Data::list(vec![])),
-                                            ),
-                                            Term::mk_pair_data()
-                                                .apply(
-                                                    Term::list_data().apply(
-                                                        Term::mk_cons()
-                                                            .apply(
-                                                                Term::i_data()
-                                                                    .apply(Term::var("a")),
-                                                            )
-                                                            .apply(Term::var("a_tail")),
-                                                    ),
-                                                )
-                                                .apply(
-                                                    Term::list_data().apply(
-                                                        Term::mk_cons()
-                                                            .apply(
-                                                                Term::b_data()
-                                                                    .apply(Term::var("b")),
-                                                            )
-                                                            .apply(Term::var("b_tail")),
-                                                    ),
-                                                )
-                                                .lambda("b_tail")
-                                                .apply(Term::unlist_data().apply(
-                                                    Term::snd_pair().apply(Term::var("tail_pair")),
-                                                ))
-                                                .lambda("a_tail")
-                                                .apply(Term::unlist_data().apply(
-                                                    Term::fst_pair().apply(Term::var("tail_pair")),
-                                                ))
-                                                .lambda("tail_pair")
-                                                .apply(
-                                                    Term::var("unzip")
-                                                        .apply(Term::var("unzip"))
-                                                        .apply(Term::var("rest")),
-                                                )
-                                                .lambda("b")
-                                                .apply(Term::un_b_data().apply(
-                                                    Term::snd_pair().apply(Term::var("head_pair")),
-                                                ))
-                                                .lambda("a")
-                                                .apply(Term::un_i_data().apply(
-                                                    Term::fst_pair().apply(Term::var("head_pair")),
-                                                ))
-                                                .lambda("rest")
-                                                .apply(Term::tail_list().apply(Term::var("xs")))
-                                                .lambda("head_pair")
-                                                .apply(Term::head_list().apply(Term::var("xs"))),
-                                        )
-                                        .lambda("xs")
-                                        .lambda("unzip"),
-                                )
-                                .apply(Term::var("x")),
-                        )
-                        .apply(Term::empty_map()),
-                ),
-            )
-            .apply(
-                Term::map_data().apply(
-                    Term::mk_cons()
-                        .apply(Term::pair_values(
-                            Constant::Data(Data::list(vec![
-                                Data::integer(3.into()),
-                                Data::integer(4.into()),
-                            ])),
-                            Constant::Data(Data::list(vec![
-                                Data::bytestring(vec![85]),
-                                Data::bytestring(vec![119, 153]),
-                            ])),
-                        ))
-                        .apply(Term::empty_map()),
-                ),
-            )
-            .lambda("x")
-            .apply(Term::map_values(vec![
-                Constant::ProtoPair(
-                    Type::Data,
-                    Type::Data,
-                    Constant::Data(Data::integer(3.into())).into(),
-                    Constant::Data(Data::bytestring(vec![85])).into(),
-                ),
-                Constant::ProtoPair(
-                    Type::Data,
-                    Type::Data,
-                    Constant::Data(Data::integer(4.into())).into(),
-                    Constant::Data(Data::bytestring(vec![119, 153])).into(),
-                ),
-            ])),
-        false,
-    );
+    let uplc = Term::equals_data()
+        .apply(
+            Term::map_data().apply(
+                Term::mk_cons()
+                    .apply(
+                        Term::var("unzip")
+                            .lambda("unzip")
+                            .apply(Term::var("unzip").apply(Term::var("unzip")))
+                            .lambda("unzip")
+                            .apply(
+                                Term::var("xs")
+                                    .delayed_choose_list(
+                                        Term::pair_values(
+                                            Constant::Data(Data::list(vec![])),
+                                            Constant::Data(Data::list(vec![])),
+                                        ),
+                                        Term::mk_pair_data()
+                                            .apply(
+                                                Term::list_data().apply(
+                                                    Term::mk_cons()
+                                                        .apply(Term::i_data().apply(Term::var("a")))
+                                                        .apply(Term::var("a_tail")),
+                                                ),
+                                            )
+                                            .apply(
+                                                Term::list_data().apply(
+                                                    Term::mk_cons()
+                                                        .apply(Term::b_data().apply(Term::var("b")))
+                                                        .apply(Term::var("b_tail")),
+                                                ),
+                                            )
+                                            .lambda("b_tail")
+                                            .apply(Term::unlist_data().apply(
+                                                Term::snd_pair().apply(Term::var("tail_pair")),
+                                            ))
+                                            .lambda("a_tail")
+                                            .apply(Term::unlist_data().apply(
+                                                Term::fst_pair().apply(Term::var("tail_pair")),
+                                            ))
+                                            .lambda("tail_pair")
+                                            .apply(
+                                                Term::var("unzip")
+                                                    .apply(Term::var("unzip"))
+                                                    .apply(Term::var("rest")),
+                                            )
+                                            .lambda("b")
+                                            .apply(Term::un_b_data().apply(
+                                                Term::snd_pair().apply(Term::var("head_pair")),
+                                            ))
+                                            .lambda("a")
+                                            .apply(Term::un_i_data().apply(
+                                                Term::fst_pair().apply(Term::var("head_pair")),
+                                            ))
+                                            .lambda("rest")
+                                            .apply(Term::tail_list().apply(Term::var("xs")))
+                                            .lambda("head_pair")
+                                            .apply(Term::head_list().apply(Term::var("xs"))),
+                                    )
+                                    .lambda("xs")
+                                    .lambda("unzip"),
+                            )
+                            .apply(Term::var("x")),
+                    )
+                    .apply(Term::empty_map()),
+            ),
+        )
+        .apply(
+            Term::map_data().apply(
+                Term::mk_cons()
+                    .apply(Term::pair_values(
+                        Constant::Data(Data::list(vec![
+                            Data::integer(3.into()),
+                            Data::integer(4.into()),
+                        ])),
+                        Constant::Data(Data::list(vec![
+                            Data::bytestring(vec![85]),
+                            Data::bytestring(vec![119, 153]),
+                        ])),
+                    ))
+                    .apply(Term::empty_map()),
+            ),
+        )
+        .lambda("x")
+        .apply(Term::map_values(vec![
+            Constant::ProtoPair(
+                Type::Data,
+                Type::Data,
+                Constant::Data(Data::integer(3.into())).into(),
+                Constant::Data(Data::bytestring(vec![85])).into(),
+            ),
+            Constant::ProtoPair(
+                Type::Data,
+                Type::Data,
+                Constant::Data(Data::integer(4.into())).into(),
+                Constant::Data(Data::bytestring(vec![119, 153])).into(),
+            ),
+        ]));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -1048,23 +1041,22 @@ fn acceptance_test_8_is_empty() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::var("is_empty")
-            .lambda("is_empty")
-            .apply(
-                Term::equals_integer()
-                    .apply(Term::length_of_bytearray().apply(Term::var("bytes")))
-                    .apply(Term::integer(0.into()))
-                    .lambda("bytes"),
-            )
-            .apply(Term::byte_string(vec![]))
-            .delayed_if_then_else(
-                Term::bool(true),
-                Term::bool(true).if_then_else(Term::bool(false), Term::bool(true)),
-            ),
-        false,
-    );
+    let uplc = Term::var("is_empty")
+        .lambda("is_empty")
+        .apply(
+            Term::equals_integer()
+                .apply(Term::length_of_bytearray().apply(Term::var("bytes")))
+                .apply(Term::integer(0.into()))
+                .lambda("bytes"),
+        )
+        .apply(Term::byte_string(vec![]))
+        .delayed_if_then_else(
+            Term::bool(true),
+            Term::bool(true).if_then_else(Term::bool(false), Term::bool(true)),
+        );
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -1081,23 +1073,22 @@ fn acceptance_test_8_is_not_empty() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::var("is_empty")
-            .lambda("is_empty")
-            .apply(
-                Term::equals_integer()
-                    .apply(Term::length_of_bytearray().apply(Term::var("bytes")))
-                    .apply(Term::integer(0.into()))
-                    .lambda("bytes"),
-            )
-            .apply(Term::byte_string(vec![1]))
-            .delayed_if_then_else(
-                Term::bool(false),
-                Term::bool(false).if_then_else(Term::bool(false), Term::bool(true)),
-            ),
-        false,
-    );
+    let uplc = Term::var("is_empty")
+        .lambda("is_empty")
+        .apply(
+            Term::equals_integer()
+                .apply(Term::length_of_bytearray().apply(Term::var("bytes")))
+                .apply(Term::integer(0.into()))
+                .lambda("bytes"),
+        )
+        .apply(Term::byte_string(vec![1]))
+        .delayed_if_then_else(
+            Term::bool(false),
+            Term::bool(false).if_then_else(Term::bool(false), Term::bool(true)),
+        );
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -1114,23 +1105,22 @@ fn acceptance_test_9_is_empty() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::var("is_empty")
-            .lambda("is_empty")
-            .apply(
-                Term::equals_integer()
-                    .apply(Term::length_of_bytearray().apply(Term::var("bytes")))
-                    .apply(Term::integer(0.into()))
-                    .lambda("bytes"),
-            )
-            .apply(Term::byte_string(vec![]))
-            .delayed_if_then_else(
-                Term::bool(true),
-                Term::bool(true).if_then_else(Term::bool(false), Term::bool(true)),
-            ),
-        false,
-    );
+    let uplc = Term::var("is_empty")
+        .lambda("is_empty")
+        .apply(
+            Term::equals_integer()
+                .apply(Term::length_of_bytearray().apply(Term::var("bytes")))
+                .apply(Term::integer(0.into()))
+                .lambda("bytes"),
+        )
+        .apply(Term::byte_string(vec![]))
+        .delayed_if_then_else(
+            Term::bool(true),
+            Term::bool(true).if_then_else(Term::bool(false), Term::bool(true)),
+        );
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -1154,65 +1144,62 @@ fn acceptance_test_10_map_none() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::var("map")
-                    .lambda("map")
-                    .apply(
-                        Term::equals_integer()
+    let uplc = Term::equals_data()
+        .apply(
+            Term::var("map")
+                .lambda("map")
+                .apply(
+                    Term::equals_integer()
+                        .apply(Term::integer(1.into()))
+                        .apply(Term::var("constr_index"))
+                        .delayed_if_then_else(
+                            Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                            Term::constr_data()
+                                .apply(Term::integer(0.into()))
+                                .apply(
+                                    Term::mk_cons()
+                                        .apply(
+                                            Term::i_data()
+                                                .apply(Term::var("f").apply(Term::var("a"))),
+                                        )
+                                        .apply(Term::empty_list()),
+                                )
+                                .lambda("a")
+                                .apply(
+                                    Term::un_i_data()
+                                        .apply(Term::head_list().apply(Term::var("constr_fields"))),
+                                )
+                                .lambda("constr_fields")
+                                .apply(
+                                    Term::snd_pair()
+                                        .apply(Term::unconstr_data().apply(Term::var("opt"))),
+                                ),
+                        )
+                        .lambda("constr_index")
+                        .apply(
+                            Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("opt"))),
+                        )
+                        .lambda("f")
+                        .lambda("opt"),
+                )
+                .apply(Term::Constant(
+                    Constant::Data(Data::constr(1, vec![])).into(),
+                ))
+                .apply(
+                    Term::var("add_one").lambda("add_one").apply(
+                        Term::add_integer()
+                            .apply(Term::var("n"))
                             .apply(Term::integer(1.into()))
-                            .apply(Term::var("constr_index"))
-                            .delayed_if_then_else(
-                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
-                                Term::constr_data()
-                                    .apply(Term::integer(0.into()))
-                                    .apply(
-                                        Term::mk_cons()
-                                            .apply(
-                                                Term::i_data()
-                                                    .apply(Term::var("f").apply(Term::var("a"))),
-                                            )
-                                            .apply(Term::empty_list()),
-                                    )
-                                    .lambda("a")
-                                    .apply(
-                                        Term::un_i_data().apply(
-                                            Term::head_list().apply(Term::var("constr_fields")),
-                                        ),
-                                    )
-                                    .lambda("constr_fields")
-                                    .apply(
-                                        Term::snd_pair()
-                                            .apply(Term::unconstr_data().apply(Term::var("opt"))),
-                                    ),
-                            )
-                            .lambda("constr_index")
-                            .apply(
-                                Term::fst_pair()
-                                    .apply(Term::unconstr_data().apply(Term::var("opt"))),
-                            )
-                            .lambda("f")
-                            .lambda("opt"),
-                    )
-                    .apply(Term::Constant(
-                        Constant::Data(Data::constr(1, vec![])).into(),
-                    ))
-                    .apply(
-                        Term::var("add_one").lambda("add_one").apply(
-                            Term::add_integer()
-                                .apply(Term::var("n"))
-                                .apply(Term::integer(1.into()))
-                                .lambda("n"),
-                        ),
+                            .lambda("n"),
                     ),
-            )
-            .apply(Term::Constant(
-                Constant::Data(Data::constr(1, vec![])).into(),
-            )),
-        false,
-    );
+                ),
+        )
+        .apply(Term::Constant(
+            Constant::Data(Data::constr(1, vec![])).into(),
+        ));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -1236,65 +1223,62 @@ fn acceptance_test_10_map_some() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::var("map")
-                    .lambda("map")
-                    .apply(
-                        Term::equals_integer()
+    let uplc = Term::equals_data()
+        .apply(
+            Term::var("map")
+                .lambda("map")
+                .apply(
+                    Term::equals_integer()
+                        .apply(Term::integer(1.into()))
+                        .apply(Term::var("constr_index"))
+                        .delayed_if_then_else(
+                            Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                            Term::constr_data()
+                                .apply(Term::integer(0.into()))
+                                .apply(
+                                    Term::mk_cons()
+                                        .apply(
+                                            Term::i_data()
+                                                .apply(Term::var("f").apply(Term::var("a"))),
+                                        )
+                                        .apply(Term::empty_list()),
+                                )
+                                .lambda("a")
+                                .apply(
+                                    Term::un_i_data()
+                                        .apply(Term::head_list().apply(Term::var("constr_fields"))),
+                                )
+                                .lambda("constr_fields")
+                                .apply(
+                                    Term::snd_pair()
+                                        .apply(Term::unconstr_data().apply(Term::var("opt"))),
+                                ),
+                        )
+                        .lambda("constr_index")
+                        .apply(
+                            Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("opt"))),
+                        )
+                        .lambda("f")
+                        .lambda("opt"),
+                )
+                .apply(Term::Constant(
+                    Constant::Data(Data::constr(0, vec![Data::integer(1.into())])).into(),
+                ))
+                .apply(
+                    Term::var("add_one").lambda("add_one").apply(
+                        Term::add_integer()
+                            .apply(Term::var("n"))
                             .apply(Term::integer(1.into()))
-                            .apply(Term::var("constr_index"))
-                            .delayed_if_then_else(
-                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
-                                Term::constr_data()
-                                    .apply(Term::integer(0.into()))
-                                    .apply(
-                                        Term::mk_cons()
-                                            .apply(
-                                                Term::i_data()
-                                                    .apply(Term::var("f").apply(Term::var("a"))),
-                                            )
-                                            .apply(Term::empty_list()),
-                                    )
-                                    .lambda("a")
-                                    .apply(
-                                        Term::un_i_data().apply(
-                                            Term::head_list().apply(Term::var("constr_fields")),
-                                        ),
-                                    )
-                                    .lambda("constr_fields")
-                                    .apply(
-                                        Term::snd_pair()
-                                            .apply(Term::unconstr_data().apply(Term::var("opt"))),
-                                    ),
-                            )
-                            .lambda("constr_index")
-                            .apply(
-                                Term::fst_pair()
-                                    .apply(Term::unconstr_data().apply(Term::var("opt"))),
-                            )
-                            .lambda("f")
-                            .lambda("opt"),
-                    )
-                    .apply(Term::Constant(
-                        Constant::Data(Data::constr(0, vec![Data::integer(1.into())])).into(),
-                    ))
-                    .apply(
-                        Term::var("add_one").lambda("add_one").apply(
-                            Term::add_integer()
-                                .apply(Term::var("n"))
-                                .apply(Term::integer(1.into()))
-                                .lambda("n"),
-                        ),
+                            .lambda("n"),
                     ),
-            )
-            .apply(Term::Constant(
-                Constant::Data(Data::constr(0, vec![Data::integer(2.into())])).into(),
-            )),
-        false,
-    );
+                ),
+        )
+        .apply(Term::Constant(
+            Constant::Data(Data::constr(0, vec![Data::integer(2.into())])).into(),
+        ));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -1314,58 +1298,58 @@ fn acceptance_test_11_map_empty() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::list_data().apply(
-                    Term::var("map")
-                        .lambda("map")
-                        .apply(
-                            Term::var("map")
-                                .apply(Term::var("map"))
-                                .apply(Term::var("xs"))
-                                .lambda("map")
-                                .apply(
-                                    Term::var("xs")
-                                        .delayed_choose_list(
-                                            Term::empty_list(),
-                                            Term::mk_cons()
-                                                .apply(
-                                                    Term::i_data().apply(
-                                                        Term::var("f").apply(Term::var("x")),
-                                                    ),
-                                                )
-                                                .apply(
-                                                    Term::var("map")
-                                                        .apply(Term::var("map"))
-                                                        .apply(Term::var("rest")),
-                                                )
-                                                .lambda("rest")
-                                                .apply(Term::tail_list().apply(Term::var("xs")))
-                                                .lambda("x")
-                                                .apply(Term::un_i_data().apply(
+    let uplc = Term::equals_data()
+        .apply(
+            Term::list_data().apply(
+                Term::var("map")
+                    .lambda("map")
+                    .apply(
+                        Term::var("map")
+                            .apply(Term::var("map"))
+                            .apply(Term::var("xs"))
+                            .lambda("map")
+                            .apply(
+                                Term::var("xs")
+                                    .delayed_choose_list(
+                                        Term::empty_list(),
+                                        Term::mk_cons()
+                                            .apply(
+                                                Term::i_data()
+                                                    .apply(Term::var("f").apply(Term::var("x"))),
+                                            )
+                                            .apply(
+                                                Term::var("map")
+                                                    .apply(Term::var("map"))
+                                                    .apply(Term::var("rest")),
+                                            )
+                                            .lambda("rest")
+                                            .apply(Term::tail_list().apply(Term::var("xs")))
+                                            .lambda("x")
+                                            .apply(
+                                                Term::un_i_data().apply(
                                                     Term::head_list().apply(Term::var("xs")),
-                                                )),
-                                        )
-                                        .lambda("xs")
-                                        .lambda("map"),
-                                )
-                                .lambda("f")
-                                .lambda("xs"),
-                        )
-                        .apply(Term::empty_list())
-                        .apply(
-                            Term::add_integer()
-                                .apply(Term::var("n"))
-                                .apply(Term::integer(1.into()))
-                                .lambda("n"),
-                        ),
-                ),
-            )
-            .apply(Term::list_data().apply(Term::empty_list())),
-        false,
-    );
+                                                ),
+                                            ),
+                                    )
+                                    .lambda("xs")
+                                    .lambda("map"),
+                            )
+                            .lambda("f")
+                            .lambda("xs"),
+                    )
+                    .apply(Term::empty_list())
+                    .apply(
+                        Term::add_integer()
+                            .apply(Term::var("n"))
+                            .apply(Term::integer(1.into()))
+                            .lambda("n"),
+                    ),
+            ),
+        )
+        .apply(Term::list_data().apply(Term::empty_list()));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -1385,66 +1369,66 @@ fn acceptance_test_11_map_filled() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::list_data().apply(
-                    Term::var("map")
-                        .lambda("map")
-                        .apply(
-                            Term::var("map")
-                                .apply(Term::var("map"))
-                                .apply(Term::var("xs"))
-                                .lambda("map")
-                                .apply(
-                                    Term::var("xs")
-                                        .delayed_choose_list(
-                                            Term::empty_list(),
-                                            Term::mk_cons()
-                                                .apply(
-                                                    Term::i_data().apply(
-                                                        Term::var("f").apply(Term::var("x")),
-                                                    ),
-                                                )
-                                                .apply(
-                                                    Term::var("map")
-                                                        .apply(Term::var("map"))
-                                                        .apply(Term::var("rest")),
-                                                )
-                                                .lambda("rest")
-                                                .apply(Term::tail_list().apply(Term::var("xs")))
-                                                .lambda("x")
-                                                .apply(Term::un_i_data().apply(
+    let uplc = Term::equals_data()
+        .apply(
+            Term::list_data().apply(
+                Term::var("map")
+                    .lambda("map")
+                    .apply(
+                        Term::var("map")
+                            .apply(Term::var("map"))
+                            .apply(Term::var("xs"))
+                            .lambda("map")
+                            .apply(
+                                Term::var("xs")
+                                    .delayed_choose_list(
+                                        Term::empty_list(),
+                                        Term::mk_cons()
+                                            .apply(
+                                                Term::i_data()
+                                                    .apply(Term::var("f").apply(Term::var("x"))),
+                                            )
+                                            .apply(
+                                                Term::var("map")
+                                                    .apply(Term::var("map"))
+                                                    .apply(Term::var("rest")),
+                                            )
+                                            .lambda("rest")
+                                            .apply(Term::tail_list().apply(Term::var("xs")))
+                                            .lambda("x")
+                                            .apply(
+                                                Term::un_i_data().apply(
                                                     Term::head_list().apply(Term::var("xs")),
-                                                )),
-                                        )
-                                        .lambda("xs")
-                                        .lambda("map"),
-                                )
-                                .lambda("f")
-                                .lambda("xs"),
-                        )
-                        .apply(Term::list_values(vec![
-                            Constant::Data(Data::integer(6.into())),
-                            Constant::Data(Data::integer(7.into())),
-                            Constant::Data(Data::integer(8.into())),
-                        ]))
-                        .apply(
-                            Term::add_integer()
-                                .apply(Term::var("n"))
-                                .apply(Term::integer(1.into()))
-                                .lambda("n"),
-                        ),
-                ),
-            )
-            .apply(Term::list_data().apply(Term::list_values(vec![
-                Constant::Data(Data::integer(7.into())),
-                Constant::Data(Data::integer(8.into())),
-                Constant::Data(Data::integer(9.into())),
-            ]))),
-        false,
-    );
+                                                ),
+                                            ),
+                                    )
+                                    .lambda("xs")
+                                    .lambda("map"),
+                            )
+                            .lambda("f")
+                            .lambda("xs"),
+                    )
+                    .apply(Term::list_values(vec![
+                        Constant::Data(Data::integer(6.into())),
+                        Constant::Data(Data::integer(7.into())),
+                        Constant::Data(Data::integer(8.into())),
+                    ]))
+                    .apply(
+                        Term::add_integer()
+                            .apply(Term::var("n"))
+                            .apply(Term::integer(1.into()))
+                            .lambda("n"),
+                    ),
+            ),
+        )
+        .apply(Term::list_data().apply(Term::list_values(vec![
+            Constant::Data(Data::integer(7.into())),
+            Constant::Data(Data::integer(8.into())),
+            Constant::Data(Data::integer(9.into())),
+        ])));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -1470,8 +1454,7 @@ fn acceptance_test_12_filter_even() {
       }
     "#;
 
-    assert_uplc(
-        src,
+    let uplc =
         Term::equals_data()
             .apply(
                 Term::list_data().apply(
@@ -1537,9 +1520,10 @@ fn acceptance_test_12_filter_even() {
                 Constant::Data(Data::integer(2.into())),
                 Constant::Data(Data::integer(4.into())),
                 Constant::Data(Data::integer(6.into())),
-            ]))),
-        false,
-    );
+            ])));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -1550,45 +1534,44 @@ fn acceptance_test_14_list_creation() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::list_data().apply(
-                    Term::mk_cons()
-                        .apply(
-                            Term::i_data().apply(
-                                Term::subtract_integer()
-                                    .apply(Term::integer(0.into()))
-                                    .apply(Term::integer(2.into())),
-                            ),
-                        )
-                        .apply(
-                            Term::mk_cons()
-                                .apply(
-                                    Term::i_data().apply(
-                                        Term::subtract_integer()
-                                            .apply(Term::integer(0.into()))
-                                            .apply(Term::integer(1.into())),
-                                    ),
-                                )
-                                .apply(
-                                    Term::mk_cons()
-                                        .apply(Term::Constant(
-                                            Constant::Data(Data::integer(0.into())).into(),
-                                        ))
-                                        .apply(Term::empty_list()),
-                                ),
+    let uplc = Term::equals_data()
+        .apply(
+            Term::list_data().apply(
+                Term::mk_cons()
+                    .apply(
+                        Term::i_data().apply(
+                            Term::subtract_integer()
+                                .apply(Term::integer(0.into()))
+                                .apply(Term::integer(2.into())),
                         ),
-                ),
-            )
-            .apply(Term::list_data().apply(Term::list_values(vec![
-                Constant::Data(Data::integer((-2).into())),
-                Constant::Data(Data::integer((-1).into())),
-                Constant::Data(Data::integer(0.into())),
-            ]))),
-        false,
-    );
+                    )
+                    .apply(
+                        Term::mk_cons()
+                            .apply(
+                                Term::i_data().apply(
+                                    Term::subtract_integer()
+                                        .apply(Term::integer(0.into()))
+                                        .apply(Term::integer(1.into())),
+                                ),
+                            )
+                            .apply(
+                                Term::mk_cons()
+                                    .apply(Term::Constant(
+                                        Constant::Data(Data::integer(0.into())).into(),
+                                    ))
+                                    .apply(Term::empty_list()),
+                            ),
+                    ),
+            ),
+        )
+        .apply(Term::list_data().apply(Term::list_values(vec![
+            Constant::Data(Data::integer((-2).into())),
+            Constant::Data(Data::integer((-1).into())),
+            Constant::Data(Data::integer(0.into())),
+        ])));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -1607,13 +1590,12 @@ fn acceptance_test_15_zero_arg() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(Term::map_data().apply(Term::empty_map()))
-            .apply(Term::map_data().apply(Term::empty_map())),
-        false,
-    );
+    let uplc = Term::equals_data()
+        .apply(Term::map_data().apply(Term::empty_map()))
+        .apply(Term::map_data().apply(Term::empty_map()));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -1640,48 +1622,47 @@ fn acceptance_test_16_drop() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_bytestring()
-            .apply(
-                Term::var("drop")
-                    .lambda("drop")
-                    .apply(
-                        Term::var("slice")
-                            .apply(Term::var("bytes"))
-                            .apply(Term::var("n"))
-                            .apply(
-                                Term::subtract_integer()
-                                    .apply(Term::var("length").apply(Term::var("bytes")))
-                                    .apply(Term::var("n")),
-                            )
-                            .lambda("n")
-                            .lambda("bytes"),
-                    )
-                    .lambda("slice")
-                    .apply(
-                        Term::slice_bytearray()
-                            .apply(Term::var("start"))
-                            .apply(Term::var("end"))
-                            .apply(Term::var("bytes"))
-                            .lambda("end")
-                            .lambda("start")
-                            .lambda("bytes"),
-                    )
-                    .lambda("length")
-                    .apply(
-                        Term::length_of_bytearray()
-                            .apply(Term::var("bytes"))
-                            .lambda("bytes"),
-                    )
-                    .apply(Term::var("x"))
-                    .apply(Term::integer(2.into())),
-            )
-            .apply(Term::byte_string(vec![3, 4, 5, 6, 7]))
-            .lambda("x")
-            .apply(Term::byte_string(vec![1, 2, 3, 4, 5, 6, 7])),
-        false,
-    );
+    let uplc = Term::equals_bytestring()
+        .apply(
+            Term::var("drop")
+                .lambda("drop")
+                .apply(
+                    Term::var("slice")
+                        .apply(Term::var("bytes"))
+                        .apply(Term::var("n"))
+                        .apply(
+                            Term::subtract_integer()
+                                .apply(Term::var("length").apply(Term::var("bytes")))
+                                .apply(Term::var("n")),
+                        )
+                        .lambda("n")
+                        .lambda("bytes"),
+                )
+                .lambda("slice")
+                .apply(
+                    Term::slice_bytearray()
+                        .apply(Term::var("start"))
+                        .apply(Term::var("end"))
+                        .apply(Term::var("bytes"))
+                        .lambda("end")
+                        .lambda("start")
+                        .lambda("bytes"),
+                )
+                .lambda("length")
+                .apply(
+                    Term::length_of_bytearray()
+                        .apply(Term::var("bytes"))
+                        .lambda("bytes"),
+                )
+                .apply(Term::var("x"))
+                .apply(Term::integer(2.into())),
+        )
+        .apply(Term::byte_string(vec![3, 4, 5, 6, 7]))
+        .lambda("x")
+        .apply(Term::byte_string(vec![1, 2, 3, 4, 5, 6, 7]));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -1702,36 +1683,35 @@ fn acceptance_test_17_take() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_bytestring()
-            .apply(
-                Term::var("take")
-                    .lambda("take")
-                    .apply(
-                        Term::var("slice")
-                            .apply(Term::var("bytes"))
-                            .apply(Term::integer(0.into()))
-                            .apply(Term::var("n"))
-                            .lambda("n")
-                            .lambda("bytes"),
-                    )
-                    .lambda("slice")
-                    .apply(
-                        Term::slice_bytearray()
-                            .apply(Term::var("start"))
-                            .apply(Term::var("end"))
-                            .apply(Term::var("bytes"))
-                            .lambda("end")
-                            .lambda("start")
-                            .lambda("bytes"),
-                    )
-                    .apply(Term::byte_string(vec![1, 2, 3]))
-                    .apply(Term::integer(2.into())),
-            )
-            .apply(Term::byte_string(vec![1, 2])),
-        false,
-    );
+    let uplc = Term::equals_bytestring()
+        .apply(
+            Term::var("take")
+                .lambda("take")
+                .apply(
+                    Term::var("slice")
+                        .apply(Term::var("bytes"))
+                        .apply(Term::integer(0.into()))
+                        .apply(Term::var("n"))
+                        .lambda("n")
+                        .lambda("bytes"),
+                )
+                .lambda("slice")
+                .apply(
+                    Term::slice_bytearray()
+                        .apply(Term::var("start"))
+                        .apply(Term::var("end"))
+                        .apply(Term::var("bytes"))
+                        .lambda("end")
+                        .lambda("start")
+                        .lambda("bytes"),
+                )
+                .apply(Term::byte_string(vec![1, 2, 3]))
+                .apply(Term::integer(2.into())),
+        )
+        .apply(Term::byte_string(vec![1, 2]));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -1751,50 +1731,45 @@ fn acceptance_test_18_or_else() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_integer()
-            .apply(
-                Term::var("or_else")
-                    .lambda("or_else")
-                    .apply(
-                        Term::equals_integer()
-                            .apply(Term::integer(1.into()))
-                            .apply(Term::var("subject"))
-                            .delayed_if_then_else(
-                                Term::var("default"),
-                                Term::var("a")
-                                    .lambda("a")
-                                    .apply(
-                                        Term::un_i_data().apply(
-                                            Term::head_list().apply(Term::var("opt_fields")),
-                                        ),
-                                    )
-                                    .lambda("opt_fields")
-                                    .apply(
-                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt")),
-                                    ),
-                            )
-                            .lambda("subject")
-                            .apply(
-                                Term::fst_pair()
-                                    .apply(Term::unconstr_data().apply(Term::var("opt"))),
-                            )
-                            .lambda("default")
-                            .lambda("opt"),
-                    )
-                    .apply(Term::data(Data::constr(0, vec![Data::integer(42.into())])))
-                    .apply(Term::integer(14.into())),
-            )
-            .apply(Term::integer(42.into()))
-            .lambda(CONSTR_FIELDS_EXPOSER)
-            .apply(
-                Term::snd_pair()
-                    .apply(Term::unconstr_data().apply(Term::var("x")))
-                    .lambda("x"),
-            ),
-        false,
-    );
+    let uplc = Term::equals_integer()
+        .apply(
+            Term::var("or_else")
+                .lambda("or_else")
+                .apply(
+                    Term::equals_integer()
+                        .apply(Term::integer(1.into()))
+                        .apply(Term::var("subject"))
+                        .delayed_if_then_else(
+                            Term::var("default"),
+                            Term::var("a")
+                                .lambda("a")
+                                .apply(
+                                    Term::un_i_data()
+                                        .apply(Term::head_list().apply(Term::var("opt_fields"))),
+                                )
+                                .lambda("opt_fields")
+                                .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt"))),
+                        )
+                        .lambda("subject")
+                        .apply(
+                            Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("opt"))),
+                        )
+                        .lambda("default")
+                        .lambda("opt"),
+                )
+                .apply(Term::data(Data::constr(0, vec![Data::integer(42.into())])))
+                .apply(Term::integer(14.into())),
+        )
+        .apply(Term::integer(42.into()))
+        .lambda(CONSTR_FIELDS_EXPOSER)
+        .apply(
+            Term::snd_pair()
+                .apply(Term::unconstr_data().apply(Term::var("x")))
+                .lambda("x"),
+        );
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -1814,57 +1789,53 @@ fn acceptance_test_19_map_none_wrap_int() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::var("map")
-                    .lambda("map")
-                    .apply(
-                        Term::equals_integer()
-                            .apply(Term::integer(1.into()))
-                            .apply(Term::var("subject"))
-                            .delayed_if_then_else(
-                                Term::data(Data::constr(1, vec![])),
-                                Term::constr_data()
-                                    .apply(Term::integer(0.into()))
-                                    .apply(
-                                        Term::mk_cons()
-                                            .apply(
-                                                Term::i_data()
-                                                    .apply(Term::var("f").apply(Term::var("a"))),
-                                            )
-                                            .apply(Term::empty_list()),
-                                    )
-                                    .lambda("a")
-                                    // "a" generic is unbound in this case thus
-                                    // the aiken compiler does not unwrap the value to pass to f
-                                    .apply(Term::head_list().apply(Term::var("opt_fields")))
-                                    .lambda("opt_fields")
-                                    .apply(
-                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt")),
-                                    ),
-                            )
-                            .lambda("subject")
-                            .apply(
-                                Term::fst_pair()
-                                    .apply(Term::unconstr_data().apply(Term::var("opt"))),
-                            )
-                            .lambda("f")
-                            .lambda("opt"),
-                    )
-                    .apply(Term::data(Data::constr(1, vec![])))
-                    .apply(Term::integer(14.into()).lambda("_")),
-            )
-            .apply(Term::data(Data::constr(1, vec![])))
-            .lambda(CONSTR_FIELDS_EXPOSER)
-            .apply(
-                Term::snd_pair()
-                    .apply(Term::unconstr_data().apply(Term::var("x")))
-                    .lambda("x"),
-            ),
-        false,
-    );
+    let uplc = Term::equals_data()
+        .apply(
+            Term::var("map")
+                .lambda("map")
+                .apply(
+                    Term::equals_integer()
+                        .apply(Term::integer(1.into()))
+                        .apply(Term::var("subject"))
+                        .delayed_if_then_else(
+                            Term::data(Data::constr(1, vec![])),
+                            Term::constr_data()
+                                .apply(Term::integer(0.into()))
+                                .apply(
+                                    Term::mk_cons()
+                                        .apply(
+                                            Term::i_data()
+                                                .apply(Term::var("f").apply(Term::var("a"))),
+                                        )
+                                        .apply(Term::empty_list()),
+                                )
+                                .lambda("a")
+                                // "a" generic is unbound in this case thus
+                                // the aiken compiler does not unwrap the value to pass to f
+                                .apply(Term::head_list().apply(Term::var("opt_fields")))
+                                .lambda("opt_fields")
+                                .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt"))),
+                        )
+                        .lambda("subject")
+                        .apply(
+                            Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("opt"))),
+                        )
+                        .lambda("f")
+                        .lambda("opt"),
+                )
+                .apply(Term::data(Data::constr(1, vec![])))
+                .apply(Term::integer(14.into()).lambda("_")),
+        )
+        .apply(Term::data(Data::constr(1, vec![])))
+        .lambda(CONSTR_FIELDS_EXPOSER)
+        .apply(
+            Term::snd_pair()
+                .apply(Term::unconstr_data().apply(Term::var("x")))
+                .lambda("x"),
+        );
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -1884,58 +1855,54 @@ fn acceptance_test_19_map_wrap_void() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::var("map")
-                    .lambda("map")
-                    .apply(
-                        Term::equals_integer()
-                            .apply(Term::integer(1.into()))
-                            .apply(Term::var("subject"))
-                            .delayed_if_then_else(
-                                Term::data(Data::constr(1, vec![])),
-                                Term::constr_data()
-                                    .apply(Term::integer(0.into()))
-                                    .apply(
-                                        Term::mk_cons()
-                                            .apply(
-                                                Term::data(Data::constr(0, vec![]))
-                                                    .lambda("_")
-                                                    .apply(Term::var("f").apply(Term::var("a"))),
-                                            )
-                                            .apply(Term::empty_list()),
-                                    )
-                                    .lambda("a")
-                                    // "a" generic is unbound in this case thus
-                                    // the aiken compiler does not unwrap the value to pass to f
-                                    .apply(Term::head_list().apply(Term::var("opt_fields")))
-                                    .lambda("opt_fields")
-                                    .apply(
-                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt")),
-                                    ),
-                            )
-                            .lambda("subject")
-                            .apply(
-                                Term::fst_pair()
-                                    .apply(Term::unconstr_data().apply(Term::var("opt"))),
-                            )
-                            .lambda("f")
-                            .lambda("opt"),
-                    )
-                    .apply(Term::data(Data::constr(1, vec![])))
-                    .apply(Term::unit().lambda("_")),
-            )
-            .apply(Term::data(Data::constr(1, vec![])))
-            .lambda(CONSTR_FIELDS_EXPOSER)
-            .apply(
-                Term::snd_pair()
-                    .apply(Term::unconstr_data().apply(Term::var("x")))
-                    .lambda("x"),
-            ),
-        false,
-    );
+    let uplc = Term::equals_data()
+        .apply(
+            Term::var("map")
+                .lambda("map")
+                .apply(
+                    Term::equals_integer()
+                        .apply(Term::integer(1.into()))
+                        .apply(Term::var("subject"))
+                        .delayed_if_then_else(
+                            Term::data(Data::constr(1, vec![])),
+                            Term::constr_data()
+                                .apply(Term::integer(0.into()))
+                                .apply(
+                                    Term::mk_cons()
+                                        .apply(
+                                            Term::data(Data::constr(0, vec![]))
+                                                .lambda("_")
+                                                .apply(Term::var("f").apply(Term::var("a"))),
+                                        )
+                                        .apply(Term::empty_list()),
+                                )
+                                .lambda("a")
+                                // "a" generic is unbound in this case thus
+                                // the aiken compiler does not unwrap the value to pass to f
+                                .apply(Term::head_list().apply(Term::var("opt_fields")))
+                                .lambda("opt_fields")
+                                .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt"))),
+                        )
+                        .lambda("subject")
+                        .apply(
+                            Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("opt"))),
+                        )
+                        .lambda("f")
+                        .lambda("opt"),
+                )
+                .apply(Term::data(Data::constr(1, vec![])))
+                .apply(Term::unit().lambda("_")),
+        )
+        .apply(Term::data(Data::constr(1, vec![])))
+        .lambda(CONSTR_FIELDS_EXPOSER)
+        .apply(
+            Term::snd_pair()
+                .apply(Term::unconstr_data().apply(Term::var("x")))
+                .lambda("x"),
+        );
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -1955,63 +1922,58 @@ fn acceptance_test_20_map_some() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::var("map")
-                    .lambda("map")
-                    .apply(
-                        Term::equals_integer()
-                            .apply(Term::integer(1.into()))
-                            .apply(Term::var("constr_index"))
-                            .delayed_if_then_else(
-                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
-                                Term::constr_data()
-                                    .apply(Term::integer(0.into()))
-                                    .apply(
-                                        Term::mk_cons()
-                                            .apply(
-                                                Term::i_data()
-                                                    .apply(Term::var("f").apply(Term::var("a"))),
-                                            )
-                                            .apply(Term::empty_list()),
-                                    )
-                                    .lambda("a")
-                                    .apply(
-                                        Term::un_i_data().apply(
-                                            Term::head_list().apply(Term::var("constr_fields")),
-                                        ),
-                                    )
-                                    .lambda("constr_fields")
-                                    .apply(
-                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt")),
-                                    ),
-                            )
-                            .lambda("constr_index")
-                            .apply(
-                                Term::fst_pair()
-                                    .apply(Term::unconstr_data().apply(Term::var("opt"))),
-                            )
-                            .lambda("f")
-                            .lambda("opt"),
-                    )
-                    .apply(Term::Constant(
-                        Constant::Data(Data::constr(0, vec![Data::integer(14.into())])).into(),
-                    ))
-                    .apply(
-                        Term::add_integer()
-                            .apply(Term::var("n"))
-                            .apply(Term::integer(1.into()))
-                            .lambda("n"),
-                    ),
-            )
-            .apply(Term::Constant(
-                Constant::Data(Data::constr(0, vec![Data::integer(15.into())])).into(),
-            ))
-            .constr_fields_exposer(),
-        false,
-    );
+    let uplc = Term::equals_data()
+        .apply(
+            Term::var("map")
+                .lambda("map")
+                .apply(
+                    Term::equals_integer()
+                        .apply(Term::integer(1.into()))
+                        .apply(Term::var("constr_index"))
+                        .delayed_if_then_else(
+                            Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                            Term::constr_data()
+                                .apply(Term::integer(0.into()))
+                                .apply(
+                                    Term::mk_cons()
+                                        .apply(
+                                            Term::i_data()
+                                                .apply(Term::var("f").apply(Term::var("a"))),
+                                        )
+                                        .apply(Term::empty_list()),
+                                )
+                                .lambda("a")
+                                .apply(
+                                    Term::un_i_data()
+                                        .apply(Term::head_list().apply(Term::var("constr_fields"))),
+                                )
+                                .lambda("constr_fields")
+                                .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt"))),
+                        )
+                        .lambda("constr_index")
+                        .apply(
+                            Term::fst_pair().apply(Term::unconstr_data().apply(Term::var("opt"))),
+                        )
+                        .lambda("f")
+                        .lambda("opt"),
+                )
+                .apply(Term::Constant(
+                    Constant::Data(Data::constr(0, vec![Data::integer(14.into())])).into(),
+                ))
+                .apply(
+                    Term::add_integer()
+                        .apply(Term::var("n"))
+                        .apply(Term::integer(1.into()))
+                        .lambda("n"),
+                ),
+        )
+        .apply(Term::Constant(
+            Constant::Data(Data::constr(0, vec![Data::integer(15.into())])).into(),
+        ))
+        .constr_fields_exposer();
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -2046,92 +2008,88 @@ fn acceptance_test_22_filter_map() {
           }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::list_data().apply(
-                    Term::var("filter_map")
-                        .lambda("filter_map")
-                        .apply(
-                            Term::var("foldr")
-                                .apply(Term::var("xs"))
-                                .apply(
-                                    Term::equals_integer()
-                                        .apply(Term::integer(1.into()))
-                                        .apply(Term::var("subject_index"))
-                                        .delayed_if_then_else(
-                                            Term::var("ys"),
-                                            Term::mk_cons()
-                                                .apply(Term::i_data().apply(Term::var("y")))
-                                                .apply(Term::var("ys"))
-                                                .lambda("y")
-                                                .apply(
-                                                    Term::un_i_data().apply(
-                                                        Term::head_list()
-                                                            .apply(Term::var("subject_fields")),
-                                                    ),
-                                                )
-                                                .lambda("subject_fields")
-                                                .apply(
-                                                    Term::var(CONSTR_FIELDS_EXPOSER)
-                                                        .apply(Term::var("subject")),
+    let uplc = Term::equals_data()
+        .apply(
+            Term::list_data().apply(
+                Term::var("filter_map")
+                    .lambda("filter_map")
+                    .apply(
+                        Term::var("foldr")
+                            .apply(Term::var("xs"))
+                            .apply(
+                                Term::equals_integer()
+                                    .apply(Term::integer(1.into()))
+                                    .apply(Term::var("subject_index"))
+                                    .delayed_if_then_else(
+                                        Term::var("ys"),
+                                        Term::mk_cons()
+                                            .apply(Term::i_data().apply(Term::var("y")))
+                                            .apply(Term::var("ys"))
+                                            .lambda("y")
+                                            .apply(
+                                                Term::un_i_data().apply(
+                                                    Term::head_list()
+                                                        .apply(Term::var("subject_fields")),
                                                 ),
-                                        )
-                                        .lambda("subject_index")
-                                        .apply(
-                                            Term::var(CONSTR_INDEX_EXPOSER)
-                                                .apply(Term::var("subject")),
-                                        )
-                                        .lambda("subject")
-                                        .apply(Term::var("f").apply(Term::var("x")))
-                                        .lambda("ys")
-                                        .lambda("x"),
-                                )
-                                .apply(Term::empty_list())
-                                .lambda("f")
-                                .lambda("xs"),
-                        )
-                        .lambda("foldr")
-                        .apply(
-                            Term::var("foldr")
-                                .apply(Term::var("foldr"))
-                                .apply(Term::var("xs"))
-                                .lambda("foldr")
-                                .apply(
-                                    Term::var("xs")
-                                        .delayed_choose_list(
-                                            Term::var("zero"),
-                                            Term::var("f")
-                                                .apply(Term::var("x"))
-                                                .apply(
-                                                    Term::var("foldr")
-                                                        .apply(Term::var("foldr"))
-                                                        .apply(Term::var("rest")),
-                                                )
-                                                .lambda("rest")
-                                                .apply(Term::tail_list().apply(Term::var("xs")))
-                                                .lambda("x")
-                                                .apply(Term::head_list().apply(Term::var("xs"))),
-                                        )
-                                        .lambda("xs")
-                                        .lambda("foldr"),
-                                )
-                                .lambda("zero")
-                                .lambda("f")
-                                .lambda("xs"),
-                        )
-                        .apply(Term::empty_list())
-                        .apply(
-                            Term::data(Data::constr(0, vec![Data::integer(42.into())])).lambda("_"),
-                        ),
-                ),
-            )
-            .apply(Term::list_data().apply(Term::empty_list()))
-            .constr_fields_exposer()
-            .constr_index_exposer(),
-        false,
-    );
+                                            )
+                                            .lambda("subject_fields")
+                                            .apply(
+                                                Term::var(CONSTR_FIELDS_EXPOSER)
+                                                    .apply(Term::var("subject")),
+                                            ),
+                                    )
+                                    .lambda("subject_index")
+                                    .apply(
+                                        Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("subject")),
+                                    )
+                                    .lambda("subject")
+                                    .apply(Term::var("f").apply(Term::var("x")))
+                                    .lambda("ys")
+                                    .lambda("x"),
+                            )
+                            .apply(Term::empty_list())
+                            .lambda("f")
+                            .lambda("xs"),
+                    )
+                    .lambda("foldr")
+                    .apply(
+                        Term::var("foldr")
+                            .apply(Term::var("foldr"))
+                            .apply(Term::var("xs"))
+                            .lambda("foldr")
+                            .apply(
+                                Term::var("xs")
+                                    .delayed_choose_list(
+                                        Term::var("zero"),
+                                        Term::var("f")
+                                            .apply(Term::var("x"))
+                                            .apply(
+                                                Term::var("foldr")
+                                                    .apply(Term::var("foldr"))
+                                                    .apply(Term::var("rest")),
+                                            )
+                                            .lambda("rest")
+                                            .apply(Term::tail_list().apply(Term::var("xs")))
+                                            .lambda("x")
+                                            .apply(Term::head_list().apply(Term::var("xs"))),
+                                    )
+                                    .lambda("xs")
+                                    .lambda("foldr"),
+                            )
+                            .lambda("zero")
+                            .lambda("f")
+                            .lambda("xs"),
+                    )
+                    .apply(Term::empty_list())
+                    .apply(Term::data(Data::constr(0, vec![Data::integer(42.into())])).lambda("_")),
+            ),
+        )
+        .apply(Term::list_data().apply(Term::empty_list()))
+        .constr_fields_exposer()
+        .constr_index_exposer();
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -2258,43 +2216,42 @@ fn acceptance_test_23_to_list() {
         .lambda("k")
         .lambda("m");
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::map_data().apply(
-                    insert
-                        .as_var("insert", |insert| {
-                            Term::Var(insert.clone())
-                                .apply(
-                                    Term::Var(insert)
-                                        .apply(Term::empty_map())
-                                        .apply(Term::byte_string("foo".as_bytes().to_vec()))
-                                        .apply(Term::integer(42.into())),
-                                )
-                                .apply(Term::byte_string("bar".as_bytes().to_vec()))
-                                .apply(Term::integer(14.into()))
-                                .delay()
-                        })
-                        .force(),
-                ),
-            )
-            .apply(Term::map_data().apply(Term::map_values(vec![
-                Constant::ProtoPair(
-                    Type::Data,
-                    Type::Data,
-                    Constant::Data(Data::bytestring("foo".as_bytes().to_vec())).into(),
-                    Constant::Data(Data::integer(42.into())).into(),
-                ),
-                Constant::ProtoPair(
-                    Type::Data,
-                    Type::Data,
-                    Constant::Data(Data::bytestring("bar".as_bytes().to_vec())).into(),
-                    Constant::Data(Data::integer(14.into())).into(),
-                ),
-            ]))),
-        false,
-    );
+    let uplc = Term::equals_data()
+        .apply(
+            Term::map_data().apply(
+                insert
+                    .as_var("insert", |insert| {
+                        Term::Var(insert.clone())
+                            .apply(
+                                Term::Var(insert)
+                                    .apply(Term::empty_map())
+                                    .apply(Term::byte_string("foo".as_bytes().to_vec()))
+                                    .apply(Term::integer(42.into())),
+                            )
+                            .apply(Term::byte_string("bar".as_bytes().to_vec()))
+                            .apply(Term::integer(14.into()))
+                            .delay()
+                    })
+                    .force(),
+            ),
+        )
+        .apply(Term::map_data().apply(Term::map_values(vec![
+            Constant::ProtoPair(
+                Type::Data,
+                Type::Data,
+                Constant::Data(Data::bytestring("foo".as_bytes().to_vec())).into(),
+                Constant::Data(Data::integer(42.into())).into(),
+            ),
+            Constant::ProtoPair(
+                Type::Data,
+                Type::Data,
+                Constant::Data(Data::bytestring("bar".as_bytes().to_vec())).into(),
+                Constant::Data(Data::integer(14.into())).into(),
+            ),
+        ])));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -2323,121 +2280,107 @@ fn acceptance_test_24_map_pair() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::var("map2")
-                    .lambda("map2")
-                    .apply(
-                        Term::equals_integer()
-                            .apply(Term::integer(1.into()))
-                            .apply(Term::var("opt_a_index"))
-                            .delayed_if_then_else(
-                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
-                                Term::equals_integer()
-                                    .apply(Term::integer(1.into()))
-                                    .apply(Term::var("opt_b_index"))
-                                    .delayed_if_then_else(
-                                        Term::Constant(
-                                            Constant::Data(Data::constr(1, vec![])).into(),
-                                        ),
-                                        Term::constr_data()
-                                            .apply(Term::integer(0.into()))
-                                            .apply(
-                                                Term::mk_cons()
-                                                    .apply(
-                                                        Term::list_data()
-                                                            .apply(
-                                                                Term::mk_cons()
-                                                                    .apply(
-                                                                        Term::fst_pair().apply(
-                                                                            Term::var("pair"),
-                                                                        ),
-                                                                    )
-                                                                    .apply(
-                                                                        Term::mk_cons()
-                                                                            .apply(
-                                                                                Term::snd_pair()
-                                                                                    .apply(
-                                                                                        Term::var(
-                                                                                            "pair",
-                                                                                        ),
-                                                                                    ),
-                                                                            )
-                                                                            .apply(
-                                                                                Term::empty_list(),
+    let uplc = Term::equals_data()
+        .apply(
+            Term::var("map2")
+                .lambda("map2")
+                .apply(
+                    Term::equals_integer()
+                        .apply(Term::integer(1.into()))
+                        .apply(Term::var("opt_a_index"))
+                        .delayed_if_then_else(
+                            Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                            Term::equals_integer()
+                                .apply(Term::integer(1.into()))
+                                .apply(Term::var("opt_b_index"))
+                                .delayed_if_then_else(
+                                    Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                                    Term::constr_data()
+                                        .apply(Term::integer(0.into()))
+                                        .apply(
+                                            Term::mk_cons()
+                                                .apply(
+                                                    Term::list_data()
+                                                        .apply(
+                                                            Term::mk_cons()
+                                                                .apply(
+                                                                    Term::fst_pair()
+                                                                        .apply(Term::var("pair")),
+                                                                )
+                                                                .apply(
+                                                                    Term::mk_cons()
+                                                                        .apply(
+                                                                            Term::snd_pair().apply(
+                                                                                Term::var("pair"),
                                                                             ),
-                                                                    ),
-                                                            )
-                                                            .lambda("pair")
-                                                            .apply(
-                                                                Term::var("f")
-                                                                    .apply(Term::var("a"))
-                                                                    .apply(Term::var("b")),
-                                                            ),
-                                                    )
-                                                    .apply(Term::empty_list()),
-                                            )
-                                            .lambda("b")
-                                            .apply(Term::un_i_data().apply(
-                                                Term::head_list().apply(Term::var("opt_b_fields")),
-                                            ))
-                                            .lambda("opt_b_fields")
-                                            .apply(
-                                                Term::var(CONSTR_FIELDS_EXPOSER)
-                                                    .apply(Term::var("opt_b")),
-                                            ),
-                                    )
-                                    .lambda("opt_b_index")
-                                    .apply(
-                                        Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("opt_b")),
-                                    )
-                                    .lambda("a")
-                                    .apply(
-                                        Term::un_i_data().apply(
-                                            Term::head_list().apply(Term::var("opt_a_fields")),
+                                                                        )
+                                                                        .apply(Term::empty_list()),
+                                                                ),
+                                                        )
+                                                        .lambda("pair")
+                                                        .apply(
+                                                            Term::var("f")
+                                                                .apply(Term::var("a"))
+                                                                .apply(Term::var("b")),
+                                                        ),
+                                                )
+                                                .apply(Term::empty_list()),
+                                        )
+                                        .lambda("b")
+                                        .apply(Term::un_i_data().apply(
+                                            Term::head_list().apply(Term::var("opt_b_fields")),
+                                        ))
+                                        .lambda("opt_b_fields")
+                                        .apply(
+                                            Term::var(CONSTR_FIELDS_EXPOSER)
+                                                .apply(Term::var("opt_b")),
                                         ),
-                                    )
-                                    .lambda("opt_a_fields")
-                                    .apply(
-                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt_a")),
-                                    ),
-                            )
-                            .lambda("opt_a_index")
-                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("opt_a")))
-                            .lambda("f")
-                            .lambda("opt_b")
-                            .lambda("opt_a"),
-                    )
-                    .apply(Term::Constant(
-                        Constant::Data(Data::constr(0, vec![Data::integer(14.into())])).into(),
-                    ))
-                    .apply(Term::Constant(
-                        Constant::Data(Data::constr(0, vec![Data::integer(42.into())])).into(),
-                    ))
-                    .apply(
-                        Term::mk_pair_data()
-                            .apply(Term::i_data().apply(Term::var("a")))
-                            .apply(Term::i_data().apply(Term::var("b")))
-                            .lambda("b")
-                            .lambda("a"),
-                    ),
-            )
-            .apply(Term::Constant(
-                Constant::Data(Data::constr(
-                    0,
-                    vec![Data::list(vec![
-                        Data::integer(14.into()),
-                        Data::integer(42.into()),
-                    ])],
+                                )
+                                .lambda("opt_b_index")
+                                .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("opt_b")))
+                                .lambda("a")
+                                .apply(
+                                    Term::un_i_data()
+                                        .apply(Term::head_list().apply(Term::var("opt_a_fields"))),
+                                )
+                                .lambda("opt_a_fields")
+                                .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt_a"))),
+                        )
+                        .lambda("opt_a_index")
+                        .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("opt_a")))
+                        .lambda("f")
+                        .lambda("opt_b")
+                        .lambda("opt_a"),
+                )
+                .apply(Term::Constant(
+                    Constant::Data(Data::constr(0, vec![Data::integer(14.into())])).into(),
                 ))
-                .into(),
+                .apply(Term::Constant(
+                    Constant::Data(Data::constr(0, vec![Data::integer(42.into())])).into(),
+                ))
+                .apply(
+                    Term::mk_pair_data()
+                        .apply(Term::i_data().apply(Term::var("a")))
+                        .apply(Term::i_data().apply(Term::var("b")))
+                        .lambda("b")
+                        .lambda("a"),
+                ),
+        )
+        .apply(Term::Constant(
+            Constant::Data(Data::constr(
+                0,
+                vec![Data::list(vec![
+                    Data::integer(14.into()),
+                    Data::integer(42.into()),
+                ])],
             ))
-            .constr_fields_exposer()
-            .constr_index_exposer(),
-        false,
-    );
+            .into(),
+        ))
+        .constr_fields_exposer()
+        .constr_index_exposer();
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -2466,101 +2409,93 @@ fn acceptance_test_24_map2() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::equals_data()
-            .apply(
-                Term::var("map2")
-                    .lambda("map2")
-                    .apply(
-                        Term::equals_integer()
-                            .apply(Term::integer(1.into()))
-                            .apply(Term::var("opt_a_index"))
-                            .delayed_if_then_else(
-                                Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
-                                Term::equals_integer()
-                                    .apply(Term::integer(1.into()))
-                                    .apply(Term::var("opt_b_index"))
-                                    .delayed_if_then_else(
-                                        Term::Constant(
-                                            Constant::Data(Data::constr(1, vec![])).into(),
+    let uplc = Term::equals_data()
+        .apply(
+            Term::var("map2")
+                .lambda("map2")
+                .apply(
+                    Term::equals_integer()
+                        .apply(Term::integer(1.into()))
+                        .apply(Term::var("opt_a_index"))
+                        .delayed_if_then_else(
+                            Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                            Term::equals_integer()
+                                .apply(Term::integer(1.into()))
+                                .apply(Term::var("opt_b_index"))
+                                .delayed_if_then_else(
+                                    Term::Constant(Constant::Data(Data::constr(1, vec![])).into()),
+                                    Term::constr_data()
+                                        .apply(Term::integer(0.into()))
+                                        .apply(
+                                            Term::mk_cons()
+                                                .apply(
+                                                    Term::list_data().apply(
+                                                        Term::var("f")
+                                                            .apply(Term::var("a"))
+                                                            .apply(Term::var("b")),
+                                                    ),
+                                                )
+                                                .apply(Term::empty_list()),
+                                        )
+                                        .lambda("b")
+                                        .apply(Term::un_i_data().apply(
+                                            Term::head_list().apply(Term::var("opt_b_fields")),
+                                        ))
+                                        .lambda("opt_b_fields")
+                                        .apply(
+                                            Term::var(CONSTR_FIELDS_EXPOSER)
+                                                .apply(Term::var("opt_b")),
                                         ),
-                                        Term::constr_data()
-                                            .apply(Term::integer(0.into()))
-                                            .apply(
-                                                Term::mk_cons()
-                                                    .apply(
-                                                        Term::list_data().apply(
-                                                            Term::var("f")
-                                                                .apply(Term::var("a"))
-                                                                .apply(Term::var("b")),
-                                                        ),
-                                                    )
-                                                    .apply(Term::empty_list()),
-                                            )
-                                            .lambda("b")
-                                            .apply(Term::un_i_data().apply(
-                                                Term::head_list().apply(Term::var("opt_b_fields")),
-                                            ))
-                                            .lambda("opt_b_fields")
-                                            .apply(
-                                                Term::var(CONSTR_FIELDS_EXPOSER)
-                                                    .apply(Term::var("opt_b")),
-                                            ),
-                                    )
-                                    .lambda("opt_b_index")
-                                    .apply(
-                                        Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("opt_b")),
-                                    )
-                                    .lambda("a")
-                                    .apply(
-                                        Term::un_i_data().apply(
-                                            Term::head_list().apply(Term::var("opt_a_fields")),
-                                        ),
-                                    )
-                                    .lambda("opt_a_fields")
-                                    .apply(
-                                        Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt_a")),
-                                    ),
-                            )
-                            .lambda("opt_a_index")
-                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("opt_a")))
-                            .lambda("f")
-                            .lambda("opt_b")
-                            .lambda("opt_a"),
-                    )
-                    .apply(Term::Constant(
-                        Constant::Data(Data::constr(0, vec![Data::integer(14.into())])).into(),
-                    ))
-                    .apply(Term::Constant(
-                        Constant::Data(Data::constr(0, vec![Data::integer(42.into())])).into(),
-                    ))
-                    .apply(
-                        Term::mk_cons()
-                            .apply(Term::i_data().apply(Term::var("a")))
-                            .apply(
-                                Term::mk_cons()
-                                    .apply(Term::i_data().apply(Term::var("b")))
-                                    .apply(Term::empty_list()),
-                            )
-                            .lambda("b")
-                            .lambda("a"),
-                    ),
-            )
-            .apply(Term::Constant(
-                Constant::Data(Data::constr(
-                    0,
-                    vec![Data::list(vec![
-                        Data::integer(14.into()),
-                        Data::integer(42.into()),
-                    ])],
+                                )
+                                .lambda("opt_b_index")
+                                .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("opt_b")))
+                                .lambda("a")
+                                .apply(
+                                    Term::un_i_data()
+                                        .apply(Term::head_list().apply(Term::var("opt_a_fields"))),
+                                )
+                                .lambda("opt_a_fields")
+                                .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("opt_a"))),
+                        )
+                        .lambda("opt_a_index")
+                        .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("opt_a")))
+                        .lambda("f")
+                        .lambda("opt_b")
+                        .lambda("opt_a"),
+                )
+                .apply(Term::Constant(
+                    Constant::Data(Data::constr(0, vec![Data::integer(14.into())])).into(),
                 ))
-                .into(),
+                .apply(Term::Constant(
+                    Constant::Data(Data::constr(0, vec![Data::integer(42.into())])).into(),
+                ))
+                .apply(
+                    Term::mk_cons()
+                        .apply(Term::i_data().apply(Term::var("a")))
+                        .apply(
+                            Term::mk_cons()
+                                .apply(Term::i_data().apply(Term::var("b")))
+                                .apply(Term::empty_list()),
+                        )
+                        .lambda("b")
+                        .lambda("a"),
+                ),
+        )
+        .apply(Term::Constant(
+            Constant::Data(Data::constr(
+                0,
+                vec![Data::list(vec![
+                    Data::integer(14.into()),
+                    Data::integer(42.into()),
+                ])],
             ))
-            .constr_fields_exposer()
-            .constr_index_exposer(),
-        false,
-    );
+            .into(),
+        ))
+        .constr_fields_exposer()
+        .constr_index_exposer();
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -2571,11 +2506,10 @@ fn acceptance_test_25_void_equal() {
       }
     "#;
 
-    assert_uplc(
-        src,
-        Term::unit().choose_unit(Term::unit().choose_unit(Term::bool(true))),
-        false,
-    );
+    let uplc = Term::unit().choose_unit(Term::unit().choose_unit(Term::bool(true)));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -2608,8 +2542,7 @@ fn acceptance_test_26_foldr() {
       }
     "#;
 
-    assert_uplc(
-        src,
+    let uplc =
         Term::equals_data()
             .apply(
                 Term::list_data().apply(
@@ -2714,9 +2647,10 @@ fn acceptance_test_26_foldr() {
                 Constant::Data(Data::integer(2.into())),
                 Constant::Data(Data::integer(3.into())),
                 Constant::Data(Data::integer(3.into())),
-            ]))),
-        false,
-    );
+            ])));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
@@ -2749,8 +2683,7 @@ fn acceptance_test_27_flat_map() {
       }
     "#;
 
-    assert_uplc(
-        src,
+    let uplc =
         Term::equals_data()
             .apply(
                 Term::list_data().apply(
@@ -2855,9 +2788,10 @@ fn acceptance_test_27_flat_map() {
                 Constant::Data(Data::integer(2.into())),
                 Constant::Data(Data::integer(3.into())),
                 Constant::Data(Data::integer(3.into())),
-            ]))),
-        false,
-    );
+            ])));
+
+    assert_uplc(src, uplc.clone(), false, true);
+    assert_uplc(src, uplc, false, false);
 }
 
 #[test]
