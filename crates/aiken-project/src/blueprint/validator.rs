@@ -696,6 +696,35 @@ mod tests {
     }
 
     #[test]
+    fn type_aliases() {
+        assert_validator!(
+            r#"
+            pub type Asset = (ByteArray, Int)
+
+            pub type POSIXTime = Int
+
+            pub type AlwaysNone = Never
+
+            pub type MyDatum {
+                Either(AlwaysNone)
+                OrElse(Pair<POSIXTime, Bool>)
+            }
+
+            pub type MyRedeemer<a> {
+                fst_field: List<a>,
+                snd_field: Pairs<a, POSIXTime>
+            }
+
+            validator recursive_types {
+              spend(datum: Option<MyDatum>, redeemer: MyRedeemer<Asset>, output_reference: Data, transaction: Data) {
+                True
+              }
+            }
+            "#
+        );
+    }
+
+    #[test]
     fn validate_arguments_integer() {
         let definitions = fixture_definitions();
 

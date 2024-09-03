@@ -20,16 +20,21 @@ description: "Code:\n\n/// On-chain state\npub type State {\n    /// The contest
   "hash": "<redacted>",
   "definitions": {
     "ByteArray": {
+      "title": "ByteArray",
       "dataType": "bytes"
     },
     "Int": {
       "dataType": "integer"
     },
-    "List$ByteArray": {
+    "List$Party": {
       "dataType": "list",
       "items": {
-        "$ref": "#/definitions/ByteArray"
+        "$ref": "#/definitions/Party"
       }
+    },
+    "Party": {
+      "title": "Party",
+      "dataType": "bytes"
     },
     "test_module/ContestationPeriod": {
       "title": "ContestationPeriod",
@@ -89,7 +94,7 @@ description: "Code:\n\n/// On-chain state\npub type State {\n    /// The contest
             {
               "title": "parties",
               "description": "List of public key hashes of all participants",
-              "$ref": "#/definitions/List$ByteArray"
+              "$ref": "#/definitions/List$Party"
             },
             {
               "title": "utxoHash",

@@ -1,4 +1,5 @@
-use aiken_lang::tipo::{Type, TypeVar};
+use aiken_lang::tipo::{pretty::resolve_alias, Type, TypeAliasAnnotation, TypeVar};
+use itertools::Itertools;
 use serde::{
     self,
     de::{self, Deserialize, Deserializer, MapAccess, Visitor},
@@ -125,6 +126,22 @@ impl Display for Reference {
 
 impl Reference {
     pub fn from_type(type_info: &Type, type_parameters: &HashMap<u64, Rc<Type>>) -> Self {
+        if let Some(TypeAliasAnnotation {
+            alias,
+            parameters,
+            annotation,
+        }) = type_info.alias().as_deref()
+        {
+            if let Some(resolved_parameters) = resolve_alias(parameters, annotation, type_info) {
+                return Self::from_type_alias(
+                    type_info,
+                    alias.to_string(),
+                    resolved_parameters,
+                    type_parameters,
+                );
+            }
+        }
+
         match type_info {
             Type::App {
                 module, name, args, ..
@@ -187,6 +204,41 @@ impl Reference {
                         .collect::<Vec<_>>()
                         .join("_")
                 ),
+            }
+        }
+    }
+
+    fn from_type_alias(
+        type_info: &Type,
+        alias: String,
+        parameters: Vec<Rc<Type>>,
+        type_parameters: &HashMap<u64, Rc<Type>>,
+    ) -> Self {
+        if !parameters.is_empty() {
+            Reference {
+                inner: format!(
+                    "{alias}${}",
+                    parameters
+                        .iter()
+                        .map(|param| {
+                            // Avoid infinite recursion for recursive types instantiated to
+                            // themselves. For example: type Identity<t> = t
+                            if param.as_ref() == type_info {
+                                Self::from_type(
+                                    type_info.clone().set_alias(None).as_ref(),
+                                    type_parameters,
+                                )
+                                .inner
+                            } else {
+                                Self::from_type(param, type_parameters).inner
+                            }
+                        })
+                        .join("_"),
+                ),
+            }
+        } else {
+            Reference {
+                inner: alias.clone(),
             }
         }
     }

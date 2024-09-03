@@ -172,6 +172,24 @@ impl Annotated<Schema> {
         type_parameters: &mut HashMap<u64, Rc<Type>>,
         definitions: &mut Definitions<Self>,
     ) -> Result<Reference, Error> {
+        let title = if type_info.alias().is_some() {
+            Some(type_info.to_pretty(0))
+        } else {
+            None
+        };
+
+        fn with_title(title: Option<&String>, annotated: Schema) -> Annotated<Schema> {
+            if title.is_some() {
+                Annotated {
+                    title: title.cloned(),
+                    description: None,
+                    annotated,
+                }
+            } else {
+                annotated.into()
+            }
+        }
+
         match type_info {
             Type::App {
                 module: module_name,
@@ -182,20 +200,20 @@ impl Annotated<Schema> {
                 definitions.register(type_info, &type_parameters.clone(), |definitions| {
                     match &type_name[..] {
                         "Data" => Ok(Annotated {
-                            title: Some("Data".to_string()),
+                            title: title.or(Some("Data".to_string())),
                             description: Some("Any Plutus data.".to_string()),
                             annotated: Schema::Data(Data::Opaque),
                         }),
 
-                        "ByteArray" => Ok(Schema::Data(Data::Bytes).into()),
+                        "ByteArray" => Ok(with_title(title.as_ref(), Schema::Data(Data::Bytes))),
 
-                        "Int" => Ok(Schema::Data(Data::Integer).into()),
+                        "Int" => Ok(with_title(title.as_ref(), Schema::Data(Data::Integer))),
 
-                        "String" => Ok(Schema::String.into()),
+                        "String" => Ok(with_title(title.as_ref(), Schema::String)),
 
                         "Void" => Ok(Annotated {
-                            title: Some("Unit".to_string()),
-                            description: Some("The nullary constructor.".to_string()),
+                            title: title.or(Some("Unit".to_string())),
+                            description: None,
                             annotated: Schema::Data(Data::AnyOf(vec![Annotated {
                                 title: None,
                                 description: None,
@@ -207,7 +225,7 @@ impl Annotated<Schema> {
                         }),
 
                         "Bool" => Ok(Annotated {
-                            title: Some("Bool".to_string()),
+                            title: title.or(Some("Bool".to_string())),
                             description: None,
                             annotated: Schema::Data(Data::AnyOf(vec![
                                 Annotated {
@@ -230,7 +248,7 @@ impl Annotated<Schema> {
                         }),
 
                         "Ordering" => Ok(Annotated {
-                            title: Some("Ordering".to_string()),
+                            title: title.or(Some("Ordering".to_string())),
                             description: None,
                             annotated: Schema::Data(Data::AnyOf(vec![
                                 Annotated {
@@ -260,6 +278,23 @@ impl Annotated<Schema> {
                             ])),
                         }),
 
+                        "Never" => {
+                            Ok(Annotated {
+                                title: title.or(Some("Never".to_string())),
+                                description: None,
+                                annotated: Schema::Data(Data::AnyOf(vec![
+                                    Annotated {
+                                        title: Some("Never".to_string()),
+                                        description: Some("Nothing.".to_string()),
+                                        annotated: Constructor {
+                                            index: 1,
+                                            fields: vec![],
+                                        },
+                                    },
+                                ])),
+                            })
+                        }
+
                         "Option" => {
                             let generic = Annotated::do_from_type(
                                 args.first()
@@ -270,7 +305,7 @@ impl Annotated<Schema> {
                             )?;
 
                             Ok(Annotated {
-                                title: Some("Optional".to_string()),
+                                title: title.or(Some("Option".to_string())),
                                 description: None,
                                 annotated: Schema::Data(Data::AnyOf(vec![
                                     Annotated {
@@ -329,7 +364,7 @@ impl Annotated<Schema> {
                                 _ => Data::List(Items::One(Declaration::Referenced(generic))),
                             };
 
-                            Ok(Schema::Data(data).into())
+                            Ok(with_title(title.as_ref(), Schema::Data(data)))
                         }
 
                         _ => Err(Error::new(ErrorContext::UnsupportedType, type_info)),
@@ -360,7 +395,7 @@ impl Annotated<Schema> {
                 );
 
                 Ok(Annotated {
-                    title: Some(data_type.name.clone()),
+                    title: title.or(Some(data_type.name.clone())),
                     description: data_type.doc.clone().map(|s| s.trim().to_string()),
                     annotated,
                 })
@@ -377,7 +412,7 @@ impl Annotated<Schema> {
                         .map_err(|e| e.backtrack(type_info))?;
 
                     Ok(Annotated {
-                        title: Some("Pair".to_owned()),
+                        title: title.or(Some("Pair".to_owned())),
                         description: None,
                         annotated: Schema::Pair(left, right),
                     })
@@ -396,7 +431,7 @@ impl Annotated<Schema> {
                         .map_err(|e| e.backtrack(type_info))?;
 
                     Ok(Annotated {
-                        title: Some("Tuple".to_owned()),
+                        title: title.or(Some("Tuple".to_owned())),
                         description: None,
                         annotated: Schema::Data(Data::List(Items::Many(elems))),
                     })

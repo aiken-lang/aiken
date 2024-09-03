@@ -1,0 +1,145 @@
+---
+source: crates/aiken-project/src/blueprint/validator.rs
+description: "Code:\n\npub type Asset = (ByteArray, Int)\n\npub type POSIXTime = Int\n\npub type AlwaysNone = Never\n\npub type MyDatum {\n    Either(AlwaysNone)\n    OrElse(Pair<POSIXTime, Bool>)\n}\n\npub type MyRedeemer<a> {\n    fst_field: List<a>,\n    snd_field: Pairs<a, POSIXTime>\n}\n\nvalidator recursive_types {\n  spend(datum: Option<MyDatum>, redeemer: MyRedeemer<Asset>, output_reference: Data, transaction: Data) {\n    True\n  }\n}\n"
+---
+{
+  "title": "test_module.recursive_types.spend",
+  "datum": {
+    "title": "datum",
+    "schema": {
+      "$ref": "#/definitions/test_module~1MyDatum"
+    }
+  },
+  "redeemer": {
+    "title": "redeemer",
+    "schema": {
+      "$ref": "#/definitions/test_module~1MyRedeemer$Asset"
+    }
+  },
+  "compiledCode": "<redacted>",
+  "hash": "<redacted>",
+  "definitions": {
+    "AlwaysNone": {
+      "title": "AlwaysNone",
+      "anyOf": [
+        {
+          "title": "Never",
+          "description": "Nothing.",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "Asset": {
+      "title": "Asset",
+      "dataType": "list",
+      "items": [
+        {
+          "$ref": "#/definitions/ByteArray"
+        },
+        {
+          "$ref": "#/definitions/Int"
+        }
+      ]
+    },
+    "Bool": {
+      "title": "Bool",
+      "anyOf": [
+        {
+          "title": "False",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "True",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "List$Asset": {
+      "dataType": "list",
+      "items": {
+        "$ref": "#/definitions/Asset"
+      }
+    },
+    "POSIXTime": {
+      "title": "POSIXTime",
+      "dataType": "integer"
+    },
+    "Pair$POSIXTime_Bool": {
+      "title": "Pair",
+      "dataType": "#pair",
+      "left": {
+        "$ref": "#/definitions/POSIXTime"
+      },
+      "right": {
+        "$ref": "#/definitions/Bool"
+      }
+    },
+    "Pairs$Asset_POSIXTime": {
+      "title": "Pairs<a, POSIXTime>",
+      "dataType": "map",
+      "keys": {
+        "$ref": "#/definitions/Asset"
+      },
+      "values": {
+        "$ref": "#/definitions/POSIXTime"
+      }
+    },
+    "test_module/MyDatum": {
+      "title": "MyDatum",
+      "anyOf": [
+        {
+          "title": "Either",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "$ref": "#/definitions/AlwaysNone"
+            }
+          ]
+        },
+        {
+          "title": "OrElse",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "$ref": "#/definitions/Pair$POSIXTime_Bool"
+            }
+          ]
+        }
+      ]
+    },
+    "test_module/MyRedeemer$Asset": {
+      "title": "MyRedeemer",
+      "anyOf": [
+        {
+          "title": "MyRedeemer",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "fst_field",
+              "$ref": "#/definitions/List$Asset"
+            },
+            {
+              "title": "snd_field",
+              "$ref": "#/definitions/Pairs$Asset_POSIXTime"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -214,7 +214,7 @@ fn qualify_type_name(module: &String, typ_name: &str) -> Document<'static> {
     }
 }
 
-fn resolve_alias(
+pub fn resolve_alias(
     parameters: &[String],
     annotation: &Annotation,
     typ: &Type,
