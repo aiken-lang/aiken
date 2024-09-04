@@ -387,8 +387,9 @@ impl Server {
 
         match found {
             // TODO: test
-            None | Some(Located::Definition(Definition::Use(Use { .. }))) => {
-                self.completion_for_import()
+            None => self.completion_for_import(&[]),
+            Some(Located::Definition(Definition::Use(Use { module, .. }))) => {
+                self.completion_for_import(module)
             }
 
             // TODO: autocompletion for patterns
@@ -408,7 +409,7 @@ impl Server {
         }
     }
 
-    fn completion_for_import(&self) -> Option<Vec<lsp_types::CompletionItem>> {
+    fn completion_for_import(&self, module: &[String]) -> Option<Vec<lsp_types::CompletionItem>> {
         let compiler = self.compiler.as_ref()?;
 
         // TODO: Test
@@ -421,6 +422,7 @@ impl Server {
             .into_iter()
             .chain(project_modules)
             .sorted()
+            .filter(|m| m.starts_with(&module.join("/")))
             .map(|label| lsp_types::CompletionItem {
                 label,
                 kind: None,
