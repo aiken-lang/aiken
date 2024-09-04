@@ -61,6 +61,7 @@ fn capabilities() -> lsp_types::ServerCapabilities {
         //         work_done_progress: None,
         //     },
         // }),
+        references_provider: Some(lsp_types::OneOf::Left(true)),
         code_action_provider: Some(lsp_types::CodeActionProviderCapability::Simple(true)),
         document_formatting_provider: Some(lsp_types::OneOf::Left(true)),
         definition_provider: Some(lsp_types::OneOf::Left(true)),

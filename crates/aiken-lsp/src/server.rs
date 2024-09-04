@@ -13,7 +13,7 @@ use aiken_lang::{
     ast::{Definition, Located, ModuleKind, Span, Use},
     error::ExtraData,
     line_numbers::LineNumbers,
-    parser,
+    parser, tipo,
     tipo::pretty::Printer,
 };
 use aiken_project::{
@@ -30,10 +30,10 @@ use lsp_types::{
         Notification, Progress, PublishDiagnostics, ShowMessage,
     },
     request::{
-        CodeActionRequest, Completion, Formatting, GotoDefinition, HoverRequest, Request,
-        WorkDoneProgressCreate,
+        CodeActionRequest, Completion, Formatting, GotoDefinition, HoverRequest, References,
+        Request, WorkDoneProgressCreate,
     },
-    DocumentFormattingParams, InitializeParams, TextEdit,
+    DocumentFormattingParams, InitializeParams, ReferenceParams, TextEdit,
 };
 use miette::Diagnostic;
 use std::{
@@ -314,6 +314,18 @@ impl Server {
                 })
             }
 
+            References::METHOD => {
+                let params = cast_request::<References>(request)?;
+
+                let locations = self.handle_references(params)?;
+
+                Ok(lsp_server::Response {
+                    id,
+                    error: None,
+                    result: Some(serde_json::to_value(locations)?),
+                })
+            }
+
             Completion::METHOD => {
                 let params = cast_request::<Completion>(request).expect("cast Completion");
 
@@ -496,6 +508,40 @@ impl Server {
             let module_name = uri_to_module_name(uri, &self.root).expect("uri to module name");
             compiler.modules.get(&module_name)
         })
+    }
+
+    fn handle_references(
+        &self,
+        params: ReferenceParams,
+    ) -> Result<Option<Vec<lsp_types::Location>>, ServerError> {
+        let position = params.text_document_position.position;
+        let text_document = params.text_document_position.text_document.clone();
+
+        let (line_numbers, node) =
+            match self.node_at_position(&lsp_types::TextDocumentPositionParams {
+                text_document: text_document.clone(),
+                position,
+            }) {
+                Some(location) => location,
+                None => return Ok(None),
+            };
+
+        let module = match self.module_for_uri(&text_document.uri) {
+            Some(module) => module,
+            None => return Ok(None),
+        };
+
+        let references = tipo::find_references(&module.ast, node);
+
+        let locations = references
+            .into_iter()
+            .map(|span| lsp_types::Location {
+                uri: text_document.uri.clone(),
+                range: span_to_lsp_range(span, &line_numbers),
+            })
+            .collect();
+
+        Ok(Some(locations))
     }
 
     fn hover(
