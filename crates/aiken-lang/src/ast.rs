@@ -613,8 +613,6 @@ impl TypedValidator {
 
                         let transaction = handler.arguments.last().unwrap();
 
-                        println!("REDEEMER SPAN: {:?}", redeemer.location);
-
                         let pattern = match handler.name.as_str() {
                             "spend" => TypedPattern::spend_purpose(
                                 (var_purpose_arg, purpose_arg.location),
