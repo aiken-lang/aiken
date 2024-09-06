@@ -37,9 +37,10 @@ fn create_project(args: Args, package_name: &PackageName) -> miette::Result<()> 
         })?;
     }
 
-    create_lib(&root, package_name)?;
+    create_lib(&root)?;
 
     if !args.lib {
+        create_env(&root)?;
         create_validators(&root)?;
     }
 
@@ -94,8 +95,13 @@ fn print_success_message(package_name: &PackageName) {
     )
 }
 
-fn create_lib(root: &Path, package_name: &PackageName) -> miette::Result<()> {
-    let lib = root.join("lib").join(&package_name.repo);
+fn create_env(root: &Path) -> miette::Result<()> {
+    let env = root.join("env");
+    fs::create_dir_all(env).into_diagnostic()
+}
+
+fn create_lib(root: &Path) -> miette::Result<()> {
+    let lib = root.join("lib");
     fs::create_dir_all(lib).into_diagnostic()
 }
 
@@ -113,8 +119,6 @@ fn readme(root: &Path, project_name: &str) -> miette::Result<()> {
 
                 Write validators in the `validators` folder, and supporting functions in the `lib` folder using `.ak` as a file extension.
 
-                For example, as `validators/always_true.ak`
-
                 ```aiken
                 validator my_first_validator {{
                   spend(_datum: Option<Data>, _redeemer: Data, _output_reference: Data, _context: Data) {{
@@ -129,13 +133,25 @@ fn readme(root: &Path, project_name: &str) -> miette::Result<()> {
                 aiken build
                 ```
 
+                ## Configuring
+
+                **aiken.toml**
+                ```toml
+                [config.default]
+                network_id = 41
+                ```
+
+                Or, alternatively, write conditional environment modules under `env`.
+
                 ## Testing
 
                 You can write tests in any module using the `test` keyword. For example:
 
                 ```aiken
+                use config
+
                 test foo() {{
-                  1 + 1 == 2
+                  config.network_id + 1 == 42
                 }}
                 ```
 
