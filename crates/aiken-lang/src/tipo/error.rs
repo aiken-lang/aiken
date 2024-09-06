@@ -982,9 +982,9 @@ The best thing to do from here is to remove it."#))]
     #[error("Validators require at least 2 arguments and at most 3 arguments.\n")]
     #[diagnostic(code("illegal::validator_arity"))]
     #[diagnostic(help(
-        "Please {}.\nIf you don't need one of the required arguments use an underscore (e.g. `_datum`).",
-        if *count < 2 {
-            let missing = 2 - count;
+        "Please {}. If you don't need one of the required arguments use an underscore (e.g. `_datum`).",
+        if *count < *expected {
+            let missing = expected - count;
 
             let mut arguments = "argument".to_string();
 
@@ -997,7 +997,7 @@ The best thing to do from here is to remove it."#))]
                 missing.to_string().if_supports_color(Stdout, |s| s.yellow()),
             )
         } else {
-            let extra = count - 3;
+            let extra = count - expected;
 
             let mut arguments = "argument".to_string();
 

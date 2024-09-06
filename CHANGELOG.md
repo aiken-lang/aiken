@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.1.1 - UNRELEASED
+
+### Added
+
+- N/A
+
+### Changed
+
+- **aiken-lang**: Fix underflow in error message reported by the validator arity. See [#1013](https://github.com/aiken-lang/aiken/issues/1013) @KtorZ.
+
+### Removed
+
+- N/A
+
 ## v1.1.0 - 2024-09-03
 
 ### Added
