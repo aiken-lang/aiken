@@ -633,6 +633,11 @@ table tr:nth-child(2n) {
 
 /* Dark Theme Option */
 
+html.theme-dark {
+  --color-text: #cdd6f4;
+  --color-background: #1e1e2e;
+}
+
 body.theme-dark {
   /* Colors */
   --color-text: #cdd6f4;
