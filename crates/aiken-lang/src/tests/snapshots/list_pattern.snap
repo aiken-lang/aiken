@@ -1,0 +1,14 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n  when xs is {\n    [_] -> True\n    [1, 2] -> False\n    [_, x] -> {\n       let y = x\n       y == 42\n    }\n  }\n}\n"
+---
+fn foo() {
+  when xs is {
+    [_] -> True
+    [1, 2] -> False
+    [_, x] -> {
+      let y = x
+      y == 42
+    }
+  }
+}

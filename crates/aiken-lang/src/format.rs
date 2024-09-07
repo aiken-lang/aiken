@@ -1878,12 +1878,16 @@ impl<'comments> Formatter<'comments> {
                 ..
             }
             | UntypedExpr::Sequence { .. }
-            | UntypedExpr::Assignment { .. } => " {"
-                .to_doc()
-                .append(line().append(self.expr(expr, true)).nest(INDENT).group())
-                .append(line())
-                .append("}")
-                .force_break(),
+            | UntypedExpr::Assignment { .. } => Document::Str(" {")
+                .append(break_("", " ").nest(INDENT))
+                .append(
+                    self.expr(expr, true)
+                        .nest(INDENT)
+                        .group()
+                        .append(line())
+                        .append("}")
+                        .force_break(),
+                ),
 
             UntypedExpr::Fn { .. } | UntypedExpr::List { .. } => {
                 line().append(self.expr(expr, false)).nest(INDENT).group()

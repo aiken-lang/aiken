@@ -1247,3 +1247,21 @@ fn format_validator_exhaustive_handlers_extra_non_default_fallback() {
         "#
     );
 }
+
+#[test]
+fn list_pattern() {
+    assert_format!(
+        r#"
+        fn foo() {
+          when xs is {
+            [_] -> True
+            [1, 2] -> False
+            [_, x] -> {
+               let y = x
+               y == 42
+            }
+          }
+        }
+        "#
+    );
+}
