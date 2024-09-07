@@ -94,8 +94,12 @@ where
 {
     let project_path = if let Some(d) = directory {
         d.to_path_buf()
-    } else {
+    } else if std::env::consts::OS == "windows" {
         env::current_dir().into_diagnostic()?
+    } else {
+        let mut current_dir = std::path::PathBuf::new();
+        current_dir.push(".");
+        current_dir
     };
 
     let mut project = match Project::new(project_path, Terminal) {
