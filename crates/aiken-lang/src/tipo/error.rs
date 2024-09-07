@@ -1813,7 +1813,7 @@ pub enum Warning {
             .if_supports_color(Stderr, |s| s.bold()),
         literal_foo = "\"foo\"".if_supports_color(Stderr, |s| s.purple()),
         foo_bytes = "#[102, 111, 111]".if_supports_color(Stderr, |s| s.purple()),
-        value = "\"{value}\"".if_supports_color(Stderr, |s| s.purple()),
+        value = format!("\"{value}\"").if_supports_color(Stderr, |s| s.purple()),
         symbol_hash = "#".if_supports_color(Stderr, |s| s.purple()),
     }))]
     #[diagnostic(code("syntax::bytearray_literal_is_hex_string"))]
