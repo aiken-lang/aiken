@@ -1,4 +1,5 @@
 use aiken/collection/list
+use cardano/address.{Script, VerificationKey}
 use cardano/certificate.{
   AlwaysAbstain, AlwaysNoConfidence, AuthorizeConstitutionalCommitteeProxy,
   Certificate, DelegateBlockProduction, DelegateBoth, DelegateCredential,
@@ -7,7 +8,6 @@ use cardano/certificate.{
   RetireFromConstitutionalCommittee, RetireStakePool, UnregisterCredential,
   UnregisterDelegateRepresentative, UpdateDelegateRepresentative,
 }
-use cardano/address.{Script, VerificationKey}
 use cardano/transaction.{Transaction}
 
 const only0s = #"00000000000000000000000000000000000000000000000000000000"
@@ -20,11 +20,7 @@ const only9s =
   #"9999999999999999999999999999999999999999999999999999999999999999"
 
 validator purposes {
-  publish(
-    _redeemer: Void,
-    certificate: Certificate,
-    transaction: Transaction,
-  ) -> Bool {
+  publish(_redeemer: Void, certificate: Certificate, transaction: Transaction) {
     assert_script_info(certificate)
 
     let certificates = transaction.certificates

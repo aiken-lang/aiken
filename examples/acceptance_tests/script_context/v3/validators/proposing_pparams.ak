@@ -24,7 +24,7 @@ validator guardrails {
     _redeemer: Void,
     proposal: ProposalProcedure,
     _transaction: Transaction,
-  ) -> Bool {
+  ) {
     expect ProposalProcedure {
       governance_action: ProtocolParameters {
         ancestor: None,

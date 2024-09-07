@@ -14,11 +14,7 @@ const null32 =
   #"0000000000000000000000000000000000000000000000000000000000000000"
 
 validator guardrails {
-  propose(
-    _redeemer: Void,
-    _: ProposalProcedure,
-    transaction: Transaction,
-  ) -> Bool {
+  propose(_redeemer: Void, _: ProposalProcedure, transaction: Transaction) {
     let procedures = transaction.proposal_procedures
 
     assert_redeemers(transaction.redeemers)

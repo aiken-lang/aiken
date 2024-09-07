@@ -18,8 +18,7 @@ type Direction {
   RD
 }
 
-const direction_list =
-  [UL, UR, DL, DR, LU, LD, RU, RD]
+const direction_list = [UL, UR, DL, DR, LU, LD, RU, RD]
 
 fn move(direction: Direction, tile: Tile) -> Tile {
   let (x, y) = tile

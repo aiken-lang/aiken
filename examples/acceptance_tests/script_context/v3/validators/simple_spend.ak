@@ -1,6 +1,6 @@
 use aiken/collection/dict
-use cardano/assets
 use cardano/address.{Address, Script}
+use cardano/assets
 use cardano/transaction.{
   InlineDatum, Input, Output, OutputReference, ScriptPurpose, Spend, Transaction,
 }
