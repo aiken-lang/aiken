@@ -1296,3 +1296,47 @@ fn multiline_alternative_patterns() {
         "#
     );
 }
+
+#[test]
+fn trace_if_false_pipeline() {
+    assert_format!(
+        r#"
+        fn main(self) {
+          (self.extra_signatories |> list.has(self.extra_signatories, config.cold_key))?
+        }
+        "#
+    );
+}
+
+#[test]
+fn trace_if_false_unop() {
+    assert_format!(
+        r#"
+        fn main(self) {
+            (!True)?
+        }
+        "#
+    );
+}
+
+#[test]
+fn trace_if_false_todo() {
+    assert_format!(
+        r#"
+        fn main(self) {
+            (todo @"whatever")?
+        }
+        "#
+    );
+}
+
+#[test]
+fn trace_if_false_fail() {
+    assert_format!(
+        r#"
+        fn main(self) {
+            (fail @"whatever")?
+        }
+        "#
+    );
+}

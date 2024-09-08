@@ -1,0 +1,7 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn main(self) {\n    (!True)?\n}\n"
+---
+fn main(self) {
+  (!True)?
+}

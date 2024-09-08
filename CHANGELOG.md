@@ -11,6 +11,7 @@
 - **aiken-lang**: Fix underflow in error message reported by the validator arity. See [#1013](https://github.com/aiken-lang/aiken/issues/1013) @KtorZ
 - **aiken-lang**: Fix list-pattern needlessly formatting over multiple lines. @KtorZ
 - **aiken-lang**: Fix formatter on long alternative patterns spanning over multiple lines. @KtorZ
+- **aiken-lang**: Fix needed parentheses under trace-if-false operator for todo, fail, unop & pipelines; removed when formatting. @KtorZ
 
 ### Removed
 

@@ -2028,7 +2028,17 @@ impl<'comments> Formatter<'comments> {
 
     fn wrap_unary_op<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
         match expr {
-            UntypedExpr::BinOp { .. } => "(".to_doc().append(self.expr(expr, false)).append(")"),
+            UntypedExpr::Trace {
+                kind: TraceKind::Error,
+                ..
+            }
+            | UntypedExpr::Trace {
+                kind: TraceKind::Todo,
+                ..
+            }
+            | UntypedExpr::PipeLine { .. }
+            | UntypedExpr::BinOp { .. }
+            | UntypedExpr::UnOp { .. } => "(".to_doc().append(self.expr(expr, false)).append(")"),
             _ => self.wrap_expr(expr),
         }
     }

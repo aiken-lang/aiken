@@ -1,0 +1,7 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn main(self) {\n  (self.extra_signatories |> list.has(self.extra_signatories, config.cold_key))?\n}\n"
+---
+fn main(self) {
+  (self.extra_signatories |> list.has(self.extra_signatories, config.cold_key))?
+}
