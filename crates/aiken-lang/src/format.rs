@@ -1906,8 +1906,9 @@ impl<'comments> Formatter<'comments> {
         let space_before = self.pop_empty_lines(clause.location.start);
         let clause_doc = join(
             clause.patterns.iter().map(|p| self.pattern(p)),
-            " | ".to_doc(),
-        );
+            break_(" | ", " | "),
+        )
+        .group();
 
         if index == 0 {
             clause_doc

@@ -1,0 +1,14 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n    when bar is {\n        a | b | c -> True\n        d | e -> {\n            let x = e + d\n            x > 10\n        }\n        _ -> False\n    }\n}\n"
+---
+fn foo() {
+  when bar is {
+    a | b | c -> True
+    d | e -> {
+      let x = e + d
+      x > 10
+    }
+    _ -> False
+  }
+}

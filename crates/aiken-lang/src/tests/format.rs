@@ -1249,17 +1249,48 @@ fn format_validator_exhaustive_handlers_extra_non_default_fallback() {
 }
 
 #[test]
-fn list_pattern() {
+fn single_line_alternative_patterns() {
     assert_format!(
         r#"
         fn foo() {
-          when xs is {
-            [_] -> True
-            [1, 2] -> False
-            [_, x] -> {
-               let y = x
-               y == 42
+            when bar is {
+                a | b | c -> True
+                d | e -> {
+                    let x = e + d
+                    x > 10
+                }
+                _ -> False
             }
+        }
+        "#
+    );
+}
+
+#[test]
+fn multiline_alternative_patterns() {
+    assert_format!(
+        r#"
+        validator direct_proxy {
+          mint(_redeemer: Void, policy_id: PolicyId, self: Transaction) {
+            list.any(
+              self.certificates,
+              fn(certificate) {
+                when certificate is {
+                  RegisterDelegateRepresentative {
+                    delegate_representative: credential,
+                    ..
+                  } | UnregisterDelegateRepresentative {
+                    delegate_representative: credential,
+                    ..
+                  } | RegisterCredential { credential, .. } | UnregisterCredential {
+                    credential,
+                    ..
+                  } | RegisterAndDelegateCredential { credential, .. } ->
+                    credential == Script(policy_id)
+                  _ -> False
+                }
+              },
+            )
           }
         }
         "#

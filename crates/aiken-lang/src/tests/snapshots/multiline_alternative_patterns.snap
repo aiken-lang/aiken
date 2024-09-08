@@ -1,0 +1,32 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nvalidator direct_proxy {\n  mint(_redeemer: Void, policy_id: PolicyId, self: Transaction) {\n    list.any(\n      self.certificates,\n      fn(certificate) {\n        when certificate is {\n          RegisterDelegateRepresentative {\n            delegate_representative: credential,\n            ..\n          } | UnregisterDelegateRepresentative {\n            delegate_representative: credential,\n            ..\n          } | RegisterCredential { credential, .. } | UnregisterCredential {\n            credential,\n            ..\n          } | RegisterAndDelegateCredential { credential, .. } ->\n            credential == Script(policy_id)\n          _ -> False\n        }\n      },\n    )\n  }\n}\n"
+---
+validator direct_proxy {
+  mint(_redeemer: Void, policy_id: PolicyId, self: Transaction) {
+    list.any(
+      self.certificates,
+      fn(certificate) {
+        when certificate is {
+          RegisterDelegateRepresentative {
+            delegate_representative: credential,
+            ..
+          } | 
+          UnregisterDelegateRepresentative {
+            delegate_representative: credential,
+            ..
+          } | 
+          RegisterCredential { credential, .. } | 
+          UnregisterCredential { credential, .. } | 
+          RegisterAndDelegateCredential { credential, .. } ->
+            credential == Script(policy_id)
+          _ -> False
+        }
+      },
+    )
+  }
+
+  else(_) {
+    fail
+  }
+}
