@@ -12,6 +12,7 @@
 - **aiken-lang**: Fix list-pattern needlessly formatting over multiple lines. @KtorZ
 - **aiken-lang**: Fix formatter on long alternative patterns spanning over multiple lines. @KtorZ
 - **aiken-lang**: Fix needed parentheses under trace-if-false operator for todo, fail, unop & pipelines; removed when formatting. @KtorZ
+- **aiken-lang**: Fix formatter removing curly braces around multi-line constants. It's fine to not have curly braces, but it's the Aiken signature after all. @KtorZ
 
 ### Removed
 

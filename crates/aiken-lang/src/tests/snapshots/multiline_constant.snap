@@ -1,0 +1,8 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nconst n: Int = {\n    let x = 0\n    x + 1\n}\n"
+---
+const n: Int = {
+    let x = 0
+    x + 1
+  }

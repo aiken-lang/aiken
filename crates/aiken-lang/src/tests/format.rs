@@ -1340,3 +1340,15 @@ fn trace_if_false_fail() {
         "#
     );
 }
+
+#[test]
+fn multiline_constant() {
+    assert_format!(
+        r#"
+        const n: Int = {
+            let x = 0
+            x + 1
+        }
+        "#
+    );
+}

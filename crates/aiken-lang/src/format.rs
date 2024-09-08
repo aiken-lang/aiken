@@ -295,7 +295,7 @@ impl<'comments> Formatter<'comments> {
 
                 head.append(" =")
                     .append(break_("", " "))
-                    .append(self.expr(value, true))
+                    .append(self.expr(value, false))
                     .nest(INDENT)
                     .group()
             }
