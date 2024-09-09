@@ -1,6 +1,7 @@
 use super::{
     air::ExpectLevel,
-    tree::{AirMsg, AirTree, TreePath},
+    interner::AirInterner,
+    tree::{AirMsg, AirTree},
 };
 use crate::{
     ast::{
@@ -17,7 +18,7 @@ use crate::{
 };
 use indexmap::{IndexMap, IndexSet};
 use itertools::{Itertools, Position};
-use std::{collections::HashMap, ops::Deref, rc::Rc};
+use std::{ops::Deref, rc::Rc};
 use uplc::{
     ast::{Constant as UplcConstant, Name, Term, Type as UplcType},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
@@ -41,6 +42,7 @@ pub const CONSTR_NOT_EMPTY: &str = "__CONSTR_NOT_EMPTY";
 pub const INCORRECT_BOOLEAN: &str = "__INCORRECT_BOOLEAN";
 pub const INCORRECT_CONSTR: &str = "__INCORRECT_CONSTR";
 pub const CONSTR_INDEX_MISMATCH: &str = "__CONSTR_INDEX_MISMATCH";
+pub const DISCARDED: &str = "_";
 
 #[derive(Clone, Debug)]
 pub enum CodeGenFunction {
@@ -421,21 +423,17 @@ pub fn is_recursive_function_call<'a>(
 
 pub fn identify_recursive_static_params(
     air_tree: &mut AirTree,
-    tree_path: &TreePath,
+
     func_params: &[String],
     func_key: &(FunctionAccessKey, String),
     function_calls_and_usage: &mut (usize, usize),
-    shadowed_parameters: &mut HashMap<String, TreePath>,
+
     potential_recursive_statics: &mut Vec<String>,
 ) {
     let variant = &func_key.1;
     let func_key = &func_key.0;
-    // Find whether any of the potential recursive statics get shadowed (because even if we pass in the same referenced name, it might not be static)
-    for introduced_variable in find_introduced_variables(air_tree) {
-        if potential_recursive_statics.contains(&introduced_variable) {
-            shadowed_parameters.insert(introduced_variable, tree_path.clone());
-        }
-    }
+
+    // Now all variables can't be shadowed at this stage due to interning
     // Otherwise, if this is a recursive call site, disqualify anything that is different (or the same, but shadowed)
     if let (true, Some(args)) = is_recursive_function_call(air_tree, func_key, variant) {
         for (param, arg) in func_params.iter().zip(args) {
@@ -446,18 +444,9 @@ pub fn identify_recursive_static_params(
                 // Check if we pass something different in this recursive call site
                 // by different, we mean
                 // - a variable that is bound to a different name
-                // - a variable with the same name, but that was shadowed in an ancestor scope
                 // - any other type of expression
                 let param_is_different = match arg {
-                    AirTree::Var { name, .. } => {
-                        // "shadowed in an ancestor scope" means "the definition scope is a prefix of our scope"
-                        name != param
-                            || if let Some(p) = shadowed_parameters.get(param) {
-                                p.common_ancestor(tree_path) == *p
-                            } else {
-                                false
-                            }
-                    }
+                    AirTree::Var { name, .. } => name != param || false,
                     _ => true,
                 };
                 // If so, then we disqualify this parameter from being a recursive static parameter
@@ -499,17 +488,14 @@ pub fn modify_self_calls(
     // identify which parameters are recursively nonstatic (i.e. get modified before the self-call)
     // TODO: this would be a lot simpler if each `Var`, `Let`, function argument, etc. had a unique identifier
     // rather than just a name; this would let us track if the Var passed to itself was the same value as the method argument
-    let mut shadowed_parameters: HashMap<String, TreePath> = HashMap::new();
     let mut calls_and_var_usage = (0, 0);
     body.traverse_tree_with(
-        &mut |air_tree: &mut AirTree, tree_path| {
+        &mut |air_tree: &mut AirTree, _tree_path| {
             identify_recursive_static_params(
                 air_tree,
-                tree_path,
                 func_params,
                 &(func_key.clone(), variant.clone()),
                 &mut calls_and_var_usage,
-                &mut shadowed_parameters,
                 &mut potential_recursive_statics,
             );
         },
@@ -1661,19 +1647,26 @@ pub fn get_list_elements_len_and_tail(
     }
 }
 
-pub fn cast_validator_args(term: Term<Name>, arguments: &[TypedArg]) -> Term<Name> {
+pub fn cast_validator_args(
+    term: Term<Name>,
+    arguments: &[TypedArg],
+    interner: &AirInterner,
+) -> Term<Name> {
     let mut term = term;
     for arg in arguments.iter().rev() {
+        let name = arg
+            .arg_name
+            .get_variable_name()
+            .map(|arg| interner.lookup_interned(&arg.to_string()))
+            .unwrap_or_else(|| "_".to_string());
+
         if !matches!(arg.tipo.get_uplc_type(), Some(UplcType::Data) | None) {
             term = term
-                .lambda(arg.arg_name.get_variable_name().unwrap_or("_"))
-                .apply(known_data_to_type(
-                    Term::var(arg.arg_name.get_variable_name().unwrap_or("_")),
-                    &arg.tipo,
-                ));
+                .lambda(&name)
+                .apply(known_data_to_type(Term::var(&name), &arg.tipo));
         }
 
-        term = term.lambda(arg.arg_name.get_variable_name().unwrap_or("_"))
+        term = term.lambda(name)
     }
     term
 }
@@ -1750,4 +1743,90 @@ pub fn get_line_columns_by_span(
     lines
         .line_and_column_number(span.start)
         .expect("Out of bounds span")
+}
+
+pub fn introduce_pattern(interner: &mut AirInterner, pattern: &TypedPattern) {
+    match pattern {
+        Pattern::Int { .. } | Pattern::ByteArray { .. } | Pattern::Discard { .. } => (),
+
+        Pattern::Var { name, .. } => {
+            interner.intern(name.clone());
+        }
+        Pattern::Assign { name, pattern, .. } => {
+            interner.intern(name.clone());
+            introduce_pattern(interner, pattern);
+        }
+
+        Pattern::List { elements, tail, .. } => {
+            elements.iter().for_each(|element| {
+                introduce_pattern(interner, element);
+            });
+
+            tail.iter().for_each(|tail| {
+                introduce_pattern(interner, tail);
+            });
+        }
+        Pattern::Constructor {
+            arguments: elems, ..
+        } => {
+            elems.iter().for_each(|element| {
+                introduce_pattern(interner, &element.value);
+            });
+        }
+        Pattern::Tuple { elems, .. } => {
+            elems.iter().for_each(|element| {
+                introduce_pattern(interner, element);
+            });
+        }
+        Pattern::Pair { fst, snd, .. } => {
+            introduce_pattern(interner, fst);
+            introduce_pattern(interner, snd);
+        }
+    }
+}
+
+pub fn pop_pattern(interner: &mut AirInterner, pattern: &TypedPattern) {
+    match pattern {
+        Pattern::Int { .. } | Pattern::ByteArray { .. } | Pattern::Discard { .. } => (),
+
+        Pattern::Var { name, .. } => {
+            interner.pop_text(name.clone());
+        }
+        Pattern::Assign { name, pattern, .. } => {
+            interner.pop_text(name.clone());
+            pop_pattern(interner, pattern);
+        }
+
+        Pattern::List { elements, tail, .. } => {
+            elements.iter().for_each(|element| {
+                pop_pattern(interner, element);
+            });
+
+            tail.iter().for_each(|tail| {
+                pop_pattern(interner, tail);
+            });
+        }
+        Pattern::Constructor {
+            arguments: elems, ..
+        } => {
+            elems.iter().for_each(|element| {
+                pop_pattern(interner, &element.value);
+            });
+        }
+        Pattern::Tuple { elems, .. } => {
+            elems.iter().for_each(|element| {
+                pop_pattern(interner, element);
+            });
+        }
+        Pattern::Pair { fst, snd, .. } => {
+            pop_pattern(interner, fst);
+            pop_pattern(interner, snd);
+        }
+    }
+}
+
+pub fn introduce_name(interner: &mut AirInterner, name: &String) -> String {
+    interner.intern(name.clone());
+
+    interner.lookup_interned(&name)
 }
