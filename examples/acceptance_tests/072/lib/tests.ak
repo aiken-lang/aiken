@@ -1,4 +1,4 @@
-use aiken/transaction.{Datum, InlineDatum}
+use cardano/transaction.{Datum, InlineDatum}
 
 type OwnerInfo {
   pkh: ByteArray,
