@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.1.1 - UNRELEASED
+## v1.1.1 - 2024-09-10
 
 ### Added
 
@@ -14,6 +14,7 @@
 - **aiken-lang**: Fix formatter on long alternative patterns spanning over multiple lines. @KtorZ
 - **aiken-lang**: Fix needed parentheses under trace-if-false operator for todo, fail, unop & pipelines; removed when formatting. @KtorZ
 - **aiken-lang**: Fix formatter removing curly braces around multi-line constants. It's fine to not have curly braces, but it's the Aiken signature after all. @KtorZ
+- **aiken-lang**: Improve LSP suggestion for module imports. @Riley-Kilgore
 
 ### Removed
 
