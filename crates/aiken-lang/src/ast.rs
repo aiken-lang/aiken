@@ -714,25 +714,30 @@ impl TypedValidator {
                     .chain(std::iter::once(&self.fallback).map(|fallback| {
                         let arg = fallback.arguments.first().unwrap();
 
-                        let then = &[
-                            TypedExpr::let_(
-                                TypedExpr::local_var(var_context, arg.tipo.clone(), arg.location),
-                                arg.get_variable_name().map(TypedPattern::var).unwrap_or(
-                                    TypedPattern::Discard {
-                                        name: var_context.to_string(),
-                                        location: arg.location,
-                                    },
+                        let then = match arg.get_variable_name() {
+                            Some(arg_name) => TypedExpr::sequence(&[
+                                TypedExpr::let_(
+                                    TypedExpr::local_var(
+                                        var_context,
+                                        arg.tipo.clone(),
+                                        arg.location,
+                                    ),
+                                    TypedPattern::var(arg_name),
+                                    arg.tipo.clone(),
+                                    arg.location,
                                 ),
-                                arg.tipo.clone(),
-                                arg.location,
-                            ),
-                            fallback.body.clone(),
-                        ];
+                                fallback.body.clone(),
+                            ]),
+                            None => fallback.body.clone(),
+                        };
 
                         TypedClause {
                             location: Span::empty(),
-                            pattern: TypedPattern::var(var_context),
-                            then: TypedExpr::sequence(then),
+                            pattern: TypedPattern::Discard {
+                                name: "_".to_string(),
+                                location: arg.location,
+                            },
+                            then,
                         }
                     }))
                     .collect(),
