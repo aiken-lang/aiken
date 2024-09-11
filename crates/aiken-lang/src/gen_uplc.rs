@@ -1283,7 +1283,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let name_interned = introduce_name(&mut self.interner, &name);
 
-                let casted_var = AirTree::local_var(&name, tipo.clone());
+                let casted_var = AirTree::local_var(&name_interned, tipo.clone());
 
                 let tree = if elements.is_empty() {
                     assign_casted_value(
@@ -3322,11 +3322,15 @@ impl<'a> CodeGenerator<'a> {
                         then,
                     )
                 }
-                Pattern::Assign { name, pattern, .. } => AirTree::let_assignment(
-                    name,
-                    AirTree::local_var(&props.clause_var_name, subject_tipo.clone()),
-                    self.nested_clause_condition(pattern, subject_tipo, props, then),
-                ),
+                Pattern::Assign { name, pattern, .. } => {
+                    let name = self.interner.lookup_interned(name);
+
+                    AirTree::let_assignment(
+                        name,
+                        AirTree::local_var(&props.clause_var_name, subject_tipo.clone()),
+                        self.nested_clause_condition(pattern, subject_tipo, props, then),
+                    )
+                }
                 Pattern::Discard { .. } => then,
                 Pattern::List { elements, tail, .. } => {
                     props.complex_clause = true;
