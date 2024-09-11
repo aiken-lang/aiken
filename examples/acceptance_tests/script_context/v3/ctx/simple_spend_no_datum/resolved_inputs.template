@@ -1,0 +1,5 @@
+[
+  { 0: h'70{{ simple_spend_no_datum.simple_spend.spend.hash }}'
+  , 1: 1000000000
+  }
+]

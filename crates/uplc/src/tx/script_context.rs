@@ -1,4 +1,7 @@
-use super::{to_plutus_data::MintValue, Error};
+use super::{
+    to_plutus_data::{MintValue, ToPlutusData},
+    Error,
+};
 use itertools::Itertools;
 use pallas_addresses::{Address, Network, StakePayload};
 use pallas_codec::utils::{
@@ -839,6 +842,16 @@ pub fn find_script(
         Some(DatumOption::Data(data)) => Ok(data.0.clone()),
         _ => Err(Error::MissingRequiredInlineDatumOrHash),
     };
+    let lookup_datum_v3 = |datum: Option<DatumOption>| match datum {
+        Some(DatumOption::Hash(hash)) => match lookup_table.datum.get(&hash) {
+            Some(d) => Ok(d.clone()),
+            None => Err(Error::MissingRequiredDatum {
+                hash: hash.to_string(),
+            }),
+        },
+        Some(DatumOption::Data(data)) => Ok(data.0.clone()),
+        _ => Ok(None::<PlutusData>.to_plutus_data()),
+    };
 
     match redeemer.tag {
         RedeemerTag::Mint => get_mint_info(&tx.transaction_body.mint)
@@ -908,12 +921,12 @@ pub fn find_script(
             .and_then(|input| match output_address(&input.resolved) {
                 Address::Shelley(shelley_address) => {
                     let hash = shelley_address.payment().as_hash();
-
-                    let script = lookup_script(hash);
-
-                    let datum = lookup_datum(output_datum(&input.resolved));
-
-                    script.and_then(|(script, _)| Ok((script, Some(datum?))))
+                    let (script, _) = lookup_script(hash)?;
+                    let datum = match script {
+                        ScriptVersion::V3(_) => lookup_datum_v3(output_datum(&input.resolved)),
+                        _ => lookup_datum(output_datum(&input.resolved)),
+                    }?;
+                    Ok((script, Some(datum)))
                 }
                 _ => Err(Error::NonScriptStakeCredential),
             }),
