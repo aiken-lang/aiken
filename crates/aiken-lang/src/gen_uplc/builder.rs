@@ -446,7 +446,7 @@ pub fn identify_recursive_static_params(
                 // - a variable that is bound to a different name
                 // - any other type of expression
                 let param_is_different = match arg {
-                    AirTree::Var { name, .. } => name != param || false,
+                    AirTree::Var { name, .. } => name != param,
                     _ => true,
                 };
                 // If so, then we disqualify this parameter from being a recursive static parameter

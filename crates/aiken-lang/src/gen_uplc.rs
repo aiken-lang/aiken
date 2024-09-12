@@ -2861,7 +2861,7 @@ impl<'a> CodeGenerator<'a> {
                         props.final_clause,
                     );
 
-                    if &elem_name != DISCARDED && !defined_tails.is_empty() {
+                    if elem_name != DISCARDED && !defined_tails.is_empty() {
                         list_tail = Some((tail.unwrap().to_string(), elem_name.to_string()));
                     }
 
