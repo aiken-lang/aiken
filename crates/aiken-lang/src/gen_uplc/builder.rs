@@ -485,22 +485,20 @@ pub fn modify_self_calls(
     func_params: &[String],
 ) -> Vec<String> {
     let mut potential_recursive_statics = func_params.to_vec();
+
     // identify which parameters are recursively nonstatic (i.e. get modified before the self-call)
     // TODO: this would be a lot simpler if each `Var`, `Let`, function argument, etc. had a unique identifier
     // rather than just a name; this would let us track if the Var passed to itself was the same value as the method argument
     let mut calls_and_var_usage = (0, 0);
-    body.traverse_tree_with(
-        &mut |air_tree: &mut AirTree, _tree_path| {
-            identify_recursive_static_params(
-                air_tree,
-                func_params,
-                &(func_key.clone(), variant.clone()),
-                &mut calls_and_var_usage,
-                &mut potential_recursive_statics,
-            );
-        },
-        false,
-    );
+    body.traverse_tree_with(&mut |air_tree: &mut AirTree, _tree_path| {
+        identify_recursive_static_params(
+            air_tree,
+            func_params,
+            &(func_key.clone(), variant.clone()),
+            &mut calls_and_var_usage,
+            &mut potential_recursive_statics,
+        );
+    });
 
     // Find the index of any recursively static parameters,
     // so we can remove them from the call-site of each recursive call
@@ -512,69 +510,64 @@ pub fn modify_self_calls(
         .collect();
 
     // Modify any self calls to remove recursive static parameters and append `self` as a parameter for the recursion
-    body.traverse_tree_with(
-        &mut |air_tree: &mut AirTree, _| {
-            if let AirTree::Call {
-                func: func_recursive,
-                args,
-                ..
-            } = air_tree
-            {
-                if let AirTree::Call { func, .. } = func_recursive.as_ref() {
-                    if let AirTree::Var {
-                        constructor:
-                            ValueConstructor {
-                                variant: ValueConstructorVariant::ModuleFn { name, module, .. },
-                                ..
-                            },
-                        variant_name,
-                        ..
-                    } = func.as_ref()
+    body.traverse_tree_with(&mut |air_tree: &mut AirTree, _| {
+        if let AirTree::Call {
+            func: func_recursive,
+            args,
+            ..
+        } = air_tree
+        {
+            if let AirTree::Call { func, .. } = func_recursive.as_ref() {
+                if let AirTree::Var {
+                    constructor:
+                        ValueConstructor {
+                            variant: ValueConstructorVariant::ModuleFn { name, module, .. },
+                            ..
+                        },
+                    variant_name,
+                    ..
+                } = func.as_ref()
+                {
+                    // The name must match and the recursive function must not be
+                    // passed around for this optimization to work.
+                    if name == &func_key.function_name
+                        && module == &func_key.module_name
+                        && variant == variant_name
+                        && calls_and_var_usage.0 == calls_and_var_usage.1
                     {
-                        // The name must match and the recursive function must not be
-                        // passed around for this optimization to work.
-                        if name == &func_key.function_name
-                            && module == &func_key.module_name
-                            && variant == variant_name
-                            && calls_and_var_usage.0 == calls_and_var_usage.1
-                        {
-                            // Remove any static-recursive-parameters, because they'll be bound statically
-                            // above the recursive part of the function
-                            // note: assumes that static_recursive_params is sorted
-                            for arg in recursive_static_indexes.iter().rev() {
-                                args.remove(*arg);
-                            }
-                            args.insert(0, func.as_ref().clone());
-                            *func_recursive = func.as_ref().clone().into();
+                        // Remove any static-recursive-parameters, because they'll be bound statically
+                        // above the recursive part of the function
+                        // note: assumes that static_recursive_params is sorted
+                        for arg in recursive_static_indexes.iter().rev() {
+                            args.remove(*arg);
                         }
                     }
                 }
-            } else if let AirTree::Var {
-                constructor:
-                    ValueConstructor {
-                        variant: ValueConstructorVariant::ModuleFn { name, module, .. },
-                        ..
-                    },
-                variant_name,
-                ..
-            } = &air_tree
-            {
-                if name.clone() == func_key.function_name
-                    && module.clone() == func_key.module_name
-                    && variant.clone() == variant_name.clone()
-                {
-                    let self_call = AirTree::call(
-                        air_tree.clone(),
-                        air_tree.return_type(),
-                        vec![air_tree.clone()],
-                    );
-
-                    *air_tree = self_call;
-                }
             }
-        },
-        true,
-    );
+        } else if let AirTree::Var {
+            constructor:
+                ValueConstructor {
+                    variant: ValueConstructorVariant::ModuleFn { name, module, .. },
+                    ..
+                },
+            variant_name,
+            ..
+        } = &air_tree
+        {
+            if name.clone() == func_key.function_name
+                && module.clone() == func_key.module_name
+                && variant.clone() == variant_name.clone()
+            {
+                let self_call = AirTree::call(
+                    air_tree.clone(),
+                    air_tree.return_type(),
+                    vec![air_tree.clone()],
+                );
+
+                *air_tree = self_call;
+            }
+        }
+    });
 
     // In the case of equal calls to usage we can reduce the static params
     if calls_and_var_usage.0 == calls_and_var_usage.1 {
@@ -597,71 +590,68 @@ pub fn modify_cyclic_calls(
         (CycleFunctionNames, usize, FunctionAccessKey),
     >,
 ) {
-    body.traverse_tree_with(
-        &mut |air_tree: &mut AirTree, _| {
-            if let AirTree::Var {
-                constructor:
-                    ValueConstructor {
-                        variant: ValueConstructorVariant::ModuleFn { name, module, .. },
-                        tipo,
-                        ..
-                    },
-                variant_name,
-                ..
-            } = air_tree
+    body.traverse_tree_with(&mut |air_tree: &mut AirTree, _| {
+        if let AirTree::Var {
+            constructor:
+                ValueConstructor {
+                    variant: ValueConstructorVariant::ModuleFn { name, module, .. },
+                    tipo,
+                    ..
+                },
+            variant_name,
+            ..
+        } = air_tree
+        {
+            let tipo = tipo.clone();
+            let var_key = FunctionAccessKey {
+                module_name: module.clone(),
+                function_name: name.clone(),
+            };
+
+            if let Some((names, index, cyclic_name)) =
+                cyclic_links.get(&(var_key.clone(), variant_name.to_string()))
             {
-                let tipo = tipo.clone();
-                let var_key = FunctionAccessKey {
-                    module_name: module.clone(),
-                    function_name: name.clone(),
-                };
+                if *cyclic_name == *func_key {
+                    let cyclic_var_name = if cyclic_name.module_name.is_empty() {
+                        cyclic_name.function_name.to_string()
+                    } else {
+                        format!("{}_{}", cyclic_name.module_name, cyclic_name.function_name)
+                    };
 
-                if let Some((names, index, cyclic_name)) =
-                    cyclic_links.get(&(var_key.clone(), variant_name.to_string()))
-                {
-                    if *cyclic_name == *func_key {
-                        let cyclic_var_name = if cyclic_name.module_name.is_empty() {
-                            cyclic_name.function_name.to_string()
-                        } else {
-                            format!("{}_{}", cyclic_name.module_name, cyclic_name.function_name)
-                        };
+                    let index_name = names[*index].clone();
 
-                        let index_name = names[*index].clone();
-
-                        let var = AirTree::var(
-                            ValueConstructor::public(
-                                tipo.clone(),
-                                ValueConstructorVariant::ModuleFn {
-                                    name: cyclic_var_name.clone(),
-                                    field_map: None,
-                                    module: "".to_string(),
-                                    arity: 2,
-                                    location: Span::empty(),
-                                    builtin: None,
-                                },
-                            ),
-                            cyclic_var_name,
-                            "".to_string(),
-                        );
-
-                        *air_tree = AirTree::call(
-                            var.clone(),
+                    let var = AirTree::var(
+                        ValueConstructor::public(
                             tipo.clone(),
-                            vec![
-                                var,
-                                AirTree::anon_func(
-                                    names.clone(),
-                                    AirTree::local_var(index_name, tipo),
-                                    false,
-                                ),
-                            ],
-                        );
-                    }
+                            ValueConstructorVariant::ModuleFn {
+                                name: cyclic_var_name.clone(),
+                                field_map: None,
+                                module: "".to_string(),
+                                arity: 2,
+                                location: Span::empty(),
+                                builtin: None,
+                            },
+                        ),
+                        cyclic_var_name,
+                        "".to_string(),
+                    );
+
+                    *air_tree = AirTree::call(
+                        var.clone(),
+                        tipo.clone(),
+                        vec![
+                            var,
+                            AirTree::anon_func(
+                                names.clone(),
+                                AirTree::local_var(index_name, tipo),
+                                false,
+                            ),
+                        ],
+                    );
                 }
             }
-        },
-        true,
-    );
+        }
+    });
 }
 
 pub fn pattern_has_conditions(

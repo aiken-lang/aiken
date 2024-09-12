@@ -1810,19 +1810,9 @@ impl AirTree {
         }
     }
 
-    pub fn traverse_tree_with(
-        &mut self,
-        with: &mut impl FnMut(&mut AirTree, &TreePath),
-        apply_with_func_last: bool,
-    ) {
+    pub fn traverse_tree_with(&mut self, with: &mut impl FnMut(&mut AirTree, &TreePath)) {
         let mut tree_path = TreePath::new();
-        self.do_traverse_tree_with(
-            &mut tree_path,
-            0,
-            Fields::FirstField,
-            with,
-            apply_with_func_last,
-        );
+        self.do_traverse_tree_with(&mut tree_path, 0, Fields::FirstField, with);
     }
 
     pub fn traverse_tree_with_path(
@@ -1831,9 +1821,8 @@ impl AirTree {
         current_depth: usize,
         depth_index: Fields,
         with: &mut impl FnMut(&mut AirTree, &TreePath),
-        apply_with_func_last: bool,
     ) {
-        self.do_traverse_tree_with(path, current_depth, depth_index, with, apply_with_func_last);
+        self.do_traverse_tree_with(path, current_depth, depth_index, with);
     }
 
     fn do_traverse_tree_with(
@@ -1842,7 +1831,6 @@ impl AirTree {
         current_depth: usize,
         field_index: Fields,
         with: &mut impl FnMut(&mut AirTree, &TreePath),
-        apply_with_func_last: bool,
     ) {
         tree_path.push(current_depth, field_index);
 
@@ -1859,7 +1847,6 @@ impl AirTree {
                     current_depth + 1,
                     Fields::SecondField,
                     with,
-                    apply_with_func_last,
                 );
             }
 
@@ -1870,20 +1857,13 @@ impl AirTree {
                 then: _,
                 otherwise,
             } => {
-                value.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::ThirdField,
-                    with,
-                    apply_with_func_last,
-                );
+                value.do_traverse_tree_with(tree_path, current_depth + 1, Fields::ThirdField, with);
 
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
                     Fields::FifthField,
                     with,
-                    apply_with_func_last,
                 );
             }
 
@@ -1898,14 +1878,12 @@ impl AirTree {
                     current_depth + 1,
                     Fields::SecondField,
                     with,
-                    apply_with_func_last,
                 );
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
                     Fields::FourthField,
                     with,
-                    apply_with_func_last,
                 )
             }
             AirTree::AssertBool {
@@ -1919,14 +1897,12 @@ impl AirTree {
                     current_depth + 1,
                     Fields::SecondField,
                     with,
-                    apply_with_func_last,
                 );
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
                     Fields::FourthField,
                     with,
-                    apply_with_func_last,
                 )
             }
             AirTree::ClauseGuard {
@@ -1940,7 +1916,6 @@ impl AirTree {
                     current_depth + 1,
                     Fields::ThirdField,
                     with,
-                    apply_with_func_last,
                 );
             }
 
@@ -1956,14 +1931,12 @@ impl AirTree {
                     current_depth + 1,
                     Fields::SecondField,
                     with,
-                    apply_with_func_last,
                 );
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
                     Fields::FifthField,
                     with,
-                    apply_with_func_last,
                 )
             }
             AirTree::ListAccessor {
@@ -1975,19 +1948,12 @@ impl AirTree {
                 then: _,
                 otherwise,
             } => {
-                list.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::FourthField,
-                    with,
-                    apply_with_func_last,
-                );
+                list.do_traverse_tree_with(tree_path, current_depth + 1, Fields::FourthField, with);
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
                     Fields::SeventhField,
                     with,
-                    apply_with_func_last,
                 )
             }
             AirTree::TupleAccessor {
@@ -1998,19 +1964,12 @@ impl AirTree {
                 then: _,
                 otherwise,
             } => {
-                tuple.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::ThirdField,
-                    with,
-                    apply_with_func_last,
-                );
+                tuple.do_traverse_tree_with(tree_path, current_depth + 1, Fields::ThirdField, with);
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
                     Fields::SixthField,
                     with,
-                    apply_with_func_last,
                 )
             }
             AirTree::PairAccessor {
@@ -2022,19 +1981,12 @@ impl AirTree {
                 then: _,
                 otherwise,
             } => {
-                pair.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::FifthField,
-                    with,
-                    apply_with_func_last,
-                );
+                pair.do_traverse_tree_with(tree_path, current_depth + 1, Fields::FifthField, with);
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
                     Fields::SeventhField,
                     with,
-                    apply_with_func_last,
                 )
             }
             AirTree::FieldsEmpty {
@@ -2047,7 +1999,6 @@ impl AirTree {
                     current_depth + 1,
                     Fields::FirstField,
                     with,
-                    apply_with_func_last,
                 );
 
                 otherwise.do_traverse_tree_with(
@@ -2055,7 +2006,6 @@ impl AirTree {
                     current_depth + 1,
                     Fields::ThirdField,
                     with,
-                    apply_with_func_last,
                 );
             }
             AirTree::ListEmpty {
@@ -2063,19 +2013,12 @@ impl AirTree {
                 then: _,
                 otherwise,
             } => {
-                list.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::FirstField,
-                    with,
-                    apply_with_func_last,
-                );
+                list.do_traverse_tree_with(tree_path, current_depth + 1, Fields::FirstField, with);
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
                     Fields::ThirdField,
                     with,
-                    apply_with_func_last,
                 )
             }
 
@@ -2090,7 +2033,6 @@ impl AirTree {
                 current_depth + 1,
                 Fields::ThirdField,
                 with,
-                apply_with_func_last,
             ),
 
             AirTree::TupleClause {
@@ -2107,7 +2049,6 @@ impl AirTree {
                     current_depth + 1,
                     Fields::SeventhField,
                     with,
-                    apply_with_func_last,
                 );
             }
             AirTree::PairClause {
@@ -2124,7 +2065,6 @@ impl AirTree {
                     current_depth + 1,
                     Fields::SeventhField,
                     with,
-                    apply_with_func_last,
                 );
             }
 
@@ -2164,20 +2104,10 @@ impl AirTree {
             | AirTree::MultiValidator { .. } => {}
         }
 
-        if !apply_with_func_last {
-            with(self, tree_path);
-        }
-
         // Expressions or an assignment that hoist over a expression are traversed here
         match self {
             AirTree::NoOp { then } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::FirstField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::FirstField, with);
             }
             AirTree::When {
                 tipo: _,
@@ -2191,7 +2121,6 @@ impl AirTree {
                     current_depth + 1,
                     Fields::FifthField,
                     with,
-                    apply_with_func_last,
                 );
             }
             AirTree::TupleClause {
@@ -2203,13 +2132,7 @@ impl AirTree {
                 then,
                 otherwise: _,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::SixthField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::SixthField, with);
             }
             AirTree::PairClause {
                 subject_tipo: _,
@@ -2220,13 +2143,7 @@ impl AirTree {
                 then,
                 otherwise: _,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::SixthField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::SixthField, with);
             }
             AirTree::List {
                 tipo: _,
@@ -2239,7 +2156,6 @@ impl AirTree {
                         current_depth + 1,
                         Fields::ArgsField(index),
                         with,
-                        apply_with_func_last,
                     );
                 }
             }
@@ -2250,39 +2166,20 @@ impl AirTree {
                         current_depth + 1,
                         Fields::ArgsField(index),
                         with,
-                        apply_with_func_last,
                     );
                 }
             }
             AirTree::Pair { tipo: _, fst, snd } => {
-                fst.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::SecondField,
-                    with,
-                    apply_with_func_last,
-                );
+                fst.do_traverse_tree_with(tree_path, current_depth + 1, Fields::SecondField, with);
 
-                snd.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::ThirdField,
-                    with,
-                    apply_with_func_last,
-                );
+                snd.do_traverse_tree_with(tree_path, current_depth + 1, Fields::ThirdField, with);
             }
             AirTree::Call {
                 tipo: _,
                 func,
                 args,
             } => {
-                func.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::SecondField,
-                    with,
-                    apply_with_func_last,
-                );
+                func.do_traverse_tree_with(tree_path, current_depth + 1, Fields::SecondField, with);
 
                 for (index, arg) in args.iter_mut().enumerate() {
                     arg.do_traverse_tree_with(
@@ -2290,7 +2187,6 @@ impl AirTree {
                         current_depth + 1,
                         Fields::ArgsField(index),
                         with,
-                        apply_with_func_last,
                     );
                 }
             }
@@ -2304,7 +2200,6 @@ impl AirTree {
                     current_depth + 1,
                     Fields::SecondField,
                     with,
-                    apply_with_func_last,
                 );
             }
             AirTree::Builtin {
@@ -2318,7 +2213,6 @@ impl AirTree {
                         current_depth + 1,
                         Fields::ArgsField(index),
                         with,
-                        apply_with_func_last,
                     );
                 }
             }
@@ -2329,30 +2223,17 @@ impl AirTree {
                 right,
                 argument_tipo: _,
             } => {
-                left.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::ThirdField,
-                    with,
-                    apply_with_func_last,
-                );
+                left.do_traverse_tree_with(tree_path, current_depth + 1, Fields::ThirdField, with);
 
                 right.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
                     Fields::FourthField,
                     with,
-                    apply_with_func_last,
                 );
             }
             AirTree::UnOp { op: _, arg } => {
-                arg.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::SecondField,
-                    with,
-                    apply_with_func_last,
-                );
+                arg.do_traverse_tree_with(tree_path, current_depth + 1, Fields::SecondField, with);
             }
             AirTree::CastFromData {
                 tipo: _,
@@ -2364,7 +2245,6 @@ impl AirTree {
                     current_depth + 1,
                     Fields::SecondField,
                     with,
-                    apply_with_func_last,
                 );
             }
             AirTree::CastToData { tipo: _, value } => {
@@ -2373,7 +2253,6 @@ impl AirTree {
                     current_depth + 1,
                     Fields::SecondField,
                     with,
-                    apply_with_func_last,
                 );
             }
 
@@ -2390,23 +2269,15 @@ impl AirTree {
                     current_depth + 1,
                     Fields::FourthField,
                     with,
-                    apply_with_func_last,
                 );
 
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::FifthField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::FifthField, with);
 
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
                     Fields::SixthField,
                     with,
-                    apply_with_func_last,
                 );
             }
             AirTree::ListClause {
@@ -2417,37 +2288,23 @@ impl AirTree {
                 then,
                 otherwise,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::FifthField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::FifthField, with);
 
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
                     Fields::SixthField,
                     with,
-                    apply_with_func_last,
                 );
             }
             AirTree::WrapClause { then, otherwise } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::FirstField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::FirstField, with);
 
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
                     Fields::SecondField,
                     with,
-                    apply_with_func_last,
                 );
             }
 
@@ -2457,16 +2314,9 @@ impl AirTree {
                     current_depth + 1,
                     Fields::FirstField,
                     with,
-                    apply_with_func_last,
                 );
 
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::SecondField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::SecondField, with);
             }
             AirTree::If {
                 tipo: _,
@@ -2479,23 +2329,15 @@ impl AirTree {
                     current_depth + 1,
                     Fields::SecondField,
                     with,
-                    apply_with_func_last,
                 );
 
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::ThirdField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::ThirdField, with);
 
                 otherwise.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
                     Fields::FourthField,
                     with,
-                    apply_with_func_last,
                 );
             }
             AirTree::Constr {
@@ -2509,7 +2351,6 @@ impl AirTree {
                         current_depth + 1,
                         Fields::ArgsField(index),
                         with,
-                        apply_with_func_last,
                     );
                 }
             }
@@ -2525,7 +2366,6 @@ impl AirTree {
                     current_depth + 1,
                     Fields::FourthField,
                     with,
-                    apply_with_func_last,
                 );
 
                 for (index, arg) in args.iter_mut().enumerate() {
@@ -2534,26 +2374,13 @@ impl AirTree {
                         current_depth + 1,
                         Fields::ArgsField(index),
                         with,
-                        apply_with_func_last,
                     );
                 }
             }
             AirTree::Trace { tipo: _, msg, then } => {
-                msg.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::SecondField,
-                    with,
-                    apply_with_func_last,
-                );
+                msg.do_traverse_tree_with(tree_path, current_depth + 1, Fields::SecondField, with);
 
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::ThirdField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::ThirdField, with);
             }
             AirTree::DefineFunc {
                 func_name: _,
@@ -2570,15 +2397,8 @@ impl AirTree {
                     current_depth + 1,
                     Fields::SeventhField,
                     with,
-                    apply_with_func_last,
                 );
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::EighthField,
-                    with,
-                    apply_with_func_last,
-                )
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::EighthField, with)
             }
             AirTree::DefineCyclicFuncs {
                 func_name: _,
@@ -2593,16 +2413,9 @@ impl AirTree {
                         current_depth + 1,
                         Fields::ArgsField(index),
                         with,
-                        apply_with_func_last,
                     );
                 }
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::FifthField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::FifthField, with);
             }
             AirTree::Int { .. }
             | AirTree::String { .. }
@@ -2617,13 +2430,7 @@ impl AirTree {
                 value: _,
                 then,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::ThirdField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::ThirdField, with);
             }
             AirTree::SoftCastLet {
                 name: _,
@@ -2632,13 +2439,7 @@ impl AirTree {
                 then,
                 otherwise: _,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::FourthField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::FourthField, with);
             }
             AirTree::AssertConstr {
                 constr_index: _,
@@ -2646,13 +2447,7 @@ impl AirTree {
                 then,
                 otherwise: _,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::ThirdField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::ThirdField, with);
             }
             AirTree::AssertBool {
                 is_true: _,
@@ -2660,13 +2455,7 @@ impl AirTree {
                 then,
                 otherwise: _,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::ThirdField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::ThirdField, with);
             }
             AirTree::ClauseGuard {
                 subject_name: _,
@@ -2674,13 +2463,7 @@ impl AirTree {
                 pattern: _,
                 then,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::FourthField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::FourthField, with);
             }
             AirTree::ListClauseGuard {
                 subject_tipo: _,
@@ -2689,13 +2472,7 @@ impl AirTree {
                 inverse: _,
                 then,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::FifthField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::FifthField, with);
             }
             AirTree::TupleGuard {
                 subject_tipo: _,
@@ -2703,13 +2480,7 @@ impl AirTree {
                 subject_name: _,
                 then,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::FourthField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::FourthField, with);
             }
             AirTree::PairGuard {
                 subject_tipo: _,
@@ -2718,13 +2489,7 @@ impl AirTree {
                 snd_name: _,
                 then,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::FifthField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::FifthField, with);
             }
             AirTree::FieldsExpose {
                 indices: _,
@@ -2733,13 +2498,7 @@ impl AirTree {
                 then,
                 otherwise: _,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::FourthField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::FourthField, with);
             }
             AirTree::ListAccessor {
                 tipo: _,
@@ -2750,13 +2509,7 @@ impl AirTree {
                 then,
                 otherwise: _,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::SixthField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::SixthField, with);
             }
             AirTree::ListExpose {
                 tipo: _,
@@ -2764,13 +2517,7 @@ impl AirTree {
                 tail: _,
                 then,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::FourthField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::FourthField, with);
             }
             AirTree::TupleAccessor {
                 names: _,
@@ -2780,13 +2527,7 @@ impl AirTree {
                 then,
                 otherwise: _,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::FifthField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::FifthField, with);
             }
             AirTree::PairAccessor {
                 fst: _,
@@ -2797,39 +2538,21 @@ impl AirTree {
                 then,
                 otherwise: _,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::SixthField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::SixthField, with);
             }
             AirTree::FieldsEmpty {
                 constr: _,
                 then,
                 otherwise: _,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::SecondField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::SecondField, with);
             }
             AirTree::ListEmpty {
                 list: _,
                 then,
                 otherwise: _,
             } => {
-                then.do_traverse_tree_with(
-                    tree_path,
-                    current_depth + 1,
-                    Fields::SecondField,
-                    with,
-                    apply_with_func_last,
-                );
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::SecondField, with);
             }
             AirTree::MultiValidator {
                 two_arg_name: _,
@@ -2842,21 +2565,17 @@ impl AirTree {
                     current_depth + 1,
                     Fields::SecondField,
                     with,
-                    apply_with_func_last,
                 );
                 three_arg.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
                     Fields::FourthField,
                     with,
-                    apply_with_func_last,
                 )
             }
         }
 
-        if apply_with_func_last {
-            with(self, tree_path);
-        }
+        with(self, tree_path);
 
         tree_path.pop();
     }

@@ -3507,12 +3507,9 @@ impl<'a> CodeGenerator<'a> {
         let mut validator_hoistable;
 
         // TODO change subsequent tree traversals to be more like a stream.
-        air_tree.traverse_tree_with(
-            &mut |air_tree: &mut AirTree, _| {
-                erase_opaque_type_operations(air_tree, &self.data_types);
-            },
-            true,
-        );
+        air_tree.traverse_tree_with(&mut |air_tree: &mut AirTree, _| {
+            erase_opaque_type_operations(air_tree, &self.data_types);
+        });
 
         self.find_function_vars_and_depth(
             &mut air_tree,
@@ -4234,12 +4231,9 @@ impl<'a> CodeGenerator<'a> {
 
                             let mut body = AirTree::no_op(body.clone());
 
-                            body.traverse_tree_with(
-                                &mut |air_tree, _| {
-                                    erase_opaque_type_operations(air_tree, &self.data_types);
-                                },
-                                true,
-                            );
+                            body.traverse_tree_with(&mut |air_tree, _| {
+                                erase_opaque_type_operations(air_tree, &self.data_types);
+                            });
 
                             function_variant_path.insert(
                                 "".to_string(),
@@ -4331,13 +4325,10 @@ impl<'a> CodeGenerator<'a> {
                                 &[],
                             ));
 
-                            function_air_tree_body.traverse_tree_with(
-                                &mut |air_tree, _| {
-                                    erase_opaque_type_operations(air_tree, &self.data_types);
-                                    monomorphize(air_tree, &mono_types);
-                                },
-                                true,
-                            );
+                            function_air_tree_body.traverse_tree_with(&mut |air_tree, _| {
+                                erase_opaque_type_operations(air_tree, &self.data_types);
+                                monomorphize(air_tree, &mono_types);
+                            });
 
                             args.iter().for_each(|arg| {
                                 arg.arg_name.get_variable_name().iter().for_each(|arg| {
@@ -4376,13 +4367,10 @@ impl<'a> CodeGenerator<'a> {
                             &[],
                         ));
 
-                        function_air_tree_body.traverse_tree_with(
-                            &mut |air_tree, _| {
-                                erase_opaque_type_operations(air_tree, &self.data_types);
-                                monomorphize(air_tree, &mono_types);
-                            },
-                            true,
-                        );
+                        function_air_tree_body.traverse_tree_with(&mut |air_tree, _| {
+                            erase_opaque_type_operations(air_tree, &self.data_types);
+                            monomorphize(air_tree, &mono_types);
+                        });
 
                         let mut function_variant_path = IndexMap::new();
 
@@ -4409,7 +4397,6 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
             },
-            true,
         );
     }
 
@@ -4462,12 +4449,9 @@ impl<'a> CodeGenerator<'a> {
                     let mut value =
                         AirTree::no_op(self.build(definition, &access_key.module_name, &[]));
 
-                    value.traverse_tree_with(
-                        &mut |air_tree, _| {
-                            erase_opaque_type_operations(air_tree, &self.data_types);
-                        },
-                        true,
-                    );
+                    value.traverse_tree_with(&mut |air_tree, _| {
+                        erase_opaque_type_operations(air_tree, &self.data_types);
+                    });
 
                     value = self.hoist_functions_to_validator(value);
 
@@ -5020,7 +5004,7 @@ impl<'a> CodeGenerator<'a> {
                     func_body = func_body.lambda(param.clone());
                 }
 
-                if params.is_empty() {
+                if recursive_nonstatic_params.is_empty() || params.is_empty() {
                     func_body = func_body.delay();
                 }
 
@@ -5046,6 +5030,10 @@ impl<'a> CodeGenerator<'a> {
                             Term::var(&func_name).apply(Term::var(&func_name));
                         for param in recursive_nonstatic_params.iter() {
                             recursive_func_body = recursive_func_body.apply(Term::var(param));
+                        }
+
+                        if recursive_nonstatic_params.is_empty() {
+                            recursive_func_body = recursive_func_body.force();
                         }
 
                         // Then construct an outer function with *all* parameters, not just the nonstatic ones.
