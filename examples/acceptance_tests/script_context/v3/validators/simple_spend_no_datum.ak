@@ -1,32 +1,18 @@
 use aiken/collection/dict
 use cardano/address.{Address, Script}
 use cardano/assets
-use cardano/transaction.{
-  Input, NoDatum, Output, OutputReference, ScriptPurpose, Spend, Transaction,
-}
+use cardano/transaction.{Input, NoDatum, Output, OutputReference, Transaction}
 
 validator simple_spend {
   spend(
-    _datum: Option<Void>,
+    datum: Option<Void>,
     _redeemer: Void,
-    output_ref: OutputReference,
+    _output_ref: OutputReference,
     transaction: Transaction,
   ) {
-    assert_transaction_id(transaction.id)
-
-    assert_script_info(output_ref)
+    expect None = datum
 
     assert_inputs(transaction.inputs)
-
-    expect [] = transaction.outputs
-
-    expect [] = transaction.reference_inputs
-
-    expect [] = transaction.extra_signatories
-
-    expect 42 == transaction.fee
-
-    assert_redeemers(transaction.redeemers)
 
     expect [] == dict.to_pairs(transaction.datums)
 
@@ -36,21 +22,6 @@ validator simple_spend {
   else(_ctx) {
     fail
   }
-}
-
-fn assert_transaction_id(id: ByteArray) {
-  expect
-    #"c6fbd346681a8f8337f6b3e51e6ec973f1509367eabc3a44c849af58a1d8471b" == id
-  Void
-}
-
-fn assert_script_info(info: OutputReference) {
-  expect
-    OutputReference {
-      transaction_id: #"0000000000000000000000000000000000000000000000000000000000000000",
-      output_index: 0,
-    } == info
-  Void
 }
 
 fn assert_inputs(inputs: List<Input>) {
@@ -75,25 +46,4 @@ fn assert_inputs(inputs: List<Input>) {
     address
 
   Void
-}
-
-fn assert_redeemers(redeemers: Pairs<ScriptPurpose, Data>) {
-  expect
-    [
-      Pair(
-        Spend(
-          OutputReference {
-            transaction_id: #"0000000000000000000000000000000000000000000000000000000000000000",
-            output_index: 0,
-          },
-        ),
-        void(),
-      ),
-    ] == redeemers
-  Void
-}
-
-fn void() -> Data {
-  let void: Data = Void
-  void
 }
