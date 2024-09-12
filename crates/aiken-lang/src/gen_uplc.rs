@@ -2040,8 +2040,8 @@ impl<'a> CodeGenerator<'a> {
                 } else {
                     let list_name = format!("__list_span_{}_{}", location.start, location.end);
                     let item_name = format!("__item_span_{}_{}", location.start, location.end);
-                    let list = format!("__list");
-                    let curried_func = format!("__curried_expect_on_list");
+                    let list = "__list".to_string();
+                    let curried_func = "__curried_expect_on_list".to_string();
 
                     let list_name_interned = introduce_name(&mut self.interner, &list_name);
                     let item_name_interned = introduce_name(&mut self.interner, &item_name);

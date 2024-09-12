@@ -1818,5 +1818,5 @@ pub fn pop_pattern(interner: &mut AirInterner, pattern: &TypedPattern) {
 pub fn introduce_name(interner: &mut AirInterner, name: &String) -> String {
     interner.intern(name.clone());
 
-    interner.lookup_interned(&name)
+    interner.lookup_interned(name)
 }

@@ -885,7 +885,7 @@ impl<'comments> Formatter<'comments> {
             ByteArrayFormatPreference::Utf8String => nil()
                 .append("\"")
                 .append(Document::String(escape(
-                    &String::from_utf8(bytes.to_vec()).unwrap(),
+                    core::str::from_utf8(bytes).unwrap(),
                 )))
                 .append("\""),
         }
