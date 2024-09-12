@@ -666,12 +666,13 @@ impl<'a> CodeGenerator<'a> {
                         self.build(final_else, module_build_name, &[]),
                         |acc, branch| {
                             let condition = self.build(&branch.condition, module_build_name, &[]);
-                            let body = self.build(&branch.body, module_build_name, &[]);
 
                             match &branch.is {
                                 Some((pattern, tipo)) => {
                                     introduce_pattern(&mut self.interner, pattern);
                                     self.interner.intern("acc_var".to_string());
+
+                                    let body = self.build(&branch.body, module_build_name, &[]);
 
                                     let acc_var =
                                         self.interner.lookup_interned(&"acc_var".to_string());
@@ -703,7 +704,12 @@ impl<'a> CodeGenerator<'a> {
 
                                     tree
                                 }
-                                None => AirTree::if_branch(tipo.clone(), condition, body, acc),
+                                None => AirTree::if_branch(
+                                    tipo.clone(),
+                                    condition,
+                                    self.build(&branch.body, module_build_name, &[]),
+                                    acc,
+                                ),
                             }
                         },
                     )
