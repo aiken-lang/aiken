@@ -831,13 +831,13 @@ pub fn find_script(
 
     let lookup_datum = |datum: Option<DatumOption>| match datum {
         Some(DatumOption::Hash(hash)) => match lookup_table.datum.get(&hash) {
-            Some(d) => Ok(d.clone()),
+            Some(d) => Ok(Some(d.clone())),
             None => Err(Error::MissingRequiredDatum {
                 hash: hash.to_string(),
             }),
         },
-        Some(DatumOption::Data(data)) => Ok(data.0.clone()),
-        _ => Err(Error::MissingRequiredInlineDatumOrHash),
+        Some(DatumOption::Data(data)) => Ok(Some(data.0.clone())),
+        None => Ok(None),
     };
 
     match redeemer.tag {
@@ -908,12 +908,16 @@ pub fn find_script(
             .and_then(|input| match output_address(&input.resolved) {
                 Address::Shelley(shelley_address) => {
                     let hash = shelley_address.payment().as_hash();
+                    let (script, _) = lookup_script(hash)?;
+                    let datum = lookup_datum(output_datum(&input.resolved))?;
 
-                    let script = lookup_script(hash);
+                    if datum.is_none()
+                        && matches!(script, ScriptVersion::V1(..) | ScriptVersion::V2(..))
+                    {
+                        return Err(Error::MissingRequiredInlineDatumOrHash);
+                    }
 
-                    let datum = lookup_datum(output_datum(&input.resolved));
-
-                    script.and_then(|(script, _)| Ok((script, Some(datum?))))
+                    Ok((script, datum))
                 }
                 _ => Err(Error::NonScriptStakeCredential),
             }),
