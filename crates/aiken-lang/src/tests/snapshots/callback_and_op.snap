@@ -1,0 +1,17 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n    let labels = list.filter(labels, fn(lbl) {\n        and {\n        lbl != sc_missing_admin_approval_for_foreign_assets,\n        lbl != sc_missing_admin_approval_for_certificate_publish,\n      }\n    })\n    labels\n}\n"
+---
+fn foo() {
+  let labels =
+    list.filter(
+      labels,
+      fn(lbl) {
+        and {
+          lbl != sc_missing_admin_approval_for_foreign_assets,
+          lbl != sc_missing_admin_approval_for_certificate_publish,
+        }
+      },
+    )
+  labels
+}

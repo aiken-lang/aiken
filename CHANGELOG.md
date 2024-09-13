@@ -12,7 +12,8 @@
 - **aiken-lang**: Aiken IR now interns variables while building up to ensure uniqueness for local vars. @Microproofs
 - **aiken-lang**: Fix reification of `Data` (failing to reify) & `PRNG` (missing variants' arguments). @KtorZ
 - **aiken-lang**: Adjust reification of `String` to be shown as plain UTF-8 text strings (instead of hex-encoded byte array). @KtorZ
-
+- **aiken-lang**: Fix formatting of long if-condition over multiline. @KtorZ & @Microproofs
+- **aiken-lang**: Fix formatting of standalone logical binary chains (`and` & `or`) in functions. @KtorZ
 
 ### Removed
 

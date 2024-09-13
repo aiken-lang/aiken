@@ -712,9 +712,9 @@ impl<'comments> Formatter<'comments> {
     ) -> Document<'a> {
         let args = wrap_args(args.iter().map(|e| (self.fn_arg(e), false))).group();
         let body = match body {
-            UntypedExpr::Trace { .. } | UntypedExpr::When { .. } => {
-                self.expr(body, true).force_break()
-            }
+            UntypedExpr::Trace { .. }
+            | UntypedExpr::When { .. }
+            | UntypedExpr::LogicalOpChain { .. } => self.expr(body, true).force_break(),
             _ => self.expr(body, true),
         };
 
@@ -1268,7 +1268,7 @@ impl<'comments> Formatter<'comments> {
         final_else: &'a UntypedExpr,
     ) -> Document<'a> {
         let if_branches = self
-            .if_branch(break_("if", "if "), branches.first())
+            .if_branch(Document::Str("if "), branches.first())
             .append(join(
                 branches[1..].iter().map(|branch| {
                     self.if_branch(line().append(break_("} else if", "} else if ")), branch)
@@ -1330,7 +1330,7 @@ impl<'comments> Formatter<'comments> {
                 }
                 None => nil(),
             })
-            .append(break_("{", " {"))
+            .append(Document::Str(" {"))
             .group();
 
         let if_body = line().append(self.expr(&branch.body, true)).nest(INDENT);

@@ -1352,3 +1352,38 @@ fn multiline_constant() {
         "#
     );
 }
+
+#[test]
+fn multiline_if_condition() {
+    assert_format!(
+        r#"
+        fn foo() {
+          if
+          list.is_empty(outputs) && (
+            !list.is_empty(mint_redeemers) || !list.is_empty(cert_redeemers)
+          ){
+            True
+          } else {
+              False
+          }
+        }
+        "#
+    );
+}
+
+#[test]
+fn callback_and_op() {
+    assert_format!(
+        r#"
+        fn foo() {
+            let labels = list.filter(labels, fn(lbl) {
+                and {
+                lbl != sc_missing_admin_approval_for_foreign_assets,
+                lbl != sc_missing_admin_approval_for_certificate_publish,
+              }
+            })
+            labels
+        }
+        "#
+    );
+}

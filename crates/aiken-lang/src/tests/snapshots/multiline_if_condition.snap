@@ -1,0 +1,13 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n  if\n  list.is_empty(outputs) && (\n    !list.is_empty(mint_redeemers) || !list.is_empty(cert_redeemers)\n  ){\n    True\n  } else {\n      False\n  }\n}\n"
+---
+fn foo() {
+  if list.is_empty(outputs) && (
+    !list.is_empty(mint_redeemers) || !list.is_empty(cert_redeemers)
+  ) {
+    True
+  } else {
+    False
+  }
+}
