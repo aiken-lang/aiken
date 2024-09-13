@@ -1063,11 +1063,20 @@ impl UntypedExpr {
                     value: from_pallas_bigint(i).to_string(),
                 }),
 
-                PlutusData::BoundedBytes(bytes) => Ok(UntypedExpr::ByteArray {
-                    location: Span::empty(),
-                    bytes: bytes.into(),
-                    preferred_format: ByteArrayFormatPreference::HexadecimalString,
-                }),
+                PlutusData::BoundedBytes(bytes) => {
+                    if tipo.is_string() {
+                        Ok(UntypedExpr::String {
+                            location: Span::empty(),
+                            value: String::from_utf8(bytes.to_vec()).expect("invalid UTF-8 string"),
+                        })
+                    } else {
+                        Ok(UntypedExpr::ByteArray {
+                            location: Span::empty(),
+                            bytes: bytes.into(),
+                            preferred_format: ByteArrayFormatPreference::HexadecimalString,
+                        })
+                    }
+                }
 
                 PlutusData::Array(args) => match tipo {
                     Type::App {
