@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.1.2 - 2024-09-DD
+## v1.1.2 - UNRELEASED
 
 ### Added
 
@@ -10,8 +10,13 @@
 
 - **aiken-lang**: Fix issues with static recursive optimization. See [#1009](https://github.com/aiken-lang/aiken/issues/1009) @Microproofs
 - **aiken-lang**: Aiken IR now interns variables while building up to ensure uniqueness for local vars. @Microproofs
+- **aiken-lang**: Fix reification of `Data` (failing to reify) & `PRNG` (missing variants' arguments). @KtorZ
+- **aiken-lang**: Adjust reification of `String` to be shown as plain UTF-8 text strings (instead of hex-encoded byte array). @KtorZ
 
 
+### Removed
+
+- N/A
 
 ## v1.1.1 - 2024-09-10
 

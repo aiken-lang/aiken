@@ -420,9 +420,13 @@ pub type TypedDataType = DataType<Rc<Type>>;
 
 impl TypedDataType {
     pub fn known_enum(name: &str, constructors: &[&str]) -> Self {
+        Self::known_data_type(name, &RecordConstructor::known_enum(constructors))
+    }
+
+    pub fn known_data_type(name: &str, constructors: &[RecordConstructor<Rc<Type>>]) -> Self {
         Self {
             name: name.to_string(),
-            constructors: RecordConstructor::known_enum(constructors),
+            constructors: constructors.to_vec(),
             location: Span::empty(),
             opaque: false,
             public: true,
@@ -946,7 +950,10 @@ pub struct RecordConstructor<T> {
     pub sugar: bool,
 }
 
-impl<A> RecordConstructor<A> {
+impl<A> RecordConstructor<A>
+where
+    A: Clone,
+{
     pub fn put_doc(&mut self, new_doc: String) {
         self.doc = Some(new_doc);
     }
@@ -962,6 +969,16 @@ impl<A> RecordConstructor<A> {
                 sugar: false,
             })
             .collect()
+    }
+
+    pub fn known_record(name: &str, args: &[RecordConstructorArg<A>]) -> Self {
+        RecordConstructor {
+            location: Span::empty(),
+            name: name.to_string(),
+            arguments: args.to_vec(),
+            doc: None,
+            sugar: false,
+        }
     }
 }
 

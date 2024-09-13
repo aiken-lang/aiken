@@ -1588,7 +1588,35 @@ impl TypedDataType {
     }
 
     pub fn prng() -> Self {
-        DataType::known_enum(well_known::PRNG, well_known::PRNG_CONSTRUCTORS)
+        let bytearray_arg = |label: &str| RecordConstructorArg {
+            label: Some(label.to_string()),
+            doc: None,
+            annotation: Annotation::bytearray(Span::empty()),
+            location: Span::empty(),
+            tipo: Type::byte_array(),
+        };
+
+        let int_arg = |label: &str| RecordConstructorArg {
+            label: Some(label.to_string()),
+            doc: None,
+            annotation: Annotation::int(Span::empty()),
+            location: Span::empty(),
+            tipo: Type::int(),
+        };
+
+        DataType::known_data_type(
+            well_known::PRNG,
+            &[
+                RecordConstructor::known_record(
+                    well_known::PRNG_CONSTRUCTORS[0],
+                    &[bytearray_arg("seed"), bytearray_arg("choices")],
+                ),
+                RecordConstructor::known_record(
+                    well_known::PRNG_CONSTRUCTORS[1],
+                    &[int_arg("cursor"), bytearray_arg("choices")],
+                ),
+            ],
+        )
     }
 
     pub fn ordering() -> Self {
