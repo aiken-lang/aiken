@@ -27,9 +27,16 @@ impl LspProject {
     }
 
     pub fn compile(&mut self) -> Result<(), Vec<ProjectError>> {
+        self.compile_with_edits(None)
+    }
+
+    pub fn compile_with_edits(
+        &mut self,
+        edited: Option<&HashMap<String, String>>,
+    ) -> Result<(), Vec<ProjectError>> {
         let checkpoint = self.project.checkpoint();
 
-        let result = self.project.check(
+        let result = self.project.check_with_edits(
             true,
             None,
             false,
@@ -38,6 +45,7 @@ impl LspProject {
             PropertyTest::DEFAULT_MAX_SUCCESS,
             Tracing::silent(),
             None,
+            edited,
         );
 
         self.project.restore(checkpoint);

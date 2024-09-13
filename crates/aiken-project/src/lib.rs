@@ -202,6 +202,7 @@ where
             code_gen_mode: CodeGenMode::Build(uplc),
             tracing,
             env,
+            edited: None,
         };
 
         self.compile(options)
@@ -268,6 +269,32 @@ where
         tracing: Tracing,
         env: Option<String>,
     ) -> Result<(), Vec<Error>> {
+        self.check_with_edits(
+            skip_tests,
+            match_tests,
+            verbose,
+            exact_match,
+            seed,
+            property_max_success,
+            tracing,
+            env,
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn check_with_edits(
+        &mut self,
+        skip_tests: bool,
+        match_tests: Option<Vec<String>>,
+        verbose: bool,
+        exact_match: bool,
+        seed: u32,
+        property_max_success: usize,
+        tracing: Tracing,
+        env: Option<String>,
+        edited: Option<&HashMap<String, String>>,
+    ) -> Result<(), Vec<Error>> {
         let options = Options {
             tracing,
             env,
@@ -282,6 +309,7 @@ where
                     property_max_success,
                 }
             },
+            edited: edited,
         };
 
         self.compile(options)
@@ -352,6 +380,42 @@ where
         self.read_source_files(config)?;
 
         let mut modules = self.parse_sources(self.config.name.clone())?;
+
+        if let Some(edited) = options.edited {
+            for (module_name, edited_content) in edited {
+                if let Some(module) = modules.get_mut(module_name) {
+                    // Parse the edited content
+                    match aiken_lang::parser::module(&edited_content, module.kind) {
+                        Ok((mut ast, extra)) => {
+                            ast.name.clone_from(&module.name);
+                            *module = ParsedModule {
+                                kind: module.kind,
+                                ast,
+                                code: edited_content.to_string(),
+                                name: module.name.clone(),
+                                path: module.path.clone(),
+                                extra,
+                                package: module.package.clone(),
+                            };
+                        }
+                        Err(errs) => {
+                            return Err(errs
+                                .into_iter()
+                                .map(|e| Error::Parse {
+                                    path: module.path.clone(),
+                                    src: edited_content.to_string(),
+                                    named: Box::new(NamedSource::new(
+                                        module.path.display().to_string(),
+                                        edited_content.to_string(),
+                                    )),
+                                    error: Box::new(e),
+                                })
+                                .collect());
+                        }
+                    }
+                }
+            }
+        }
 
         self.type_check(&mut modules, options.tracing, env, true)?;
 

@@ -40,6 +40,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
+    time::{Duration, Instant},
 };
 
 pub mod lsp_project;
@@ -71,6 +72,10 @@ pub struct Server {
 
     /// An instance of a LspProject
     compiler: Option<LspProject>,
+
+    last_change: Instant,
+    compile_scheduled: bool,
+    debounce_duration: Duration,
 }
 
 impl Server {
@@ -98,10 +103,21 @@ impl Server {
 
     /// Compile the project if we are in one. Otherwise do nothing.
     fn compile(&mut self, connection: &Connection) -> Result<(), ServerError> {
+        self.compile_with_edits(connection, false)
+    }
+
+    /// Helper function used by compile and by the LSP to generate code completions.
+    fn compile_with_edits(
+        &mut self,
+        connection: &Connection,
+        use_edits: bool,
+    ) -> Result<(), ServerError> {
         self.notify_client_of_compilation_start(connection)?;
 
+        let edited = if use_edits { Some(&self.edited) } else { None };
+
         if let Some(compiler) = self.compiler.as_mut() {
-            let result = compiler.compile();
+            let result = compiler.compile_with_edits(edited);
 
             for warning in compiler.project.warnings() {
                 self.process_diagnostic(warning)?;
@@ -218,6 +234,10 @@ impl Server {
                 if let Some(changes) = params.content_changes.into_iter().next() {
                     self.edited.insert(path, changes.text);
                 }
+
+                self.last_change = Instant::now();
+                self.compile_scheduled = true;
+                dbg!("Modified Document");
 
                 Ok(())
             }
@@ -588,8 +608,32 @@ impl Server {
                     self.handle_notification(&connection, notification)?
                 }
             }
+            // Check if it's time to compile after processing each message
+            self.check_compile(&connection)?;
         }
 
+        Ok(())
+    }
+
+    fn check_compile(&mut self, connection: &Connection) -> Result<(), ServerError> {
+        if self.compile_scheduled && self.last_change.elapsed() >= self.debounce_duration {
+            dbg!("Entered check_compile (after initial check)");
+            self.compile_scheduled = false;
+            if let Ok(config) = Config::load(&self.root) {
+                dbg!("Config Okay");
+                self.config = Some(config);
+                self.create_new_compiler();
+                self.compile_with_edits(connection, true)?;
+                dbg!("after compile_with_edits");
+            } else {
+                dbg!("Failed to reload aiken.toml");
+                self.stored_messages.push(lsp_types::ShowMessageParams {
+                    typ: lsp_types::MessageType::ERROR,
+                    message: "Failed to reload aiken.toml".to_string(),
+                });
+            }
+            self.publish_stored_diagnostics(connection)?;
+        }
         Ok(())
     }
 
@@ -607,6 +651,9 @@ impl Server {
             stored_diagnostics: HashMap::new(),
             stored_messages: Vec::new(),
             compiler: None,
+            last_change: Instant::now(),
+            compile_scheduled: false,
+            debounce_duration: Duration::from_millis(300),
         };
 
         server.create_new_compiler();

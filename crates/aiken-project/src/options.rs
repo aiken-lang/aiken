@@ -1,17 +1,21 @@
+use std::collections::HashMap;
+
 use aiken_lang::ast::Tracing;
 
-pub struct Options {
+pub struct Options<'a> {
     pub code_gen_mode: CodeGenMode,
     pub tracing: Tracing,
     pub env: Option<String>,
+    pub edited: Option<&'a HashMap<String, String>>,
 }
 
-impl Default for Options {
+impl<'a> Default for Options<'a> {
     fn default() -> Self {
         Self {
             code_gen_mode: CodeGenMode::NoOp,
             tracing: Tracing::silent(),
             env: None,
+            edited: None,
         }
     }
 }
