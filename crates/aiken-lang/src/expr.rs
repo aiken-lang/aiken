@@ -1138,6 +1138,13 @@ impl UntypedExpr {
                             ..
                         }) = lookup_data_type_by_tipo(data_types, tipo)
                         {
+                            if constructors.is_empty() {
+                                return Ok(UntypedExpr::Var {
+                                    location: Span::empty(),
+                                    name: "Data".to_string(),
+                                });
+                            }
+
                             let constructor = &constructors[ix];
 
                             typed_parameters
