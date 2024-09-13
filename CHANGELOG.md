@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.1.2 - 2024-09-DD
+
+### Added
+
+- N/A
+
+### Changed
+
+- **aiken-lang**: Fix issues with static recursive optimization. See [#1009](https://github.com/aiken-lang/aiken/issues/1009) @Microproofs
+- **aiken-lang**: Aiken IR now interns variables while building up to ensure uniqueness for local vars. @Microproofs
+
+
+
 ## v1.1.1 - 2024-09-10
 
 ### Added
