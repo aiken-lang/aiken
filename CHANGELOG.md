@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.1.3 - UNRELEASED
+
+### Added
+
+- N/A
+
+### Changed
+
+- **aiken-project**: Fix documentation link-tree generation messing up with modules when re-inserting the same module. @KtorZ
+
+### Removed
+
+- N/A
+
 ## v1.1.2 - 2024-09-13
 
 ### Added

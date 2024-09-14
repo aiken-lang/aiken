@@ -82,6 +82,11 @@ impl LinkTree {
                 value: ref mut leaf,
                 ..
             } => {
+                // In case we try to insert a module that already exists, there's nothing to do.
+                if module == leaf {
+                    return;
+                }
+
                 let (prefix, value) = if let Some(prefix) = common_prefix(module, leaf) {
                     *leaf = strip_prefix(leaf, &prefix);
                     let value = strip_prefix(module, &prefix);
@@ -90,9 +95,9 @@ impl LinkTree {
                     (String::new(), module.to_string())
                 };
 
-                // When `prefix == module`, we are in the case where we try to insert a parent
-                // (e.g. `aiken/math`) into a sub-leaf (e.g. `aiken/math/rational`). So `self`
-                // must become a child node of our newly created parent.
+                // When `prefix == module`, we are usually in the case where we try to insert a
+                // parent (e.g. `aiken/math`) into a sub-leaf (e.g. `aiken/math/rational`). So
+                // `self` must become a child node of our newly created parent.
                 if prefix == module {
                     let children = vec![self.clone().into_ref()];
                     *self = LinkTree::Node {
@@ -101,6 +106,7 @@ impl LinkTree {
                         children,
                         prefix,
                     };
+
                 // If `leaf.is_empty()`, we are in the case where we are inserting a sub-leaf
                 // (e.g. `aiken/math/rational`) into a parent (e.g. `aiken/math`); so much that
                 // we've run out of path segments to follow down. So `self` can turn into a node
@@ -132,7 +138,7 @@ impl LinkTree {
             }
 
             LinkTree::Node {
-                ref prefix,
+                ref mut prefix,
                 ref mut children,
                 ..
             } => {
@@ -140,7 +146,7 @@ impl LinkTree {
                 // inserted belong to our sub-tree. We do not know *where* exactly though, so we
                 // have to find whether there's any child that continues the path. If node, we can
                 // add it to our children.
-                if module.starts_with(prefix) {
+                if module.starts_with(prefix.as_str()) {
                     let module = strip_prefix(module, prefix);
 
                     for child in children.iter_mut() {
@@ -159,10 +165,14 @@ impl LinkTree {
                     children.sort_by(|a, b| a.borrow().path().cmp(b.borrow().path()));
                 // Otherwise, we make it a neighbor that shares no common prefix.
                 } else {
+                    let new_prefix = common_prefix(prefix, module).unwrap_or_default();
+
+                    *prefix = strip_prefix(prefix, &new_prefix);
+
                     let mut children = vec![
                         self.clone().into_ref(),
                         LinkTree::Leaf {
-                            value: module.to_string(),
+                            value: strip_prefix(module, &new_prefix),
                         }
                         .into_ref(),
                     ];
@@ -173,7 +183,7 @@ impl LinkTree {
                         // This node is a 'separator' because it doesn't
                         // hold any value. It is just an intersection point.
                         separator: true,
-                        prefix: String::new(),
+                        prefix: new_prefix,
                         children,
                     };
                 }
@@ -418,6 +428,47 @@ fn link_tree_5() {
                 name: "foo".to_string(),
                 path: "cardano/foo.html".to_string(),
             }
+        ]
+    )
+}
+
+#[test]
+fn link_tree_6() {
+    let mut tree = LinkTree::default();
+    tree.insert("cardano/address");
+    tree.insert("cardano/address/credential");
+    tree.insert("cardano/address/credential");
+    tree.insert("cardano/assets");
+    tree.insert("cardano/assets");
+    tree.insert("cardano/certificate");
+    assert_eq!(
+        tree.to_vec(),
+        vec![
+            DocLink {
+                indent: 0,
+                name: "cardano".to_string(),
+                path: "".to_string(),
+            },
+            DocLink {
+                indent: 1,
+                name: "address".to_string(),
+                path: "cardano/address.html".to_string(),
+            },
+            DocLink {
+                indent: 2,
+                name: "credential".to_string(),
+                path: "cardano/address/credential.html".to_string(),
+            },
+            DocLink {
+                indent: 1,
+                name: "assets".to_string(),
+                path: "cardano/assets.html".to_string(),
+            },
+            DocLink {
+                indent: 1,
+                name: "certificate".to_string(),
+                path: "cardano/certificate.html".to_string(),
+            },
         ]
     )
 }
