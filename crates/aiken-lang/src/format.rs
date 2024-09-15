@@ -1889,9 +1889,7 @@ impl<'comments> Formatter<'comments> {
                         .force_break(),
                 ),
 
-            UntypedExpr::Fn { .. } | UntypedExpr::List { .. } => {
-                line().append(self.expr(expr, false)).nest(INDENT).group()
-            }
+            UntypedExpr::Fn { .. } => line().append(self.expr(expr, false)).nest(INDENT).group(),
 
             UntypedExpr::When { .. } => line().append(self.expr(expr, false)).nest(INDENT).group(),
 
@@ -1976,6 +1974,7 @@ impl<'comments> Formatter<'comments> {
                     } else {
                         || break_(",", ", ")
                     };
+
                 let elements_document =
                     join(elements.iter().map(|e| self.pattern(e)), break_style());
                 let tail = tail.as_ref().map(|e| {

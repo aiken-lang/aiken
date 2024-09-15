@@ -298,6 +298,7 @@ fn format_nested_when_if() {
             when xs is {
             [] ->
               []
+            [x] -> [1, 2, 3]
             [_x, ..rest] ->
               drop(rest, n - 1)
           }

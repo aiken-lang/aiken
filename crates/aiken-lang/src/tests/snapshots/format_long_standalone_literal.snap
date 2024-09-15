@@ -3,8 +3,7 @@ source: crates/aiken-lang/src/tests/format.rs
 description: "Code:\n\ntest foo() {\n  let left =\n    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n  let right =\n    [\n      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,\n      0, 0, 0, 0,\n    ]\n  left == right\n}\n"
 ---
 test foo() {
-  let left =
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  let left = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   let right =
     [
       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,

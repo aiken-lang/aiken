@@ -9,6 +9,7 @@
 ### Changed
 
 - **aiken-project**: Fix documentation link-tree generation messing up with modules when re-inserting the same module. @KtorZ
+- **aiken-lang**: Fix formatter adding extra unnecessary newlines after literal lists clause values or assignments. @KtorZ
 
 ### Removed
 
@@ -28,6 +29,7 @@
 - **aiken-lang**: Adjust reification of `String` to be shown as plain UTF-8 text strings (instead of hex-encoded byte array). @KtorZ
 - **aiken-lang**: Fix formatting of long if-condition over multiline. @KtorZ & @Microproofs
 - **aiken-lang**: Fix formatting of standalone logical binary chains (`and` & `or`) in functions. @KtorZ
+- **uplc**: Fix script context generation failure on missing datum when evaluating transactions. @solidsnakedev
 
 ### Removed
 
