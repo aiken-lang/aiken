@@ -1,0 +1,12 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n    if first_asset\n    is\n    Pair(first_asset_policy, first_asset_tokens): Pair<PolicyId, Data> {\n        True\n        } else {\n            False }\n}\n"
+---
+fn foo() {
+  if first_asset
+  is Pair(first_asset_policy, first_asset_tokens): Pair<PolicyId, Data> {
+    True
+  } else {
+    False
+  }
+}

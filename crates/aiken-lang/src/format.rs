@@ -1323,10 +1323,7 @@ impl<'comments> Formatter<'comments> {
                             .group()
                     };
 
-                    break_("", " ")
-                        .append("is")
-                        .append(break_("", " "))
-                        .append(is)
+                    break_("", " ").append("is ").append(is)
                 }
                 None => nil(),
             })

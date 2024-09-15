@@ -1388,3 +1388,35 @@ fn callback_and_op() {
         "#
     );
 }
+
+#[test]
+fn multiline_if_is() {
+    assert_format!(
+        r#"
+        fn foo() {
+            if first_asset
+            is
+            Pair(first_asset_policy, first_asset_tokens): Pair<PolicyId, Data> {
+                True
+                } else {
+                    False }
+        }
+        "#
+    );
+}
+
+#[test]
+fn multiline_if_is_2() {
+    assert_format!(
+        r#"
+        fn foo() {
+            if [1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0]
+            is
+            Pair(first_asset_policy, first_asset_tokens): Pair<PolicyId, Data> {
+                True
+                } else {
+                    False }
+        }
+        "#
+    );
+}

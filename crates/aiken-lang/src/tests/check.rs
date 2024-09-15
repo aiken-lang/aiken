@@ -3264,3 +3264,15 @@ fn constant_usage() {
         }] if name == "some_string_constant"
     ));
 }
+
+#[test]
+fn wrong_arity_on_known_builtin() {
+    let source_code = r#"
+        const foo: Option<Int> = Some()
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::IncorrectFunctionCallArity { .. }))
+    ))
+}

@@ -1,0 +1,15 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n    if [1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0]\n    is\n    Pair(first_asset_policy, first_asset_tokens): Pair<PolicyId, Data> {\n        True\n        } else {\n            False }\n}\n"
+---
+fn foo() {
+  if [
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6,
+    7, 8, 9, 0,
+  ]
+  is Pair(first_asset_policy, first_asset_tokens): Pair<PolicyId, Data> {
+    True
+  } else {
+    False
+  }
+}
