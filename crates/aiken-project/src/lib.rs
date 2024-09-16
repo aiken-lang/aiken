@@ -285,7 +285,7 @@ where
                     property_max_success,
                 }
             },
-            json: json,
+            json,
         };
 
         self.compile(options)
