@@ -38,7 +38,7 @@ pub fn exec(
             p.docs(destination.clone(), include_dependencies)
         })
     } else {
-        with_project(directory.as_deref(), deny, |p| {
+        with_project(directory.as_deref(), deny, false, |p| {
             p.docs(destination.clone(), include_dependencies)
         })
     };

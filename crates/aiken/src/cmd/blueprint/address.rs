@@ -33,7 +33,7 @@ pub fn exec(
         mainnet,
     }: Args,
 ) -> miette::Result<()> {
-    with_project(directory.as_deref(), false, |p| {
+    with_project(directory.as_deref(), false, false, |p| {
         let title = module.as_ref().map(|m| {
             format!(
                 "{m}{}",
