@@ -194,7 +194,7 @@ impl EventListener for Terminal {
                         "modules": group_by_module(&tests).iter().map(|(module, results)| {
                             serde_json::json!({
                                 "name": module,
-                                "tests": results.iter().map(|r| fmt_test_json(r)).collect::<Vec<_>>(),
+                                "tests": results.iter().map(|r| fmt_test_json(r, max_mem, max_cpu, max_iter)).collect::<Vec<_>>(),
                                 "summary": fmt_test_summary_json(results)
                             })
                         }).collect::<Vec<_>>(),
@@ -517,7 +517,12 @@ fn fmt_test_summary<T>(tests: &[&TestResult<T, T>], styled: bool) -> String {
     )
 }
 
-fn fmt_test_json(result: &TestResult<UntypedExpr, UntypedExpr>) -> serde_json::Value {
+fn fmt_test_json(
+    result: &TestResult<UntypedExpr, UntypedExpr>,
+    max_mem: usize,
+    max_cpu: usize,
+    max_iter: usize,
+) -> serde_json::Value {
     let mut test = json!({
         "name": result.title(),
         "status": if result.is_success() { "PASS" } else { "FAIL" },
@@ -601,7 +606,7 @@ fn fmt_overall_summary_json(tests: &[TestResult<UntypedExpr, UntypedExpr>]) -> s
         "modules": modules.into_iter().map(|(module, results)| {
             json!({
                 "name": module,
-                "tests": results.iter().map(|r| fmt_test_json(r)).collect::<Vec<_>>(),
+                "tests": results.iter().map(|r| fmt_test_json(r, max_mem, max_cpu, max_iter)).collect::<Vec<_>>(),
                 "summary": fmt_test_summary_json(&results),
             })
         }).collect::<Vec<_>>(),
