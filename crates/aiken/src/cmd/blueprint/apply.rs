@@ -47,7 +47,7 @@ pub fn exec(
         validator,
     }: Args,
 ) -> miette::Result<()> {
-    with_project(None, false, |p| {
+    with_project(None, false, false, |p| {
         let title = module.as_ref().map(|m| {
             format!(
                 "{m}{}",
