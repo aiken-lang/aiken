@@ -88,7 +88,12 @@ pub fn default_filter(evt: &Event) -> bool {
     }
 }
 
-pub fn with_project<A>(directory: Option<&Path>, deny: bool, mut action: A) -> miette::Result<()>
+pub fn with_project<A>(
+    directory: Option<&Path>,
+    deny: bool,
+    json: bool,
+    mut action: A,
+) -> miette::Result<()>
 where
     A: FnMut(&mut Project<Terminal>) -> Result<(), Vec<crate::error::Error>>,
 {
@@ -116,35 +121,37 @@ where
 
     let warning_count = warnings.len();
 
-    for warning in &warnings {
-        warning.report()
-    }
+    if !json {
+        for warning in &warnings {
+            warning.report()
+        }
 
-    if let Err(errs) = build_result {
-        for err in &errs {
-            err.report()
+        if let Err(errs) = build_result {
+            for err in &errs {
+                err.report()
+            }
+
+            eprintln!(
+                "{}",
+                Summary {
+                    check_count: project.checks_count,
+                    warning_count,
+                    error_count: errs.len(),
+                }
+            );
+
+            return Err(ExitFailure::into_report());
         }
 
         eprintln!(
             "{}",
             Summary {
                 check_count: project.checks_count,
-                warning_count,
-                error_count: errs.len(),
+                error_count: 0,
+                warning_count
             }
         );
-
-        return Err(ExitFailure::into_report());
     }
-
-    eprintln!(
-        "{}",
-        Summary {
-            check_count: project.checks_count,
-            error_count: 0,
-            warning_count
-        }
-    );
 
     if warning_count > 0 && deny {
         Err(ExitFailure::into_report())
@@ -239,7 +246,7 @@ where
                     .if_supports_color(Stderr, |s| s.bold())
                     .if_supports_color(Stderr, |s| s.purple()),
             );
-            with_project(directory, false, &mut action).unwrap_or(())
+            with_project(directory, false, false, &mut action).unwrap_or(())
         }
     }
 }

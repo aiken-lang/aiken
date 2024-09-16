@@ -4,6 +4,7 @@ pub struct Options {
     pub code_gen_mode: CodeGenMode,
     pub tracing: Tracing,
     pub env: Option<String>,
+    pub json: bool,
 }
 
 impl Default for Options {
@@ -12,6 +13,7 @@ impl Default for Options {
             code_gen_mode: CodeGenMode::NoOp,
             tracing: Tracing::silent(),
             env: None,
+            json: false,
         }
     }
 }

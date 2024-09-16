@@ -6,6 +6,7 @@ use aiken_lang::{
     test_framework::{PropertyTestResult, TestResult, UnitTestResult},
 };
 use owo_colors::{OwoColorize, Stream::Stderr};
+use serde_json::json;
 use std::{collections::BTreeMap, fmt::Display, path::PathBuf};
 use uplc::machine::cost_model::ExBudget;
 
@@ -18,6 +19,7 @@ pub enum Event {
         name: String,
         version: String,
         root: PathBuf,
+        json: bool,
     },
     BuildingDocumentation {
         name: String,
@@ -37,10 +39,13 @@ pub enum Event {
         name: String,
         path: PathBuf,
     },
-    RunningTests,
+    RunningTests {
+        json: bool,
+    },
     FinishedTests {
         seed: u32,
         tests: Vec<TestResult<UntypedExpr, UntypedExpr>>,
+        json: bool,
     },
     WaitingForBuildDirLock,
     ResolvingPackages {
@@ -81,17 +86,20 @@ impl EventListener for Terminal {
                 name,
                 version,
                 root,
+                json,
             } => {
-                eprintln!(
-                    "{} {} {} ({})",
-                    "    Compiling"
-                        .if_supports_color(Stderr, |s| s.bold())
-                        .if_supports_color(Stderr, |s| s.purple()),
-                    name.if_supports_color(Stderr, |s| s.bold()),
-                    version,
-                    root.display()
-                        .if_supports_color(Stderr, |s| s.bright_blue())
-                );
+                if !json {
+                    eprintln!(
+                        "{} {} {} ({})",
+                        "    Compiling"
+                            .if_supports_color(Stderr, |s| s.bold())
+                            .if_supports_color(Stderr, |s| s.purple()),
+                        name.if_supports_color(Stderr, |s| s.bold()),
+                        version,
+                        root.display()
+                            .if_supports_color(Stderr, |s| s.bright_blue())
+                    );
+                }
             }
             Event::BuildingDocumentation {
                 name,
@@ -169,53 +177,70 @@ impl EventListener for Terminal {
                     name.if_supports_color(Stderr, |s| s.bright_blue()),
                 );
             }
-            Event::RunningTests => {
-                eprintln!(
-                    "{} {}",
-                    "      Testing"
-                        .if_supports_color(Stderr, |s| s.bold())
-                        .if_supports_color(Stderr, |s| s.purple()),
-                    "...".if_supports_color(Stderr, |s| s.bold())
-                );
+            Event::RunningTests { json } => {
+                if !json {
+                    eprintln!(
+                        "{} {}\n",
+                        "      Testing"
+                            .if_supports_color(Stderr, |s| s.bold())
+                            .if_supports_color(Stderr, |s| s.purple()),
+                        "...".if_supports_color(Stderr, |s| s.bold())
+                    );
+                }
             }
-            Event::FinishedTests { seed, tests } => {
+            Event::FinishedTests { seed, tests, json } => {
                 let (max_mem, max_cpu, max_iter) = find_max_execution_units(&tests);
 
-                for (module, results) in &group_by_module(&tests) {
-                    let title = module
-                        .if_supports_color(Stderr, |s| s.bold())
-                        .if_supports_color(Stderr, |s| s.blue())
-                        .to_string();
+                if json {
+                    let json_output = serde_json::json!({
+                        "seed": seed,
+                        "modules": group_by_module(&tests).iter().map(|(module, results)| {
+                            serde_json::json!({
+                                "name": module,
+                                "tests": results.iter().map(|r| fmt_test_json(r, max_mem, max_cpu, max_iter)).collect::<Vec<_>>(),
+                                "summary": fmt_test_summary_json(results)
+                            })
+                        }).collect::<Vec<_>>(),
+                        "summary": fmt_overall_summary_json(&tests)
+                    });
+                    println!("{}", serde_json::to_string_pretty(&json_output).unwrap());
+                } else {
+                    for (module, results) in &group_by_module(&tests) {
+                        let title = module
+                            .if_supports_color(Stderr, |s| s.bold())
+                            .if_supports_color(Stderr, |s| s.blue())
+                            .to_string();
 
-                    let tests = results
-                        .iter()
-                        .map(|r| fmt_test(r, max_mem, max_cpu, max_iter, true))
-                        .collect::<Vec<String>>()
-                        .join("\n");
+                        let tests = results
+                            .iter()
+                            .map(|r| fmt_test(r, max_mem, max_cpu, max_iter, true))
+                            .collect::<Vec<String>>()
+                            .join("\n");
 
-                    let seed_info = if results
-                        .iter()
-                        .any(|t| matches!(t, TestResult::PropertyTestResult { .. }))
-                    {
-                        format!(
-                            "with {opt}={seed} → ",
-                            opt = "--seed".if_supports_color(Stderr, |s| s.bold()),
-                            seed = format!("{seed}").if_supports_color(Stderr, |s| s.bold())
-                        )
-                    } else {
-                        String::new()
-                    };
+                        let seed_info = if results
+                            .iter()
+                            .any(|t| matches!(t, TestResult::PropertyTestResult { .. }))
+                        {
+                            format!(
+                                "with {opt}={seed} → ",
+                                opt = "--seed".if_supports_color(Stderr, |s| s.bold()),
+                                seed = format!("{seed}").if_supports_color(Stderr, |s| s.bold())
+                            )
+                        } else {
+                            String::new()
+                        };
 
-                    let summary = format!("{}{}", seed_info, fmt_test_summary(results, true));
-                    println!(
-                        "\n{}",
-                        pretty::indent(
-                            &pretty::open_box(&title, &tests, &summary, |border| border
-                                .if_supports_color(Stderr, |s| s.bright_black())
-                                .to_string()),
-                            4
-                        )
-                    );
+                        let summary = format!("{}{}", seed_info, fmt_test_summary(results, true));
+                        println!(
+                            "{}\n",
+                            pretty::indent(
+                                &pretty::open_box(&title, &tests, &summary, |border| border
+                                    .if_supports_color(Stderr, |s| s.bright_black())
+                                    .to_string()),
+                                4
+                            )
+                        );
+                    }
                 }
 
                 if !tests.is_empty() {
@@ -495,7 +520,105 @@ fn fmt_test_summary<T>(tests: &[&TestResult<T, T>], styled: bool) -> String {
     )
 }
 
-fn group_by_module<T>(results: &Vec<TestResult<T, T>>) -> BTreeMap<String, Vec<&TestResult<T, T>>> {
+fn fmt_test_json(
+    result: &TestResult<UntypedExpr, UntypedExpr>,
+    max_mem: usize,
+    max_cpu: usize,
+    max_iter: usize,
+) -> serde_json::Value {
+    let mut test = json!({
+        "name": result.title(),
+        "status": if result.is_success() { "PASS" } else { "FAIL" },
+    });
+
+    match result {
+        TestResult::UnitTestResult(UnitTestResult {
+            spent_budget,
+            assertion,
+            test: unit_test,
+            ..
+        }) => {
+            test["execution_units"] = json!({
+                "memory": spent_budget.mem,
+                "cpu": spent_budget.cpu,
+            });
+            if !result.is_success() {
+                if let Some(assertion) = assertion {
+                    test["assertion"] = json!({
+                        "message": assertion.to_string(Stderr, false),
+                        "expected_to_fail": matches!(unit_test.on_test_failure, OnTestFailure::SucceedEventually | OnTestFailure::SucceedImmediately),
+                    });
+                }
+            }
+        }
+        TestResult::PropertyTestResult(PropertyTestResult {
+            iterations,
+            labels,
+            counterexample,
+            ..
+        }) => {
+            test["iterations"] = json!(iterations);
+            test["labels"] = json!(labels);
+            test["counterexample"] = match counterexample {
+                Ok(Some(expr)) => json!(Formatter::new().expr(expr, false).to_pretty_string(60)),
+                Ok(None) => json!(null),
+                Err(err) => json!({"error": err.to_string()}),
+            };
+        }
+    }
+
+    if !result.traces().is_empty() {
+        test["traces"] = json!(result.traces());
+    }
+
+    test
+}
+
+fn fmt_test_summary_json(tests: &[&TestResult<UntypedExpr, UntypedExpr>]) -> serde_json::Value {
+    let total = tests.len();
+    let passed = tests.iter().filter(|t| t.is_success()).count();
+    let failed = total - passed;
+
+    json!({
+        "total": total,
+        "passed": passed,
+        "failed": failed,
+    })
+}
+
+fn fmt_overall_summary_json(tests: &[TestResult<UntypedExpr, UntypedExpr>]) -> serde_json::Value {
+    let total = tests.len();
+    let passed = tests.iter().filter(|t| t.is_success()).count();
+    let failed = total - passed;
+
+    let modules = group_by_module(tests);
+    let module_count = modules.len();
+
+    let (max_mem, max_cpu, max_iter) = find_max_execution_units(tests);
+
+    json!({
+        "total_tests": total,
+        "passed_tests": passed,
+        "failed_tests": failed,
+        "module_count": module_count,
+        "max_execution_units": {
+            "memory": max_mem,
+            "cpu": max_cpu,
+        },
+        "max_iterations": max_iter,
+        "modules": modules.into_iter().map(|(module, results)| {
+            json!({
+                "name": module,
+                "tests": results.iter().map(|r| fmt_test_json(r, max_mem, max_cpu, max_iter)).collect::<Vec<_>>(),
+                "summary": fmt_test_summary_json(&results),
+            })
+        }).collect::<Vec<_>>(),
+    })
+}
+
+fn group_by_module(
+    results: &[TestResult<UntypedExpr, UntypedExpr>],
+) -> BTreeMap<String, Vec<&TestResult<UntypedExpr, UntypedExpr>>> {
     let mut modules = BTreeMap::new();
     for r in results {
         let xs: &mut Vec<&TestResult<_, _>> = modules.entry(r.module().to_string()).or_default();
