@@ -1007,9 +1007,9 @@ impl BuiltinCosts {
             },
             verify_ed25519_signature: CostingFun {
                 mem: ThreeArguments::ConstantCost(10),
-                cpu: ThreeArguments::LinearInZ(LinearSize {
-                    intercept: 57996947,
-                    slope: 18975,
+                cpu: ThreeArguments::LinearInY(LinearSize {
+                    intercept: 53384111,
+                    slope: 14333,
                 }),
             },
             verify_ecdsa_secp256k1_signature: CostingFun {
