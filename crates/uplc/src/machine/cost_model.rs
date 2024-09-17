@@ -842,9 +842,9 @@ impl BuiltinCosts {
                     intercept: 0,
                     slope: 1,
                 }),
-                cpu: TwoArguments::AddedSizes(AddedSizes {
-                    intercept: 69522,
-                    slope: 11687,
+                cpu: TwoArguments::MultipliedSizes(MultipliedSizes {
+                    intercept: 90434,
+                    slope: 519,
                 }),
             },
             divide_integer: CostingFun {
@@ -854,10 +854,10 @@ impl BuiltinCosts {
                     minimum: 1,
                 }),
                 cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
-                    constant: 196500,
+                    constant: 85848,
                     model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
-                        intercept: 453240,
-                        slope: 220,
+                        intercept: 228465,
+                        slope: 122,
                     })),
                 }),
             },
@@ -868,10 +868,10 @@ impl BuiltinCosts {
                     minimum: 1,
                 }),
                 cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
-                    constant: 196500,
+                    constant: 85848,
                     model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
-                        intercept: 453240,
-                        slope: 220,
+                        intercept: 228465,
+                        slope: 122,
                     })),
                 }),
             },
@@ -882,10 +882,10 @@ impl BuiltinCosts {
                     minimum: 1,
                 }),
                 cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
-                    constant: 196500,
+                    constant: 85848,
                     model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
-                        intercept: 453240,
-                        slope: 220,
+                        intercept: 228465,
+                        slope: 122,
                     })),
                 }),
             },
@@ -896,10 +896,10 @@ impl BuiltinCosts {
                     minimum: 1,
                 }),
                 cpu: TwoArguments::ConstAboveDiagonal(ConstantOrTwoArguments {
-                    constant: 196500,
+                    constant: 85848,
                     model: Box::new(TwoArguments::MultipliedSizes(MultipliedSizes {
-                        intercept: 453240,
-                        slope: 220,
+                        intercept: 228465,
+                        slope: 122,
                     })),
                 }),
             },
