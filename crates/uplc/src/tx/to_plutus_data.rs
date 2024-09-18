@@ -872,9 +872,10 @@ impl<'a> ToPlutusData for WithWrappedTransactionId<'a, ScriptPurpose> {
             ScriptPurpose::Spending(out_ref, ()) => {
                 wrap_with_constr(1, WithWrappedTransactionId(out_ref).to_plutus_data())
             }
-            ScriptPurpose::Rewarding(stake_credential) => {
-                wrap_with_constr(2, stake_credential.to_plutus_data())
-            }
+            ScriptPurpose::Rewarding(stake_credential) => wrap_with_constr(
+                2,
+                WithWrappedStakeCredential(stake_credential).to_plutus_data(),
+            ),
             ScriptPurpose::Certifying(_, dcert) => {
                 wrap_with_constr(3, WithPartialCertificates(dcert).to_plutus_data())
             }
@@ -1240,6 +1241,12 @@ impl<'a> ToPlutusData for WithWrappedStakeCredential<'a, KeyValuePairs<Address, 
                 .collect::<Vec<_>>(),
         )
         .to_plutus_data()
+    }
+}
+
+impl<'a> ToPlutusData for WithWrappedStakeCredential<'a, StakeCredential> {
+    fn to_plutus_data(&self) -> PlutusData {
+        wrap_with_constr(0, self.0.to_plutus_data())
     }
 }
 
