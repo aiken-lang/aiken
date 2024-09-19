@@ -1211,7 +1211,8 @@ impl UntypedExpr {
                     }
 
                     Err(format!(
-                        "invalid type annotation {tipo:?} for constructor: {tag:?} with {fields:?}"
+                        "invalid type annotation {tipo:?} for {ix}{} constructor with fields: {fields:?}",
+                        ordinal::Ordinal::<usize>(ix + 1).suffix(),
                     ))
                 }
 
