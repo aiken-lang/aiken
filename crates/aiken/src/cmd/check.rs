@@ -84,6 +84,10 @@ pub struct Args {
     /// [optional]
     #[clap(short, long, value_parser=trace_level_parser(), default_value_t=TraceLevel::Verbose, verbatim_doc_comment)]
     trace_level: TraceLevel,
+
+    /// Output JSON (useful for scripting & automation)
+    #[clap(long)]
+    json: bool,
 }
 
 pub fn exec(
@@ -100,6 +104,7 @@ pub fn exec(
         seed,
         max_success,
         env,
+        json,
     }: Args,
 ) -> miette::Result<()> {
     let mut rng = rand::thread_rng();
@@ -120,10 +125,11 @@ pub fn exec(
                     None => Tracing::All(trace_level),
                 },
                 env.clone(),
+                json,
             )
         })
     } else {
-        with_project(directory.as_deref(), deny, |p| {
+        with_project(directory.as_deref(), deny, json, |p| {
             p.check(
                 skip_tests,
                 match_tests.clone(),
@@ -136,6 +142,7 @@ pub fn exec(
                     None => Tracing::All(trace_level),
                 },
                 env.clone(),
+                json,
             )
         })
     };
