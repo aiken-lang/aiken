@@ -9,12 +9,18 @@ use crate::{
 use cryptoxide::{blake2b::Blake2b, digest::Digest};
 use indexmap::IndexMap;
 use itertools::Itertools;
-use owo_colors::{OwoColorize, Stream};
+use owo_colors::{OwoColorize, Stream, Stream::Stderr};
 use pallas_primitives::alonzo::{Constr, PlutusData};
 use patricia_tree::PatriciaMap;
 use std::{
-    borrow::Borrow, collections::BTreeMap, convert::TryFrom, fmt::Debug, ops::Deref, path::PathBuf,
+    borrow::Borrow,
+    collections::BTreeMap,
+    convert::TryFrom,
+    fmt::{Debug, Display},
+    ops::Deref,
+    path::PathBuf,
     rc::Rc,
+    time::Duration,
 };
 use uplc::{
     ast::{Constant, Data, Name, NamedDeBruijn, Program, Term},
@@ -199,7 +205,7 @@ impl UnitTest {
 }
 
 /// ----- PropertyTest -----------------------------------------------------------------
-///
+
 #[derive(Debug, Clone)]
 pub struct PropertyTest {
     pub input_path: PathBuf,
@@ -229,6 +235,42 @@ pub struct Fuzzer<T> {
 pub struct FuzzerError {
     traces: Vec<String>,
     uplc_error: uplc::machine::Error,
+}
+
+#[derive(Debug, Clone)]
+pub enum Event {
+    Simplifying { choices: usize },
+    Simplified { duration: Duration, steps: usize },
+}
+
+impl Display for Event {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            Event::Simplifying { choices } => f.write_str(&format!(
+                "{} {}",
+                "  Simplifying"
+                    .if_supports_color(Stderr, |s| s.bold())
+                    .if_supports_color(Stderr, |s| s.purple()),
+                format!("counterexample from {choices} choices")
+                    .if_supports_color(Stderr, |s| s.bold()),
+            )),
+            Event::Simplified { duration, steps } => f.write_str(&format!(
+                "{} {}",
+                "   Simplified"
+                    .if_supports_color(Stderr, |s| s.bold())
+                    .if_supports_color(Stderr, |s| s.purple()),
+                format!(
+                    "counterexample in {} after {steps} steps",
+                    if duration.as_secs() == 0 {
+                        format!("{}ms", duration.as_millis())
+                    } else {
+                        format!("{}s", duration.as_secs())
+                    }
+                )
+                .if_supports_color(Stderr, |s| s.bold()),
+            )),
+        }
+    }
 }
 
 impl PropertyTest {
@@ -626,6 +668,16 @@ impl<'a> Counterexample<'a> {
     pub fn simplify(&mut self) {
         let mut prev;
 
+        let mut steps = 0;
+        let now = std::time::Instant::now();
+
+        eprintln!(
+            "{}",
+            Event::Simplifying {
+                choices: self.choices.len(),
+            }
+        );
+
         loop {
             prev = self.choices.clone();
 
@@ -644,6 +696,7 @@ impl<'a> Counterexample<'a> {
                 while !underflow {
                     if i >= self.choices.len() {
                         (i, underflow) = i.overflowing_sub(1);
+                        steps += 1;
                         continue;
                     }
 
@@ -674,6 +727,8 @@ impl<'a> Counterexample<'a> {
 
                         (i, underflow) = i.overflowing_sub(1);
                     }
+
+                    steps += 1;
                 }
 
                 k /= 2
@@ -687,6 +742,7 @@ impl<'a> Counterexample<'a> {
                 while k > 1 {
                     let mut i = self.choices.len();
                     while i >= k {
+                        steps += 1;
                         let ivs = (i - k..i).map(|j| (j, 0)).collect::<Vec<_>>();
                         i -= if self.replace(ivs) { k } else { 1 }
                     }
@@ -698,6 +754,7 @@ impl<'a> Counterexample<'a> {
                 // smaller number than doing multiple subtractions would.
                 let (mut i, mut underflow) = (self.choices.len() - 1, false);
                 while !underflow {
+                    steps += 1;
                     self.binary_search_replace(0, self.choices[i], |v| vec![(i, v)]);
                     (i, underflow) = i.overflowing_sub(1);
                 }
@@ -707,6 +764,7 @@ impl<'a> Counterexample<'a> {
                 while k > 1 {
                     let mut i = self.choices.len() - 1;
                     while i >= k {
+                        steps += 1;
                         let (from, to) = (i - k, i);
                         self.replace(
                             (from..to)
@@ -740,6 +798,8 @@ impl<'a> Counterexample<'a> {
                             self.binary_search_replace(0, iv, |v| vec![(i, v), (j, jv + (iv - v))]);
                         }
 
+                        steps += 1;
+
                         j -= 1
                     }
                 }
@@ -751,6 +811,14 @@ impl<'a> Counterexample<'a> {
                 break;
             }
         }
+
+        eprintln!(
+            "{}",
+            Event::Simplified {
+                duration: now.elapsed(),
+                steps,
+            }
+        );
     }
 
     /// Try to replace a value with a smaller value by doing a binary search between
@@ -1011,7 +1079,7 @@ impl PropertyTestResult<PlutusData> {
             counterexample: self.counterexample.map(|ok| {
                 ok.map(|counterexample| {
                     UntypedExpr::reify_data(data_types, counterexample, &self.test.fuzzer.type_info)
-                        .expect("Failed to reify counterexample?")
+                        .expect("failed to reify counterexample?")
                 })
             }),
             iterations: self.iterations,

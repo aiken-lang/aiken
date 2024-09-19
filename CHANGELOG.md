@@ -9,8 +9,9 @@
 ### Changed
 
 - **aiken-project**: Fix documentation link-tree generation messing up with modules when re-inserting the same module. @KtorZ
+- **aiken-project**: Provide intermediate feedback when looking for counterexamples during property tests. @KtorZ
 - **aiken-lang**: Fix formatter adding extra unnecessary newlines after literal lists clause values or assignments. @KtorZ
-- **aiken0lang**: Fix formatting of long multi-line if/is expressions. @KtorZ
+- **aiken-lang**: Fix formatting of long multi-line if/is expressions. @KtorZ
 
 ### Removed
 
