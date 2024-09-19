@@ -11,13 +11,13 @@ validator direct_proxy {
           RegisterDelegateRepresentative {
             delegate_representative: credential,
             ..
-          } | 
+          } |
           UnregisterDelegateRepresentative {
             delegate_representative: credential,
             ..
-          } | 
-          RegisterCredential { credential, .. } | 
-          UnregisterCredential { credential, .. } | 
+          } |
+          RegisterCredential { credential, .. } |
+          UnregisterCredential { credential, .. } |
           RegisterAndDelegateCredential { credential, .. } ->
             credential == Script(policy_id)
           _ -> False
