@@ -239,6 +239,10 @@ impl EventListener for Terminal {
                         );
                     }
                 }
+
+                if !tests.is_empty() {
+                    println!();
+                }
             }
             Event::ResolvingPackages { name } => {
                 eprintln!(
