@@ -12,6 +12,7 @@
 - **aiken-project**: Provide intermediate feedback when looking for counterexamples during property tests. @KtorZ
 - **aiken-lang**: Fix formatter adding extra unnecessary newlines after literal lists clause values or assignments. @KtorZ
 - **aiken-lang**: Fix formatting of long multi-line if/is expressions. @KtorZ
+- **uplc**: Fix cost-models for PlutusV1 & PlutusV2. @MicroProofs
 
 ### Removed
 
