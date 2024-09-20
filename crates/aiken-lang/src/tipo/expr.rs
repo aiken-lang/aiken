@@ -1388,7 +1388,36 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         // If `expect` is explicitly used, we still check exhaustiveness but instead of returning an
         // error we emit a warning which explains that using `expect` is unnecessary.
         match kind {
-            AssignmentKind::Is => (),
+            AssignmentKind::Is => {
+                let pattern_var_name = match pattern {
+                    Pattern::Var { ref name, .. } => Some(name),
+                    _ => None,
+                };
+
+                let value_var_name = match typed_value {
+                    TypedExpr::Var { ref name, .. } => Some(name),
+                    _ => None,
+                };
+
+                // In case where we have no explicit pattern, we end up introducing a new let
+                // binding with the same name as the value. However, the assigned value may not
+                // necessarily be used, resulting in an annoying warning when one only wants to
+                // assert a type.
+                //
+                // if foo is Int { // foo is unused here but shouldn't generated warnings.
+                //   True
+                // } else {
+                //   False
+                // }
+                //
+                // The following check removes the warning by marking the new let-binding as used
+                // in this particular context.
+                if let Some(pattern_var_name) = pattern_var_name {
+                    if Some(pattern_var_name) == value_var_name {
+                        self.environment.increment_usage(pattern_var_name);
+                    }
+                }
+            }
             AssignmentKind::Let { .. } => {
                 self.environment
                     .check_exhaustiveness(&[&pattern], location, true)?
