@@ -24,6 +24,17 @@ impl From<bool> for ExpectLevel {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum FunctionVariants {
+    Standard(Vec<String>),
+    Recursive {
+        params: Vec<String>,
+        recursive_nonstatic_params: Vec<String>,
+    },
+    Cyclic(Vec<Vec<String>>),
+    Constant,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Air {
     // Primitives
     Int {
@@ -67,17 +78,8 @@ pub enum Air {
     DefineFunc {
         func_name: String,
         module_name: String,
-        params: Vec<String>,
-        recursive: bool,
-        recursive_nonstatic_params: Vec<String>,
         variant_name: String,
-    },
-    DefineCyclicFuncs {
-        func_name: String,
-        module_name: String,
-        variant_name: String,
-        // just the params
-        contained_functions: Vec<Vec<String>>,
+        variant: FunctionVariants,
     },
     Fn {
         params: Vec<String>,
