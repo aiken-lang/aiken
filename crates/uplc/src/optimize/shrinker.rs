@@ -1152,7 +1152,7 @@ impl Program<Name> {
                         {
                             *term = Term::var(format!("blst_p1_index_{}", index));
                         } else {
-                            blst_p1_list.push(blst_p1.as_ref().clone());
+                            blst_p1_list.push(*blst_p1.as_ref());
                             *term = Term::var(format!("blst_p1_index_{}", blst_p1_list.len() - 1));
                         }
                     }
@@ -1163,7 +1163,7 @@ impl Program<Name> {
                         {
                             *term = Term::var(format!("blst_p2_index_{}", index));
                         } else {
-                            blst_p2_list.push(blst_p2.as_ref().clone());
+                            blst_p2_list.push(*blst_p2.as_ref());
                             *term = Term::var(format!("blst_p2_index_{}", blst_p2_list.len() - 1));
                         }
                     }
