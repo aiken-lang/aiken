@@ -2233,7 +2233,14 @@ impl<'a> CodeGenerator<'a> {
                     IndexMap::new()
                 };
 
-                let data_type_name = format!("__expect_{}_{}", data_type.name, data_type_variant);
+                let data_type_name = if otherwise.is_some() {
+                    format!(
+                        "__expect_{}_{}_otherwise",
+                        data_type.name, data_type_variant
+                    )
+                } else {
+                    format!("__expect_{}_{}", data_type.name, data_type_variant)
+                };
                 let function = self.code_gen_functions.get(&data_type_name);
 
                 // mutate code_gen_funcs and defined_data_types in this if branch
