@@ -3,7 +3,7 @@ use crate::{
     ast::{Constant, Data, Name, NamedDeBruijn, Program, Term, Type},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
     builtins::DefaultFunction,
-    machine::cost_model::ExBudget,
+    machine::{cost_model::ExBudget, runtime::Compressable},
 };
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -1122,6 +1122,71 @@ impl Program<Name> {
                 } else {
                     Term::Builtin(default_func).force().force()
                 });
+        }
+
+        let mut program = Program {
+            version: program.version,
+            term,
+        };
+
+        let mut interner = CodeGenInterner::new();
+
+        interner.program(&mut program);
+
+        let program = Program::<NamedDeBruijn>::try_from(program).unwrap();
+
+        Program::<Name>::try_from(program).unwrap()
+    }
+
+    pub fn bls381_compressor(self) -> Self {
+        let mut blst_p1_list = vec![];
+        let mut blst_p2_list = vec![];
+
+        let program = self.traverse_uplc_with(true, &mut |_id, term, _arg_stack, _scope| {
+            if let Term::Constant(con) = term {
+                match con.as_ref() {
+                    Constant::Bls12_381G1Element(blst_p1) => {
+                        if let Some(index) = blst_p1_list
+                            .iter()
+                            .position(|item| item == blst_p1.as_ref())
+                        {
+                            *term = Term::var(format!("blst_p1_index_{}", index));
+                        } else {
+                            blst_p1_list.push(blst_p1.as_ref().clone());
+                            *term = Term::var(format!("blst_p1_index_{}", blst_p1_list.len() - 1));
+                        }
+                    }
+                    Constant::Bls12_381G2Element(blst_p2) => {
+                        if let Some(index) = blst_p2_list
+                            .iter()
+                            .position(|item| item == blst_p2.as_ref())
+                        {
+                            *term = Term::var(format!("blst_p2_index_{}", index));
+                        } else {
+                            blst_p2_list.push(blst_p2.as_ref().clone());
+                            *term = Term::var(format!("blst_p2_index_{}", blst_p2_list.len() - 1));
+                        }
+                    }
+                    _ => (),
+                }
+            }
+        });
+        let mut term = program.term;
+
+        for (index, blst_p1) in blst_p1_list.into_iter().enumerate() {
+            let compressed = blst_p1.compress();
+
+            term = term
+                .lambda(format!("blst_p1_index_{}", index))
+                .apply(Term::bls12_381_g1_uncompress().apply(Term::byte_string(compressed)));
+        }
+
+        for (index, blst_p2) in blst_p2_list.into_iter().enumerate() {
+            let compressed = blst_p2.compress();
+
+            term = term
+                .lambda(format!("blst_p2_index_{}", index))
+                .apply(Term::bls12_381_g2_uncompress().apply(Term::byte_string(compressed)));
         }
 
         let mut program = Program {
