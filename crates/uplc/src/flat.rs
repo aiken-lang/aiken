@@ -676,7 +676,9 @@ impl<'b> Decode<'b> for Constant {
                     de::Error::Message(format!("Failed to uncompress p1: {}", err))
                 })?;
 
-                Err(de::Error::Message("BLS12-381 G1 points are not supported for flat decoding.".to_string()))
+                Err(de::Error::Message(
+                    "BLS12-381 G1 points are not supported for flat decoding.".to_string(),
+                ))
             }
 
             [10] => {
@@ -686,7 +688,9 @@ impl<'b> Decode<'b> for Constant {
                     de::Error::Message(format!("Failed to uncompress p2: {}", err))
                 })?;
 
-                Err(de::Error::Message("BLS12-381 G2 points are not supported for flat decoding.".to_string()))
+                Err(de::Error::Message(
+                    "BLS12-381 G2 points are not supported for flat decoding.".to_string(),
+                ))
             }
             [11] => Err(de::Error::Message(
                 "BLS12-381 ML results are not supported for flat decoding".to_string(),
@@ -736,7 +740,9 @@ fn decode_constant_value(typ: Rc<Type>, d: &mut Decoder) -> Result<Constant, de:
             let _p1 = blst::blst_p1::uncompress(&p1)
                 .map_err(|err| de::Error::Message(format!("Failed to uncompress p1: {}", err)))?;
 
-            Err(de::Error::Message("BLS12-381 G1 points are not supported for flat decoding.".to_string()))
+            Err(de::Error::Message(
+                "BLS12-381 G1 points are not supported for flat decoding.".to_string(),
+            ))
         }
         Type::Bls12_381G2Element => {
             let p2 = Vec::<u8>::decode(d)?;
@@ -744,7 +750,9 @@ fn decode_constant_value(typ: Rc<Type>, d: &mut Decoder) -> Result<Constant, de:
             let _p2 = blst::blst_p2::uncompress(&p2)
                 .map_err(|err| de::Error::Message(format!("Failed to uncompress p2: {}", err)))?;
 
-            Err(de::Error::Message("BLS12-381 G2 points are not supported for flat decoding.".to_string()))
+            Err(de::Error::Message(
+                "BLS12-381 G2 points are not supported for flat decoding.".to_string(),
+            ))
         }
         Type::Bls12_381MlResult => Err(de::Error::Message(
             "BLS12-381 ML results are not supported for flat decoding".to_string(),
