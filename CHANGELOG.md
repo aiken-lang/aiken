@@ -13,6 +13,7 @@
 - **aiken-lang**: Fix formatter adding extra unnecessary newlines after literal lists clause values or assignments. @KtorZ
 - **aiken-lang**: Fix formatting of long multi-line if/is expressions. @KtorZ
 - **aiken-lang**: Fix extraneous white-space added by the formatter after multiline alternative patterns. @KtorZ
+- **aiken-lang**: Fix incorrect warning about unused variable when softcasting without explicit right-pattern. @KtorZ
 - **uplc**: Fix cost-models for PlutusV1 & PlutusV2. @MicroProofs
 
 ### Removed

@@ -3276,3 +3276,22 @@ fn wrong_arity_on_known_builtin() {
         Err((_, Error::IncorrectFunctionCallArity { .. }))
     ))
 }
+
+#[test]
+fn softcasting_unused_let_binding() {
+    let source_code = r#"
+        pub fn is_int(data: Data) -> Bool {
+          if data is Int {
+            True
+          } else {
+            False
+          }
+        }
+    "#;
+
+    let result = dbg!(check(parse(source_code)));
+    assert!(result.is_ok());
+
+    let (warnings, _) = result.unwrap();
+    assert!(warnings.is_empty(), "should not contain any warnings");
+}
