@@ -6326,3 +6326,154 @@ fn cast_never() {
 
     assert_uplc(src, program, false, true)
 }
+
+#[test]
+fn hard_soft_cast() {
+    let src = r#"
+        type Foo{
+          Bar
+          Bax
+        }
+
+        test hard_soft_cast() {
+          let x: Data = Bar
+          if x is Foo {
+            True
+          } else {
+            expect y: Foo = x
+            y == y
+          }
+        }
+    "#;
+
+    let otherwise = &Term::var("otherwise");
+
+    let soft_cast = Term::fst_pair()
+        .apply(Term::unconstr_data().apply(Term::var("__param_0")))
+        .as_var("index", |index| {
+            Term::equals_integer()
+                .apply(Term::integer(0.into()))
+                .apply(Term::Var(index.clone()))
+                .delayed_if_then_else(
+                    Term::snd_pair()
+                        .apply(Term::unconstr_data().apply(Term::var("__param_0")))
+                        .delay_empty_choose_list(Term::var("then").force(), otherwise.clone()),
+                    Term::equals_integer()
+                        .apply(Term::integer(1.into()))
+                        .apply(Term::Var(index.clone()))
+                        .delay_true_if_then_else(
+                            Term::snd_pair()
+                                .apply(Term::unconstr_data().apply(Term::var("__param_0")))
+                                .delay_empty_choose_list(
+                                    Term::var("then").force(),
+                                    otherwise.clone(),
+                                ),
+                            otherwise.clone(),
+                        ),
+                )
+        })
+        .lambda("otherwise")
+        .lambda("then")
+        .lambda("__param_0");
+
+    let hard_cast = Term::fst_pair()
+        .apply(Term::unconstr_data().apply(Term::var("__param_0")))
+        .as_var("index", |index| {
+            Term::equals_integer()
+                .apply(Term::integer(0.into()))
+                .apply(Term::Var(index.clone()))
+                .delayed_if_then_else(
+                    Term::snd_pair()
+                        .apply(Term::unconstr_data().apply(Term::var("__param_0")))
+                        .delayed_choose_list(Term::var("then").force(), Term::Error),
+                    Term::equals_integer()
+                        .apply(Term::integer(1.into()))
+                        .apply(Term::Var(index.clone()))
+                        .delayed_if_then_else(
+                            Term::snd_pair()
+                                .apply(Term::unconstr_data().apply(Term::var("__param_0")))
+                                .delayed_choose_list(Term::var("then").force(), Term::Error),
+                            Term::Error,
+                        ),
+                )
+        })
+        .lambda("then")
+        .lambda("__param_0");
+
+    let program_traces = Term::data(Data::constr(0, vec![]))
+        .as_var("x", |x| {
+            Term::choose_data_constr(
+                x.clone(),
+                |val| {
+                    Term::var("__Foo__otherwise")
+                        .apply(val.clone())
+                        .apply(
+                            Term::equals_data()
+                                .apply(Term::var("y"))
+                                .apply(Term::var("y"))
+                                .lambda("y")
+                                .apply(val)
+                                .delay(),
+                        )
+                        .apply(Term::var("expecty:Foo=x"))
+                },
+                &Term::var("expecty:Foo=x"),
+            )
+            .delay()
+            .as_var("acc", |acc| {
+                Term::choose_data_constr(
+                    x,
+                    |val| {
+                        Term::var("__Foo__otherwise")
+                            .apply(val)
+                            .apply(Term::bool(true).delay())
+                            .apply(Term::Var(acc.clone()))
+                    },
+                    &Term::Var(acc.clone()),
+                )
+            })
+        })
+        .lambda("__Foo__otherwise")
+        .apply(soft_cast.clone())
+        .lambda("expecty:Foo=x")
+        .apply(
+            Term::Error
+                .delayed_trace(Term::string("expect y: Foo = x"))
+                .delay(),
+        );
+
+    assert_uplc(src, program_traces, false, true);
+
+    let program = Term::data(Data::constr(0, vec![]))
+        .as_var("x", |x| {
+            Term::var("__Foo_")
+                .lambda("__Foo_")
+                .apply(hard_cast)
+                .apply(Term::Var(x.clone()))
+                .apply(
+                    Term::equals_data()
+                        .apply(Term::var("y"))
+                        .apply(Term::var("y"))
+                        .lambda("y")
+                        .apply(Term::Var(x.clone()))
+                        .delay(),
+                )
+                .delay()
+                .as_var("acc", |acc| {
+                    Term::choose_data_constr(
+                        x,
+                        |val| {
+                            Term::var("__Foo__otherwise")
+                                .apply(val)
+                                .apply(Term::bool(true).delay())
+                                .apply(Term::Var(acc.clone()))
+                        },
+                        &Term::Var(acc.clone()),
+                    )
+                })
+        })
+        .lambda("__Foo__otherwise")
+        .apply(soft_cast.clone());
+
+    assert_uplc(src, program, false, false);
+}
