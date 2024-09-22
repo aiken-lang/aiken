@@ -10,6 +10,22 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          key: ${{ runner.os }}-cache-build-v${{ inputs.cache-version }}
+      - name: Build release
+        run: |
+          cargo install --path crates/aiken -F bundle_openssl --target-dir dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aiken-${{ github.sha }}-${{ runner.arch }}-${{ runner.os }}
+          path: dist/release/aiken
+
   acceptance_tests:
     runs-on: ubuntu-latest
     steps:

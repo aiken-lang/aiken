@@ -1,20 +1,21 @@
 use aiken_project::{config, pretty};
+#[cfg(not(target_os = "windows"))]
+use cmd::completion;
 use cmd::{
     blueprint::{self, address},
     build, check, docs, export, fmt, lsp, new,
     packages::{self, add},
     tx, uplc, Cmd,
 };
-
-#[cfg(not(target_os = "windows"))]
-use cmd::completion;
-
 use owo_colors::OwoColorize;
 
 mod cmd;
 
 fn main() -> miette::Result<()> {
     panic_handler();
+
+    #[cfg(feature = "bundle_openssl")]
+    openssl_probe::init_ssl_cert_env_vars();
 
     match Cmd::default() {
         Cmd::New(args) => new::exec(args),
