@@ -20,7 +20,7 @@ jobs:
           key: ${{ runner.os }}-cache-build-v${{ inputs.cache-version }}
       - name: Build release
         run: |
-          sudo apt-get install -y pkg-config libssl-dev
+          sudo apt-get install -y pkg-config libssl-dev musl musl-dev musl-tools
           rustup target add x86_64-unknown-linux-musl
           cargo install --path crates/aiken -F bundle_openssl --target=x86_64-unknown-linux-musl --target-dir dist
       - uses: actions/upload-artifact@v4
