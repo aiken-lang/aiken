@@ -20,7 +20,7 @@ jobs:
           key: ${{ runner.os }}-cache-build-v${{ inputs.cache-version }}
       - name: Build release
         run: |
-          cargo install --path crates/aiken -F bundle_openssl --target-dir dist
+          cargo install --path crates/aiken --target=x86_64-unknown-linux-musl --target-dir dist
       - uses: actions/upload-artifact@v4
         with:
           name: aiken-${{ github.sha }}-${{ runner.arch }}-${{ runner.os }}
