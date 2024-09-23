@@ -22,11 +22,13 @@ jobs:
         run: |
           sudo apt-get install -y pkg-config libssl-dev musl musl-dev musl-tools
           rustup target add x86_64-unknown-linux-musl
-          cargo install --path crates/aiken -F bundle_openssl --target=x86_64-unknown-linux-musl --target-dir dist
+          cargo install --path=crates/aiken -F bundle_openssl --target=x86_64-unknown-linux-musl
+          mv $(which aiken) aiken
+          ldd aiken
       - uses: actions/upload-artifact@v4
         with:
           name: aiken-${{ github.sha }}-${{ runner.arch }}-${{ runner.os }}
-          path: dist/release/aiken
+          path: ./aiken
 
   acceptance_tests:
     runs-on: ubuntu-latest

@@ -20,7 +20,7 @@ tap = "aiken-lang/homebrew-tap"
 targets = [
     "aarch64-apple-darwin",
     "x86_64-apple-darwin",
-    "x86_64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
     "x86_64-pc-windows-msvc",
 ]
 # The archive format to use for windows builds (defaults .zip)
@@ -41,13 +41,13 @@ install-path = "~/.aiken/bin"
 publish-prereleases = true
 
 [[workspace.metadata.dist.artifact]]
-target = "x86_64-unknown-linux-gnu"
-features = ["bundle-openssl"]
+target = "x86_64-unknown-linux-musl"
+features = ["bundle_openssl"]
 
 # Cargo-dist uses ubuntu-20.04 by default, causing issues in various cases
 # because it links with openssl-1.1 whereas recent distro ships with 3.x
 [workspace.metadata.dist.github-custom-runners]
-x86_64-unknown-linux-gnu = "ubuntu-22.04"
+x86_64-unknown-linux-musl = "ubuntu-22.04"
 
 [workspace.dependencies]
 walkdir = "2.3.2"
