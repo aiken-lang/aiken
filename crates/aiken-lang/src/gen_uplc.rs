@@ -5010,7 +5010,7 @@ impl<'a> CodeGenerator<'a> {
 
                         let func_body = params
                             .into_iter()
-                            .fold(func_body, |term, arg| term.lambda(arg))
+                            .rfold(func_body, |term, arg| term.lambda(arg))
                             .lambda(NO_INLINE);
 
                         Some(term.lambda(func_name).apply(func_body))
