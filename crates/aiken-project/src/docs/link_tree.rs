@@ -64,8 +64,8 @@ impl LinkTree {
         /// Strip prefix and ensures to remove any leading slash "/" as well.
         fn strip_prefix(source: &str, prefix: &str) -> String {
             let result = source.strip_prefix(prefix).unwrap();
-            if result.starts_with("/") {
-                result.strip_prefix("/").unwrap().to_string()
+            if result.starts_with('/') {
+                result.strip_prefix('/').unwrap().to_string()
             } else {
                 result.to_string()
             }
@@ -206,10 +206,10 @@ impl LinkTree {
             LinkTree::Empty => vec![],
 
             LinkTree::Leaf { value } => {
-                let last_ix = value.split("/").count();
+                let last_ix = value.split('/').count();
                 let module_path = mk_path(value);
                 value
-                    .split("/")
+                    .split('/')
                     .enumerate()
                     .map(|(offset, segment)| {
                         if offset == last_ix - 1 {
