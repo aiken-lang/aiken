@@ -173,8 +173,8 @@ fn generate_module(
             let comment = Comment::from((span, module.code.as_str()))
                 .content
                 .trim_start();
-            if comment.starts_with("#") {
-                let trimmed = comment.trim_start_matches("#");
+            if comment.starts_with('#') {
+                let trimmed = comment.trim_start_matches('#');
                 let heading = comment.len() - trimmed.len();
                 Some((
                     span,

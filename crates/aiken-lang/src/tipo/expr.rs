@@ -964,12 +964,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                             let has_validator = info
                                 .values
                                 .keys()
-                                .any(|k| k.split(".").next() == Some(name));
+                                .any(|k| k.split('.').next() == Some(name));
 
                             let value_constructors = info
                                 .values
                                 .keys()
-                                .map(|k| k.split(".").next().unwrap_or(k).to_string())
+                                .map(|k| k.split('.').next().unwrap_or(k).to_string())
                                 .collect::<Vec<_>>();
 
                             return Some(
