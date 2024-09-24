@@ -485,8 +485,10 @@ where
 
         blueprint.with_validator(title, when_too_many, when_missing, |validator| {
             // Make sure we're not calculating the address for a minting validator
-            if validator.datum.is_none() {
-                return Err(blueprint::error::Error::UnexpectedMintingValidator.into());
+            if let Some(title) = title {
+                if !title.ends_with("else") && !title.ends_with("spend") {
+                    return Err(blueprint::error::Error::UnexpectedMintingValidator.into());
+                }
             }
 
             let n = validator.parameters.len();
