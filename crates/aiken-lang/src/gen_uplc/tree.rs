@@ -1206,7 +1206,6 @@ impl AirTree {
                 air_vec.push(Air::DefineFunc {
                     func_name: func_name.clone(),
                     module_name: module_name.clone(),
-
                     variant_name: variant_name.clone(),
                     variant,
                 });
