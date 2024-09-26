@@ -14,9 +14,9 @@ use self::{
 };
 use crate::{
     ast::{
-        AssignmentKind, BinOp, Bls12_381Point, Curve, DataTypeKey, FunctionAccessKey, Pattern,
-        Span, TraceLevel, Tracing, TypedArg, TypedClause, TypedDataType, TypedFunction,
-        TypedPattern, TypedValidator, UnOp,
+        AssignmentKind, BinOp, Bls12_381Point, Curve, DataTypeKey, FunctionAccessKey,
+        OnTestFailure, Pattern, Span, TraceLevel, Tracing, TypedArg, TypedClause, TypedDataType,
+        TypedFunction, TypedPattern, TypedValidator, UnOp,
     },
     builtins::PRELUDE,
     expr::TypedExpr,
@@ -3541,20 +3541,28 @@ impl<'a> CodeGenerator<'a> {
                 .unwrap_or_else(|| panic!("Missing Function Variant Definition"));
 
             match function {
-                HoistableFunction::Function { body, deps, params } => {
+                HoistableFunction::Function {
+                    body,
+                    deps,
+                    params,
+                    is_constant,
+                } => {
                     let mut hoist_body = body.clone();
                     let mut hoist_deps = deps.clone();
                     let params = params.clone();
                     let tree_path = tree_path.clone();
+                    let is_constant = *is_constant;
 
-                    self.define_dependent_functions(
-                        &mut hoist_body,
-                        &mut functions_to_hoist,
-                        &mut used_functions,
-                        &defined_functions,
-                        &mut hoist_deps,
-                        tree_path,
-                    );
+                    if !is_constant {
+                        self.define_dependent_functions(
+                            &mut hoist_body,
+                            &mut functions_to_hoist,
+                            &mut used_functions,
+                            &defined_functions,
+                            &mut hoist_deps,
+                            tree_path,
+                        );
+                    }
 
                     let function_variants = functions_to_hoist
                         .get_mut(&key)
@@ -3564,17 +3572,17 @@ impl<'a> CodeGenerator<'a> {
                         .get_mut(&variant_name)
                         .expect("Missing Function Variant Definition");
 
-                    if params.is_empty() {
-                        validator_hoistable.push((key, variant_name));
+                    if is_constant {
+                        assert!(hoist_deps.is_empty());
                     }
 
                     *function = HoistableFunction::Function {
                         body: hoist_body,
                         deps: hoist_deps,
                         params,
+                        is_constant,
                     };
                 }
-                HoistableFunction::Link(_) => todo!("Deal with Link later"),
                 _ => unreachable!(),
             }
         }
@@ -3678,7 +3686,9 @@ impl<'a> CodeGenerator<'a> {
                     .expect("Missing Function Variant Definition");
 
                 match func {
-                    HoistableFunction::Function { params, body, deps } => {
+                    HoistableFunction::Function {
+                        params, body, deps, ..
+                    } => {
                         cycle_of_functions.push((params.clone(), body.clone()));
                         cycle_deps.push(deps.clone());
                     }
@@ -3878,6 +3888,7 @@ impl<'a> CodeGenerator<'a> {
                 body,
                 deps: func_deps,
                 params,
+                ..
             } => {
                 let mut body = body.clone();
 
@@ -4067,6 +4078,7 @@ impl<'a> CodeGenerator<'a> {
                             body: mut dep_air_tree,
                             deps: dependency_deps,
                             params: dependent_params,
+                            ..
                         } => {
                             let is_dependent_recursive = dependency_deps
                                 .iter()
@@ -4185,14 +4197,18 @@ impl<'a> CodeGenerator<'a> {
                     ..
                 } = air_tree
                 {
-                    let ValueConstructorVariant::ModuleFn {
-                        name: func_name,
-                        module,
-                        builtin: None,
-                        ..
-                    } = &constructor.variant
-                    else {
-                        return;
+                    let (func_name, module, is_constant) = match &constructor.variant {
+                        ValueConstructorVariant::ModuleConstant { module, name, .. } => {
+                            (name, module, true)
+                        }
+                        ValueConstructorVariant::ModuleFn {
+                            name,
+                            module,
+                            builtin: None,
+                            ..
+                        } => (name, module, false),
+                        // In other cases simply return early
+                        _ => return,
                     };
 
                     let function_var_tipo = &constructor.tipo;
@@ -4202,7 +4218,27 @@ impl<'a> CodeGenerator<'a> {
                         function_name: func_name.clone(),
                     };
 
-                    let function_def = self.functions.get(&generic_function_key);
+                    let const_func =
+                        self.constants
+                            .get(&generic_function_key)
+                            .map(|item| TypedFunction {
+                                arguments: vec![],
+                                body: (*item).clone(),
+                                doc: None,
+                                end_position: 0,
+                                location: Span::empty(),
+                                name: func_name.clone(),
+                                public: true,
+                                return_annotation: None,
+                                return_type: item.tipo(),
+                                on_test_failure: OnTestFailure::FailImmediately,
+                            });
+
+                    let function_def = self
+                        .functions
+                        .get(&generic_function_key)
+                        .map(|item| *item)
+                        .or(const_func.as_ref());
 
                     let Some(function_def) = function_def else {
                         let code_gen_func = self
@@ -4250,6 +4286,7 @@ impl<'a> CodeGenerator<'a> {
                                         body,
                                         deps: vec![],
                                         params: params.clone(),
+                                        is_constant: false,
                                     },
                                 ),
                             );
@@ -4351,6 +4388,7 @@ impl<'a> CodeGenerator<'a> {
                                         body: function_air_tree_body,
                                         deps: vec![],
                                         params,
+                                        is_constant,
                                     },
                                 ),
                             );
@@ -4396,6 +4434,7 @@ impl<'a> CodeGenerator<'a> {
                                     body: function_air_tree_body,
                                     deps: vec![],
                                     params,
+                                    is_constant,
                                 },
                             ),
                         );
@@ -4443,48 +4482,19 @@ impl<'a> CodeGenerator<'a> {
                     .into(),
                 )),
                 ValueConstructorVariant::ModuleConstant { module, name, .. } => {
-                    let access_key = FunctionAccessKey {
-                        module_name: module.clone(),
-                        function_name: name.clone(),
+                    let name = if !module.is_empty() {
+                        format!("{module}_{name}{variant_name}")
+                    } else {
+                        format!("{name}{variant_name}")
                     };
 
-                    let definition = self
-                        .constants
-                        .get(&access_key)
-                        .unwrap_or_else(|| panic!("unknown constant {module}.{name}"));
-
-                    let mut value =
-                        AirTree::no_op(self.build(definition, &access_key.module_name, &[]));
-
-                    value.traverse_tree_with(&mut |air_tree, _| {
-                        erase_opaque_type_operations(air_tree, &self.data_types);
-                    });
-
-                    value = self.hoist_functions_to_validator(value);
-
-                    let term = self
-                        .uplc_code_gen(value.to_vec())
-                        .constr_fields_exposer()
-                        .constr_index_exposer();
-
-                    let mut program =
-                        self.new_program(self.special_functions.apply_used_functions(term));
-
-                    let mut interner = CodeGenInterner::new();
-
-                    interner.program(&mut program);
-
-                    let eval_program: Program<NamedDeBruijn> =
-                        program.remove_no_inlines().try_into().unwrap();
-
-                    Some(
-                        eval_program
-                            .eval(ExBudget::max())
-                            .result()
-                            .unwrap_or_else(|e| panic!("Failed to evaluate constant: {e:#?}"))
-                            .try_into()
-                            .unwrap(),
-                    )
+                    Some(Term::Var(
+                        Name {
+                            text: name,
+                            unique: 0.into(),
+                        }
+                        .into(),
+                    ))
                 }
                 ValueConstructorVariant::ModuleFn {
                     name: func_name,
@@ -5082,7 +5092,51 @@ impl<'a> CodeGenerator<'a> {
                             )
                         }
                     }
-                    air::FunctionVariants::Constant => todo!(),
+                    air::FunctionVariants::Constant => {
+                        let term = arg_stack.pop().unwrap();
+
+                        let access_key = FunctionAccessKey {
+                            module_name: module_name.clone(),
+                            function_name: func_name.clone(),
+                        };
+
+                        let definition = self.constants.get(&access_key).unwrap_or_else(|| {
+                            panic!("unknown constant {module_name}.{func_name}")
+                        });
+
+                        let mut value =
+                            AirTree::no_op(self.build(definition, &access_key.module_name, &[]));
+
+                        value.traverse_tree_with(&mut |air_tree, _| {
+                            erase_opaque_type_operations(air_tree, &self.data_types);
+                        });
+
+                        value = self.hoist_functions_to_validator(value);
+
+                        let const_term = self
+                            .uplc_code_gen(value.to_vec())
+                            .constr_fields_exposer()
+                            .constr_index_exposer();
+
+                        let mut program = self
+                            .new_program(self.special_functions.apply_used_functions(const_term));
+
+                        let mut interner = CodeGenInterner::new();
+
+                        interner.program(&mut program);
+
+                        let eval_program: Program<NamedDeBruijn> =
+                            program.remove_no_inlines().try_into().unwrap();
+
+                        let const_body = eval_program
+                            .eval(ExBudget::max())
+                            .result()
+                            .unwrap_or_else(|e| panic!("Failed to evaluate constant: {e:#?}"))
+                            .try_into()
+                            .unwrap();
+
+                        Some(term.lambda(func_name).apply(const_body))
+                    }
                     air::FunctionVariants::Cyclic(contained_functions) => {
                         let mut cyclic_functions = vec![];
 

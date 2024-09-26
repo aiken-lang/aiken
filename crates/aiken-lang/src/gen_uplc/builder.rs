@@ -56,6 +56,7 @@ pub enum HoistableFunction {
         body: AirTree,
         deps: Vec<(FunctionAccessKey, Variant)>,
         params: Params,
+        is_constant: bool,
     },
     CyclicFunction {
         functions: Vec<(Params, AirTree)>,
