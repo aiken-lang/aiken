@@ -545,18 +545,18 @@ impl AirTree {
     pub fn define_const(
         func_name: impl ToString,
         module_name: impl ToString,
-        func_body: AirTree,
+        variant_name: impl ToString,
         then: AirTree,
     ) -> AirTree {
         AirTree::DefineFunc {
             func_name: func_name.to_string(),
             module_name: module_name.to_string(),
-            variant_name: "".to_string(),
+            variant_name: variant_name.to_string(),
             params: vec![],
             recursive: false,
             recursive_nonstatic_params: vec![],
             constant: true,
-            func_body: func_body.into(),
+            func_body: AirTree::void().into(),
             then: then.into(),
         }
     }
