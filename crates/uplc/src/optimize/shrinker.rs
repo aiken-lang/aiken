@@ -1139,6 +1139,26 @@ impl Program<Name> {
     }
 
     pub fn bls381_compressor(self) -> Self {
+        let program = self.traverse_uplc_with(true, &mut |_id, term, _arg_stack, _scope| {
+            if let Term::Constant(con) = term {
+                match con.as_ref() {
+                    Constant::Bls12_381G1Element(blst_p1) => {
+                        *term = Term::bls12_381_g1_uncompress()
+                            .apply(Term::byte_string(blst_p1.compress()))
+                    }
+                    Constant::Bls12_381G2Element(blst_p2) => {
+                        *term = Term::bls12_381_g2_uncompress()
+                            .apply(Term::byte_string(blst_p2.compress()))
+                    }
+                    _ => (),
+                }
+            }
+        });
+
+        program
+    }
+
+    pub fn bls381_compressor_hoister(self) -> Self {
         let mut blst_p1_list = vec![];
         let mut blst_p2_list = vec![];
 
