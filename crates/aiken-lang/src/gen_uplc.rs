@@ -4283,7 +4283,8 @@ impl<'a> CodeGenerator<'a> {
 
                     let function_def = self
                         .functions
-                        .get(&generic_function_key).copied()
+                        .get(&generic_function_key)
+                        .copied()
                         .or(const_func.as_ref());
 
                     let Some(function_def) = function_def else {
