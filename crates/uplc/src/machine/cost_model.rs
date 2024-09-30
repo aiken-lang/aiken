@@ -799,8 +799,8 @@ impl BuiltinCosts {
                     slope: 1,
                 }),
                 cpu: TwoArguments::MaxSize(MaxSize {
-                    intercept: 205665,
-                    slope: 812,
+                    intercept: 100788,
+                    slope: 420,
                 }),
             },
             subtract_integer: CostingFun {
@@ -809,8 +809,8 @@ impl BuiltinCosts {
                     slope: 1,
                 }),
                 cpu: TwoArguments::MaxSize(MaxSize {
-                    intercept: 205665,
-                    slope: 812,
+                    intercept: 100788,
+                    slope: 420,
                 }),
             },
             multiply_integer: CostingFun {
@@ -882,22 +882,22 @@ impl BuiltinCosts {
             equals_integer: CostingFun {
                 mem: TwoArguments::ConstantCost(1),
                 cpu: TwoArguments::MinSize(MinSize {
-                    intercept: 208512,
-                    slope: 421,
+                    intercept: 51775,
+                    slope: 558,
                 }),
             },
             less_than_integer: CostingFun {
                 mem: TwoArguments::ConstantCost(1),
                 cpu: TwoArguments::MinSize(MinSize {
-                    intercept: 208896,
-                    slope: 511,
+                    intercept: 44749,
+                    slope: 541,
                 }),
             },
             less_than_equals_integer: CostingFun {
                 mem: TwoArguments::ConstantCost(1),
                 cpu: TwoArguments::MinSize(MinSize {
-                    intercept: 204924,
-                    slope: 473,
+                    intercept: 43285,
+                    slope: 552,
                 }),
             },
             append_byte_string: CostingFun {
@@ -907,7 +907,7 @@ impl BuiltinCosts {
                 }),
                 cpu: TwoArguments::AddedSizes(AddedSizes {
                     intercept: 1000,
-                    slope: 571,
+                    slope: 173,
                 }),
             },
             cons_byte_string: CostingFun {
@@ -916,8 +916,8 @@ impl BuiltinCosts {
                     slope: 1,
                 }),
                 cpu: TwoArguments::LinearInY(LinearSize {
-                    intercept: 221973,
-                    slope: 511,
+                    intercept: 72010,
+                    slope: 178,
                 }),
             },
             slice_byte_string: CostingFun {
@@ -926,59 +926,59 @@ impl BuiltinCosts {
                     slope: 0,
                 }),
                 cpu: ThreeArguments::LinearInZ(LinearSize {
-                    intercept: 265318,
-                    slope: 0,
+                    intercept: 20467,
+                    slope: 1,
                 }),
             },
             length_of_byte_string: CostingFun {
                 mem: OneArgument::ConstantCost(10),
-                cpu: OneArgument::ConstantCost(1000),
+                cpu: OneArgument::ConstantCost(22100),
             },
             index_byte_string: CostingFun {
                 mem: TwoArguments::ConstantCost(4),
-                cpu: TwoArguments::ConstantCost(57667),
+                cpu: TwoArguments::ConstantCost(13169),
             },
             equals_byte_string: CostingFun {
                 mem: TwoArguments::ConstantCost(1),
                 cpu: TwoArguments::LinearOnDiagonal(ConstantOrLinear {
-                    constant: 245000,
-                    intercept: 216773,
-                    slope: 62,
+                    constant: 24548,
+                    intercept: 29498,
+                    slope: 38,
                 }),
             },
             less_than_byte_string: CostingFun {
                 mem: TwoArguments::ConstantCost(1),
                 cpu: TwoArguments::MinSize(MinSize {
-                    intercept: 197145,
-                    slope: 156,
+                    intercept: 28999,
+                    slope: 74,
                 }),
             },
             less_than_equals_byte_string: CostingFun {
                 mem: TwoArguments::ConstantCost(1),
                 cpu: TwoArguments::MinSize(MinSize {
-                    intercept: 197145,
-                    slope: 156,
+                    intercept: 28999,
+                    slope: 74,
                 }),
             },
             sha2_256: CostingFun {
                 mem: OneArgument::ConstantCost(4),
                 cpu: OneArgument::LinearCost(LinearSize {
-                    intercept: 806990,
-                    slope: 30482,
+                    intercept: 270652,
+                    slope: 22588,
                 }),
             },
             sha3_256: CostingFun {
                 mem: OneArgument::ConstantCost(4),
                 cpu: OneArgument::LinearCost(LinearSize {
-                    intercept: 1927926,
-                    slope: 82523,
+                    intercept: 1457325,
+                    slope: 64566,
                 }),
             },
             blake2b_256: CostingFun {
                 mem: OneArgument::ConstantCost(4),
                 cpu: OneArgument::LinearCost(LinearSize {
-                    intercept: 117366,
-                    slope: 10475,
+                    intercept: 201305,
+                    slope: 8356,
                 }),
             },
             verify_ed25519_signature: CostingFun {
@@ -990,13 +990,13 @@ impl BuiltinCosts {
             },
             verify_ecdsa_secp256k1_signature: CostingFun {
                 mem: ThreeArguments::ConstantCost(10),
-                cpu: ThreeArguments::ConstantCost(35892428),
+                cpu: ThreeArguments::ConstantCost(43053543),
             },
             verify_schnorr_secp256k1_signature: CostingFun {
                 mem: ThreeArguments::ConstantCost(10),
                 cpu: ThreeArguments::LinearInY(LinearSize {
-                    intercept: 38887044,
-                    slope: 32947,
+                    intercept: 43574283,
+                    slope: 26308,
                 }),
             },
             append_string: CostingFun {
@@ -1006,15 +1006,15 @@ impl BuiltinCosts {
                 }),
                 cpu: TwoArguments::AddedSizes(AddedSizes {
                     intercept: 1000,
-                    slope: 24177,
+                    slope: 59957,
                 }),
             },
             equals_string: CostingFun {
                 mem: TwoArguments::ConstantCost(1),
                 cpu: TwoArguments::LinearOnDiagonal(ConstantOrLinear {
-                    constant: 187000,
+                    constant: 39184,
                     intercept: 1000,
-                    slope: 52998,
+                    slope: 60594,
                 }),
             },
             encode_utf8: CostingFun {
@@ -1024,7 +1024,7 @@ impl BuiltinCosts {
                 }),
                 cpu: OneArgument::LinearCost(LinearSize {
                     intercept: 1000,
-                    slope: 28662,
+                    slope: 42921,
                 }),
             },
             decode_utf8: CostingFun {
@@ -1033,112 +1033,112 @@ impl BuiltinCosts {
                     slope: 2,
                 }),
                 cpu: OneArgument::LinearCost(LinearSize {
-                    intercept: 497525,
-                    slope: 14068,
+                    intercept: 91189,
+                    slope: 769,
                 }),
             },
             if_then_else: CostingFun {
                 mem: ThreeArguments::ConstantCost(1),
-                cpu: ThreeArguments::ConstantCost(80556),
+                cpu: ThreeArguments::ConstantCost(76049),
             },
             choose_unit: CostingFun {
                 mem: TwoArguments::ConstantCost(4),
-                cpu: TwoArguments::ConstantCost(46417),
+                cpu: TwoArguments::ConstantCost(61462),
             },
             trace: CostingFun {
                 mem: TwoArguments::ConstantCost(32),
-                cpu: TwoArguments::ConstantCost(212342),
+                cpu: TwoArguments::ConstantCost(59498),
             },
             fst_pair: CostingFun {
                 mem: OneArgument::ConstantCost(32),
-                cpu: OneArgument::ConstantCost(80436),
+                cpu: OneArgument::ConstantCost(141895),
             },
             snd_pair: CostingFun {
                 mem: OneArgument::ConstantCost(32),
-                cpu: OneArgument::ConstantCost(85931),
+                cpu: OneArgument::ConstantCost(141992),
             },
             choose_list: CostingFun {
                 mem: ThreeArguments::ConstantCost(32),
-                cpu: ThreeArguments::ConstantCost(175354),
+                cpu: ThreeArguments::ConstantCost(132994),
             },
             mk_cons: CostingFun {
                 mem: TwoArguments::ConstantCost(32),
-                cpu: TwoArguments::ConstantCost(65493),
+                cpu: TwoArguments::ConstantCost(72362),
             },
             head_list: CostingFun {
                 mem: OneArgument::ConstantCost(32),
-                cpu: OneArgument::ConstantCost(43249),
+                cpu: OneArgument::ConstantCost(83150),
             },
             tail_list: CostingFun {
                 mem: OneArgument::ConstantCost(32),
-                cpu: OneArgument::ConstantCost(41182),
+                cpu: OneArgument::ConstantCost(81663),
             },
             null_list: CostingFun {
                 mem: OneArgument::ConstantCost(32),
-                cpu: OneArgument::ConstantCost(60091),
+                cpu: OneArgument::ConstantCost(74433),
             },
             choose_data: CostingFun {
                 mem: SixArguments::ConstantCost(32),
-                cpu: SixArguments::ConstantCost(19537),
+                cpu: SixArguments::ConstantCost(94375),
             },
             constr_data: CostingFun {
                 mem: TwoArguments::ConstantCost(32),
-                cpu: TwoArguments::ConstantCost(89141),
+                cpu: TwoArguments::ConstantCost(22151),
             },
             map_data: CostingFun {
                 mem: OneArgument::ConstantCost(32),
-                cpu: OneArgument::ConstantCost(64832),
+                cpu: OneArgument::ConstantCost(68246),
             },
             list_data: CostingFun {
                 mem: OneArgument::ConstantCost(32),
-                cpu: OneArgument::ConstantCost(52467),
+                cpu: OneArgument::ConstantCost(33852),
             },
             i_data: CostingFun {
                 mem: OneArgument::ConstantCost(32),
-                cpu: OneArgument::ConstantCost(1000),
+                cpu: OneArgument::ConstantCost(15299),
             },
             b_data: CostingFun {
                 mem: OneArgument::ConstantCost(32),
-                cpu: OneArgument::ConstantCost(1000),
+                cpu: OneArgument::ConstantCost(11183),
             },
             un_constr_data: CostingFun {
                 mem: OneArgument::ConstantCost(32),
-                cpu: OneArgument::ConstantCost(32696),
+                cpu: OneArgument::ConstantCost(24588),
             },
             un_map_data: CostingFun {
                 mem: OneArgument::ConstantCost(32),
-                cpu: OneArgument::ConstantCost(38314),
+                cpu: OneArgument::ConstantCost(24623),
             },
             un_list_data: CostingFun {
                 mem: OneArgument::ConstantCost(32),
-                cpu: OneArgument::ConstantCost(32247),
+                cpu: OneArgument::ConstantCost(25933),
             },
             un_i_data: CostingFun {
                 mem: OneArgument::ConstantCost(32),
-                cpu: OneArgument::ConstantCost(43357),
+                cpu: OneArgument::ConstantCost(20744),
             },
             un_b_data: CostingFun {
                 mem: OneArgument::ConstantCost(32),
-                cpu: OneArgument::ConstantCost(31220),
+                cpu: OneArgument::ConstantCost(20142),
             },
             equals_data: CostingFun {
                 mem: TwoArguments::ConstantCost(1),
                 cpu: TwoArguments::MinSize(MinSize {
-                    intercept: 1060367,
-                    slope: 12586,
+                    intercept: 898148,
+                    slope: 27279,
                 }),
             },
             mk_pair_data: CostingFun {
                 mem: TwoArguments::ConstantCost(32),
-                cpu: TwoArguments::ConstantCost(76511),
+                cpu: TwoArguments::ConstantCost(11546),
             },
             mk_nil_data: CostingFun {
                 mem: OneArgument::ConstantCost(32),
-                cpu: OneArgument::ConstantCost(22558),
+                cpu: OneArgument::ConstantCost(7243),
             },
             mk_nil_pair_data: CostingFun {
                 mem: OneArgument::ConstantCost(32),
-                cpu: OneArgument::ConstantCost(16563),
+                cpu: OneArgument::ConstantCost(7391),
             },
             serialise_data: CostingFun {
                 mem: OneArgument::LinearCost(LinearSize {
@@ -1146,125 +1146,93 @@ impl BuiltinCosts {
                     slope: 2,
                 }),
                 cpu: OneArgument::LinearCost(LinearSize {
-                    intercept: 1159724,
-                    slope: 392670,
+                    intercept: 955506,
+                    slope: 213312,
                 }),
             },
             blake2b_224: CostingFun {
-                cpu: OneArgument::LinearCost(LinearSize {
-                    intercept: 117_366,
-                    slope: 10_475,
-                }),
-                mem: OneArgument::ConstantCost(4),
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
             keccak_256: CostingFun {
-                cpu: OneArgument::LinearCost(LinearSize {
-                    intercept: 1_927_926,
-                    slope: 82_523,
-                }),
-                mem: OneArgument::ConstantCost(4),
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g1_add: CostingFun {
-                cpu: TwoArguments::ConstantCost(1_046_420),
-                mem: TwoArguments::ConstantCost(18),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_g1_neg: CostingFun {
-                cpu: OneArgument::ConstantCost(292_890),
-                mem: OneArgument::ConstantCost(18),
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g1_scalar_mul: CostingFun {
-                cpu: TwoArguments::LinearInX(LinearSize {
-                    intercept: 94_607_019,
-                    slope: 87_060,
-                }),
-                mem: TwoArguments::ConstantCost(18),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_g1_equal: CostingFun {
-                cpu: TwoArguments::ConstantCost(545_063),
-                mem: TwoArguments::ConstantCost(1),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_g1_compress: CostingFun {
-                cpu: OneArgument::ConstantCost(3_387_741),
-                mem: OneArgument::ConstantCost(1),
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g1_uncompress: CostingFun {
-                cpu: OneArgument::ConstantCost(16_598_737),
-                mem: OneArgument::ConstantCost(18),
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g1_hash_to_group: CostingFun {
-                cpu: TwoArguments::LinearInX(LinearSize {
-                    intercept: 66_311_195,
-                    slope: 23_097,
-                }),
-                mem: TwoArguments::ConstantCost(18),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_g2_add: CostingFun {
-                cpu: TwoArguments::ConstantCost(2_359_410),
-                mem: TwoArguments::ConstantCost(36),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_g2_neg: CostingFun {
-                cpu: OneArgument::ConstantCost(307_813),
-                mem: OneArgument::ConstantCost(36),
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g2_scalar_mul: CostingFun {
-                cpu: TwoArguments::LinearInX(LinearSize {
-                    intercept: 190_191_402,
-                    slope: 85_902,
-                }),
-                mem: TwoArguments::ConstantCost(36),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_g2_equal: CostingFun {
-                cpu: TwoArguments::ConstantCost(1_102_635),
-                mem: TwoArguments::ConstantCost(1),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_g2_compress: CostingFun {
-                cpu: OneArgument::ConstantCost(3_973_992),
-                mem: OneArgument::ConstantCost(12),
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g2_uncompress: CostingFun {
-                cpu: OneArgument::ConstantCost(33_191_512),
-                mem: OneArgument::ConstantCost(36),
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
             bls12_381_g2_hash_to_group: CostingFun {
-                cpu: TwoArguments::LinearInX(LinearSize {
-                    intercept: 66_311_195,
-                    slope: 23_097,
-                }),
-                mem: TwoArguments::ConstantCost(18),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_miller_loop: CostingFun {
-                cpu: TwoArguments::ConstantCost(402_099_373),
-                mem: TwoArguments::ConstantCost(72),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_mul_ml_result: CostingFun {
-                cpu: TwoArguments::ConstantCost(2_544_991),
-                mem: TwoArguments::ConstantCost(72),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             bls12_381_final_verify: CostingFun {
-                cpu: TwoArguments::ConstantCost(388_656_972),
-                mem: TwoArguments::ConstantCost(1),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
             integer_to_byte_string: CostingFun {
-                cpu: ThreeArguments::QuadraticInZ(QuadraticFunction {
-                    coeff_0: 1292075,
-                    coeff_1: 24469,
-                    coeff_2: 74,
-                }),
-                mem: ThreeArguments::LiteralInYorLinearInZ(LinearSize {
-                    intercept: 0,
-                    slope: 1,
-                }),
+                cpu: ThreeArguments::ConstantCost(30000000000),
+                mem: ThreeArguments::ConstantCost(30000000000),
             },
             byte_string_to_integer: CostingFun {
-                cpu: TwoArguments::QuadraticInY(QuadraticFunction {
-                    coeff_0: 936157,
-                    coeff_1: 49601,
-                    coeff_2: 237,
-                }),
-                mem: TwoArguments::LinearInY(LinearSize {
-                    intercept: 0,
-                    slope: 1,
-                }),
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
             },
         }
     }
@@ -4701,21 +4669,19 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "confusing atm"]
-    fn assert_default_cost_model_v2_mainnet_2023_02_23() {
+    fn assert_default_cost_model_v2_mainnet_2024_09_29() {
         let costs = vec![
-            205665, 812, 1, 1, 1000, 571, 0, 1, 1000, 24177, 4, 1, 1000, 32, 117366, 10475, 4,
-            23000, 100, 23000, 100, 23000, 100, 23000, 100, 23000, 100, 23000, 100, 100, 100,
-            23000, 100, 19537, 32, 175354, 32, 46417, 4, 221973, 511, 0, 1, 89141, 32, 497525,
-            14068, 4, 2, 196500, 453240, 220, 0, 1, 1, 1000, 28662, 4, 2, 245000, 216773, 62, 1,
-            1060367, 12586, 1, 208512, 421, 1, 187000, 1000, 52998, 1, 80436, 32, 43249, 32, 1000,
-            32, 80556, 1, 57667, 4, 1000, 10, 197145, 156, 1, 197145, 156, 1, 204924, 473, 1,
-            208896, 511, 1, 52467, 32, 64832, 32, 65493, 32, 22558, 32, 16563, 32, 76511, 32,
-            196500, 453240, 220, 0, 1, 1, 69522, 11687, 0, 1, 60091, 32, 196500, 453240, 220, 0, 1,
-            1, 196500, 453240, 220, 0, 1, 1, 1159724, 392670, 0, 2, 806990, 30482, 4, 1927926,
-            82523, 4, 265318, 0, 4, 0, 85931, 32, 205665, 812, 1, 1, 41182, 32, 212342, 32, 31220,
-            32, 32696, 32, 43357, 32, 32247, 32, 38314, 32, 35892428, 10, 57996947, 18975, 10,
-            38887044, 32947, 10,
+            100788, 420, 1, 1, 1000, 173, 0, 1, 1000, 59957, 4, 1, 11183, 32, 201305, 8356, 4,
+            16000, 100, 16000, 100, 16000, 100, 16000, 100, 16000, 100, 16000, 100, 100, 100,
+            16000, 100, 94375, 32, 132994, 32, 61462, 4, 72010, 178, 0, 1, 22151, 32, 91189, 769,
+            4, 2, 85848, 228465, 122, 0, 1, 1, 1000, 42921, 4, 2, 24548, 29498, 38, 1, 898148,
+            27279, 1, 51775, 558, 1, 39184, 1000, 60594, 1, 141895, 32, 83150, 32, 15299, 32,
+            76049, 1, 13169, 4, 22100, 10, 28999, 74, 1, 28999, 74, 1, 43285, 552, 1, 44749, 541,
+            1, 33852, 32, 68246, 32, 72362, 32, 7243, 32, 7391, 32, 11546, 32, 85848, 228465, 122,
+            0, 1, 1, 90434, 519, 0, 1, 74433, 32, 85848, 228465, 122, 0, 1, 1, 85848, 228465, 122,
+            0, 1, 1, 955506, 213312, 0, 2, 270652, 22588, 4, 1457325, 64566, 4, 20467, 1, 4, 0,
+            141992, 32, 100788, 420, 1, 1, 81663, 32, 59498, 32, 20142, 32, 24588, 32, 20744, 32,
+            25933, 32, 24623, 32, 43053543, 10, 53384111, 14333, 10, 43574283, 26308, 10,
         ];
 
         let cost_model = initialize_cost_model(&Language::PlutusV2, &costs);
@@ -4724,7 +4690,7 @@ mod tests {
     }
 
     #[test]
-    fn assert_default_cost_model_v3_mainnet_2024_08_24() {
+    fn assert_default_cost_model_v3_mainnet_2024_09_29() {
         let costs: Vec<i64> = vec![
             100788, 420, 1, 1, 1000, 173, 0, 1, 1000, 59957, 4, 1, 11183, 32, 201305, 8356, 4,
             16000, 100, 16000, 100, 16000, 100, 16000, 100, 16000, 100, 16000, 100, 100, 100,
