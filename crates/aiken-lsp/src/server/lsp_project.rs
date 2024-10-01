@@ -36,7 +36,7 @@ impl LspProject {
             false,
             u32::default(),
             PropertyTest::DEFAULT_MAX_SUCCESS,
-            Tracing::silent(),
+            Tracing::verbose(),
             None,
         );
 
