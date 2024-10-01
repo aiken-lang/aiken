@@ -100,8 +100,6 @@ impl UntypedModule {
             .collect();
 
         // Generate warnings for unused items
-        println!("warnings: {:#?}", environment.warnings);
-        println!("params: {:#?}", environment.validator_params);
         environment.warnings.retain(|warning| match warning {
             Warning::UnusedVariable { location, name } => !environment
                 .validator_params
