@@ -64,7 +64,6 @@ const DELAY_ERROR: fn() -> AirTree =
 
 #[derive(Clone)]
 pub struct CodeGenerator<'a> {
-    #[allow(dead_code)]
     plutus_version: PlutusVersion,
     /// immutable index maps
     functions: IndexMap<&'a FunctionAccessKey, &'a TypedFunction>,
@@ -81,6 +80,7 @@ pub struct CodeGenerator<'a> {
     cyclic_functions:
         IndexMap<(FunctionAccessKey, Variant), (CycleFunctionNames, usize, FunctionAccessKey)>,
     monomorphized_consts: IndexMap<(FunctionAccessKey, String), AirTree>,
+    uplc_resolved_consts: IndexMap<(FunctionAccessKey, String), Term<Name>>,
     /// mutable and reset as well
     interner: AirInterner,
     id_gen: IdGenerator,
@@ -113,6 +113,7 @@ impl<'a> CodeGenerator<'a> {
             code_gen_functions: IndexMap::new(),
             cyclic_functions: IndexMap::new(),
             monomorphized_consts: IndexMap::new(),
+            uplc_resolved_consts: IndexMap::new(),
             interner: AirInterner::new(),
             id_gen: IdGenerator::new(),
         }
@@ -123,6 +124,7 @@ impl<'a> CodeGenerator<'a> {
         self.defined_functions = IndexMap::new();
         self.cyclic_functions = IndexMap::new();
         self.monomorphized_consts = IndexMap::new();
+        self.uplc_resolved_consts = IndexMap::new();
         self.interner = AirInterner::new();
         self.id_gen = IdGenerator::new();
         if reset_special_functions {
@@ -153,6 +155,43 @@ impl<'a> CodeGenerator<'a> {
         // optimizations on air tree
 
         let full_vec = full_tree.to_vec();
+
+        self.uplc_resolved_consts = self
+            .monomorphized_consts
+            .clone()
+            .into_iter()
+            .map(|item| {
+                let (key, value) = item;
+
+                let value = self.hoist_functions_to_validator(value);
+
+                let const_term = self
+                    .uplc_code_gen(value.to_vec())
+                    .constr_fields_exposer()
+                    .constr_index_exposer();
+
+                let mut program =
+                    self.new_program(self.special_functions.apply_used_functions(const_term));
+
+                let mut interner = CodeGenInterner::new();
+
+                interner.program(&mut program);
+
+                let eval_program: Program<NamedDeBruijn> =
+                    program.remove_no_inlines().try_into().unwrap();
+
+                let const_body = eval_program
+                    .eval(ExBudget::max())
+                    .result()
+                    .unwrap_or_else(|e| panic!("Failed to evaluate constant: {e:#?}"))
+                    .try_into()
+                    .unwrap();
+
+                (key.clone(), const_body)
+            })
+            .collect();
+
+        println!("TOOOO {:#?}", self.uplc_resolved_consts);
 
         let term = self.uplc_code_gen(full_vec);
 
@@ -189,6 +228,43 @@ impl<'a> CodeGenerator<'a> {
         // optimizations on air tree
         let full_vec = full_tree.to_vec();
 
+        self.uplc_resolved_consts = self
+            .monomorphized_consts
+            .clone()
+            .into_iter()
+            .map(|item| {
+                let (key, value) = item;
+
+                let value = self.hoist_functions_to_validator(value);
+
+                let const_term = self
+                    .uplc_code_gen(value.to_vec())
+                    .constr_fields_exposer()
+                    .constr_index_exposer();
+
+                let mut program =
+                    self.new_program(self.special_functions.apply_used_functions(const_term));
+
+                let mut interner = CodeGenInterner::new();
+
+                interner.program(&mut program);
+
+                let eval_program: Program<NamedDeBruijn> =
+                    program.remove_no_inlines().try_into().unwrap();
+
+                let const_body = eval_program
+                    .eval(ExBudget::max())
+                    .result()
+                    .unwrap_or_else(|e| panic!("Failed to evaluate constant: {e:#?}"))
+                    .try_into()
+                    .unwrap();
+
+                (key.clone(), const_body)
+            })
+            .collect();
+
+        println!("TOOOO {:#?}", self.uplc_resolved_consts);
+
         let mut term = self.uplc_code_gen(full_vec);
 
         term = if args.is_empty() {
@@ -217,6 +293,8 @@ impl<'a> CodeGenerator<'a> {
 
     fn finalize(&mut self, mut term: Term<Name>) -> Program<Name> {
         term = self.special_functions.apply_used_functions(term);
+
+        println!("TERM IS {}", term.to_pretty());
 
         let program = aiken_optimize_and_intern(self.new_program(term));
 
@@ -4527,19 +4605,31 @@ impl<'a> CodeGenerator<'a> {
                     .into(),
                 )),
                 ValueConstructorVariant::ModuleConstant { module, name, .. } => {
-                    let name = if !module.is_empty() {
+                    let uplc_name = if !module.is_empty() {
                         format!("{module}_{name}{variant_name}")
                     } else {
                         format!("{name}{variant_name}")
                     };
 
-                    Some(Term::Var(
-                        Name {
-                            text: name,
-                            unique: 0.into(),
-                        }
-                        .into(),
-                    ))
+                    let existing_term = self.uplc_resolved_consts.get(&(
+                        FunctionAccessKey {
+                            module_name: module.clone(),
+                            function_name: name.clone(),
+                        },
+                        variant_name.clone(),
+                    ));
+
+                    match existing_term {
+                        Some(constant @ Term::Constant(_)) => Some(constant.clone()),
+
+                        _ => Some(Term::Var(
+                            Name {
+                                text: uplc_name,
+                                unique: 0.into(),
+                            }
+                            .into(),
+                        )),
+                    }
                 }
                 ValueConstructorVariant::ModuleFn {
                     name: func_name,
@@ -5150,37 +5240,55 @@ impl<'a> CodeGenerator<'a> {
                             function_name: func_name.clone(),
                         };
 
-                        let mut value = self
-                            .monomorphized_consts
-                            .get(&(access_key, variant_name))
-                            .cloned()
-                            .unwrap();
+                        let existing_term = self
+                            .uplc_resolved_consts
+                            .get(&(access_key.clone(), variant_name.clone()));
 
-                        value = self.hoist_functions_to_validator(value);
+                        match existing_term {
+                            Some(Term::Constant(_)) => Some(term),
 
-                        let const_term = self
-                            .uplc_code_gen(value.to_vec())
-                            .constr_fields_exposer()
-                            .constr_index_exposer();
+                            _ => {
+                                let mut value = self
+                                    .monomorphized_consts
+                                    .get(&(access_key.clone(), variant_name.clone()))
+                                    .cloned()
+                                    .unwrap();
 
-                        let mut program = self
-                            .new_program(self.special_functions.apply_used_functions(const_term));
+                                value = self.hoist_functions_to_validator(value);
 
-                        let mut interner = CodeGenInterner::new();
+                                let const_term = self
+                                    .uplc_code_gen(value.to_vec())
+                                    .constr_fields_exposer()
+                                    .constr_index_exposer();
 
-                        interner.program(&mut program);
+                                let mut program = self.new_program(
+                                    self.special_functions.apply_used_functions(const_term),
+                                );
 
-                        let eval_program: Program<NamedDeBruijn> =
-                            program.remove_no_inlines().try_into().unwrap();
+                                let mut interner = CodeGenInterner::new();
 
-                        let const_body = eval_program
-                            .eval(ExBudget::max())
-                            .result()
-                            .unwrap_or_else(|e| panic!("Failed to evaluate constant: {e:#?}"))
-                            .try_into()
-                            .unwrap();
+                                interner.program(&mut program);
 
-                        Some(term.lambda(func_uplc_name).apply(const_body))
+                                let eval_program: Program<NamedDeBruijn> =
+                                    program.remove_no_inlines().try_into().unwrap();
+
+                                let const_body: Term<Name> = eval_program
+                                    .eval(ExBudget::max())
+                                    .result()
+                                    .unwrap_or_else(|e| {
+                                        panic!("Failed to evaluate constant: {e:#?}")
+                                    })
+                                    .try_into()
+                                    .unwrap();
+
+                                self.uplc_resolved_consts.insert(
+                                    (access_key.clone(), variant_name.clone()),
+                                    const_body.clone(),
+                                );
+
+                                Some(term.lambda(func_uplc_name).apply(const_body))
+                            }
+                        }
                     }
                     air::FunctionVariants::Cyclic(contained_functions) => {
                         let mut cyclic_functions = vec![];

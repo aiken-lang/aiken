@@ -3032,7 +3032,9 @@ fn acceptance_test_29_union_pair() {
         inner: Pairs<key, value>,
       }
 
-      const empty_list: AssocList<key, value> = AssocList { inner: [] }
+      const empty_list: AssocList<key, value> = {fn(k: key, v: value){
+        [(k,v)]
+      }(1, 2)}
 
       pub fn from_list(xs: Pairs<key, value>) -> AssocList<key, value> {
         AssocList { inner: do_from_list(xs) }
@@ -6001,6 +6003,95 @@ fn bls12_381_elements_from_data_conversion() {
          }
 
         pk.piA == #<Bls12_381, G1>"b28cb29bc282be68df977b35eb9d8e98b3a0a3fc7c372990bddc50419ca86693e491755338fed4fb42231a7c081252ce"
+      }
+    "#;
+
+    let bytes = vec![
+        0xb2, 0x8c, 0xb2, 0x9b, 0xc2, 0x82, 0xbe, 0x68, 0xdf, 0x97, 0x7b, 0x35, 0xeb, 0x9d, 0x8e,
+        0x98, 0xb3, 0xa0, 0xa3, 0xfc, 0x7c, 0x37, 0x29, 0x90, 0xbd, 0xdc, 0x50, 0x41, 0x9c, 0xa8,
+        0x66, 0x93, 0xe4, 0x91, 0x75, 0x53, 0x38, 0xfe, 0xd4, 0xfb, 0x42, 0x23, 0x1a, 0x7c, 0x08,
+        0x12, 0x52, 0xce,
+    ];
+
+    let g1 = Term::Constant(
+        Constant::Bls12_381G1Element(blst::blst_p1::uncompress(&bytes).unwrap().into()).into(),
+    );
+
+    let constant = Term::Constant(
+        Constant::Data(Data::constr(
+            0,
+            vec![
+                Data::bytestring(bytes),
+                Data::bytestring(vec![
+                    0xb9, 0x21, 0x5e, 0x5b, 0xc4, 0x81, 0xba, 0x65, 0x52, 0x38, 0x4c, 0x89, 0xc2,
+                    0x3d, 0x45, 0xbd, 0x65, 0x0b, 0x69, 0x46, 0x28, 0x68, 0x24, 0x8b, 0xfb, 0xb8,
+                    0x3a, 0xee, 0x70, 0x60, 0x57, 0x94, 0x04, 0xdb, 0xa4, 0x1c, 0x78, 0x1d, 0xec,
+                    0x7c, 0x2b, 0xec, 0x5f, 0xcc, 0xec, 0x06, 0x84, 0x2e, 0x0e, 0x66, 0xad, 0x6d,
+                    0x86, 0xc7, 0xc7, 0x6c, 0x46, 0x8a, 0x32, 0xc9, 0xc0, 0x08, 0x0e, 0xea, 0x02,
+                    0x19, 0xd0, 0x95, 0x3b, 0x44, 0xb1, 0xc4, 0xf5, 0x60, 0x5a, 0xfb, 0x1e, 0x5a,
+                    0x31, 0x93, 0x26, 0x4f, 0xf7, 0x30, 0x22, 0x2e, 0x94, 0xf5, 0x52, 0x07, 0x62,
+                    0x82, 0x35, 0xf3, 0xb4, 0x23,
+                ]),
+            ],
+        ))
+        .into(),
+    );
+
+    assert_uplc(
+        src,
+        Term::bls12_381_g1_equal()
+            .apply(Term::bls12_381_g1_uncompress().apply(
+                Term::un_b_data().apply(
+                    Term::head_list().apply(
+                        Term::snd_pair().apply(Term::unconstr_data().apply(constant.clone())),
+                    ),
+                ),
+            ))
+            .apply(g1),
+        false,
+        true,
+    )
+}
+
+#[test]
+fn bls12_381_elements_constant_hoisting() {
+    let src = r#"
+      pub const generator_g1: G1Element =
+        #<Bls12_381, G1>"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
+
+      pub const other_generator_g1: G1Element =
+        #<Bls12_381, G1>"b28cb29bc282be68df977b35eb9d8e98b3a0a3fc7c372990bddc50419ca86693e491755338fed4fb42231a7c081252ce"
+
+      type Mew{
+        One(G1Element)
+        Two(G1Element)
+      }
+
+      type Choo{
+        Foo(Mew)
+        Bar
+      }
+
+      test thing() {
+        let x = Foo(One(other_generator_g1))
+
+        when x is {
+          Foo(y) -> {
+            when y is {
+              One(other_g1) -> {
+                let g1 = generator_g1
+
+                g1 != other_g1
+              }
+              Two(other_g) -> {
+                let ga = generator_g1
+
+                ga == other_g && True
+              }
+            }
+          }
+          Bar -> False
+        }
       }
     "#;
 

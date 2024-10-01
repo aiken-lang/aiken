@@ -6,7 +6,7 @@ pub mod shrinker;
 pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
     program
         .inline_constr_ops()
-        .bls381_compressor()
+        .bls381_compressor_hoister()
         .builtin_force_reducer()
         .lambda_reducer()
         .inline_reducer()
