@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.1.4 - UNRELEASED
+
+### Added
+
+- N/A
+
+### Changed
+
+- **uplc**: Fix (again :grimacing:) cost-models for PlutusV1 & PlutusV2. @MicroProofs
+
+### Removed
+
+- N/A
+
 ## v1.1.3 - 2024-09-20
 
 ### Added
@@ -17,7 +31,6 @@
 - **aiken-lang**: Fix soft cast and hard cast on same type issues that lead to validator errors. @Microproofs
 - **aiken-lang**: Bls constants are automatically converted to a hoisted compressed form with uncompress builtin call. @Microproofs
 - **uplc**: Fix cost-models for PlutusV1 & PlutusV2. @MicroProofs
-
 
 ### Removed
 
