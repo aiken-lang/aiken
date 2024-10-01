@@ -31,7 +31,6 @@ pub enum FunctionVariants {
         recursive_nonstatic_params: Vec<String>,
     },
     Cyclic(Vec<Vec<String>>),
-    Constant,
 }
 
 #[derive(Debug, Clone, PartialEq)]
