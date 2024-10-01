@@ -3342,3 +3342,55 @@ fn dangling_trace_let_in_trace() {
         Err((_, Error::LastExpressionIsAssignment { .. }))
     ))
 }
+
+#[test]
+fn destructuring_validator_params_tuple() {
+    let source_code = r#"
+        validator foo((x, y): (Int, Int)) {
+            mint(_redeemer, _policy_id, _self) {
+              x + y > 42
+            }
+
+            else(_) {
+              fail
+            }
+        }
+    "#;
+
+    let result = check_validator(parse(source_code));
+    assert!(result.is_ok());
+
+    let (warnings, _) = result.unwrap();
+    assert!(
+        matches!(&warnings[..], &[]),
+        "should be empty: {warnings:#?}"
+    );
+}
+
+#[test]
+fn destructuring_validator_params_record() {
+    let source_code = r#"
+        pub type Foo {
+            Foo(Int, Int)
+        }
+
+        validator foo(Foo(x, y): Foo) {
+            mint(_redeemer, _policy_id, _self) {
+              x + y > 42
+            }
+
+            else(_) {
+              fail
+            }
+        }
+    "#;
+
+    let result = check_validator(parse(source_code));
+    assert!(result.is_ok());
+
+    let (warnings, _) = result.unwrap();
+    assert!(
+        matches!(&warnings[..], &[]),
+        "should be empty: {warnings:#?}"
+    );
+}

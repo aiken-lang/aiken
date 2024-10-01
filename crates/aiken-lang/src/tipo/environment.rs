@@ -39,6 +39,7 @@ pub struct Environment<'a> {
     pub entity_usages: Vec<HashMap<String, (EntityKind, Span, bool)>>,
     pub id_gen: IdGenerator,
     pub importable_modules: &'a HashMap<String, TypeInfo>,
+    pub validator_params: HashSet<(String, Span)>,
 
     /// Modules that have been imported by the current module, along with the
     /// location of the import statement where they were imported.
@@ -792,6 +793,7 @@ impl<'a> Environment<'a> {
             annotations: HashMap::new(),
             warnings,
             entity_usages: vec![HashMap::new()],
+            validator_params: HashSet::new(),
             target_env,
         }
     }
