@@ -1565,10 +1565,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             let then = if let Some(filler) =
                 recover_from_no_assignment(assert_no_assignment(&then), then.location())?
             {
-                TypedExpr::Sequence {
-                    location,
-                    expressions: vec![scope.infer(then)?, filler],
-                }
+                scope.infer(then)?.and_then(filler)
             } else {
                 scope.infer(then)?
             };
@@ -1638,10 +1635,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let typed_final_else = if let Some(filler) =
             recover_from_no_assignment(assert_no_assignment(&final_else), final_else.location())?
         {
-            TypedExpr::Sequence {
-                location: final_else.location(),
-                expressions: vec![self.infer(final_else)?, filler],
-            }
+            self.infer(final_else)?.and_then(filler)
         } else {
             self.infer(final_else)?
         };
@@ -1696,10 +1690,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     assert_no_assignment(&branch.body),
                     branch.body.location(),
                 )? {
-                    TypedExpr::Sequence {
-                        location: branch.body.location(),
-                        expressions: vec![typer.infer(branch.body.clone())?, filler],
-                    }
+                    typer.infer(branch.body.clone())?.and_then(filler)
                 } else {
                     typer.infer(branch.body.clone())?
                 };
@@ -1720,10 +1711,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     assert_no_assignment(&branch.body),
                     branch.body.location(),
                 )? {
-                    TypedExpr::Sequence {
-                        location: branch.body.location(),
-                        expressions: vec![self.infer(branch.body.clone())?, filler],
-                    }
+                    self.infer(branch.body.clone())?.and_then(filler)
                 } else {
                     self.infer(branch.body.clone())?
                 };
@@ -1815,10 +1803,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             body_infer.map_err(|e| e.with_unify_error_rigid_names(&body_rigid_names));
 
         let body = if let Some(filler) = recover_from_no_assignment(no_assignment, location)? {
-            TypedExpr::Sequence {
-                location,
-                expressions: vec![inferred_body?, filler],
-            }
+            inferred_body?.and_then(filler)
         } else {
             inferred_body?
         };
@@ -2206,8 +2191,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         if let Some(filler) =
                             recover_from_no_assignment(no_assignment, typed_expression.location())?
                         {
-                            expressions.push(typed_expression);
-                            expressions.push(filler);
+                            match typed_expression.and_then(filler) {
+                                TypedExpr::Sequence {
+                                    expressions: seq, ..
+                                } => expressions.extend(seq),
+                                trace => expressions.push(trace),
+                            }
                         } else {
                             expressions.push(typed_expression);
                         }
@@ -2391,6 +2380,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             .collect::<Result<Vec<_>, Error>>()?;
 
         let then = self.infer(then)?;
+
         let tipo = then.tipo();
 
         if let TraceKind::Todo = kind {

@@ -6477,3 +6477,63 @@ fn hard_soft_cast() {
 
     assert_uplc(src, program, false, false);
 }
+
+#[test]
+fn dangling_trace_expect_standalone() {
+    let src = r#"
+        test foo() {
+          trace @"foo"
+          expect True
+        }
+    "#;
+
+    let program = Term::bool(true)
+        .delayed_if_then_else(
+            Term::unit(),
+            Term::Error.delayed_trace(Term::string("expect True")),
+        )
+        .delayed_trace(Term::string("foo"));
+
+    assert_uplc(src, program, false, true)
+}
+
+#[test]
+fn dangling_trace_expect_in_sequence() {
+    let src = r#"
+        test foo() {
+          let predicate = True
+          trace @"foo"
+          expect predicate
+        }
+    "#;
+
+    let program = Term::bool(true)
+        .delayed_if_then_else(
+            Term::unit(),
+            Term::Error.delayed_trace(Term::string("expect predicate")),
+        )
+        .delayed_trace(Term::string("foo"));
+
+    assert_uplc(src, program, false, true)
+}
+
+#[test]
+fn dangling_trace_expect_in_trace() {
+    let src = r#"
+        test foo() {
+          trace @"foo"
+          trace @"bar"
+          expect True
+        }
+    "#;
+
+    let program = Term::bool(true)
+        .delayed_if_then_else(
+            Term::unit(),
+            Term::Error.delayed_trace(Term::string("expect True")),
+        )
+        .delayed_trace(Term::string("bar"))
+        .delayed_trace(Term::string("foo"));
+
+    assert_uplc(src, program, false, true)
+}

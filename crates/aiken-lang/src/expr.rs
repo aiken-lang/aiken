@@ -203,6 +203,28 @@ impl<T> From<Vec1Ref<T>> for Vec1<T> {
 }
 
 impl TypedExpr {
+    pub fn and_then(self, next: Self) -> Self {
+        if let TypedExpr::Trace {
+            tipo,
+            location,
+            then,
+            text,
+        } = self
+        {
+            return TypedExpr::Trace {
+                tipo,
+                location,
+                then: Box::new(then.and_then(next)),
+                text,
+            };
+        }
+
+        TypedExpr::Sequence {
+            location: self.location(),
+            expressions: vec![self, next],
+        }
+    }
+
     pub fn sequence(exprs: &[TypedExpr]) -> Self {
         TypedExpr::Sequence {
             location: Span::empty(),
