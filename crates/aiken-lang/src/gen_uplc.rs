@@ -3564,10 +3564,6 @@ impl<'a> CodeGenerator<'a> {
                         .get_mut(&variant_name)
                         .expect("Missing Function Variant Definition");
 
-                    if params.is_empty() {
-                        validator_hoistable.push((key, variant_name));
-                    }
-
                     *function = HoistableFunction::Function {
                         body: hoist_body,
                         deps: hoist_deps,
@@ -5082,7 +5078,6 @@ impl<'a> CodeGenerator<'a> {
                             )
                         }
                     }
-                    air::FunctionVariants::Constant => todo!(),
                     air::FunctionVariants::Cyclic(contained_functions) => {
                         let mut cyclic_functions = vec![];
 

@@ -21,7 +21,6 @@ pub enum Fields {
     SixthField,
     SeventhField,
     EighthField,
-    NinthField,
     ArgsField(usize),
 }
 
@@ -142,7 +141,6 @@ pub enum AirTree {
         params: Vec<String>,
         recursive: bool,
         recursive_nonstatic_params: Vec<String>,
-        constant: bool,
         func_body: Box<AirTree>,
         then: Box<AirTree>,
     },
@@ -534,28 +532,8 @@ impl AirTree {
             params,
             recursive,
             recursive_nonstatic_params,
-            constant: false,
-            variant_name: variant_name.to_string(),
-            func_body: func_body.into(),
-            then: then.into(),
-        }
-    }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn define_const(
-        func_name: impl ToString,
-        module_name: impl ToString,
-        func_body: AirTree,
-        then: AirTree,
-    ) -> AirTree {
-        AirTree::DefineFunc {
-            func_name: func_name.to_string(),
-            module_name: module_name.to_string(),
-            variant_name: "".to_string(),
-            params: vec![],
-            recursive: false,
-            recursive_nonstatic_params: vec![],
-            constant: true,
+            variant_name: variant_name.to_string(),
             func_body: func_body.into(),
             then: then.into(),
         }
@@ -1182,18 +1160,11 @@ impl AirTree {
                 params,
                 recursive,
                 recursive_nonstatic_params,
-                constant,
                 variant_name,
                 func_body,
                 then,
             } => {
-                let variant = if *constant {
-                    assert!(!recursive);
-                    assert!(params.is_empty());
-                    assert!(recursive_nonstatic_params.is_empty());
-
-                    FunctionVariants::Constant
-                } else if *recursive {
+                let variant = if *recursive {
                     FunctionVariants::Recursive {
                         params: params.clone(),
                         recursive_nonstatic_params: recursive_nonstatic_params.clone(),
@@ -2431,17 +2402,16 @@ impl AirTree {
                 recursive: _,
                 recursive_nonstatic_params: _,
                 variant_name: _,
-                constant: _,
                 func_body,
                 then,
             } => {
                 func_body.do_traverse_tree_with(
                     tree_path,
                     current_depth + 1,
-                    Fields::EighthField,
+                    Fields::SeventhField,
                     with,
                 );
-                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::NinthField, with)
+                then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::EighthField, with)
             }
             AirTree::DefineCyclicFuncs {
                 func_name: _,
