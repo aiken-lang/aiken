@@ -1044,7 +1044,7 @@ The best thing to do from here is to remove it."#))]
     #[error("I choked on a generic type left in an outward-facing interface.\n")]
     #[diagnostic(code("illegal::generic_in_abi"))]
     #[diagnostic(help(
-        "Functions of the outer-most parts of a project, such as a validator or a property-based test, must be fully instantiated. That means they can no longer carry unbound generic variables. The type must be fully-known at this point since many structural validation must occur to ensure a safe boundary between the on-chain and off-chain worlds."
+        "Elements of the outer-most parts of a project, such as a validator, constants or a property-based test, must be fully instantiated. That means they can no longer carry unbound or generic variables. The type must be fully-known at this point since many structural validation must occur to ensure a safe boundary between the on-chain and off-chain worlds."
     ))]
     GenericLeftAtBoundary {
         #[label("unbound generic at boundary")]
