@@ -1047,7 +1047,7 @@ impl UntypedArg {
                 // NOTE: We use ordinal here not only because it's cute, but because
                 // such a name cannot be parsed to begin with and thus, will not clash
                 // with any user-defined name.
-                let name = format!("{}_arg", Ordinal::<usize>(ix).suffix());
+                let name = format!("{}{}_arg", ix + 1, Ordinal::<usize>(ix + 1).suffix());
                 ArgName::Named {
                     label: name.clone(),
                     name,
@@ -1768,6 +1768,36 @@ impl UntypedPattern {
             tipo: (),
             module: None,
             is_record: false,
+        }
+    }
+
+    pub fn collect_identifiers<F>(&self, collect: &mut F)
+    where
+        F: FnMut((String, Span)),
+    {
+        match self {
+            Pattern::Var { name, location } => {
+                collect((name.to_string(), *location));
+            }
+            Pattern::List { elements, .. } => {
+                elements.iter().for_each(|e| e.collect_identifiers(collect));
+            }
+            Pattern::Pair { fst, snd, .. } => {
+                fst.collect_identifiers(collect);
+                snd.collect_identifiers(collect);
+            }
+            Pattern::Tuple { elems, .. } => {
+                elems.iter().for_each(|e| e.collect_identifiers(collect));
+            }
+            Pattern::Constructor { arguments, .. } => {
+                arguments
+                    .iter()
+                    .for_each(|arg| arg.value.collect_identifiers(collect));
+            }
+            Pattern::Int { .. }
+            | Pattern::ByteArray { .. }
+            | Pattern::Discard { .. }
+            | Pattern::Assign { .. } => {}
         }
     }
 }
