@@ -3295,3 +3295,50 @@ fn softcasting_unused_let_binding() {
     let (warnings, _) = result.unwrap();
     assert!(warnings.is_empty(), "should not contain any warnings");
 }
+
+#[test]
+fn dangling_trace_let_standalone() {
+    let source_code = r#"
+        test foo() {
+          trace @"foo"
+          let True = True
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::LastExpressionIsAssignment { .. }))
+    ))
+}
+
+#[test]
+fn dangling_trace_let_in_sequence() {
+    let source_code = r#"
+        test foo() {
+          let predicate = True
+          trace @"foo"
+          let result = predicate
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::LastExpressionIsAssignment { .. }))
+    ))
+}
+
+#[test]
+fn dangling_trace_let_in_trace() {
+    let source_code = r#"
+        test foo() {
+          trace @"foo"
+          trace @"bar"
+          let result = True
+        }
+    "#;
+
+    assert!(matches!(
+        check_validator(parse(source_code)),
+        Err((_, Error::LastExpressionIsAssignment { .. }))
+    ))
+}

@@ -8,6 +8,7 @@
 
 ### Changed
 
+- **aiken-lang**: Fix compiler crash on trace + expect as last expression of a clause. See #1029. @KtorZ
 - **uplc**: Fix (again :grimacing:) cost-models for PlutusV1 & PlutusV2. @MicroProofs
 
 ### Removed
