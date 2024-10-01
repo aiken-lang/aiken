@@ -3,7 +3,7 @@ use crate::{
         self,
         definitions::Definitions,
         parameter::Parameter,
-        schema::{Annotated, Schema},
+        schema::{Annotated, Declaration, Schema},
     },
     module::{CheckedModule, CheckedModules},
 };
@@ -51,7 +51,7 @@ impl Export {
                 )
                 .map(|schema| Parameter {
                     title: Some(param.arg_name.get_label()),
-                    schema,
+                    schema: Declaration::Referenced(schema),
                 })
                 .map_err(|error| blueprint::Error::Schema {
                     error,

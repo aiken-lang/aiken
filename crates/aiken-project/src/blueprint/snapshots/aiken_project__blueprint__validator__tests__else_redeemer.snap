@@ -1,0 +1,12 @@
+---
+source: crates/aiken-project/src/blueprint/validator.rs
+description: "Code:\n\nvalidator always_true {\n  else(_) {\n    True\n  }\n}\n"
+---
+{
+  "title": "test_module.always_true.else",
+  "redeemer": {
+    "schema": {}
+  },
+  "compiledCode": "<redacted>",
+  "hash": "<redacted>"
+}
