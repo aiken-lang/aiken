@@ -14,14 +14,14 @@ pub struct Parameter {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
 
-    pub schema: Reference,
+    pub schema: Declaration<Schema>,
 }
 
 impl From<Reference> for Parameter {
     fn from(schema: Reference) -> Parameter {
         Parameter {
             title: None,
-            schema,
+            schema: Declaration::Referenced(schema),
         }
     }
 }
@@ -32,15 +32,20 @@ impl Parameter {
         definitions: &Definitions<Annotated<Schema>>,
         constant: &Constant,
     ) -> Result<(), Error> {
-        let schema = &definitions
-            .lookup(&self.schema)
-            .map(Ok)
-            .unwrap_or_else(|| {
-                Err(Error::UnresolvedSchemaReference {
-                    reference: self.schema.clone(),
-                })
-            })?
-            .annotated;
+        let schema = match &self.schema {
+            Declaration::Inline(schema) => schema,
+            Declaration::Referenced(ref link) => {
+                &definitions
+                    .lookup(link)
+                    .map(Ok)
+                    .unwrap_or_else(|| {
+                        Err(Error::UnresolvedSchemaReference {
+                            reference: link.clone(),
+                        })
+                    })?
+                    .annotated
+            }
+        };
 
         validate_schema(schema, definitions, constant)
     }

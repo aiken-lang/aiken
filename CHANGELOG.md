@@ -8,6 +8,7 @@
 
 ### Changed
 
+- **aiken-project**: Generate empty redeemer for `else` handler, to keep full compliance with the blueprint spec. @KtorZ
 - **aiken-lang**: Forbid constants evaluating to generic or unbound functions. Same restrictions as for validators or any exported UPLC programs apply here. @KtorZ & @MicroProofs
 - **aiken-lang**: Fix compiler crash on trace + expect as last expression of a clause. See #1029. @KtorZ
 - **aiken-lang**: Fix redundant warning on introduced identifiers when destructuring validator params. @KtorZ
