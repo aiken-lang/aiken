@@ -10,6 +10,7 @@
 
 - **aiken-lang**: Fix compiler crash on trace + expect as last expression of a clause. See #1029. @KtorZ
 - **aiken-lang**: Fix redundant warning on introduced identifiers when destructuring validator params. @KtorZ
+- **aiken-lsp**: Compile project using verbose tracing, to avoid having the language server complain about unused imports. @KtorZ
 - **uplc**: Fix (again :grimacing:) cost-models for PlutusV1 & PlutusV2. @MicroProofs
 
 ### Removed
