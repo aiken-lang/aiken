@@ -655,6 +655,10 @@ fn infer_definition(
 
             let tipo = typed_expr.tipo();
 
+            if tipo.is_function() && !tipo.is_monomorphic() {
+                return Err(Error::GenericLeftAtBoundary { location });
+            }
+
             let variant = ValueConstructor {
                 public,
                 variant: ValueConstructorVariant::ModuleConstant {

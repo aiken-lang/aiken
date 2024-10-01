@@ -3394,3 +3394,54 @@ fn destructuring_validator_params_record() {
         "should be empty: {warnings:#?}"
     );
 }
+
+#[test]
+fn constant_generic_lambda() {
+    let source_code = r#"const foo: fn(a) -> List<a> = fn(x: a) { [x] }"#;
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::GenericLeftAtBoundary { .. }))
+    ))
+}
+
+#[test]
+fn constant_generic_mismatch() {
+    let source_code = r#"const foo: List<a> = [42]"#;
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CouldNotUnify { .. }))
+    ))
+}
+
+#[test]
+fn constant_generic_inferred_1() {
+    let source_code = r#"const foo = [42]"#;
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn constant_generic_inferred_2() {
+    let source_code = r#"
+        const foo = fn(x) { [x] }(42)
+
+        test my_test() {
+            foo == [42]
+        }
+    "#;
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn constant_generic_inferred_3() {
+    let source_code = r#"const foo: List<a> = fn(x) { [x] }(42)"#;
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::CouldNotUnify { .. }))
+    ))
+}
+
+#[test]
+fn constant_generic_empty() {
+    let source_code = r#"const foo: List<a> = []"#;
+    assert!(check_validator(parse(source_code)).is_ok());
+}

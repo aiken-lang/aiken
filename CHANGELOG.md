@@ -8,6 +8,7 @@
 
 ### Changed
 
+- **aiken-lang**: Forbid constants evaluating to generic or unbound functions. Same restrictions as for validators or any exported UPLC programs apply here. @KtorZ & @MicroProofs
 - **aiken-lang**: Fix compiler crash on trace + expect as last expression of a clause. See #1029. @KtorZ
 - **aiken-lang**: Fix redundant warning on introduced identifiers when destructuring validator params. @KtorZ
 - **aiken-lsp**: Compile project using verbose tracing, to avoid having the language server complain about unused imports. @KtorZ
