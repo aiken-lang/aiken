@@ -43,10 +43,6 @@ publish-prereleases = true
 # as one would normally write them in a workflow.
 github-build-setup = "../musl-build-setup.yml"
 
-[[workspace.metadata.dist.artifact]]
-target = "x86_64-unknown-linux-musl"
-features = ["bundle_openssl"]
-
 # Cargo-dist uses ubuntu-20.04 by default, causing issues in various cases
 # because it links with openssl-1.1 whereas recent distro ships with 3.x
 [workspace.metadata.dist.github-custom-runners]
