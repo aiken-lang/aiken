@@ -49,6 +49,16 @@ features = ["bundle_openssl"]
 [workspace.metadata.dist.github-custom-runners]
 x86_64-unknown-linux-musl = "ubuntu-22.04"
 
+# Inject build steps into the build-local-artifacts job to prepare the container.
+# This is needed to install libssl-dev and musl tools for producing statically linked
+# binary on Linux and avoid weird segfaults.
+#
+# Note: should be a path relative to the .github/workflows/ directory, and
+# which should point to a .yml file containing the github workflow steps just
+# as one would normally write them in a workflow.
+[workspace.metadata.dist.github-build-setup]
+x86_64-unknown-linux-musl = "../musl-build-setup.yml"
+
 [workspace.dependencies]
 walkdir = "2.3.2"
 insta = { version = "1.30.0", features = ["yaml", "json", "redactions"] }
