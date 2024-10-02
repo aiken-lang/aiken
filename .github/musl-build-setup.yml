@@ -1,4 +1,5 @@
-- if: ${{ runner.os == 'Linux' }}
+- name: Musl build setup
+  if: ${{ runner.os == 'Linux' }}
   run: |
     sudo apt-get install -y pkg-config libssl-dev musl musl-dev musl-tools
     rustup target add x86_64-unknown-linux-musl
