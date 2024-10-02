@@ -39,6 +39,15 @@ install-updater = false
 install-path = "~/.aiken/bin"
 # Whether to publish prereleases to package managers
 publish-prereleases = true
+# Inject build steps into the build-local-artifacts job to prepare the container.
+# This is needed to install libssl-dev and musl tools for producing statically linked
+# binary on Linux and avoid weird segfaults.
+#
+# Note: should be a path relative to the .github/workflows/ directory, and
+# which should point to a .yml file containing the github workflow steps just
+# as one would normally write them in a workflow.
+[workspace.metadata.dist]
+github-build-setup = "../musl-build-setup.yml"
 
 [[workspace.metadata.dist.artifact]]
 target = "x86_64-unknown-linux-musl"
@@ -48,16 +57,6 @@ features = ["bundle_openssl"]
 # because it links with openssl-1.1 whereas recent distro ships with 3.x
 [workspace.metadata.dist.github-custom-runners]
 x86_64-unknown-linux-musl = "ubuntu-22.04"
-
-# Inject build steps into the build-local-artifacts job to prepare the container.
-# This is needed to install libssl-dev and musl tools for producing statically linked
-# binary on Linux and avoid weird segfaults.
-#
-# Note: should be a path relative to the .github/workflows/ directory, and
-# which should point to a .yml file containing the github workflow steps just
-# as one would normally write them in a workflow.
-[workspace.metadata.dist.github-build-setup]
-x86_64-unknown-linux-musl = "../musl-build-setup.yml"
 
 [workspace.dependencies]
 walkdir = "2.3.2"
