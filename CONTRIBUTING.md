@@ -101,6 +101,14 @@ The process follows these steps:
 > tag-name = "v{{version}}"
 > ```
 
+> [!IMPORTANT]
+>
+> Since v1.1.4, we have switched to producing statically linked binary with musl, preventing issues with openssl on various linux platforms. However, this changes the artifact name
+> from: `aiken-x86_64-unknown-linux-gnu.tar.gz` to `aiken-x86_64-unknown-linux-musl.tar.gz`. Consequently, we've patched `aikup` in version v0.0.11, but people using previous
+> version will fail to install aiken through aikup. So for a little a while, we need to manually re-upload a `-gnu.tar.gz` archive (which can be obtained by simply renaming the musl one) so that aikup can keep fetching artifacts on Linux prior to version `v0.0.11`. We can cease doing that once enough time has reasonably passed and enough people have switched to aikup.
+>
+> Ideally, we should introduce an `upgrade` command to aikup, and have some kind of notification system that indicates to people that they should upgrade their aikup installer.
+
 ## About Issues
 
 ### :bug: How To Report A Bug
