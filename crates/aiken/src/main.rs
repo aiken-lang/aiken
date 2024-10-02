@@ -14,7 +14,7 @@ mod cmd;
 fn main() -> miette::Result<()> {
     panic_handler();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(target_env = "musl")]
     openssl_probe::init_ssl_cert_env_vars();
 
     match Cmd::default() {
