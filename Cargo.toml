@@ -46,7 +46,6 @@ publish-prereleases = true
 # Note: should be a path relative to the .github/workflows/ directory, and
 # which should point to a .yml file containing the github workflow steps just
 # as one would normally write them in a workflow.
-[workspace.metadata.dist]
 github-build-setup = "../musl-build-setup.yml"
 
 [[workspace.metadata.dist.artifact]]
