@@ -232,7 +232,8 @@ fn split(formula: Formula) -> List<Formula> {
 fn do_split(f: Formula, fs: List<Formula>) -> List<Formula> {
   when f is {
     Con(p, q) -> do_split(p, do_split(q, fs))
-    _ -> [f, ..fs]
+    _ ->
+      [f, ..fs]
   }
 }
 
@@ -260,11 +261,14 @@ fn tautclause(var: LRVars) -> Bool {
 /// insertion of an item into an ordered list
 fn insert_ordered(es: List<a>, e: a, compare: fn(a, a) -> Ordering) -> List<a> {
   when es is {
-    [] -> [e]
+    [] ->
+      [e]
     [head, ..tail] ->
       when compare(e, head) is {
-        Less -> [e, ..es]
-        Greater -> [head, ..insert_ordered(tail, e, compare)]
+        Less ->
+          [e, ..es]
+        Greater ->
+          [head, ..insert_ordered(tail, e, compare)]
         Equal -> es
       }
   }
