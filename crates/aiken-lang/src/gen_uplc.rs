@@ -1,5 +1,6 @@
 pub mod air;
 pub mod builder;
+pub mod decision_tree;
 pub mod interner;
 pub mod tree;
 

@@ -95,8 +95,7 @@ validator redeem(creator: ByteArray) {
 
 fn insert(self: List<a>, e: a, compare: fn(a, a) -> Ordering) -> List<a> {
   when self is {
-    [] ->
-      [e]
+    [] -> [e]
     [x, ..xs] ->
       if compare(e, x) == Less {
         [e, ..self]
@@ -153,8 +152,7 @@ fn create_expected_minted_nfts(
   } else {
     let token_name = blake2b_256(bytearray.push(base, counter))
 
-    let accum =
-      [token_name, ..accum]
+    let accum = [token_name, ..accum]
 
     create_expected_minted_nfts(base, counter - 1, accum)
   }
