@@ -63,8 +63,7 @@ pub fn descendants(board: ChessSet) -> List<ChessSet> {
           |> quicksort(compare_chess_set)
           |> list.map(fn(t) { t.2nd })
       [_] -> singles
-      _ ->
-        []
+      _ -> []
     }
   }
 }
