@@ -25,8 +25,8 @@ use crate::{
         builder::{
             erase_opaque_type_operations, find_list_clause_or_default_first,
             get_generic_variant_name, get_line_columns_by_span, get_src_code_by_span,
-            known_data_to_type, monomorphize, pattern_has_conditions, wrap_as_multi_validator,
-            wrap_validator_condition, CodeGenFunction, SpecificClause,
+            known_data_to_type, monomorphize, pattern_has_conditions, wrap_validator_condition,
+            CodeGenFunction, SpecificClause,
         },
     },
     line_numbers::LineNumbers,
@@ -6035,24 +6035,6 @@ impl<'a> CodeGenerator<'a> {
             }
 
             Air::NoOp => None,
-            Air::MultiValidator {
-                two_arg_name,
-                three_arg_name,
-            } => {
-                let two_arg = arg_stack.pop().unwrap();
-
-                let three_arg = arg_stack.pop().unwrap();
-
-                let term = wrap_as_multi_validator(
-                    three_arg,
-                    two_arg,
-                    self.tracing,
-                    three_arg_name,
-                    two_arg_name,
-                );
-
-                Some(term)
-            }
             Air::SoftCastLet { name, tipo } => {
                 let value = arg_stack.pop().unwrap();
                 let then = arg_stack.pop().unwrap();
