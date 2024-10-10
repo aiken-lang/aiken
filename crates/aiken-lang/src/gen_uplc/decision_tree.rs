@@ -14,7 +14,7 @@ struct Occurrence {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-enum Path {
+pub enum Path {
     Pair(usize),
     Tuple(usize),
 }
@@ -34,7 +34,7 @@ struct RowItem<'a> {
 }
 
 #[derive(Clone, Debug)]
-struct Assign {
+pub struct Assign {
     path: Vec<Path>,
     assigned: String,
 }
@@ -80,7 +80,7 @@ impl Ord for CaseTest {
     }
 }
 
-enum DecisionTree<'a> {
+pub enum DecisionTree<'a> {
     Switch {
         subject_name: String,
         subject_tipo: Rc<Type>,
@@ -228,7 +228,7 @@ pub fn build_tree<'a>(
     do_build_tree(subject_name, &subject_tipo, PatternMatrix { rows })
 }
 
-pub fn do_build_tree<'a>(
+fn do_build_tree<'a>(
     subject_name: &String,
     subject_tipo: &Rc<Type>,
     matrix: PatternMatrix<'a>,
