@@ -49,7 +49,7 @@ pub enum CaseTest {
     Constr(PatternConstructor),
     Int(String),
     Bytes(Vec<u8>),
-    List(usize),
+    List(usize, bool),
     Wild,
 }
 
@@ -103,7 +103,6 @@ fn get_tipo_by_path(mut subject_tipo: Rc<Type>, mut path: &[Path]) -> Rc<Type> {
 
 fn map_pattern_to_row<'a>(
     pattern: &'a TypedPattern,
-    subject_name: &String,
     subject_tipo: &Rc<Type>,
     path: Vec<Path>,
 ) -> (Vec<Assign>, Vec<RowItem<'a>>) {
@@ -141,7 +140,7 @@ fn map_pattern_to_row<'a>(
                 path: path.clone(),
                 assigned: name.clone(),
             }],
-            map_pattern_to_row(pattern, subject_name, subject_tipo, path).1,
+            map_pattern_to_row(pattern, subject_tipo, path).1,
         ),
         Pattern::Int { .. }
         | Pattern::ByteArray { .. }
@@ -165,15 +164,13 @@ fn map_pattern_to_row<'a>(
             let mut snd_path = path;
             snd_path.push(Path::Pair(1));
 
-            let (mut assigns, mut patts) =
-                map_pattern_to_row(fst, subject_name, subject_tipo, fst_path);
+            let (mut assigns, mut patts) = map_pattern_to_row(fst, subject_tipo, fst_path);
 
-            let (assign_snd, patt_snd) =
-                map_pattern_to_row(snd, subject_name, subject_tipo, snd_path);
+            let (assign_snd, patt_snd) = map_pattern_to_row(snd, subject_tipo, snd_path);
 
-            assigns.extend(assign_snd.into_iter());
+            assigns.extend(assign_snd);
 
-            patts.extend(patt_snd.into_iter());
+            patts.extend(patt_snd);
 
             (assigns, patts)
         }
@@ -186,11 +183,10 @@ fn map_pattern_to_row<'a>(
 
                     item_path.push(Path::Tuple(index));
 
-                    let (assigns, patts) =
-                        map_pattern_to_row(item, subject_name, subject_tipo, item_path);
+                    let (assigns, patts) = map_pattern_to_row(item, subject_tipo, item_path);
 
-                    acc.0.extend(assigns.into_iter());
-                    acc.1.extend(patts.into_iter());
+                    acc.0.extend(assigns);
+                    acc.1.extend(patts);
 
                     acc
                 })
@@ -209,13 +205,12 @@ fn match_wild_card(pattern: &TypedPattern) -> bool {
 pub fn build_tree<'a>(
     subject_name: &String,
     subject_tipo: &Rc<Type>,
-    clauses: &'a Vec<TypedClause>,
+    clauses: &'a [TypedClause],
 ) -> DecisionTree<'a> {
     let rows = clauses
         .iter()
         .map(|clause| {
-            let (assign, row_items) =
-                map_pattern_to_row(&clause.pattern, subject_name, subject_tipo, vec![]);
+            let (assign, row_items) = map_pattern_to_row(&clause.pattern, subject_tipo, vec![]);
 
             Row {
                 assigns: assign.into_iter().collect_vec(),
@@ -227,7 +222,7 @@ pub fn build_tree<'a>(
 
     println!("INITIAL ROWS ARE {:#?}", rows);
 
-    do_build_tree(subject_name, &subject_tipo, PatternMatrix { rows }, None)
+    do_build_tree(subject_name, subject_tipo, PatternMatrix { rows }, None)
 }
 
 fn do_build_tree<'a>(
@@ -293,19 +288,20 @@ fn do_build_tree<'a>(
                 Pattern::Int { value, .. } => (vec![], CaseTest::Int(value.clone())),
                 Pattern::ByteArray { value, .. } => (vec![], CaseTest::Bytes(value.clone())),
                 Pattern::Var { .. } | Pattern::Discard { .. } => (vec![], CaseTest::Wild),
-                Pattern::List { elements, .. } => (
+                Pattern::List { elements, tail, .. } => (
                     elements
                         .iter()
+                        .chain(tail.as_ref().map(|tail| tail.as_ref()))
                         .enumerate()
                         .map(|(index, item)| {
                             let mut item_path = col.path.clone();
 
                             item_path.push(Path::List(index));
 
-                            map_pattern_to_row(item, subject_name, subject_tipo, item_path)
+                            map_pattern_to_row(item, subject_tipo, item_path)
                         })
                         .collect_vec(),
-                    CaseTest::List(elements.len()),
+                    CaseTest::List(elements.len(), tail.is_some()),
                 ),
 
                 Pattern::Constructor { .. } => {
@@ -315,9 +311,9 @@ fn do_build_tree<'a>(
             };
 
             item.assigns
-                .extend(mapped_args.iter().map(|x| x.0.clone()).flatten());
+                .extend(mapped_args.iter().flat_map(|x| x.0.clone()));
             item.columns
-                .extend(mapped_args.into_iter().map(|x| x.1).flatten());
+                .extend(mapped_args.into_iter().flat_map(|x| x.1));
 
             assert!(
                 collection_vec.0.is_empty()
@@ -369,7 +365,6 @@ fn do_build_tree<'a>(
                     PatternMatrix { rows: x.1 },
                     None,
                 )
-                .into()
             })
             .collect_vec();
         assert!(fallback.len() == 1 || fallback_option.is_some());
