@@ -342,57 +342,6 @@ pub fn erase_opaque_type_operations(
     }
 }
 
-/// Determine whether this air_tree node introduces any shadowing over `potential_matches`
-pub fn find_introduced_variables(air_tree: &AirTree) -> Vec<String> {
-    match air_tree {
-        AirTree::Let { name, .. } => vec![name.clone()],
-        AirTree::SoftCastLet { name, .. } => vec![name.clone()],
-        AirTree::TupleGuard { indices, .. } | AirTree::TupleClause { indices, .. } => {
-            indices.iter().map(|(_, name)| name.clone()).collect()
-        }
-        AirTree::PairGuard {
-            fst_name, snd_name, ..
-        } => fst_name
-            .iter()
-            .cloned()
-            .chain(snd_name.iter().cloned())
-            .collect_vec(),
-        AirTree::PairAccessor { fst, snd, .. } => {
-            fst.iter().cloned().chain(snd.iter().cloned()).collect_vec()
-        }
-        AirTree::PairClause {
-            fst_name, snd_name, ..
-        } => fst_name
-            .iter()
-            .cloned()
-            .chain(snd_name.iter().cloned())
-            .collect_vec(),
-        AirTree::Fn { params, .. } => params.to_vec(),
-        AirTree::ListAccessor { names, .. } => names.clone(),
-        AirTree::ListExpose {
-            tail,
-            tail_head_names,
-            ..
-        } => {
-            let mut ret = vec![];
-            if let Some((_, head)) = tail {
-                ret.push(head.clone())
-            }
-
-            for name in tail_head_names.iter().map(|(_, head)| head) {
-                ret.push(name.clone());
-            }
-            ret
-        }
-        AirTree::TupleAccessor { names, .. } => names.clone(),
-        AirTree::FieldsExpose { indices, .. } => {
-            indices.iter().map(|(_, name, _)| name.clone()).collect()
-        }
-        AirTree::When { subject_name, .. } => vec![subject_name.clone()],
-        _ => vec![],
-    }
-}
-
 /// Determine whether a function is recursive, and if so, get the arguments
 pub fn is_recursive_function_call<'a>(
     air_tree: &'a AirTree,
