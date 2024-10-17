@@ -99,6 +99,7 @@ dependencies = [
  "pallas-primitives",
  "patricia_tree",
  "petgraph",
+ "pretty 0.12.3",
  "pretty_assertions",
  "serde",
  "strum",
@@ -2242,6 +2243,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "pretty"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b55c4d17d994b637e2f4daf6e5dc5d660d209d5642377d675d7a1c3ab69fa579"
+dependencies = [
+ "arrayvec",
+ "typed-arena",
+ "unicode-width",
+]
+
+[[package]]
 name = "pretty_assertions"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3254,7 +3266,7 @@ dependencies = [
  "pallas-primitives",
  "pallas-traverse",
  "peg",
- "pretty",
+ "pretty 0.11.3",
  "pretty_assertions",
  "secp256k1",
  "serde",
