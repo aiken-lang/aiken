@@ -325,14 +325,15 @@ impl<'a, 'b> TreeGen<'a, 'b> {
             })
             .collect_vec();
 
-        let tree_gen = &mut self;
-
-        tree_gen.do_build_tree(
+        let tree = self.do_build_tree(
             subject_name,
             subject_tipo,
             PatternMatrix { rows },
             &mut clause_then_map,
-        )
+        );
+
+        // Do hoisting of thens here
+        tree
     }
 
     fn do_build_tree(
