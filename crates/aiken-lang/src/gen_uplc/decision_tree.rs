@@ -1,4 +1,6 @@
-use std::rc::Rc;
+use core::fmt;
+use pretty::RcDoc;
+use std::{fmt::Display, rc::Rc};
 
 use indexmap::IndexMap;
 use itertools::{Itertools, Position};
@@ -29,6 +31,18 @@ pub enum Path {
     ListTail(usize),
 }
 
+impl Display for Path {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Path::Pair(i) => write!(f, "Pair({})", i),
+            Path::Tuple(i) => write!(f, "Tuple({})", i),
+            Path::Constr(_, i) => write!(f, "Constr({})", i),
+            Path::List(i) => write!(f, "List({})", i),
+            Path::ListTail(i) => write!(f, "ListTail({})", i),
+        }
+    }
+}
+
 impl PartialEq for Path {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -41,6 +55,8 @@ impl PartialEq for Path {
         }
     }
 }
+
+impl Eq for Path {}
 
 #[derive(Clone, Debug)]
 pub struct Assigned {
@@ -58,7 +74,7 @@ struct RowItem<'a> {
 struct Row<'a> {
     assigns: Vec<Assigned>,
     columns: Vec<RowItem<'a>>,
-    then: &'a TypedExpr,
+    then: String,
 }
 
 #[derive(Clone, Debug)]
@@ -76,6 +92,19 @@ pub enum CaseTest {
     Wild,
 }
 
+impl Display for CaseTest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CaseTest::Constr(i) => write!(f, "Constr({})", i),
+            CaseTest::Int(i) => write!(f, "Int({})", i),
+            CaseTest::Bytes(vec) => write!(f, "Bytes({:?})", vec),
+            CaseTest::List(i) => write!(f, "List({})", i),
+            CaseTest::ListWithTail(i) => write!(f, "ListWithTail({})", i),
+            CaseTest::Wild => write!(f, "Wild"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum DecisionTree<'a> {
     Switch {
@@ -83,7 +112,7 @@ pub enum DecisionTree<'a> {
         subject_tipo: Rc<Type>,
         path: Vec<Path>,
         cases: Vec<(CaseTest, DecisionTree<'a>)>,
-        default: Box<DecisionTree<'a>>,
+        default: Option<Box<DecisionTree<'a>>>,
     },
     ListSwitch {
         subject_name: String,
@@ -93,40 +122,217 @@ pub enum DecisionTree<'a> {
         tail_cases: Vec<(CaseTest, DecisionTree<'a>)>,
         default: Option<Box<DecisionTree<'a>>>,
     },
-    Leaf(Vec<Assigned>, &'a TypedExpr),
-    HoistedLeaf(String),
-    HoistThen(String, Box<DecisionTree<'a>>, Box<DecisionTree<'a>>),
+    HoistedLeaf(String, Vec<Assigned>),
+    HoistThen {
+        name: String,
+        assigns: Vec<Assigned>,
+        pattern: Box<DecisionTree<'a>>,
+        then: &'a TypedExpr,
+    },
+}
+
+impl<'a> DecisionTree<'a> {
+    pub fn to_pretty(&self) -> String {
+        let mut w = Vec::new();
+
+        self.to_doc().render(80, &mut w).unwrap();
+
+        String::from_utf8(w)
+            .unwrap()
+            .lines()
+            // This is a hack to deal with blank newlines
+            // that end up with a bunch of useless whitespace
+            // because of the nesting
+            .map(|l| {
+                if l.chars().all(|c| c.is_whitespace()) {
+                    "".to_string()
+                } else {
+                    l.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn to_doc(&self) -> RcDoc<()> {
+        match self {
+            DecisionTree::Switch {
+                path,
+                cases,
+                default,
+                ..
+            } => RcDoc::text("Switch(")
+                .append(RcDoc::line())
+                .append(
+                    path.iter()
+                        .fold(RcDoc::text("path("), |acc, p| {
+                            acc.append(RcDoc::line())
+                                .append(RcDoc::text(format!("{}", p)))
+                        })
+                        .append(RcDoc::line_())
+                        .nest(2)
+                        .append(RcDoc::text(")")),
+                )
+                .append(RcDoc::line())
+                .append(
+                    cases
+                        .iter()
+                        .fold(RcDoc::text("cases("), |acc, (con, tree)| {
+                            acc.append(RcDoc::line())
+                                .append(format!("({}): ", con))
+                                .append(RcDoc::line())
+                                .append(tree.to_doc().nest(2))
+                        })
+                        .append(RcDoc::line_())
+                        .nest(2)
+                        .append(RcDoc::text(")")),
+                )
+                .append(RcDoc::line())
+                .append(
+                    RcDoc::text("default : ")
+                        .append(RcDoc::line())
+                        .append(
+                            default
+                                .as_ref()
+                                .map(|i| i.to_doc())
+                                .unwrap_or(RcDoc::text("None")),
+                        )
+                        .nest(2),
+                )
+                .append(RcDoc::line_())
+                .append(RcDoc::text(")")),
+            DecisionTree::ListSwitch {
+                path,
+                cases,
+                tail_cases,
+                default,
+                ..
+            } => RcDoc::text("ListSwitch(")
+                .append(
+                    path.iter()
+                        .fold(RcDoc::text("path("), |acc, p| {
+                            acc.append(RcDoc::line())
+                                .append(RcDoc::text(format!("{}", p)))
+                        })
+                        .append(RcDoc::line_())
+                        .nest(2)
+                        .append(RcDoc::text(")")),
+                )
+                .append(
+                    cases
+                        .iter()
+                        .fold(RcDoc::text("cases("), |acc, (con, tree)| {
+                            acc.append(RcDoc::line())
+                                .append(format!("({}): ", con))
+                                .append(RcDoc::line())
+                                .append(tree.to_doc().nest(2))
+                        })
+                        .append(RcDoc::line_())
+                        .nest(2)
+                        .append(RcDoc::text(")")),
+                )
+                .append(
+                    tail_cases
+                        .iter()
+                        .fold(RcDoc::text("tail cases("), |acc, (con, tree)| {
+                            acc.append(RcDoc::line())
+                                .append(format!("({}): ", con))
+                                .append(RcDoc::line())
+                                .append(tree.to_doc().nest(2))
+                        })
+                        .append(RcDoc::line_())
+                        .nest(2)
+                        .append(RcDoc::text(")")),
+                )
+                .append(
+                    RcDoc::text("default : ")
+                        .append(RcDoc::line())
+                        .append(
+                            default
+                                .as_ref()
+                                .map(|i| i.to_doc())
+                                .unwrap_or(RcDoc::text("None")),
+                        )
+                        .nest(2),
+                )
+                .append(RcDoc::line_())
+                .append(RcDoc::text(")")),
+            DecisionTree::HoistedLeaf(name, _) => RcDoc::text(format!("Leaf({})", name)),
+            DecisionTree::HoistThen { .. } => todo!(),
+        }
+    }
+}
+
+impl<'a> Display for DecisionTree<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_pretty())
+    }
 }
 
 pub struct TreeGen<'a, 'b> {
     interner: &'b mut AirInterner,
     data_types: &'b IndexMap<&'a DataTypeKey, &'a TypedDataType>,
+    wild_card_pattern: RowItem<'a>,
 }
 
 impl<'a, 'b> TreeGen<'a, 'b> {
+    pub fn new(
+        interner: &'b mut AirInterner,
+        data_types: &'b IndexMap<&'a DataTypeKey, &'a TypedDataType>,
+        wild_card_pattern: &'a TypedPattern,
+    ) -> Self {
+        TreeGen {
+            interner,
+            data_types,
+            wild_card_pattern: RowItem {
+                path: vec![],
+                pattern: wild_card_pattern,
+            },
+        }
+    }
+
     pub fn build_tree(
         mut self,
         subject_name: &String,
         subject_tipo: &Rc<Type>,
         clauses: &'a [TypedClause],
     ) -> DecisionTree<'a> {
+        let mut clause_then_map = IndexMap::new();
+
         let rows = clauses
             .iter()
-            .map(|clause| {
+            .enumerate()
+            .map(|(index, clause)| {
                 let (assign, row_items) =
                     self.map_pattern_to_row(&clause.pattern, subject_tipo, vec![]);
 
-                Row {
+                self.interner.intern(format!("__clause_then_{}", index));
+                let clause_then_name = self
+                    .interner
+                    .lookup_interned(&format!("__clause_then_{}", index));
+
+                clause_then_map.insert(clause_then_name.clone(), (vec![], &clause.then));
+
+                let row = Row {
                     assigns: assign.into_iter().collect_vec(),
                     columns: row_items,
-                    then: &clause.then,
-                }
+                    then: clause_then_name,
+                };
+
+                self.interner.pop_text(format!("__clause_then_{}", index));
+
+                row
             })
             .collect_vec();
 
         let tree_gen = &mut self;
 
-        tree_gen.do_build_tree(subject_name, subject_tipo, PatternMatrix { rows }, None)
+        tree_gen.do_build_tree(
+            subject_name,
+            subject_tipo,
+            PatternMatrix { rows },
+            &mut clause_then_map,
+        )
     }
 
     fn do_build_tree(
@@ -134,21 +340,41 @@ impl<'a, 'b> TreeGen<'a, 'b> {
         subject_name: &String,
         subject_tipo: &Rc<Type>,
         matrix: PatternMatrix<'a>,
-        fallback_option: Option<DecisionTree<'a>>,
+        then_map: &mut IndexMap<String, (Vec<Assigned>, &'a TypedExpr)>,
     ) -> DecisionTree<'a> {
         let column_length = matrix.rows[0].columns.len();
-
+        // First step make sure all rows have same number of columns
+        // or something went wrong
         assert!(matrix
             .rows
             .iter()
             .all(|row| { row.columns.len() == column_length }));
 
         let occurrence_col = highest_occurrence(&matrix, column_length);
+        // Find which column has the most important pattern
+
+        let Some(occurrence_col) = occurrence_col else {
+            // No more patterns to match on so we grab the first default row and return that
+            let mut fallback = matrix.rows;
+
+            let row = fallback.swap_remove(0);
+
+            let Some((assigns, _)) = then_map.get_mut(&row.then) else {
+                unreachable!()
+            };
+
+            if assigns.is_empty() {
+                *assigns = row.assigns.clone();
+            }
+
+            return DecisionTree::HoistedLeaf(row.then, row.assigns);
+        };
 
         let mut longest_elems_no_tail = None;
         let mut longest_elems_with_tail = None;
         let mut has_list_pattern = false;
 
+        // List patterns are special so we need more information on length
         matrix.rows.iter().for_each(|item| {
             let col = &item.columns[occurrence_col];
 
@@ -194,19 +420,20 @@ impl<'a, 'b> TreeGen<'a, 'b> {
 
         let specialized_tipo = get_tipo_by_path(subject_tipo.clone(), &path);
 
-        let mut row_iter = matrix.rows.into_iter().peekable();
-
-        let specialized_matrices = row_iter
-            .peeking_take_while(|row| !match_wild_card(&row.columns[occurrence_col].pattern))
-            .fold(vec![], |mut case_matrices, mut row| {
+        let (default_matrix, specialized_matrices) = matrix.rows.into_iter().fold(
+            (vec![], vec![]),
+            |(mut default_matrix, mut case_matrices): (Vec<Row>, Vec<(CaseTest, Vec<Row>)>),
+             mut row| {
+                // For example in the case of matching on []
                 if row.columns.is_empty() {
-                    case_matrices.push((CaseTest::Wild, vec![row]));
-                    return case_matrices;
+                    default_matrix.push(row);
+                    return (default_matrix, case_matrices);
                 }
 
                 let col = row.columns.remove(occurrence_col);
 
                 let (case, remaining_patts) = match col.pattern {
+                    Pattern::Var { .. } | Pattern::Discard { .. } => (CaseTest::Wild, vec![]),
                     Pattern::Int { value, .. } => (CaseTest::Int(value.clone()), vec![]),
                     Pattern::ByteArray { value, .. } => (CaseTest::Bytes(value.clone()), vec![]),
                     Pattern::List { elements, tail, .. } => (
@@ -281,52 +508,73 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                                 .collect_vec(),
                         )
                     }
-                    Pattern::Tuple { .. }
-                    | Pattern::Pair { .. }
-                    | Pattern::Assign { .. }
-                    | Pattern::Var { .. }
-                    | Pattern::Discard { .. } => {
+                    Pattern::Tuple { .. } | Pattern::Pair { .. } | Pattern::Assign { .. } => {
                         unreachable!("{:#?}", col.pattern)
                     }
                 };
 
                 // Assert path is the same for each specialized row
-                assert!(path == col.path);
+                assert!(path == col.path || matches!(case, CaseTest::Wild));
 
                 // expand assigns by newly added ones
                 row.assigns
                     .extend(remaining_patts.iter().flat_map(|x| x.0.clone()));
 
                 // Add inner patterns to existing row
-                row.columns
-                    .extend(remaining_patts.into_iter().flat_map(|x| x.1));
+                let mut new_cols = remaining_patts.into_iter().flat_map(|x| x.1).collect_vec();
 
-                // For lists with tail it's a special case where we also add it to existing patterns
-                // all the way to the longest element. The reason being that each list size greater
-                // than the list with tail could also match with could also match depending on the inner pattern.
-                // See tests below for an example
-                if let CaseTest::ListWithTail(elems_len) = case {
+                let added_columns = new_cols.len();
+
+                // Pop off tail so that it aligns more easily with other list patterns
+                if matches!(case, CaseTest::ListWithTail(_)) {
+                    new_cols.pop();
+                }
+
+                new_cols.extend(row.columns);
+
+                row.columns = new_cols;
+
+                if let CaseTest::Wild = case {
+                    let current_wild_cols = row.columns.len();
+                    default_matrix.push(row.clone());
+
+                    case_matrices.iter_mut().for_each(|(_, matrix)| {
+                        let mut row = row.clone();
+                        let total_cols = matrix[0].columns.len();
+
+                        if total_cols != 0 {
+                            let added_columns = total_cols - current_wild_cols;
+
+                            for _ in 0..added_columns {
+                                row.columns.insert(0, self.wild_card_pattern.clone());
+                            }
+
+                            matrix.push(row);
+                        }
+                    });
+                } else if let CaseTest::ListWithTail(case_length) = case {
+                    // For lists with tail it's a special case where we also add it to existing patterns
+                    // all the way to the longest element. The reason being that each list size greater
+                    // than the list with tail could also match with could also match depending on the inner pattern.
+                    // See tests below for an example
                     if let Some(longest_elems_no_tail) = longest_elems_no_tail {
-                        for elem_count in elems_len..=longest_elems_no_tail {
+                        for elem_count in case_length..=longest_elems_no_tail {
                             let case = CaseTest::List(elem_count);
 
                             let mut row = row.clone();
 
-                            let tail = row.columns.pop().unwrap();
-
-                            let columns_to_fill = (0..(elem_count - elems_len))
-                                .map(|_| tail.clone())
-                                .collect_vec();
-
-                            row.columns.extend(columns_to_fill);
-
-                            if let Some(entry) =
-                                case_matrices.iter_mut().find(|item| item.0 == case)
-                            {
-                                entry.1.push(row);
-                            } else {
-                                case_matrices.push((case, vec![row]));
+                            for _ in 0..(elem_count - case_length) {
+                                row.columns
+                                    .insert(case_length, self.wild_card_pattern.clone());
                             }
+
+                            self.insert_case(
+                                &mut case_matrices,
+                                case,
+                                &default_matrix,
+                                row,
+                                added_columns,
+                            );
                         }
                     }
 
@@ -334,190 +582,138 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                         unreachable!()
                     };
 
-                    for elem_count in elems_len..=longest_elems_with_tail {
+                    for elem_count in case_length..=longest_elems_with_tail {
                         let case = CaseTest::ListWithTail(elem_count);
 
                         let mut row = row.clone();
 
-                        let tail = row.columns.pop().unwrap();
-
-                        let columns_to_fill = (0..(elem_count - elems_len))
-                            .map(|_| tail.clone())
-                            .collect_vec();
-
-                        row.columns.extend(columns_to_fill);
-
-                        if let Some(entry) = case_matrices.iter_mut().find(|item| item.0 == case) {
-                            entry.1.push(row);
-                        } else {
-                            case_matrices.push((case, vec![row]));
+                        for _ in 0..(elem_count - case_length) {
+                            row.columns
+                                .insert(case_length, self.wild_card_pattern.clone());
                         }
+
+                        self.insert_case(
+                            &mut case_matrices,
+                            case,
+                            &default_matrix,
+                            row,
+                            added_columns,
+                        );
                     }
                 } else {
-                    if let Some(entry) = case_matrices.iter_mut().find(|item| item.0 == case) {
-                        entry.1.push(row);
-                    } else {
-                        case_matrices.push((case, vec![row]));
-                    }
+                    self.insert_case(
+                        &mut case_matrices,
+                        case,
+                        &default_matrix,
+                        row,
+                        added_columns,
+                    );
                 }
 
-                case_matrices
-            });
+                (default_matrix, case_matrices)
+            },
+        );
 
         let default_matrix = PatternMatrix {
-            rows: row_iter.collect_vec(),
+            rows: default_matrix,
         };
 
         if has_list_pattern {
             // Since the list_tail case might cover the rest of the possible matches extensively
             // then fallback is optional here
             let fallback_option = if default_matrix.rows.is_empty() {
-                fallback_option
+                None
             } else {
-                Some(self.do_build_tree(
-                    subject_name,
-                    subject_tipo,
-                    // Since everything after this point had a wild card on or above
-                    // the row for the selected column in front. Then we ignore the
-                    // cases and continue to check other columns.
-                    default_matrix,
-                    fallback_option,
-                ))
+                Some(
+                    self.do_build_tree(
+                        subject_name,
+                        subject_tipo,
+                        // Since everything after this point had a wild card on or above
+                        // the row for the selected column in front. Then we ignore the
+                        // cases and continue to check other columns.
+                        default_matrix,
+                        then_map,
+                    )
+                    .into(),
+                )
             };
 
             let (tail_cases, cases): (Vec<_>, Vec<_>) = specialized_matrices
                 .into_iter()
                 .partition(|(case, _)| matches!(case, CaseTest::ListWithTail(_)));
 
-            // TODO: pass in interner and use unique string
-            let hoisted_name = "HoistedThing".to_string();
-
-            if let Some(fallback) = fallback_option {
-                DecisionTree::HoistThen(
-                    hoisted_name.clone(),
-                    fallback.into(),
-                    DecisionTree::ListSwitch {
-                        subject_name: subject_name.clone(),
-                        subject_tipo: specialized_tipo.clone(),
-                        path,
-                        cases: cases
-                            .into_iter()
-                            .map(|x| {
-                                (
-                                    x.0,
-                                    self.do_build_tree(
-                                        subject_name,
-                                        subject_tipo,
-                                        PatternMatrix { rows: x.1 },
-                                        Some(DecisionTree::HoistedLeaf(hoisted_name.clone())),
-                                    ),
-                                )
-                            })
-                            .collect_vec(),
-                        tail_cases: tail_cases
-                            .into_iter()
-                            .map(|x| {
-                                (
-                                    x.0,
-                                    self.do_build_tree(
-                                        subject_name,
-                                        subject_tipo,
-                                        PatternMatrix { rows: x.1 },
-                                        Some(DecisionTree::HoistedLeaf(hoisted_name.clone())),
-                                    ),
-                                )
-                            })
-                            .collect_vec(),
-                        default: Some(DecisionTree::HoistedLeaf(hoisted_name).into()),
-                    }
-                    .into(),
-                )
-            } else {
-                DecisionTree::ListSwitch {
-                    subject_name: subject_name.clone(),
-                    subject_tipo: specialized_tipo.clone(),
-                    path,
-                    cases: cases
-                        .into_iter()
-                        .map(|x| {
-                            (
-                                x.0,
-                                self.do_build_tree(
-                                    subject_name,
-                                    subject_tipo,
-                                    PatternMatrix { rows: x.1 },
-                                    None,
-                                ),
-                            )
-                        })
-                        .collect_vec(),
-                    tail_cases: tail_cases
-                        .into_iter()
-                        .map(|x| {
-                            (
-                                x.0,
-                                self.do_build_tree(
-                                    subject_name,
-                                    subject_tipo,
-                                    PatternMatrix { rows: x.1 },
-                                    None,
-                                ),
-                            )
-                        })
-                        .collect_vec(),
-                    default: None,
-                }
+            DecisionTree::ListSwitch {
+                subject_name: subject_name.clone(),
+                subject_tipo: specialized_tipo.clone(),
+                path,
+                cases: cases
+                    .into_iter()
+                    .map(|x| {
+                        (
+                            x.0,
+                            self.do_build_tree(
+                                subject_name,
+                                subject_tipo,
+                                PatternMatrix { rows: x.1 },
+                                then_map,
+                            ),
+                        )
+                    })
+                    .collect_vec(),
+                tail_cases: tail_cases
+                    .into_iter()
+                    .map(|x| {
+                        (
+                            x.0,
+                            self.do_build_tree(
+                                subject_name,
+                                subject_tipo,
+                                PatternMatrix { rows: x.1 },
+                                then_map,
+                            ),
+                        )
+                    })
+                    .collect_vec(),
+                default: fallback_option,
             }
-        } else if specialized_matrices.is_empty() {
-            // No more patterns to match on so we grab the first default row and return that
-            let mut fallback = default_matrix.rows;
-
-            let row = fallback.swap_remove(0);
-
-            DecisionTree::Leaf(row.assigns, row.then)
         } else {
-            let fallback = if default_matrix.rows.is_empty() {
-                fallback_option.unwrap()
+            let fallback_option = if default_matrix.rows.is_empty() {
+                None
             } else {
-                self.do_build_tree(
-                    subject_name,
-                    subject_tipo,
-                    // Since everything after this point had a wild card on or above
-                    // the row for the selected column in front. Then we ignore the
-                    // cases and continue to check other columns.
-                    default_matrix,
-                    fallback_option,
+                Some(
+                    self.do_build_tree(
+                        subject_name,
+                        subject_tipo,
+                        // Since everything after this point had a wild card on or above
+                        // the row for the selected column in front. Then we ignore the
+                        // cases and continue to check other columns.
+                        default_matrix,
+                        then_map,
+                    )
+                    .into(),
                 )
             };
 
-            // TODO: pass in interner and use unique string
-            let hoisted_name = "HoistedThing".to_string();
-
-            DecisionTree::HoistThen(
-                hoisted_name.clone(),
-                fallback.into(),
-                DecisionTree::Switch {
-                    subject_name: subject_name.clone(),
-                    subject_tipo: specialized_tipo.clone(),
-                    path,
-                    cases: specialized_matrices
-                        .into_iter()
-                        .map(|x| {
-                            (
-                                x.0,
-                                self.do_build_tree(
-                                    subject_name,
-                                    subject_tipo,
-                                    PatternMatrix { rows: x.1 },
-                                    Some(DecisionTree::HoistedLeaf(hoisted_name.clone())),
-                                ),
-                            )
-                        })
-                        .collect_vec(),
-                    default: DecisionTree::HoistedLeaf(hoisted_name).into(),
-                }
-                .into(),
-            )
+            DecisionTree::Switch {
+                subject_name: subject_name.clone(),
+                subject_tipo: specialized_tipo.clone(),
+                path,
+                cases: specialized_matrices
+                    .into_iter()
+                    .map(|x| {
+                        (
+                            x.0,
+                            self.do_build_tree(
+                                subject_name,
+                                subject_tipo,
+                                PatternMatrix { rows: x.1 },
+                                then_map,
+                            ),
+                        )
+                    })
+                    .collect_vec(),
+                default: fallback_option.into(),
+            }
         }
     }
 
@@ -659,6 +855,30 @@ impl<'a, 'b> TreeGen<'a, 'b> {
             }
         }
     }
+
+    fn insert_case(
+        &self,
+        case_matrices: &mut Vec<(CaseTest, Vec<Row<'a>>)>,
+        case: CaseTest,
+        default_matrix: &Vec<Row<'a>>,
+        new_row: Row<'a>,
+        added_columns: usize,
+    ) {
+        if let Some(entry) = case_matrices.iter_mut().find(|item| item.0 == case) {
+            entry.1.push(new_row);
+        } else {
+            let mut rows = default_matrix.clone();
+
+            for _ in 0..added_columns {
+                for row in &mut rows {
+                    row.columns.insert(0, self.wild_card_pattern.clone());
+                }
+            }
+
+            rows.push(new_row);
+            case_matrices.push((case, rows));
+        }
+    }
 }
 
 fn get_tipo_by_path(mut subject_tipo: Rc<Type>, mut path: &[Path]) -> Rc<Type> {
@@ -686,7 +906,8 @@ fn match_wild_card(pattern: &TypedPattern) -> bool {
 }
 
 // A function to get which column has the most pattern matches before a wild card
-fn highest_occurrence(matrix: &PatternMatrix, column_length: usize) -> usize {
+// Returns none if all columns in the first row are wild cards
+fn highest_occurrence(matrix: &PatternMatrix, column_length: usize) -> Option<usize> {
     let occurrences = [Occurrence::default()].repeat(column_length);
 
     let occurrences =
@@ -721,7 +942,11 @@ fn highest_occurrence(matrix: &PatternMatrix, column_length: usize) -> usize {
         }
     });
 
-    highest_occurrence.0
+    if highest_occurrence.1 == 0 {
+        None
+    } else {
+        Some(highest_occurrence.0)
+    }
 }
 
 #[cfg(test)]
@@ -732,7 +957,8 @@ mod tester {
 
     use crate::{
         ast::{
-            well_known, Definition, ModuleKind, TraceLevel, Tracing, TypedModule, UntypedModule,
+            Definition, ModuleKind, Span, TraceLevel, Tracing, TypedModule, TypedPattern,
+            UntypedModule,
         },
         builtins,
         expr::{Type, TypedExpr},
@@ -823,14 +1049,16 @@ mod tester {
 
         let data_types = IndexMap::new();
 
-        let tree_gen = TreeGen {
-            interner: &mut air_interner,
-            data_types: &data_types,
+        let pattern = TypedPattern::Discard {
+            name: "_".to_string(),
+            location: Span::empty(),
         };
+
+        let tree_gen = TreeGen::new(&mut air_interner, &data_types, &pattern);
 
         let tree = tree_gen.build_tree(&"subject".to_string(), &Type::list(Type::int()), clauses);
 
-        println!("TREE IS {:#?}", tree);
+        println!("{:#?}", tree);
     }
 
     #[test]
@@ -859,10 +1087,12 @@ mod tester {
 
         let data_types = IndexMap::new();
 
-        let tree_gen = TreeGen {
-            interner: &mut air_interner,
-            data_types: &data_types,
+        let pattern = TypedPattern::Discard {
+            name: "_".to_string(),
+            location: Span::empty(),
         };
+
+        let tree_gen = TreeGen::new(&mut air_interner, &data_types, &pattern);
 
         let tree = tree_gen.build_tree(
             &"subject".to_string(),
@@ -875,7 +1105,7 @@ mod tester {
             clauses,
         );
 
-        println!("TREE IS {:#?}", tree);
+        println!("{:#?}", tree);
     }
 
     #[test]
@@ -906,10 +1136,12 @@ mod tester {
 
         let data_types = IndexMap::new();
 
-        let tree_gen = TreeGen {
-            interner: &mut air_interner,
-            data_types: &data_types,
+        let pattern = TypedPattern::Discard {
+            name: "_".to_string(),
+            location: Span::empty(),
         };
+
+        let tree_gen = TreeGen::new(&mut air_interner, &data_types, &pattern);
 
         let tree = tree_gen.build_tree(
             &"subject".to_string(),
@@ -922,7 +1154,7 @@ mod tester {
             clauses,
         );
 
-        println!("TREE IS {:#?}", tree);
+        println!("{:#?}", tree);
     }
 
     #[test]
@@ -954,10 +1186,12 @@ mod tester {
 
         let data_types = IndexMap::new();
 
-        let tree_gen = TreeGen {
-            interner: &mut air_interner,
-            data_types: &data_types,
+        let pattern = TypedPattern::Discard {
+            name: "_".to_string(),
+            location: Span::empty(),
         };
+
+        let tree_gen = TreeGen::new(&mut air_interner, &data_types, &pattern);
 
         let tree = tree_gen.build_tree(
             &"subject".to_string(),
@@ -970,7 +1204,8 @@ mod tester {
             clauses,
         );
 
-        println!("TREE IS {:#?}", tree);
+        println!("{}", tree);
+        panic!("SUPPPPPPPPPPPPPPPPPPPPPPPER DOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOONE");
     }
 
     #[test]
@@ -994,7 +1229,7 @@ mod tester {
             panic!()
         };
 
-        let TypedExpr::When { clauses, .. } = &function.body else {
+        let TypedExpr::When { clauses, tipo, .. } = &function.body else {
             panic!()
         };
 
@@ -1004,10 +1239,14 @@ mod tester {
 
         let data_types = builtins::prelude_data_types(&id_gen);
 
-        let tree_gen = TreeGen {
-            interner: &mut air_interner,
-            data_types: &utils::indexmap::as_ref_values(&data_types),
+        let pattern = TypedPattern::Discard {
+            name: "_".to_string(),
+            location: Span::empty(),
         };
+
+        let data_types = utils::indexmap::as_ref_values(&data_types);
+
+        let tree_gen = TreeGen::new(&mut air_interner, &data_types, &pattern);
 
         let tree = tree_gen.build_tree(
             &"subject".to_string(),
@@ -1020,7 +1259,7 @@ mod tester {
             clauses,
         );
 
-        println!("TREE IS {:#?}", tree);
+        println!("{}", tree);
         panic!("SUPPPPPPPPPPPPPPPPPPPPPPPER DOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOONE");
     }
 }
