@@ -1,5 +1,7 @@
-use super::Value;
+use super::{runtime, Error, Value};
 use crate::builtins::DefaultFunction;
+use num_bigint::BigInt;
+use num_traits::Signed;
 use pallas_primitives::conway::Language;
 use std::collections::HashMap;
 
@@ -1741,8 +1743,8 @@ impl Default for BuiltinCosts {
 }
 
 impl BuiltinCosts {
-    pub fn to_ex_budget(&self, fun: DefaultFunction, args: &[Value]) -> ExBudget {
-        match fun {
+    pub fn to_ex_budget(&self, fun: DefaultFunction, args: &[Value]) -> Result<ExBudget, Error> {
+        Ok(match fun {
             DefaultFunction::AddInteger => ExBudget {
                 mem: self
                     .add_integer
@@ -2307,18 +2309,37 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
-            DefaultFunction::IntegerToByteString => ExBudget {
-                mem: self.integer_to_byte_string.mem.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                ),
-                cpu: self.integer_to_byte_string.cpu.cost(
-                    args[0].to_ex_mem(),
-                    args[1].to_ex_mem(),
-                    args[2].to_ex_mem(),
-                ),
-            },
+            DefaultFunction::IntegerToByteString => {
+                let size = args[1].unwrap_integer()?;
+
+                if size.is_negative() {
+                    return Err(Error::IntegerToByteStringNegativeSize(size.clone()));
+                }
+
+                if size > &BigInt::from(runtime::INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH) {
+                    return Err(Error::IntegerToByteStringSizeTooBig(
+                        size.clone(),
+                        runtime::INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH,
+                    ));
+                }
+
+                let arg1: i64 = u64::try_from(size).unwrap().try_into().unwrap();
+
+                let arg1_exmem = if arg1 == 0 { 0 } else { ((arg1 - 1) / 8) + 1 };
+
+                ExBudget {
+                    mem: self.integer_to_byte_string.mem.cost(
+                        args[0].to_ex_mem(),
+                        arg1_exmem,
+                        args[2].to_ex_mem(),
+                    ),
+                    cpu: self.integer_to_byte_string.cpu.cost(
+                        args[0].to_ex_mem(),
+                        arg1_exmem,
+                        args[2].to_ex_mem(),
+                    ),
+                }
+            }
             DefaultFunction::ByteStringToInteger => ExBudget {
                 mem: self
                     .byte_string_to_integer
@@ -2329,7 +2350,7 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
-        }
+        })
     }
 }
 

@@ -31,7 +31,7 @@ const BLST_P1_COMPRESSED_SIZE: usize = 48;
 
 const BLST_P2_COMPRESSED_SIZE: usize = 96;
 
-const INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH: i64 = 8192;
+pub const INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH: i64 = 8192;
 
 //#[derive(std::cmp::PartialEq)]
 //pub enum EvalMode {
@@ -96,7 +96,7 @@ impl BuiltinRuntime {
         Ok(())
     }
 
-    pub fn to_ex_budget(&self, costs: &BuiltinCosts) -> ExBudget {
+    pub fn to_ex_budget(&self, costs: &BuiltinCosts) -> Result<ExBudget, Error> {
         costs.to_ex_budget(self.fun, &self.args)
     }
 }
@@ -1384,16 +1384,17 @@ impl DefaultFunction {
                 let size = args[1].unwrap_integer()?;
                 let input = args[2].unwrap_integer()?;
 
-                if size.is_negative() {
-                    return Err(Error::IntegerToByteStringNegativeSize(size.clone()));
-                }
+                // Since this is checked at cost time it is no longer needed
+                // if size.is_negative() {
+                //     return Err(Error::IntegerToByteStringNegativeSize(size.clone()));
+                // }
 
-                if size > &INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH.into() {
-                    return Err(Error::IntegerToByteStringSizeTooBig(
-                        size.clone(),
-                        INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH,
-                    ));
-                }
+                // if size > &INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH.into() {
+                //     return Err(Error::IntegerToByteStringSizeTooBig(
+                //         size.clone(),
+                //         INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH,
+                //     ));
+                // }
 
                 if size.is_zero()
                     && integer_log2(input.clone())
