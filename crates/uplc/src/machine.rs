@@ -320,7 +320,7 @@ impl Machine {
     }
 
     fn eval_builtin_app(&mut self, runtime: BuiltinRuntime) -> Result<Value, Error> {
-        let cost = runtime.to_ex_budget(&self.costs.builtin_costs);
+        let cost = runtime.to_ex_budget(&self.costs.builtin_costs)?;
 
         self.spend_budget(cost)?;
 
