@@ -1384,11 +1384,11 @@ impl DefaultFunction {
                 let size = args[1].unwrap_integer()?;
                 let input = args[2].unwrap_integer()?;
 
-                if size.is_negative() {
-                    return Err(Error::IntegerToByteStringNegativeSize(size.clone()));
-                }
-
                 // Since this is checked at cost time it is no longer needed
+                // if size.is_negative() {
+                //     return Err(Error::IntegerToByteStringNegativeSize(size.clone()));
+                // }
+
                 // if size > &INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH.into() {
                 //     return Err(Error::IntegerToByteStringSizeTooBig(
                 //         size.clone(),

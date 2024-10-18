@@ -1,6 +1,7 @@
 use super::{runtime, Error, Value};
 use crate::builtins::DefaultFunction;
 use num_bigint::BigInt;
+use num_traits::Signed;
 use pallas_primitives::conway::Language;
 use std::collections::HashMap;
 
@@ -2309,26 +2310,32 @@ impl BuiltinCosts {
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
             DefaultFunction::IntegerToByteString => {
-                let uplc_int = args[1].unwrap_integer()?;
+                let size = args[1].unwrap_integer()?;
 
-                if uplc_int > &BigInt::from(runtime::INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH) {
+                if size.is_negative() {
+                    return Err(Error::IntegerToByteStringNegativeSize(size.clone()));
+                }
+
+                if size > &BigInt::from(runtime::INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH) {
                     return Err(Error::IntegerToByteStringSizeTooBig(
-                        uplc_int.clone(),
+                        size.clone(),
                         runtime::INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH,
                     ));
                 }
 
-                let arg1 = u64::try_from(uplc_int).unwrap().try_into().unwrap();
+                let arg1: i64 = u64::try_from(size).unwrap().try_into().unwrap();
+
+                let arg1_exmem = if arg1 == 0 { 0 } else { ((arg1 - 1) / 8) + 1 };
 
                 ExBudget {
                     mem: self.integer_to_byte_string.mem.cost(
                         args[0].to_ex_mem(),
-                        arg1,
+                        arg1_exmem,
                         args[2].to_ex_mem(),
                     ),
                     cpu: self.integer_to_byte_string.cpu.cost(
                         args[0].to_ex_mem(),
-                        arg1,
+                        arg1_exmem,
                         args[2].to_ex_mem(),
                     ),
                 }
