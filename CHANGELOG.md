@@ -1,6 +1,20 @@
 # Changelog
 
-## v1.1.4 -2024-10-01
+## v1.1.5 - UNRELEASED
+
+### Added
+
+- N/A
+
+### Changed
+
+- **aiken-lang**: Fix data-type reification from `Void`; somehow missing from known definition :facepalm:. @KtorZ
+
+### Removed
+
+- N/A
+
+## v1.1.4 - 2024-10-01
 
 ### Added
 

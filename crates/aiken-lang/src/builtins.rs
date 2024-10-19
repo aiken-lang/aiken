@@ -1486,6 +1486,16 @@ pub fn prelude_data_types(id_gen: &IdGenerator) -> IndexMap<DataTypeKey, TypedDa
         data_data_type,
     );
 
+    // Void
+    let void_data_type = TypedDataType::void();
+    data_types.insert(
+        DataTypeKey {
+            module_name: "".to_string(),
+            defined_type: well_known::VOID.to_string(),
+        },
+        void_data_type,
+    );
+
     // Ordering
     let ordering_data_type = TypedDataType::ordering();
     data_types.insert(
@@ -1567,6 +1577,10 @@ pub fn prelude_data_types(id_gen: &IdGenerator) -> IndexMap<DataTypeKey, TypedDa
 impl TypedDataType {
     pub fn data() -> Self {
         DataType::known_enum(well_known::DATA, &[])
+    }
+
+    pub fn void() -> Self {
+        DataType::known_enum(well_known::VOID, well_known::VOID_CONSTRUCTORS)
     }
 
     pub fn bool() -> Self {
