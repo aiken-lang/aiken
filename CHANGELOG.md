@@ -8,6 +8,7 @@
 
 ### Changed
 
+- **uplc**: Fix costing of integerToByteString/byteStringToInteger builtins.
 - **aiken-lang**: Fix data-type reification from `Void`; somehow missing from known definition :facepalm:. @KtorZ
 
 ### Removed
