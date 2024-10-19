@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.1.5 - UNRELEASED
+## v1.1.5 - 2024-10-19
 
 ### Added
 
@@ -8,7 +8,7 @@
 
 ### Changed
 
-- **uplc**: Fix costing of integerToByteString/byteStringToInteger builtins.
+- **uplc**: Fix costing of byteStringToInteger builtins. @Microproofs
 - **aiken-lang**: Fix data-type reification from `Void`; somehow missing from known definition :facepalm:. @KtorZ
 
 ### Removed
