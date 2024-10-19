@@ -156,10 +156,13 @@ impl EventListener for Terminal {
             }
             Event::GeneratingUPLCFor { name, path } => {
                 eprintln!(
-                    "{} {}.{{{}}}",
-                    "   Generating UPLC for"
+                    "{} {} {}.{{{}}}",
+                    "   Generating"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
+                    "UPLC for"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.white()),
                     path.to_str()
                         .unwrap_or("")
                         .if_supports_color(Stderr, |s| s.blue()),
