@@ -1160,7 +1160,7 @@ impl<'a, 'b> TreeGen<'a, 'b> {
     }
 }
 
-fn get_tipo_by_path(mut subject_tipo: Rc<Type>, mut path: &[Path]) -> Rc<Type> {
+pub fn get_tipo_by_path(mut subject_tipo: Rc<Type>, mut path: &[Path]) -> Rc<Type> {
     while let Some((p, rest)) = path.split_first() {
         subject_tipo = match p {
             Path::Pair(index) | Path::Tuple(index) => {
@@ -1226,6 +1226,10 @@ fn highest_occurrence(matrix: &PatternMatrix, column_length: usize) -> Option<us
     } else {
         Some(highest_occurrence.0)
     }
+}
+
+pub fn name_from_path(subject_name: String, path: Vec<Path>) -> String {
+    todo!()
 }
 
 #[cfg(test)]
@@ -1321,7 +1325,10 @@ mod tester {
             panic!()
         };
 
-        let TypedExpr::When { clauses, .. } = &function.body else {
+        let TypedExpr::When {
+            clauses, subject, ..
+        } = &function.body
+        else {
             panic!()
         };
         let mut air_interner = AirInterner::new();
@@ -1335,7 +1342,7 @@ mod tester {
 
         let tree_gen = TreeGen::new(&mut air_interner, &data_types, &pattern);
 
-        let tree = tree_gen.build_tree(&"subject".to_string(), &Type::list(Type::int()), clauses);
+        let tree = tree_gen.build_tree(&"subject".to_string(), &subject.tipo(), clauses);
 
         println!("{}", tree);
     }
@@ -1359,7 +1366,10 @@ mod tester {
             panic!()
         };
 
-        let TypedExpr::When { clauses, .. } = &function.body else {
+        let TypedExpr::When {
+            clauses, subject, ..
+        } = &function.body
+        else {
             panic!()
         };
         let mut air_interner = AirInterner::new();
@@ -1373,16 +1383,7 @@ mod tester {
 
         let tree_gen = TreeGen::new(&mut air_interner, &data_types, &pattern);
 
-        let tree = tree_gen.build_tree(
-            &"subject".to_string(),
-            &Type::tuple(vec![
-                Type::int(),
-                Type::int(),
-                Type::byte_array(),
-                Type::list(Type::int()),
-            ]),
-            clauses,
-        );
+        let tree = tree_gen.build_tree(&"subject".to_string(), &subject.tipo(), clauses);
 
         println!("{}", tree);
     }
@@ -1407,7 +1408,10 @@ mod tester {
             panic!()
         };
 
-        let TypedExpr::When { clauses, .. } = &function.body else {
+        let TypedExpr::When {
+            clauses, subject, ..
+        } = &function.body
+        else {
             panic!()
         };
 
@@ -1457,7 +1461,10 @@ mod tester {
             panic!()
         };
 
-        let TypedExpr::When { clauses, .. } = &function.body else {
+        let TypedExpr::When {
+            clauses, subject, ..
+        } = &function.body
+        else {
             panic!()
         };
 
@@ -1472,16 +1479,7 @@ mod tester {
 
         let tree_gen = TreeGen::new(&mut air_interner, &data_types, &pattern);
 
-        let tree = tree_gen.build_tree(
-            &"subject".to_string(),
-            &Type::tuple(vec![
-                Type::int(),
-                Type::int(),
-                Type::byte_array(),
-                Type::list(Type::int()),
-            ]),
-            clauses,
-        );
+        let tree = tree_gen.build_tree(&"subject".to_string(), &subject.tipo(), clauses);
 
         println!("{}", tree);
         panic!("SUPPPPPPPPPPPPPPPPPPPPPPPER DOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOONE");
@@ -1508,7 +1506,10 @@ mod tester {
             panic!()
         };
 
-        let TypedExpr::When { clauses, .. } = &function.body else {
+        let TypedExpr::When {
+            clauses, subject, ..
+        } = &function.body
+        else {
             panic!()
         };
 
@@ -1527,16 +1528,7 @@ mod tester {
 
         let tree_gen = TreeGen::new(&mut air_interner, &data_types, &pattern);
 
-        let tree = tree_gen.build_tree(
-            &"subject".to_string(),
-            &Type::tuple(vec![
-                Type::int(),
-                Type::int(),
-                Type::byte_array(),
-                Type::option(Type::prng()),
-            ]),
-            clauses,
-        );
+        let tree = tree_gen.build_tree(&"subject".to_string(), &subject.tipo(), clauses);
 
         println!("{}", tree);
         panic!("SUPPPPPPPPPPPPPPPPPPPPPPPER DOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOONE");

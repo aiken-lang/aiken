@@ -44,6 +44,7 @@ use builder::{
     introduce_name, introduce_pattern, pop_pattern, softcast_data_to_type_otherwise,
     unknown_data_to_type, DISCARDED,
 };
+use decision_tree::{get_tipo_by_path, name_from_path, TreeGen};
 use indexmap::{IndexMap, IndexSet};
 use interner::AirInterner;
 use itertools::Itertools;
@@ -558,8 +559,6 @@ impl<'a> CodeGenerator<'a> {
                     clauses,
                     ..
                 } => {
-                    let mut clauses = clauses.clone();
-
                     if clauses.is_empty() {
                         unreachable!("We should have one clause at least")
                     // TODO: This whole branch can _probably_ be removed, if handle_each_clause
@@ -568,7 +567,7 @@ impl<'a> CodeGenerator<'a> {
                     } else if clauses.len() == 1 {
                         let subject_val = self.build(subject, module_build_name, &[]);
 
-                        let last_clause = clauses.pop().unwrap();
+                        let last_clause = &clauses[0];
 
                         // Intern vars from pattern here
                         introduce_pattern(&mut self.interner, &last_clause.pattern);
@@ -596,14 +595,6 @@ impl<'a> CodeGenerator<'a> {
 
                         tree
                     } else {
-                        clauses = if subject.tipo().is_list() {
-                            rearrange_list_clauses(clauses, &self.data_types)
-                        } else {
-                            clauses
-                        };
-
-                        let last_clause = clauses.pop().unwrap();
-
                         let constr_var = format!(
                             "__when_var_span_{}_{}",
                             subject.location().start,
@@ -622,20 +613,62 @@ impl<'a> CodeGenerator<'a> {
                         let constr_var_interned = self.interner.lookup_interned(&constr_var);
                         let subject_name_interned = self.interner.lookup_interned(&subject_name);
 
-                        let clauses = self.handle_each_clause(
-                            &clauses,
-                            last_clause,
-                            &subject.tipo(),
-                            &mut ClauseProperties::init(
-                                &subject.tipo(),
-                                constr_var_interned.clone(),
-                                subject_name_interned.clone(),
-                            ),
-                            module_build_name,
-                        );
+                        let wild_card = TypedPattern::Discard {
+                            name: "".to_string(),
+                            location: Span::empty(),
+                        };
+
+                        let tree_gen =
+                            TreeGen::new(&mut self.interner, &self.data_types, &wild_card);
+
+                        let tree =
+                            tree_gen.build_tree(&subject_name_interned, &subject.tipo(), clauses);
+
+                        let clauses = self.handle_decision_tree(&constr_var_interned, tree);
 
                         self.interner.pop_text(constr_var);
                         self.interner.pop_text(subject_name);
+
+                        // clauses = if subject.tipo().is_list() {
+                        //     rearrange_list_clauses(clauses, &self.data_types)
+                        // } else {
+                        //     clauses
+                        // };
+
+                        // let last_clause = clauses.pop().unwrap();
+
+                        // let constr_var = format!(
+                        //     "__when_var_span_{}_{}",
+                        //     subject.location().start,
+                        //     subject.location().end
+                        // );
+
+                        // let subject_name = format!(
+                        //     "__subject_var_span_{}_{}",
+                        //     subject.location().start,
+                        //     subject.location().end
+                        // );
+
+                        // self.interner.intern(constr_var.clone());
+                        // self.interner.intern(subject_name.clone());
+
+                        // let constr_var_interned = self.interner.lookup_interned(&constr_var);
+                        // let subject_name_interned = self.interner.lookup_interned(&subject_name);
+
+                        // let clauses = self.handle_each_clause(
+                        //     &clauses,
+                        //     last_clause,
+                        //     &subject.tipo(),
+                        //     &mut ClauseProperties::init(
+                        //         &subject.tipo(),
+                        //         constr_var_interned.clone(),
+                        //         subject_name_interned.clone(),
+                        //     ),
+                        //     module_build_name,
+                        // );
+
+                        // self.interner.pop_text(constr_var);
+                        // self.interner.pop_text(subject_name);
 
                         let when_assign = AirTree::when(
                             subject_name_interned,
@@ -2419,6 +2452,57 @@ impl<'a> CodeGenerator<'a> {
 
                 AirTree::call(func_var, Type::void(), args)
             }
+        }
+    }
+
+    fn handle_decision_tree(
+        &self,
+        constr_name: &String,
+        tree: decision_tree::DecisionTree<'_>,
+    ) -> AirTree {
+        match tree {
+            decision_tree::DecisionTree::Switch {
+                subject_name,
+                subject_tipo,
+                path,
+                mut cases,
+                default,
+            } => {
+                let current_tipo = get_tipo_by_path(subject_tipo, &path);
+
+                let data_type = lookup_data_type_by_tipo(&self.data_types, &current_tipo);
+
+                let needs_default = if let Some(data_type) = data_type {
+                    data_type.constructors.len() != cases.len()
+                } else {
+                    true
+                };
+
+                let last_then = if needs_default {
+                    *default.unwrap()
+                } else {
+                    cases.pop().unwrap().1
+                };
+
+                let last_then = self.handle_decision_tree(constr_name, last_then);
+
+                todo!()
+            }
+            decision_tree::DecisionTree::ListSwitch {
+                subject_name,
+                subject_tipo,
+                path,
+                cases,
+                tail_cases,
+                default,
+            } => todo!(),
+            decision_tree::DecisionTree::HoistedLeaf(_, vec) => todo!(),
+            decision_tree::DecisionTree::HoistThen {
+                name,
+                assigns,
+                pattern,
+                then,
+            } => todo!(),
         }
     }
 
