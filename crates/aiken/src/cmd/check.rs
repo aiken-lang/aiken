@@ -5,7 +5,11 @@ use aiken_lang::{
 };
 use aiken_project::watch::{self, watch_project, with_project};
 use rand::prelude::*;
-use std::{path::PathBuf, process};
+use std::{
+    io::{self, IsTerminal},
+    path::PathBuf,
+    process,
+};
 
 #[derive(clap::Args)]
 /// Type-check an Aiken project
@@ -84,10 +88,6 @@ pub struct Args {
     /// [optional]
     #[clap(short, long, value_parser=trace_level_parser(), default_value_t=TraceLevel::Verbose, verbatim_doc_comment)]
     trace_level: TraceLevel,
-
-    /// Output JSON (useful for scripting & automation)
-    #[clap(long)]
-    json: bool,
 }
 
 pub fn exec(
@@ -104,12 +104,13 @@ pub fn exec(
         seed,
         max_success,
         env,
-        json,
     }: Args,
 ) -> miette::Result<()> {
     let mut rng = rand::thread_rng();
 
     let seed = seed.unwrap_or_else(|| rng.gen());
+
+    let json_output = !io::stdout().is_terminal();
 
     let result = if watch {
         watch_project(directory.as_deref(), watch::default_filter, 500, |p| {
@@ -125,26 +126,31 @@ pub fn exec(
                     None => Tracing::All(trace_level),
                 },
                 env.clone(),
-                json,
+                json_output,
             )
         })
     } else {
-        with_project(directory.as_deref(), deny, json, |p| {
-            p.check(
-                skip_tests,
-                match_tests.clone(),
-                debug,
-                exact_match,
-                seed,
-                max_success,
-                match trace_filter {
-                    Some(trace_filter) => trace_filter(trace_level),
-                    None => Tracing::All(trace_level),
-                },
-                env.clone(),
-                json,
-            )
-        })
+        with_project(
+            directory.as_deref(),
+            deny,
+            !io::stdout().is_terminal(),
+            |p| {
+                p.check(
+                    skip_tests,
+                    match_tests.clone(),
+                    debug,
+                    exact_match,
+                    seed,
+                    max_success,
+                    match trace_filter {
+                        Some(trace_filter) => trace_filter(trace_level),
+                        None => Tracing::All(trace_level),
+                    },
+                    env.clone(),
+                    json_output,
+                )
+            },
+        )
     };
 
     result.map_err(|_| process::exit(1))

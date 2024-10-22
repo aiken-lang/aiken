@@ -591,10 +591,22 @@ fn fmt_overall_summary_json(tests: &[TestResult<UntypedExpr, UntypedExpr>]) -> s
 
     let (max_mem, max_cpu, max_iter) = find_max_execution_units(tests);
 
+    // Separate counts for unit tests and property-based tests
+    let unit_tests = tests
+        .iter()
+        .filter(|t| matches!(t, TestResult::UnitTestResult { .. }))
+        .count();
+    let property_tests = tests
+        .iter()
+        .filter(|t| matches!(t, TestResult::PropertyTestResult { .. }))
+        .count();
+
     json!({
         "total_tests": total,
         "passed_tests": passed,
         "failed_tests": failed,
+        "unit_tests": unit_tests,
+        "property_tests": property_tests,
         "module_count": module_count,
         "max_execution_units": {
             "memory": max_mem,
@@ -605,7 +617,7 @@ fn fmt_overall_summary_json(tests: &[TestResult<UntypedExpr, UntypedExpr>]) -> s
             json!({
                 "name": module,
                 "tests": results.iter().map(|r| fmt_test_json(r)).collect::<Vec<_>>(),
-                "summary": fmt_test_summary_json(&results),
+                "summary": fmt_test_summary_json(&results)
             })
         }).collect::<Vec<_>>(),
     })
