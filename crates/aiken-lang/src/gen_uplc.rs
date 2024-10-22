@@ -2,14 +2,15 @@ pub mod air;
 pub mod builder;
 pub mod decision_tree;
 pub mod interner;
+pub mod stick_break_set;
 pub mod tree;
 
 use self::{
     air::Air,
     builder::{
         cast_validator_args, convert_type_to_data, extract_constant, modify_cyclic_calls,
-        modify_self_calls, rearrange_list_clauses, AssignmentProperties, ClauseProperties,
-        CodeGenSpecialFuncs, CycleFunctionNames, HoistableFunction, Variant,
+        modify_self_calls, AssignmentProperties, ClauseProperties, CodeGenSpecialFuncs,
+        CycleFunctionNames, HoistableFunction, Variant,
     },
     tree::{AirTree, TreePath},
 };
@@ -44,12 +45,13 @@ use builder::{
     introduce_name, introduce_pattern, pop_pattern, softcast_data_to_type_otherwise,
     unknown_data_to_type, DISCARDED,
 };
-use decision_tree::{get_tipo_by_path, name_from_path, TreeGen};
+use decision_tree::{get_tipo_by_path, TreeGen};
 use indexmap::{IndexMap, IndexSet};
 use interner::AirInterner;
 use itertools::Itertools;
 use petgraph::{algo, Graph};
 use std::{collections::HashMap, rc::Rc};
+use stick_break_set::{Builtin, Builtins, TreeSet};
 use tree::Fields;
 use uplc::{
     ast::{Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType},
@@ -624,7 +626,9 @@ impl<'a> CodeGenerator<'a> {
                         let tree =
                             tree_gen.build_tree(&subject_name_interned, &subject.tipo(), clauses);
 
-                        let clauses = self.handle_decision_tree(&constr_var_interned, tree);
+                        let stick_set = TreeSet::new();
+
+                        let clauses = self.handle_decision_tree(tree, stick_set);
 
                         self.interner.pop_text(constr_var);
                         self.interner.pop_text(subject_name);
@@ -2456,9 +2460,9 @@ impl<'a> CodeGenerator<'a> {
     }
 
     fn handle_decision_tree(
-        &self,
-        constr_name: &String,
+        &mut self,
         tree: decision_tree::DecisionTree<'_>,
+        mut stick_set: TreeSet,
     ) -> AirTree {
         match tree {
             decision_tree::DecisionTree::Switch {
@@ -2468,11 +2472,34 @@ impl<'a> CodeGenerator<'a> {
                 mut cases,
                 default,
             } => {
-                let current_tipo = get_tipo_by_path(subject_tipo, &path);
+                let current_tipo = get_tipo_by_path(subject_tipo.clone(), &path);
+
+                let builtins_path = Builtins::new_from_path(subject_tipo.clone(), path);
+
+                let mut prev_builtins = builtins_path.clone();
+
+                let builtins_to_add = stick_set.diff_union_builtins(builtins_path.clone());
+
+                builtins_to_add.vec.iter().for_each(|_| {
+                    prev_builtins.vec.pop();
+                });
+
+                let prev_subject_name = if prev_builtins.is_empty() {
+                    subject_name.clone()
+                } else {
+                    format!("{}_{}", subject_name, prev_builtins.to_string())
+                };
+                let prev_tipo = prev_builtins.vec.last().unwrap().tipo();
+
+                let current_subject_name = if builtins_path.is_empty() {
+                    subject_name
+                } else {
+                    format!("{}_{}", subject_name, builtins_path.to_string())
+                };
 
                 let data_type = lookup_data_type_by_tipo(&self.data_types, &current_tipo);
 
-                let needs_default = if let Some(data_type) = data_type {
+                let needs_default = if let Some(data_type) = &data_type {
                     data_type.constructors.len() != cases.len()
                 } else {
                     true
@@ -2484,9 +2511,46 @@ impl<'a> CodeGenerator<'a> {
                     cases.pop().unwrap().1
                 };
 
-                let last_then = self.handle_decision_tree(constr_name, last_then);
+                let last_then = AirTree::anon_func(
+                    vec![],
+                    self.handle_decision_tree(last_then, stick_set.clone()),
+                    true,
+                );
 
-                todo!()
+                let test_subject_name = if data_type.is_some() {
+                    format!("{}_index", current_subject_name.clone(),)
+                } else {
+                    current_subject_name.clone()
+                };
+
+                let clauses = cases.into_iter().rfold(last_then, |acc, (case, then)| {
+                    let case_air = AirTree::anon_func(
+                        vec![],
+                        self.handle_decision_tree(then, stick_set.clone()),
+                        true,
+                    );
+
+                    AirTree::clause(
+                        test_subject_name.clone(),
+                        case.get_air_pattern(),
+                        current_tipo.clone(),
+                        case_air,
+                        acc,
+                        false,
+                    )
+                });
+
+                let y = AirTree::when(
+                    test_subject_name,
+                    Type::void(),
+                    current_tipo.clone(),
+                    AirTree::local_var(current_subject_name, current_tipo.clone()),
+                    clauses,
+                );
+
+                let x = builtins_to_add.to_air(prev_subject_name, prev_tipo, y);
+
+                x
             }
             decision_tree::DecisionTree::ListSwitch {
                 subject_name,
