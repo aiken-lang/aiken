@@ -10,7 +10,7 @@ use crate::{
     expr::{lookup_data_type_by_tipo, Type, TypedExpr},
 };
 
-use super::interner::AirInterner;
+use super::{interner::AirInterner, tree::AirTree};
 
 const PAIR_NEW_COLUMNS: usize = 2;
 
@@ -31,17 +31,39 @@ pub enum Path {
     ListTail(usize),
 }
 
-impl Display for Path {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl ToString for Path {
+    fn to_string(&self) -> String {
         match self {
-            Path::Pair(i) => write!(f, "Pair({})", i),
-            Path::Tuple(i) => write!(f, "Tuple({})", i),
-            Path::Constr(_, i) => write!(f, "Constr({})", i),
-            Path::List(i) => write!(f, "List({})", i),
-            Path::ListTail(i) => write!(f, "ListTail({})", i),
+            Path::Pair(i) => {
+                format!("pair_{}", i)
+            }
+            Path::Tuple(i) => {
+                format!("tuple_{}", i)
+            }
+            Path::Constr(_, i) => {
+                format!("constr_{}", i)
+            }
+            Path::List(i) => {
+                format!("list_{}", i)
+            }
+            Path::ListTail(i) => {
+                format!("listtail_{}", i)
+            }
         }
     }
 }
+
+// impl Display for Path {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         match self {
+//             Path::Pair(i) => write!(f, "Pair({})", i),
+//             Path::Tuple(i) => write!(f, "Tuple({})", i),
+//             Path::Constr(_, i) => write!(f, "Constr({})", i),
+//             Path::List(i) => write!(f, "List({})", i),
+//             Path::ListTail(i) => write!(f, "ListTail({})", i),
+//         }
+//     }
+// }
 
 impl PartialEq for Path {
     fn eq(&self, other: &Self) -> bool {
@@ -90,6 +112,19 @@ pub enum CaseTest {
     List(usize),
     ListWithTail(usize),
     Wild,
+}
+
+impl CaseTest {
+    pub fn get_air_pattern(&self) -> AirTree {
+        match self {
+            CaseTest::Constr(i) => AirTree::int(i),
+            CaseTest::Int(i) => AirTree::int(i),
+            CaseTest::Bytes(vec) => AirTree::byte_array(vec.clone()),
+            CaseTest::List(_) => unreachable!(),
+            CaseTest::ListWithTail(_) => unreachable!(),
+            CaseTest::Wild => unreachable!(),
+        }
+    }
 }
 
 impl Display for CaseTest {
@@ -231,7 +266,10 @@ impl<'a> DecisionTree<'a> {
                 .append(
                     path.iter()
                         .fold(RcDoc::line().append(RcDoc::text("path(")), |acc, p| {
-                            acc.append(RcDoc::line().append(RcDoc::text(format!("{}", p)).nest(4)))
+                            acc.append(
+                                RcDoc::line()
+                                    .append(RcDoc::text(format!("{}", p.to_string())).nest(4)),
+                            )
                         })
                         .append(RcDoc::line())
                         .append(RcDoc::text(")"))
@@ -277,7 +315,10 @@ impl<'a> DecisionTree<'a> {
                 .append(
                     path.iter()
                         .fold(RcDoc::line().append(RcDoc::text("path(")), |acc, p| {
-                            acc.append(RcDoc::line().append(RcDoc::text(format!("{}", p)).nest(4)))
+                            acc.append(
+                                RcDoc::line()
+                                    .append(RcDoc::text(format!("{}", p.to_string())).nest(4)),
+                            )
                         })
                         .append(RcDoc::line())
                         .append(RcDoc::text(")"))
@@ -1228,10 +1269,6 @@ fn highest_occurrence(matrix: &PatternMatrix, column_length: usize) -> Option<us
     }
 }
 
-pub fn name_from_path(subject_name: String, path: Vec<Path>) -> String {
-    todo!()
-}
-
 #[cfg(test)]
 mod tester {
     use std::collections::HashMap;
@@ -1244,7 +1281,7 @@ mod tester {
             UntypedModule,
         },
         builtins,
-        expr::{Type, TypedExpr},
+        expr::TypedExpr,
         gen_uplc::{decision_tree::TreeGen, interner::AirInterner},
         parser,
         tipo::error::{Error, Warning},
@@ -1426,16 +1463,7 @@ mod tester {
 
         let tree_gen = TreeGen::new(&mut air_interner, &data_types, &pattern);
 
-        let tree = tree_gen.build_tree(
-            &"subject".to_string(),
-            &Type::tuple(vec![
-                Type::int(),
-                Type::int(),
-                Type::byte_array(),
-                Type::list(Type::int()),
-            ]),
-            clauses,
-        );
+        let tree = tree_gen.build_tree(&"subject".to_string(), &subject.tipo(), clauses);
 
         println!("{}", tree);
     }
