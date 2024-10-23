@@ -82,8 +82,8 @@ impl Eq for Path {}
 
 #[derive(Clone, Debug)]
 pub struct Assigned {
-    path: Vec<Path>,
-    assigned: String,
+    pub path: Vec<Path>,
+    pub assigned: String,
 }
 
 #[derive(Clone, Debug)]
@@ -143,15 +143,11 @@ impl Display for CaseTest {
 #[derive(Debug, Clone)]
 pub enum DecisionTree<'a> {
     Switch {
-        subject_name: String,
-        subject_tipo: Rc<Type>,
         path: Vec<Path>,
         cases: Vec<(CaseTest, DecisionTree<'a>)>,
         default: Option<Box<DecisionTree<'a>>>,
     },
     ListSwitch {
-        subject_name: String,
-        subject_tipo: Rc<Type>,
         path: Vec<Path>,
         cases: Vec<(CaseTest, DecisionTree<'a>)>,
         tail_cases: Vec<(CaseTest, DecisionTree<'a>)>,
@@ -963,8 +959,6 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                 .partition(|(case, _)| matches!(case, CaseTest::ListWithTail(_)));
 
             DecisionTree::ListSwitch {
-                subject_name: subject_name.clone(),
-                subject_tipo: specialized_tipo.clone(),
                 path,
                 cases: cases
                     .into_iter()
@@ -1015,8 +1009,6 @@ impl<'a, 'b> TreeGen<'a, 'b> {
             };
 
             DecisionTree::Switch {
-                subject_name: subject_name.clone(),
-                subject_tipo: specialized_tipo.clone(),
                 path,
                 cases: specialized_matrices
                     .into_iter()
