@@ -10,7 +10,7 @@ use super::{
     tree::AirTree,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Builtin {
     HeadList(Rc<Type>),
     TailList,
@@ -43,7 +43,7 @@ impl Builtin {
                 vec![arg],
             ),
             Builtin::UnConstr => AirTree::builtin(
-                DefaultFunction::TailList,
+                DefaultFunction::UnConstrData,
                 Type::pair(Type::int(), Type::list(Type::data())),
                 vec![arg],
             ),
@@ -77,7 +77,7 @@ impl ToString for Builtin {
     }
 }
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Builtins {
     pub vec: Vec<Builtin>,
 }
@@ -204,7 +204,22 @@ pub struct TreeNode {
     children: Vec<TreeNode>,
 }
 
-impl TreeNode {}
+impl TreeNode {
+    fn diff_union_builtins(&mut self, builtins: Builtins) -> Builtins {
+        if let Some((first, rest)) = builtins.vec.split_first() {
+            if let Some(item) = self.children.iter_mut().find(|item| first == &item.node) {
+                item.diff_union_builtins(Builtins { vec: rest.to_vec() })
+            } else {
+                self.children
+                    .extend(TreeSet::new_from_builtins(builtins.clone()).children);
+
+                builtins
+            }
+        } else {
+            builtins
+        }
+    }
+}
 
 impl TreeSet {
     pub fn new() -> Self {
@@ -231,9 +246,9 @@ impl TreeSet {
     }
 
     pub fn diff_union_builtins(&mut self, builtins: Builtins) -> Builtins {
-        if let Some((first, _rest)) = builtins.vec.split_first() {
-            if self.children.iter().any(|item| first == &item.node) {
-                todo!()
+        if let Some((first, rest)) = builtins.vec.split_first() {
+            if let Some(item) = self.children.iter_mut().find(|item| first == &item.node) {
+                item.diff_union_builtins(Builtins { vec: rest.to_vec() })
             } else {
                 self.children
                     .extend(TreeSet::new_from_builtins(builtins.clone()).children);
