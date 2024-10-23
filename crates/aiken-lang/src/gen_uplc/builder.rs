@@ -6,17 +6,15 @@ use super::{
 use crate::{
     ast::{
         DataTypeKey, FunctionAccessKey, Pattern, Span, TraceLevel, TypedArg, TypedAssignmentKind,
-        TypedClause, TypedDataType, TypedPattern,
+        TypedDataType, TypedPattern,
     },
-    expr::TypedExpr,
     line_numbers::{LineColumn, LineNumbers},
     tipo::{
-        check_replaceable_opaque_type, convert_opaque_type, find_and_replace_generics,
-        lookup_data_type_by_tipo, PatternConstructor, Type, ValueConstructor,
-        ValueConstructorVariant,
+        check_replaceable_opaque_type, convert_opaque_type, find_and_replace_generics, Type,
+        ValueConstructor, ValueConstructorVariant,
     },
 };
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 use itertools::{Itertools, Position};
 use std::{ops::Deref, rc::Rc};
 use uplc::{
@@ -72,129 +70,6 @@ pub struct AssignmentProperties {
     pub remove_unused: bool,
     pub full_check: bool,
     pub otherwise: Option<AirTree>,
-}
-
-#[derive(Clone, Debug)]
-
-pub struct ClauseProperties {
-    pub clause_var_name: String,
-    pub complex_clause: bool,
-    pub needs_constr_var: bool,
-    pub original_subject_name: String,
-    pub final_clause: bool,
-    pub specific_clause: SpecificClause,
-}
-#[derive(Clone, Debug)]
-pub enum SpecificClause {
-    ConstrClause,
-    ListClause {
-        defined_tails_index: i64,
-        defined_tails: Vec<String>,
-        checked_index: i64,
-    },
-    TupleClause {
-        defined_tuple_indices: IndexSet<(usize, String)>,
-    },
-    PairClause,
-}
-
-impl ClauseProperties {
-    pub fn init(t: &Rc<Type>, constr_var: String, subject_name: String) -> Self {
-        if t.is_list() {
-            ClauseProperties {
-                clause_var_name: constr_var,
-                complex_clause: false,
-                original_subject_name: subject_name.clone(),
-                final_clause: false,
-                needs_constr_var: false,
-                specific_clause: SpecificClause::ListClause {
-                    defined_tails_index: 0,
-                    defined_tails: vec![subject_name],
-                    checked_index: -1,
-                },
-            }
-        } else if t.is_tuple() {
-            ClauseProperties {
-                clause_var_name: constr_var,
-                complex_clause: false,
-                original_subject_name: subject_name,
-                needs_constr_var: false,
-                final_clause: false,
-                specific_clause: SpecificClause::TupleClause {
-                    defined_tuple_indices: IndexSet::new(),
-                },
-            }
-        } else if t.is_pair() {
-            ClauseProperties {
-                clause_var_name: constr_var,
-                complex_clause: false,
-                original_subject_name: subject_name,
-                needs_constr_var: false,
-                final_clause: false,
-                specific_clause: SpecificClause::PairClause,
-            }
-        } else {
-            ClauseProperties {
-                clause_var_name: constr_var,
-                complex_clause: false,
-                original_subject_name: subject_name,
-                needs_constr_var: false,
-                final_clause: false,
-                specific_clause: SpecificClause::ConstrClause,
-            }
-        }
-    }
-
-    pub fn init_inner(
-        t: &Rc<Type>,
-        constr_var: String,
-        subject_name: String,
-        final_clause: bool,
-    ) -> Self {
-        if t.is_list() {
-            ClauseProperties {
-                clause_var_name: constr_var,
-                complex_clause: false,
-                original_subject_name: subject_name,
-                final_clause,
-                needs_constr_var: false,
-                specific_clause: SpecificClause::ListClause {
-                    defined_tails_index: 0,
-                    defined_tails: vec![],
-                    checked_index: -1,
-                },
-            }
-        } else if t.is_tuple() {
-            ClauseProperties {
-                clause_var_name: constr_var,
-                complex_clause: false,
-                original_subject_name: subject_name,
-                needs_constr_var: false,
-                final_clause,
-                specific_clause: SpecificClause::TupleClause {
-                    defined_tuple_indices: IndexSet::new(),
-                },
-            }
-        } else if t.is_pair() {
-            ClauseProperties {
-                clause_var_name: constr_var,
-                complex_clause: false,
-                original_subject_name: subject_name,
-                needs_constr_var: false,
-                final_clause,
-                specific_clause: SpecificClause::PairClause,
-            }
-        } else {
-            ClauseProperties {
-                clause_var_name: constr_var,
-                complex_clause: false,
-                original_subject_name: subject_name,
-                needs_constr_var: false,
-                final_clause,
-                specific_clause: SpecificClause::ConstrClause,
-            }
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -603,248 +478,6 @@ pub fn modify_cyclic_calls(
     });
 }
 
-pub fn pattern_has_conditions(
-    pattern: &TypedPattern,
-    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
-) -> bool {
-    match pattern {
-        Pattern::List { .. } | Pattern::Int { .. } | Pattern::ByteArray { .. } => true,
-        Pattern::Tuple { elems, .. } => elems
-            .iter()
-            .any(|elem| pattern_has_conditions(elem, data_types)),
-        Pattern::Pair { fst, snd, .. } => {
-            pattern_has_conditions(fst, data_types) || pattern_has_conditions(snd, data_types)
-        }
-        Pattern::Constructor {
-            arguments, tipo, ..
-        } => {
-            let data_type = lookup_data_type_by_tipo(data_types, tipo)
-                .unwrap_or_else(|| panic!("Data type not found: {:#?}", tipo));
-
-            data_type.constructors.len() > 1
-                || arguments
-                    .iter()
-                    .any(|arg| pattern_has_conditions(&arg.value, data_types))
-        }
-        Pattern::Assign { pattern, .. } => pattern_has_conditions(pattern, data_types),
-        Pattern::Var { .. } | Pattern::Discard { .. } => false,
-    }
-}
-
-// TODO: write some tests
-pub fn rearrange_list_clauses(
-    clauses: Vec<TypedClause>,
-    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
-) -> Vec<TypedClause> {
-    let mut sorted_clauses = clauses;
-
-    // if we have a list sort clauses so we can plug holes for cases not covered by clauses
-    // Now we sort by elements + tail if possible and otherwise leave an index in place if var or discard
-    // This is a stable sort. i.e. matching elements amounts will remain in user given order.
-    sorted_clauses = sorted_clauses
-        .into_iter()
-        .enumerate()
-        .sorted_by(|(index1, clause1), (index2, clause2)| {
-            let mut clause_pattern1 = &clause1.pattern;
-            let mut clause_pattern2 = &clause2.pattern;
-
-            if let Pattern::Assign { pattern, .. } = clause_pattern1 {
-                clause_pattern1 = pattern;
-            }
-
-            if let Pattern::Assign { pattern, .. } = clause_pattern2 {
-                clause_pattern2 = pattern;
-            }
-
-            let clause1_len = match clause_pattern1 {
-                Pattern::List { elements, tail, .. } => {
-                    Some(elements.len() + usize::from(tail.is_some()))
-                }
-                _ => Some(100000),
-            };
-
-            let clause2_len = match clause_pattern2 {
-                Pattern::List { elements, tail, .. } => {
-                    Some(elements.len() + usize::from(tail.is_some()))
-                }
-                _ => Some(100001),
-            };
-
-            if let Some(clause1_len) = clause1_len {
-                if let Some(clause2_len) = clause2_len {
-                    return clause1_len.cmp(&clause2_len);
-                }
-            }
-
-            index1.cmp(index2)
-        })
-        .map(|(_, item)| item)
-        .collect_vec();
-
-    let mut final_clauses = sorted_clauses.clone();
-    let mut holes_to_fill = vec![];
-    let mut last_clause_index = 0;
-    let mut last_clause_set = false;
-    let mut wild_card_clause_elems = 0;
-
-    // If we have a catch all, use that. Otherwise use todo which will result in error
-    // TODO: fill in todo label with description
-    let plug_in_then = &|index: usize, last_clause: &TypedClause| match &last_clause.pattern {
-        Pattern::Var { .. } | Pattern::Discard { .. } => last_clause.clone().then,
-        _ => {
-            let tipo = last_clause.then.tipo();
-
-            TypedExpr::Trace {
-                location: Span::empty(),
-                tipo: tipo.clone(),
-                text: Box::new(TypedExpr::String {
-                    location: Span::empty(),
-                    tipo: Type::string(),
-                    value: format!("Clause hole found for {index} elements."),
-                }),
-                then: Box::new(TypedExpr::ErrorTerm {
-                    location: Span::empty(),
-                    tipo,
-                }),
-            }
-        }
-    };
-
-    let last_clause = &sorted_clauses[sorted_clauses.len() - 1];
-    let assign_plug_in_name = if let Pattern::Var { name, .. } = &last_clause.pattern {
-        Some(name)
-    } else {
-        None
-    };
-
-    for (index, clause) in sorted_clauses.iter().enumerate() {
-        if last_clause_set {
-            continue;
-        }
-
-        let mut clause_pattern = &clause.pattern;
-
-        if let Pattern::Assign { pattern, .. } = clause_pattern {
-            clause_pattern = pattern;
-        }
-
-        assert!(matches!(
-            clause_pattern,
-            Pattern::List { .. } | Pattern::Var { .. } | Pattern::Discard { .. }
-        ));
-
-        if let Pattern::List { elements, tail, .. } = clause_pattern {
-            // found a hole and now we plug it
-            while wild_card_clause_elems < elements.len() {
-                let mut discard_elems = vec![];
-
-                for _ in 0..wild_card_clause_elems {
-                    discard_elems.push(Pattern::Discard {
-                        name: "__fill".to_string(),
-                        location: Span::empty(),
-                    });
-                }
-
-                // If we have a named catch all then in scope the name and create list of discards, otherwise list of discards
-                let clause_to_fill = if let Some(name) = assign_plug_in_name {
-                    TypedClause {
-                        location: Span::empty(),
-                        pattern: Pattern::Assign {
-                            name: name.clone(),
-                            location: Span::empty(),
-                            pattern: Pattern::List {
-                                location: Span::empty(),
-                                elements: discard_elems,
-                                tail: None,
-                            }
-                            .into(),
-                        },
-                        then: plug_in_then(wild_card_clause_elems, last_clause),
-                    }
-                } else {
-                    TypedClause {
-                        location: Span::empty(),
-                        pattern: Pattern::List {
-                            location: Span::empty(),
-                            elements: discard_elems,
-                            tail: None,
-                        },
-                        then: plug_in_then(wild_card_clause_elems, last_clause),
-                    }
-                };
-
-                holes_to_fill.push((index, clause_to_fill));
-                wild_card_clause_elems += 1;
-            }
-
-            let mut is_wild_card_elems_clause = true;
-
-            for element in elements.iter() {
-                is_wild_card_elems_clause =
-                    is_wild_card_elems_clause && !pattern_has_conditions(element, data_types);
-            }
-
-            if is_wild_card_elems_clause {
-                if wild_card_clause_elems < elements.len() + usize::from(tail.is_none()) {
-                    wild_card_clause_elems += 1;
-                }
-
-                if tail.is_some() && !elements.is_empty() {
-                    last_clause_index = index;
-                    last_clause_set = true;
-                }
-            }
-        } else if let Pattern::Var { .. } | Pattern::Discard { .. } = &clause.pattern {
-            last_clause_set = true;
-            last_clause_index = index;
-        } else {
-            unreachable!("Found a clause that is not a list or var or discard");
-        }
-
-        // If the last condition doesn't have a catch all or tail then add a catch all with a todo
-        if index == sorted_clauses.len() - 1 {
-            if let Pattern::List { tail: None, .. } = &clause.pattern {
-                final_clauses.push(TypedClause {
-                    location: Span::empty(),
-                    pattern: Pattern::Discard {
-                        name: "_".to_string(),
-                        location: Span::empty(),
-                    },
-                    then: plug_in_then(index + 1, last_clause),
-                });
-            }
-        }
-    }
-
-    // Encountered a tail so stop there with that as last clause
-    if last_clause_set {
-        for _ in 0..(sorted_clauses.len() - 1 - last_clause_index) {
-            final_clauses.pop();
-        }
-    }
-
-    // insert hole fillers into clauses
-    for (index, clause) in holes_to_fill.into_iter().rev() {
-        final_clauses.insert(index, clause);
-    }
-    assert!(final_clauses.len() > 1);
-
-    final_clauses
-}
-
-pub fn find_list_clause_or_default_first(clauses: &[TypedClause]) -> &TypedClause {
-    assert!(!clauses.is_empty());
-
-    clauses
-        .iter()
-        .find(|clause| match &clause.pattern {
-            Pattern::List { .. } => true,
-            Pattern::Assign { pattern, .. } if matches!(&**pattern, Pattern::List { .. }) => true,
-            _ => false,
-        })
-        .unwrap_or(&clauses[0])
-}
-
 pub fn known_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
     let uplc_type = field_type.get_uplc_type();
 
@@ -936,7 +569,7 @@ pub fn softcast_data_to_type_otherwise(
         Some(UplcType::Data) => callback(Term::Var(val)),
 
         Some(UplcType::Bls12_381MlResult) => {
-            unreachable!("attempted to cast Data into Bls12_381MlResult ?!")
+            unreachable!("attempted to cast Data into Bls12_381MlResult?!")
         }
 
         Some(UplcType::Integer) => Term::choose_data_integer(val, callback, &otherwise_delayed),
@@ -945,6 +578,7 @@ pub fn softcast_data_to_type_otherwise(
             Term::choose_data_bytearray(val, callback, &otherwise_delayed)
         }
 
+        // TODO: Discuss if we should change this to error since it's not error safe
         Some(UplcType::String) => Term::choose_data_bytearray(
             val,
             |bytes| callback(Term::decode_utf8().apply(bytes)),
@@ -957,12 +591,14 @@ pub fn softcast_data_to_type_otherwise(
 
         Some(UplcType::List(_)) => Term::choose_data_list(val, callback, &otherwise_delayed),
 
+        // TODO: Discuss if we should change this to error since it's not error safe
         Some(UplcType::Bls12_381G1Element) => Term::choose_data_bytearray(
             val,
             |bytes| callback(Term::bls12_381_g1_uncompress().apply(bytes)),
             &otherwise_delayed,
         ),
 
+        // TODO: Discuss if we should change this to error since it's not error safe
         Some(UplcType::Bls12_381G2Element) => Term::choose_data_bytearray(
             val,
             |bytes| callback(Term::bls12_381_g2_uncompress().apply(bytes)),
@@ -1498,91 +1134,6 @@ pub fn special_case_builtin(
             term
         }
         _ => unreachable!(),
-    }
-}
-
-pub fn wrap_as_multi_validator(
-    spend: Term<Name>,
-    mint: Term<Name>,
-    trace: TraceLevel,
-    spend_name: String,
-    mint_name: String,
-) -> Term<Name> {
-    match trace {
-        TraceLevel::Silent | TraceLevel::Compact => Term::equals_integer()
-            .apply(Term::integer(0.into()))
-            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("__second_arg")))
-            .delayed_if_then_else(
-                mint.apply(Term::var("__first_arg"))
-                    .apply(Term::var("__second_arg")),
-                spend.apply(Term::var("__first_arg")).apply(
-                    Term::head_list()
-                        .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("__second_arg"))),
-                ),
-            )
-            .lambda("__second_arg")
-            .lambda("__first_arg"),
-        TraceLevel::Verbose => {
-            let trace_string = format!(
-                    "Incorrect redeemer type for validator {}.
-                    Double check you have wrapped the redeemer type as specified in your plutus.json",
-                    spend_name
-                );
-
-            let error_term = Term::Error.delayed_trace(Term::var("__incorrect_second_arg_type"));
-
-            let then_term = mint
-                .apply(Term::var("__first_arg"))
-                .apply(Term::var("__second_arg"));
-
-            let else_term = spend.apply(Term::var("__first_arg")).apply(
-                Term::head_list()
-                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(Term::var("__second_arg"))),
-            );
-
-            Term::var("__second_arg")
-                .delayed_choose_data(
-                    Term::equals_integer()
-                        .apply(Term::integer(0.into()))
-                        .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var("__second_arg")))
-                        .delayed_if_then_else(
-                            then_term.delayed_trace(Term::string(format!(
-                                "Running 2 arg validator {}",
-                                mint_name
-                            ))),
-                            else_term.delayed_trace(Term::string(format!(
-                                "Running 3 arg validator {}",
-                                spend_name
-                            ))),
-                        ),
-                    error_term.clone(),
-                    error_term.clone(),
-                    error_term.clone(),
-                    error_term,
-                )
-                .lambda("__incorrect_second_arg_type")
-                .apply(Term::string(trace_string))
-                .lambda("__second_arg")
-                .lambda("__first_arg")
-        }
-    }
-}
-
-/// If the pattern is a list the return the number of elements and if it has a tail
-/// Otherwise return None
-pub fn get_list_elements_len_and_tail(
-    pattern: &Pattern<PatternConstructor, Rc<Type>>,
-) -> Option<(usize, bool)> {
-    if let Pattern::List { elements, tail, .. } = &pattern {
-        Some((elements.len(), tail.is_some()))
-    } else if let Pattern::Assign { pattern, .. } = &pattern {
-        if let Pattern::List { elements, tail, .. } = pattern.as_ref() {
-            Some((elements.len(), tail.is_some()))
-        } else {
-            None
-        }
-    } else {
-        None
     }
 }
 
