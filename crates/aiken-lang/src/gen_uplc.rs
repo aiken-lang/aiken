@@ -45,13 +45,14 @@ use builder::{
     introduce_name, introduce_pattern, pop_pattern, softcast_data_to_type_otherwise,
     unknown_data_to_type, DISCARDED,
 };
-use decision_tree::{get_tipo_by_path, TreeGen};
+
+use decision_tree::{get_tipo_by_path, Assigned, DecisionTree, TreeGen};
 use indexmap::{IndexMap, IndexSet};
 use interner::AirInterner;
 use itertools::Itertools;
 use petgraph::{algo, Graph};
 use std::{collections::HashMap, rc::Rc};
-use stick_break_set::{Builtin, Builtins, TreeSet};
+use stick_break_set::{Builtins, TreeSet};
 use tree::Fields;
 use uplc::{
     ast::{Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType},
@@ -556,9 +557,9 @@ impl<'a> CodeGenerator<'a> {
                 ),
 
                 TypedExpr::When {
-                    tipo,
                     subject,
                     clauses,
+                    tipo,
                     ..
                 } => {
                     if clauses.is_empty() {
@@ -597,22 +598,14 @@ impl<'a> CodeGenerator<'a> {
 
                         tree
                     } else {
-                        let constr_var = format!(
-                            "__when_var_span_{}_{}",
-                            subject.location().start,
-                            subject.location().end
-                        );
-
                         let subject_name = format!(
                             "__subject_var_span_{}_{}",
                             subject.location().start,
                             subject.location().end
                         );
 
-                        self.interner.intern(constr_var.clone());
                         self.interner.intern(subject_name.clone());
 
-                        let constr_var_interned = self.interner.lookup_interned(&constr_var);
                         let subject_name_interned = self.interner.lookup_interned(&subject_name);
 
                         let wild_card = TypedPattern::Discard {
@@ -628,72 +621,25 @@ impl<'a> CodeGenerator<'a> {
 
                         let stick_set = TreeSet::new();
 
-                        let clauses = self.handle_decision_tree(tree, stick_set);
-
-                        self.interner.pop_text(constr_var);
-                        self.interner.pop_text(subject_name);
-
-                        // clauses = if subject.tipo().is_list() {
-                        //     rearrange_list_clauses(clauses, &self.data_types)
-                        // } else {
-                        //     clauses
-                        // };
-
-                        // let last_clause = clauses.pop().unwrap();
-
-                        // let constr_var = format!(
-                        //     "__when_var_span_{}_{}",
-                        //     subject.location().start,
-                        //     subject.location().end
-                        // );
-
-                        // let subject_name = format!(
-                        //     "__subject_var_span_{}_{}",
-                        //     subject.location().start,
-                        //     subject.location().end
-                        // );
-
-                        // self.interner.intern(constr_var.clone());
-                        // self.interner.intern(subject_name.clone());
-
-                        // let constr_var_interned = self.interner.lookup_interned(&constr_var);
-                        // let subject_name_interned = self.interner.lookup_interned(&subject_name);
-
-                        // let clauses = self.handle_each_clause(
-                        //     &clauses,
-                        //     last_clause,
-                        //     &subject.tipo(),
-                        //     &mut ClauseProperties::init(
-                        //         &subject.tipo(),
-                        //         constr_var_interned.clone(),
-                        //         subject_name_interned.clone(),
-                        //     ),
-                        //     module_build_name,
-                        // );
-
-                        // self.interner.pop_text(constr_var);
-                        // self.interner.pop_text(subject_name);
-
-                        let when_assign = AirTree::when(
-                            subject_name_interned,
-                            tipo.clone(),
+                        let clauses = self.handle_decision_tree(
+                            &subject_name,
                             subject.tipo(),
-                            AirTree::local_var(&constr_var_interned, subject.tipo()),
-                            clauses,
+                            tipo.clone(),
+                            module_build_name,
+                            tree,
+                            stick_set,
                         );
 
+                        self.interner.pop_text(subject_name);
+
                         AirTree::let_assignment(
-                            constr_var_interned,
+                            subject_name_interned,
                             self.build(subject, module_build_name, &[]),
-                            when_assign,
+                            clauses,
                         )
                     }
                 }
-                // let pattern = branch.condition
-                // branch.body
-                //
-                // if <expr:condition> is <pattern>: <annotation> { <expr:body> }
-                // [(builtin ifThenElse) (condition is pattern) (body) (else) ]
+
                 TypedExpr::If {
                     branches,
                     final_else,
@@ -2461,59 +2407,68 @@ impl<'a> CodeGenerator<'a> {
 
     fn handle_decision_tree(
         &mut self,
+        subject_name: &String,
+        subject_tipo: Rc<Type>,
+        return_tipo: Rc<Type>,
+        module_build_name: &str,
         tree: decision_tree::DecisionTree<'_>,
         mut stick_set: TreeSet,
     ) -> AirTree {
         match tree {
-            decision_tree::DecisionTree::Switch {
-                subject_name,
-                subject_tipo,
+            DecisionTree::Switch {
                 path,
                 mut cases,
                 default,
             } => {
+                //Current path to test
                 let current_tipo = get_tipo_by_path(subject_tipo.clone(), &path);
-
                 let builtins_path = Builtins::new_from_path(subject_tipo.clone(), path);
+                let current_subject_name = if builtins_path.is_empty() {
+                    subject_name.clone()
+                } else {
+                    format!("{}_{}", subject_name, builtins_path.to_string())
+                };
 
-                let mut prev_builtins = builtins_path.clone();
-
+                // Transition process from previous to current
                 let builtins_to_add = stick_set.diff_union_builtins(builtins_path.clone());
 
-                builtins_to_add.vec.iter().for_each(|_| {
-                    prev_builtins.vec.pop();
-                });
+                // Previous path to apply the transition process too
+                let prev_builtins = Builtins {
+                    vec: builtins_path.vec[0..(builtins_path.len() - builtins_to_add.len())]
+                        .to_vec(),
+                };
 
                 let prev_subject_name = if prev_builtins.is_empty() {
                     subject_name.clone()
                 } else {
                     format!("{}_{}", subject_name, prev_builtins.to_string())
                 };
-                let prev_tipo = prev_builtins.vec.last().unwrap().tipo();
-
-                let current_subject_name = if builtins_path.is_empty() {
-                    subject_name
-                } else {
-                    format!("{}_{}", subject_name, builtins_path.to_string())
-                };
+                let prev_tipo = prev_builtins
+                    .vec
+                    .last()
+                    .map_or(subject_tipo.clone(), |last| last.tipo());
 
                 let data_type = lookup_data_type_by_tipo(&self.data_types, &current_tipo);
 
-                let needs_default = if let Some(data_type) = &data_type {
-                    data_type.constructors.len() != cases.len()
-                } else {
-                    true
-                };
-
-                let last_then = if needs_default {
+                let last_clause = if data_type
+                    .as_ref()
+                    .map_or(true, |d| d.constructors.len() != cases.len())
+                {
                     *default.unwrap()
                 } else {
                     cases.pop().unwrap().1
                 };
 
-                let last_then = AirTree::anon_func(
+                let last_clause = AirTree::anon_func(
                     vec![],
-                    self.handle_decision_tree(last_then, stick_set.clone()),
+                    self.handle_decision_tree(
+                        subject_name,
+                        subject_tipo.clone(),
+                        return_tipo.clone(),
+                        module_build_name,
+                        last_clause,
+                        stick_set.clone(),
+                    ),
                     true,
                 );
 
@@ -2523,11 +2478,14 @@ impl<'a> CodeGenerator<'a> {
                     current_subject_name.clone()
                 };
 
-                let clauses = cases.into_iter().rfold(last_then, |acc, (case, then)| {
-                    let case_air = AirTree::anon_func(
-                        vec![],
-                        self.handle_decision_tree(then, stick_set.clone()),
-                        true,
+                let clauses = cases.into_iter().rfold(last_clause, |acc, (case, then)| {
+                    let case_air = self.handle_decision_tree(
+                        subject_name,
+                        subject_tipo.clone(),
+                        return_tipo.clone(),
+                        module_build_name,
+                        then,
+                        stick_set.clone(),
                     );
 
                     AirTree::clause(
@@ -2552,21 +2510,122 @@ impl<'a> CodeGenerator<'a> {
 
                 x
             }
-            decision_tree::DecisionTree::ListSwitch {
-                subject_name,
-                subject_tipo,
-                path,
-                cases,
-                tail_cases,
-                default,
-            } => todo!(),
-            decision_tree::DecisionTree::HoistedLeaf(_, vec) => todo!(),
-            decision_tree::DecisionTree::HoistThen {
+            DecisionTree::ListSwitch { .. } => todo!(),
+            DecisionTree::HoistedLeaf(name, args) => {
+                let air_args = args
+                    .iter()
+                    .map(|item| {
+                        let current_tipo = get_tipo_by_path(subject_tipo.clone(), &item.path);
+
+                        (
+                            current_tipo.clone(),
+                            AirTree::local_var(item.assigned.clone(), current_tipo),
+                        )
+                    })
+                    .collect_vec();
+
+                let then = if args.is_empty() {
+                    AirTree::local_var(
+                        name,
+                        Type::function(
+                            air_args.iter().map(|i| i.0.clone()).collect_vec(),
+                            return_tipo.clone(),
+                        ),
+                    )
+                } else {
+                    AirTree::anon_func(
+                        vec![],
+                        AirTree::call(
+                            AirTree::local_var(
+                                name,
+                                Type::function(
+                                    air_args.iter().map(|i| i.0.clone()).collect_vec(),
+                                    return_tipo.clone(),
+                                ),
+                            ),
+                            Type::void(),
+                            air_args.into_iter().map(|i| i.1).collect_vec(),
+                        ),
+                        true,
+                    )
+                };
+
+                args.into_iter().rfold(then, |acc, assign| {
+                    let Assigned { path, assigned } = assign;
+
+                    let current_tipo = get_tipo_by_path(subject_tipo.clone(), &path);
+                    let builtins_path = Builtins::new_from_path(subject_tipo.clone(), path);
+                    let current_subject_name = if builtins_path.is_empty() {
+                        subject_name.clone()
+                    } else {
+                        format!("{}_{}", subject_name, builtins_path.to_string())
+                    };
+
+                    // Transition process from previous to current
+                    let builtins_to_add = stick_set.diff_union_builtins(builtins_path.clone());
+
+                    // Previous path to apply the transition process too
+                    let prev_builtins = Builtins {
+                        vec: builtins_path.vec[0..(builtins_path.len() - builtins_to_add.len())]
+                            .to_vec(),
+                    };
+
+                    let prev_subject_name = if prev_builtins.is_empty() {
+                        subject_name.clone()
+                    } else {
+                        format!("{}_{}", subject_name, prev_builtins.to_string())
+                    };
+                    let prev_tipo = prev_builtins
+                        .vec
+                        .last()
+                        .map_or(subject_tipo.clone(), |last| last.tipo());
+
+                    let assignment = AirTree::let_assignment(
+                        assigned,
+                        AirTree::local_var(current_subject_name, current_tipo),
+                        acc,
+                    );
+
+                    let thing = builtins_to_add.to_air(prev_subject_name, prev_tipo, assignment);
+
+                    thing
+                })
+            }
+            DecisionTree::HoistThen {
                 name,
                 assigns,
                 pattern,
                 then,
-            } => todo!(),
+            } => {
+                let assign = AirTree::let_assignment(
+                    name,
+                    AirTree::anon_func(
+                        assigns
+                            .iter()
+                            .map(|i| {
+                                let assign = introduce_name(&mut self.interner, &i.assigned);
+                                assign
+                            })
+                            .collect_vec(),
+                        self.build(then, module_build_name, &[]),
+                        true,
+                    ),
+                    self.handle_decision_tree(
+                        subject_name,
+                        subject_tipo,
+                        return_tipo,
+                        module_build_name,
+                        *pattern,
+                        stick_set,
+                    ),
+                );
+
+                assigns.into_iter().for_each(|x| {
+                    self.interner.pop_text(x.assigned);
+                });
+
+                assign
+            }
         }
     }
 
