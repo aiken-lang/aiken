@@ -26,6 +26,10 @@ pub struct Args {
     /// `plutus.json`), or use the `cbor.serialise` function from the Aiken standard library.
     parameter: Option<String>,
 
+    /// Path to a blueprint file to be used as input.
+    #[clap(short = 'b', long, value_parser)]
+    blueprint_input: Option<PathBuf>,
+
     /// Output file. Optional, print on stdout when omitted.
     #[clap(short, long)]
     out: Option<PathBuf>,
@@ -42,6 +46,7 @@ pub struct Args {
 pub fn exec(
     Args {
         parameter,
+        blueprint_input,
         out,
         module,
         validator,
@@ -103,7 +108,7 @@ pub fn exec(
                     })
             }
 
-            None => p.construct_parameter_incrementally(title, ask_schema)?,
+            None => p.construct_parameter_incrementally(title, &blueprint_input, ask_schema)?,
         };
 
         eprintln!(
