@@ -45,7 +45,7 @@ use builder::{
     unknown_data_to_type, DISCARDED,
 };
 
-use decision_tree::{get_tipo_by_path, Assigned, DecisionTree, TreeGen};
+use decision_tree::{get_tipo_by_path, Assigned, CaseTest, DecisionTree, TreeGen};
 use indexmap::IndexMap;
 use interner::AirInterner;
 use itertools::Itertools;
@@ -2495,17 +2495,102 @@ impl<'a> CodeGenerator<'a> {
 
                 let y = AirTree::when(
                     test_subject_name,
-                    Type::void(),
+                    return_tipo.clone(),
                     current_tipo.clone(),
                     AirTree::local_var(current_subject_name, current_tipo.clone()),
                     clauses,
                 );
 
-                let x = builtins_to_add.to_air(prev_subject_name, prev_tipo, y);
+                let x = builtins_to_add.to_air(
+                    &mut self.special_functions,
+                    prev_subject_name,
+                    prev_tipo,
+                    y,
+                );
 
                 x
             }
-            DecisionTree::ListSwitch { .. } => todo!(),
+            DecisionTree::ListSwitch {
+                path,
+                cases,
+                tail_cases,
+                default,
+            } => {
+                println!("PATH IS {:#?}", path);
+                //Current path to test
+                let current_tipo = get_tipo_by_path(subject_tipo.clone(), &path);
+                let builtins_path = Builtins::new_from_path(subject_tipo.clone(), path);
+                let current_subject_name = if builtins_path.is_empty() {
+                    subject_name.clone()
+                } else {
+                    format!("{}_{}", subject_name, builtins_path.to_string())
+                };
+
+                println!("Current IS {:#?}", builtins_path);
+
+                // Transition process from previous to current
+                let builtins_to_add = stick_set.diff_union_builtins(builtins_path.clone());
+
+                println!("TO ADD IS {:#?}", builtins_to_add);
+
+                // Previous path to apply the transition process too
+                let prev_builtins = Builtins {
+                    vec: builtins_path.vec[0..(builtins_path.len() - builtins_to_add.len())]
+                        .to_vec(),
+                };
+
+                println!("PREV IS {:#?}", prev_builtins);
+
+                let prev_subject_name = if prev_builtins.is_empty() {
+                    subject_name.clone()
+                } else {
+                    format!("{}_{}", subject_name, prev_builtins.to_string())
+                };
+                let prev_tipo = prev_builtins
+                    .vec
+                    .last()
+                    .map_or(subject_tipo.clone(), |last| last.tipo());
+
+                let longest_list_pattern = cases.iter().chain(tail_cases.iter()).fold(
+                    0,
+                    |longest, (case, _)| match case {
+                        CaseTest::List(i) | CaseTest::ListWithTail(i) => {
+                            if longest > *i {
+                                *i
+                            } else {
+                                longest
+                            }
+                        }
+                        _ => unreachable!(),
+                    },
+                );
+
+                let (builtin_path, last_pattern) = if tail_cases.is_empty() {
+                    (Builtins::new(), *default.unwrap())
+                } else {
+                    let (case, tree) = tail_cases.first().unwrap();
+
+                    (
+                        builtins_path
+                            .clone()
+                            .merge(Builtins::new_from_list_case(case.clone())),
+                        tree.clone(),
+                    )
+                };
+
+                let last_pattern = self.handle_decision_tree(
+                    subject_name,
+                    subject_tipo.clone(),
+                    return_tipo.clone(),
+                    module_build_name,
+                    last_pattern,
+                    stick_set.clone(),
+                );
+
+                (0..longest_list_pattern).fold(last_pattern, |_, _| todo!());
+
+                todo!()
+            }
             DecisionTree::HoistedLeaf(name, args) => {
                 let air_args = args
                     .iter()
@@ -2567,7 +2652,12 @@ impl<'a> CodeGenerator<'a> {
                         acc,
                     );
 
-                    let thing = builtins_to_add.to_air(prev_subject_name, prev_tipo, assignment);
+                    let thing = builtins_to_add.to_air(
+                        &mut self.special_functions,
+                        prev_subject_name,
+                        prev_tipo,
+                        assignment,
+                    );
 
                     thing
                 })
