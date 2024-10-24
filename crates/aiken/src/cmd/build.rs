@@ -79,10 +79,11 @@ pub fn exec(
                     None => Tracing::All(trace_level),
                 },
                 env.clone(),
+                false,
             )
         })
     } else {
-        with_project(directory.as_deref(), deny, |p| {
+        with_project(directory.as_deref(), deny, false, |p| {
             p.build(
                 uplc,
                 match filter_traces {
@@ -90,6 +91,7 @@ pub fn exec(
                     None => Tracing::All(trace_level),
                 },
                 env.clone(),
+                false,
             )
         })
     };

@@ -5,6 +5,7 @@ use aiken_lang::{
 };
 use aiken_project::watch::{self, watch_project, with_project};
 use rand::prelude::*;
+use std::io::{self, IsTerminal};
 use std::{path::PathBuf, process};
 
 #[derive(clap::Args)]
@@ -106,6 +107,8 @@ pub fn exec(
 
     let seed = seed.unwrap_or_else(|| rng.gen());
 
+    let json_output = !io::stdout().is_terminal();
+
     let result = if watch {
         watch_project(directory.as_deref(), watch::default_filter, 500, |p| {
             p.check(
@@ -120,24 +123,31 @@ pub fn exec(
                     None => Tracing::All(trace_level),
                 },
                 env.clone(),
+                json_output,
             )
         })
     } else {
-        with_project(directory.as_deref(), deny, |p| {
-            p.check(
-                skip_tests,
-                match_tests.clone(),
-                debug,
-                exact_match,
-                seed,
-                max_success,
-                match filter_traces {
-                    Some(filter_traces) => filter_traces(trace_level),
-                    None => Tracing::All(trace_level),
-                },
-                env.clone(),
-            )
-        })
+        with_project(
+            directory.as_deref(),
+            deny,
+            !io::stdout().is_terminal(),
+            |p| {
+                p.check(
+                    skip_tests,
+                    match_tests.clone(),
+                    debug,
+                    exact_match,
+                    seed,
+                    max_success,
+                    match filter_traces {
+                        Some(filter_traces) => filter_traces(trace_level),
+                        None => Tracing::All(trace_level),
+                    },
+                    env.clone(),
+                    json_output,
+                )
+            },
+        )
     };
 
     result.map_err(|_| process::exit(1))
