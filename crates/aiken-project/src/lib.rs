@@ -565,6 +565,7 @@ where
     pub fn construct_parameter_incrementally<F>(
         &self,
         title: Option<&String>,
+        blueprint_input: &Option<PathBuf>,
         ask: F,
     ) -> Result<PlutusData, Error>
     where
@@ -574,7 +575,12 @@ where
         ) -> Result<PlutusData, blueprint::error::Error>,
     {
         // Read blueprint
-        let blueprint = File::open(self.blueprint_path())
+        let project_blueprint_path = self.blueprint_path();
+        let blueprint_path = blueprint_input
+            .as_ref()
+            .map(|p| p.as_path())
+            .unwrap_or_else(|| &project_blueprint_path);
+        let blueprint = File::open(blueprint_path)
             .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
         let blueprint: Blueprint = serde_json::from_reader(BufReader::new(blueprint))?;
 
