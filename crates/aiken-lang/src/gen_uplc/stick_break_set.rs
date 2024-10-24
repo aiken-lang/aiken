@@ -1,12 +1,13 @@
 use std::rc::Rc;
 
 use itertools::Itertools;
-use uplc::builtins::DefaultFunction;
+use uplc::{builder::CONSTR_FIELDS_EXPOSER, builtins::DefaultFunction};
 
 use crate::expr::Type;
 
 use super::{
-    decision_tree::{get_tipo_by_path, Path},
+    builder::CodeGenSpecialFuncs,
+    decision_tree::{get_tipo_by_path, CaseTest, Path},
     tree::AirTree,
 };
 
@@ -14,7 +15,7 @@ use super::{
 pub enum Builtin {
     HeadList(Rc<Type>),
     TailList,
-    UnConstr,
+    UnConstrFields,
     FstPair(Rc<Type>),
     SndPair(Rc<Type>),
 }
@@ -24,7 +25,7 @@ impl PartialEq for Builtin {
         match (self, other) {
             (Builtin::HeadList(_), Builtin::HeadList(_)) => true,
             (Builtin::TailList, Builtin::TailList) => true,
-            (Builtin::UnConstr, Builtin::UnConstr) => true,
+            (Builtin::UnConstrFields, Builtin::UnConstrFields) => true,
             (Builtin::SndPair(_), Builtin::SndPair(_)) => true,
             _ => false,
         }
@@ -34,7 +35,7 @@ impl PartialEq for Builtin {
 impl Eq for Builtin {}
 
 impl Builtin {
-    fn to_air_call(self, arg: AirTree) -> AirTree {
+    fn to_air_call(self, special_funcs: &mut CodeGenSpecialFuncs, arg: AirTree) -> AirTree {
         match self {
             Builtin::HeadList(t) => AirTree::builtin(DefaultFunction::HeadList, t, vec![arg]),
             Builtin::TailList => AirTree::builtin(
@@ -42,11 +43,12 @@ impl Builtin {
                 Type::list(Type::data()),
                 vec![arg],
             ),
-            Builtin::UnConstr => AirTree::builtin(
-                DefaultFunction::UnConstrData,
-                Type::pair(Type::int(), Type::list(Type::data())),
+            Builtin::UnConstrFields => AirTree::call(
+                special_funcs.use_function_tree(CONSTR_FIELDS_EXPOSER.to_string()),
+                Type::list(Type::data()),
                 vec![arg],
             ),
+
             Builtin::FstPair(t) => AirTree::builtin(DefaultFunction::FstPair, t, vec![arg]),
             Builtin::SndPair(t) => AirTree::builtin(DefaultFunction::SndPair, t, vec![arg]),
         }
@@ -57,7 +59,7 @@ impl Builtin {
             Builtin::HeadList(t) => t.clone(),
             Builtin::TailList => Type::list(Type::data()),
 
-            Builtin::UnConstr => Type::pair(Type::int(), Type::list(Type::data())),
+            Builtin::UnConstrFields => Type::list(Type::data()),
 
             Builtin::FstPair(t) => t.clone(),
             Builtin::SndPair(t) => t.clone(),
@@ -70,7 +72,7 @@ impl ToString for Builtin {
         match self {
             Builtin::HeadList(_) => "head".to_string(),
             Builtin::TailList => "tail".to_string(),
-            Builtin::UnConstr => "unconstr".to_string(),
+            Builtin::UnConstrFields => "unconstrfields".to_string(),
             Builtin::FstPair(_) => "fst".to_string(),
             Builtin::SndPair(_) => "snd".to_string(),
         }
@@ -85,6 +87,20 @@ pub struct Builtins {
 impl Builtins {
     pub fn new() -> Self {
         Builtins { vec: vec![] }
+    }
+
+    pub fn new_from_list_case(case: CaseTest) -> Self {
+        Self {
+            vec: match case {
+                CaseTest::List(i) | CaseTest::ListWithTail(i) => {
+                    (0..i).fold(vec![], |mut acc, _index| {
+                        acc.push(Builtin::TailList);
+                        acc
+                    })
+                }
+                _ => unreachable!(),
+            },
+        }
     }
 
     pub fn new_from_path(subject_tipo: Rc<Type>, path: Vec<Path>) -> Self {
@@ -124,10 +140,7 @@ impl Builtins {
                             (builtins, rebuilt_path)
                         }
                         Path::Constr(_rc, i) => {
-                            builtins.extend([
-                                Builtin::UnConstr,
-                                Builtin::SndPair(Type::list(Type::data())),
-                            ]);
+                            builtins.push(Builtin::UnConstrFields);
 
                             for _ in 0..i {
                                 builtins.push(Builtin::TailList);
@@ -162,7 +175,18 @@ impl Builtins {
         self.vec.is_empty()
     }
 
-    pub fn to_air(self, prev_name: String, subject_tipo: Rc<Type>, then: AirTree) -> AirTree {
+    pub fn merge(mut self, other: Self) -> Self {
+        self.vec.extend(other.vec);
+        self
+    }
+
+    pub fn to_air(
+        self,
+        special_funcs: &mut CodeGenSpecialFuncs,
+        prev_name: String,
+        subject_tipo: Rc<Type>,
+        then: AirTree,
+    ) -> AirTree {
         let (_, _, name_builtins) = self.vec.into_iter().fold(
             (prev_name, subject_tipo, vec![]),
             |(prev_name, prev_tipo, mut acc), item| {
@@ -180,7 +204,7 @@ impl Builtins {
             .rfold(then, |then, (prev_name, prev_tipo, next_name, builtin)| {
                 AirTree::let_assignment(
                     next_name,
-                    builtin.to_air_call(AirTree::local_var(prev_name, prev_tipo)),
+                    builtin.to_air_call(special_funcs, AirTree::local_var(prev_name, prev_tipo)),
                     then,
                 )
             })
