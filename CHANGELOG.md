@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.1.6 - UNRELEASED
+
+### Added
+
+- **aiken**: Optionally provide blueprint file location when using `blueprint apply` @Riley-Kilgore
+
+### Changed
+
+- N/A
+
+### Removed
+
+- N/A
+
 ## v1.1.5 - 2024-10-19
 
 ### Added
