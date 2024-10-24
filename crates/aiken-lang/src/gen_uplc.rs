@@ -1,32 +1,33 @@
 pub mod air;
 pub mod builder;
+pub mod decision_tree;
 pub mod interner;
+pub mod stick_break_set;
 pub mod tree;
 
 use self::{
     air::Air,
     builder::{
         cast_validator_args, convert_type_to_data, extract_constant, modify_cyclic_calls,
-        modify_self_calls, rearrange_list_clauses, AssignmentProperties, ClauseProperties,
-        CodeGenSpecialFuncs, CycleFunctionNames, HoistableFunction, Variant,
+        modify_self_calls, AssignmentProperties, CodeGenSpecialFuncs, CycleFunctionNames,
+        HoistableFunction, Variant,
     },
     tree::{AirTree, TreePath},
 };
 use crate::{
     ast::{
         AssignmentKind, BinOp, Bls12_381Point, Curve, DataTypeKey, FunctionAccessKey, Pattern,
-        Span, TraceLevel, Tracing, TypedArg, TypedClause, TypedDataType, TypedFunction,
-        TypedPattern, TypedValidator, UnOp,
+        Span, TraceLevel, Tracing, TypedArg, TypedDataType, TypedFunction, TypedPattern,
+        TypedValidator, UnOp,
     },
     builtins::PRELUDE,
     expr::TypedExpr,
     gen_uplc::{
         air::ExpectLevel,
         builder::{
-            erase_opaque_type_operations, find_list_clause_or_default_first,
-            get_generic_variant_name, get_line_columns_by_span, get_src_code_by_span,
-            known_data_to_type, monomorphize, pattern_has_conditions, wrap_validator_condition,
-            CodeGenFunction, SpecificClause,
+            erase_opaque_type_operations, get_generic_variant_name, get_line_columns_by_span,
+            get_src_code_by_span, known_data_to_type, monomorphize, wrap_validator_condition,
+            CodeGenFunction,
         },
     },
     line_numbers::LineNumbers,
@@ -43,11 +44,14 @@ use builder::{
     introduce_name, introduce_pattern, pop_pattern, softcast_data_to_type_otherwise,
     unknown_data_to_type, DISCARDED,
 };
-use indexmap::{IndexMap, IndexSet};
+
+use decision_tree::{get_tipo_by_path, Assigned, CaseTest, DecisionTree, TreeGen};
+use indexmap::IndexMap;
 use interner::AirInterner;
 use itertools::Itertools;
 use petgraph::{algo, Graph};
 use std::{collections::HashMap, rc::Rc};
+use stick_break_set::{Builtins, TreeSet};
 use tree::Fields;
 use uplc::{
     ast::{Constant as UplcConstant, Name, NamedDeBruijn, Program, Term, Type as UplcType},
@@ -552,13 +556,11 @@ impl<'a> CodeGenerator<'a> {
                 ),
 
                 TypedExpr::When {
-                    tipo,
                     subject,
                     clauses,
+                    tipo,
                     ..
                 } => {
-                    let mut clauses = clauses.clone();
-
                     if clauses.is_empty() {
                         unreachable!("We should have one clause at least")
                     // TODO: This whole branch can _probably_ be removed, if handle_each_clause
@@ -567,7 +569,7 @@ impl<'a> CodeGenerator<'a> {
                     } else if clauses.len() == 1 {
                         let subject_val = self.build(subject, module_build_name, &[]);
 
-                        let last_clause = clauses.pop().unwrap();
+                        let last_clause = &clauses[0];
 
                         // Intern vars from pattern here
                         introduce_pattern(&mut self.interner, &last_clause.pattern);
@@ -595,67 +597,48 @@ impl<'a> CodeGenerator<'a> {
 
                         tree
                     } else {
-                        clauses = if subject.tipo().is_list() {
-                            rearrange_list_clauses(clauses, &self.data_types)
-                        } else {
-                            clauses
-                        };
-
-                        let last_clause = clauses.pop().unwrap();
-
-                        let constr_var = format!(
-                            "__when_var_span_{}_{}",
-                            subject.location().start,
-                            subject.location().end
-                        );
-
                         let subject_name = format!(
                             "__subject_var_span_{}_{}",
                             subject.location().start,
                             subject.location().end
                         );
 
-                        self.interner.intern(constr_var.clone());
                         self.interner.intern(subject_name.clone());
 
-                        let constr_var_interned = self.interner.lookup_interned(&constr_var);
                         let subject_name_interned = self.interner.lookup_interned(&subject_name);
 
-                        let clauses = self.handle_each_clause(
-                            &clauses,
-                            last_clause,
-                            &subject.tipo(),
-                            &mut ClauseProperties::init(
-                                &subject.tipo(),
-                                constr_var_interned.clone(),
-                                subject_name_interned.clone(),
-                            ),
+                        let wild_card = TypedPattern::Discard {
+                            name: "".to_string(),
+                            location: Span::empty(),
+                        };
+
+                        let tree_gen =
+                            TreeGen::new(&mut self.interner, &self.data_types, &wild_card);
+
+                        let tree =
+                            tree_gen.build_tree(&subject_name_interned, &subject.tipo(), clauses);
+
+                        let stick_set = TreeSet::new();
+
+                        let clauses = self.handle_decision_tree(
+                            &subject_name_interned,
+                            subject.tipo(),
+                            tipo.clone(),
                             module_build_name,
+                            tree,
+                            stick_set,
                         );
 
-                        self.interner.pop_text(constr_var);
                         self.interner.pop_text(subject_name);
 
-                        let when_assign = AirTree::when(
-                            subject_name_interned,
-                            tipo.clone(),
-                            subject.tipo(),
-                            AirTree::local_var(&constr_var_interned, subject.tipo()),
-                            clauses,
-                        );
-
                         AirTree::let_assignment(
-                            constr_var_interned,
+                            subject_name_interned,
                             self.build(subject, module_build_name, &[]),
-                            when_assign,
+                            clauses,
                         )
                     }
                 }
-                // let pattern = branch.condition
-                // branch.body
-                //
-                // if <expr:condition> is <pattern>: <annotation> { <expr:body> }
-                // [(builtin ifThenElse) (condition is pattern) (body) (else) ]
+
                 TypedExpr::If {
                     branches,
                     final_else,
@@ -2421,1087 +2404,298 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    pub fn handle_each_clause(
+    fn handle_decision_tree(
         &mut self,
-        clauses: &[TypedClause],
-        final_clause: TypedClause,
-        subject_tipo: &Rc<Type>,
-        props: &mut ClauseProperties,
-        module_name: &str,
+        subject_name: &String,
+        subject_tipo: Rc<Type>,
+        return_tipo: Rc<Type>,
+        module_build_name: &str,
+        tree: decision_tree::DecisionTree<'_>,
+        mut stick_set: TreeSet,
     ) -> AirTree {
-        assert!(
-            !subject_tipo.is_void(),
-            "WHY ARE YOU PATTERN MATCHING VOID???"
-        );
-        props.complex_clause = false;
-
-        if let Some((clause, rest_clauses)) = clauses.split_first() {
-            introduce_pattern(&mut self.interner, &clause.pattern);
-
-            let clause_then = self.build(&clause.then, module_name, &[]);
-
-            let tree = match &mut props.specific_clause {
-                SpecificClause::ConstrClause => {
-                    let data_type = lookup_data_type_by_tipo(&self.data_types, subject_tipo);
-
-                    let (clause_cond, clause_assign) =
-                        self.clause_pattern(&clause.pattern, subject_tipo, props, clause_then);
-
-                    let complex_clause = props.complex_clause;
-
-                    let mut next_clause_props = ClauseProperties::init(
-                        subject_tipo,
-                        props.clause_var_name.clone(),
-                        props.original_subject_name.clone(),
-                    );
-
-                    if matches!(
-                        &clause.pattern,
-                        Pattern::Var { .. } | Pattern::Discard { .. }
-                    ) {
-                        AirTree::wrap_clause(
-                            clause_assign,
-                            self.handle_each_clause(
-                                rest_clauses,
-                                final_clause,
-                                subject_tipo,
-                                &mut next_clause_props,
-                                module_name,
-                            ),
-                        )
-                    } else if let Some(data_type) = data_type {
-                        if data_type.constructors.len() > 1 && !data_type.is_never() {
-                            AirTree::clause(
-                                &props.original_subject_name,
-                                clause_cond,
-                                subject_tipo.clone(),
-                                clause_assign,
-                                self.handle_each_clause(
-                                    rest_clauses,
-                                    final_clause,
-                                    subject_tipo,
-                                    &mut next_clause_props,
-                                    module_name,
-                                ),
-                                complex_clause,
-                            )
-                        } else {
-                            AirTree::wrap_clause(
-                                clause_assign,
-                                self.handle_each_clause(
-                                    rest_clauses,
-                                    final_clause,
-                                    subject_tipo,
-                                    &mut next_clause_props,
-                                    module_name,
-                                ),
-                            )
-                        }
-                    } else {
-                        // Case of ByteArray or Int or Bool matches
-                        assert!(subject_tipo.is_primitive());
-
-                        AirTree::clause(
-                            &props.original_subject_name,
-                            clause_cond,
-                            subject_tipo.clone(),
-                            clause_assign,
-                            self.handle_each_clause(
-                                rest_clauses,
-                                final_clause,
-                                subject_tipo,
-                                &mut next_clause_props,
-                                module_name,
-                            ),
-                            complex_clause,
-                        )
-                    }
-                }
-                SpecificClause::ListClause {
-                    defined_tails_index,
-                    defined_tails,
-                    checked_index,
-                } => {
-                    let mut clause_pattern = &clause.pattern;
-
-                    if let Pattern::Assign { pattern, .. } = clause_pattern {
-                        clause_pattern = pattern;
-                    }
-
-                    assert!(matches!(
-                        clause_pattern,
-                        Pattern::List { .. } | Pattern::Var { .. } | Pattern::Discard { .. }
-                    ));
-
-                    let Pattern::List { elements, tail, .. } = clause_pattern else {
-                        let mut next_clause_props = ClauseProperties {
-                            clause_var_name: props.clause_var_name.clone(),
-                            complex_clause: false,
-                            needs_constr_var: false,
-                            original_subject_name: props.original_subject_name.clone(),
-                            final_clause: false,
-                            specific_clause: SpecificClause::ListClause {
-                                defined_tails_index: *defined_tails_index,
-                                defined_tails: defined_tails.clone(),
-                                checked_index: *checked_index,
-                            },
-                        };
-
-                        let (_, clause_assign) =
-                            self.clause_pattern(&clause.pattern, subject_tipo, props, clause_then);
-
-                        return AirTree::wrap_clause(
-                            clause_assign,
-                            self.handle_each_clause(
-                                rest_clauses,
-                                final_clause,
-                                subject_tipo,
-                                &mut next_clause_props,
-                                module_name,
-                            ),
-                        );
-                    };
-
-                    assert!(!elements.is_empty() || tail.is_none());
-                    let elements_len = elements.len() + usize::from(tail.is_none()) - 1;
-                    let current_checked_index = *checked_index;
-
-                    let tail_name = defined_tails
-                        .get(elements_len)
-                        .cloned()
-                        .unwrap_or(props.original_subject_name.clone());
-
-                    let next_tail_name = {
-                        if rest_clauses.is_empty() {
-                            None
-                        } else {
-                            let next_clause = find_list_clause_or_default_first(rest_clauses);
-                            let mut next_clause_pattern = &next_clause.pattern;
-
-                            if let Pattern::Assign { pattern, .. } = next_clause_pattern {
-                                next_clause_pattern = pattern;
-                            }
-
-                            let next_elements_len = match next_clause_pattern {
-                                Pattern::List { elements, tail, .. } => {
-                                    assert!(!elements.is_empty() || tail.is_none());
-                                    elements.len() + usize::from(tail.is_none()) - 1
-                                }
-                                _ => 0,
-                            };
-
-                            if (*defined_tails_index as usize) < next_elements_len {
-                                *defined_tails_index += 1;
-                                let current_defined_tail = defined_tails.last().unwrap().clone();
-
-                                defined_tails.push(format!(
-                                    "tail_index_{}_span_{}_{}",
-                                    *defined_tails_index,
-                                    next_clause.pattern.location().start,
-                                    next_clause.pattern.location().end
-                                ));
-
-                                Some((
-                                    current_defined_tail,
-                                    format!(
-                                        "tail_index_{}_span_{}_{}",
-                                        *defined_tails_index,
-                                        next_clause.pattern.location().start,
-                                        next_clause.pattern.location().end
-                                    ),
-                                ))
-                            } else {
-                                None
-                            }
-                        }
-                    };
-
-                    let mut is_wild_card_elems_clause = true;
-                    for element in elements.iter() {
-                        is_wild_card_elems_clause = is_wild_card_elems_clause
-                            && !pattern_has_conditions(element, &self.data_types);
-                    }
-
-                    if *checked_index < elements_len.try_into().unwrap()
-                        && is_wild_card_elems_clause
-                    {
-                        *checked_index += 1;
-                    }
-
-                    let mut next_clause_props = ClauseProperties {
-                        clause_var_name: props.clause_var_name.clone(),
-                        complex_clause: false,
-                        needs_constr_var: false,
-                        original_subject_name: props.original_subject_name.clone(),
-                        final_clause: false,
-                        specific_clause: SpecificClause::ListClause {
-                            defined_tails_index: *defined_tails_index,
-                            defined_tails: defined_tails.clone(),
-                            checked_index: *checked_index,
-                        },
-                    };
-
-                    let (_, clause_assign) =
-                        self.clause_pattern(&clause.pattern, subject_tipo, props, clause_then);
-
-                    let complex_clause = props.complex_clause;
-
-                    if current_checked_index < elements_len.try_into().unwrap()
-                        || next_tail_name.is_some()
-                    {
-                        AirTree::list_clause(
-                            tail_name,
-                            subject_tipo.clone(),
-                            clause_assign,
-                            self.handle_each_clause(
-                                rest_clauses,
-                                final_clause,
-                                subject_tipo,
-                                &mut next_clause_props,
-                                module_name,
-                            ),
-                            next_tail_name,
-                            complex_clause,
-                        )
-                    } else {
-                        AirTree::wrap_clause(
-                            clause_assign,
-                            self.handle_each_clause(
-                                rest_clauses,
-                                final_clause,
-                                subject_tipo,
-                                &mut next_clause_props,
-                                module_name,
-                            ),
-                        )
-                    }
-                }
-                SpecificClause::TupleClause {
-                    defined_tuple_indices,
-                } => {
-                    let current_defined_indices = defined_tuple_indices.clone();
-
-                    let (_, pattern_assigns) =
-                        self.clause_pattern(&clause.pattern, subject_tipo, props, clause_then);
-
-                    let ClauseProperties {
-                        specific_clause:
-                            SpecificClause::TupleClause {
-                                defined_tuple_indices,
-                            },
-                        ..
-                    } = props
-                    else {
-                        unreachable!()
-                    };
-
-                    let new_defined_indices: IndexSet<(usize, String)> = defined_tuple_indices
-                        .difference(&current_defined_indices)
-                        .cloned()
-                        .collect();
-
-                    let mut next_clause_props = ClauseProperties {
-                        clause_var_name: props.clause_var_name.clone(),
-                        complex_clause: false,
-                        needs_constr_var: false,
-                        original_subject_name: props.original_subject_name.clone(),
-                        final_clause: false,
-                        specific_clause: SpecificClause::TupleClause {
-                            defined_tuple_indices: defined_tuple_indices.clone(),
-                        },
-                    };
-
-                    if new_defined_indices.is_empty() {
-                        AirTree::wrap_clause(
-                            pattern_assigns,
-                            self.handle_each_clause(
-                                rest_clauses,
-                                final_clause,
-                                subject_tipo,
-                                &mut next_clause_props,
-                                module_name,
-                            ),
-                        )
-                    } else {
-                        AirTree::tuple_clause(
-                            &props.original_subject_name,
-                            subject_tipo.clone(),
-                            new_defined_indices,
-                            current_defined_indices,
-                            pattern_assigns,
-                            self.handle_each_clause(
-                                rest_clauses,
-                                final_clause,
-                                subject_tipo,
-                                &mut next_clause_props,
-                                module_name,
-                            ),
-                            props.complex_clause,
-                        )
-                    }
-                }
-                SpecificClause::PairClause => {
-                    let (_, pattern_assigns) =
-                        self.clause_pattern(&clause.pattern, subject_tipo, props, clause_then);
-
-                    let mut next_clause_props = ClauseProperties::init(
-                        subject_tipo,
-                        props.clause_var_name.clone(),
-                        props.original_subject_name.clone(),
-                    );
-
-                    AirTree::wrap_clause(
-                        pattern_assigns,
-                        self.handle_each_clause(
-                            rest_clauses,
-                            final_clause,
-                            subject_tipo,
-                            &mut next_clause_props,
-                            module_name,
-                        ),
-                    )
-                }
-            };
-
-            pop_pattern(&mut self.interner, &clause.pattern);
-
-            tree
-        } else {
-            // handle final_clause
-            props.final_clause = true;
-
-            introduce_pattern(&mut self.interner, &final_clause.pattern);
-
-            let clause_then = self.build(&final_clause.then, module_name, &[]);
-
-            let (condition, assignments) =
-                self.clause_pattern(&final_clause.pattern, subject_tipo, props, clause_then);
-
-            pop_pattern(&mut self.interner, &final_clause.pattern);
-
-            AirTree::finally(condition, assignments)
-        }
-    }
-
-    pub fn clause_pattern(
-        &self,
-        pattern: &Pattern<PatternConstructor, Rc<Type>>,
-        subject_tipo: &Rc<Type>,
-        props: &mut ClauseProperties,
-        then: AirTree,
-        // We return condition and then assignments sequence
-    ) -> (AirTree, AirTree) {
-        match pattern {
-            Pattern::Int { value, .. } => {
-                assert!(!props.final_clause);
-                (AirTree::int(value), then)
-            }
-            Pattern::ByteArray { value, .. } => {
-                assert!(!props.final_clause);
-                (AirTree::byte_array(value.clone()), then)
-            }
-            Pattern::Var { name, .. } => {
-                let name = self.interner.lookup_interned(name);
-
-                (
-                    AirTree::void(),
-                    AirTree::let_assignment(
-                        name,
-                        AirTree::local_var(&props.clause_var_name, subject_tipo.clone()),
-                        then,
-                    ),
-                )
-            }
-            Pattern::Assign { name, pattern, .. } => {
-                let name = self.interner.lookup_interned(name);
-                let (inner_condition, inner_assignment) =
-                    self.clause_pattern(pattern, subject_tipo, props, then);
-
-                (
-                    inner_condition,
-                    AirTree::let_assignment(
-                        name,
-                        AirTree::local_var(&props.clause_var_name, subject_tipo.clone()),
-                        inner_assignment,
-                    ),
-                )
-            }
-            Pattern::Discard { .. } => (AirTree::void(), then),
-            Pattern::List { elements, tail, .. } => {
-                let ClauseProperties {
-                    specific_clause: SpecificClause::ListClause { defined_tails, .. },
-                    complex_clause,
-                    ..
-                } = props
-                else {
-                    unreachable!()
-                };
-
-                let list_elem_types = subject_tipo.get_inner_types();
-
-                let list_elem_type = list_elem_types
-                    .first()
-                    .unwrap_or_else(|| unreachable!("No list element type?"));
-
-                let defined_tails = defined_tails.clone();
-
-                let mut elems = vec![];
-
-                let mut list_tail = None;
-
-                let elems_then = tail.iter().rfold(then, |inner_then, elem| {
-                    assert!(!elements.is_empty());
-                    let tail = defined_tails.get(elements.len() - 1);
-                    let elem_name = match elem.as_ref() {
-                        Pattern::Discard { .. } => DISCARDED.to_string(),
-                        _ => format!(
-                            "tail_span_{}_{}",
-                            elem.location().start,
-                            elem.location().end
-                        ),
-                    };
-
-                    let mut elem_props = ClauseProperties::init_inner(
-                        subject_tipo,
-                        elem_name.clone(),
-                        elem_name.clone(),
-                        props.final_clause,
-                    );
-
-                    if elem_name != DISCARDED && !defined_tails.is_empty() {
-                        list_tail = Some((tail.unwrap().to_string(), elem_name.to_string()));
-                    }
-
-                    let inner_then = if elem_name != DISCARDED {
-                        self.nested_clause_condition(
-                            elem,
-                            subject_tipo,
-                            &mut elem_props,
-                            inner_then,
-                        )
-                    } else {
-                        inner_then
-                    };
-
-                    if props.final_clause && defined_tails.is_empty() {
-                        elems.push(elem_name);
-                    }
-
-                    *complex_clause = *complex_clause || elem_props.complex_clause;
-
-                    inner_then
-                });
-
-                let elems_then =
-                    elements
-                        .iter()
-                        .enumerate()
-                        .rfold(elems_then, |elems_then, (index, elem)| {
-                            // TODO: Turn 'Pattern' into another type instead of using strings and
-                            // expecting a special magic string '_'.
-                            let elem_name = match elem {
-                                Pattern::Discard { .. } => DISCARDED.to_string(),
-                                _ => format!(
-                                    "elem_{}_span_{}_{}",
-                                    index,
-                                    elem.location().start,
-                                    elem.location().end
-                                ),
-                            };
-
-                            let mut elem_props = ClauseProperties::init_inner(
-                                list_elem_type,
-                                elem_name.clone(),
-                                elem_name.clone(),
-                                props.final_clause,
-                            );
-
-                            let elems_then = if elem_name != DISCARDED {
-                                self.nested_clause_condition(
-                                    elem,
-                                    list_elem_type,
-                                    &mut elem_props,
-                                    elems_then,
-                                )
-                            } else {
-                                elems_then
-                            };
-
-                            elems.push(elem_name);
-
-                            *complex_clause = *complex_clause || elem_props.complex_clause;
-
-                            elems_then
-                        });
-
-                elems.reverse();
-
-                // This case is really only possible with something like
-                // when_tuple_empty_lists
-
-                let list_assign = if props.final_clause && defined_tails.is_empty() {
-                    AirTree::list_access(
-                        elems,
-                        subject_tipo.clone(),
-                        tail.is_some(),
-                        AirTree::local_var(&props.clause_var_name, subject_tipo.clone()),
-                        // One special usage of list access here
-                        // So for the msg we pass in empty string if tracing is on
-                        // Since check_last_item is false this will never get added to the final uplc anyway
-                        ExpectLevel::None,
-                        elems_then,
-                        AirTree::error(Type::void(), false),
-                    )
-                } else {
-                    assert!(defined_tails.len() >= elems.len());
-
-                    AirTree::list_expose(
-                        elems
-                            .into_iter()
-                            .zip(defined_tails)
-                            .filter(|(head, _)| head != DISCARDED)
-                            .map(|(head, tail)| (tail, head))
-                            .collect_vec(),
-                        list_tail,
-                        subject_tipo.clone(),
-                        elems_then,
-                    )
-                };
-
-                (AirTree::void(), list_assign)
-            }
-
-            Pattern::Pair { fst, snd, .. } => {
-                let items_type = subject_tipo.get_inner_types();
-
-                let mut name_index_assigns = vec![];
-
-                let next_then =
-                    [fst, snd]
-                        .iter()
-                        .enumerate()
-                        .rfold(then, |inner_then, (index, element)| {
-                            let elem_name = match element.as_ref() {
-                                Pattern::Discard { .. } => None,
-                                _ => Some(format!(
-                                    "pair_index_{}_span_{}_{}",
-                                    index,
-                                    element.location().start,
-                                    element.location().end
-                                )),
-                            };
-
-                            let mut pair_props = ClauseProperties::init_inner(
-                                &items_type[index],
-                                elem_name.clone().unwrap_or_else(|| DISCARDED.to_string()),
-                                elem_name.clone().unwrap_or_else(|| DISCARDED.to_string()),
-                                props.final_clause,
-                            );
-
-                            let elem = if elem_name.is_some() {
-                                self.nested_clause_condition(
-                                    element,
-                                    &items_type[index],
-                                    &mut pair_props,
-                                    inner_then,
-                                )
-                            } else {
-                                inner_then
-                            };
-
-                            props.complex_clause =
-                                props.complex_clause || pair_props.complex_clause;
-
-                            name_index_assigns.push((elem_name, index));
-
-                            elem
-                        });
-
-                name_index_assigns.reverse();
-
-                let field_assign = if name_index_assigns.iter().all(|s| s.0.is_none()) {
-                    next_then
-                } else {
-                    AirTree::pair_access(
-                        name_index_assigns[0].0.clone(),
-                        name_index_assigns[1].0.clone(),
-                        subject_tipo.clone(),
-                        AirTree::local_var(props.clause_var_name.clone(), subject_tipo.clone()),
-                        false,
-                        next_then,
-                        AirTree::error(Type::void(), false),
-                    )
-                };
-
-                (AirTree::void(), field_assign)
-            }
-
-            Pattern::Constructor { name, .. } if subject_tipo.is_bool() => {
-                (AirTree::bool(name == "True"), then)
-            }
-
-            Pattern::Constructor {
-                name,
-                arguments,
-                constructor,
-                tipo: function_tipo,
-                ..
+        match tree {
+            DecisionTree::Switch {
+                path,
+                mut cases,
+                default,
             } => {
-                assert!(
-                    matches!(function_tipo.as_ref().clone(), Type::Fn { .. })
-                        || matches!(function_tipo.as_ref().clone(), Type::App { .. })
-                );
-                let data_type = lookup_data_type_by_tipo(&self.data_types, subject_tipo)
-                    .unwrap_or_else(|| {
-                        unreachable!(
-                            "Code Gen should have the definition for this constructor {}",
-                            name
-                        )
-                    });
-
-                assert!(
-                    !data_type.constructors.is_empty(),
-                    "{}\n{constructor:#?}\n{data_type:#?}",
-                    subject_tipo.to_pretty(0)
-                );
-
-                let (constr_index, _) = data_type
-                    .constructors
-                    .iter()
-                    .enumerate()
-                    .find(|(_, dt)| &dt.name == name)
-                    .unwrap();
-
-                let field_map = match constructor {
-                    PatternConstructor::Record { field_map, .. } => field_map.clone(),
-                };
-
-                let mut type_map: IndexMap<usize, Rc<Type>> = IndexMap::new();
-
-                for (index, arg) in function_tipo.arg_types().unwrap().iter().enumerate() {
-                    let field_type = arg.clone();
-                    type_map.insert(index, field_type);
-                }
-
-                let mut fields = vec![];
-
-                let next_then =
-                    arguments
-                        .iter()
-                        .enumerate()
-                        .rfold(then, |inner_then, (index, arg)| {
-                            let label = arg.label.clone().unwrap_or_default();
-
-                            let field_index = if let Some(field_map) = &field_map {
-                                *field_map.fields.get(&label).map(|x| &x.0).unwrap_or(&index)
-                            } else {
-                                index
-                            };
-
-                            let field_name = match &arg.value {
-                                Pattern::Discard { .. } => DISCARDED.to_string(),
-                                _ => format!(
-                                    "field_{}_span_{}_{}",
-                                    field_index,
-                                    arg.value.location().start,
-                                    arg.value.location().end
-                                ),
-                            };
-
-                            let arg_type = type_map.get(&field_index).unwrap_or_else(|| {
-                                unreachable!(
-                                    "Missing type for field {} of constr {}",
-                                    field_index, name
-                                )
-                            });
-
-                            let mut field_props = ClauseProperties::init_inner(
-                                arg_type,
-                                field_name.clone(),
-                                field_name.clone(),
-                                props.final_clause,
-                            );
-
-                            let statement = if field_name != DISCARDED {
-                                self.nested_clause_condition(
-                                    &arg.value,
-                                    arg_type,
-                                    &mut field_props,
-                                    inner_then,
-                                )
-                            } else {
-                                inner_then
-                            };
-
-                            props.complex_clause =
-                                props.complex_clause || field_props.complex_clause;
-
-                            fields.push((field_index, field_name, arg_type.clone()));
-
-                            statement
-                        });
-
-                fields.reverse();
-
-                let field_assign = if check_replaceable_opaque_type(subject_tipo, &self.data_types)
-                {
-                    AirTree::let_assignment(
-                        &fields[0].1,
-                        AirTree::local_var(props.clause_var_name.clone(), subject_tipo.clone()),
-                        next_then,
-                    )
-                } else if fields.iter().all(|s| s.1 == DISCARDED) {
-                    next_then
+                //Current path to test
+                let current_tipo = get_tipo_by_path(subject_tipo.clone(), &path);
+                let builtins_path = Builtins::new_from_path(subject_tipo.clone(), path);
+                let current_subject_name = if builtins_path.is_empty() {
+                    subject_name.clone()
                 } else {
-                    AirTree::fields_expose(
-                        fields,
-                        AirTree::local_var(props.clause_var_name.clone(), subject_tipo.clone()),
+                    format!("{}_{}", subject_name, builtins_path.to_string())
+                };
+
+                // Transition process from previous to current
+                let builtins_to_add = stick_set.diff_union_builtins(builtins_path.clone());
+
+                // Previous path to apply the transition process too
+                let prev_builtins = Builtins {
+                    vec: builtins_path.vec[0..(builtins_path.len() - builtins_to_add.len())]
+                        .to_vec(),
+                };
+
+                let prev_subject_name = if prev_builtins.is_empty() {
+                    subject_name.clone()
+                } else {
+                    format!("{}_{}", subject_name, prev_builtins.to_string())
+                };
+                let prev_tipo = prev_builtins
+                    .vec
+                    .last()
+                    .map_or(subject_tipo.clone(), |last| last.tipo());
+
+                let data_type = lookup_data_type_by_tipo(&self.data_types, &current_tipo);
+
+                let last_clause = if data_type
+                    .as_ref()
+                    .map_or(true, |d| d.constructors.len() != cases.len())
+                {
+                    *default.unwrap()
+                } else {
+                    cases.pop().unwrap().1
+                };
+
+                let last_clause = self.handle_decision_tree(
+                    subject_name,
+                    subject_tipo.clone(),
+                    return_tipo.clone(),
+                    module_build_name,
+                    last_clause,
+                    stick_set.clone(),
+                );
+
+                let test_subject_name = if data_type.is_some() {
+                    format!("{}_index", current_subject_name.clone(),)
+                } else {
+                    current_subject_name.clone()
+                };
+
+                let clauses = cases.into_iter().rfold(last_clause, |acc, (case, then)| {
+                    let case_air = self.handle_decision_tree(
+                        subject_name,
+                        subject_tipo.clone(),
+                        return_tipo.clone(),
+                        module_build_name,
+                        then,
+                        stick_set.clone(),
+                    );
+
+                    AirTree::clause(
+                        test_subject_name.clone(),
+                        case.get_air_pattern(),
+                        current_tipo.clone(),
+                        case_air,
+                        AirTree::anon_func(vec![], acc, true),
                         false,
-                        next_then,
-                        AirTree::error(Type::void(), false),
                     )
-                };
-
-                (AirTree::int(constr_index), field_assign)
-            }
-            Pattern::Tuple { elems, .. } => {
-                let items_type = subject_tipo.get_inner_types();
-
-                let mut name_index_assigns = vec![];
-
-                let next_then =
-                    elems
-                        .iter()
-                        .enumerate()
-                        .rfold(then, |inner_then, (index, element)| {
-                            let elem_name = match element {
-                                Pattern::Discard { .. } => DISCARDED.to_string(),
-                                _ => format!(
-                                    "tuple_index_{}_span_{}_{}",
-                                    index,
-                                    element.location().start,
-                                    element.location().end
-                                ),
-                            };
-
-                            let mut tuple_props = ClauseProperties::init_inner(
-                                &items_type[index],
-                                elem_name.clone(),
-                                elem_name.clone(),
-                                props.final_clause,
-                            );
-
-                            let elem = if elem_name != DISCARDED {
-                                self.nested_clause_condition(
-                                    element,
-                                    &items_type[index],
-                                    &mut tuple_props,
-                                    inner_then,
-                                )
-                            } else {
-                                inner_then
-                            };
-
-                            props.complex_clause =
-                                props.complex_clause || tuple_props.complex_clause;
-
-                            name_index_assigns.push((elem_name, index));
-
-                            elem
-                        });
-
-                name_index_assigns.reverse();
-
-                let mut defined_indices = match props.clone() {
-                    ClauseProperties {
-                        specific_clause:
-                            SpecificClause::TupleClause {
-                                defined_tuple_indices,
-                            },
-                        ..
-                    } => defined_tuple_indices,
-                    _ => unreachable!(),
-                };
-
-                let mut previous_defined_names = vec![];
-                let mut names_to_define = vec![];
-                name_index_assigns.iter().for_each(|(name, index)| {
-                    if let Some((index, prev_name)) = defined_indices
-                        .iter()
-                        .find(|(defined_index, _nm)| defined_index == index)
-                    {
-                        previous_defined_names.push((*index, prev_name.clone(), name.clone()));
-                    } else if name != DISCARDED {
-                        assert!(defined_indices.insert((*index, name.clone())));
-                        names_to_define.push((*index, name.clone()));
-                    } else {
-                        names_to_define.push((*index, name.clone()));
-                    }
                 });
 
-                let tuple_name_assigns = previous_defined_names.into_iter().rev().fold(
-                    next_then,
-                    |inner_then, (index, prev_name, name)| {
-                        AirTree::let_assignment(
-                            name,
-                            AirTree::local_var(prev_name, items_type[index].clone()),
-                            inner_then,
-                        )
+                let y = AirTree::when(
+                    test_subject_name,
+                    return_tipo.clone(),
+                    current_tipo.clone(),
+                    AirTree::local_var(current_subject_name, current_tipo.clone()),
+                    clauses,
+                );
+
+                let x = builtins_to_add.to_air(
+                    &mut self.special_functions,
+                    prev_subject_name,
+                    prev_tipo,
+                    y,
+                );
+
+                x
+            }
+            DecisionTree::ListSwitch {
+                path,
+                cases,
+                tail_cases,
+                default,
+            } => {
+                println!("PATH IS {:#?}", path);
+                //Current path to test
+                let current_tipo = get_tipo_by_path(subject_tipo.clone(), &path);
+                let builtins_path = Builtins::new_from_path(subject_tipo.clone(), path);
+                let current_subject_name = if builtins_path.is_empty() {
+                    subject_name.clone()
+                } else {
+                    format!("{}_{}", subject_name, builtins_path.to_string())
+                };
+
+                println!("Current IS {:#?}", builtins_path);
+
+                // Transition process from previous to current
+                let builtins_to_add = stick_set.diff_union_builtins(builtins_path.clone());
+
+                println!("TO ADD IS {:#?}", builtins_to_add);
+
+                // Previous path to apply the transition process too
+                let prev_builtins = Builtins {
+                    vec: builtins_path.vec[0..(builtins_path.len() - builtins_to_add.len())]
+                        .to_vec(),
+                };
+
+                println!("PREV IS {:#?}", prev_builtins);
+
+                let prev_subject_name = if prev_builtins.is_empty() {
+                    subject_name.clone()
+                } else {
+                    format!("{}_{}", subject_name, prev_builtins.to_string())
+                };
+                let prev_tipo = prev_builtins
+                    .vec
+                    .last()
+                    .map_or(subject_tipo.clone(), |last| last.tipo());
+
+                let longest_list_pattern = cases.iter().chain(tail_cases.iter()).fold(
+                    0,
+                    |longest, (case, _)| match case {
+                        CaseTest::List(i) | CaseTest::ListWithTail(i) => {
+                            if longest > *i {
+                                *i
+                            } else {
+                                longest
+                            }
+                        }
+                        _ => unreachable!(),
                     },
                 );
 
-                match props {
-                    ClauseProperties {
-                        specific_clause:
-                            SpecificClause::TupleClause {
-                                defined_tuple_indices,
-                            },
-                        ..
-                    } => {
-                        *defined_tuple_indices = defined_indices;
-                    }
-                    _ => unreachable!(),
-                }
-
-                if props.final_clause && !names_to_define.is_empty() {
-                    names_to_define.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
-
-                    let names =
-                        names_to_define
-                            .into_iter()
-                            .fold(vec![], |mut names, (index, name)| {
-                                while names.len() < index {
-                                    names.push(DISCARDED.to_string());
-                                }
-                                names.push(name);
-                                names
-                            });
+                let (builtin_path, last_pattern) = if tail_cases.is_empty() {
+                    (Builtins::new(), *default.unwrap())
+                } else {
+                    let (case, tree) = tail_cases.first().unwrap();
 
                     (
-                        AirTree::void(),
-                        AirTree::tuple_access(
-                            names,
-                            subject_tipo.clone(),
-                            AirTree::local_var(&props.clause_var_name, subject_tipo.clone()),
-                            false,
-                            tuple_name_assigns,
-                            AirTree::error(Type::void(), false),
-                        ),
+                        builtins_path
+                            .clone()
+                            .merge(Builtins::new_from_list_case(case.clone())),
+                        tree.clone(),
                     )
-                } else {
-                    (AirTree::void(), tuple_name_assigns)
-                }
+                };
+
+                let last_pattern = self.handle_decision_tree(
+                    subject_name,
+                    subject_tipo.clone(),
+                    return_tipo.clone(),
+                    module_build_name,
+                    last_pattern,
+                    stick_set.clone(),
+                );
+
+                (0..longest_list_pattern).fold(last_pattern, |_, _| todo!());
+
+                todo!()
             }
-        }
-    }
+            DecisionTree::HoistedLeaf(name, args) => {
+                let air_args = args
+                    .iter()
+                    .map(|item| {
+                        let current_tipo = get_tipo_by_path(subject_tipo.clone(), &item.path);
 
-    fn nested_clause_condition(
-        &self,
-        pattern: &Pattern<PatternConstructor, Rc<Type>>,
-        subject_tipo: &Rc<Type>,
-        props: &mut ClauseProperties,
-        then: AirTree,
-    ) -> AirTree {
-        if props.final_clause {
-            props.complex_clause = false;
-            let (_, assign) = self.clause_pattern(pattern, subject_tipo, props, then);
-            assign
-        } else {
-            match pattern {
-                Pattern::Int { value, .. } => {
-                    props.complex_clause = true;
-                    AirTree::clause_guard(
-                        &props.original_subject_name,
-                        AirTree::int(value),
-                        Type::int(),
-                        then,
-                    )
-                }
-                Pattern::ByteArray { value, .. } => {
-                    props.complex_clause = true;
-                    AirTree::clause_guard(
-                        &props.original_subject_name,
-                        AirTree::byte_array(value.clone()),
-                        Type::byte_array(),
-                        then,
-                    )
-                }
-                Pattern::Var { name, .. } => {
-                    let name = self.interner.lookup_interned(name);
+                        (
+                            current_tipo.clone(),
+                            AirTree::local_var(item.assigned.clone(), current_tipo),
+                        )
+                    })
+                    .collect_vec();
 
-                    AirTree::let_assignment(
+                let then = AirTree::call(
+                    AirTree::local_var(
                         name,
-                        AirTree::local_var(&props.clause_var_name, subject_tipo.clone()),
-                        then,
-                    )
-                }
-                Pattern::Assign { name, pattern, .. } => {
-                    let name = self.interner.lookup_interned(name);
+                        Type::function(
+                            air_args.iter().map(|i| i.0.clone()).collect_vec(),
+                            return_tipo.clone(),
+                        ),
+                    ),
+                    Type::void(),
+                    air_args.into_iter().map(|i| i.1).collect_vec(),
+                );
 
-                    AirTree::let_assignment(
-                        name,
-                        AirTree::local_var(&props.clause_var_name, subject_tipo.clone()),
-                        self.nested_clause_condition(pattern, subject_tipo, props, then),
-                    )
-                }
-                Pattern::Discard { .. } => then,
-                Pattern::List { elements, tail, .. } => {
-                    props.complex_clause = true;
-                    let tail_name_base = "__tail".to_string();
+                args.into_iter().rfold(then, |acc, assign| {
+                    let Assigned { path, assigned } = assign;
 
-                    if elements.is_empty() {
-                        assert!(
-                            tail.is_none(),
-                            "Why do you have a [..] in a clause? Use a var."
-                        );
-
-                        AirTree::list_clause_guard(
-                            &props.original_subject_name,
-                            subject_tipo.clone(),
-                            false,
-                            None,
-                            then,
-                        )
+                    let current_tipo = get_tipo_by_path(subject_tipo.clone(), &path);
+                    let builtins_path = Builtins::new_from_path(subject_tipo.clone(), path);
+                    let current_subject_name = if builtins_path.is_empty() {
+                        subject_name.clone()
                     } else {
-                        let ClauseProperties {
-                            specific_clause:
-                                SpecificClause::ListClause {
-                                    defined_tails_index: current_index,
-                                    defined_tails,
-                                    checked_index: _,
-                                },
-                            ..
-                        } = props
-                        else {
-                            unreachable!()
-                        };
-
-                        defined_tails.push(props.original_subject_name.clone());
-
-                        for (index, _) in elements.iter().enumerate() {
-                            let tail_name = format!("{tail_name_base}_{index}");
-
-                            if elements.len() - 1 == index {
-                                if tail.is_none() {
-                                    *current_index += 1;
-                                    defined_tails.push(tail_name);
-                                }
-                            } else {
-                                *current_index += 1;
-                                defined_tails.push(tail_name);
-                            };
-                        }
-
-                        let (_, assigns) = self.clause_pattern(pattern, subject_tipo, props, then);
-
-                        elements
-                            .iter()
-                            .enumerate()
-                            .rfold(assigns, |then, (index, _)| {
-                                let prev_tail_name = if index == 0 {
-                                    props.original_subject_name.clone()
-                                } else {
-                                    format!("{}_{}", tail_name_base, index - 1)
-                                };
-
-                                let tail_name = format!("{tail_name_base}_{index}");
-                                if elements.len() - 1 == index {
-                                    if tail.is_some() {
-                                        AirTree::list_clause_guard(
-                                            prev_tail_name,
-                                            subject_tipo.clone(),
-                                            true,
-                                            None,
-                                            then,
-                                        )
-                                    } else {
-                                        AirTree::list_clause_guard(
-                                            prev_tail_name,
-                                            subject_tipo.clone(),
-                                            true,
-                                            Some(tail_name.to_string()),
-                                            AirTree::list_clause_guard(
-                                                tail_name.to_string(),
-                                                subject_tipo.clone(),
-                                                false,
-                                                None,
-                                                then,
-                                            ),
-                                        )
-                                    }
-                                } else {
-                                    AirTree::list_clause_guard(
-                                        prev_tail_name,
-                                        subject_tipo.clone(),
-                                        true,
-                                        Some(tail_name.to_string()),
-                                        then,
-                                    )
-                                }
-                            })
-                    }
-                }
-
-                Pattern::Pair { .. } => {
-                    let (_, assign) = self.clause_pattern(pattern, subject_tipo, props, then);
-                    assign
-                }
-
-                Pattern::Constructor {
-                    name: constr_name, ..
-                } => {
-                    if subject_tipo.is_bool() {
-                        props.complex_clause = true;
-                        AirTree::clause_guard(
-                            &props.original_subject_name,
-                            AirTree::bool(constr_name == "True"),
-                            Type::bool(),
-                            then,
-                        )
-                    } else if subject_tipo.is_void() {
-                        AirTree::clause_guard(
-                            &props.original_subject_name,
-                            AirTree::void(),
-                            Type::void(),
-                            then,
-                        )
-                    } else {
-                        let (cond, assign) =
-                            self.clause_pattern(pattern, subject_tipo, props, then);
-
-                        let data_type = lookup_data_type_by_tipo(&self.data_types, subject_tipo)
-                            .expect("Missing data type");
-
-                        if data_type.constructors.len() == 1 {
-                            assign
-                        } else {
-                            props.complex_clause = true;
-                            AirTree::clause_guard(
-                                &props.original_subject_name,
-                                cond,
-                                subject_tipo.clone(),
-                                assign,
-                            )
-                        }
-                    }
-                }
-                Pattern::Tuple { .. } => {
-                    let (_, assign) = self.clause_pattern(pattern, subject_tipo, props, then);
-
-                    let defined_indices = match &props.specific_clause {
-                        SpecificClause::TupleClause {
-                            defined_tuple_indices,
-                        } => defined_tuple_indices.clone(),
-                        _ => unreachable!(),
+                        format!("{}_{}", subject_name, builtins_path.to_string())
                     };
 
-                    AirTree::tuple_clause_guard(
-                        &props.original_subject_name,
-                        subject_tipo.clone(),
-                        defined_indices,
-                        assign,
-                    )
-                }
+                    // Transition process from previous to current
+                    let builtins_to_add = stick_set.diff_union_builtins(builtins_path.clone());
+
+                    // Previous path to apply the transition process too
+                    let prev_builtins = Builtins {
+                        vec: builtins_path.vec[0..(builtins_path.len() - builtins_to_add.len())]
+                            .to_vec(),
+                    };
+
+                    let prev_subject_name = if prev_builtins.is_empty() {
+                        subject_name.clone()
+                    } else {
+                        format!("{}_{}", subject_name, prev_builtins.to_string())
+                    };
+                    let prev_tipo = prev_builtins
+                        .vec
+                        .last()
+                        .map_or(subject_tipo.clone(), |last| last.tipo());
+
+                    let assignment = AirTree::let_assignment(
+                        assigned,
+                        AirTree::local_var(current_subject_name, current_tipo),
+                        acc,
+                    );
+
+                    let thing = builtins_to_add.to_air(
+                        &mut self.special_functions,
+                        prev_subject_name,
+                        prev_tipo,
+                        assignment,
+                    );
+
+                    thing
+                })
+            }
+            DecisionTree::HoistThen {
+                name,
+                assigns,
+                pattern,
+                then,
+            } => {
+                let assign = AirTree::let_assignment(
+                    name,
+                    AirTree::anon_func(
+                        assigns
+                            .iter()
+                            .map(|i| {
+                                let assign = introduce_name(&mut self.interner, &i.assigned);
+                                assign
+                            })
+                            .collect_vec(),
+                        self.build(then, module_build_name, &[]),
+                        true,
+                    ),
+                    self.handle_decision_tree(
+                        subject_name,
+                        subject_tipo,
+                        return_tipo,
+                        module_build_name,
+                        *pattern,
+                        stick_set,
+                    ),
+                );
+
+                assigns.into_iter().for_each(|x| {
+                    self.interner.pop_text(x.assigned);
+                });
+
+                assign
             }
         }
     }
@@ -5269,12 +4463,15 @@ impl<'a> CodeGenerator<'a> {
                 let body = arg_stack.pop().unwrap();
 
                 // the next branch in the when expression
+                // Expected to be delayed
                 let term = arg_stack.pop().unwrap();
+
+                assert!(matches!(term, Term::Delay(_)));
 
                 let other_clauses = if complex_clause {
                     Term::var("__other_clauses_delayed")
                 } else {
-                    term.clone().delay()
+                    term.clone()
                 };
 
                 let body = if tipo.is_bool() {
