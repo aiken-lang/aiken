@@ -4,7 +4,7 @@
 
 ### Added
 
-- **aiken**: Optionally provide blueprint file location when using `blueprint apply`
+- **aiken**: Optionally provide blueprint file location when using `blueprint apply` @Riley-Kilgore
 
 ### Changed
 
