@@ -24,15 +24,16 @@ pub struct Args {
     /// For example, `182A` designates an integer of value 42. If you're unsure about the shape of
     /// the parameter, look at the schema specified in the project's blueprint (i.e.
     /// `plutus.json`), or use the `cbor.serialise` function from the Aiken standard library.
+    #[clap(value_name = "CBOR")]
     parameter: Option<String>,
 
     /// Optional path to the blueprint file to be used as input. Default to 'plutus.json' when
     /// omitted.
-    #[clap(short, long = "in", value_parser)]
+    #[clap(short, long = "in", value_parser, value_name = "FILEPATH")]
     input: Option<PathBuf>,
 
     /// Output file. Optional, print on stdout when omitted.
-    #[clap(short, long)]
+    #[clap(short, long, value_name = "FILEPATH")]
     out: Option<PathBuf>,
 
     /// Name of the validator's module within the project. Optional if there's only one validator.

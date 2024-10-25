@@ -1,8 +1,8 @@
 use miette::IntoDiagnostic;
 use owo_colors::{OwoColorize, Stream::Stderr};
 use pallas_primitives::{
-    conway::{Redeemer, TransactionInput, TransactionOutput},
     Fragment,
+    conway::{Redeemer, TransactionInput, TransactionOutput},
 };
 use pallas_traverse::{Era, MultiEraTx};
 use std::{fmt, fs, path::PathBuf, process};
@@ -18,6 +18,7 @@ use uplc::{
 /// Simulate a transaction by evaluating it's script
 pub struct Args {
     /// A file containing cbor hex for a transaction
+    #[clap(value_name = "FILEPATH")]
     input: PathBuf,
 
     /// Toggle whether input is raw cbor or a hex string
@@ -25,21 +26,23 @@ pub struct Args {
     cbor: bool,
 
     /// A file containing cbor hex for the raw inputs
+    #[clap(value_name = "FILEPATH")]
     raw_inputs: PathBuf,
 
     /// A file containing cbor hex for the raw outputs
+    #[clap(value_name = "FILEPATH")]
     raw_outputs: PathBuf,
 
     /// Time between each slot
-    #[clap(short, long, default_value_t = 1000)]
+    #[clap(short, long, default_value_t = 1000, value_name = "MILLISECOND")]
     slot_length: u32,
 
     /// Time of shelley hardfork
-    #[clap(long, default_value_t = 1596059091000)]
+    #[clap(long, default_value_t = 1596059091000, value_name = "POSIX")]
     zero_time: u64,
 
     /// Slot number at the start of the shelley hardfork
-    #[clap(long, default_value_t = 4492800)]
+    #[clap(long, default_value_t = 4492800, value_name = "SLOT")]
     zero_slot: u64,
 }
 

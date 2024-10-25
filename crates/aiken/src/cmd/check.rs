@@ -30,11 +30,11 @@ pub struct Args {
     watch: bool,
 
     /// An initial seed to initialize the pseudo-random generator for property-tests.
-    #[clap(long)]
+    #[clap(long, value_name = "UINT")]
     seed: Option<u32>,
 
     /// Maximum number of successful test run for considering a property-based test valid.
-    #[clap(long, default_value_t = PropertyTest::DEFAULT_MAX_SUCCESS)]
+    #[clap(long, default_value_t = PropertyTest::DEFAULT_MAX_SUCCESS, value_name="UINT")]
     max_success: usize,
 
     /// Only run tests if they match any of these strings.
