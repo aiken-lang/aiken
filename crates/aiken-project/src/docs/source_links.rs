@@ -60,9 +60,16 @@ impl SourceLinker {
     pub fn url(&self, span: Span) -> String {
         match &self.url_pattern {
             Some((base, line_sep)) => {
-                let start_line = self.line_numbers.line_number(span.start).unwrap();
-                let end_line = self.line_numbers.line_number(span.end).unwrap();
-                format!("{base}{start_line}{line_sep}{end_line}")
+                match (
+                    self.line_numbers.line_number(span.start),
+                    self.line_numbers.line_number(span.end),
+                ) {
+                    (Some(start_line), Some(end_line)) => {
+                        format!("{base}{start_line}{line_sep}{end_line}")
+                    }
+                    (Some(start_line), None) => format!("{base}{start_line}"),
+                    _ => base.to_string(),
+                }
             }
             None => "".into(),
         }
