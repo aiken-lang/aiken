@@ -1,4 +1,4 @@
-use super::build::{filter_traces_parser, trace_level_parser};
+use super::build::{trace_filter_parser, trace_level_parser};
 use aiken_lang::{
     ast::{TraceLevel, Tracing},
     test_framework::PropertyTest,
@@ -66,9 +66,9 @@ pub struct Args {
     ///   - all:
     ///       include both user-defined and compiler-generated traces.
     ///
-    /// [optional] [default: all]
-    #[clap(short, long, value_parser=filter_traces_parser(), default_missing_value="all", verbatim_doc_comment)]
-    filter_traces: Option<fn(TraceLevel) -> Tracing>,
+    /// [default: all]
+    #[clap(short = 'f', long, value_parser=trace_filter_parser(), default_missing_value="all", verbatim_doc_comment, alias="filter_traces")]
+    trace_filter: Option<fn(TraceLevel) -> Tracing>,
 
     /// Choose the verbosity level of traces:
     ///
@@ -95,7 +95,7 @@ pub fn exec(
         match_tests,
         exact_match,
         watch,
-        filter_traces,
+        trace_filter,
         trace_level,
         seed,
         max_success,
@@ -115,8 +115,8 @@ pub fn exec(
                 exact_match,
                 seed,
                 max_success,
-                match filter_traces {
-                    Some(filter_traces) => filter_traces(trace_level),
+                match trace_filter {
+                    Some(trace_filter) => trace_filter(trace_level),
                     None => Tracing::All(trace_level),
                 },
                 env.clone(),
@@ -131,8 +131,8 @@ pub fn exec(
                 exact_match,
                 seed,
                 max_success,
-                match filter_traces {
-                    Some(filter_traces) => filter_traces(trace_level),
+                match trace_filter {
+                    Some(trace_filter) => trace_filter(trace_level),
                     None => Tracing::All(trace_level),
                 },
                 env.clone(),

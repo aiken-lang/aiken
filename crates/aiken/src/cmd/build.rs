@@ -40,8 +40,8 @@ pub struct Args {
     ///       include both user-defined and compiler-generated traces.
     ///
     /// [optional] [default: all]
-    #[clap(short, long, value_parser=filter_traces_parser(), default_missing_value="all", verbatim_doc_comment)]
-    filter_traces: Option<fn(TraceLevel) -> Tracing>,
+    #[clap(short = 'f', long, value_parser=trace_filter_parser(), default_missing_value="all", verbatim_doc_comment, alias="filter_traces")]
+    trace_filter: Option<fn(TraceLevel) -> Tracing>,
 
     /// Choose the verbosity level of traces:
     ///
@@ -65,7 +65,7 @@ pub fn exec(
         deny,
         watch,
         uplc,
-        filter_traces,
+        trace_filter,
         trace_level,
         env,
     }: Args,
@@ -74,8 +74,8 @@ pub fn exec(
         watch_project(directory.as_deref(), watch::default_filter, 500, |p| {
             p.build(
                 uplc,
-                match filter_traces {
-                    Some(filter_traces) => filter_traces(trace_level),
+                match trace_filter {
+                    Some(trace_filter) => trace_filter(trace_level),
                     None => Tracing::All(trace_level),
                 },
                 env.clone(),
@@ -85,8 +85,8 @@ pub fn exec(
         with_project(directory.as_deref(), deny, |p| {
             p.build(
                 uplc,
-                match filter_traces {
-                    Some(filter_traces) => filter_traces(trace_level),
+                match trace_filter {
+                    Some(trace_filter) => trace_filter(trace_level),
                     None => Tracing::All(trace_level),
                 },
                 env.clone(),
@@ -98,7 +98,7 @@ pub fn exec(
 }
 
 #[allow(clippy::type_complexity)]
-pub fn filter_traces_parser(
+pub fn trace_filter_parser(
 ) -> MapValueParser<PossibleValuesParser, fn(String) -> fn(TraceLevel) -> Tracing> {
     PossibleValuesParser::new(["user-defined", "compiler-generated", "all"]).map(
         |s: String| match s.as_str() {

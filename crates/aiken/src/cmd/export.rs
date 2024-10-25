@@ -1,4 +1,4 @@
-use super::build::{filter_traces_parser, trace_level_parser};
+use super::build::{trace_filter_parser, trace_level_parser};
 use aiken_lang::ast::{TraceLevel, Tracing};
 use aiken_project::{options::Options, watch::with_project};
 use std::path::PathBuf;
@@ -33,8 +33,8 @@ pub struct Args {
     ///       include both user-defined and compiler-generated traces.
     ///
     /// [optional] [default: all]
-    #[clap(short, long, value_parser=filter_traces_parser(), default_missing_value="all", verbatim_doc_comment)]
-    filter_traces: Option<fn(TraceLevel) -> Tracing>,
+    #[clap(short = 'f', long, value_parser=trace_filter_parser(), default_missing_value="all", verbatim_doc_comment, alias = "filter_traces")]
+    trace_filter: Option<fn(TraceLevel) -> Tracing>,
 
     /// Choose the verbosity level of traces:
     ///
@@ -57,7 +57,7 @@ pub fn exec(
         directory,
         module,
         name,
-        filter_traces,
+        trace_filter,
         trace_level,
     }: Args,
 ) -> miette::Result<()> {
@@ -67,8 +67,8 @@ pub fn exec(
         let export = p.export(
             &module,
             &name,
-            match filter_traces {
-                Some(filter_traces) => filter_traces(trace_level),
+            match trace_filter {
+                Some(trace_filter) => trace_filter(trace_level),
                 None => Tracing::All(trace_level),
             },
         )?;

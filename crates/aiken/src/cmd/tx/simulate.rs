@@ -1,8 +1,8 @@
 use miette::IntoDiagnostic;
 use owo_colors::{OwoColorize, Stream::Stderr};
 use pallas_primitives::{
-    Fragment,
     conway::{Redeemer, TransactionInput, TransactionOutput},
+    Fragment,
 };
 use pallas_traverse::{Era, MultiEraTx};
 use std::{fmt, fs, path::PathBuf, process};

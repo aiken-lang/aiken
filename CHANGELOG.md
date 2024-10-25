@@ -8,7 +8,7 @@
 
 ### Changed
 
-- N/A
+- **aiken**: Rename `--filter_traces` to `--trace_filter` for more consistency with `--trace_level`. An alias for `--filter_traces` still exists for backward compatibility. @KtorZ
 
 ### Removed
 
