@@ -530,6 +530,7 @@ fn list_constructors() -> Vec<tipo::ValueConstructor> {
     ]
 }
 
+#[allow(clippy::result_large_err)]
 pub(super) fn simplify(
     environment: &mut Environment,
     value: &ast::TypedPattern,

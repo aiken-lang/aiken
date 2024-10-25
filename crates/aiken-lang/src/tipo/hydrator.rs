@@ -80,6 +80,7 @@ impl Hydrator {
         self.rigid_type_names.clone()
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn type_from_option_annotation(
         &mut self,
         ast: &Option<Annotation>,
@@ -91,6 +92,7 @@ impl Hydrator {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn type_from_annotation(
         &mut self,
         annotation: &Annotation,
@@ -110,7 +112,7 @@ impl Hydrator {
     }
 
     /// Construct a Type from an AST Type annotation.
-    ///
+    #[allow(clippy::result_large_err)]
     fn do_type_from_annotation<'a>(
         &mut self,
         annotation: &'a Annotation,

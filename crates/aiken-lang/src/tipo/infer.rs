@@ -20,6 +20,7 @@ use std::{borrow::Borrow, collections::HashMap, ops::Deref, rc::Rc};
 
 impl UntypedModule {
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::result_large_err)]
     pub fn infer(
         mut self,
         id_gen: &IdGenerator,
@@ -158,6 +159,7 @@ impl UntypedModule {
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn infer_definition(
     def: UntypedDefinition,
     module_name: &String,
@@ -687,6 +689,7 @@ fn infer_definition(
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn infer_fuzzer(
     environment: &mut Environment<'_>,
     expected_inner_type: Option<Rc<Type>>,
@@ -763,6 +766,7 @@ fn infer_fuzzer(
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
     match tipo {
         Type::App {

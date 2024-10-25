@@ -1397,7 +1397,7 @@ impl ToPlutusData for ScriptContext {
                 vec![
                     tx_info.to_plutus_data(),
                     redeemer.to_plutus_data(),
-                    WithNeverRegistrationDeposit(purpose).to_plutus_data(),
+                    WithNeverRegistrationDeposit(purpose.as_ref()).to_plutus_data(),
                 ],
             ),
         }

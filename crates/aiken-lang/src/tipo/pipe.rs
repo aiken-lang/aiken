@@ -21,6 +21,7 @@ pub(crate) struct PipeTyper<'a, 'b, 'c> {
 }
 
 impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
+    #[allow(clippy::result_large_err)]
     pub fn infer(
         expr_typer: &'a mut ExprTyper<'b, 'c>,
         expressions: Vec1<UntypedExpr>,
@@ -56,6 +57,7 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
         typer.infer_expressions(expressions)
     }
 
+    #[allow(clippy::result_large_err)]
     fn infer_expressions(
         mut self,
         expressions: impl IntoIterator<Item = UntypedExpr>,
@@ -74,6 +76,7 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
         })
     }
 
+    #[allow(clippy::result_large_err)]
     fn infer_each_expression(
         &mut self,
         expressions: impl IntoIterator<Item = UntypedExpr>,
@@ -192,6 +195,7 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
     }
 
     /// Attempt to infer a |> b(..c) as b(..c)(a)
+    #[allow(clippy::result_large_err)]
     fn infer_apply_to_call_pipe(
         &mut self,
         function: TypedExpr,
@@ -225,6 +229,7 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
     }
 
     /// Attempt to infer a |> b(c) as b(a, c)
+    #[allow(clippy::result_large_err)]
     fn infer_insert_pipe(
         &mut self,
         function: TypedExpr,
@@ -247,6 +252,7 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
     }
 
     /// Attempt to infer a |> b as b(a)
+    #[allow(clippy::result_large_err)]
     fn infer_apply_pipe(&mut self, func: UntypedExpr) -> Result<TypedExpr, Error> {
         let func = Box::new(self.expr_typer.infer(func)?);
         let return_type = self.expr_typer.new_unbound_var();

@@ -11,6 +11,7 @@ mod quickfix;
 pub mod server;
 mod utils;
 
+#[allow(clippy::result_large_err)]
 pub fn start() -> Result<(), Error> {
     tracing::info!("Aiken language server starting");
 

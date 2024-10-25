@@ -75,6 +75,7 @@ pub struct Server {
 
 impl Server {
     /// Clear all diagnostics that have been previously published to the client
+    #[allow(clippy::result_large_err)]
     fn clear_all_diagnostics(&mut self, connection: &Connection) -> Result<(), ServerError> {
         for file in self.published_diagnostics.drain() {
             let params = lsp_types::PublishDiagnosticsParams {
@@ -97,6 +98,7 @@ impl Server {
     }
 
     /// Compile the project if we are in one. Otherwise do nothing.
+    #[allow(clippy::result_large_err)]
     fn compile(&mut self, connection: &Connection) -> Result<(), ServerError> {
         self.notify_client_of_compilation_start(connection)?;
 
@@ -119,6 +121,7 @@ impl Server {
         Ok(())
     }
 
+    #[allow(clippy::result_large_err)]
     fn create_compilation_progress_token(
         &mut self,
         connection: &lsp_server::Connection,
@@ -191,6 +194,7 @@ impl Server {
         Ok(vec![text_edit_replace(new_text)])
     }
 
+    #[allow(clippy::result_large_err)]
     fn handle_notification(
         &mut self,
         connection: &lsp_server::Connection,
@@ -251,6 +255,7 @@ impl Server {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     fn handle_request(
         &mut self,
         request: lsp_server::Request,
@@ -434,6 +439,7 @@ impl Server {
         Some(modules)
     }
 
+    #[allow(clippy::result_large_err)]
     fn goto_definition(
         &self,
         params: lsp_types::GotoDefinitionParams,
@@ -500,6 +506,7 @@ impl Server {
         })
     }
 
+    #[allow(clippy::result_large_err)]
     fn hover(
         &self,
         params: lsp_types::HoverParams,
@@ -560,6 +567,7 @@ impl Server {
         }))
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn listen(&mut self, connection: Connection) -> Result<(), ServerError> {
         self.create_compilation_progress_token(&connection)?;
         self.start_watching_aiken_toml(&connection)?;
@@ -614,6 +622,7 @@ impl Server {
         server
     }
 
+    #[allow(clippy::result_large_err)]
     fn notify_client_of_compilation_end(&self, connection: &Connection) -> Result<(), ServerError> {
         self.send_work_done_notification(
             connection,
@@ -621,6 +630,7 @@ impl Server {
         )
     }
 
+    #[allow(clippy::result_large_err)]
     fn notify_client_of_compilation_start(
         &self,
         connection: &Connection,
@@ -643,6 +653,7 @@ impl Server {
     /// If the Aiken diagnostic cannot be converted to LSP diagnostic (due to it
     /// not having a location) it is stored as a message suitable for use with
     /// the `showMessage` notification instead.
+    #[allow(clippy::result_large_err)]
     fn process_diagnostic<E>(&mut self, error: E) -> Result<(), ServerError>
     where
         E: Diagnostic + GetSource + ExtraData,
@@ -730,6 +741,7 @@ impl Server {
     /// Publish all stored diagnostics to the client.
     /// Any previously publish diagnostics are cleared before the new set are
     /// published to the client.
+    #[allow(clippy::result_large_err)]
     fn publish_stored_diagnostics(&mut self, connection: &Connection) -> Result<(), ServerError> {
         self.clear_all_diagnostics(connection)?;
 
@@ -778,6 +790,7 @@ impl Server {
             .push(diagnostic);
     }
 
+    #[allow(clippy::result_large_err)]
     fn send_work_done_notification(
         &self,
         connection: &Connection,
@@ -802,6 +815,7 @@ impl Server {
         Ok(())
     }
 
+    #[allow(clippy::result_large_err)]
     fn start_watching_aiken_toml(&mut self, connection: &Connection) -> Result<(), ServerError> {
         let supports_watch_files = self
             .initialize_params

@@ -91,6 +91,7 @@ pub struct Environment<'a> {
 }
 
 impl<'a> Environment<'a> {
+    #[allow(clippy::result_large_err)]
     pub fn find_module(&self, fragments: &[String], location: Span) -> Result<&'a TypeInfo, Error> {
         let mut name = fragments.join("/");
 
@@ -158,6 +159,7 @@ impl<'a> Environment<'a> {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn match_fun_type(
         &mut self,
         tipo: Rc<Type>,
@@ -216,6 +218,7 @@ impl<'a> Environment<'a> {
         })
     }
 
+    #[allow(clippy::result_large_err)]
     fn custom_type_accessors<A>(
         &mut self,
         constructors: &[RecordConstructor<A>],
@@ -368,6 +371,7 @@ impl<'a> Environment<'a> {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn get_type_constructor_mut(
         &mut self,
         name: &str,
@@ -388,6 +392,7 @@ impl<'a> Environment<'a> {
     }
 
     /// Lookup a type in the current scope.
+    #[allow(clippy::result_large_err)]
     pub fn get_type_constructor(
         &mut self,
         module_alias: &Option<String>,
@@ -434,7 +439,7 @@ impl<'a> Environment<'a> {
     }
 
     /// Lookup a value constructor in the current scope.
-    ///
+    #[allow(clippy::result_large_err)]
     pub fn get_value_constructor(
         &mut self,
         module: Option<&String>,
@@ -585,6 +590,7 @@ impl<'a> Environment<'a> {
     /// Map a type in the current scope. Errors if the module
     /// already has a type with that name, unless the type is
     /// from the prelude.
+    #[allow(clippy::result_large_err)]
     pub fn insert_type_constructor(
         &mut self,
         type_name: String,
@@ -737,6 +743,7 @@ impl<'a> Environment<'a> {
             .collect()
     }
 
+    #[allow(clippy::result_large_err)]
     fn make_type_vars(
         &mut self,
         args: &[String],
@@ -827,6 +834,7 @@ impl<'a> Environment<'a> {
         self.previous_id
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn register_import(&mut self, def: &UntypedDefinition) -> Result<(), Error> {
         match def {
             Definition::Use(Use {
@@ -985,6 +993,7 @@ impl<'a> Environment<'a> {
     }
 
     /// Iterate over a module, registering any new types created by the module into the typer
+    #[allow(clippy::result_large_err)]
     pub fn register_types(
         &mut self,
         definitions: Vec<&'a UntypedDefinition>,
@@ -1065,6 +1074,7 @@ impl<'a> Environment<'a> {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn register_type(
         &mut self,
         def: &'a UntypedDefinition,
@@ -1182,6 +1192,7 @@ impl<'a> Environment<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::result_large_err)]
     fn register_function(
         &mut self,
         name: &str,
@@ -1241,6 +1252,7 @@ impl<'a> Environment<'a> {
         Ok(())
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn register_values(
         &mut self,
         def: &'a UntypedDefinition,
@@ -1512,6 +1524,7 @@ impl<'a> Environment<'a> {
     ///
     /// It two types are found to not be the same an error is returned.
     #[allow(clippy::only_used_in_recursion)]
+    #[allow(clippy::result_large_err)]
     pub fn unify(
         &mut self,
         lhs: Rc<Type>,
@@ -1719,6 +1732,7 @@ impl<'a> Environment<'a> {
     /// Checks that the given patterns are exhaustive for given type.
     /// https://github.com/elm/compiler/blob/047d5026fe6547c842db65f7196fed3f0b4743ee/compiler/src/Nitpick/PatternMatches.hs#L397-L475
     /// http://moscova.inria.fr/~maranget/papers/warn/index.html
+    #[allow(clippy::result_large_err)]
     pub fn check_exhaustiveness(
         &mut self,
         unchecked_patterns: &[&TypedPattern],
@@ -1768,7 +1782,7 @@ impl<'a> Environment<'a> {
     }
 
     /// Lookup constructors for type in the current scope.
-    ///
+    #[allow(clippy::result_large_err)]
     pub fn get_constructors_for_type(
         &mut self,
         full_module_name: &String,
@@ -1868,6 +1882,7 @@ pub enum EntityKind {
 /// prevents the algorithm from inferring recursive types, which
 /// could cause naively-implemented type checking to diverge.
 /// While traversing the type tree.
+#[allow(clippy::result_large_err)]
 fn unify_unbound_type(tipo: Rc<Type>, own_id: u64, location: Span) -> Result<(), Error> {
     if let Type::Var { tipo, alias } = tipo.deref() {
         let new_value = match tipo.borrow().deref() {
@@ -1942,6 +1957,7 @@ fn unify_unbound_type(tipo: Rc<Type>, own_id: u64, location: Span) -> Result<(),
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn unify_enclosed_type(e1: Rc<Type>, e2: Rc<Type>, result: Result<(), Error>) -> Result<(), Error> {
     // If types cannot unify, show the type error with the enclosing types, e1 and e2.
     match result {
@@ -1962,6 +1978,7 @@ fn unify_enclosed_type(e1: Rc<Type>, e2: Rc<Type>, result: Result<(), Error>) ->
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn assert_unique_type_name<'a>(
     names: &mut HashMap<&'a str, &'a Span>,
     name: &'a str,
@@ -1977,6 +1994,7 @@ fn assert_unique_type_name<'a>(
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn assert_unique_value_name<'a>(
     names: &mut HashMap<String, &'a Span>,
     name: &str,
@@ -1992,6 +2010,7 @@ fn assert_unique_value_name<'a>(
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn assert_unique_const_name<'a>(
     names: &mut HashMap<String, &'a Span>,
     name: &str,

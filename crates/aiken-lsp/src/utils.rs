@@ -1,11 +1,9 @@
-use std::path::{Path, PathBuf};
-
+use crate::error::Error;
 use aiken_lang::{ast::Span, line_numbers::LineNumbers};
 use itertools::Itertools;
 use lsp_types::TextEdit;
+use std::path::{Path, PathBuf};
 use urlencoding::decode;
-
-use crate::error::Error;
 
 pub const COMPILING_PROGRESS_TOKEN: &str = "compiling-aiken";
 pub const CREATE_COMPILING_PROGRESS_TOKEN: &str = "create-compiling-progress-token";
@@ -26,6 +24,7 @@ pub fn text_edit_replace(new_text: String) -> TextEdit {
     }
 }
 
+#[allow(clippy::result_large_err)]
 pub fn path_to_uri(path: PathBuf) -> Result<lsp_types::Url, Error> {
     let mut file: String = "file://".into();
 

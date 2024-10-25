@@ -1,9 +1,7 @@
-use std::collections::{HashMap, HashSet};
-
-use itertools::Itertools;
-
 use super::error::{Error, UnknownLabels};
 use crate::ast::{CallArg, Span};
+use itertools::Itertools;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FieldMap {
@@ -21,6 +19,7 @@ impl FieldMap {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn insert(&mut self, label: String, index: usize, location: &Span) -> Result<(), Error> {
         match self.fields.insert(label.clone(), (index, *location)) {
             Some((_, location_other)) => {
@@ -52,6 +51,7 @@ impl FieldMap {
 
     /// Reorder an argument list so that labelled fields supplied out-of-order are
     /// in the correct order.
+    #[allow(clippy::result_large_err)]
     pub fn reorder<A>(&self, args: &mut [CallArg<A>], location: Span) -> Result<(), Error> {
         let mut last_labeled_arguments_given: Option<&CallArg<A>> = None;
         let mut seen_labels = std::collections::HashSet::new();

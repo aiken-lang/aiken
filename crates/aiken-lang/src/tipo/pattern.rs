@@ -36,6 +36,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     fn insert_variable(
         &mut self,
         name: &str,
@@ -91,6 +92,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn infer_alternative_pattern(
         &mut self,
         pattern: UntypedPattern,
@@ -122,6 +124,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn infer_pattern(
         &mut self,
         pattern: UntypedPattern,
@@ -130,6 +133,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
         self.unify(pattern, Rc::new(subject.clone()), None, false)
     }
 
+    #[allow(clippy::result_large_err)]
     /// When we have an assignment or a case expression we unify the pattern with the
     /// inferred type of the subject in order to determine what variables to insert
     /// into the environment (or to detect a type error).

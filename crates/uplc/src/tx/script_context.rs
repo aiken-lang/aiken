@@ -407,7 +407,7 @@ impl TxInfo {
                     }
                 })
                 .map(move |purpose| ScriptContext::V1V2 {
-                    tx_info: self,
+                    tx_info: self.into(),
                     purpose: purpose.clone().into(),
                 }),
 
@@ -421,9 +421,9 @@ impl TxInfo {
                     }
                 })
                 .map(move |purpose| ScriptContext::V3 {
-                    tx_info: self,
+                    tx_info: self.into(),
                     redeemer: redeemer.data.clone(),
-                    purpose: purpose.clone().into_script_info(datum.cloned()),
+                    purpose: purpose.clone().into_script_info(datum.cloned()).into(),
                 }),
         }
     }
@@ -464,13 +464,13 @@ impl TxInfo {
 #[derive(Debug, PartialEq, Clone)]
 pub enum ScriptContext {
     V1V2 {
-        tx_info: TxInfo,
+        tx_info: Box<TxInfo>,
         purpose: Box<ScriptPurpose>,
     },
     V3 {
-        tx_info: TxInfo,
+        tx_info: Box<TxInfo>,
         redeemer: PlutusData,
-        purpose: ScriptInfo<Option<PlutusData>>,
+        purpose: Box<ScriptInfo<Option<PlutusData>>>,
     },
 }
 
