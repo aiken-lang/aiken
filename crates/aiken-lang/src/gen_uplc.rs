@@ -2551,11 +2551,11 @@ impl<'a> CodeGenerator<'a> {
                     .last()
                     .map_or(subject_tipo.clone(), |last| last.tipo());
 
-                let longest_list_pattern = cases.iter().chain(tail_cases.iter()).fold(
+                let longest_pattern = cases.iter().chain(tail_cases.iter()).fold(
                     0,
                     |longest, (case, _)| match case {
                         CaseTest::List(i) | CaseTest::ListWithTail(i) => {
-                            if longest > *i {
+                            if longest < *i {
                                 *i
                             } else {
                                 longest
@@ -2565,18 +2565,22 @@ impl<'a> CodeGenerator<'a> {
                     },
                 );
 
-                let (builtin_path, last_pattern) = if tail_cases.is_empty() {
-                    (Builtins::new(), *default.unwrap())
+                let last_pattern = if tail_cases.is_empty() {
+                    *default.as_ref().unwrap().clone()
                 } else {
                     let (case, tree) = tail_cases.first().unwrap();
 
-                    (
-                        builtins_path
-                            .clone()
-                            .merge(Builtins::new_from_list_case(case.clone())),
-                        tree.clone(),
-                    )
+                    tree.clone()
                 };
+
+                let last_case = cases.last().unwrap().0.clone();
+
+                let builtins_for_pattern =
+                    builtins_path.merge(Builtins::new_from_list_case(last_case.clone()));
+
+                let last_tail_name = builtins_for_pattern.to_string();
+
+                stick_set.diff_union_builtins(builtins_for_pattern.clone());
 
                 let last_pattern = self.handle_decision_tree(
                     subject_name,
@@ -2587,9 +2591,107 @@ impl<'a> CodeGenerator<'a> {
                     stick_set.clone(),
                 );
 
-                (0..longest_list_pattern).fold(last_pattern, |_, _| todo!());
+                let list_clauses = (0..longest_pattern).rev().with_position().fold(
+                    (builtins_for_pattern, last_pattern),
+                    |(mut builtins_for_pattern, air), list_item| match list_item {
+                        itertools::Position::First(index) | itertools::Position::Only(index) => {
+                            let (_, tree) = cases
+                                .iter()
+                                .chain(tail_cases.iter())
+                                .find(|x| match x.0 {
+                                    CaseTest::List(i) => i == index,
+                                    CaseTest::ListWithTail(i) => i <= index,
+                                    _ => unreachable!(),
+                                })
+                                .cloned()
+                                .unwrap_or_else(|| {
+                                    (CaseTest::Wild, *default.as_ref().unwrap().clone())
+                                });
 
-                todo!()
+                            let tail_name = builtins_for_pattern.to_string();
+
+                            let then = self.handle_decision_tree(
+                                subject_name,
+                                subject_tipo.clone(),
+                                return_tipo.clone(),
+                                module_build_name,
+                                tree,
+                                stick_set.clone(),
+                            );
+
+                            let air = AirTree::list_clause(
+                                tail_name.clone(),
+                                subject_tipo.clone(),
+                                then,
+                                air,
+                                None,
+                                false,
+                            );
+
+                            builtins_for_pattern.pop();
+
+                            (builtins_for_pattern, air)
+                        }
+
+                        itertools::Position::Middle(index) | itertools::Position::Last(index) => {
+                            let (_, tree) = cases
+                                .iter()
+                                .chain(tail_cases.iter())
+                                .find(|x| match x.0 {
+                                    CaseTest::List(i) => i == index,
+                                    CaseTest::ListWithTail(i) => i <= index,
+                                    _ => unreachable!(),
+                                })
+                                .cloned()
+                                .unwrap_or_else(|| {
+                                    (CaseTest::Wild, *default.as_ref().unwrap().clone())
+                                });
+
+                            let tail_name = builtins_for_pattern.to_string();
+
+                            let next_tail_name = Some(format!("{}_tail", last_tail_name));
+
+                            let then = self.handle_decision_tree(
+                                subject_name,
+                                subject_tipo.clone(),
+                                return_tipo.clone(),
+                                module_build_name,
+                                tree,
+                                stick_set.clone(),
+                            );
+
+                            let air = AirTree::list_clause(
+                                tail_name.clone(),
+                                subject_tipo.clone(),
+                                then,
+                                air,
+                                next_tail_name.map(|next| (tail_name, next)),
+                                false,
+                            );
+
+                            builtins_for_pattern.pop();
+
+                            (builtins_for_pattern, air)
+                        }
+                    },
+                );
+
+                let y = AirTree::when(
+                    current_subject_name.clone(),
+                    return_tipo.clone(),
+                    current_tipo.clone(),
+                    AirTree::local_var(current_subject_name, current_tipo.clone()),
+                    list_clauses.1,
+                );
+
+                let x = builtins_to_add.to_air(
+                    &mut self.special_functions,
+                    prev_subject_name,
+                    prev_tipo,
+                    y,
+                );
+
+                x
             }
             DecisionTree::HoistedLeaf(name, args) => {
                 let air_args = args

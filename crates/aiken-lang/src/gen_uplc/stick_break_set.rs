@@ -167,6 +167,10 @@ impl Builtins {
         }
     }
 
+    pub fn pop(&mut self) {
+        self.vec.pop();
+    }
+
     pub fn len(&self) -> usize {
         self.vec.len()
     }
