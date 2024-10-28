@@ -2568,7 +2568,7 @@ impl<'a> CodeGenerator<'a> {
                 let last_pattern = if tail_cases.is_empty() {
                     *default.as_ref().unwrap().clone()
                 } else {
-                    let (case, tree) = tail_cases.first().unwrap();
+                    let (_case, tree) = tail_cases.first().unwrap();
 
                     tree.clone()
                 };
@@ -2577,8 +2577,6 @@ impl<'a> CodeGenerator<'a> {
 
                 let builtins_for_pattern =
                     builtins_path.merge(Builtins::new_from_list_case(last_case.clone()));
-
-                let last_tail_name = builtins_for_pattern.to_string();
 
                 stick_set.diff_union_builtins(builtins_for_pattern.clone());
 
@@ -2593,7 +2591,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let list_clauses = (0..longest_pattern).rev().with_position().fold(
                     (builtins_for_pattern, last_pattern),
-                    |(mut builtins_for_pattern, air), list_item| match list_item {
+                    |(mut builtins_for_pattern, acc), list_item| match list_item {
                         itertools::Position::First(index) | itertools::Position::Only(index) => {
                             let (_, tree) = cases
                                 .iter()
@@ -2608,7 +2606,11 @@ impl<'a> CodeGenerator<'a> {
                                     (CaseTest::Wild, *default.as_ref().unwrap().clone())
                                 });
 
-                            let tail_name = builtins_for_pattern.to_string();
+                            let tail_name = if builtins_for_pattern.is_empty() {
+                                subject_name.clone()
+                            } else {
+                                format!("{}_{}", subject_name, builtins_for_pattern.to_string())
+                            };
 
                             let then = self.handle_decision_tree(
                                 subject_name,
@@ -2619,18 +2621,18 @@ impl<'a> CodeGenerator<'a> {
                                 stick_set.clone(),
                             );
 
-                            let air = AirTree::list_clause(
+                            let acc = AirTree::list_clause(
                                 tail_name.clone(),
                                 subject_tipo.clone(),
                                 then,
-                                air,
+                                AirTree::anon_func(vec![], acc, true),
                                 None,
                                 false,
                             );
 
                             builtins_for_pattern.pop();
 
-                            (builtins_for_pattern, air)
+                            (builtins_for_pattern, acc)
                         }
 
                         itertools::Position::Middle(index) | itertools::Position::Last(index) => {
@@ -2647,9 +2649,13 @@ impl<'a> CodeGenerator<'a> {
                                     (CaseTest::Wild, *default.as_ref().unwrap().clone())
                                 });
 
-                            let tail_name = builtins_for_pattern.to_string();
+                            let tail_name = if builtins_for_pattern.is_empty() {
+                                subject_name.clone()
+                            } else {
+                                format!("{}_{}", subject_name, builtins_for_pattern.to_string())
+                            };
 
-                            let next_tail_name = Some(format!("{}_tail", last_tail_name));
+                            let next_tail_name = Some(format!("{}_tail", tail_name));
 
                             let then = self.handle_decision_tree(
                                 subject_name,
@@ -2660,18 +2666,18 @@ impl<'a> CodeGenerator<'a> {
                                 stick_set.clone(),
                             );
 
-                            let air = AirTree::list_clause(
+                            let acc = AirTree::list_clause(
                                 tail_name.clone(),
                                 subject_tipo.clone(),
                                 then,
-                                air,
+                                AirTree::anon_func(vec![], acc, true),
                                 next_tail_name.map(|next| (tail_name, next)),
                                 false,
                             );
 
                             builtins_for_pattern.pop();
 
-                            (builtins_for_pattern, air)
+                            (builtins_for_pattern, acc)
                         }
                     },
                 );
@@ -4619,7 +4625,9 @@ impl<'a> CodeGenerator<'a> {
                             .apply(Term::var(subject_name)),
                     };
 
-                    condition.if_then_else(body.delay(), other_clauses).force()
+                    condition
+                        .delay_true_if_then_else(body, other_clauses)
+                        .force()
                 };
 
                 if complex_clause {
@@ -4638,9 +4646,13 @@ impl<'a> CodeGenerator<'a> {
                 let body = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
 
-                let arg = if let Some((current_tail, next_tail_name)) = next_tail_name {
-                    term.lambda(next_tail_name)
+                assert!(matches!(term, Term::Delay(_)));
+
+                term = if let Some((current_tail, next_tail_name)) = next_tail_name {
+                    term.force()
+                        .lambda(next_tail_name)
                         .apply(Term::tail_list().apply(Term::var(current_tail.clone())))
+                        .delay()
                 } else {
                     term
                 };
@@ -4650,9 +4662,9 @@ impl<'a> CodeGenerator<'a> {
                         .choose_list(body.delay(), Term::var("__other_clauses_delayed"))
                         .force()
                         .lambda("__other_clauses_delayed")
-                        .apply(arg.delay());
+                        .apply(term.delay());
                 } else {
-                    term = Term::var(tail_name).delayed_choose_list(body, arg);
+                    term = Term::var(tail_name).delay_empty_choose_list(body, term);
                 }
 
                 Some(term)

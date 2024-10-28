@@ -1502,7 +1502,6 @@ mod tester {
         let tree = tree_gen.build_tree(&"subject".to_string(), &subject.tipo(), clauses);
 
         println!("{}", tree);
-        panic!("SUPPPPPPPPPPPPPPPPPPPPPPPER DOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOONE");
     }
 
     #[test]
@@ -1551,6 +1550,5 @@ mod tester {
         let tree = tree_gen.build_tree(&"subject".to_string(), &subject.tipo(), clauses);
 
         println!("{}", tree);
-        panic!("SUPPPPPPPPPPPPPPPPPPPPPPPER DOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOONE");
     }
 }
