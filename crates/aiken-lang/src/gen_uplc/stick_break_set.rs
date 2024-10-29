@@ -23,10 +23,11 @@ pub enum Builtin {
 impl PartialEq for Builtin {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Builtin::HeadList(_), Builtin::HeadList(_)) => true,
-            (Builtin::TailList, Builtin::TailList) => true,
-            (Builtin::UnConstrFields, Builtin::UnConstrFields) => true,
-            (Builtin::SndPair(_), Builtin::SndPair(_)) => true,
+            (Builtin::HeadList(_), Builtin::HeadList(_))
+            | (Builtin::TailList, Builtin::TailList)
+            | (Builtin::UnConstrFields, Builtin::UnConstrFields)
+            | (Builtin::FstPair(_), Builtin::FstPair(_))
+            | (Builtin::SndPair(_), Builtin::SndPair(_)) => true,
             _ => false,
         }
     }
@@ -112,7 +113,7 @@ impl Builtins {
                     match i {
                         Path::Pair(i) => {
                             if i == 0 {
-                                builtins.push(Builtin::HeadList(get_tipo_by_path(
+                                builtins.push(Builtin::FstPair(get_tipo_by_path(
                                     subject_tipo.clone(),
                                     &rebuilt_path,
                                 )));

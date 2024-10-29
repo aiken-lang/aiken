@@ -53,18 +53,6 @@ impl ToString for Path {
     }
 }
 
-// impl Display for Path {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         match self {
-//             Path::Pair(i) => write!(f, "Pair({})", i),
-//             Path::Tuple(i) => write!(f, "Tuple({})", i),
-//             Path::Constr(_, i) => write!(f, "Constr({})", i),
-//             Path::List(i) => write!(f, "List({})", i),
-//             Path::ListTail(i) => write!(f, "ListTail({})", i),
-//         }
-//     }
-// }
-
 impl PartialEq for Path {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -115,9 +103,15 @@ pub enum CaseTest {
 }
 
 impl CaseTest {
-    pub fn get_air_pattern(&self) -> AirTree {
+    pub fn get_air_pattern(&self, current_type: Rc<Type>) -> AirTree {
         match self {
-            CaseTest::Constr(i) => AirTree::int(i),
+            CaseTest::Constr(i) => {
+                if current_type.is_bool() {
+                    AirTree::bool(1 == *i)
+                } else {
+                    AirTree::int(i)
+                }
+            }
             CaseTest::Int(i) => AirTree::int(i),
             CaseTest::Bytes(vec) => AirTree::byte_array(vec.clone()),
             CaseTest::List(_) => unreachable!(),
@@ -839,12 +833,13 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                 // Add inner patterns to existing row
                 let mut new_cols = remaining_patts.into_iter().flat_map(|x| x.1).collect_vec();
 
-                let added_columns = new_cols.len();
-
-                // Pop off tail so that it aligns more easily with other list patterns
                 if matches!(case, CaseTest::ListWithTail(_)) {
                     new_cols.pop();
                 }
+
+                let added_columns = new_cols.len();
+
+                // Pop off tail so that it aligns more easily with other list patterns
 
                 new_cols.extend(row.columns);
 

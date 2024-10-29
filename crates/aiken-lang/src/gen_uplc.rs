@@ -2485,7 +2485,7 @@ impl<'a> CodeGenerator<'a> {
 
                     AirTree::clause(
                         test_subject_name.clone(),
-                        case.get_air_pattern(),
+                        case.get_air_pattern(current_tipo.clone()),
                         current_tipo.clone(),
                         case_air,
                         AirTree::anon_func(vec![], acc, true),
