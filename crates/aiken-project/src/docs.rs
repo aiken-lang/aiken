@@ -22,7 +22,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-const MAX_COLUMNS: isize = 999;
+const MAX_COLUMNS: isize = 80;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod link_tree;

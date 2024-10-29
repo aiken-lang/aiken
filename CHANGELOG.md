@@ -9,7 +9,9 @@
 ### Changed
 
 - **aiken**: Rename `--filter_traces` to `--trace_filter` for more consistency with `--trace_level`. An alias for `--filter_traces` still exists for backward compatibility. @KtorZ
+- **aiken-project**: Fix `aiken docs` wrongly formatting list constants as tuples. See [#1048](https://github.com/aiken-lang/aiken/issues/1048). @KtorZ
 - **aiken-project**: Fix `aiken docs` source linking crashing when generating docs for config modules. See [#1044](https://github.com/aiken-lang/aiken/issues/1044). @KtorZ
+- **aiken-project**: Fix `aiken docs` generating very long lines for constants. @KtorZ
 
 ### Removed
 

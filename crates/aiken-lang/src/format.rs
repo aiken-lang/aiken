@@ -382,7 +382,18 @@ impl<'comments> Formatter<'comments> {
                     .append(wrap_args(elems.iter().map(|e| (self.const_expr(e), false))).group())
             }
             TypedExpr::List { elements, .. } => {
-                wrap_args(elements.iter().map(|e| (self.const_expr(e), false))).group()
+                let comma: fn() -> Document<'a> =
+                    if elements.iter().all(TypedExpr::is_simple_expr_to_format) {
+                        || flex_break(",", ", ")
+                    } else {
+                        || break_(",", ", ")
+                    };
+
+                list(
+                    join(elements.iter().map(|e| self.const_expr(e)), comma()),
+                    elements.len(),
+                    None,
+                )
             }
             TypedExpr::Var { name, .. } => name.to_doc(),
             _ => Document::Str(""),

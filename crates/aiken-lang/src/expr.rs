@@ -203,6 +203,22 @@ impl<T> From<Vec1Ref<T>> for Vec1<T> {
 }
 
 impl TypedExpr {
+    pub fn is_simple_expr_to_format(&self) -> bool {
+        match self {
+            Self::String { .. } | Self::UInt { .. } | Self::ByteArray { .. } | Self::Var { .. } => {
+                true
+            }
+            Self::Pair { fst, snd, .. } => {
+                fst.is_simple_expr_to_format() && snd.is_simple_expr_to_format()
+            }
+            Self::Tuple { elems, .. } => elems.iter().all(|e| e.is_simple_expr_to_format()),
+            Self::List { elements, .. } if elements.len() <= 3 => {
+                elements.iter().all(|e| e.is_simple_expr_to_format())
+            }
+            _ => false,
+        }
+    }
+
     pub fn and_then(self, next: Self) -> Self {
         if let TypedExpr::Trace {
             tipo,
