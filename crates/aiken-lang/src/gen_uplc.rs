@@ -2516,7 +2516,6 @@ impl<'a> CodeGenerator<'a> {
                 tail_cases,
                 default,
             } => {
-                println!("PATH IS {:#?}", path);
                 //Current path to test
                 let current_tipo = get_tipo_by_path(subject_tipo.clone(), &path);
                 let builtins_path = Builtins::new_from_path(subject_tipo.clone(), path);
@@ -2526,20 +2525,14 @@ impl<'a> CodeGenerator<'a> {
                     format!("{}_{}", subject_name, builtins_path.to_string())
                 };
 
-                println!("Current IS {:#?}", builtins_path);
-
                 // Transition process from previous to current
                 let builtins_to_add = stick_set.diff_union_builtins(builtins_path.clone());
-
-                println!("TO ADD IS {:#?}", builtins_to_add);
 
                 // Previous path to apply the transition process too
                 let prev_builtins = Builtins {
                     vec: builtins_path.vec[0..(builtins_path.len() - builtins_to_add.len())]
                         .to_vec(),
                 };
-
-                println!("PREV IS {:#?}", prev_builtins);
 
                 let prev_subject_name = if prev_builtins.is_empty() {
                     subject_name.clone()
@@ -2554,9 +2547,16 @@ impl<'a> CodeGenerator<'a> {
                 let longest_pattern = cases.iter().chain(tail_cases.iter()).fold(
                     0,
                     |longest, (case, _)| match case {
-                        CaseTest::List(i) | CaseTest::ListWithTail(i) => {
+                        CaseTest::List(i) => {
                             if longest < *i {
                                 *i
+                            } else {
+                                longest
+                            }
+                        }
+                        CaseTest::ListWithTail(i) => {
+                            if longest < *i {
+                                *i - 1
                             } else {
                                 longest
                             }
@@ -2568,9 +2568,9 @@ impl<'a> CodeGenerator<'a> {
                 let last_pattern = if tail_cases.is_empty() {
                     *default.as_ref().unwrap().clone()
                 } else {
-                    let (_case, tree) = tail_cases.first().unwrap();
+                    let tree = tail_cases.last().unwrap();
 
-                    tree.clone()
+                    tree.1.clone()
                 };
 
                 let last_case = cases.last().unwrap().0.clone();
@@ -2589,7 +2589,7 @@ impl<'a> CodeGenerator<'a> {
                     stick_set.clone(),
                 );
 
-                let list_clauses = (0..longest_pattern).rev().with_position().fold(
+                let list_clauses = (0..=longest_pattern).rev().with_position().fold(
                     (builtins_for_pattern, last_pattern),
                     |(mut builtins_for_pattern, acc), list_item| match list_item {
                         itertools::Position::First(index) | itertools::Position::Only(index) => {
@@ -2724,51 +2724,7 @@ impl<'a> CodeGenerator<'a> {
                     air_args.into_iter().map(|i| i.1).collect_vec(),
                 );
 
-                args.into_iter().rfold(then, |acc, assign| {
-                    let Assigned { path, assigned } = assign;
-
-                    let current_tipo = get_tipo_by_path(subject_tipo.clone(), &path);
-                    let builtins_path = Builtins::new_from_path(subject_tipo.clone(), path);
-                    let current_subject_name = if builtins_path.is_empty() {
-                        subject_name.clone()
-                    } else {
-                        format!("{}_{}", subject_name, builtins_path.to_string())
-                    };
-
-                    // Transition process from previous to current
-                    let builtins_to_add = stick_set.diff_union_builtins(builtins_path.clone());
-
-                    // Previous path to apply the transition process too
-                    let prev_builtins = Builtins {
-                        vec: builtins_path.vec[0..(builtins_path.len() - builtins_to_add.len())]
-                            .to_vec(),
-                    };
-
-                    let prev_subject_name = if prev_builtins.is_empty() {
-                        subject_name.clone()
-                    } else {
-                        format!("{}_{}", subject_name, prev_builtins.to_string())
-                    };
-                    let prev_tipo = prev_builtins
-                        .vec
-                        .last()
-                        .map_or(subject_tipo.clone(), |last| last.tipo());
-
-                    let assignment = AirTree::let_assignment(
-                        assigned,
-                        AirTree::local_var(current_subject_name, current_tipo),
-                        acc,
-                    );
-
-                    let thing = builtins_to_add.to_air(
-                        &mut self.special_functions,
-                        prev_subject_name,
-                        prev_tipo,
-                        assignment,
-                    );
-
-                    thing
-                })
+                self.handle_assigns(subject_name, subject_tipo, &args, &mut stick_set, then)
             }
             DecisionTree::HoistThen {
                 name,
@@ -2804,6 +2760,64 @@ impl<'a> CodeGenerator<'a> {
                 });
 
                 assign
+            }
+        }
+    }
+
+    fn handle_assigns(
+        &mut self,
+        subject_name: &String,
+        subject_tipo: Rc<Type>,
+        assigns: &[Assigned],
+        stick_set: &mut TreeSet,
+        then: AirTree,
+    ) -> AirTree {
+        match assigns {
+            [] => then,
+            [assign, rest @ ..] => {
+                let Assigned { path, assigned } = assign;
+
+                let current_tipo = get_tipo_by_path(subject_tipo.clone(), path);
+                let builtins_path = Builtins::new_from_path(subject_tipo.clone(), path.clone());
+                let current_subject_name = if builtins_path.is_empty() {
+                    subject_name.clone()
+                } else {
+                    format!("{}_{}", subject_name, builtins_path.to_string())
+                };
+
+                // Transition process from previous to current
+                let builtins_to_add = stick_set.diff_union_builtins(builtins_path.clone());
+
+                // Previous path to apply the transition process too
+                let prev_builtins = Builtins {
+                    vec: builtins_path.vec[0..(builtins_path.len() - builtins_to_add.len())]
+                        .to_vec(),
+                };
+
+                let prev_subject_name = if prev_builtins.is_empty() {
+                    subject_name.clone()
+                } else {
+                    format!("{}_{}", subject_name, prev_builtins.to_string())
+                };
+                let prev_tipo = prev_builtins
+                    .vec
+                    .last()
+                    .map_or(subject_tipo.clone(), |last| last.tipo());
+
+                let assignment = AirTree::let_assignment(
+                    assigned,
+                    AirTree::local_var(current_subject_name, current_tipo),
+                    self.handle_assigns(subject_name, subject_tipo, rest, stick_set, then),
+                );
+
+                let thing = builtins_to_add.to_air(
+                    &mut self.special_functions,
+                    prev_subject_name,
+                    prev_tipo,
+                    assignment,
+                );
+
+                thing
             }
         }
     }
