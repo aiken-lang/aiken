@@ -4639,9 +4639,7 @@ impl<'a> CodeGenerator<'a> {
                             .apply(Term::var(subject_name)),
                     };
 
-                    condition
-                        .delay_true_if_then_else(body, other_clauses)
-                        .force()
+                    condition.delay_true_if_then_else(body, other_clauses)
                 };
 
                 if complex_clause {

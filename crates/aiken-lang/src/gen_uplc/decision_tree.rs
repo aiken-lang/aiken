@@ -7,7 +7,7 @@ use itertools::{Itertools, Position};
 
 use crate::{
     ast::{DataTypeKey, Pattern, TypedClause, TypedDataType, TypedPattern},
-    expr::{lookup_data_type_by_tipo, Type, TypedExpr},
+    expr::{lookup_data_type_by_tipo, Type, TypeVar, TypedExpr},
 };
 
 use super::{interner::AirInterner, tree::AirTree};
@@ -1041,7 +1041,7 @@ impl<'a, 'b> TreeGen<'a, 'b> {
             PAIR_NEW_COLUMNS
         } else if current_tipo.is_tuple() {
             let Type::Tuple { elems, .. } = current_tipo.as_ref() else {
-                unreachable!()
+                unreachable!("{:#?}", current_tipo)
             };
             elems.len()
         } else if let Some(data) = lookup_data_type_by_tipo(self.data_types, subject_tipo) {
@@ -1206,7 +1206,13 @@ pub fn get_tipo_by_path(mut subject_tipo: Rc<Type>, mut path: &[Path]) -> Rc<Typ
 
         path = rest
     }
-    subject_tipo
+    match subject_tipo.as_ref() {
+        Type::Var { tipo, .. } => match &*tipo.borrow() {
+            TypeVar::Unbound { .. } | TypeVar::Generic { .. } => subject_tipo.clone(),
+            TypeVar::Link { tipo } => get_tipo_by_path(tipo.clone(), &[]),
+        },
+        _ => subject_tipo,
+    }
 }
 
 fn match_wild_card(pattern: &TypedPattern) -> bool {
