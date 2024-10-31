@@ -615,8 +615,7 @@ impl<'a> CodeGenerator<'a> {
                         let tree_gen =
                             TreeGen::new(&mut self.interner, &self.data_types, &wild_card);
 
-                        let tree =
-                            tree_gen.build_tree(&subject_name_interned, &subject.tipo(), clauses);
+                        let tree = tree_gen.build_tree(&subject.tipo(), clauses);
 
                         let stick_set = TreeSet::new();
 

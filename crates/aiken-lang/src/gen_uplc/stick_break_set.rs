@@ -23,15 +23,15 @@ pub enum Builtin {
 
 impl PartialEq for Builtin {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
+        matches!(
+            (self, other),
             (Builtin::HeadList(_), Builtin::HeadList(_))
-            | (Builtin::ExtractField(_), Builtin::ExtractField(_))
-            | (Builtin::TailList, Builtin::TailList)
-            | (Builtin::UnConstrFields, Builtin::UnConstrFields)
-            | (Builtin::FstPair(_), Builtin::FstPair(_))
-            | (Builtin::SndPair(_), Builtin::SndPair(_)) => true,
-            _ => false,
-        }
+                | (Builtin::ExtractField(_), Builtin::ExtractField(_))
+                | (Builtin::TailList, Builtin::TailList)
+                | (Builtin::UnConstrFields, Builtin::UnConstrFields)
+                | (Builtin::FstPair(_), Builtin::FstPair(_))
+                | (Builtin::SndPair(_), Builtin::SndPair(_))
+        )
     }
 }
 
