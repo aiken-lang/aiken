@@ -2493,7 +2493,7 @@ impl<'a> CodeGenerator<'a> {
                     )
                 });
 
-                let y = AirTree::when(
+                let when_air_clauses = AirTree::when(
                     test_subject_name,
                     return_tipo.clone(),
                     current_tipo.clone(),
@@ -2501,14 +2501,16 @@ impl<'a> CodeGenerator<'a> {
                     clauses,
                 );
 
-                let x = builtins_to_add.to_air(
+                builtins_to_add.to_air(
+                    // The only reason I pass this in is to ensure I signal
+                    // whether or not constr_fields_exposer was used. I could
+                    // probably optimize this part out to simplify codegen in
+                    // the future
                     &mut self.special_functions,
                     prev_subject_name,
                     prev_tipo,
-                    y,
-                );
-
-                x
+                    when_air_clauses,
+                )
             }
             DecisionTree::ListSwitch {
                 path,
@@ -2573,10 +2575,9 @@ impl<'a> CodeGenerator<'a> {
                     tree.1.clone()
                 };
 
-                let last_case = cases.last().unwrap().0.clone();
-
-                let builtins_for_pattern =
-                    builtins_path.merge(Builtins::new_from_list_case(last_case.clone()));
+                let builtins_for_pattern = builtins_path.merge(Builtins::new_from_list_case(
+                    CaseTest::List(longest_pattern),
+                ));
 
                 stick_set.diff_union_builtins(builtins_for_pattern.clone());
 
@@ -2655,6 +2656,8 @@ impl<'a> CodeGenerator<'a> {
                                 format!("{}_{}", subject_name, builtins_for_pattern.to_string())
                             };
 
+                            // TODO: change this in the future to use the Builtins to_string method
+                            // to ensure future changes don't break things
                             let next_tail_name = Some(format!("{}_tail", tail_name));
 
                             let then = self.handle_decision_tree(
@@ -2675,6 +2678,9 @@ impl<'a> CodeGenerator<'a> {
                                 false,
                             );
 
+                            // since we iterate over the list cases in reverse
+                            // We pop off a builtin to make it easier to get the name of
+                            // prev_tested list case since each name is based off the builtins
                             builtins_for_pattern.pop();
 
                             (builtins_for_pattern, acc)
@@ -2682,7 +2688,7 @@ impl<'a> CodeGenerator<'a> {
                     },
                 );
 
-                let y = AirTree::when(
+                let when_list_cases = AirTree::when(
                     current_subject_name.clone(),
                     return_tipo.clone(),
                     current_tipo.clone(),
@@ -2690,14 +2696,16 @@ impl<'a> CodeGenerator<'a> {
                     list_clauses.1,
                 );
 
-                let x = builtins_to_add.to_air(
+                builtins_to_add.to_air(
+                    // The only reason I pass this in is to ensure I signal
+                    // whether or not constr_fields_exposer was used. I could
+                    // probably optimize this part out to simplify codegen in
+                    // the future
                     &mut self.special_functions,
                     prev_subject_name,
                     prev_tipo,
-                    y,
-                );
-
-                x
+                    when_list_cases,
+                )
             }
             DecisionTree::HoistedLeaf(name, args) => {
                 let air_args = args
@@ -2742,6 +2750,8 @@ impl<'a> CodeGenerator<'a> {
                                 assign
                             })
                             .collect_vec(),
+                        // The one reason we have to pass in mutable self
+                        // So we can build the TypedExpr into Air
                         self.build(then, module_build_name, &[]),
                         true,
                     ),
