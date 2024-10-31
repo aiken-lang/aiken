@@ -1039,9 +1039,11 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                 unreachable!("{:#?}", current_tipo)
             };
             elems.len()
-        } else if let Some(data) = lookup_data_type_by_tipo(self.data_types, subject_tipo) {
+        } else if let Some(data) = lookup_data_type_by_tipo(self.data_types, &current_tipo) {
             if data.constructors.len() == 1 {
                 data.constructors[0].arguments.len()
+            } else if data.is_never() {
+                0
             } else {
                 MIN_NEW_COLUMNS
             }
@@ -1092,7 +1094,7 @@ impl<'a, 'b> TreeGen<'a, 'b> {
             } => {
                 let data_type = lookup_data_type_by_tipo(self.data_types, &current_tipo).unwrap();
 
-                if data_type.constructors.len() == 1 {
+                if data_type.constructors.len() == 1 || data_type.is_never() {
                     arguments
                         .iter()
                         .enumerate()
