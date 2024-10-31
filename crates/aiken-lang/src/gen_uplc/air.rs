@@ -211,12 +211,15 @@ pub enum Air {
         tipo: Rc<Type>,
         is_expect: bool,
     },
-    // Tuple Access
+    // Pair Access
     PairAccessor {
         fst: Option<String>,
         snd: Option<String>,
         tipo: Rc<Type>,
         is_expect: bool,
+    },
+    ExtractField {
+        tipo: Rc<Type>,
     },
     // Misc.
     ErrorTerm {

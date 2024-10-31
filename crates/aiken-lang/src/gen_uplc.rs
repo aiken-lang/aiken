@@ -5371,6 +5371,11 @@ impl<'a> CodeGenerator<'a> {
                     ))
                 }
             }
+            Air::ExtractField { tipo } => {
+                let arg = arg_stack.pop().unwrap();
+
+                Some(known_data_to_type(Term::head_list().apply(arg), &tipo))
+            }
         }
     }
 }

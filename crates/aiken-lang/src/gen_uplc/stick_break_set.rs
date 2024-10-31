@@ -14,6 +14,7 @@ use super::{
 #[derive(Clone, Debug)]
 pub enum Builtin {
     HeadList(Rc<Type>),
+    ExtractField(Rc<Type>),
     TailList,
     UnConstrFields,
     FstPair(Rc<Type>),
@@ -24,6 +25,7 @@ impl PartialEq for Builtin {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Builtin::HeadList(_), Builtin::HeadList(_))
+            | (Builtin::ExtractField(_), Builtin::ExtractField(_))
             | (Builtin::TailList, Builtin::TailList)
             | (Builtin::UnConstrFields, Builtin::UnConstrFields)
             | (Builtin::FstPair(_), Builtin::FstPair(_))
@@ -39,6 +41,7 @@ impl Builtin {
     fn to_air_call(self, special_funcs: &mut CodeGenSpecialFuncs, arg: AirTree) -> AirTree {
         match self {
             Builtin::HeadList(t) => AirTree::builtin(DefaultFunction::HeadList, t, vec![arg]),
+            Builtin::ExtractField(t) => AirTree::extract_field(t, arg),
             Builtin::TailList => AirTree::builtin(
                 DefaultFunction::TailList,
                 Type::list(Type::data()),
@@ -58,10 +61,9 @@ impl Builtin {
     pub fn tipo(&self) -> Rc<Type> {
         match self {
             Builtin::HeadList(t) => t.clone(),
+            Builtin::ExtractField(t) => t.clone(),
             Builtin::TailList => Type::list(Type::data()),
-
             Builtin::UnConstrFields => Type::list(Type::data()),
-
             Builtin::FstPair(t) => t.clone(),
             Builtin::SndPair(t) => t.clone(),
         }
@@ -72,6 +74,7 @@ impl ToString for Builtin {
     fn to_string(&self) -> String {
         match self {
             Builtin::HeadList(_) => "head".to_string(),
+            Builtin::ExtractField(_) => "extractfield".to_string(),
             Builtin::TailList => "tail".to_string(),
             Builtin::UnConstrFields => "unconstrfields".to_string(),
             Builtin::FstPair(_) => "fst".to_string(),
@@ -110,6 +113,8 @@ impl Builtins {
                 .into_iter()
                 .fold((vec![], vec![]), |(mut builtins, mut rebuilt_path), i| {
                     rebuilt_path.push(i.clone());
+                    let is_list = matches!(i, Path::List(_));
+
                     match i {
                         Path::Pair(i) => {
                             if i == 0 {
@@ -133,10 +138,17 @@ impl Builtins {
                                 builtins.push(Builtin::TailList);
                             }
 
-                            builtins.push(Builtin::HeadList(get_tipo_by_path(
-                                subject_tipo.clone(),
-                                &rebuilt_path,
-                            )));
+                            if is_list {
+                                builtins.push(Builtin::HeadList(get_tipo_by_path(
+                                    subject_tipo.clone(),
+                                    &rebuilt_path,
+                                )));
+                            } else {
+                                builtins.push(Builtin::ExtractField(get_tipo_by_path(
+                                    subject_tipo.clone(),
+                                    &rebuilt_path,
+                                )));
+                            }
 
                             (builtins, rebuilt_path)
                         }
@@ -147,7 +159,7 @@ impl Builtins {
                                 builtins.push(Builtin::TailList);
                             }
 
-                            builtins.push(Builtin::HeadList(get_tipo_by_path(
+                            builtins.push(Builtin::ExtractField(get_tipo_by_path(
                                 subject_tipo.clone(),
                                 &rebuilt_path,
                             )));
@@ -162,6 +174,7 @@ impl Builtins {
 
                             (builtins, rebuilt_path)
                         }
+                        Path::OpaqueConstr(_) => (builtins, rebuilt_path),
                     }
                 })
                 .0,

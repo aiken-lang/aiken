@@ -27,6 +27,7 @@ pub enum Path {
     Pair(usize),
     Tuple(usize),
     Constr(Rc<Type>, usize),
+    OpaqueConstr(Rc<Type>),
     List(usize),
     ListTail(usize),
 }
@@ -43,6 +44,7 @@ impl ToString for Path {
             Path::Constr(_, i) => {
                 format!("constr_{}", i)
             }
+            Path::OpaqueConstr(_) => "opaqueconstr".to_string(),
             Path::List(i) => {
                 format!("list_{}", i)
             }
@@ -61,6 +63,7 @@ impl PartialEq for Path {
             | (Path::Constr(_, a), Path::Constr(_, b))
             | (Path::List(a), Path::List(b))
             | (Path::ListTail(a), Path::ListTail(b)) => a == b,
+            (Path::OpaqueConstr(_), Path::OpaqueConstr(_)) => true,
             _ => false,
         }
     }
@@ -1094,6 +1097,9 @@ impl<'a, 'b> TreeGen<'a, 'b> {
             } => {
                 let data_type = lookup_data_type_by_tipo(self.data_types, &current_tipo).unwrap();
 
+                let is_transparent =
+                    data_type.opaque && data_type.constructors[0].arguments.len() == 1;
+
                 if data_type.constructors.len() == 1 || data_type.is_never() {
                     arguments
                         .iter()
@@ -1103,7 +1109,11 @@ impl<'a, 'b> TreeGen<'a, 'b> {
 
                             let mut item_path = path.clone();
 
-                            item_path.push(Path::Constr(tipo.clone(), index));
+                            if is_transparent {
+                                item_path.push(Path::OpaqueConstr(tipo.clone()));
+                            } else {
+                                item_path.push(Path::Constr(tipo.clone(), index));
+                            }
 
                             let (assigns, patts) =
                                 self.map_pattern_to_row(arg_value, subject_tipo, item_path);
@@ -1199,6 +1209,10 @@ pub fn get_tipo_by_path(mut subject_tipo: Rc<Type>, mut path: &[Path]) -> Rc<Typ
             Path::List(_) => subject_tipo.get_inner_types().swap_remove(0),
             Path::ListTail(_) => subject_tipo,
             Path::Constr(tipo, index) => tipo.arg_types().unwrap().swap_remove(*index),
+            Path::OpaqueConstr(tipo) => {
+                let x = tipo.arg_types().unwrap().swap_remove(0);
+                x
+            }
         };
 
         path = rest

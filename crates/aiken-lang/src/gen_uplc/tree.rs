@@ -235,6 +235,10 @@ pub enum AirTree {
         then: Box<AirTree>,
         otherwise: Box<AirTree>,
     },
+    ExtractField {
+        tipo: Rc<Type>,
+        arg: Box<AirTree>,
+    },
     // Misc.
     FieldsEmpty {
         constr: Box<AirTree>,
@@ -970,6 +974,13 @@ impl AirTree {
         }
     }
 
+    pub fn extract_field(tipo: Rc<Type>, arg: AirTree) -> AirTree {
+        AirTree::ExtractField {
+            tipo,
+            arg: arg.into(),
+        }
+    }
+
     pub fn pair_index(index: usize, tipo: Rc<Type>, tuple: AirTree) -> AirTree {
         AirTree::cast_from_data(
             AirTree::builtin(
@@ -1651,6 +1662,13 @@ impl AirTree {
                 msg.create_air_vec(air_vec);
                 then.create_air_vec(air_vec);
             }
+            AirTree::ExtractField {
+                tipo,
+                arg: args_list,
+            } => {
+                air_vec.push(Air::ExtractField { tipo: tipo.clone() });
+                args_list.create_air_vec(air_vec);
+            }
         }
     }
 
@@ -1666,6 +1684,7 @@ impl AirTree {
             | AirTree::Pair { tipo, .. }
             | AirTree::Call { tipo, .. }
             | AirTree::Builtin { tipo, .. }
+            | AirTree::ExtractField { tipo, .. }
             | AirTree::BinOp { tipo, .. }
             | AirTree::CastFromData { tipo, .. }
             | AirTree::When { tipo, .. }
@@ -1728,6 +1747,7 @@ impl AirTree {
             | AirTree::Tuple { tipo, .. }
             | AirTree::Call { tipo, .. }
             | AirTree::Builtin { tipo, .. }
+            | AirTree::ExtractField { tipo, .. }
             | AirTree::CastFromData { tipo, .. }
             | AirTree::CastToData { tipo, .. }
             | AirTree::If { tipo, .. }
@@ -2077,7 +2097,8 @@ impl AirTree {
             | AirTree::Constr { .. }
             | AirTree::RecordUpdate { .. }
             | AirTree::ErrorTerm { .. }
-            | AirTree::Trace { .. } => {}
+            | AirTree::Trace { .. }
+            | AirTree::ExtractField { .. } => {}
         }
 
         match self {
@@ -2190,6 +2211,9 @@ impl AirTree {
                         with,
                     );
                 }
+            }
+            AirTree::ExtractField { tipo: _, arg } => {
+                arg.do_traverse_tree_with(tree_path, current_depth + 1, Fields::SecondField, with);
             }
             AirTree::BinOp {
                 name: _,
@@ -2733,6 +2757,10 @@ impl AirTree {
                         .get_mut(*index)
                         .expect("Tree Path index outside tree children nodes")
                         .do_find_air_tree_node(tree_path_iter),
+                    _ => panic!("Tree Path index outside tree children nodes"),
+                },
+                AirTree::ExtractField { tipo: _, arg } => match field {
+                    Fields::SecondField => arg.as_mut().do_find_air_tree_node(tree_path_iter),
                     _ => panic!("Tree Path index outside tree children nodes"),
                 },
                 AirTree::Pair { tipo: _, fst, snd } => match field {
