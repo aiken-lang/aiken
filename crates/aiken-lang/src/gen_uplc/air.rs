@@ -113,9 +113,6 @@ pub enum Air {
     CastToData {
         tipo: Rc<Type>,
     },
-    AssertConstr {
-        constr_index: usize,
-    },
     AssertBool {
         is_true: bool,
     },
@@ -128,13 +125,11 @@ pub enum Air {
     Clause {
         subject_tipo: Rc<Type>,
         subject_name: String,
-        complex_clause: bool,
     },
     ListClause {
         subject_tipo: Rc<Type>,
         tail_name: String,
         next_tail_name: Option<(String, String)>,
-        complex_clause: bool,
     },
     WrapClause,
     TupleClause {
@@ -199,11 +194,6 @@ pub enum Air {
         names: Vec<String>,
         tail: bool,
         expect_level: ExpectLevel,
-    },
-    ListExpose {
-        tipo: Rc<Type>,
-        tail_head_names: Vec<(String, String)>,
-        tail: Option<(String, String)>,
     },
     // Tuple Access
     TupleAccessor {

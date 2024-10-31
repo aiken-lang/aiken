@@ -1640,9 +1640,10 @@ impl<'a> CodeGenerator<'a> {
                         Type::void(),
                         tipo.clone(),
                         AirTree::local_var(&constructor_name_interned, tipo.clone()),
-                        AirTree::assert_constr_index(
-                            index,
-                            AirTree::local_var(&subject_name_interned, tipo.clone()),
+                        AirTree::clause(
+                            &subject_name_interned,
+                            AirTree::int(index),
+                            tipo.clone(),
                             then,
                             otherwise,
                         ),
@@ -1782,7 +1783,6 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn expect_type_assign(
         &mut self,
         tipo: &Rc<Type>,
@@ -2310,18 +2310,12 @@ impl<'a> CodeGenerator<'a> {
                                 )
                             };
 
-                            // Special case here for future refactoring
                             AirTree::anon_func(
                                 vec![],
-                                AirTree::assert_constr_index(
-                                    index,
-                                    AirTree::local_var(
-                                        format!(
-                                            "__subject_span_{}_{}",
-                                            location.start, location.end
-                                        ),
-                                        tipo.clone(),
-                                    ),
+                                AirTree::clause(
+                                    format!("__subject_span_{}_{}", location.start, location.end),
+                                    AirTree::int(index),
+                                    tipo.clone(),
                                     then,
                                     acc,
                                 ),
@@ -2489,7 +2483,6 @@ impl<'a> CodeGenerator<'a> {
                         current_tipo.clone(),
                         case_air,
                         AirTree::anon_func(vec![], acc, true),
-                        false,
                     )
                 });
 
@@ -2628,7 +2621,6 @@ impl<'a> CodeGenerator<'a> {
                                 then,
                                 AirTree::anon_func(vec![], acc, true),
                                 None,
-                                false,
                             );
 
                             builtins_for_pattern.pop();
@@ -2675,7 +2667,6 @@ impl<'a> CodeGenerator<'a> {
                                 then,
                                 AirTree::anon_func(vec![], acc, true),
                                 next_tail_name.map(|next| (tail_name, next)),
-                                false,
                             );
 
                             // since we iterate over the list cases in reverse
@@ -4079,35 +4070,6 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(term)
             }
-            Air::ListExpose {
-                tail_head_names,
-                tail,
-                // TODO: another case where tipo is not the actual return type,
-                // but the list type
-                tipo,
-            } => {
-                let mut term = arg_stack.pop().unwrap();
-
-                if let Some((tail_var, tail_name)) = &tail {
-                    term = term
-                        .lambda(tail_name)
-                        .apply(Term::tail_list().apply(Term::var(tail_var)));
-                }
-
-                for (tail_var, head_name) in tail_head_names.iter().rev() {
-                    let head_list = if tipo.is_map() {
-                        Term::head_list().apply(Term::var(tail_var))
-                    } else {
-                        builder::known_data_to_type(
-                            Term::head_list().apply(Term::var(tail_var)),
-                            &tipo.get_inner_types()[0],
-                        )
-                    };
-                    term = term.lambda(head_name).apply(head_list);
-                }
-
-                Some(term)
-            }
             Air::Fn {
                 params,
                 allow_inline,
@@ -4517,20 +4479,6 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(term)
             }
-            Air::AssertConstr { constr_index } => {
-                let constr = arg_stack.pop().unwrap();
-
-                let mut term = arg_stack.pop().unwrap();
-                let otherwise = arg_stack.pop().unwrap();
-
-                term = Term::equals_integer()
-                    .apply(Term::integer(constr_index.into()))
-                    .apply(constr)
-                    .if_then_else(term.delay(), otherwise)
-                    .force();
-
-                Some(term)
-            }
             Air::AssertBool { is_true } => {
                 let value = arg_stack.pop().unwrap();
 
@@ -4586,7 +4534,6 @@ impl<'a> CodeGenerator<'a> {
             Air::Clause {
                 subject_tipo: tipo,
                 subject_name,
-                complex_clause,
             } => {
                 // clause to compare
                 let clause = arg_stack.pop().unwrap();
@@ -4598,13 +4545,9 @@ impl<'a> CodeGenerator<'a> {
                 // Expected to be delayed
                 let term = arg_stack.pop().unwrap();
 
-                assert!(matches!(term, Term::Delay(_)));
+                assert!(matches!(term, Term::Delay(_) | Term::Var(_)));
 
-                let other_clauses = if complex_clause {
-                    Term::var("__other_clauses_delayed")
-                } else {
-                    term.clone()
-                };
+                let other_clauses = term.clone();
 
                 let body = if tipo.is_bool() {
                     if matches!(clause, Term::Constant(boolean) if matches!(boolean.as_ref(), UplcConstant::Bool(true)))
@@ -4652,16 +4595,11 @@ impl<'a> CodeGenerator<'a> {
                     condition.delay_true_if_then_else(body, other_clauses)
                 };
 
-                if complex_clause {
-                    Some(body.lambda("__other_clauses_delayed").apply(term.delay()))
-                } else {
-                    Some(body)
-                }
+                Some(body)
             }
             Air::ListClause {
                 tail_name,
                 next_tail_name,
-                complex_clause,
                 ..
             } => {
                 // no longer need to pop off discard
@@ -4679,15 +4617,7 @@ impl<'a> CodeGenerator<'a> {
                     term
                 };
 
-                if complex_clause {
-                    term = Term::var(tail_name)
-                        .choose_list(body.delay(), Term::var("__other_clauses_delayed"))
-                        .force()
-                        .lambda("__other_clauses_delayed")
-                        .apply(term.delay());
-                } else {
-                    term = Term::var(tail_name).delay_empty_choose_list(body, term);
-                }
+                term = Term::var(tail_name).delay_empty_choose_list(body, term);
 
                 Some(term)
             }
