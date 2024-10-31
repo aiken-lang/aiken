@@ -1070,13 +1070,19 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                 .collect_vec(),
             ),
 
-            Pattern::Assign { name, pattern, .. } => (
-                vec![Assigned {
-                    path: path.clone(),
-                    assigned: name.clone(),
-                }],
-                self.map_pattern_to_row(pattern, subject_tipo, path).1,
-            ),
+            Pattern::Assign { name, pattern, .. } => {
+                let (mut assigns, patts) =
+                    self.map_pattern_to_row(pattern, subject_tipo, path.clone());
+
+                assigns.insert(
+                    0,
+                    Assigned {
+                        path,
+                        assigned: name.clone(),
+                    },
+                );
+                (assigns, patts)
+            }
             Pattern::Int { .. }
             | Pattern::ByteArray { .. }
             | Pattern::Discard { .. }
