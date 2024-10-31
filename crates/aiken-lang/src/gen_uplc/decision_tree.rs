@@ -201,7 +201,7 @@ impl Scope {
     }
 
     pub fn common_ancestor(&mut self, other: &Scope) {
-        let scope = std::mem::replace(&mut self.scope, vec![]);
+        let scope = std::mem::take(&mut self.scope);
 
         self.scope = scope
             .into_iter()
@@ -263,7 +263,7 @@ impl<'a> DecisionTree<'a> {
                         .fold(RcDoc::line().append(RcDoc::text("path(")), |acc, p| {
                             acc.append(
                                 RcDoc::line()
-                                    .append(RcDoc::text(format!("{}", p.to_string())).nest(4)),
+                                    .append(RcDoc::text(p.to_string()).nest(4)),
                             )
                         })
                         .append(RcDoc::line())
@@ -312,7 +312,7 @@ impl<'a> DecisionTree<'a> {
                         .fold(RcDoc::line().append(RcDoc::text("path(")), |acc, p| {
                             acc.append(
                                 RcDoc::line()
-                                    .append(RcDoc::text(format!("{}", p.to_string())).nest(4)),
+                                    .append(RcDoc::text(p.to_string()).nest(4)),
                             )
                         })
                         .append(RcDoc::line())
@@ -703,34 +703,31 @@ impl<'a, 'b> TreeGen<'a, 'b> {
         matrix.rows.iter().for_each(|item| {
             let col = &item.columns[occurrence_col];
 
-            match col.pattern {
-                Pattern::List { elements, tail, .. } => {
-                    has_list_pattern = true;
-                    if tail.is_none() {
-                        match longest_elems_no_tail {
-                            Some(elems_count) => {
-                                if elems_count < elements.len() {
-                                    longest_elems_no_tail = Some(elements.len());
-                                }
-                            }
-                            None => {
+            if let Pattern::List { elements, tail, .. } = col.pattern {
+                has_list_pattern = true;
+                if tail.is_none() {
+                    match longest_elems_no_tail {
+                        Some(elems_count) => {
+                            if elems_count < elements.len() {
                                 longest_elems_no_tail = Some(elements.len());
                             }
                         }
-                    } else {
-                        match longest_elems_with_tail {
-                            Some(elems_count) => {
-                                if elems_count < elements.len() {
-                                    longest_elems_with_tail = Some(elements.len());
-                                }
-                            }
-                            None => {
+                        None => {
+                            longest_elems_no_tail = Some(elements.len());
+                        }
+                    }
+                } else {
+                    match longest_elems_with_tail {
+                        Some(elems_count) => {
+                            if elems_count < elements.len() {
                                 longest_elems_with_tail = Some(elements.len());
                             }
                         }
+                        None => {
+                            longest_elems_with_tail = Some(elements.len());
+                        }
                     }
                 }
-                _ => (),
             }
         });
 
@@ -738,8 +735,7 @@ impl<'a, 'b> TreeGen<'a, 'b> {
         // pattern to match on so we also must have a path to the object to test
         // for that pattern
         let path = matrix
-            .rows
-            .get(0)
+            .rows.first()
             .unwrap()
             .columns
             .get(occurrence_col)
@@ -814,7 +810,7 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                         ..
                     } => {
                         let data_type =
-                            lookup_data_type_by_tipo(&self.data_types, &specialized_tipo).unwrap();
+                            lookup_data_type_by_tipo(self.data_types, &specialized_tipo).unwrap();
 
                         let (constr_index, _) = data_type
                             .constructors
@@ -1016,7 +1012,7 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                         )
                     })
                     .collect_vec(),
-                default: fallback_option.into(),
+                default: fallback_option,
             }
         }
     }
@@ -1210,8 +1206,8 @@ pub fn get_tipo_by_path(mut subject_tipo: Rc<Type>, mut path: &[Path]) -> Rc<Typ
             Path::ListTail(_) => subject_tipo,
             Path::Constr(tipo, index) => tipo.arg_types().unwrap().swap_remove(*index),
             Path::OpaqueConstr(tipo) => {
-                let x = tipo.arg_types().unwrap().swap_remove(0);
-                x
+                
+                tipo.arg_types().unwrap().swap_remove(0)
             }
         };
 

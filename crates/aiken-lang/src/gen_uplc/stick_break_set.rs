@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{fmt::Display, rc::Rc};
 
 use itertools::Itertools;
 use uplc::{builder::CONSTR_FIELDS_EXPOSER, builtins::DefaultFunction};
@@ -38,7 +38,7 @@ impl PartialEq for Builtin {
 impl Eq for Builtin {}
 
 impl Builtin {
-    fn to_air_call(self, special_funcs: &mut CodeGenSpecialFuncs, arg: AirTree) -> AirTree {
+    fn produce_air(self, special_funcs: &mut CodeGenSpecialFuncs, arg: AirTree) -> AirTree {
         match self {
             Builtin::HeadList(t) => AirTree::builtin(DefaultFunction::HeadList, t, vec![arg]),
             Builtin::ExtractField(t) => AirTree::extract_field(t, arg),
@@ -70,15 +70,15 @@ impl Builtin {
     }
 }
 
-impl ToString for Builtin {
-    fn to_string(&self) -> String {
+impl Display for Builtin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Builtin::HeadList(_) => "head".to_string(),
-            Builtin::ExtractField(_) => "extractfield".to_string(),
-            Builtin::TailList => "tail".to_string(),
-            Builtin::UnConstrFields => "unconstrfields".to_string(),
-            Builtin::FstPair(_) => "fst".to_string(),
-            Builtin::SndPair(_) => "snd".to_string(),
+            Builtin::HeadList(_) => write!(f, "head"),
+            Builtin::ExtractField(_) => write!(f, "extractfield"),
+            Builtin::TailList => write!(f, "tail"),
+            Builtin::UnConstrFields => write!(f, "unconstrfields"),
+            Builtin::FstPair(_) => write!(f, "fst"),
+            Builtin::SndPair(_) => write!(f, "snd"),
         }
     }
 }
@@ -86,6 +86,12 @@ impl ToString for Builtin {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Builtins {
     pub vec: Vec<Builtin>,
+}
+
+impl Default for Builtins {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Builtins {
@@ -198,7 +204,7 @@ impl Builtins {
         self
     }
 
-    pub fn to_air(
+    pub fn produce_air(
         self,
         special_funcs: &mut CodeGenSpecialFuncs,
         prev_name: String,
@@ -208,7 +214,7 @@ impl Builtins {
         let (_, _, name_builtins) = self.vec.into_iter().fold(
             (prev_name, subject_tipo, vec![]),
             |(prev_name, prev_tipo, mut acc), item| {
-                let next_name = format!("{}_{}", prev_name, item.to_string());
+                let next_name = format!("{}_{}", prev_name, item);
                 let next_tipo = item.tipo();
 
                 acc.push((prev_name, prev_tipo, next_name.clone(), item));
@@ -222,16 +228,16 @@ impl Builtins {
             .rfold(then, |then, (prev_name, prev_tipo, next_name, builtin)| {
                 AirTree::let_assignment(
                     next_name,
-                    builtin.to_air_call(special_funcs, AirTree::local_var(prev_name, prev_tipo)),
+                    builtin.produce_air(special_funcs, AirTree::local_var(prev_name, prev_tipo)),
                     then,
                 )
             })
     }
 }
 
-impl ToString for Builtins {
-    fn to_string(&self) -> String {
-        self.vec.iter().map(|i| i.to_string()).join("_")
+impl Display for Builtins {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.vec.iter().map(|i| i.to_string()).join("_"))
     }
 }
 
@@ -260,6 +266,12 @@ impl TreeNode {
         } else {
             builtins
         }
+    }
+}
+
+impl Default for TreeSet {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

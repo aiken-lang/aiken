@@ -2419,7 +2419,7 @@ impl<'a> CodeGenerator<'a> {
                 let current_subject_name = if builtins_path.is_empty() {
                     subject_name.clone()
                 } else {
-                    format!("{}_{}", subject_name, builtins_path.to_string())
+                    format!("{}_{}", subject_name, builtins_path)
                 };
 
                 // Transition process from previous to current
@@ -2434,7 +2434,7 @@ impl<'a> CodeGenerator<'a> {
                 let prev_subject_name = if prev_builtins.is_empty() {
                     subject_name.clone()
                 } else {
-                    format!("{}_{}", subject_name, prev_builtins.to_string())
+                    format!("{}_{}", subject_name, prev_builtins)
                 };
                 let prev_tipo = prev_builtins
                     .vec
@@ -2494,7 +2494,7 @@ impl<'a> CodeGenerator<'a> {
                     clauses,
                 );
 
-                builtins_to_add.to_air(
+                builtins_to_add.produce_air(
                     // The only reason I pass this in is to ensure I signal
                     // whether or not constr_fields_exposer was used. I could
                     // probably optimize this part out to simplify codegen in
@@ -2517,7 +2517,7 @@ impl<'a> CodeGenerator<'a> {
                 let current_subject_name = if builtins_path.is_empty() {
                     subject_name.clone()
                 } else {
-                    format!("{}_{}", subject_name, builtins_path.to_string())
+                    format!("{}_{}", subject_name, builtins_path)
                 };
 
                 // Transition process from previous to current
@@ -2532,7 +2532,7 @@ impl<'a> CodeGenerator<'a> {
                 let prev_subject_name = if prev_builtins.is_empty() {
                     subject_name.clone()
                 } else {
-                    format!("{}_{}", subject_name, prev_builtins.to_string())
+                    format!("{}_{}", subject_name, prev_builtins)
                 };
                 let prev_tipo = prev_builtins
                     .vec
@@ -2603,7 +2603,7 @@ impl<'a> CodeGenerator<'a> {
                             let tail_name = if builtins_for_pattern.is_empty() {
                                 subject_name.clone()
                             } else {
-                                format!("{}_{}", subject_name, builtins_for_pattern.to_string())
+                                format!("{}_{}", subject_name, builtins_for_pattern)
                             };
 
                             let then = self.handle_decision_tree(
@@ -2645,7 +2645,7 @@ impl<'a> CodeGenerator<'a> {
                             let tail_name = if builtins_for_pattern.is_empty() {
                                 subject_name.clone()
                             } else {
-                                format!("{}_{}", subject_name, builtins_for_pattern.to_string())
+                                format!("{}_{}", subject_name, builtins_for_pattern)
                             };
 
                             // TODO: change this in the future to use the Builtins to_string method
@@ -2687,7 +2687,7 @@ impl<'a> CodeGenerator<'a> {
                     list_clauses.1,
                 );
 
-                builtins_to_add.to_air(
+                builtins_to_add.produce_air(
                     // The only reason I pass this in is to ensure I signal
                     // whether or not constr_fields_exposer was used. I could
                     // probably optimize this part out to simplify codegen in
@@ -2736,10 +2736,7 @@ impl<'a> CodeGenerator<'a> {
                     AirTree::anon_func(
                         assigns
                             .iter()
-                            .map(|i| {
-                                let assign = introduce_name(&mut self.interner, &i.assigned);
-                                assign
-                            })
+                            .map(|i| introduce_name(&mut self.interner, &i.assigned))
                             .collect_vec(),
                         // The one reason we have to pass in mutable self
                         // So we can build the TypedExpr into Air
@@ -2783,7 +2780,7 @@ impl<'a> CodeGenerator<'a> {
                 let current_subject_name = if builtins_path.is_empty() {
                     subject_name.clone()
                 } else {
-                    format!("{}_{}", subject_name, builtins_path.to_string())
+                    format!("{}_{}", subject_name, builtins_path)
                 };
 
                 // Transition process from previous to current
@@ -2798,7 +2795,7 @@ impl<'a> CodeGenerator<'a> {
                 let prev_subject_name = if prev_builtins.is_empty() {
                     subject_name.clone()
                 } else {
-                    format!("{}_{}", subject_name, prev_builtins.to_string())
+                    format!("{}_{}", subject_name, prev_builtins)
                 };
                 let prev_tipo = prev_builtins
                     .vec
@@ -2811,14 +2808,12 @@ impl<'a> CodeGenerator<'a> {
                     self.handle_assigns(subject_name, subject_tipo, rest, stick_set, then),
                 );
 
-                let thing = builtins_to_add.to_air(
+                builtins_to_add.produce_air(
                     &mut self.special_functions,
                     prev_subject_name,
                     prev_tipo,
                     assignment,
-                );
-
-                thing
+                )
             }
         }
     }
