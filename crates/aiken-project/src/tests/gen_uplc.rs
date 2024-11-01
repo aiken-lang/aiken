@@ -855,15 +855,15 @@ fn acceptance_test_7_unzip_tuple() {
                                                 .apply(Term::var("unzip"))
                                                 .apply(Term::var("rest")),
                                         )
+                                        .lambda("rest")
                                         .lambda("b")
-                                        .apply(Term::un_b_data().apply(Term::head_list().apply(
-                                            Term::tail_list().apply(Term::var("head_tuple")),
-                                        )))
                                         .lambda("a")
                                         .apply(Term::un_i_data().apply(
                                             Term::head_list().apply(Term::var("head_tuple")),
                                         ))
-                                        .lambda("rest")
+                                        .apply(Term::un_b_data().apply(Term::head_list().apply(
+                                            Term::tail_list().apply(Term::var("head_tuple")),
+                                        )))
                                         .apply(Term::tail_list().apply(Term::var("xs")))
                                         .lambda("head_tuple")
                                         .apply(
@@ -970,15 +970,15 @@ fn acceptance_test_7_unzip_pair() {
                                                     .apply(Term::var("unzip"))
                                                     .apply(Term::var("rest")),
                                             )
+                                            .lambda("rest")
                                             .lambda("b")
-                                            .apply(Term::un_b_data().apply(
-                                                Term::snd_pair().apply(Term::var("head_pair")),
-                                            ))
                                             .lambda("a")
                                             .apply(Term::un_i_data().apply(
                                                 Term::fst_pair().apply(Term::var("head_pair")),
                                             ))
-                                            .lambda("rest")
+                                            .apply(Term::un_b_data().apply(
+                                                Term::snd_pair().apply(Term::var("head_pair")),
+                                            ))
                                             .apply(Term::tail_list().apply(Term::var("xs")))
                                             .lambda("head_pair")
                                             .apply(Term::head_list().apply(Term::var("xs"))),
