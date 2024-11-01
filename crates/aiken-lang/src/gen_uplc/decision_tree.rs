@@ -1532,4 +1532,46 @@ mod tester {
 
         println!("{}", tree);
     }
+
+    #[test]
+    fn thing6() {
+        let source_code = r#"
+            test thing(){
+                when [] is {
+                  [] -> 4 == 4
+                  [a, 1, ..c] -> True
+                  [a, b, c, d, 5, ..f] -> False
+                  _ -> 1 == 1
+                }
+            }
+        "#;
+
+        let (_, ast) = check(parse(source_code)).unwrap();
+
+        let Definition::Test(function) = &ast.definitions[0] else {
+            panic!()
+        };
+
+        let TypedExpr::When {
+            clauses, subject, ..
+        } = &function.body
+        else {
+            panic!()
+        };
+
+        let mut air_interner = AirInterner::new();
+
+        let data_types = IndexMap::new();
+
+        let pattern = TypedPattern::Discard {
+            name: "_".to_string(),
+            location: Span::empty(),
+        };
+
+        let tree_gen = TreeGen::new(&mut air_interner, &data_types, &pattern);
+
+        let tree = tree_gen.build_tree(&subject.tipo(), clauses);
+
+        println!("{}", tree);
+    }
 }
