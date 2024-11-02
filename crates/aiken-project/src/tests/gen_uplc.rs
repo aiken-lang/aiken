@@ -5460,35 +5460,22 @@ fn list_clause_with_assign() {
                                         .delayed_choose_list(
                                             Term::var("self"),
                                             Term::var("tail_2")
-                                                .delay_empty_choose_list(
+                                                .delayed_choose_list(
                                                     Term::equals_integer()
                                                         .apply(Term::integer(0.into()))
                                                         .apply(
                                                             Term::var(CONSTR_INDEX_EXPOSER)
                                                                 .apply(Term::var("n")),
                                                         )
-                                                        .delay_true_if_then_else(
+                                                        .delayed_if_then_else(
                                                             Term::mk_cons()
                                                                 .apply(Term::var("n"))
-                                                                .apply(Term::empty_list()),
-                                                            Term::var("clauses_delayed"),
-                                                        )
-                                                        .lambda("x")
-                                                        .apply(
-                                                            Term::head_list()
-                                                                .apply(Term::var("tail_1")),
-                                                        )
-                                                        .lambda("n")
-                                                        .apply(
-                                                            Term::head_list()
-                                                                .apply(Term::var("self")),
-                                                        ),
-                                                    Term::var("clauses_delayed"),
-                                                )
-                                                .lambda("clauses_delayed")
-                                                .apply(
-                                                    Term::var("tail_2")
-                                                        .delayed_choose_list(
+                                                                .apply(Term::empty_list())
+                                                                .lambda("x")
+                                                                .apply(
+                                                                    Term::head_list()
+                                                                        .apply(Term::var("tail_1")),
+                                                                ),
                                                             Term::mk_cons()
                                                                 .apply(Term::var("x"))
                                                                 .apply(Term::empty_list())
@@ -5496,30 +5483,26 @@ fn list_clause_with_assign() {
                                                                 .apply(
                                                                     Term::head_list()
                                                                         .apply(Term::var("tail_1")),
-                                                                )
-                                                                .lambda("a")
-                                                                .apply(
-                                                                    Term::head_list()
-                                                                        .apply(Term::var("self")),
                                                                 ),
-                                                            Term::var("c").lambda("c").apply(
-                                                                Term::tail_list()
-                                                                    .apply(Term::var("tail_1"))
-                                                                    .lambda("b")
-                                                                    .apply(
-                                                                        Term::head_list().apply(
-                                                                            Term::var("tail_1"),
-                                                                        ),
-                                                                    )
-                                                                    .lambda("a")
-                                                                    .apply(
-                                                                        Term::head_list().apply(
-                                                                            Term::var("self"),
-                                                                        ),
-                                                                    ),
-                                                            ),
                                                         )
-                                                        .delay(),
+                                                        .lambda("n")
+                                                        .apply(
+                                                            Term::head_list()
+                                                                .apply(Term::var("self")),
+                                                        ),
+                                                    Term::var("c")
+                                                        .lambda("c")
+                                                        .apply(Term::var("tail_2"))
+                                                        .lambda("b")
+                                                        .lambda("a")
+                                                        .apply(
+                                                            Term::head_list()
+                                                                .apply(Term::var("self")),
+                                                        )
+                                                        .apply(
+                                                            Term::head_list()
+                                                                .apply(Term::var("tail_1")),
+                                                        ),
                                                 )
                                                 .lambda("tail_2")
                                                 .apply(
