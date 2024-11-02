@@ -4151,43 +4151,38 @@ fn generic_validator_type_test() {
                 Term::snd_pair()
                     .apply(Term::unconstr_data().apply(Term::Var(purpose)))
                     .as_var("tail_id_10", |tail_id_10| {
-                        Term::head_list()
-                            .apply(Term::Var(tail_id_10.clone()))
-                            .as_var("__purpose_arg__", |_purpose_arg| {
-                                Term::head_list()
-                                    .apply(Term::tail_list().apply(Term::Var(tail_id_10.clone())))
-                                    .as_var("__datum__", |_datum| {
-                                        let body_part = body(redeemer.clone()).delay().as_var(
-                                            "then_delayed",
-                                            |then_delayed| {
-                                                when_constr_arity_2(
-                                                    redeemer.clone(),
-                                                    expect_no_a(
-                                                        redeemer.clone(),
-                                                        then_delayed.clone(),
-                                                        trace,
-                                                    ),
-                                                    expect_some_a(
-                                                        redeemer.clone(),
-                                                        then_delayed.clone(),
-                                                        trace,
-                                                    ),
-                                                    trace,
-                                                )
-                                            },
-                                        );
+                        let body_part =
+                            body(redeemer.clone())
+                                .delay()
+                                .as_var("then_delayed", |then_delayed| {
+                                    when_constr_arity_2(
+                                        redeemer.clone(),
+                                        expect_no_a(redeemer.clone(), then_delayed.clone(), trace),
+                                        expect_some_a(
+                                            redeemer.clone(),
+                                            then_delayed.clone(),
+                                            trace,
+                                        ),
+                                        trace,
+                                    )
+                                });
 
-                                        if trace {
-                                            Term::choose_data_constr(
-                                                redeemer.clone(),
-                                                |_| body_part,
-                                                &Term::var("r:A<B>"),
-                                            )
-                                        } else {
-                                            body_part
-                                        }
-                                    })
-                            })
+                        if trace {
+                            Term::choose_data_constr(
+                                redeemer.clone(),
+                                |_| body_part,
+                                &Term::var("r:A<B>"),
+                            )
+                        } else {
+                            body_part
+                        }
+                        .lambda("__datum__")
+                        .lambda("__purpose_arg__")
+                        .apply(Term::head_list().apply(Term::Var(tail_id_10.clone())))
+                        .apply(
+                            Term::head_list()
+                                .apply(Term::tail_list().apply(Term::Var(tail_id_10.clone()))),
+                        )
                     }),
                 Term::Error,
             )
