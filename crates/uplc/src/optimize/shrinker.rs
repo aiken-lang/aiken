@@ -150,7 +150,7 @@ impl VarLookup {
 }
 
 impl DefaultFunction {
-    pub fn is_order_agnostic_builtin(self) -> bool {
+    pub fn is_order_agnostic_builtin_2(self) -> bool {
         matches!(
             self,
             DefaultFunction::AddInteger
@@ -166,7 +166,7 @@ impl DefaultFunction {
         )
     }
     /// For now all of the curry builtins are not forceable
-    pub fn can_curry_builtin(self) -> bool {
+    pub fn can_curry_builtin_2(self) -> bool {
         matches!(
             self,
             DefaultFunction::AddInteger
@@ -197,7 +197,7 @@ impl DefaultFunction {
         )
     }
 
-    pub fn is_error_safe(self, arg_stack: &[&Term<Name>]) -> bool {
+    pub fn is_error_safe_1(self, arg_stack: &[&Term<Name>]) -> bool {
         match self {
             DefaultFunction::AddInteger
             | DefaultFunction::SubtractInteger
@@ -361,7 +361,7 @@ impl BuiltinArgs {
 
         let mut ordered_arg_stack = stack.into_iter().sorted_by(|(_, arg1), (_, arg2)| {
             // sort by constant first if the builtin is order agnostic
-            if func.is_order_agnostic_builtin() {
+            if func.is_order_agnostic_builtin_2() {
                 if matches!(arg1, Term::Constant(_)) == matches!(arg2, Term::Constant(_)) {
                     Ordering::Equal
                 } else if matches!(arg1, Term::Constant(_)) {
@@ -374,7 +374,7 @@ impl BuiltinArgs {
             }
         });
 
-        if ordered_arg_stack.len() == 2 && func.is_order_agnostic_builtin() {
+        if ordered_arg_stack.len() == 2 && func.is_order_agnostic_builtin_2() {
             // This is the special case where the order of args is irrelevant to the builtin
             // An example is addInteger or multiplyInteger
             BuiltinArgs::TwoArgsAnyOrder {
@@ -853,7 +853,7 @@ impl CurriedBuiltin {
 }
 
 impl Term<Name> {
-    fn traverse_uplc_with_helper(
+    fn traverse_uplc_with_helper_2(
         &mut self,
         scope: &Scope,
         mut arg_stack: Vec<(usize, Term<Name>)>,
@@ -865,7 +865,7 @@ impl Term<Name> {
             Term::Apply { function, argument } => {
                 let arg = Rc::make_mut(argument);
 
-                Self::traverse_uplc_with_helper(
+                Self::traverse_uplc_with_helper_2(
                     arg,
                     &scope.push(ScopePath::ARG),
                     vec![],
@@ -879,7 +879,7 @@ impl Term<Name> {
 
                 let func = Rc::make_mut(function);
 
-                Self::traverse_uplc_with_helper(
+                Self::traverse_uplc_with_helper_2(
                     func,
                     &scope.push(ScopePath::FUNC),
                     arg_stack,
@@ -895,7 +895,7 @@ impl Term<Name> {
             Term::Delay(d) => {
                 let d = Rc::make_mut(d);
                 // First we recurse further to reduce the inner terms before coming back up to the Delay
-                Self::traverse_uplc_with_helper(d, scope, arg_stack, id_gen, with, inline_lambda);
+                Self::traverse_uplc_with_helper_2(d, scope, arg_stack, id_gen, with, inline_lambda);
                 with(None, self, vec![], scope);
             }
             Term::Lambda {
@@ -922,7 +922,7 @@ impl Term<Name> {
                             body,
                         } if parameter_name.as_ref() == &p => {
                             let body = Rc::make_mut(body);
-                            Self::traverse_uplc_with_helper(
+                            Self::traverse_uplc_with_helper_2(
                                 body,
                                 scope,
                                 arg_stack,
@@ -934,7 +934,7 @@ impl Term<Name> {
 
                         Term::Constr { .. } => todo!(),
                         Term::Case { .. } => todo!(),
-                        other => Self::traverse_uplc_with_helper(
+                        other => Self::traverse_uplc_with_helper_2(
                             other,
                             scope,
                             arg_stack,
@@ -946,7 +946,7 @@ impl Term<Name> {
                 } else {
                     let body = Rc::make_mut(body);
 
-                    Self::traverse_uplc_with_helper(
+                    Self::traverse_uplc_with_helper_2(
                         body,
                         scope,
                         arg_stack,
@@ -961,7 +961,7 @@ impl Term<Name> {
 
             Term::Force(f) => {
                 let f = Rc::make_mut(f);
-                Self::traverse_uplc_with_helper(f, scope, arg_stack, id_gen, with, inline_lambda);
+                Self::traverse_uplc_with_helper_2(f, scope, arg_stack, id_gen, with, inline_lambda);
                 with(None, self, vec![], scope);
             }
             Term::Case { .. } => todo!(),
@@ -984,7 +984,7 @@ impl Term<Name> {
         }
     }
 
-    pub fn pierce_no_inlines(&self) -> &Self {
+    pub fn pierce_no_inlines_2(&self) -> &Self {
         let mut term = self;
 
         while let Term::Lambda {
@@ -1004,7 +1004,7 @@ impl Term<Name> {
 }
 
 impl Program<Name> {
-    fn traverse_uplc_with(
+    fn traverse_uplc_with_1(
         self,
         inline_lambda: bool,
         with: &mut impl FnMut(Option<usize>, &mut Term<Name>, Vec<(usize, Term<Name>)>, &Scope),
@@ -1014,17 +1014,17 @@ impl Program<Name> {
         let arg_stack = vec![];
         let mut id_gen = IdGen::new();
 
-        term.traverse_uplc_with_helper(&scope, arg_stack, &mut id_gen, with, inline_lambda);
+        term.traverse_uplc_with_helper_2(&scope, arg_stack, &mut id_gen, with, inline_lambda);
         Program {
             version: self.version,
             term,
         }
     }
 
-    pub fn lambda_reducer(self) -> Self {
+    pub fn lambda_reducer_1(self) -> Self {
         let mut lambda_applied_ids = vec![];
 
-        self.traverse_uplc_with(true, &mut |id, term, mut arg_stack, _scope| {
+        self.traverse_uplc_with_1(true, &mut |id, term, mut arg_stack, _scope| {
             match term {
                 Term::Apply { function, .. } => {
                     // We are applying some arg so now we unwrap the id of the applied arg
@@ -1077,10 +1077,10 @@ impl Program<Name> {
         })
     }
 
-    pub fn builtin_force_reducer(self) -> Self {
+    pub fn builtin_force_reducer_1(self) -> Self {
         let mut builtin_map = IndexMap::new();
 
-        let program = self.traverse_uplc_with(true, &mut |_id, term, _arg_stack, _scope| {
+        let program = self.traverse_uplc_with_1(true, &mut |_id, term, _arg_stack, _scope| {
             if let Term::Force(f) = term {
                 let f = Rc::make_mut(f);
                 match f {
@@ -1138,11 +1138,11 @@ impl Program<Name> {
         Program::<Name>::try_from(program).unwrap()
     }
 
-    pub fn bls381_compressor(self) -> Self {
+    pub fn bls381_compressor_1(self) -> Self {
         let mut blst_p1_list = vec![];
         let mut blst_p2_list = vec![];
 
-        let program = self.traverse_uplc_with(true, &mut |_id, term, _arg_stack, _scope| {
+        let program = self.traverse_uplc_with_1(true, &mut |_id, term, _arg_stack, _scope| {
             if let Term::Constant(con) = term {
                 match con.as_ref() {
                     Constant::Bls12_381G1Element(blst_p1) => {
@@ -1203,9 +1203,9 @@ impl Program<Name> {
         Program::<Name>::try_from(program).unwrap()
     }
 
-    pub fn identity_reducer(self) -> Self {
+    pub fn identity_reducer_1(self) -> Self {
         let mut identity_applied_ids = vec![];
-        self.traverse_uplc_with(true, &mut |id, term, mut arg_stack, _scope| {
+        self.traverse_uplc_with_1(true, &mut |id, term, mut arg_stack, _scope| {
             match term {
                 Term::Apply { function, .. } => {
                     // We are applying some arg so now we unwrap the id of the applied arg
@@ -1311,10 +1311,10 @@ impl Program<Name> {
         })
     }
 
-    pub fn inline_reducer(self) -> Self {
+    pub fn inline_reducer_1(self) -> Self {
         let mut lambda_applied_ids = vec![];
 
-        self.traverse_uplc_with(true, &mut |id, term, mut arg_stack, _scope| match term {
+        self.traverse_uplc_with_1(true, &mut |id, term, mut arg_stack, _scope| match term {
             Term::Apply { function, .. } => {
                 // We are applying some arg so now we unwrap the id of the applied arg
                 let id = id.unwrap();
@@ -1379,20 +1379,24 @@ impl Program<Name> {
         })
     }
 
-    pub fn force_delay_reducer(self) -> Self {
-        self.traverse_uplc_with(true, &mut |_id, term, _arg_stack, _scope| {
+    pub fn force_delay_reducer_1(self) -> Self {
+        self.traverse_uplc_with_1(true, &mut |_id, term, _arg_stack, _scope| {
             if let Term::Force(f) = term {
-                let f = f.as_ref();
-
-                if let Term::Delay(body) = f {
+                if let Term::Delay(body) = f.as_ref() {
                     *term = body.as_ref().clone();
+                }
+            } else if let Term::Delay(d) = term {
+                if let Term::Force(var) = d.as_ref() {
+                    if let Term::Var(_) = var.as_ref() {
+                        *term = var.as_ref().clone();
+                    }
                 }
             }
         })
     }
 
-    pub fn remove_no_inlines(self) -> Self {
-        self.traverse_uplc_with(true, &mut |_, term, _, _| match term {
+    pub fn remove_no_inlines_2(self) -> Self {
+        self.traverse_uplc_with_1(true, &mut |_, term, _, _| match term {
             Term::Lambda {
                 parameter_name,
                 body,
@@ -1401,8 +1405,8 @@ impl Program<Name> {
         })
     }
 
-    pub fn inline_constr_ops(self) -> Self {
-        self.traverse_uplc_with(true, &mut |_, term, _, _| {
+    pub fn inline_constr_ops_2(self) -> Self {
+        self.traverse_uplc_with_1(true, &mut |_, term, _, _| {
             if let Term::Apply { function, argument } = term {
                 if let Term::Var(name) = function.as_ref() {
                     if name.text == CONSTR_FIELDS_EXPOSER {
@@ -1421,10 +1425,10 @@ impl Program<Name> {
         })
     }
 
-    pub fn cast_data_reducer(self) -> Self {
+    pub fn cast_data_reducer_1(self) -> Self {
         let mut applied_ids = vec![];
 
-        self.traverse_uplc_with(true, &mut |id, term, mut arg_stack, _scope| {
+        self.traverse_uplc_with_1(true, &mut |id, term, mut arg_stack, _scope| {
             match term {
                 Term::Apply { function, .. } => {
                     // We are apply some arg so now we unwrap the id of the applied arg
@@ -1549,10 +1553,10 @@ impl Program<Name> {
     }
 
     // Converts subtract integer with a constant to add integer with a negative constant
-    pub fn convert_arithmetic_ops(self) -> Self {
+    pub fn convert_arithmetic_ops_2(self) -> Self {
         let mut constants_to_flip = vec![];
 
-        self.traverse_uplc_with(true, &mut |id, term, arg_stack, _scope| match term {
+        self.traverse_uplc_with_1(true, &mut |id, term, arg_stack, _scope| match term {
             Term::Apply { argument, .. } => {
                 let id = id.unwrap();
 
@@ -1584,7 +1588,7 @@ impl Program<Name> {
         })
     }
 
-    pub fn builtin_curry_reducer(self) -> Self {
+    pub fn builtin_curry_reducer_1(self) -> Self {
         let mut curried_terms = vec![];
         let mut id_mapped_curry_terms: IndexMap<CurriedName, (Scope, Term<Name>, usize)> =
             IndexMap::new();
@@ -1597,9 +1601,9 @@ impl Program<Name> {
         let mut final_ids: IndexMap<Vec<usize>, ()> = IndexMap::new();
 
         let step_a =
-            self.traverse_uplc_with(false, &mut |_id, term, arg_stack, scope| match term {
+            self.traverse_uplc_with_1(false, &mut |_id, term, arg_stack, scope| match term {
                 Term::Builtin(func) => {
-                    if func.can_curry_builtin() && arg_stack.len() == func.arity() {
+                    if func.can_curry_builtin_2() && arg_stack.len() == func.arity() {
                         // In the case of order agnostic builtins we want to sort the args by constant first
                         // This gives us the opportunity to curry constants that often pop up in the code
 
@@ -1704,9 +1708,9 @@ impl Program<Name> {
             });
 
         let mut step_b =
-            step_a.traverse_uplc_with(false, &mut |id, term, mut arg_stack, scope| match term {
+            step_a.traverse_uplc_with_1(false, &mut |id, term, mut arg_stack, scope| match term {
                 Term::Builtin(func) => {
-                    if func.can_curry_builtin() && arg_stack.len() == func.arity() {
+                    if func.can_curry_builtin_2() && arg_stack.len() == func.arity() {
                         let Some(curried_builtin) =
                             curried_terms.iter().find(|curry| curry.func == *func)
                         else {
@@ -1789,18 +1793,18 @@ impl Program<Name> {
         step_b
     }
 
-    pub fn builtin_eval_reducer(self) -> Self {
+    pub fn builtin_eval_reducer_2(self) -> Self {
         let mut applied_ids = vec![];
 
-        self.traverse_uplc_with(false, &mut |id, term, arg_stack, _scope| match term {
+        self.traverse_uplc_with_1(false, &mut |id, term, arg_stack, _scope| match term {
             Term::Builtin(func) => {
                 let args = arg_stack
                     .iter()
                     .map(|(_, term)| term.pierce_no_inlines())
                     .collect_vec();
-                if func.can_curry_builtin()
+                if func.can_curry_builtin_2()
                     && arg_stack.len() == func.arity()
-                    && func.is_error_safe(&args)
+                    && func.is_error_safe_1(&args)
                 {
                     let applied_term =
                         arg_stack
@@ -2097,7 +2101,7 @@ mod tests {
             ),
         };
 
-        compare_optimization(expected, program, |p| p.lambda_reducer());
+        compare_optimization(expected, program, |p| p.lambda_reducer_1());
     }
 
     #[test]
@@ -2114,7 +2118,7 @@ mod tests {
             term: Term::integer(6.into()),
         };
 
-        compare_optimization(expected, program, |p| p.lambda_reducer());
+        compare_optimization(expected, program, |p| p.lambda_reducer_1());
     }
 
     #[test]
@@ -2129,7 +2133,7 @@ mod tests {
             term: Term::add_integer(),
         };
 
-        compare_optimization(expected, program, |p| p.lambda_reducer());
+        compare_optimization(expected, program, |p| p.lambda_reducer_1());
     }
 
     #[test]
@@ -2166,7 +2170,7 @@ mod tests {
                 .apply(Term::bool(false).lambda("x")),
         };
 
-        compare_optimization(expected, program, |p| p.lambda_reducer());
+        compare_optimization(expected, program, |p| p.lambda_reducer_1());
     }
 
     #[test]
@@ -2199,7 +2203,7 @@ mod tests {
                 .apply(Term::tail_list()),
         };
 
-        compare_optimization(expected, program, |p| p.builtin_force_reducer());
+        compare_optimization(expected, program, |p| p.builtin_force_reducer_1());
     }
 
     #[test]
@@ -2244,7 +2248,7 @@ mod tests {
                 .apply(Term::Builtin(DefaultFunction::IfThenElse).force()),
         };
 
-        compare_optimization(expected, program, |p| p.builtin_force_reducer());
+        compare_optimization(expected, program, |p| p.builtin_force_reducer_1());
     }
 
     #[test]
@@ -2285,7 +2289,7 @@ mod tests {
                 .apply(Term::snd_pair()),
         };
 
-        compare_optimization(expected, program, |p| p.builtin_force_reducer());
+        compare_optimization(expected, program, |p| p.builtin_force_reducer_1());
     }
 
     #[test]
@@ -2308,7 +2312,7 @@ mod tests {
                 .apply(Term::byte_string(vec![]).delay()),
         };
 
-        compare_optimization(expected, program, |p| p.identity_reducer());
+        compare_optimization(expected, program, |p| p.identity_reducer_1());
     }
 
     #[test]
@@ -2331,7 +2335,7 @@ mod tests {
                 .apply(Term::byte_string(vec![]).delay()),
         };
 
-        compare_optimization(expected, program, |p| p.identity_reducer());
+        compare_optimization(expected, program, |p| p.identity_reducer_1());
     }
 
     #[test]
@@ -2378,7 +2382,7 @@ mod tests {
                 ),
         };
 
-        compare_optimization(expected, program, |p| p.identity_reducer());
+        compare_optimization(expected, program, |p| p.identity_reducer_1());
     }
 
     #[test]
@@ -2401,7 +2405,7 @@ mod tests {
                 .apply(Term::byte_string(vec![]).delay()),
         };
 
-        compare_optimization(expected, program, |p| p.identity_reducer());
+        compare_optimization(expected, program, |p| p.identity_reducer_1());
     }
 
     #[test]
@@ -2426,7 +2430,7 @@ mod tests {
                 .lambda(NO_INLINE),
         };
 
-        compare_optimization(expected, program, |p| p.identity_reducer());
+        compare_optimization(expected, program, |p| p.identity_reducer_1());
     }
 
     #[test]
@@ -2444,7 +2448,7 @@ mod tests {
             term: Term::sha2_256().apply(Term::byte_string(vec![]).delay()),
         };
 
-        compare_optimization(expected, program, |p| p.inline_reducer());
+        compare_optimization(expected, program, |p| p.inline_reducer_1());
     }
 
     #[test]
@@ -2461,7 +2465,7 @@ mod tests {
             term: Term::sha2_256(),
         };
 
-        compare_optimization(expected, program, |p| p.inline_reducer());
+        compare_optimization(expected, program, |p| p.inline_reducer_1());
     }
 
     #[test]
@@ -2486,7 +2490,7 @@ mod tests {
                 .lambda("x"),
         };
 
-        compare_optimization(expected, program, |p| p.cast_data_reducer());
+        compare_optimization(expected, program, |p| p.cast_data_reducer_1());
     }
 
     #[test]
@@ -2509,7 +2513,7 @@ mod tests {
                 .lambda("x"),
         };
 
-        compare_optimization(expected, program, |p| p.cast_data_reducer());
+        compare_optimization(expected, program, |p| p.cast_data_reducer_1());
     }
 
     #[test]
@@ -2547,7 +2551,7 @@ mod tests {
                 .lambda("g"),
         };
 
-        compare_optimization(expected, program, |p| p.builtin_curry_reducer());
+        compare_optimization(expected, program, |p| p.builtin_curry_reducer_1());
     }
 
     #[test]
@@ -2582,7 +2586,7 @@ mod tests {
                 .apply(Term::integer(5.into())),
         };
 
-        compare_optimization(expected, program, |p| p.builtin_curry_reducer());
+        compare_optimization(expected, program, |p| p.builtin_curry_reducer_1());
     }
 
     #[test]
@@ -2948,7 +2952,7 @@ mod tests {
                 .constr_fields_exposer(),
         };
 
-        compare_optimization(expected, program, |p| p.builtin_curry_reducer());
+        compare_optimization(expected, program, |p| p.builtin_curry_reducer_1());
     }
 
     #[test]
@@ -3023,6 +3027,6 @@ mod tests {
                 ]))),
         };
 
-        compare_optimization(expected, program, |p| p.builtin_curry_reducer());
+        compare_optimization(expected, program, |p| p.builtin_curry_reducer_1());
     }
 }
