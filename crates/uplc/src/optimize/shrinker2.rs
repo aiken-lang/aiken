@@ -1702,9 +1702,14 @@ impl Program<Name> {
     }
     // This one runs the optimizations that are only done a single time
     pub fn run_once_pass(self) -> Self {
-        let (program, context) =
-            self.traverse_uplc_with(&mut |id, term, arg_stack, scope, context| {
+        let program = self
+            .traverse_uplc_with(&mut |id, term, _arg_stack, scope, context| {
                 term.inline_constr_ops(id, vec![], scope, context);
+            })
+            .0;
+
+        let (program, context) =
+            program.traverse_uplc_with(&mut |id, term, arg_stack, scope, context| {
                 term.bls381_compressor(id, vec![], scope, context);
                 term.builtin_force_reducer(id, arg_stack, scope, context);
                 term.remove_inlined_ids(id, vec![], scope, context);
@@ -1768,15 +1773,7 @@ impl Program<Name> {
     }
 
     pub fn clean_up(self) -> Self {
-        self.traverse_uplc_with(&mut |id, term, arg_stack, scope, context| {
-            term.lambda_reducer(id, arg_stack.clone(), scope, context);
-            term.identity_reducer(id, arg_stack.clone(), scope, context);
-            term.inline_reducer(id, arg_stack.clone(), scope, context);
-            term.force_delay_reducer(id, arg_stack.clone(), scope, context);
-            term.cast_data_reducer(id, arg_stack.clone(), scope, context);
-            term.builtin_eval_reducer(id, arg_stack.clone(), scope, context);
-            term.convert_arithmetic_ops(id, arg_stack, scope, context);
-            term.remove_inlined_ids(id, vec![], scope, context);
+        self.traverse_uplc_with(&mut |id, term, _arg_stack, scope, context| {
             term.remove_no_inlines(id, vec![], scope, context);
         })
         .0
