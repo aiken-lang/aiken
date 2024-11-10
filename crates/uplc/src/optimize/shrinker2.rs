@@ -9,7 +9,7 @@ use blst::{blst_p1, blst_p2};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use pallas_primitives::conway::{BigInt, PlutusData};
-use std::{cmp::Ordering, iter, rc::Rc};
+use std::{cmp::Ordering, iter, ops::Neg, rc::Rc};
 
 #[derive(Eq, Hash, PartialEq, Clone, Debug, PartialOrd)]
 pub enum ScopePath {
@@ -927,16 +927,15 @@ impl Term<Name> {
 
                 d.traverse_uplc_with_helper(scope, arg_stack, id_gen, with, context);
 
-                with(None, self, delay_arg, scope, context)
+                with(None, self, delay_arg, scope, context);
             }
             Term::Lambda {
-                parameter_name: p,
+                parameter_name,
                 body,
             } => {
-                let p = p.as_ref().clone();
                 // Lambda pops one item off the arg stack. If there is no item then it is a unsaturated lambda
-                // We also skip NO_INLINE lambdas since those are placeholder lambdas created by codegen
-                let args = if p.text == NO_INLINE {
+                // NO_INLINE lambdas come in with 0 arguments on the arg stack
+                let args = if parameter_name.text == NO_INLINE {
                     vec![]
                 } else {
                     arg_stack
@@ -950,40 +949,44 @@ impl Term<Name> {
 
                 let body = Rc::make_mut(body);
 
-                Self::traverse_uplc_with_helper(body, scope, arg_stack, id_gen, with, context);
+                body.traverse_uplc_with_helper(scope, arg_stack, id_gen, with, context);
 
                 with(None, self, args, scope, context);
 
-                // if inline_lambda {
+                // if lambda_first {
                 //     // Pass in either one or zero args.
                 //     // For lambda we run the function with first then recurse on the body or replaced term
-                //     with(None, self, args, scope);
+
+                //     if p.text.contains("pred") {
+                //         println!("ARG STACK IS {:#?} WITH NAME {}", args, p.text);
+                //     }
+                //     with(None, self, args, scope, context);
 
                 //     match self {
                 //         Term::Lambda {
                 //             parameter_name,
                 //             body,
-                //         } if parameter_name.as_ref() == &p => {
+                //         } if parameter_name.text == p.text && parameter_name.unique == p.unique => {
                 //             let body = Rc::make_mut(body);
-                //             Self::traverse_uplc_with_helper(
-                //                 body,
+                //             body.traverse_uplc_with_helper(
                 //                 scope,
                 //                 arg_stack,
                 //                 id_gen,
                 //                 with,
-                //                 inline_lambda,
+                //                 context,
+                //                 lambda_first,
                 //             );
                 //         }
 
                 //         Term::Constr { .. } => todo!(),
                 //         Term::Case { .. } => todo!(),
-                //         other => Self::traverse_uplc_with_helper(
-                //             other,
+                //         other => other.traverse_uplc_with_helper(
                 //             scope,
                 //             arg_stack,
                 //             id_gen,
                 //             with,
-                //             inline_lambda,
+                //             context,
+                //             lambda_first,
                 //         ),
                 //     }
                 // } else {
@@ -1137,7 +1140,8 @@ impl Term<Name> {
         mut arg_stack: Vec<Args>,
         _scope: &Scope,
         context: &mut Context,
-    ) {
+    ) -> bool {
+        let mut changed = false;
         match self {
             Term::Lambda {
                 parameter_name,
@@ -1158,10 +1162,12 @@ impl Term<Name> {
 
                         _ => false,
                     };
+                    changed = replace;
 
                     if replace {
                         let body = Rc::make_mut(body);
                         context.inlined_apply_ids.push(arg_id);
+
                         body.substitute_var(parameter_name.clone(), &arg_term);
                         // creates new body that replaces all var occurrences with the arg
                         *self = std::mem::replace(body, Term::Error.force());
@@ -1172,7 +1178,9 @@ impl Term<Name> {
             Term::Case { .. } => todo!(),
             Term::Constr { .. } => todo!(),
             _ => (),
-        }
+        };
+
+        changed
     }
 
     // IMPORTANT: RUNS ONE TIME
@@ -1244,7 +1252,9 @@ impl Term<Name> {
         mut arg_stack: Vec<Args>,
         _scope: &Scope,
         context: &mut Context,
-    ) {
+    ) -> bool {
+        let mut changed = false;
+
         match self {
             Term::Lambda {
                 parameter_name,
@@ -1272,7 +1282,7 @@ impl Term<Name> {
                     _ => (0, &temp),
                 } {
                     let Term::Var(identity_var) = identity_body.as_ref() else {
-                        return;
+                        return false;
                     };
 
                     if identity_var.text == identity_name.text
@@ -1286,6 +1296,7 @@ impl Term<Name> {
                             .var_occurrences(parameter_name.clone(), vec![], vec![])
                             .found
                         {
+                            changed = true;
                             context.inlined_apply_ids.push(arg_id);
                             *self = std::mem::replace(body, Term::Error.force());
                         }
@@ -1295,7 +1306,9 @@ impl Term<Name> {
             Term::Constr { .. } => todo!(),
             Term::Case { .. } => todo!(),
             _ => (),
-        }
+        };
+
+        changed
     }
 
     fn inline_reducer(
@@ -1304,7 +1317,9 @@ impl Term<Name> {
         mut arg_stack: Vec<Args>,
         _scope: &Scope,
         context: &mut Context,
-    ) {
+    ) -> bool {
+        let mut changed = false;
+
         match self {
             Term::Lambda {
                 parameter_name,
@@ -1335,6 +1350,7 @@ impl Term<Name> {
                         );
 
                     if var_lookup.occurrences == 1 && substitute_condition {
+                        changed = true;
                         body.substitute_var(parameter_name.clone(), &arg_term);
 
                         context.inlined_apply_ids.push(arg_id);
@@ -1351,6 +1367,7 @@ impl Term<Name> {
                                 | Term::Builtin(_)
                         )
                     {
+                        changed = true;
                         context.inlined_apply_ids.push(arg_id);
                         *self = std::mem::replace(body, Term::Error.force());
                     }
@@ -1359,7 +1376,8 @@ impl Term<Name> {
             Term::Constr { .. } => todo!(),
             Term::Case { .. } => todo!(),
             _ => {}
-        }
+        };
+        changed
     }
 
     fn force_delay_reducer(
@@ -1368,19 +1386,23 @@ impl Term<Name> {
         mut arg_stack: Vec<Args>,
         _scope: &Scope,
         context: &mut Context,
-    ) {
+    ) -> bool {
+        let mut changed = false;
         if let Term::Delay(d) = self {
             if let Some(Args::Force(id)) = arg_stack.pop() {
+                changed = true;
                 context.inlined_apply_ids.push(id);
                 *self = std::mem::replace(Rc::make_mut(d), Term::Error.force())
             } else {
                 if let Term::Force(var) = d.as_ref() {
                     if let Term::Var(_) = var.as_ref() {
+                        changed = true;
                         *self = var.as_ref().clone();
                     }
                 }
             }
         }
+        changed
     }
 
     fn remove_no_inlines(
@@ -1431,11 +1453,13 @@ impl Term<Name> {
         mut arg_stack: Vec<Args>,
         _scope: &Scope,
         context: &mut Context,
-    ) {
+    ) -> bool {
+        let mut changed = false;
+
         match self {
             Term::Builtin(first_function) => {
                 let Some(Args::Apply(arg_id, mut arg_term)) = arg_stack.pop() else {
-                    return;
+                    return false;
                 };
 
                 match &mut arg_term {
@@ -1450,6 +1474,7 @@ impl Term<Name> {
                                 | (DefaultFunction::UnListData, DefaultFunction::ListData)
                                 | (DefaultFunction::MapData, DefaultFunction::UnMapData)
                                 | (DefaultFunction::UnMapData, DefaultFunction::MapData) => {
+                                    changed = true;
                                     context.inlined_apply_ids.push(arg_id);
                                     *self = std::mem::replace(
                                         Rc::make_mut(argument),
@@ -1465,22 +1490,27 @@ impl Term<Name> {
                             DefaultFunction::UnIData,
                             Constant::Data(PlutusData::BigInt(BigInt::Int(i))),
                         ) => {
+                            changed = true;
                             context.inlined_apply_ids.push(arg_id);
                             *self = Term::integer(i128::from(*i).into());
                         }
                         (DefaultFunction::IData, Constant::Integer(i)) => {
+                            changed = true;
                             context.inlined_apply_ids.push(arg_id);
                             *self = Term::data(Data::integer(i.clone()));
                         }
                         (DefaultFunction::UnBData, Constant::Data(PlutusData::BoundedBytes(b))) => {
+                            changed = true;
                             context.inlined_apply_ids.push(arg_id);
                             *self = Term::byte_string(b.clone().into());
                         }
                         (DefaultFunction::BData, Constant::ByteString(b)) => {
+                            changed = true;
                             context.inlined_apply_ids.push(arg_id);
                             *self = Term::data(Data::bytestring(b.clone()));
                         }
                         (DefaultFunction::UnListData, Constant::Data(PlutusData::Array(l))) => {
+                            changed = true;
                             context.inlined_apply_ids.push(arg_id);
                             *self = Term::list_values(
                                 l.iter()
@@ -1489,6 +1519,7 @@ impl Term<Name> {
                             );
                         }
                         (DefaultFunction::ListData, Constant::ProtoList(_, l)) => {
+                            changed = true;
                             context.inlined_apply_ids.push(arg_id);
                             *self = Term::data(Data::list(
                                 l.iter()
@@ -1500,6 +1531,7 @@ impl Term<Name> {
                             ));
                         }
                         (DefaultFunction::MapData, Constant::ProtoList(_, m)) => {
+                            changed = true;
                             context.inlined_apply_ids.push(arg_id);
                             *self = Term::data(Data::map(
                                 m.iter()
@@ -1518,6 +1550,7 @@ impl Term<Name> {
                             ));
                         }
                         (DefaultFunction::UnMapData, Constant::Data(PlutusData::Map(m))) => {
+                            changed = true;
                             context.inlined_apply_ids.push(arg_id);
                             *self = Term::map_values(
                                 m.iter()
@@ -1541,6 +1574,7 @@ impl Term<Name> {
             Term::Case { .. } => todo!(),
             _ => {}
         }
+        changed
     }
 
     // Converts subtract integer with a constant to add integer with a negative constant
@@ -1550,13 +1584,15 @@ impl Term<Name> {
         arg_stack: Vec<Args>,
         _scope: &Scope,
         context: &mut Context,
-    ) {
+    ) -> bool {
+        let mut changed = false;
         match self {
             Term::Builtin(d @ DefaultFunction::SubtractInteger) => {
                 if arg_stack.len() == d.arity() {
                     let Some(Args::Apply(apply_id, Term::Constant(_))) = arg_stack.last() else {
-                        return;
+                        return false;
                     };
+                    changed = true;
                     context.constants_to_flip.push(*apply_id);
 
                     *self = Term::Builtin(DefaultFunction::AddInteger);
@@ -1566,6 +1602,7 @@ impl Term<Name> {
             Term::Case { .. } => todo!(),
             _ => {}
         }
+        changed
     }
 
     fn builtin_eval_reducer(
@@ -1574,7 +1611,9 @@ impl Term<Name> {
         mut arg_stack: Vec<Args>,
         _scope: &Scope,
         context: &mut Context,
-    ) {
+    ) -> bool {
+        let mut changed = false;
+
         match self {
             Term::Builtin(func) => {
                 arg_stack = arg_stack
@@ -1592,10 +1631,11 @@ impl Term<Name> {
                         term.pierce_no_inlines()
                     })
                     .collect_vec();
-                if func.can_curry_builtin_2()
+                if func.can_curry_builtin()
                     && arg_stack.len() == func.arity()
-                    && func.is_error_safe_1(&args)
+                    && func.is_error_safe(&args)
                 {
+                    changed = true;
                     let applied_term =
                         arg_stack
                             .into_iter()
@@ -1628,6 +1668,7 @@ impl Term<Name> {
             Term::Case { .. } => todo!(),
             _ => (),
         }
+        changed
     }
 
     fn remove_inlined_ids(
@@ -1647,6 +1688,33 @@ impl Term<Name> {
                 if context.inlined_apply_ids.contains(&id) {
                     let func = Rc::make_mut(function);
                     *self = std::mem::replace(func, Term::Error.force());
+                }
+            }
+            _ => (),
+        }
+    }
+
+    fn flip_constants(
+        &mut self,
+        id: Option<usize>,
+        _arg_stack: Vec<Args>,
+        _scope: &Scope,
+        context: &mut Context,
+    ) {
+        match self {
+            Term::Apply { argument, .. } => {
+                let id = id.unwrap();
+
+                if context.constants_to_flip.contains(&id) {
+                    let Term::Constant(c) = Rc::make_mut(argument) else {
+                        unreachable!();
+                    };
+
+                    let Constant::Integer(i) = c.as_ref() else {
+                        unreachable!();
+                    };
+
+                    *c = Constant::Integer(i.neg()).into();
                 }
             }
             _ => (),
@@ -1761,13 +1829,40 @@ impl Program<Name> {
 
     pub fn multi_pass(self) -> (Self, Context) {
         self.traverse_uplc_with(&mut |id, term, arg_stack, scope, context| {
-            term.lambda_reducer(id, arg_stack.clone(), scope, context);
-            term.identity_reducer(id, arg_stack.clone(), scope, context);
-            term.inline_reducer(id, arg_stack.clone(), scope, context);
-            term.force_delay_reducer(id, arg_stack.clone(), scope, context);
-            term.cast_data_reducer(id, arg_stack.clone(), scope, context);
-            term.builtin_eval_reducer(id, arg_stack.clone(), scope, context);
+            let mut changed;
+
+            changed = term.lambda_reducer(id, arg_stack.clone(), scope, context);
+            if changed {
+                term.remove_inlined_ids(id, vec![], scope, context);
+                return;
+            }
+            changed = term.identity_reducer(id, arg_stack.clone(), scope, context);
+            if changed {
+                term.remove_inlined_ids(id, vec![], scope, context);
+                return;
+            }
+            changed = term.inline_reducer(id, arg_stack.clone(), scope, context);
+            if changed {
+                term.remove_inlined_ids(id, vec![], scope, context);
+                return;
+            }
+            changed = term.force_delay_reducer(id, arg_stack.clone(), scope, context);
+            if changed {
+                term.remove_inlined_ids(id, vec![], scope, context);
+                return;
+            }
+            changed = term.cast_data_reducer(id, arg_stack.clone(), scope, context);
+            if changed {
+                term.remove_inlined_ids(id, vec![], scope, context);
+                return;
+            }
+            changed = term.builtin_eval_reducer(id, arg_stack.clone(), scope, context);
+            if changed {
+                term.remove_inlined_ids(id, vec![], scope, context);
+                return;
+            }
             term.convert_arithmetic_ops(id, arg_stack, scope, context);
+            term.flip_constants(id, vec![], scope, context);
             term.remove_inlined_ids(id, vec![], scope, context);
         })
     }
@@ -1911,7 +2006,7 @@ impl Program<Name> {
         let (mut step_b, _) =
             step_a.traverse_uplc_with(&mut |id, term, arg_stack, scope, _context| match term {
                 Term::Builtin(func) => {
-                    if func.can_curry_builtin_2() && arg_stack.len() == func.arity() {
+                    if func.can_curry_builtin() && arg_stack.len() == func.arity() {
                         let mut arg_stack = arg_stack
                             .into_iter()
                             .map(|item| {

@@ -5,9 +5,9 @@ pub mod shrinker;
 pub mod shrinker2;
 
 pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
-    println!("PROG IS {}", program.to_pretty());
+    // println!("PROG IS {}", program.to_pretty());
     let mut prog = program.run_once_pass();
-    println!("PROG IS {}", prog.to_pretty());
+    // println!("PROG IS {}", prog.to_pretty());
     let mut prev_count = 0;
 
     loop {
@@ -21,7 +21,7 @@ pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
             prev_count = context.node_count;
         }
     }
-    println!("PROG IS {}", prog.to_pretty());
+    // println!("PROG IS {}", prog.to_pretty());
 
     prog = prog
         .builtin_curry_reducer()
@@ -29,7 +29,7 @@ pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
         .0
         .builtin_curry_reducer();
 
-    println!("PROG IS {}", prog.to_pretty());
+    // println!("PROG IS {}", prog.to_pretty());
 
     loop {
         let (current_program, context) = prog.multi_pass();
@@ -43,15 +43,16 @@ pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
         }
     }
 
-    println!("PROG IS {}", prog.to_pretty());
+    // println!("PROG IS {}", prog.to_pretty());
 
     let x = prog.clean_up();
 
-    println!("PROG IS {}", x.to_pretty());
+    // println!("PROG IS {}", x.to_pretty());
 
     x
 
-    // prog.lambda_reducer_1()
+    // prog.
+    // lambda_reducer_1()
     //     .inline_reducer_1()
     //     .identity_reducer_1()
     //     .lambda_reducer_1()
