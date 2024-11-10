@@ -362,7 +362,7 @@ impl BuiltinArgs {
 
         let mut ordered_arg_stack = stack.into_iter().sorted_by(|(_, arg1), (_, arg2)| {
             // sort by constant first if the builtin is order agnostic
-            if func.is_order_agnostic_builtin_2() {
+            if func.is_order_agnostic_builtin() {
                 if matches!(arg1, Term::Constant(_)) == matches!(arg2, Term::Constant(_)) {
                     Ordering::Equal
                 } else if matches!(arg1, Term::Constant(_)) {
@@ -375,7 +375,7 @@ impl BuiltinArgs {
             }
         });
 
-        if ordered_arg_stack.len() == 2 && func.is_order_agnostic_builtin_2() {
+        if ordered_arg_stack.len() == 2 && func.is_order_agnostic_builtin() {
             // This is the special case where the order of args is irrelevant to the builtin
             // An example is addInteger or multiplyInteger
             BuiltinArgs::TwoArgsAnyOrder {
