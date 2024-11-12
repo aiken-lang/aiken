@@ -1400,12 +1400,10 @@ impl Term<Name> {
                 changed = true;
                 context.inlined_apply_ids.push(id);
                 *self = std::mem::replace(Rc::make_mut(d), Term::Error.force())
-            } else {
-                if let Term::Force(var) = d.as_ref() {
-                    if let Term::Var(_) = var.as_ref() {
-                        changed = true;
-                        *self = var.as_ref().clone();
-                    }
+            } else if let Term::Force(var) = d.as_ref() {
+                if let Term::Var(_) = var.as_ref() {
+                    changed = true;
+                    *self = var.as_ref().clone();
                 }
             }
         }
@@ -1708,23 +1706,20 @@ impl Term<Name> {
         _scope: &Scope,
         context: &mut Context,
     ) {
-        match self {
-            Term::Apply { argument, .. } => {
-                let id = id.unwrap();
+        if let Term::Apply { argument, .. } = self {
+            let id = id.unwrap();
 
-                if context.constants_to_flip.contains(&id) {
-                    let Term::Constant(c) = Rc::make_mut(argument) else {
-                        unreachable!();
-                    };
+            if context.constants_to_flip.contains(&id) {
+                let Term::Constant(c) = Rc::make_mut(argument) else {
+                    unreachable!();
+                };
 
-                    let Constant::Integer(i) = c.as_ref() else {
-                        unreachable!();
-                    };
+                let Constant::Integer(i) = c.as_ref() else {
+                    unreachable!();
+                };
 
-                    *c = Constant::Integer(i.neg()).into();
-                }
+                *c = Constant::Integer(i.neg()).into();
             }
-            _ => (),
         }
     }
 
