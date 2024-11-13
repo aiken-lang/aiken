@@ -9,6 +9,7 @@
 
 ### Changed
 
+- **aiken**: Fix validator selection for `apply`, `address` and `policy` commands. Parameters are also now correctly applied to all handlers of a given validator, instead of needing to be manually targetted one-by-one. @KtorZ
 - **aiken**: Add more flexibility around the management of Plutus blueprint files for `build`, `address`, `policy` and `apply` commands. See [#1055](https://github.com/aiken-lang/aiken/issues/1055). @KtorZ
 - **aiken**: Rename `--filter_traces` to `--trace_filter` for more consistency with `--trace_level`. An alias for `--filter_traces` still exists for backward compatibility. @KtorZ
 - **aiken-project**: Fix `aiken docs` wrongly formatting list constants as tuples. See [#1048](https://github.com/aiken-lang/aiken/issues/1048). @KtorZ

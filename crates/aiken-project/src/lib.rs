@@ -448,8 +448,9 @@ where
 
     pub fn address(
         &self,
-        title: Option<&String>,
-        stake_address: Option<&String>,
+        module_name: Option<&str>,
+        validator_name: Option<&str>,
+        stake_address: Option<&str>,
         blueprint_path: &Path,
         mainnet: bool,
     ) -> Result<ShelleyAddress, Error> {
@@ -481,35 +482,39 @@ where
             |known_validators| Error::MoreThanOneValidatorFound { known_validators };
         let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
 
-        blueprint.with_validator(title, when_too_many, when_missing, |validator| {
-            // Make sure we're not calculating the address for a minting validator
-            if let Some(title) = title {
-                if !title.ends_with("else") && !title.ends_with("spend") {
-                    return Err(blueprint::error::Error::UnexpectedMintingValidator.into());
-                }
-            }
+        blueprint.with_validator(
+            module_name,
+            validator_name,
+            when_too_many,
+            when_missing,
+            |validator| {
+                let n = validator.parameters.len();
 
-            let n = validator.parameters.len();
-
-            if n > 0 {
-                Err(blueprint::error::Error::ParameterizedValidator { n }.into())
-            } else {
-                let network = if mainnet {
-                    Network::Mainnet
+                if n > 0 {
+                    Err(blueprint::error::Error::ParameterizedValidator { n }.into())
                 } else {
-                    Network::Testnet
-                };
+                    let network = if mainnet {
+                        Network::Mainnet
+                    } else {
+                        Network::Testnet
+                    };
 
-                Ok(validator.program.inner().address(
-                    network,
-                    delegation_part.to_owned(),
-                    &self.config.plutus.into(),
-                ))
-            }
-        })
+                    Ok(validator.program.inner().address(
+                        network,
+                        delegation_part.to_owned(),
+                        &self.config.plutus.into(),
+                    ))
+                }
+            },
+        )
     }
 
-    pub fn policy(&self, title: Option<&String>, blueprint_path: &Path) -> Result<PolicyId, Error> {
+    pub fn policy(
+        &self,
+        module_name: Option<&str>,
+        validator_name: Option<&str>,
+        blueprint_path: &Path,
+    ) -> Result<PolicyId, Error> {
         // Read blueprint
         let blueprint = File::open(blueprint_path)
             .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
@@ -520,19 +525,20 @@ where
             |known_validators| Error::MoreThanOneValidatorFound { known_validators };
         let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
 
-        blueprint.with_validator(title, when_too_many, when_missing, |validator| {
-            // Make sure we're not calculating the policy for a spending validator
-            if validator.datum.is_some() {
-                return Err(blueprint::error::Error::UnexpectedSpendingValidator.into());
-            }
-
-            let n = validator.parameters.len();
-            if n > 0 {
-                Err(blueprint::error::Error::ParameterizedValidator { n }.into())
-            } else {
-                Ok(validator.program.compiled_code_and_hash().1)
-            }
-        })
+        blueprint.with_validator(
+            module_name,
+            validator_name,
+            when_too_many,
+            when_missing,
+            |validator| {
+                let n = validator.parameters.len();
+                if n > 0 {
+                    Err(blueprint::error::Error::ParameterizedValidator { n }.into())
+                } else {
+                    Ok(validator.program.compiled_code_and_hash().1)
+                }
+            },
+        )
     }
 
     pub fn export(&self, module: &str, name: &str, tracing: Tracing) -> Result<Export, Error> {
@@ -571,7 +577,8 @@ where
 
     pub fn construct_parameter_incrementally<F>(
         &self,
-        title: Option<&String>,
+        module_name: Option<&str>,
+        validator_name: Option<&str>,
         blueprint_path: &Path,
         ask: F,
     ) -> Result<PlutusData, Error>
@@ -591,18 +598,25 @@ where
             |known_validators| Error::MoreThanOneValidatorFound { known_validators };
         let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
 
-        let data = blueprint.with_validator(title, when_too_many, when_missing, |validator| {
-            validator
-                .ask_next_parameter(&blueprint.definitions, &ask)
-                .map_err(|e| e.into())
-        })?;
+        let data = blueprint.with_validator(
+            module_name,
+            validator_name,
+            when_too_many,
+            when_missing,
+            |validator| {
+                validator
+                    .ask_next_parameter(&blueprint.definitions, &ask)
+                    .map_err(|e| e.into())
+            },
+        )?;
 
         Ok(data)
     }
 
     pub fn apply_parameter(
         &self,
-        title: Option<&String>,
+        module_name: Option<&str>,
+        validator_name: Option<&str>,
         blueprint_path: &Path,
         param: &PlutusData,
     ) -> Result<Blueprint, Error> {
@@ -616,21 +630,28 @@ where
             |known_validators| Error::MoreThanOneValidatorFound { known_validators };
         let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
 
-        let applied_validator =
-            blueprint.with_validator(title, when_too_many, when_missing, |validator| {
+        let applied_validator = blueprint.with_validator(
+            module_name,
+            validator_name,
+            when_too_many,
+            when_missing,
+            |validator| {
                 validator
+                    .clone()
                     .apply(&blueprint.definitions, param)
                     .map_err(|e| e.into())
-            })?;
+            },
+        )?;
+
+        let prefix = |v: &str| v.split('.').take(2).collect::<Vec<&str>>().join(".");
 
         // Overwrite validator
         blueprint.validators = blueprint
             .validators
             .into_iter()
             .map(|validator| {
-                let same_title = validator.title == applied_validator.title;
-                if same_title {
-                    applied_validator.to_owned()
+                if prefix(&applied_validator.title) == prefix(&validator.title) {
+                    applied_validator.clone()
                 } else {
                     validator
                 }

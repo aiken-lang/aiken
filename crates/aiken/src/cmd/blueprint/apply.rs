@@ -63,18 +63,6 @@ pub fn exec(
     }: Args,
 ) -> miette::Result<()> {
     with_project(None, false, false, |p| {
-        let title = module.as_ref().map(|m| {
-            format!(
-                "{m}{}",
-                validator
-                    .as_ref()
-                    .map(|v| format!(".{v}"))
-                    .unwrap_or_default()
-            )
-        });
-
-        let title = title.as_ref().or(validator.as_ref());
-
         eprintln!(
             "{} blueprint",
             "    Analyzing"
@@ -120,9 +108,12 @@ pub fn exec(
                     })
             }
 
-            None => {
-                p.construct_parameter_incrementally(title, &blueprint_input_path, ask_schema)?
-            }
+            None => p.construct_parameter_incrementally(
+                module.as_deref(),
+                validator.as_deref(),
+                &blueprint_input_path,
+                ask_schema,
+            )?,
         };
 
         eprintln!(
@@ -136,7 +127,12 @@ pub fn exec(
             }
         );
 
-        let blueprint = p.apply_parameter(title, &blueprint_input_path, &data)?;
+        let blueprint = p.apply_parameter(
+            module.as_deref(),
+            validator.as_deref(),
+            &blueprint_input_path,
+            &data,
+        )?;
 
         let json = serde_json::to_string_pretty(&blueprint).unwrap();
 

@@ -143,14 +143,16 @@ where
             return Err(ExitFailure::into_report());
         }
 
-        eprintln!(
-            "{}",
-            Summary {
-                check_count: project.checks_count,
-                error_count: 0,
-                warning_count
-            }
-        );
+        if project.checks_count.unwrap_or_default() + warning_count > 0 {
+            eprintln!(
+                "{}",
+                Summary {
+                    check_count: project.checks_count,
+                    error_count: 0,
+                    warning_count
+                }
+            );
+        }
     }
 
     if warning_count > 0 && deny {

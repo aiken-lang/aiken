@@ -40,18 +40,6 @@ pub fn exec(
         to,
     }: Args,
 ) -> miette::Result<()> {
-    let title = module.as_ref().map(|m| {
-        format!(
-            "{m}{}",
-            validator
-                .as_ref()
-                .map(|v| format!(".{v}"))
-                .unwrap_or_default()
-        )
-    });
-
-    let title = title.as_ref().or(validator.as_ref());
-
     let project_path = if let Some(d) = directory {
         d
     } else {
@@ -80,8 +68,12 @@ pub fn exec(
         |known_validators| ProjectError::MoreThanOneValidatorFound { known_validators };
     let when_missing = |known_validators| ProjectError::NoValidatorNotFound { known_validators };
 
-    let result =
-        blueprint.with_validator(title, when_too_many, when_missing, |validator| match to {
+    let result = blueprint.with_validator(
+        module.as_deref(),
+        validator.as_deref(),
+        when_too_many,
+        when_missing,
+        |validator| match to {
             Format::CardanoCli => {
                 let cbor_bytes = validator.program.inner().to_cbor().unwrap();
 
@@ -99,7 +91,8 @@ pub fn exec(
                     "cborHex": cbor_hex
                 }))
             }
-        });
+        },
+    );
 
     match result {
         Ok(value) => {

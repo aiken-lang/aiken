@@ -37,20 +37,9 @@ pub fn exec(
     }: Args,
 ) -> miette::Result<()> {
     with_project(directory.as_deref(), false, false, |p| {
-        let title = module.as_ref().map(|m| {
-            format!(
-                "{m}{}",
-                validator
-                    .as_ref()
-                    .map(|v| format!(".{v}"))
-                    .unwrap_or_default()
-            )
-        });
-
-        let title = title.as_ref().or(validator.as_ref());
-
         let address = p.address(
-            title,
+            module.as_deref(),
+            validator.as_deref(),
             None,
             p.blueprint_path(input.as_deref()).as_path(),
             false,
