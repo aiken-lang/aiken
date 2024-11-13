@@ -4,7 +4,7 @@ use aiken_lang::{
     ast::OnTestFailure,
     expr::UntypedExpr,
     format::Formatter,
-    test_framework::{PropertyTestResult, TestResult, UnitTestResult},
+    test_framework::{AssertionStyleOptions, PropertyTestResult, TestResult, UnitTestResult},
 };
 use owo_colors::{OwoColorize, Stream::Stderr};
 use uplc::machine::cost_model::ExBudget;
@@ -288,12 +288,12 @@ fn fmt_test(
             test = format!(
                 "{test}\n{}",
                 assertion.to_string(
-                    Stderr,
                     match unit_test.on_test_failure {
                         OnTestFailure::FailImmediately => false,
                         OnTestFailure::SucceedEventually | OnTestFailure::SucceedImmediately =>
                             true,
-                    }
+                    },
+                    &AssertionStyleOptions::new(Some(&Stderr))
                 ),
             );
         }

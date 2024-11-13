@@ -3,9 +3,8 @@ use aiken_lang::{
     ast::OnTestFailure,
     expr::UntypedExpr,
     format::Formatter,
-    test_framework::{PropertyTestResult, TestResult, UnitTestResult},
+    test_framework::{AssertionStyleOptions, PropertyTestResult, TestResult, UnitTestResult},
 };
-use owo_colors::Stream::Stderr;
 use serde_json::json;
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -53,7 +52,7 @@ fn fmt_test_json(result: &TestResult<UntypedExpr, UntypedExpr>) -> serde_json::V
             if !result.is_success() {
                 if let Some(assertion) = assertion {
                     test["assertion"] = json!({
-                        "message": assertion.to_string(Stderr, false),
+                        "message": assertion.to_string(false, &AssertionStyleOptions::new(None)),
                         "expected_to_fail": matches!(unit_test.on_test_failure, OnTestFailure::SucceedEventually | OnTestFailure::SucceedImmediately),
                     });
                 }
