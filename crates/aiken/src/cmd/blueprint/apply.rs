@@ -27,14 +27,22 @@ pub struct Args {
     #[clap(value_name = "CBOR")]
     parameter: Option<String>,
 
-    /// Optional path to the blueprint file to be used as input. Default to 'plutus.json' when
-    /// omitted.
-    #[clap(short, long = "in", value_parser, value_name = "FILEPATH")]
+    /// Optional path to the blueprint file to be used as input.
+    ///
+    /// [default: plutus.json]
+    #[clap(
+        short,
+        long = "in",
+        value_parser,
+        value_name = "FILEPATH",
+        verbatim_doc_comment
+    )]
     input: Option<PathBuf>,
 
-    /// Output file. Optional, print on stdout when omitted.
-    #[clap(short, long, value_name = "FILEPATH")]
-    out: Option<PathBuf>,
+    /// Optional relative filepath to the generated Plutus blueprint. Default to printing to stdout
+    /// when omitted.
+    #[clap(short, long("out"), value_parser, value_name = "FILEPATH")]
+    output: Option<PathBuf>,
 
     /// Name of the validator's module within the project. Optional if there's only one validator.
     #[clap(short, long)]
@@ -49,7 +57,7 @@ pub fn exec(
     Args {
         parameter,
         input,
-        out,
+        output,
         module,
         validator,
     }: Args,
@@ -73,6 +81,8 @@ pub fn exec(
                 .if_supports_color(Stderr, |s| s.purple())
                 .if_supports_color(Stderr, |s| s.bold()),
         );
+
+        let blueprint_input_path = p.blueprint_path(input.as_deref());
 
         let data: PlutusData = match &parameter {
             Some(param) => {
@@ -110,7 +120,9 @@ pub fn exec(
                     })
             }
 
-            None => p.construct_parameter_incrementally(title, &input, ask_schema)?,
+            None => {
+                p.construct_parameter_incrementally(title, &blueprint_input_path, ask_schema)?
+            }
         };
 
         eprintln!(
@@ -124,19 +136,22 @@ pub fn exec(
             }
         );
 
-        let blueprint = p.apply_parameter(title, &data)?;
+        let blueprint = p.apply_parameter(title, &blueprint_input_path, &data)?;
 
         let json = serde_json::to_string_pretty(&blueprint).unwrap();
 
-        match out {
+        match output {
             None => {
                 println!("\n{}\n", json);
                 Ok(())
             }
-            Some(ref path) => fs::write(path, json).map_err(|error| Error::FileIo {
-                error,
-                path: p.blueprint_path(),
-            }),
+            Some(ref path) => {
+                let blueprint_output_path = p.blueprint_path(Some(path));
+                fs::write(&blueprint_output_path, json).map_err(|error| Error::FileIo {
+                    error,
+                    path: blueprint_output_path,
+                })
+            }
         }?;
 
         eprintln!(

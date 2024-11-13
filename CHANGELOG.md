@@ -9,6 +9,7 @@
 
 ### Changed
 
+- **aiken**: Add more flexibility around the management of Plutus blueprint files for `build`, `address`, `policy` and `apply` commands. See [#1055](https://github.com/aiken-lang/aiken/issues/1055). @KtorZ
 - **aiken**: Rename `--filter_traces` to `--trace_filter` for more consistency with `--trace_level`. An alias for `--filter_traces` still exists for backward compatibility. @KtorZ
 - **aiken-project**: Fix `aiken docs` wrongly formatting list constants as tuples. See [#1048](https://github.com/aiken-lang/aiken/issues/1048). @KtorZ
 - **aiken-project**: Fix `aiken docs` source linking crashing when generating docs for config modules. See [#1044](https://github.com/aiken-lang/aiken/issues/1044). @KtorZ

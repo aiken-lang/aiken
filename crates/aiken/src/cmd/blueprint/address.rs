@@ -7,6 +7,18 @@ pub struct Args {
     /// Path to project
     directory: Option<PathBuf>,
 
+    /// Optional path to the Plutus blueprint file to be used as input.
+    ///
+    /// [default: plutus.json]
+    #[clap(
+        short,
+        long = "in",
+        value_parser,
+        value_name = "FILEPATH",
+        verbatim_doc_comment
+    )]
+    input: Option<PathBuf>,
+
     /// Name of the validator's module within the project. Optional if there's only one validator
     #[clap(short, long)]
     module: Option<String>,
@@ -27,6 +39,7 @@ pub struct Args {
 pub fn exec(
     Args {
         directory,
+        input,
         module,
         validator,
         delegated_to,
@@ -46,7 +59,12 @@ pub fn exec(
 
         let title = title.as_ref().or(validator.as_ref());
 
-        let address = p.address(title, delegated_to.as_ref(), mainnet)?;
+        let address = p.address(
+            title,
+            delegated_to.as_ref(),
+            p.blueprint_path(input.as_deref()).as_path(),
+            mainnet,
+        )?;
 
         println!("{}", address.to_bech32().unwrap());
 

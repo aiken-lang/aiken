@@ -192,16 +192,25 @@ where
         self.defined_modules = checkpoint.defined_modules;
     }
 
+    pub fn blueprint_path(&self, filepath: Option<&Path>) -> PathBuf {
+        match filepath {
+            Some(filepath) => filepath.to_path_buf(),
+            None => self.root.join(Options::default().blueprint_path),
+        }
+    }
+
     pub fn build(
         &mut self,
         uplc: bool,
         tracing: Tracing,
+        blueprint_path: PathBuf,
         env: Option<String>,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
             code_gen_mode: CodeGenMode::Build(uplc),
             tracing,
             env,
+            blueprint_path,
         };
 
         self.compile(options)
@@ -282,6 +291,7 @@ where
                     property_max_success,
                 }
             },
+            blueprint_path: self.blueprint_path(None),
         };
 
         self.compile(options)
@@ -305,10 +315,6 @@ where
         }
 
         Ok(())
-    }
-
-    pub fn blueprint_path(&self) -> PathBuf {
-        self.root.join("plutus.json")
     }
 
     fn config_definitions(&mut self, env: Option<&str>) -> Option<Vec<UntypedDefinition>> {
@@ -359,7 +365,7 @@ where
             CodeGenMode::Build(uplc_dump) => {
                 self.event_listener
                     .handle_event(Event::GeneratingBlueprint {
-                        path: self.blueprint_path(),
+                        path: options.blueprint_path.clone(),
                     });
 
                 self.checked_modules.values_mut().for_each(|m| {
@@ -381,10 +387,10 @@ where
 
                 let json = serde_json::to_string_pretty(&blueprint).unwrap();
 
-                fs::write(self.blueprint_path(), json).map_err(|error| {
+                fs::write(options.blueprint_path.as_path(), json).map_err(|error| {
                     Error::FileIo {
                         error,
-                        path: self.blueprint_path(),
+                        path: options.blueprint_path,
                     }
                     .into()
                 })
@@ -444,6 +450,7 @@ where
         &self,
         title: Option<&String>,
         stake_address: Option<&String>,
+        blueprint_path: &Path,
         mainnet: bool,
     ) -> Result<ShelleyAddress, Error> {
         // Parse stake address
@@ -465,7 +472,7 @@ where
         };
 
         // Read blueprint
-        let blueprint = File::open(self.blueprint_path())
+        let blueprint = File::open(blueprint_path)
             .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
         let blueprint: Blueprint = serde_json::from_reader(BufReader::new(blueprint))?;
 
@@ -502,9 +509,9 @@ where
         })
     }
 
-    pub fn policy(&self, title: Option<&String>) -> Result<PolicyId, Error> {
+    pub fn policy(&self, title: Option<&String>, blueprint_path: &Path) -> Result<PolicyId, Error> {
         // Read blueprint
-        let blueprint = File::open(self.blueprint_path())
+        let blueprint = File::open(blueprint_path)
             .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
         let blueprint: Blueprint = serde_json::from_reader(BufReader::new(blueprint))?;
 
@@ -565,7 +572,7 @@ where
     pub fn construct_parameter_incrementally<F>(
         &self,
         title: Option<&String>,
-        blueprint_input: &Option<PathBuf>,
+        blueprint_path: &Path,
         ask: F,
     ) -> Result<PlutusData, Error>
     where
@@ -575,11 +582,6 @@ where
         ) -> Result<PlutusData, blueprint::error::Error>,
     {
         // Read blueprint
-        let project_blueprint_path = self.blueprint_path();
-        let blueprint_path = blueprint_input
-            .as_ref()
-            .map(|p| p.as_path())
-            .unwrap_or_else(|| &project_blueprint_path);
         let blueprint = File::open(blueprint_path)
             .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
         let blueprint: Blueprint = serde_json::from_reader(BufReader::new(blueprint))?;
@@ -601,10 +603,11 @@ where
     pub fn apply_parameter(
         &self,
         title: Option<&String>,
+        blueprint_path: &Path,
         param: &PlutusData,
     ) -> Result<Blueprint, Error> {
         // Read blueprint
-        let blueprint = File::open(self.blueprint_path())
+        let blueprint = File::open(blueprint_path)
             .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
         let mut blueprint: Blueprint = serde_json::from_reader(BufReader::new(blueprint))?;
 

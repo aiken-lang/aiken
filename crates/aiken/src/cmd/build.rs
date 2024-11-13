@@ -25,6 +25,18 @@ pub struct Args {
     #[clap(long)]
     env: Option<String>,
 
+    /// Optional relative filepath to the generated Plutus blueprint.
+    ///
+    /// [default: plutus.json]
+    #[clap(
+        short,
+        long("out"),
+        value_parser,
+        value_name = "FILEPATH",
+        verbatim_doc_comment
+    )]
+    output: Option<PathBuf>,
+
     /// Filter traces to be included in the generated program(s).
     ///
     ///   - user-defined:
@@ -67,6 +79,7 @@ pub fn exec(
         uplc,
         trace_filter,
         trace_level,
+        output,
         env,
     }: Args,
 ) -> miette::Result<()> {
@@ -78,6 +91,7 @@ pub fn exec(
                     Some(trace_filter) => trace_filter(trace_level),
                     None => Tracing::All(trace_level),
                 },
+                p.blueprint_path(output.as_deref()),
                 env.clone(),
             )
         })
@@ -89,6 +103,7 @@ pub fn exec(
                     Some(trace_filter) => trace_filter(trace_level),
                     None => Tracing::All(trace_level),
                 },
+                p.blueprint_path(output.as_deref()),
                 env.clone(),
             )
         })
