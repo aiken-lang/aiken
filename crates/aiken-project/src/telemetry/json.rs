@@ -1,4 +1,4 @@
-use super::{find_max_execution_units, group_by_module, Event, EventListener};
+use super::{group_by_module, Event, EventListener};
 use aiken_lang::{
     ast::OnTestFailure,
     expr::UntypedExpr,
@@ -14,16 +14,28 @@ impl EventListener for Json {
     fn handle_event(&self, event: Event) {
         match event {
             Event::FinishedTests { seed, tests, .. } => {
+                let total = tests.len();
+                let passed = tests.iter().filter(|t| t.is_success()).count();
+                let failed = total - passed;
+
                 let json_output = serde_json::json!({
                     "seed": seed,
+                    "summary": json!({
+                        "total": total,
+                        "passed": passed,
+                        "failed": failed,
+                        "kind": json!({
+                            "unit": count_unit_tests(tests.iter()),
+                            "property": count_property_tests(tests.iter()),
+                        })
+                    }),
                     "modules": group_by_module(&tests).iter().map(|(module, results)| {
                         serde_json::json!({
                             "name": module,
+                            "summary": fmt_test_summary_json(results),
                             "tests": results.iter().map(|r| fmt_test_json(r)).collect::<Vec<_>>(),
-                            "summary": fmt_test_summary_json(results)
                         })
                     }).collect::<Vec<_>>(),
-                    "summary": fmt_overall_summary_json(&tests)
                 });
                 println!("{}", serde_json::to_string_pretty(&json_output).unwrap());
             }
@@ -34,8 +46,8 @@ impl EventListener for Json {
 
 fn fmt_test_json(result: &TestResult<UntypedExpr, UntypedExpr>) -> serde_json::Value {
     let mut test = json!({
-        "name": result.title(),
-        "status": if result.is_success() { "PASS" } else { "FAIL" },
+        "title": result.title(),
+        "status": if result.is_success() { "pass" } else { "fail" },
     });
 
     match result {
@@ -46,14 +58,18 @@ fn fmt_test_json(result: &TestResult<UntypedExpr, UntypedExpr>) -> serde_json::V
             ..
         }) => {
             test["execution_units"] = json!({
-                "memory": spent_budget.mem,
+                "mem": spent_budget.mem,
                 "cpu": spent_budget.cpu,
             });
             if !result.is_success() {
                 if let Some(assertion) = assertion {
                     test["assertion"] = json!({
                         "message": assertion.to_string(false, &AssertionStyleOptions::new(None)),
-                        "expected_to_fail": matches!(unit_test.on_test_failure, OnTestFailure::SucceedEventually | OnTestFailure::SucceedImmediately),
+                        "on_failure": match unit_test.on_test_failure {
+                            OnTestFailure::FailImmediately => "fail_immediately" ,
+                            OnTestFailure::SucceedEventually => "succeed_eventually" ,
+                            OnTestFailure::SucceedImmediately => "succeed_immediately",
+                        }
                     });
                 }
             }
@@ -90,47 +106,27 @@ fn fmt_test_summary_json(tests: &[&TestResult<UntypedExpr, UntypedExpr>]) -> ser
         "total": total,
         "passed": passed,
         "failed": failed,
+        "kind": json!({
+            "unit": count_unit_tests(tests.iter().copied()),
+            "property": count_property_tests(tests.iter().copied())
+        })
     })
 }
 
-fn fmt_overall_summary_json(tests: &[TestResult<UntypedExpr, UntypedExpr>]) -> serde_json::Value {
-    let total = tests.len();
-    let passed = tests.iter().filter(|t| t.is_success()).count();
-    let failed = total - passed;
-
-    let modules = group_by_module(tests);
-    let module_count = modules.len();
-
-    let (max_mem, max_cpu, max_iter) = find_max_execution_units(tests);
-
-    // Separate counts for unit tests and property-based tests
-    let unit_tests = tests
-        .iter()
+fn count_unit_tests<'a, I>(tests: I) -> usize
+where
+    I: Iterator<Item = &'a TestResult<UntypedExpr, UntypedExpr>>,
+{
+    tests
         .filter(|t| matches!(t, TestResult::UnitTestResult { .. }))
-        .count();
-    let property_tests = tests
-        .iter()
-        .filter(|t| matches!(t, TestResult::PropertyTestResult { .. }))
-        .count();
+        .count()
+}
 
-    json!({
-        "total_tests": total,
-        "passed_tests": passed,
-        "failed_tests": failed,
-        "unit_tests": unit_tests,
-        "property_tests": property_tests,
-        "module_count": module_count,
-        "max_execution_units": {
-            "memory": max_mem,
-            "cpu": max_cpu,
-        },
-        "max_iterations": max_iter,
-        "modules": modules.into_iter().map(|(module, results)| {
-            json!({
-                "name": module,
-                "tests": results.iter().map(|r| fmt_test_json(r)).collect::<Vec<_>>(),
-                "summary": fmt_test_summary_json(&results)
-            })
-        }).collect::<Vec<_>>(),
-    })
+fn count_property_tests<'a, I>(tests: I) -> usize
+where
+    I: Iterator<Item = &'a TestResult<UntypedExpr, UntypedExpr>>,
+{
+    tests
+        .filter(|t| matches!(t, TestResult::PropertyTestResult { .. }))
+        .count()
 }
