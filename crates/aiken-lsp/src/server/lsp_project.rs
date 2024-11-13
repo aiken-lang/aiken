@@ -38,7 +38,6 @@ impl LspProject {
             PropertyTest::DEFAULT_MAX_SUCCESS,
             Tracing::verbose(),
             None,
-            false,
         );
 
         self.project.restore(checkpoint);

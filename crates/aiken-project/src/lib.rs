@@ -197,13 +197,11 @@ where
         uplc: bool,
         tracing: Tracing,
         env: Option<String>,
-        json: bool,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
             code_gen_mode: CodeGenMode::Build(uplc),
             tracing,
             env,
-            json,
         };
 
         self.compile(options)
@@ -227,7 +225,7 @@ where
 
         let mut modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(&mut modules, Tracing::silent(), None, false, false)?;
+        self.type_check(&mut modules, Tracing::silent(), None, false)?;
 
         let destination = destination.unwrap_or_else(|| self.root.join("docs"));
 
@@ -269,7 +267,6 @@ where
         property_max_success: usize,
         tracing: Tracing,
         env: Option<String>,
-        json: bool,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
             tracing,
@@ -285,7 +282,6 @@ where
                     property_max_success,
                 }
             },
-            json,
         };
 
         self.compile(options)
@@ -347,7 +343,6 @@ where
                 root: self.root.clone(),
                 name: self.config.name.to_string(),
                 version: self.config.version.clone(),
-                json: options.json,
             });
 
         let env = options.env.as_deref();
@@ -358,7 +353,7 @@ where
 
         let mut modules = self.parse_sources(self.config.name.clone())?;
 
-        self.type_check(&mut modules, options.tracing, env, true, options.json)?;
+        self.type_check(&mut modules, options.tracing, env, true)?;
 
         match options.code_gen_mode {
             CodeGenMode::Build(uplc_dump) => {
@@ -405,8 +400,7 @@ where
                     self.collect_tests(verbose, match_tests, exact_match, options.tracing)?;
 
                 if !tests.is_empty() {
-                    self.event_listener
-                        .handle_event(Event::RunningTests { json: options.json });
+                    self.event_listener.handle_event(Event::RunningTests);
                 }
 
                 let tests = self.run_tests(tests, seed, property_max_success);
@@ -433,11 +427,8 @@ where
                     })
                     .collect();
 
-                self.event_listener.handle_event(Event::FinishedTests {
-                    seed,
-                    tests,
-                    json: options.json,
-                });
+                self.event_listener
+                    .handle_event(Event::FinishedTests { seed, tests });
 
                 if !errors.is_empty() {
                     Err(errors)
@@ -646,11 +637,7 @@ where
         Ok(blueprint)
     }
 
-    fn with_dependencies(
-        &mut self,
-        parsed_packages: &mut ParsedModules,
-        json: bool,
-    ) -> Result<(), Vec<Error>> {
+    fn with_dependencies(&mut self, parsed_packages: &mut ParsedModules) -> Result<(), Vec<Error>> {
         let manifest = deps::download(&self.event_listener, &self.root, &self.config)?;
 
         for package in manifest.packages {
@@ -661,7 +648,6 @@ where
                     root: lib.clone(),
                     name: package.name.to_string(),
                     version: package.version.clone(),
-                    json,
                 });
 
             self.read_package_source_files(&lib.join("lib"))?;
@@ -850,11 +836,10 @@ where
         tracing: Tracing,
         env: Option<&str>,
         validate_module_name: bool,
-        json: bool,
     ) -> Result<(), Vec<Error>> {
         let our_modules: BTreeSet<String> = modules.keys().cloned().collect();
 
-        self.with_dependencies(modules, json)?;
+        self.with_dependencies(modules)?;
 
         for name in modules.sequence(&our_modules)? {
             if let Some(module) = modules.remove(&name) {

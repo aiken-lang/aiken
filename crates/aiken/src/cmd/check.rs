@@ -110,8 +110,6 @@ pub fn exec(
 
     let seed = seed.unwrap_or_else(|| rng.gen());
 
-    let json_output = !io::stdout().is_terminal();
-
     let result = if watch {
         watch_project(directory.as_deref(), watch::default_filter, 500, |p| {
             p.check(
@@ -126,7 +124,6 @@ pub fn exec(
                     None => Tracing::All(trace_level),
                 },
                 env.clone(),
-                json_output,
             )
         })
     } else {
@@ -147,7 +144,6 @@ pub fn exec(
                         None => Tracing::All(trace_level),
                     },
                     env.clone(),
-                    json_output,
                 )
             },
         )

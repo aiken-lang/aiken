@@ -79,7 +79,6 @@ pub fn exec(
                     None => Tracing::All(trace_level),
                 },
                 env.clone(),
-                false,
             )
         })
     } else {
@@ -91,7 +90,6 @@ pub fn exec(
                     None => Tracing::All(trace_level),
                 },
                 env.clone(),
-                false,
             )
         })
     };

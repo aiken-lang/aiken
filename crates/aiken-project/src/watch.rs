@@ -1,4 +1,4 @@
-use crate::{telemetry::Terminal, Project};
+use crate::{telemetry::EventTarget, Project};
 use miette::{Diagnostic, IntoDiagnostic};
 use notify::{Event, RecursiveMode, Watcher};
 use owo_colors::{OwoColorize, Stream::Stderr};
@@ -95,7 +95,7 @@ pub fn with_project<A>(
     mut action: A,
 ) -> miette::Result<()>
 where
-    A: FnMut(&mut Project<Terminal>) -> Result<(), Vec<crate::error::Error>>,
+    A: FnMut(&mut Project<EventTarget>) -> Result<(), Vec<crate::error::Error>>,
 {
     let project_path = if let Some(d) = directory {
         d.to_path_buf()
@@ -107,7 +107,7 @@ where
         current_dir
     };
 
-    let mut project = match Project::new(project_path, Terminal) {
+    let mut project = match Project::new(project_path, EventTarget::default()) {
         Ok(p) => Ok(p),
         Err(e) => {
             e.report();
@@ -166,7 +166,7 @@ where
 /// // Note: doctest disabled, because aiken_project doesn't have an implementation of EventListener I can use
 /// use aiken_project::watch::{watch_project, default_filter};
 /// use aiken_project::{Project};
-/// watch_project(None, Terminal, default_filter, 500, |project| {
+/// watch_project(None, default_filter, 500, |project| {
 ///   println!("Project changed!");
 ///   Ok(())
 /// });
@@ -179,7 +179,7 @@ pub fn watch_project<F, A>(
 ) -> miette::Result<()>
 where
     F: Fn(&Event) -> bool,
-    A: FnMut(&mut Project<Terminal>) -> Result<(), Vec<crate::error::Error>>,
+    A: FnMut(&mut Project<EventTarget>) -> Result<(), Vec<crate::error::Error>>,
 {
     let project_path = directory
         .map(|p| p.to_path_buf())
