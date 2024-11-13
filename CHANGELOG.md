@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.1.6 - UNRELEASED
+## v1.1.6 - 2024-11-13
 
 ### Added
 
@@ -16,6 +16,8 @@
 - **aiken-project**: Fix `aiken docs` source linking crashing when generating docs for config modules. See [#1044](https://github.com/aiken-lang/aiken/issues/1044). @KtorZ
 - **aiken-project**: Fix `aiken docs` generating very long lines for constants. @KtorZ
 - **aiken-lang**: Leverage [Decision Trees](https://www.cs.tufts.edu/comp/150FP/archive/luc-maranget/jun08.pdf) for compiling pattern matches to UPLC. @MicroProofs
+- **aiken-lang**: Rework optimization passes to safely reduce different kinds of patterns for each pass over the uplc. @MicroProofs
+- **aiken-lang**: Implement a looping mechanism to reduce uplc with deletion optimizations until term count remains the same. @MicroProofs
 
 ### Removed
 
