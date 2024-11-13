@@ -1175,7 +1175,7 @@ impl Term<Name> {
                         let body = Rc::make_mut(body);
                         context.inlined_apply_ids.push(arg_id);
 
-                        body.substitute_var(parameter_name.clone(), &arg_term);
+                        body.substitute_var(parameter_name.clone(), arg_term.pierce_no_inlines());
                         // creates new body that replaces all var occurrences with the arg
                         *self = std::mem::replace(body, Term::Error.force());
                     }
@@ -1358,7 +1358,7 @@ impl Term<Name> {
 
                     if var_lookup.occurrences == 1 && substitute_condition {
                         changed = true;
-                        body.substitute_var(parameter_name.clone(), &arg_term);
+                        body.substitute_var(parameter_name.clone(), arg_term.pierce_no_inlines());
 
                         context.inlined_apply_ids.push(arg_id);
                         *self = std::mem::replace(body, Term::Error.force());
