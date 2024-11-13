@@ -11,7 +11,7 @@ authors = [
     "Kasey White <kwhitemsg@gmail.com>",
     "KtorZ <matthias.benkort@gmail.com>",
 ]
-rust-version = "1.66.1"
+rust-version = "1.70.0"
 build = "build.rs"
 
 [dependencies]
