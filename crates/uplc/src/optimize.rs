@@ -4,25 +4,39 @@ pub mod interner;
 pub mod shrinker;
 
 pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
-    program
-        .inline_constr_ops()
-        .bls381_compressor()
-        .builtin_force_reducer()
-        .lambda_reducer()
-        .inline_reducer()
-        .identity_reducer()
-        .lambda_reducer()
-        .inline_reducer()
-        .force_delay_reducer()
-        .cast_data_reducer()
-        .builtin_eval_reducer()
-        .convert_arithmetic_ops()
+    let mut prog = program.run_once_pass();
+
+    let mut prev_count = 0;
+
+    loop {
+        let (current_program, context) = prog.multi_pass();
+
+        if context.node_count == prev_count {
+            prog = current_program;
+            break;
+        } else {
+            prog = current_program;
+            prev_count = context.node_count;
+        }
+    }
+
+    prog = prog
         .builtin_curry_reducer()
-        .lambda_reducer()
-        .inline_reducer()
-        .identity_reducer()
-        .builtin_curry_reducer()
-        .lambda_reducer()
-        .inline_reducer()
-        .remove_no_inlines()
+        .multi_pass()
+        .0
+        .builtin_curry_reducer();
+
+    loop {
+        let (current_program, context) = prog.multi_pass();
+
+        if context.node_count == prev_count {
+            prog = current_program;
+            break;
+        } else {
+            prog = current_program;
+            prev_count = context.node_count;
+        }
+    }
+
+    prog.clean_up()
 }

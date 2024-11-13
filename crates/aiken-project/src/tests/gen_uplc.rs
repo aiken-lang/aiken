@@ -3690,12 +3690,12 @@ fn always_true_validator() {
         Term::snd_pair()
             .apply(Term::unconstr_data().apply(Term::var(context)))
             .as_var("tail_id_2", |tail_id_2| {
-                Term::head_list()
+                Term::tail_list()
                     .apply(Term::Var(tail_id_2.clone()))
-                    .as_var("__transaction__", |_transaction| {
-                        Term::tail_list().apply(Term::Var(tail_id_2)).as_var(
-                            "tail_id_3",
-                            |tail_id_3| {
+                    .as_var("tail_id_3", |tail_id_3| {
+                        Term::head_list()
+                            .apply(Term::Var(tail_id_2.clone()))
+                            .as_var("__transaction__", |_transaction| {
                                 Term::head_list()
                                     .apply(Term::Var(tail_id_3.clone()))
                                     .as_var("__redeemer__", |_redeemer| {
@@ -3708,8 +3708,7 @@ fn always_true_validator() {
                                                 )
                                             })
                                     })
-                            },
-                        )
+                            })
                     })
             })
             .delayed_if_then_else(
@@ -4187,12 +4186,12 @@ fn generic_validator_type_test() {
         Term::snd_pair()
             .apply(Term::unconstr_data().apply(Term::var(context)))
             .as_var("tail_id_13", |tail_id_13| {
-                Term::head_list()
+                Term::tail_list()
                     .apply(Term::Var(tail_id_13.clone()))
-                    .as_var("__transaction__", |_transaction| {
-                        Term::tail_list().apply(Term::Var(tail_id_13)).as_var(
-                            "tail_id_14",
-                            |tail_id_14| {
+                    .as_var("tail_id_14", |tail_id_14| {
+                        Term::head_list()
+                            .apply(Term::Var(tail_id_13.clone()))
+                            .as_var("__transaction__", |_transaction| {
                                 Term::head_list()
                                     .apply(Term::Var(tail_id_14.clone()))
                                     .as_var("__redeemer__", |redeemer| {
@@ -4202,8 +4201,7 @@ fn generic_validator_type_test() {
                                                 choose_purpose(redeemer, purpose, trace)
                                             })
                                     })
-                            },
-                        )
+                            })
                     })
             })
             .delayed_if_then_else(
