@@ -2,7 +2,6 @@ use crate::ast::{Name, Program};
 
 pub mod interner;
 pub mod shrinker;
-pub mod shrinker2;
 
 pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
     let mut prog = program.run_once_pass();
