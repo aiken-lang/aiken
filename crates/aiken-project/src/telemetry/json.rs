@@ -45,16 +45,27 @@ impl EventListener for Json {
 }
 
 fn fmt_test_json(result: &TestResult<UntypedExpr, UntypedExpr>) -> serde_json::Value {
+    let on_test_failure = match result {
+        TestResult::UnitTestResult(UnitTestResult { ref test, .. }) => &test.on_test_failure,
+        TestResult::PropertyTestResult(PropertyTestResult { ref test, .. }) => {
+            &test.on_test_failure
+        }
+    };
+
     let mut test = json!({
         "title": result.title(),
         "status": if result.is_success() { "pass" } else { "fail" },
+        "on_failure": match on_test_failure {
+            OnTestFailure::FailImmediately => "fail_immediately" ,
+            OnTestFailure::SucceedEventually => "succeed_eventually" ,
+            OnTestFailure::SucceedImmediately => "succeed_immediately",
+        }
     });
 
     match result {
         TestResult::UnitTestResult(UnitTestResult {
             spent_budget,
             assertion,
-            test: unit_test,
             ..
         }) => {
             test["execution_units"] = json!({
@@ -63,14 +74,8 @@ fn fmt_test_json(result: &TestResult<UntypedExpr, UntypedExpr>) -> serde_json::V
             });
             if !result.is_success() {
                 if let Some(assertion) = assertion {
-                    test["assertion"] = json!({
-                        "message": assertion.to_string(false, &AssertionStyleOptions::new(None)),
-                        "on_failure": match unit_test.on_test_failure {
-                            OnTestFailure::FailImmediately => "fail_immediately" ,
-                            OnTestFailure::SucceedEventually => "succeed_eventually" ,
-                            OnTestFailure::SucceedImmediately => "succeed_immediately",
-                        }
-                    });
+                    test["assertion"] =
+                        json!(assertion.to_string(false, &AssertionStyleOptions::new(None)));
                 }
             }
         }
@@ -81,7 +86,9 @@ fn fmt_test_json(result: &TestResult<UntypedExpr, UntypedExpr>) -> serde_json::V
             ..
         }) => {
             test["iterations"] = json!(iterations);
-            test["labels"] = json!(labels);
+            if !labels.is_empty() {
+                test["labels"] = json!(labels);
+            }
             test["counterexample"] = match counterexample {
                 Ok(Some(expr)) => json!(Formatter::new().expr(expr, false).to_pretty_string(60)),
                 Ok(None) => json!(null),

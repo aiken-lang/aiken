@@ -12,7 +12,101 @@ use std::{
 };
 
 #[derive(clap::Args)]
-/// Type-check an Aiken project
+#[command(
+    verbatim_doc_comment,
+    about = color_print::cstr!(r#"
+Type-check an Aiken project and run any tests found.
+
+Test results are printed as stylized outputs when `stdout` is a TTY-capable terminal. If it
+isn't, (e.g. because you are redirecting the output to a file), test results are printed as
+a JSON structured object. Use `--help` to see the whole schema.
+"#),
+    after_long_help = color_print::cstr!(r#"<bold><underline>Output JSON schema:</underline></bold>
+  <bold>type</bold>: object
+  <bold>properties</bold>:
+    <bold>seed</bold>: <cyan>&type_integer</cyan>
+      <bold>type</bold>: integer
+    <bold>summary</bold>:
+      <bold>type</bold>: object
+      <bold>properties</bold>: <cyan>&type_summary</cyan>
+        <bold>total</bold>: *type_integer
+        <bold>passed</bold>: *type_integer
+        <bold>failed</bold>: *type_integer
+        <bold>kind</bold>:
+          <bold>type</bold>: object
+          <bold>properties</bold>:
+            <bold>unit</bold>: *type_integer
+            <bold>property</bold>: *type_integer
+    <bold>modules</bold>:
+      <bold>type</bold>: array
+      <bold>items</bold>:
+        <bold>type</bold>: object
+        <bold>properties</bold>:
+          <bold>name</bold>: <cyan>&type_string</cyan>
+            <bold>type</bold>: string
+          <bold>summary</bold>: *type_summary
+          <bold>test</bold>:
+            <bold>type</bold>: array
+            <bold>items</bold>:
+              <bold>oneOf</bold>:
+                - <bold>type</bold>: object
+                  <bold>required</bold>:
+                    - kind
+                    - title
+                    - status
+                    - on_failure
+                    - execution_units
+                  <bold>properties</bold>:
+                    <bold>kind</bold>
+                      <bold>type</bold>: string
+                      <bold>enum</bold>: [ "unit" ]
+                    <bold>title</bold>: *type_string
+                    <bold>status</bold>: <cyan>&type_status</cyan>
+                      <bold>type</bold>: string
+                      <bold>enum</bold>: [ "pass", "fail" ]
+                    <bold>on_failure</bold>: <cyan>&type_on_failure</cyan>
+                      <bold>type</bold>: string
+                      <bold>enum</bold>:
+                        - fail_immediately
+                        - succeed_immediately
+                        - succeed_eventually
+                    <bold>execution_units</bold>:
+                        <bold>type</bold>: object
+                        <bold>properties</bold>:
+                          <bold>mem</bold>: *type_integer
+                          <bold>cpu</bold>: *type_integer
+                    <bold>assertion</bold>: *type_string
+                - <bold>type</bold>: object
+                  <bold>required</bold>:
+                    - kind
+                    - title
+                    - status
+                    - on_failure
+                    - iterations
+                    - counterexample
+                  <bold>properties</bold>:
+                    <bold>kind</bold>
+                      <bold>type</bold>: string
+                      <bold>enum</bold>: [ "property" ]
+                    <bold>title</bold>: *type_string
+                    <bold>status</bold>: *type_status
+                    <bold>on_failure</bold>: *type_on_failure
+                    <bold>iterations</bold>: *type_integer
+                    <bold>labels</bold>:
+                      <bold>type</bold>: object
+                      <bold>additionalProperties</bold>: *type_integer
+                    <bold>counterexample</bold>:
+                      <bold>oneOf</bold>:
+                        - *type_string
+                        - <bold>type</bold>: "null"
+                        - <bold>type</bold>: object
+                          <bold>properties</bold>:
+                            <bold>error</bold>: *type_string
+
+<bold><underline>Note:</underline></bold>
+  You are seeing the extended help. Use `-h` instead of `--help` for a more compact view.
+"#
+))]
 pub struct Args {
     /// Path to project
     directory: Option<PathBuf>,
@@ -44,7 +138,7 @@ pub struct Args {
     /// Only run tests if they match any of these strings.
     /// You can match a module with `-m aiken/list` or `-m list`.
     /// You can match a test with `-m "aiken/list.{map}"` or `-m "aiken/option.{flatten_1}"`
-    #[clap(short, long)]
+    #[clap(short, long, verbatim_doc_comment)]
     match_tests: Option<Vec<String>>,
 
     /// This is meant to be used with `--match-tests`.
@@ -76,14 +170,9 @@ pub struct Args {
 
     /// Choose the verbosity level of traces:
     ///
-    ///   - silent:
-    ///       disable traces altogether
-    ///
-    ///   - compact:
-    ///       only culprit line numbers are shown on failures
-    ///
-    ///   - verbose:
-    ///       enable full verbose traces as provided by the user or the compiler
+    ///   - silent: disable traces altogether
+    ///   - compact: only culprit line numbers are shown on failures
+    ///   - verbose: enable full verbose traces as provided by the user or the compiler
     ///
     /// [optional]
     #[clap(short, long, value_parser=trace_level_parser(), default_value_t=TraceLevel::Verbose, verbatim_doc_comment)]
