@@ -51,7 +51,7 @@ dependencies = [
 
 [[package]]
 name = "aiken"
-version = "1.1.5"
+version = "1.1.6"
 dependencies = [
  "aiken-lang",
  "aiken-lsp",
@@ -82,7 +82,7 @@ dependencies = [
 
 [[package]]
 name = "aiken-lang"
-version = "1.1.5"
+version = "1.1.6"
 dependencies = [
  "blst",
  "built",
@@ -111,7 +111,7 @@ dependencies = [
 
 [[package]]
 name = "aiken-lsp"
-version = "1.1.5"
+version = "1.1.6"
 dependencies = [
  "aiken-lang",
  "aiken-project",
@@ -132,7 +132,7 @@ dependencies = [
 
 [[package]]
 name = "aiken-project"
-version = "1.1.5"
+version = "1.1.6"
 dependencies = [
  "aiken-lang",
  "askama",
@@ -3267,7 +3267,7 @@ checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
 
 [[package]]
 name = "uplc"
-version = "1.1.5"
+version = "1.1.6"
 dependencies = [
  "blst",
  "cryptoxide",
