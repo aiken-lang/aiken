@@ -82,7 +82,7 @@ pub fn exec(
             )
         })
     } else {
-        with_project(directory.as_deref(), deny, |p| {
+        with_project(directory.as_deref(), deny, false, |p| {
             p.build(
                 uplc,
                 match trace_filter {

@@ -4,7 +4,8 @@
 
 ### Added
 
-- **aiken**: Optionally provide blueprint file location when using `blueprint apply` @Riley-Kilgore
+- **aiken**: Optionally provide blueprint file location when using `blueprint apply`. @Riley-Kilgore
+- **aiken**: Output test results as structured JSON when the target output is not a TTY terminal. @Riley-Kilgore, @KtorZ
 
 ### Changed
 
@@ -12,6 +13,7 @@
 - **aiken-project**: Fix `aiken docs` wrongly formatting list constants as tuples. See [#1048](https://github.com/aiken-lang/aiken/issues/1048). @KtorZ
 - **aiken-project**: Fix `aiken docs` source linking crashing when generating docs for config modules. See [#1044](https://github.com/aiken-lang/aiken/issues/1044). @KtorZ
 - **aiken-project**: Fix `aiken docs` generating very long lines for constants. @KtorZ
+- **aiken-lang**: Leverage [Decision Trees](https://www.cs.tufts.edu/comp/150FP/archive/luc-maranget/jun08.pdf) for compiling pattern matches to UPLC. @MicroProofs
 
 ### Removed
 

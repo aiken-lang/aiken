@@ -30,6 +30,7 @@ clap = { version = "4.1.8", features = [
     "string",
 ] }
 clap_complete = "4.3.2"
+color-print = "0.3.7"
 hex = "0.4.3"
 ignore = "0.4.20"
 indoc = "2.0"

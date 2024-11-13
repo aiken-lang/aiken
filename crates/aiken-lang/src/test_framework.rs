@@ -1201,28 +1201,50 @@ impl TryFrom<TypedExpr> for Assertion<TypedExpr> {
     }
 }
 
+pub struct AssertionStyleOptions<'a> {
+    red: Box<dyn Fn(String) -> String + 'a>,
+    bold: Box<dyn Fn(String) -> String + 'a>,
+}
+
+impl<'a> AssertionStyleOptions<'a> {
+    pub fn new(stream: Option<&'a Stream>) -> Self {
+        match stream {
+            Some(stream) => Self {
+                red: Box::new(|s| {
+                    s.if_supports_color(stream.to_owned(), |s| s.red())
+                        .to_string()
+                }),
+                bold: Box::new(|s| {
+                    s.if_supports_color(stream.to_owned(), |s| s.bold())
+                        .to_string()
+                }),
+            },
+            None => Self {
+                red: Box::new(|s| s),
+                bold: Box::new(|s| s),
+            },
+        }
+    }
+}
+
 impl Assertion<UntypedExpr> {
     #[allow(clippy::just_underscores_and_digits)]
-    pub fn to_string(&self, stream: Stream, expect_failure: bool) -> String {
-        let red = |s: &str| {
-            format!("× {s}")
-                .if_supports_color(stream, |s| s.red())
-                .if_supports_color(stream, |s| s.bold())
-                .to_string()
-        };
+    pub fn to_string(&self, expect_failure: bool, style: &AssertionStyleOptions) -> String {
+        let red = |s: &str| style.red.as_ref()(s.to_string());
+        let x = |s: &str| style.red.as_ref()(style.bold.as_ref()(format!("× {s}")));
 
         // head did not map to a constant
         if self.head.is_err() {
-            return red("program failed");
+            return x("program failed");
         }
 
         // any value in tail did not map to a constant
         if self.tail.is_err() {
-            return red("program failed");
+            return x("program failed");
         }
 
-        fn fmt_side(side: &UntypedExpr, stream: Stream) -> String {
-            let __ = "│".if_supports_color(stream, |s| s.red());
+        fn fmt_side(side: &UntypedExpr, red: &dyn Fn(&str) -> String) -> String {
+            let __ = red("│");
 
             Formatter::new()
                 .expr(side, false)
@@ -1233,20 +1255,17 @@ impl Assertion<UntypedExpr> {
                 .join("\n")
         }
 
-        let left = fmt_side(self.head.as_ref().unwrap(), stream);
+        let left = fmt_side(self.head.as_ref().unwrap(), &red);
 
         let tail = self.tail.as_ref().unwrap();
 
-        let right = fmt_side(tail.first(), stream);
+        let right = fmt_side(tail.first(), &red);
 
         format!(
             "{}{}{}",
-            red("expected"),
+            x("expected"),
             if expect_failure && self.bin_op == BinOp::Or {
-                " neither\n"
-                    .if_supports_color(stream, |s| s.red())
-                    .if_supports_color(stream, |s| s.bold())
-                    .to_string()
+                x(" neither\n")
             } else {
                 "\n".to_string()
             },
@@ -1254,34 +1273,34 @@ impl Assertion<UntypedExpr> {
                 match self.bin_op {
                     BinOp::And => [
                         left,
-                        red("and"),
+                        x("and"),
                         [
-                            tail.mapped_ref(|s| fmt_side(s, stream))
-                                .join(format!("\n{}\n", red("and")).as_str()),
+                            tail.mapped_ref(|s| fmt_side(s, &red))
+                                .join(format!("\n{}\n", x("and")).as_str()),
                             if tail.len() > 1 {
-                                red("to not all be true")
+                                x("to not all be true")
                             } else {
-                                red("to not both be true")
+                                x("to not both be true")
                             },
                         ]
                         .join("\n"),
                     ],
                     BinOp::Or => [
                         left,
-                        red("nor"),
+                        x("nor"),
                         [
-                            tail.mapped_ref(|s| fmt_side(s, stream))
-                                .join(format!("\n{}\n", red("nor")).as_str()),
-                            red("to be true"),
+                            tail.mapped_ref(|s| fmt_side(s, &red))
+                                .join(format!("\n{}\n", x("nor")).as_str()),
+                            x("to be true"),
                         ]
                         .join("\n"),
                     ],
-                    BinOp::Eq => [left, red("to not equal"), right],
-                    BinOp::NotEq => [left, red("to not be different"), right],
-                    BinOp::LtInt => [left, red("to not be lower than"), right],
-                    BinOp::LtEqInt => [left, red("to not be lower than or equal to"), right],
-                    BinOp::GtInt => [left, red("to not be greater than"), right],
-                    BinOp::GtEqInt => [left, red("to not be greater than or equal to"), right],
+                    BinOp::Eq => [left, x("to not equal"), right],
+                    BinOp::NotEq => [left, x("to not be different"), right],
+                    BinOp::LtInt => [left, x("to not be lower than"), right],
+                    BinOp::LtEqInt => [left, x("to not be lower than or equal to"), right],
+                    BinOp::GtInt => [left, x("to not be greater than"), right],
+                    BinOp::GtEqInt => [left, x("to not be greater than or equal to"), right],
                     _ => unreachable!("unexpected non-boolean binary operator in assertion?"),
                 }
                 .join("\n")
@@ -1289,34 +1308,34 @@ impl Assertion<UntypedExpr> {
                 match self.bin_op {
                     BinOp::And => [
                         left,
-                        red("and"),
+                        x("and"),
                         [
-                            tail.mapped_ref(|s| fmt_side(s, stream))
-                                .join(format!("\n{}\n", red("and")).as_str()),
+                            tail.mapped_ref(|s| fmt_side(s, &red))
+                                .join(format!("\n{}\n", x("and")).as_str()),
                             if tail.len() > 1 {
-                                red("to all be true")
+                                x("to all be true")
                             } else {
-                                red("to both be true")
+                                x("to both be true")
                             },
                         ]
                         .join("\n"),
                     ],
                     BinOp::Or => [
                         left,
-                        red("or"),
+                        x("or"),
                         [
-                            tail.mapped_ref(|s| fmt_side(s, stream))
-                                .join(format!("\n{}\n", red("or")).as_str()),
-                            red("to be true"),
+                            tail.mapped_ref(|s| fmt_side(s, &red))
+                                .join(format!("\n{}\n", x("or")).as_str()),
+                            x("to be true"),
                         ]
                         .join("\n"),
                     ],
-                    BinOp::Eq => [left, red("to equal"), right],
-                    BinOp::NotEq => [left, red("to not equal"), right],
-                    BinOp::LtInt => [left, red("to be lower than"), right],
-                    BinOp::LtEqInt => [left, red("to be lower than or equal to"), right],
-                    BinOp::GtInt => [left, red("to be greater than"), right],
-                    BinOp::GtEqInt => [left, red("to be greater than or equal to"), right],
+                    BinOp::Eq => [left, x("to equal"), right],
+                    BinOp::NotEq => [left, x("to not equal"), right],
+                    BinOp::LtInt => [left, x("to be lower than"), right],
+                    BinOp::LtEqInt => [left, x("to be lower than or equal to"), right],
+                    BinOp::GtInt => [left, x("to be greater than"), right],
+                    BinOp::GtEqInt => [left, x("to be greater than or equal to"), right],
                     _ => unreachable!("unexpected non-boolean binary operator in assertion?"),
                 }
                 .join("\n")

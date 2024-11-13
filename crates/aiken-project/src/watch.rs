@@ -1,4 +1,4 @@
-use crate::{telemetry::Terminal, Project};
+use crate::{telemetry::EventTarget, Project};
 use miette::{Diagnostic, IntoDiagnostic};
 use notify::{Event, RecursiveMode, Watcher};
 use owo_colors::{OwoColorize, Stream::Stderr};
@@ -88,9 +88,14 @@ pub fn default_filter(evt: &Event) -> bool {
     }
 }
 
-pub fn with_project<A>(directory: Option<&Path>, deny: bool, mut action: A) -> miette::Result<()>
+pub fn with_project<A>(
+    directory: Option<&Path>,
+    deny: bool,
+    json: bool,
+    mut action: A,
+) -> miette::Result<()>
 where
-    A: FnMut(&mut Project<Terminal>) -> Result<(), Vec<crate::error::Error>>,
+    A: FnMut(&mut Project<EventTarget>) -> Result<(), Vec<crate::error::Error>>,
 {
     let project_path = if let Some(d) = directory {
         d.to_path_buf()
@@ -102,7 +107,7 @@ where
         current_dir
     };
 
-    let mut project = match Project::new(project_path, Terminal) {
+    let mut project = match Project::new(project_path, EventTarget::default()) {
         Ok(p) => Ok(p),
         Err(e) => {
             e.report();
@@ -116,35 +121,37 @@ where
 
     let warning_count = warnings.len();
 
-    for warning in &warnings {
-        warning.report()
-    }
+    if !json {
+        for warning in &warnings {
+            warning.report()
+        }
 
-    if let Err(errs) = build_result {
-        for err in &errs {
-            err.report()
+        if let Err(errs) = build_result {
+            for err in &errs {
+                err.report()
+            }
+
+            eprintln!(
+                "{}",
+                Summary {
+                    check_count: project.checks_count,
+                    warning_count,
+                    error_count: errs.len(),
+                }
+            );
+
+            return Err(ExitFailure::into_report());
         }
 
         eprintln!(
             "{}",
             Summary {
                 check_count: project.checks_count,
-                warning_count,
-                error_count: errs.len(),
+                error_count: 0,
+                warning_count
             }
         );
-
-        return Err(ExitFailure::into_report());
     }
-
-    eprintln!(
-        "{}",
-        Summary {
-            check_count: project.checks_count,
-            error_count: 0,
-            warning_count
-        }
-    );
 
     if warning_count > 0 && deny {
         Err(ExitFailure::into_report())
@@ -159,7 +166,7 @@ where
 /// // Note: doctest disabled, because aiken_project doesn't have an implementation of EventListener I can use
 /// use aiken_project::watch::{watch_project, default_filter};
 /// use aiken_project::{Project};
-/// watch_project(None, Terminal, default_filter, 500, |project| {
+/// watch_project(None, default_filter, 500, |project| {
 ///   println!("Project changed!");
 ///   Ok(())
 /// });
@@ -172,7 +179,7 @@ pub fn watch_project<F, A>(
 ) -> miette::Result<()>
 where
     F: Fn(&Event) -> bool,
-    A: FnMut(&mut Project<Terminal>) -> Result<(), Vec<crate::error::Error>>,
+    A: FnMut(&mut Project<EventTarget>) -> Result<(), Vec<crate::error::Error>>,
 {
     let project_path = directory
         .map(|p| p.to_path_buf())
@@ -239,7 +246,7 @@ where
                     .if_supports_color(Stderr, |s| s.bold())
                     .if_supports_color(Stderr, |s| s.purple()),
             );
-            with_project(directory, false, &mut action).unwrap_or(())
+            with_project(directory, false, false, &mut action).unwrap_or(())
         }
     }
 }
