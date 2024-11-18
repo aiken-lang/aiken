@@ -428,10 +428,17 @@ impl<'a> DecisionTree<'a> {
                         .enumerate()
                         .rev()
                         .for_each(|(index, (_, detree))| {
-                            prev.push(Marker::PopPush(
-                                ScopePath::Case(index + cases.len()),
-                                detree,
-                            ));
+                            if index + cases.len() == 0 {
+                                prev.push(Marker::Push(
+                                    ScopePath::Case(index + cases.len()),
+                                    detree,
+                                ));
+                            } else {
+                                prev.push(Marker::PopPush(
+                                    ScopePath::Case(index + cases.len()),
+                                    detree,
+                                ));
+                            }
                         });
 
                     cases
