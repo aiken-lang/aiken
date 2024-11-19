@@ -109,7 +109,7 @@ impl EventListener for Terminal {
             }
             Event::RunningTests => {
                 eprintln!(
-                    "{} {}\n",
+                    "{} {}",
                     "      Testing"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
@@ -143,6 +143,10 @@ impl EventListener for Terminal {
                     } else {
                         String::new()
                     };
+
+                    if !tests.is_empty() {
+                        println!();
+                    }
 
                     let summary = format!("{}{}", seed_info, fmt_test_summary(results, true));
                     println!(
@@ -204,10 +208,11 @@ impl EventListener for Terminal {
             }
             Event::ResolvingVersions => {
                 eprintln!(
-                    "{}",
-                    "    Resolving dependencies"
+                    "{} {}",
+                    "    Resolving"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
+                    "dependencies".if_supports_color(Stderr, |s| s.bold())
                 )
             }
         }
