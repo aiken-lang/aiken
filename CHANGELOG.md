@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.7 - UNRELEASED
+
+### Changed
+
+- **aiken-lang**: Fix pattern-matching on list wildcard sometimes causing compiler crash following the new _decision trees_ approach. @MicroProofs
+
 ## v1.1.6 - 2024-11-13
 
 ### Added
