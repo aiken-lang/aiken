@@ -344,6 +344,18 @@ pub struct BuiltinCosts {
     // bitwise
     integer_to_byte_string: CostingFun<ThreeArguments>,
     byte_string_to_integer: CostingFun<TwoArguments>,
+    and_byte_string: CostingFun<TwoArguments>,
+    or_byte_string: CostingFun<TwoArguments>,
+    xor_byte_string: CostingFun<TwoArguments>,
+    complement_byte_string: CostingFun<OneArgument>,
+    read_bit: CostingFun<TwoArguments>,
+    write_bits: CostingFun<TwoArguments>,
+    replicate_byte: CostingFun<TwoArguments>,
+    shift_byte_string: CostingFun<TwoArguments>,
+    rotate_byte_string: CostingFun<TwoArguments>,
+    count_set_bits: CostingFun<OneArgument>,
+    find_first_set_bit: CostingFun<OneArgument>,
+    ripemd_160: CostingFun<OneArgument>,
 }
 
 impl BuiltinCosts {
@@ -790,6 +802,54 @@ impl BuiltinCosts {
                 cpu: TwoArguments::ConstantCost(30000000000),
                 mem: TwoArguments::ConstantCost(30000000000),
             },
+            and_byte_string: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            or_byte_string: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            xor_byte_string: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            complement_byte_string: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
+            },
+            read_bit: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            write_bits: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            replicate_byte: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            shift_byte_string: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            rotate_byte_string: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            count_set_bits: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
+            },
+            find_first_set_bit: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
+            },
+            ripemd_160: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
+            },
         }
     }
 
@@ -1235,6 +1295,54 @@ impl BuiltinCosts {
             byte_string_to_integer: CostingFun {
                 cpu: TwoArguments::ConstantCost(30000000000),
                 mem: TwoArguments::ConstantCost(30000000000),
+            },
+            and_byte_string: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            or_byte_string: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            xor_byte_string: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            complement_byte_string: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
+            },
+            read_bit: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            write_bits: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            replicate_byte: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            shift_byte_string: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            rotate_byte_string: CostingFun {
+                cpu: TwoArguments::ConstantCost(30000000000),
+                mem: TwoArguments::ConstantCost(30000000000),
+            },
+            count_set_bits: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
+            },
+            find_first_set_bit: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
+            },
+            ripemd_160: CostingFun {
+                cpu: OneArgument::ConstantCost(30000000000),
+                mem: OneArgument::ConstantCost(30000000000),
             },
         }
     }
@@ -1731,6 +1839,114 @@ impl BuiltinCosts {
                     intercept: 0,
                     slope: 1,
                 }),
+            },
+            and_byte_string: CostingFun {
+                cpu: TwoArguments::LinearInXAndY(TwoVariableLinearSize {
+                    intercept: 100181,
+                    slope1: 726,
+                    slope2: 719,
+                }),
+                mem: TwoArguments::LinearInY(LinearSize {
+                    intercept: 0,
+                    slope: 1,
+                }),
+            },
+            or_byte_string: CostingFun {
+                cpu: TwoArguments::LinearInXAndY(TwoVariableLinearSize {
+                    intercept: 100181,
+                    slope1: 726,
+                    slope2: 719,
+                }),
+                mem: TwoArguments::LinearInY(LinearSize {
+                    intercept: 0,
+                    slope: 1,
+                }),
+            },
+            xor_byte_string: CostingFun {
+                cpu: TwoArguments::LinearInXAndY(TwoVariableLinearSize {
+                    intercept: 100181,
+                    slope1: 726,
+                    slope2: 719,
+                }),
+                mem: TwoArguments::LinearInY(LinearSize {
+                    intercept: 0,
+                    slope: 1,
+                }),
+            },
+            complement_byte_string: CostingFun {
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 107878,
+                    slope: 680,
+                }),
+                mem: OneArgument::LinearCost(LinearSize {
+                    intercept: 0,
+                    slope: 1,
+                }),
+            },
+            read_bit: CostingFun {
+                cpu: TwoArguments::ConstantCost(95336),
+                mem: TwoArguments::ConstantCost(1),
+            },
+            write_bits: CostingFun {
+                cpu: TwoArguments::LinearInY(LinearSize {
+                    intercept: 281145,
+                    slope: 18848,
+                }),
+                mem: TwoArguments::LinearInY(LinearSize {
+                    intercept: 0,
+                    slope: 1,
+                }),
+            },
+            replicate_byte: CostingFun {
+                cpu: TwoArguments::LinearInY(LinearSize {
+                    intercept: 180194,
+                    slope: 159,
+                }),
+                mem: TwoArguments::LinearInY(LinearSize {
+                    intercept: 1,
+                    slope: 1,
+                }),
+            },
+            shift_byte_string: CostingFun {
+                cpu: TwoArguments::LinearInY(LinearSize {
+                    intercept: 158519,
+                    slope: 8942,
+                }),
+                mem: TwoArguments::LinearInY(LinearSize {
+                    intercept: 0,
+                    slope: 1,
+                }),
+            },
+            rotate_byte_string: CostingFun {
+                cpu: TwoArguments::LinearInY(LinearSize {
+                    intercept: 159378,
+                    slope: 8813,
+                }),
+                mem: TwoArguments::LinearInY(LinearSize {
+                    intercept: 0,
+                    slope: 1,
+                }),
+            },
+            count_set_bits: CostingFun {
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 107490,
+                    slope: 3298,
+                }),
+                mem: OneArgument::ConstantCost(1),
+            },
+            find_first_set_bit: CostingFun {
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 106057,
+                    slope: 655,
+                }),
+                mem: OneArgument::ConstantCost(1),
+            },
+            ripemd_160: CostingFun {
+                cpu: OneArgument::LinearCost(LinearSize {
+                    intercept: 1964219,
+                    slope: 24520,
+                }),
+                mem: OneArgument::ConstantCost(3),
             },
         }
     }
@@ -2707,8 +2923,8 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
         }
         Language::PlutusV3 => {
             assert!(
-                costs.len() == 251,
-                "expecting 251 cost parameters, but got {:?}",
+                costs.len() == 297,
+                "expecting 297 cost parameters, but got {:?}",
                 costs.len()
             );
             hashmap! {
@@ -2962,7 +3178,53 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                 "byteStringToInteger-cpu-arguments-c1" => costs[247],
                 "byteStringToInteger-cpu-arguments-c2" => costs[248],
                 "byteStringToInteger-mem-arguments-intercept" => costs[249],
-                "byteStringToInteger-mem-arguments-slope" => costs[250]
+                "byteStringToInteger-mem-arguments-slope" => costs[250],
+                "andByteString-cpu-arguments-intercept"=> costs[251],
+                "andByteString-cpu-arguments-slope1"=> costs[252],
+                "andByteString-cpu-arguments-slope2"=> costs[253],
+                "andByteString-memory-arguments-intercept"=> costs[254],
+                "andByteString-memory-arguments-slope"=> costs[255],
+                "orByteString-cpu-arguments-intercept"=> costs[256],
+                "orByteString-cpu-arguments-slope1"=> costs[257],
+                "orByteString-cpu-arguments-slope2"=> costs[258],
+                "orByteString-memory-arguments-intercept"=> costs[259],
+                "orByteString-memory-arguments-slope"=> costs[260],
+                "xorByteString-cpu-arguments-intercept"=> costs[261],
+                "xorByteString-cpu-arguments-slope1"=> costs[262],
+                "xorByteString-cpu-arguments-slope2"=> costs[263],
+                "xorByteString-memory-arguments-intercept"=> costs[264],
+                "xorByteString-memory-arguments-slope"=> costs[265],
+                "complementByteString-cpu-arguments-intercept"=> costs[266],
+                "complementByteString-cpu-arguments-slope"=> costs[267],
+                "complementByteString-memory-arguments-intercept"=> costs[268],
+                "complementByteString-memory-arguments-slope"=> costs[269],
+                "readBit-cpu-arguments"=> costs[270],
+                "readBit-memory-arguments"=> costs[271],
+                "writeBits-cpu-arguments-intercept"=> costs[272],
+                "writeBits-cpu-arguments-slope"=> costs[273],
+                "writeBits-memory-arguments-intercept"=> costs[274],
+                "writeBits-memory-arguments-slope"=> costs[275],
+                "replicateByte-cpu-arguments-intercept"=> costs[276],
+                "replicateByte-cpu-arguments-slope"=> costs[277],
+                "replicateByte-memory-arguments-intercept"=> costs[278],
+                "replicateByte-memory-arguments-slope"=> costs[279],
+                "shiftByteString-cpu-arguments-intercept"=> costs[280],
+                "shiftByteString-cpu-arguments-slope"=> costs[281],
+                "shiftByteString-memory-arguments-intercept"=> costs[282],
+                "shiftByteString-memory-arguments-slope"=> costs[283],
+                "rotateByteString-cpu-arguments-intercept"=> costs[284],
+                "rotateByteString-cpu-arguments-slope"=> costs[285],
+                "rotateByteString-memory-arguments-intercept"=> costs[286],
+                "rotateByteString-memory-arguments-slope"=> costs[287],
+                "countSetBits-cpu-arguments-intercept"=> costs[288],
+                "countSetBits-cpu-arguments-slope"=> costs[289],
+                "countSetBits-memory-arguments"=> costs[290],
+                "findFirstSetBit-cpu-arguments-intercept"=> costs[291],
+                "findFirstSetBit-cpu-arguments-slope"=> costs[292],
+                "findFirstSetBit-memory-arguments"=> costs[293],
+                "ripemd_160-cpu-arguments-intercept"=> costs[294],
+                "ripemd_160-cpu-arguments-slope"=> costs[295],
+                "ripemd_160-memory-arguments"=> costs[296],
             }
         }
     };
@@ -4421,6 +4683,288 @@ pub fn initialize_cost_model(version: &Language, costs: &[i64]) -> CostModel {
                     }),
                 },
             },
+            and_byte_string: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::LinearInXAndY(TwoVariableLinearSize {
+                        intercept: *cost_map
+                            .get("andByteString-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope1: *cost_map
+                            .get("andByteString-cpu-arguments-slope1")
+                            .unwrap_or(&30000000000),
+                        slope2: *cost_map
+                            .get("andByteString-cpu-arguments-slope2")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: TwoArguments::LinearInY(LinearSize {
+                        intercept: *cost_map
+                            .get("andByteString-memory-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("andByteString-memory-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                },
+            },
+            or_byte_string: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::LinearInXAndY(TwoVariableLinearSize {
+                        intercept: *cost_map
+                            .get("orByteString-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope1: *cost_map
+                            .get("orByteString-cpu-arguments-slope1")
+                            .unwrap_or(&30000000000),
+                        slope2: *cost_map
+                            .get("orByteString-cpu-arguments-slope2")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: TwoArguments::LinearInY(LinearSize {
+                        intercept: *cost_map
+                            .get("orByteString-memory-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("orByteString-memory-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                },
+            },
+            xor_byte_string: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::LinearInXAndY(TwoVariableLinearSize {
+                        intercept: *cost_map
+                            .get("xorByteString-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope1: *cost_map
+                            .get("xorByteString-cpu-arguments-slope1")
+                            .unwrap_or(&30000000000),
+                        slope2: *cost_map
+                            .get("xorByteString-cpu-arguments-slope2")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: TwoArguments::LinearInY(LinearSize {
+                        intercept: *cost_map
+                            .get("xorByteString-memory-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("xorByteString-memory-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                },
+            },
+            complement_byte_string: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: OneArgument::ConstantCost(30000000000),
+                    mem: OneArgument::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: OneArgument::LinearCost(LinearSize {
+                        intercept: *cost_map
+                            .get("complementByteString-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("complementByteString-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: OneArgument::LinearCost(LinearSize {
+                        intercept: *cost_map
+                            .get("complementByteString-memory-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("complementByteString-memory-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                },
+            },
+            read_bit: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(
+                        *cost_map
+                            .get("readBit-cpu-arguments")
+                            .unwrap_or(&30000000000),
+                    ),
+                    mem: TwoArguments::ConstantCost(
+                        *cost_map
+                            .get("readBit-memory-arguments")
+                            .unwrap_or(&30000000000),
+                    ),
+                },
+            },
+            write_bits: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::LinearInY(LinearSize {
+                        intercept: *cost_map
+                            .get("writeBits-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("writeBits-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: TwoArguments::LinearInY(LinearSize {
+                        intercept: *cost_map
+                            .get("writeBits-memory-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("writeBits-memory-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                },
+            },
+            replicate_byte: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::LinearInY(LinearSize {
+                        intercept: *cost_map
+                            .get("replicateByte-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("replicateByte-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: TwoArguments::LinearInY(LinearSize {
+                        intercept: *cost_map
+                            .get("replicateByte-memory-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("replicateByte-memory-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                },
+            },
+            shift_byte_string: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::LinearInY(LinearSize {
+                        intercept: *cost_map
+                            .get("shiftByteString-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("shiftByteString-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: TwoArguments::LinearInY(LinearSize {
+                        intercept: *cost_map
+                            .get("shiftByteString-memory-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("shiftByteString-memory-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                },
+            },
+            rotate_byte_string: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: TwoArguments::ConstantCost(30000000000),
+                    mem: TwoArguments::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: TwoArguments::LinearInY(LinearSize {
+                        intercept: *cost_map
+                            .get("rotateByteString-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("rotateByteString-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: TwoArguments::LinearInY(LinearSize {
+                        intercept: *cost_map
+                            .get("rotateByteString-memory-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("rotateByteString-memory-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                },
+            },
+            count_set_bits: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: OneArgument::ConstantCost(30000000000),
+                    mem: OneArgument::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: OneArgument::LinearCost(LinearSize {
+                        intercept: *cost_map
+                            .get("countSetBits-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("countSetBits-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: OneArgument::ConstantCost(
+                        *cost_map
+                            .get("countSetBits-memory-arguments")
+                            .unwrap_or(&30000000000),
+                    ),
+                },
+            },
+            find_first_set_bit: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: OneArgument::ConstantCost(30000000000),
+                    mem: OneArgument::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: OneArgument::LinearCost(LinearSize {
+                        intercept: *cost_map
+                            .get("findFirstSetBit-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("findFirstSetBit-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: OneArgument::ConstantCost(
+                        *cost_map
+                            .get("findFirstSetBit-memory-arguments")
+                            .unwrap_or(&30000000000),
+                    ),
+                },
+            },
+            ripemd_160: match version {
+                Language::PlutusV1 | Language::PlutusV2 => CostingFun {
+                    cpu: OneArgument::ConstantCost(30000000000),
+                    mem: OneArgument::ConstantCost(30000000000),
+                },
+                Language::PlutusV3 => CostingFun {
+                    cpu: OneArgument::LinearCost(LinearSize {
+                        intercept: *cost_map
+                            .get("ripemd_160-cpu-arguments-intercept")
+                            .unwrap_or(&30000000000),
+                        slope: *cost_map
+                            .get("ripemd_160-cpu-arguments-slope")
+                            .unwrap_or(&30000000000),
+                    }),
+                    mem: OneArgument::ConstantCost(
+                        *cost_map
+                            .get("ripemd_160-memory-arguments")
+                            .unwrap_or(&30000000000),
+                    ),
+                },
+            },
         },
     }
 }
@@ -4451,6 +4995,7 @@ pub enum TwoArguments {
     ConstantCost(i64),
     LinearInX(LinearSize),
     LinearInY(LinearSize),
+    LinearInXAndY(TwoVariableLinearSize),
     AddedSizes(AddedSizes),
     SubtractedSizes(SubtractedSizes),
     MultipliedSizes(MultipliedSizes),
@@ -4469,6 +5014,7 @@ impl TwoArguments {
             TwoArguments::ConstantCost(c) => *c,
             TwoArguments::LinearInX(l) => l.slope * x + l.intercept,
             TwoArguments::LinearInY(l) => l.slope * y + l.intercept,
+            TwoArguments::LinearInXAndY(l) => l.slope1 * x + l.slope2 * y + l.intercept,
             TwoArguments::AddedSizes(s) => s.slope * (x + y) + s.intercept,
             TwoArguments::SubtractedSizes(s) => s.slope * s.minimum.max(x - y) + s.intercept,
             TwoArguments::MultipliedSizes(s) => s.slope * (x * y) + s.intercept,
@@ -4565,6 +5111,13 @@ impl SixArguments {
 pub struct LinearSize {
     pub intercept: i64,
     pub slope: i64,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct TwoVariableLinearSize {
+    pub intercept: i64,
+    pub slope1: i64,
+    pub slope2: i64,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -4711,7 +5264,7 @@ mod tests {
     }
 
     #[test]
-    fn assert_default_cost_model_v3_mainnet_2024_09_29() {
+    fn assert_default_cost_model_v3_preprod_2024_11_22() {
         let costs: Vec<i64> = vec![
             100788, 420, 1, 1, 1000, 173, 0, 1, 1000, 59957, 4, 1, 11183, 32, 201305, 8356, 4,
             16000, 100, 16000, 100, 16000, 100, 16000, 100, 16000, 100, 16000, 100, 100, 100,
@@ -4729,7 +5282,10 @@ mod tests {
             52538055, 3756, 18, 267929, 18, 76433006, 8868, 18, 52948122, 18, 1995836, 36, 3227919,
             12, 901022, 1, 166917843, 4307, 36, 284546, 36, 158221314, 26549, 36, 74698472, 36,
             333849714, 1, 254006273, 72, 2174038, 72, 2261318, 64571, 4, 207616, 8310, 4, 1293828,
-            28716, 63, 0, 1, 1006041, 43623, 251, 0, 1,
+            28716, 63, 0, 1, 1006041, 43623, 251, 0, 1, 100181, 726, 719, 0, 1, 100181, 726, 719,
+            0, 1, 100181, 726, 719, 0, 1, 107878, 680, 0, 1, 95336, 1, 281145, 18848, 0, 1, 180194,
+            159, 1, 1, 158519, 8942, 0, 1, 159378, 8813, 0, 1, 107490, 3298, 1, 106057, 655, 1,
+            1964219, 24520, 3,
         ];
 
         let cost_model = initialize_cost_model(&Language::PlutusV3, &costs);
