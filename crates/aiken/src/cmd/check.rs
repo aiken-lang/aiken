@@ -3,7 +3,10 @@ use aiken_lang::{
     ast::{TraceLevel, Tracing},
     test_framework::PropertyTest,
 };
-use aiken_project::watch::{self, watch_project, with_project};
+use aiken_project::{
+    telemetry::json_schema,
+    watch::{self, watch_project, with_project},
+};
 use rand::prelude::*;
 use std::{
     io::{self, IsTerminal},
@@ -19,92 +22,9 @@ Type-check an Aiken project and run any tests found.
 
 Test results are printed as stylized outputs when `stdout` is a TTY-capable terminal. If it
 isn't, (e.g. because you are redirecting the output to a file), test results are printed as
-a JSON structured object. Use `--help` to see the whole schema.
+a JSON structured object. Use `--show-json-schema` to see the whole schema.
 "#),
-    after_long_help = color_print::cstr!(r#"<bold><underline>Output JSON schema:</underline></bold>
-  <bold>type</bold>: object
-  <bold>properties</bold>:
-    <bold>seed</bold>: <cyan>&type_integer</cyan>
-      <bold>type</bold>: integer
-    <bold>summary</bold>:
-      <bold>type</bold>: object
-      <bold>properties</bold>: <cyan>&type_summary</cyan>
-        <bold>total</bold>: *type_integer
-        <bold>passed</bold>: *type_integer
-        <bold>failed</bold>: *type_integer
-        <bold>kind</bold>:
-          <bold>type</bold>: object
-          <bold>properties</bold>:
-            <bold>unit</bold>: *type_integer
-            <bold>property</bold>: *type_integer
-    <bold>modules</bold>:
-      <bold>type</bold>: array
-      <bold>items</bold>:
-        <bold>type</bold>: object
-        <bold>properties</bold>:
-          <bold>name</bold>: <cyan>&type_string</cyan>
-            <bold>type</bold>: string
-          <bold>summary</bold>: *type_summary
-          <bold>test</bold>:
-            <bold>type</bold>: array
-            <bold>items</bold>:
-              <bold>oneOf</bold>:
-                - <bold>type</bold>: object
-                  <bold>required</bold>:
-                    - kind
-                    - title
-                    - status
-                    - on_failure
-                    - execution_units
-                  <bold>properties</bold>:
-                    <bold>kind</bold>
-                      <bold>type</bold>: string
-                      <bold>enum</bold>: [ "unit" ]
-                    <bold>title</bold>: *type_string
-                    <bold>status</bold>: <cyan>&type_status</cyan>
-                      <bold>type</bold>: string
-                      <bold>enum</bold>: [ "pass", "fail" ]
-                    <bold>on_failure</bold>: <cyan>&type_on_failure</cyan>
-                      <bold>type</bold>: string
-                      <bold>enum</bold>:
-                        - fail_immediately
-                        - succeed_immediately
-                        - succeed_eventually
-                    <bold>execution_units</bold>:
-                        <bold>type</bold>: object
-                        <bold>properties</bold>:
-                          <bold>mem</bold>: *type_integer
-                          <bold>cpu</bold>: *type_integer
-                    <bold>assertion</bold>: *type_string
-                - <bold>type</bold>: object
-                  <bold>required</bold>:
-                    - kind
-                    - title
-                    - status
-                    - on_failure
-                    - iterations
-                    - counterexample
-                  <bold>properties</bold>:
-                    <bold>kind</bold>
-                      <bold>type</bold>: string
-                      <bold>enum</bold>: [ "property" ]
-                    <bold>title</bold>: *type_string
-                    <bold>status</bold>: *type_status
-                    <bold>on_failure</bold>: *type_on_failure
-                    <bold>iterations</bold>: *type_integer
-                    <bold>labels</bold>:
-                      <bold>type</bold>: object
-                      <bold>additionalProperties</bold>: *type_integer
-                    <bold>counterexample</bold>:
-                      <bold>oneOf</bold>:
-                        - *type_string
-                        - <bold>type</bold>: "null"
-                        - <bold>type</bold>: object
-                          <bold>properties</bold>:
-                            <bold>error</bold>: *type_string
-
-<bold><underline>Note:</underline></bold>
-  You are seeing the extended help. Use `-h` instead of `--help` for a more compact view.
+    after_long_help = color_print::cstr!(r#"You are seeing the extended help. Use `-h` instead of `--help` for a more compact view.
 "#
 ))]
 pub struct Args {
@@ -122,6 +42,11 @@ pub struct Args {
     /// When enabled, also pretty-print test UPLC on failure
     #[clap(long)]
     debug: bool,
+
+    /// When enabled, print-out the JSON-schema of the command output when the target isn't an
+    /// ANSI-capable terminal
+    #[clap(long, required = false)]
+    show_json_schema: bool,
 
     /// When enabled, re-run the command on file changes instead of exiting
     #[clap(long)]
@@ -185,6 +110,7 @@ pub fn exec(
         deny,
         skip_tests,
         debug,
+        show_json_schema,
         match_tests,
         exact_match,
         watch,
@@ -195,6 +121,11 @@ pub fn exec(
         env,
     }: Args,
 ) -> miette::Result<()> {
+    if show_json_schema {
+        println!("{}", serde_json::to_string_pretty(&json_schema()).unwrap());
+        std::process::exit(0);
+    }
+
     let mut rng = rand::thread_rng();
 
     let seed = seed.unwrap_or_else(|| rng.gen());

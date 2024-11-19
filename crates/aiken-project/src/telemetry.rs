@@ -2,7 +2,7 @@ use aiken_lang::{
     expr::UntypedExpr,
     test_framework::{PropertyTestResult, TestResult, UnitTestResult},
 };
-pub use json::Json;
+pub use json::{json_schema, Json};
 use std::{
     collections::BTreeMap,
     fmt::Display,

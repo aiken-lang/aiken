@@ -4,6 +4,7 @@
 
 ### Changed
 
+- **aiken**: Move JSON schema help for `check` under a new dedicated flag `--show-json-schema`. @KtorZ
 - **aiken-lang**: Fix pattern-matching on list wildcard sometimes causing compiler crash following the new _decision trees_ approach. @MicroProofs
 - **uplc**, **aiken**, **aiken-lang**: Update internal dependencies to pallas-0.31.0. @KtorZ
 

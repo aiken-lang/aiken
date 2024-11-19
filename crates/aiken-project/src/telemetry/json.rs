@@ -137,3 +137,137 @@ where
         .filter(|t| matches!(t, TestResult::PropertyTestResult { .. }))
         .count()
 }
+
+pub fn json_schema() -> serde_json::Value {
+    let definitions = json!({
+      "Summary": {
+        "type": "object",
+        "required": ["total", "passed", "failed", "kind"],
+        "properties": {
+          "total": { "type": "integer" },
+          "passed": { "type": "integer" },
+          "failed": { "type": "integer" },
+          "kind": {
+            "type": "object",
+            "required": ["unit", "property"],
+            "properties": {
+              "unit": { "type": "integer" },
+              "property": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "Status": {
+       "type": "string",
+       "enum": [ "pass", "fail" ]
+      },
+      "OnFailure": {
+       "type": "string",
+       "enum": [
+         "fail_immediately",
+         "succeed_immediately",
+         "succeed_eventually"
+       ]
+      }
+    });
+
+    let unit_test = json!({
+      "type": "object",
+      "required": [
+        "kind",
+        "title",
+        "status",
+        "on_failure",
+        "execution_units"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [ "unit" ]
+        },
+        "title": { "type": "string" },
+        "status": { "$ref": "#/properties/definitions/Status" },
+        "on_failure": { "$ref": "#/properties/definitions/OnFailure" },
+        "execution_units": {
+            "type": "object",
+            "properties": {
+              "mem": { "type": "integer" },
+              "cpu": { "type": "integer" }
+            }
+        },
+        "assertion": { "type": "string" },
+      }
+    });
+
+    let property_test = json!({
+      "type": "object",
+      "required": [
+        "kind",
+        "title",
+        "status",
+        "on_failure",
+        "iterations",
+        "counterexample"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [ "property" ]
+        },
+        "title": { "type": "string" },
+        "status": { "$ref": "#/properties/definitions/Status" },
+        "on_failure": { "$ref": "#/properties/definitions/OnFailure" },
+        "iterations": { "type": "integer" },
+        "labels": {
+          "type": "object",
+          "additionalProperties": { "type": "integer" }
+        },
+        "counterexample": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "null" },
+            {
+              "type": "object",
+              "properties": {
+                "error": { "type": "string" }
+              }
+            }
+          ]
+        }
+      }
+    });
+
+    json!({
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$vocabulary": {
+          "https://json-schema.org/draft/2020-12/vocab/core": true,
+          "https://json-schema.org/draft/2020-12/vocab/applicator": true,
+          "https://json-schema.org/draft/2020-12/vocab/validation": true
+      },
+      "title": "Aiken CLI JSON Schema",
+      "type": "object",
+      "properties": {
+        "command[check]": {
+          "seed": { "type": "integer" },
+          "summary": { "$ref": "#/properties/definitions/Summary" },
+          "modules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "summary": { "$ref": "#/properties/definitions/Summary" },
+                "test": {
+                  "type": "array",
+                  "items": {
+                    "oneOf": [ unit_test, property_test ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "definitions": definitions
+      }
+    })
+}
