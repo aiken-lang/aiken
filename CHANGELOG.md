@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.1.7 - UNRELEASED
+## v1.1.7 - 2024-11-19
 
 ### Changed
 
