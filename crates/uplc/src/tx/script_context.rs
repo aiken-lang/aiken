@@ -1,4 +1,5 @@
 use super::{to_plutus_data::MintValue, Error};
+use crate::tx::iter_redeemers;
 use itertools::Itertools;
 use pallas_addresses::{Address, Network, StakePayload};
 use pallas_codec::utils::{
@@ -10,10 +11,10 @@ use pallas_primitives::{
     conway::{
         AddrKeyhash, Certificate, Coin, DatumHash, DatumOption, GovAction, GovActionId, Mint,
         MintedTransactionBody, MintedTransactionOutput, MintedTx, MintedWitnessSet, NativeScript,
-        PlutusData, PlutusV1Script, PlutusV2Script, PlutusV3Script, PolicyId,
-        PostAlonzoTransactionOutput, ProposalProcedure, PseudoDatumOption, PseudoScript, Redeemer,
-        RedeemerTag, RedeemersKey, RequiredSigners, RewardAccount, ScriptHash, StakeCredential,
-        TransactionInput, TransactionOutput, Value, Voter, VotingProcedure,
+        PlutusData, PlutusScript, PolicyId, PostAlonzoTransactionOutput, ProposalProcedure,
+        PseudoDatumOption, PseudoScript, Redeemer, RedeemerTag, RedeemersKey, RequiredSigners,
+        RewardAccount, ScriptHash, StakeCredential, TransactionInput, TransactionOutput, Value,
+        Voter, VotingProcedure,
     },
 };
 use pallas_traverse::{ComputeHash, OriginalHash};
@@ -77,9 +78,9 @@ impl ScriptPurpose {
 #[derive(Debug, PartialEq, Clone)]
 pub enum ScriptVersion {
     Native(NativeScript),
-    V1(PlutusV1Script),
-    V2(PlutusV2Script),
-    V3(PlutusV3Script),
+    V1(PlutusScript<1>),
+    V2(PlutusScript<2>),
+    V3(PlutusScript<3>),
 }
 
 pub struct DataLookupTable {
@@ -400,7 +401,7 @@ impl TxInfo {
             | TxInfo::V2(TxInfoV2 { ref redeemers, .. }) => redeemers
                 .iter()
                 .find_map(move |(purpose, some_redeemer)| {
-                    if redeemer == some_redeemer {
+                    if redeemer.tag == some_redeemer.tag && redeemer.index == some_redeemer.index {
                         Some(purpose.clone())
                     } else {
                         None
@@ -414,7 +415,7 @@ impl TxInfo {
             TxInfo::V3(TxInfoV3 { ref redeemers, .. }) => redeemers
                 .iter()
                 .find_map(move |(purpose, some_redeemer)| {
-                    if redeemer == some_redeemer {
+                    if redeemer.tag == some_redeemer.tag && redeemer.index == some_redeemer.index {
                         Some(purpose.clone())
                     } else {
                         None
@@ -702,24 +703,24 @@ pub fn get_data_info(witness_set: &MintedWitnessSet) -> Vec<(DatumHash, PlutusDa
 
 pub fn get_redeemers_info<'a>(
     witness_set: &'a MintedWitnessSet,
-    to_script_purpose: impl Fn(&'a RedeemersKey) -> Result<ScriptPurpose, Error>,
+    to_script_purpose: impl Fn(RedeemersKey) -> Result<ScriptPurpose, Error> + 'a,
 ) -> Result<KeyValuePairs<ScriptPurpose, Redeemer>, Error> {
     Ok(KeyValuePairs::from(
         witness_set
             .redeemer
             .as_deref()
             .map(|m| {
-                m.iter()
-                    .sorted_by(|a, b| sort_redeemers(&a.0, &b.0))
-                    .map(|(redeemer_key, redeemer_value)| {
+                iter_redeemers(m)
+                    .sorted_by(|(a, _, _), (b, _, _)| sort_redeemers(a, b))
+                    .map(|(key, data, ex_units)| {
                         let redeemer = Redeemer {
-                            tag: redeemer_key.tag,
-                            index: redeemer_key.index,
-                            data: redeemer_value.data.clone(),
-                            ex_units: redeemer_value.ex_units,
+                            tag: key.tag,
+                            index: key.index,
+                            data: data.clone(),
+                            ex_units,
                         };
 
-                        to_script_purpose(redeemer_key).map(|purpose| (purpose, redeemer))
+                        to_script_purpose(key).map(|purpose| (purpose, redeemer))
                     })
                     .collect::<Result<Vec<_>, _>>()
             })
@@ -766,8 +767,8 @@ fn script_purpose_builder<'a>(
     withdrawals: &'a KeyValuePairs<Address, Coin>,
     proposal_procedures: &'a [ProposalProcedure],
     votes: &'a [&'a Voter],
-) -> impl Fn(&'a RedeemersKey) -> Result<ScriptPurpose, Error> {
-    move |redeemer: &'a RedeemersKey| {
+) -> impl Fn(RedeemersKey) -> Result<ScriptPurpose, Error> + 'a {
+    move |redeemer: RedeemersKey| {
         let tag = redeemer.tag;
         let index = redeemer.index as usize;
 
@@ -793,7 +794,7 @@ fn script_purpose_builder<'a>(
                 .map(|(address, _)| match address {
                     Address::Stake(stake_address) => match stake_address.payload() {
                         StakePayload::Script(script_hash) => Ok(ScriptPurpose::Rewarding(
-                            StakeCredential::Scripthash(*script_hash),
+                            StakeCredential::ScriptHash(*script_hash),
                         )),
                         StakePayload::Stake(_) => Err(Error::NonScriptWithdrawal),
                     },
@@ -885,7 +886,7 @@ pub fn find_script(
                 | Certificate::AuthCommitteeHot(stake_credential, _)
                 | Certificate::ResignCommitteeCold(stake_credential, _)
                 | Certificate::StakeDelegation(stake_credential, _) => match stake_credential {
-                    StakeCredential::Scripthash(hash) => Ok(hash),
+                    StakeCredential::ScriptHash(hash) => Ok(hash),
                     _ => Err(Error::NonScriptStakeCredential),
                 },
                 Certificate::StakeRegistration { .. }

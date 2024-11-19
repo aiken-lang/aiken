@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Constant, Name, Program, Term, Type},
+    ast::{Constant, Data, Name, Program, Term, Type},
     builtins::DefaultFunction,
     machine::{runtime::Compressable, value::to_pallas_bigint},
 };
@@ -239,7 +239,7 @@ peg::parser! {
 
         rule data() -> PlutusData
           = _* "Constr" _+ t:decimal() _+ fs:plutus_list() {?
-            Ok(crate::ast::Data::constr(
+            Ok(Data::constr(
                 u64::try_from(t).or(Err("tag"))?,
                 fs,
             ))
@@ -247,7 +247,7 @@ peg::parser! {
           / _* "Map" _+ kvps:plutus_key_value_pairs() {
             PlutusData::Map(pallas_codec::utils::KeyValuePairs::Def(kvps))
           }
-          / _* "List" _+ ls:plutus_list() { PlutusData::Array(ls) }
+          / _* "List" _+ ls:plutus_list() { Data::list(ls) }
           / _* "I" _+ n:big_number() { PlutusData::BigInt(to_pallas_bigint(&n)) }
           / _* "B" _+ "#" i:ident()* {?
             Ok(PlutusData::BoundedBytes(

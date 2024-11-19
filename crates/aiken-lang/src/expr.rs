@@ -1007,6 +1007,7 @@ impl UntypedExpr {
             PlutusData::Array(elems) => UntypedExpr::List {
                 location: Span::empty(),
                 elements: elems
+                    .to_vec()
                     .into_iter()
                     .map(UntypedExpr::reify_blind)
                     .collect::<Vec<_>>(),
@@ -1041,6 +1042,7 @@ impl UntypedExpr {
                 let ix = convert_tag_to_constr(tag).or(any_constructor).unwrap() as usize;
 
                 let fields = fields
+                    .to_vec()
                     .into_iter()
                     .map(|field| CallArg {
                         location: Span::empty(),
@@ -1127,6 +1129,7 @@ impl UntypedExpr {
                             Ok(UntypedExpr::List {
                                 location: Span::empty(),
                                 elements: args
+                                    .to_vec()
                                     .into_iter()
                                     .map(|arg| {
                                         UntypedExpr::do_reify_data(generics, data_types, arg, inner)
@@ -1144,6 +1147,7 @@ impl UntypedExpr {
                     Type::Tuple { elems, .. } => Ok(UntypedExpr::Tuple {
                         location: Span::empty(),
                         elems: args
+                            .to_vec()
                             .into_iter()
                             .zip(elems)
                             .map(|(arg, arg_type)| {
@@ -1153,6 +1157,7 @@ impl UntypedExpr {
                     }),
                     Type::Pair { fst, snd, .. } => {
                         let mut elems = args
+                            .to_vec()
                             .into_iter()
                             .zip([fst, snd])
                             .map(|(arg, arg_type)| {
@@ -1213,6 +1218,7 @@ impl UntypedExpr {
                             } else {
                                 let arguments =
                                     fields
+                                        .to_vec()
                                         .into_iter()
                                         .zip(constructor.arguments.iter())
                                         .map(
@@ -1264,9 +1270,9 @@ impl UntypedExpr {
                     UntypedExpr::do_reify_data(
                         generics,
                         data_types,
-                        PlutusData::Array(
+                        Data::list(
                             kvs.into_iter()
-                                .map(|(k, v)| PlutusData::Array(vec![k, v]))
+                                .map(|(k, v)| Data::list(vec![k, v]))
                                 .collect(),
                         ),
                         tipo,

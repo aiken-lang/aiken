@@ -559,16 +559,15 @@ impl Prng {
                     {
                         return Prng::Seeded {
                             choices: choices.to_vec(),
-                            uplc: PlutusData::Constr(Constr {
-                                tag: 121 + Prng::SEEDED,
-                                fields: vec![
+                            uplc: Data::constr(
+                                Prng::SEEDED,
+                                vec![
                                     PlutusData::BoundedBytes(bytes.to_owned()),
                                     // Clear choices between seeded runs, to not
                                     // accumulate ALL choices ever made.
                                     PlutusData::BoundedBytes(vec![].into()),
                                 ],
-                                any_constructor: None,
-                            }),
+                            ),
                         };
                     }
                 }

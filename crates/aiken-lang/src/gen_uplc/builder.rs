@@ -18,14 +18,11 @@ use indexmap::IndexMap;
 use itertools::{Itertools, Position};
 use std::{ops::Deref, rc::Rc};
 use uplc::{
-    ast::{Constant as UplcConstant, Name, Term, Type as UplcType},
+    ast::{Constant as UplcConstant, Data, Name, Term, Type as UplcType},
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
     builtins::DefaultFunction,
-    machine::{
-        runtime::{convert_constr_to_tag, Compressable, ANY_TAG},
-        value::to_pallas_bigint,
-    },
-    Constr, KeyValuePairs, PlutusData,
+    machine::{runtime::Compressable, value::to_pallas_bigint},
+    KeyValuePairs, PlutusData,
 };
 
 pub type Variant = String;
@@ -637,12 +634,7 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
                 UplcConstant::Data(PlutusData::BoundedBytes(s.as_bytes().to_vec().into()))
             }
 
-            UplcConstant::Bool(b) => UplcConstant::Data(PlutusData::Constr(Constr {
-                tag: convert_constr_to_tag((*b).into()).unwrap_or(ANY_TAG),
-                any_constructor: convert_constr_to_tag((*b).into())
-                    .map_or(Some((*b).into()), |_| None),
-                fields: vec![],
-            })),
+            UplcConstant::Bool(b) => UplcConstant::Data(Data::constr((*b).into(), vec![])),
             UplcConstant::ProtoList(list_type, constants) => {
                 if matches!(list_type, UplcType::Pair(_, _)) {
                     let inner_constants = constants
@@ -675,7 +667,7 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
                             })
                             .collect_vec();
 
-                    UplcConstant::Data(PlutusData::Array(inner_constants))
+                    UplcConstant::Data(Data::list(inner_constants))
                 }
             }
             UplcConstant::ProtoPair(_, _, left, right) => {
@@ -688,17 +680,13 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
                     })
                     .collect_vec();
 
-                UplcConstant::Data(PlutusData::Array(vec![
+                UplcConstant::Data(Data::list(vec![
                     inner_constants[0].clone(),
                     inner_constants[1].clone(),
                 ]))
             }
             d @ UplcConstant::Data(_) => d.clone(),
-            UplcConstant::Unit => UplcConstant::Data(PlutusData::Constr(Constr {
-                tag: convert_constr_to_tag(0).unwrap(),
-                any_constructor: None,
-                fields: vec![],
-            })),
+            UplcConstant::Unit => UplcConstant::Data(Data::constr(0, vec![])),
             UplcConstant::Bls12_381G1Element(b) => UplcConstant::Data(PlutusData::BoundedBytes(
                 b.deref().clone().compress().into(),
             )),
@@ -741,33 +729,12 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
             )
             .lambda("__pair")
             .apply(term),
-        Some(UplcType::Unit) => Term::Constant(
-            UplcConstant::Data(PlutusData::Constr(Constr {
-                tag: convert_constr_to_tag(0).unwrap(),
-                any_constructor: None,
-                fields: vec![],
-            }))
-            .into(),
-        )
-        .lambda("_")
-        .apply(term),
+        Some(UplcType::Unit) => Term::Constant(UplcConstant::Data(Data::constr(0, vec![])).into())
+            .lambda("_")
+            .apply(term),
         Some(UplcType::Bool) => term.if_then_else(
-            Term::Constant(
-                UplcConstant::Data(PlutusData::Constr(Constr {
-                    tag: convert_constr_to_tag(1).unwrap(),
-                    any_constructor: None,
-                    fields: vec![],
-                }))
-                .into(),
-            ),
-            Term::Constant(
-                UplcConstant::Data(PlutusData::Constr(Constr {
-                    tag: convert_constr_to_tag(0).unwrap(),
-                    any_constructor: None,
-                    fields: vec![],
-                }))
-                .into(),
-            ),
+            Term::Constant(UplcConstant::Data(Data::constr(1, vec![])).into()),
+            Term::Constant(UplcConstant::Data(Data::constr(0, vec![])).into()),
         ),
 
         Some(UplcType::Data) | None => term,

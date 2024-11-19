@@ -5,7 +5,10 @@ use crate::{
 };
 use error::Error;
 use pallas_primitives::{
-    conway::{CostMdls, MintedTx, Redeemer, TransactionInput, TransactionOutput},
+    conway::{
+        CostModels, ExUnits, MintedTx, Redeemer, Redeemers, RedeemersKey, TransactionInput,
+        TransactionOutput,
+    },
     Fragment,
 };
 use pallas_traverse::{Era, MultiEraTx};
@@ -28,7 +31,7 @@ pub mod to_plutus_data;
 pub fn eval_phase_two(
     tx: &MintedTx,
     utxos: &[ResolvedInput],
-    cost_mdls: Option<&CostMdls>,
+    cost_mdls: Option<&CostModels>,
     initial_budget: Option<&ExBudget>,
     slot_config: &SlotConfig,
     run_phase_one: bool,
@@ -49,12 +52,12 @@ pub fn eval_phase_two(
 
             let mut remaining_budget = *initial_budget.unwrap_or(&ExBudget::default());
 
-            for (redeemer_key, redeemer_value) in rs.iter() {
+            for (key, data, ex_units) in iter_redeemers(rs) {
                 let redeemer = Redeemer {
-                    tag: redeemer_key.tag,
-                    index: redeemer_key.index,
-                    data: redeemer_value.data.clone(),
-                    ex_units: redeemer_value.ex_units,
+                    tag: key.tag,
+                    index: key.index,
+                    data: data.clone(),
+                    ex_units,
                 };
 
                 with_redeemer(&redeemer);
@@ -100,7 +103,9 @@ pub fn eval_phase_two_raw(
         .or_else(|_| MultiEraTx::decode_for_era(Era::Babbage, tx_bytes))
         .or_else(|_| MultiEraTx::decode_for_era(Era::Alonzo, tx_bytes))?;
 
-    let cost_mdls = cost_mdls_bytes.map(CostMdls::decode_fragment).transpose()?;
+    let cost_mdls = cost_mdls_bytes
+        .map(CostModels::decode_fragment)
+        .transpose()?;
 
     let budget = ExBudget {
         cpu: initial_budget.0 as i64,
@@ -161,12 +166,40 @@ pub fn apply_params_to_script(
     let mut buffer = Vec::new();
     let mut program = Program::<DeBruijn>::from_cbor(plutus_script_bytes, &mut buffer)?;
 
-    for param in params {
+    for param in params.to_vec() {
         program = program.apply_data(param);
     }
 
     match program.to_cbor() {
         Ok(res) => Ok(res),
         Err(_) => Err(Error::ApplyParamsError),
+    }
+}
+
+pub fn iter_redeemers(
+    redeemers: &Redeemers,
+) -> impl Iterator<Item = (RedeemersKey, &PlutusData, ExUnits)> {
+    match redeemers {
+        Redeemers::List(rs) => Box::new(rs.iter().map(|r| {
+            (
+                RedeemersKey {
+                    tag: r.tag,
+                    index: r.index,
+                },
+                &r.data,
+                r.ex_units,
+            )
+        })),
+        Redeemers::Map(kv) => Box::new(kv.iter().map(|(k, v)| {
+            (
+                RedeemersKey {
+                    tag: k.tag,
+                    index: k.index,
+                },
+                &v.data,
+                v.ex_units,
+            )
+        }))
+            as Box<dyn Iterator<Item = (RedeemersKey, &PlutusData, ExUnits)>>,
     }
 }

@@ -881,7 +881,7 @@ impl DefaultFunction {
                     })
                     .collect();
 
-                let value = Value::data(PlutusData::Array(data_list));
+                let value = Value::data(Data::list(data_list));
 
                 Ok(value)
             }

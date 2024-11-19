@@ -149,21 +149,21 @@ impl SerializableProgram {
             PlutusV1Program(pgrm) => {
                 let cbor = pgrm.to_cbor().unwrap();
                 let compiled_code = hex::encode(&cbor);
-                let hash = conway::PlutusV1Script(cbor.into()).compute_hash();
+                let hash = conway::PlutusScript::<1>(cbor.into()).compute_hash();
                 (compiled_code, hash)
             }
 
             PlutusV2Program(pgrm) => {
                 let cbor = pgrm.to_cbor().unwrap();
                 let compiled_code = hex::encode(&cbor);
-                let hash = conway::PlutusV2Script(cbor.into()).compute_hash();
+                let hash = conway::PlutusScript::<2>(cbor.into()).compute_hash();
                 (compiled_code, hash)
             }
 
             PlutusV3Program(pgrm) => {
                 let cbor = pgrm.to_cbor().unwrap();
                 let compiled_code = hex::encode(&cbor);
-                let hash = conway::PlutusV3Script(cbor.into()).compute_hash();
+                let hash = conway::PlutusScript::<3>(cbor.into()).compute_hash();
                 (compiled_code, hash)
             }
         }
@@ -239,15 +239,15 @@ impl<'a> Deserialize<'a> for SerializableProgram {
                     .and_then(|program| {
                         let cbor = || program.to_cbor().unwrap().into();
 
-                        if conway::PlutusV3Script(cbor()).compute_hash().to_string() == hash {
+                        if conway::PlutusScript::<1>(cbor()).compute_hash().to_string() == hash {
                             return Ok(SerializableProgram::PlutusV3Program(program));
                         }
 
-                        if conway::PlutusV2Script(cbor()).compute_hash().to_string() == hash {
+                        if conway::PlutusScript::<2>(cbor()).compute_hash().to_string() == hash {
                             return Ok(SerializableProgram::PlutusV2Program(program));
                         }
 
-                        if conway::PlutusV1Script(cbor()).compute_hash().to_string() == hash {
+                        if conway::PlutusScript::<3>(cbor()).compute_hash().to_string() == hash {
                             return Ok(SerializableProgram::PlutusV1Program(program));
                         }
 
@@ -273,9 +273,9 @@ impl Program<DeBruijn> {
         let cbor = self.to_cbor().unwrap();
 
         let validator_hash = match plutus_version {
-            Language::PlutusV1 => conway::PlutusV1Script(cbor.into()).compute_hash(),
-            Language::PlutusV2 => conway::PlutusV2Script(cbor.into()).compute_hash(),
-            Language::PlutusV3 => conway::PlutusV3Script(cbor.into()).compute_hash(),
+            Language::PlutusV1 => conway::PlutusScript::<1>(cbor.into()).compute_hash(),
+            Language::PlutusV2 => conway::PlutusScript::<2>(cbor.into()).compute_hash(),
+            Language::PlutusV3 => conway::PlutusScript::<3>(cbor.into()).compute_hash(),
         };
 
         ShelleyAddress::new(
@@ -420,10 +420,20 @@ impl Data {
     }
 
     pub fn list(xs: Vec<PlutusData>) -> PlutusData {
-        PlutusData::Array(xs)
+        PlutusData::Array(if xs.is_empty() {
+            conway::MaybeIndefArray::Def(xs)
+        } else {
+            conway::MaybeIndefArray::Indef(xs)
+        })
     }
 
     pub fn constr(ix: u64, fields: Vec<PlutusData>) -> PlutusData {
+        let fields = if fields.is_empty() {
+            conway::MaybeIndefArray::Def(fields)
+        } else {
+            conway::MaybeIndefArray::Indef(fields)
+        };
+
         // NOTE: see https://github.com/input-output-hk/plutus/blob/9538fc9829426b2ecb0628d352e2d7af96ec8204/plutus-core/plutus-core/src/PlutusCore/Data.hs#L139-L155
         if ix < 7 {
             PlutusData::Constr(Constr {

@@ -1,4 +1,5 @@
 use num_bigint::ToBigInt;
+use pallas_codec::utils::MaybeIndefArray;
 use uplc::{
     ast::{Constant, Name, Term, Type},
     parser::term,
@@ -111,9 +112,9 @@ fn constant_data_constr() {
             Constant::Data(PlutusData::Constr(Constr::<PlutusData> {
                 tag: 122,
                 any_constructor: None,
-                fields: vec![PlutusData::BigInt(pallas_primitives::alonzo::BigInt::Int(
-                    2.into(),
-                ))],
+                fields: MaybeIndefArray::Indef(vec![PlutusData::BigInt(
+                    pallas_primitives::alonzo::BigInt::Int(2.into()),
+                )]),
             }))
             .into(),
         ),
@@ -145,10 +146,10 @@ fn constant_data_map() {
 fn constant_data_list() {
     round_trip(
         Term::<Name>::Constant(
-            Constant::Data(PlutusData::Array(vec![
+            Constant::Data(PlutusData::Array(MaybeIndefArray::Indef(vec![
                 PlutusData::BigInt(pallas_primitives::alonzo::BigInt::Int(0.into())),
                 PlutusData::BigInt(pallas_primitives::alonzo::BigInt::Int(1.into())),
-            ]))
+            ])))
             .into(),
         ),
         "(con data (List [I 0, I 1]))",

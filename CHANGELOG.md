@@ -5,6 +5,7 @@
 ### Changed
 
 - **aiken-lang**: Fix pattern-matching on list wildcard sometimes causing compiler crash following the new _decision trees_ approach. @MicroProofs
+- **uplc**, **aiken**, **aiken-lang**: Update internal dependencies to pallas-0.31.0. @KtorZ
 
 ## v1.1.6 - 2024-11-13
 

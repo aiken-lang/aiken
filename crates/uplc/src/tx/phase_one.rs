@@ -7,8 +7,8 @@ use itertools::Itertools;
 use pallas_addresses::{Address, ScriptHash, ShelleyPaymentPart, StakePayload};
 use pallas_codec::utils::Nullable;
 use pallas_primitives::conway::{
-    Certificate, GovAction, MintedTx, PolicyId, RedeemerTag, RedeemersKey, RewardAccount,
-    StakeCredential, TransactionOutput, Voter,
+    Certificate, GovAction, MintedTx, PolicyId, RedeemerTag, Redeemers, RedeemersKey,
+    RewardAccount, StakeCredential, TransactionOutput, Voter,
 };
 use std::collections::HashMap;
 
@@ -92,7 +92,7 @@ pub fn scripts_needed(tx: &MintedTx, utxos: &[ResolvedInput]) -> Result<ScriptsN
 
                     if let Address::Stake(a) = address {
                         if let StakePayload::Script(h) = a.payload() {
-                            let cred = StakeCredential::Scripthash(*h);
+                            let cred = StakeCredential::ScriptHash(*h);
                             return Some((ScriptPurpose::Rewarding(cred), *h));
                         }
                     }
@@ -110,19 +110,19 @@ pub fn scripts_needed(tx: &MintedTx, utxos: &[ResolvedInput]) -> Result<ScriptsN
             m.iter()
                 .enumerate()
                 .filter_map(|(ix, cert)| match cert {
-                    Certificate::StakeDeregistration(StakeCredential::Scripthash(h))
-                    | Certificate::UnReg(StakeCredential::Scripthash(h), _)
-                    | Certificate::VoteDeleg(StakeCredential::Scripthash(h), _)
-                    | Certificate::VoteRegDeleg(StakeCredential::Scripthash(h), _, _)
-                    | Certificate::StakeVoteDeleg(StakeCredential::Scripthash(h), _, _)
-                    | Certificate::StakeRegDeleg(StakeCredential::Scripthash(h), _, _)
-                    | Certificate::StakeVoteRegDeleg(StakeCredential::Scripthash(h), _, _, _)
-                    | Certificate::RegDRepCert(StakeCredential::Scripthash(h), _, _)
-                    | Certificate::UnRegDRepCert(StakeCredential::Scripthash(h), _)
-                    | Certificate::UpdateDRepCert(StakeCredential::Scripthash(h), _)
-                    | Certificate::AuthCommitteeHot(StakeCredential::Scripthash(h), _)
-                    | Certificate::ResignCommitteeCold(StakeCredential::Scripthash(h), _)
-                    | Certificate::StakeDelegation(StakeCredential::Scripthash(h), _) => {
+                    Certificate::StakeDeregistration(StakeCredential::ScriptHash(h))
+                    | Certificate::UnReg(StakeCredential::ScriptHash(h), _)
+                    | Certificate::VoteDeleg(StakeCredential::ScriptHash(h), _)
+                    | Certificate::VoteRegDeleg(StakeCredential::ScriptHash(h), _, _)
+                    | Certificate::StakeVoteDeleg(StakeCredential::ScriptHash(h), _, _)
+                    | Certificate::StakeRegDeleg(StakeCredential::ScriptHash(h), _, _)
+                    | Certificate::StakeVoteRegDeleg(StakeCredential::ScriptHash(h), _, _, _)
+                    | Certificate::RegDRepCert(StakeCredential::ScriptHash(h), _, _)
+                    | Certificate::UnRegDRepCert(StakeCredential::ScriptHash(h), _)
+                    | Certificate::UpdateDRepCert(StakeCredential::ScriptHash(h), _)
+                    | Certificate::AuthCommitteeHot(StakeCredential::ScriptHash(h), _)
+                    | Certificate::ResignCommitteeCold(StakeCredential::ScriptHash(h), _)
+                    | Certificate::StakeDelegation(StakeCredential::ScriptHash(h), _) => {
                         Some((ScriptPurpose::Certifying(ix, cert.clone()), *h))
                     }
 
@@ -222,11 +222,26 @@ pub fn has_exact_set_of_redeemers(
         }
     }
 
-    let wits_redeemer_keys: Vec<&RedeemersKey> = tx
+    let wits_redeemer_keys: Vec<RedeemersKey> = tx
         .transaction_witness_set
         .redeemer
         .as_deref()
-        .map(|m| m.iter().map(|(k, _)| k).collect())
+        .map(|m| match m {
+            Redeemers::List(rs) => rs
+                .iter()
+                .map(|r| RedeemersKey {
+                    index: r.index,
+                    tag: r.tag,
+                })
+                .collect(),
+            Redeemers::Map(kv) => kv
+                .iter()
+                .map(|(k, _)| RedeemersKey {
+                    index: k.index,
+                    tag: k.tag,
+                })
+                .collect(),
+        })
         .unwrap_or_default();
 
     let needed_redeemer_keys: Vec<RedeemersKey> =
@@ -234,7 +249,7 @@ pub fn has_exact_set_of_redeemers(
 
     let missing: Vec<_> = redeemers_needed
         .into_iter()
-        .filter(|x| !wits_redeemer_keys.contains(&&x.0))
+        .filter(|x| !wits_redeemer_keys.contains(&x.0))
         .map(|x| {
             format!(
                 "{}[{:?}] -> {}",
@@ -321,7 +336,7 @@ fn build_redeemer_key(
             for (idx, x) in reward_accounts.iter().enumerate() {
                 let cred = match Address::from_bytes(x).unwrap() {
                     Address::Stake(a) => match a.payload() {
-                        StakePayload::Script(sh) => Some(StakeCredential::Scripthash(*sh)),
+                        StakePayload::Script(sh) => Some(StakeCredential::ScriptHash(*sh)),
                         StakePayload::Stake(_) => None,
                     },
                     _ => return Err(Error::BadWithdrawalAddress),

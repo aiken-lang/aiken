@@ -11,7 +11,8 @@ use pallas_addresses::{
     Address, ShelleyDelegationPart, ShelleyPaymentPart, StakeAddress, StakePayload,
 };
 use pallas_codec::utils::{
-    AnyUInt, Bytes, Int, KeyValuePairs, NonEmptyKeyValuePairs, Nullable, PositiveCoin,
+    AnyUInt, Bytes, Int, KeyValuePairs, MaybeIndefArray, NonEmptyKeyValuePairs, Nullable,
+    PositiveCoin,
 };
 use pallas_crypto::hash::Hash;
 use pallas_primitives::conway::{
@@ -28,7 +29,11 @@ fn wrap_multiple_with_constr(index: u64, data: Vec<PlutusData>) -> PlutusData {
     PlutusData::Constr(Constr {
         tag: converted.unwrap_or(ANY_TAG),
         any_constructor: converted.map_or(Some(index), |_| None),
-        fields: data,
+        fields: if data.is_empty() {
+            MaybeIndefArray::Def(data)
+        } else {
+            MaybeIndefArray::Indef(data)
+        },
     })
 }
 
@@ -104,7 +109,7 @@ impl ToPlutusData for Address {
                     .to_plutus_data(),
                     ShelleyDelegationPart::Script(script_hash) => Some(wrap_with_constr(
                         0,
-                        StakeCredential::Scripthash(*script_hash).to_plutus_data(),
+                        StakeCredential::ScriptHash(*script_hash).to_plutus_data(),
                     ))
                     .to_plutus_data(),
                     ShelleyDelegationPart::Pointer(pointer) => Some(wrap_multiple_with_constr(
@@ -174,7 +179,7 @@ where
     A: ToPlutusData,
 {
     fn to_plutus_data(&self) -> PlutusData {
-        PlutusData::Array(self.iter().map(|p| p.to_plutus_data()).collect())
+        Data::list(self.iter().map(|p| p.to_plutus_data()).collect())
     }
 }
 
@@ -414,7 +419,7 @@ impl ToPlutusData for ScriptRef {
 
 impl<'a> ToPlutusData for WithOptionDatum<'a, WithZeroAdaAsset<'a, Vec<TransactionOutput>>> {
     fn to_plutus_data(&self) -> PlutusData {
-        PlutusData::Array(
+        Data::list(
             self.0
                  .0
                 .iter()
@@ -426,7 +431,7 @@ impl<'a> ToPlutusData for WithOptionDatum<'a, WithZeroAdaAsset<'a, Vec<Transacti
 
 impl<'a> ToPlutusData for WithZeroAdaAsset<'a, Vec<TransactionOutput>> {
     fn to_plutus_data(&self) -> PlutusData {
-        PlutusData::Array(
+        Data::list(
             self.0
                 .iter()
                 .map(|p| WithZeroAdaAsset(p).to_plutus_data())
@@ -516,7 +521,7 @@ impl ToPlutusData for StakeCredential {
             StakeCredential::AddrKeyhash(addr_keyhas) => {
                 wrap_with_constr(0, addr_keyhas.to_plutus_data())
             }
-            StakeCredential::Scripthash(script_hash) => {
+            StakeCredential::ScriptHash(script_hash) => {
                 wrap_with_constr(1, script_hash.to_plutus_data())
             }
         }
@@ -741,7 +746,7 @@ impl ToPlutusData for DRep {
                 wrap_with_constr(0, StakeCredential::AddrKeyhash(*hash).to_plutus_data())
             }
             DRep::Script(hash) => {
-                wrap_with_constr(0, StakeCredential::Scripthash(*hash).to_plutus_data())
+                wrap_with_constr(0, StakeCredential::ScriptHash(*hash).to_plutus_data())
             }
             DRep::Abstain => empty_constr(1),
             DRep::NoConfidence => empty_constr(2),
@@ -798,7 +803,7 @@ impl<'a> ToPlutusData
     for WithOptionDatum<'a, WithZeroAdaAsset<'a, WithWrappedTransactionId<'a, Vec<TxInInfo>>>>
 {
     fn to_plutus_data(&self) -> PlutusData {
-        PlutusData::Array(
+        Data::list(
             self.0
                  .0
                  .0
@@ -814,7 +819,7 @@ impl<'a> ToPlutusData
 
 impl<'a> ToPlutusData for WithZeroAdaAsset<'a, WithWrappedTransactionId<'a, Vec<TxInInfo>>> {
     fn to_plutus_data(&self) -> PlutusData {
-        PlutusData::Array(
+        Data::list(
             self.0
                  .0
                 .iter()
@@ -1254,13 +1259,13 @@ impl ToPlutusData for Voter {
     fn to_plutus_data(&self) -> PlutusData {
         match self {
             Voter::ConstitutionalCommitteeScript(hash) => {
-                wrap_with_constr(0, StakeCredential::Scripthash(*hash).to_plutus_data())
+                wrap_with_constr(0, StakeCredential::ScriptHash(*hash).to_plutus_data())
             }
             Voter::ConstitutionalCommitteeKey(hash) => {
                 wrap_with_constr(0, StakeCredential::AddrKeyhash(*hash).to_plutus_data())
             }
             Voter::DRepScript(hash) => {
-                wrap_with_constr(1, StakeCredential::Scripthash(*hash).to_plutus_data())
+                wrap_with_constr(1, StakeCredential::ScriptHash(*hash).to_plutus_data())
             }
             Voter::DRepKey(hash) => {
                 wrap_with_constr(1, StakeCredential::AddrKeyhash(*hash).to_plutus_data())

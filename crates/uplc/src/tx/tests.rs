@@ -2,7 +2,7 @@ use super::{eval_phase_two, ResolvedInput, SlotConfig};
 use crate::machine::cost_model::ExBudget;
 use pallas_codec::utils::MaybeIndefArray;
 use pallas_primitives::{
-    conway::{CostMdls, TransactionInput, TransactionOutput},
+    conway::{CostModels, TransactionInput, TransactionOutput},
     Fragment,
 };
 use pallas_traverse::{Era, MultiEraTx};
@@ -222,7 +222,7 @@ fn test_eval_0() {
         20000000000,
     ];
 
-    let cost_mdl = CostMdls {
+    let cost_mdl = CostModels {
         plutus_v1: None,
         plutus_v2: Some(costs),
         plutus_v3: None,
@@ -494,7 +494,7 @@ fn test_eval_1() {
         20000000000,
     ];
 
-    let cost_mdl = CostMdls {
+    let cost_mdl = CostModels {
         plutus_v1: None,
         plutus_v2: Some(costs),
         plutus_v3: None,
@@ -606,7 +606,7 @@ fn test_eval_2() {
         31220, 32, 32696, 32, 43357, 32, 32247, 32, 38314, 32, 9462713, 1021, 10,
     ];
 
-    let cost_mdl = CostMdls {
+    let cost_mdl = CostModels {
         plutus_v1: Some(costs),
         plutus_v2: None,
         plutus_v3: None,
@@ -876,7 +876,7 @@ fn test_eval_3() {
         20000000000,
     ];
 
-    let cost_mdl = CostMdls {
+    let cost_mdl = CostModels {
         plutus_v1: None,
         plutus_v2: Some(costs),
         plutus_v3: None,
@@ -984,7 +984,7 @@ fn test_eval_4() {
         31220, 32, 32696, 32, 43357, 32, 32247, 32, 38314, 32, 9462713, 1021, 10,
     ];
 
-    let cost_mdl = CostMdls {
+    let cost_mdl = CostModels {
         plutus_v1: Some(costs),
         plutus_v2: None,
         plutus_v3: None,
@@ -1069,7 +1069,7 @@ fn test_eval_5() {
         31220, 32, 32696, 32, 43357, 32, 32247, 32, 38314, 32, 9462713, 1021, 10,
     ];
 
-    let cost_mdl = CostMdls {
+    let cost_mdl = CostModels {
         plutus_v1: Some(costs),
         plutus_v2: None,
         plutus_v3: None,
@@ -1179,7 +1179,7 @@ fn test_eval_6() {
         3345831, 1, 1,
     ];
 
-    let cost_mdl = CostMdls {
+    let cost_mdl = CostModels {
         plutus_v1: Some(costs),
         plutus_v2: None,
         plutus_v3: None,
@@ -1289,7 +1289,7 @@ fn test_eval_7() {
         3345831, 1, 1,
     ];
 
-    let cost_mdl = CostMdls {
+    let cost_mdl = CostModels {
         plutus_v1: Some(costs),
         plutus_v2: None,
         plutus_v3: None,
@@ -1550,7 +1550,7 @@ fn test_eval_8() {
         20000000000,
     ];
 
-    let cost_mdl = CostMdls {
+    let cost_mdl = CostModels {
         plutus_v1: None,
         plutus_v2: Some(costs),
         plutus_v3: None,
@@ -1656,7 +1656,7 @@ fn eval_missing_redeemer() {
         31220, 32, 32696, 32, 43357, 32, 32247, 32, 38314, 32, 9462713, 1021, 10,
     ];
 
-    let cost_mdl = CostMdls {
+    let cost_mdl = CostModels {
         plutus_v1: Some(costs),
         plutus_v2: None,
         plutus_v3: None,
@@ -1739,7 +1739,7 @@ fn eval_extraneous_redeemer() {
         31220, 32, 32696, 32, 43357, 32, 32247, 32, 38314, 32, 9462713, 1021, 10,
     ];
 
-    let cost_mdl = CostMdls {
+    let cost_mdl = CostModels {
         plutus_v1: Some(costs),
         plutus_v2: None,
         plutus_v3: None,

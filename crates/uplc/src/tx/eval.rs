@@ -13,7 +13,7 @@ use crate::{
     PlutusData,
 };
 use pallas_codec::utils::Bytes;
-use pallas_primitives::conway::{CostMdls, CostModel, ExUnits, Language, MintedTx, Redeemer};
+use pallas_primitives::conway::{CostModel, CostModels, ExUnits, Language, MintedTx, Redeemer};
 
 pub fn eval_redeemer(
     tx: &MintedTx,
@@ -21,7 +21,7 @@ pub fn eval_redeemer(
     slot_config: &SlotConfig,
     redeemer: &Redeemer,
     lookup_table: &DataLookupTable,
-    cost_mdls_opt: Option<&CostMdls>,
+    cost_mdls_opt: Option<&CostModels>,
     initial_budget: &ExBudget,
 ) -> Result<Redeemer, Error> {
     fn do_eval_redeemer(
