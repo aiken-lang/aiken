@@ -1,6 +1,7 @@
 use aiken_project::config;
 use clap::Parser;
 
+pub mod benchmark;
 pub mod blueprint;
 pub mod build;
 pub mod check;
@@ -34,6 +35,8 @@ pub enum Cmd {
     Check(check::Args),
     Docs(docs::Args),
     Add(packages::add::Args),
+
+    Benchmark(benchmark::Args),
 
     #[clap(subcommand)]
     Blueprint(blueprint::Cmd),
