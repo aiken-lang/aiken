@@ -28,5 +28,12 @@ pub enum CodeGenMode {
         property_max_success: usize,
     },
     Build(bool),
+    Benchmark {
+        match_tests: Option<Vec<String>>,
+        exact_match: bool,
+        seed: u32,
+        property_max_success: usize
+
+    },
     NoOp,
 }
