@@ -297,6 +297,26 @@ where
         self.compile(options)
     }
 
+    pub fn benchmark(
+        &mut self,
+        match_tests: Option<Vec<String>>,
+        exact_match: bool,
+        seed: u32,
+        property_max_success: usize,
+    ) -> Result<(), Vec<Error>> {
+        let options = Options {
+            tracing: Tracing::silent(),
+            code_gen_mode: CodeGenMode::Benchmark {
+                match_tests,
+                exact_match,
+                seed,
+                property_max_success,
+            }
+        };
+
+        self.compile(options)
+    }
+
     pub fn dump_uplc(&self, blueprint: &Blueprint) -> Result<(), Error> {
         let dir = self.root.join("artifacts");
 
@@ -403,7 +423,7 @@ where
                 property_max_success,
             } => {
                 let tests =
-                    self.collect_tests(verbose, match_tests, exact_match, options.tracing)?;
+                    self.collect_tests(false, match_tests, exact_match, options.tracing)?;
 
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningTests);
@@ -429,6 +449,52 @@ where
                             None
                         } else {
                             Some(Error::from_test_result(e, verbose))
+                        }
+                    })
+                    .collect();
+
+                self.event_listener
+                    .handle_event(Event::FinishedTests { seed, tests });
+
+                if !errors.is_empty() {
+                    Err(errors)
+                } else {
+                    Ok(())
+                }
+            }
+            CodeGenMode::Benchmark {
+                match_tests,
+                exact_match,
+                seed,
+                property_max_success,
+            } => {
+                let tests =
+                    self.collect_tests(false, match_tests, exact_match, options.tracing)?;
+
+                if !tests.is_empty() {
+                    self.event_listener.handle_event(Event::RunningTests);
+                }
+
+                let tests = self.run_benchmarks(tests, seed, property_max_success);
+
+                self.checks_count = if tests.is_empty() {
+                    None
+                } else {
+                    Some(tests.iter().fold(0, |acc, test| {
+                        acc + match test {
+                            TestResult::PropertyTestResult(r) => r.iterations,
+                            _ => 1,
+                        }
+                    }))
+                };
+
+                let errors: Vec<Error> = tests
+                    .iter()
+                    .filter_map(|e| {
+                        if e.is_success() {
+                            None
+                        } else {
+                            Some(e.into_error(false))
                         }
                     })
                     .collect();
@@ -995,6 +1061,32 @@ where
     }
 
     fn run_tests(
+        &self,
+        tests: Vec<Test>,
+        seed: u32,
+        property_max_success: usize,
+    ) -> Vec<TestResult<UntypedExpr, UntypedExpr>> {
+        use rayon::prelude::*;
+
+        let data_types = utils::indexmap::as_ref_values(&self.data_types);
+
+        let plutus_version = &self.config.plutus;
+
+        tests
+            .into_par_iter()
+            .map(|test| match test {
+                Test::UnitTest(unit_test) => unit_test.run(plutus_version),
+                Test::PropertyTest(property_test) => {
+                    property_test.run(seed, property_max_success, plutus_version)
+                }
+            })
+            .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
+            .into_iter()
+            .map(|test| test.reify(&data_types))
+            .collect()
+    }
+
+    fn run_benchmarks(
         &self,
         tests: Vec<Test>,
         seed: u32,

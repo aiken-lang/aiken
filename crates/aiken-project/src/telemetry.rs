@@ -43,7 +43,12 @@ pub enum Event {
         path: PathBuf,
     },
     RunningTests,
+    RunningBenchmarks,
     FinishedTests {
+        seed: u32,
+        tests: Vec<TestResult<UntypedExpr, UntypedExpr>>,
+    },
+    FinishedBenchmarks {
         seed: u32,
         tests: Vec<TestResult<UntypedExpr, UntypedExpr>>,
     },
