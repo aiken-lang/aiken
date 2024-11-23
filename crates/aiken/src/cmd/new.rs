@@ -42,6 +42,7 @@ fn create_project(args: Args, package_name: &PackageName) -> miette::Result<()> 
     if !args.lib {
         create_env(&root)?;
         create_validators(&root)?;
+        create_validator(&root)?;
     }
 
     readme(&root, &package_name.repo)?;
@@ -108,6 +109,48 @@ fn create_lib(root: &Path) -> miette::Result<()> {
 fn create_validators(root: &Path) -> miette::Result<()> {
     let validators = root.join("validators");
     fs::create_dir_all(validators).into_diagnostic()
+}
+
+fn create_validator(root: &Path) -> miette::Result<()> {
+    let validators = root.join("validators");
+    fs::write(
+        validators.join("hello.ak"),
+        indoc! {
+            r#"
+            use cardano/address.{{Credential}}
+            use cardano/assets.{{PolicyId}}
+            use cardano/certificate.{{Certificate}}
+            use cardano/governance.{{ProposalProcedure, Voter}}
+            use cardano/transaction.{{Transaction, OutputReference}}
+            
+            validator my_script {{
+                mint(redeemer: MyMintRedeemer, policy_id: PolicyId, self: Transaction) {{
+                    todo @"mint logic goes here"
+                }}
+                
+                spend(datum: Option<MyDatum>, redeemer: MySpendRedeemer, utxo: OutputReference, self: Transaction) {{
+                    todo @"spend logic goes here"
+                }}
+                
+                withdraw(redeemer: MyWithdrawRedeemer, account: Credential, self: Transaction) {{
+                    todo @"withdraw logic goes here"
+                }}
+                
+                publish(redeemer: MyPublishRedeemer, certificate: Certificate, self: Transaction) {{
+                    todo @"publish logic goes here"
+                }}
+                
+                vote(redeemer: MyVoteRedeemer, voter: Voter, self: Transaction) {{
+                    todo @"vote logic goes here"
+                }}
+                
+                propose(redeemer: MyProposeRedeemer, proposal: ProposalProcedure, self: Transaction) {{
+                    todo @"propose logic goes here"
+                }}
+            }}
+            "#,
+        },
+    ).into_diagnostic()
 }
 
 fn readme(root: &Path, project_name: &str) -> miette::Result<()> {
