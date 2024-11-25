@@ -1,44 +1,42 @@
 {
-  "name": "gift-card",
+  "name": "gift_card",
   "version": "0.0.1",
-  "private": true,
+  "type": "module",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "lint": "prettier --check . && eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "lint": "prettier --check . && eslint ."
   },
   "devDependencies": {
     "@sveltejs/adapter-auto": "^3.0.0",
     "@sveltejs/kit": "^2.0.0",
-    "@sveltejs/vite-plugin-svelte": "^4.0.0-next.6",
-    "@tailwindcss/typography": "^0.5.14",
-    "@types/eslint": "^9.6.0",
+    "@sveltejs/vite-plugin-svelte": "^4.0.0",
     "autoprefixer": "^10.4.20",
-    "eslint": "^9.0.0",
+    "eslint": "^9.7.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-svelte": "^2.36.0",
     "globals": "^15.0.0",
-    "prettier": "^3.1.1",
-    "prettier-plugin-svelte": "^3.1.2",
+    "prettier": "^3.3.2",
+    "prettier-plugin-svelte": "^3.2.6",
     "prettier-plugin-tailwindcss": "^0.6.5",
-    "svelte": "^5.0.0-next.1",
-    "svelte-check": "^3.6.0",
+    "svelte": "^5.0.0",
+    "svelte-check": "^4.0.0",
     "tailwindcss": "^3.4.9",
     "typescript": "^5.0.0",
     "typescript-eslint": "^8.0.0",
     "vite": "^5.0.3"
   },
-  "type": "module",
   "dependencies": {
-    "@blaze-cardano/core": "^0.4.2",
-    "@blaze-cardano/query": "^0.2.11",
-    "@blaze-cardano/sdk": "^0.1.20",
-    "@blaze-cardano/tx": "^0.5.3",
-    "@blaze-cardano/uplc": "^0.1.14",
-    "@blaze-cardano/wallet": "^0.1.39"
+    "@ada-anvil/weld": "^0.2.1",
+    "@lucid-evolution/lucid": "^0.4.6",
+    "@tailwindcss/container-queries": "^0.1.1",
+    "@tailwindcss/forms": "^0.5.9",
+    "@tailwindcss/typography": "^0.5.15",
+    "vite-plugin-top-level-await": "^1.4.4",
+    "vite-plugin-wasm": "^3.3.0"
   }
 }
