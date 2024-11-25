@@ -177,7 +177,22 @@ impl DefaultFunction {
             | DefaultFunction::Bls12_381_MulMlResult
             | DefaultFunction::Bls12_381_FinalVerify
             | DefaultFunction::IntegerToByteString
-            | DefaultFunction::ByteStringToInteger => false,
+            | DefaultFunction::ByteStringToInteger
+            | DefaultFunction::AndByteString
+            | DefaultFunction::OrByteString
+            | DefaultFunction::XorByteString
+            | DefaultFunction::ComplementByteString
+            | DefaultFunction::ReadBit
+            | DefaultFunction::WriteBits
+            | DefaultFunction::ReplicateByte
+            | DefaultFunction::ShiftByteString
+            | DefaultFunction::RotateByteString
+            | DefaultFunction::CountSetBits
+            | DefaultFunction::FindFirstSetBit
+            | DefaultFunction::Ripemd_160
+            | DefaultFunction::ExpModInteger => false,
+            // | DefaultFunction::CaseList
+            // | DefaultFunction::CaseData
         }
     }
 
@@ -258,6 +273,19 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_FinalVerify => 2,
             DefaultFunction::IntegerToByteString => 3,
             DefaultFunction::ByteStringToInteger => 2,
+            DefaultFunction::AndByteString => 2,
+            DefaultFunction::OrByteString => 2,
+            DefaultFunction::XorByteString => 2,
+            DefaultFunction::ComplementByteString => todo!(),
+            DefaultFunction::ReadBit => todo!(),
+            DefaultFunction::WriteBits => todo!(),
+            DefaultFunction::ReplicateByte => todo!(),
+            DefaultFunction::ShiftByteString => todo!(),
+            DefaultFunction::RotateByteString => todo!(),
+            DefaultFunction::CountSetBits => todo!(),
+            DefaultFunction::FindFirstSetBit => todo!(),
+            DefaultFunction::Ripemd_160 => todo!(),
+            DefaultFunction::ExpModInteger => todo!(),
         }
     }
 
@@ -338,6 +366,19 @@ impl DefaultFunction {
             DefaultFunction::Bls12_381_FinalVerify => 0,
             DefaultFunction::IntegerToByteString => 0,
             DefaultFunction::ByteStringToInteger => 0,
+            DefaultFunction::AndByteString => 0,
+            DefaultFunction::OrByteString => 0,
+            DefaultFunction::XorByteString => 0,
+            DefaultFunction::ComplementByteString => 0,
+            DefaultFunction::ReadBit => 0,
+            DefaultFunction::WriteBits => 0,
+            DefaultFunction::ReplicateByte => 0,
+            DefaultFunction::ShiftByteString => 0,
+            DefaultFunction::RotateByteString => 0,
+            DefaultFunction::CountSetBits => 0,
+            DefaultFunction::FindFirstSetBit => 0,
+            DefaultFunction::Ripemd_160 => 0,
+            DefaultFunction::ExpModInteger => 0,
         }
     }
 
@@ -1454,6 +1495,19 @@ impl DefaultFunction {
 
                 Ok(Value::Con(constant.into()))
             }
+            DefaultFunction::AndByteString => todo!(),
+            DefaultFunction::OrByteString => todo!(),
+            DefaultFunction::XorByteString => todo!(),
+            DefaultFunction::ComplementByteString => todo!(),
+            DefaultFunction::ReadBit => todo!(),
+            DefaultFunction::WriteBits => todo!(),
+            DefaultFunction::ReplicateByte => todo!(),
+            DefaultFunction::ShiftByteString => todo!(),
+            DefaultFunction::RotateByteString => todo!(),
+            DefaultFunction::CountSetBits => todo!(),
+            DefaultFunction::FindFirstSetBit => todo!(),
+            DefaultFunction::Ripemd_160 => todo!(),
+            DefaultFunction::ExpModInteger => todo!(),
         }
     }
 }

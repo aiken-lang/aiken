@@ -2566,6 +2566,60 @@ impl BuiltinCosts {
                     .cpu
                     .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
             },
+            DefaultFunction::AndByteString => ExBudget {
+                mem: self
+                    .and_byte_string
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .and_byte_string
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::OrByteString => ExBudget {
+                mem: self
+                    .or_byte_string
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .or_byte_string
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::XorByteString => ExBudget {
+                mem: self
+                    .xor_byte_string
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .xor_byte_string
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::ComplementByteString => ExBudget {
+                mem: self.complement_byte_string.mem.cost(args[0].to_ex_mem()),
+                cpu: self.complement_byte_string.cpu.cost(args[0].to_ex_mem()),
+            },
+            DefaultFunction::ReadBit => ExBudget {
+                mem: self
+                    .read_bit
+                    .mem
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+                cpu: self
+                    .read_bit
+                    .cpu
+                    .cost(args[0].to_ex_mem(), args[1].to_ex_mem()),
+            },
+            DefaultFunction::WriteBits => todo!(),
+            DefaultFunction::ReplicateByte => todo!(),
+            DefaultFunction::ShiftByteString => todo!(),
+            DefaultFunction::RotateByteString => todo!(),
+            DefaultFunction::CountSetBits => todo!(),
+            DefaultFunction::FindFirstSetBit => todo!(),
+            DefaultFunction::Ripemd_160 => todo!(),
+            DefaultFunction::ExpModInteger => todo!(),
+            // DefaultFunction::CaseList => todo!(),
+            // DefaultFunction::CaseData => todo!(),
         })
     }
 }

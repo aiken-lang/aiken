@@ -101,9 +101,28 @@ pub enum DefaultFunction {
     Bls12_381_MulMlResult = 69,
     Bls12_381_FinalVerify = 70,
 
-    // Bitwise
+    // Conversions
     IntegerToByteString = 73,
     ByteStringToInteger = 74,
+    // Logical
+    AndByteString = 75,
+    OrByteString = 76,
+    XorByteString = 77,
+    ComplementByteString = 78,
+    ReadBit = 79,
+    WriteBits = 80,
+    ReplicateByte = 81,
+    // Bitwise
+    ShiftByteString = 82,
+    RotateByteString = 83,
+    CountSetBits = 84,
+    FindFirstSetBit = 85,
+    // Ripemd_160
+    Ripemd_160 = 86,
+    ExpModInteger = 87,
+    // Match
+    // CaseList = 88,
+    // CaseData = 89,
 }
 
 impl TryFrom<u8> for DefaultFunction {
@@ -362,11 +381,23 @@ impl FromStr for DefaultFunction {
             "bls12_381_millerLoop" => Ok(Bls12_381_MillerLoop),
             "bls12_381_mulMlResult" => Ok(Bls12_381_MulMlResult),
             "bls12_381_finalVerify" => Ok(Bls12_381_FinalVerify),
-
-            // Bitwise
             "integerToByteString" => Ok(IntegerToByteString),
             "byteStringToInteger" => Ok(ByteStringToInteger),
-
+            "andByteString" => Ok(AndByteString),
+            "orByteString" => Ok(OrByteString),
+            "xorByteString" => Ok(XorByteString),
+            "complementByteString" => Ok(ComplementByteString),
+            "readBit" => Ok(ReadBit),
+            "writeBits" => Ok(WriteBits),
+            "replicateByte" => Ok(ReplicateByte),
+            "shiftByteString" => Ok(ShiftByteString),
+            "rotateByteString" => Ok(RotateByteString),
+            "countSetBits" => Ok(CountSetBits),
+            "findFirstSetBit" => Ok(FindFirstSetBit),
+            "ripemd160" => Ok(Ripemd_160),
+            "expModInteger" => Ok(ExpModInteger),
+            // "caseList" => Ok(CaseList),
+            // "caseData" => Ok(CaseData),
             rest => Err(format!("Default Function not found - {rest}")),
         }
     }
@@ -452,6 +483,21 @@ impl Display for DefaultFunction {
             Bls12_381_FinalVerify => write!(f, "bls12_381_finalVerify"),
             IntegerToByteString => write!(f, "integerToByteString"),
             ByteStringToInteger => write!(f, "byteStringToInteger"),
+            AndByteString => write!(f, "andByteString"),
+            OrByteString => write!(f, "orByteString"),
+            XorByteString => write!(f, "xorByteString"),
+            ComplementByteString => write!(f, "complementByteString"),
+            ReadBit => write!(f, "readBit"),
+            WriteBits => write!(f, "writeBits"),
+            ReplicateByte => write!(f, "replicateByte"),
+            ShiftByteString => write!(f, "shiftByteString"),
+            RotateByteString => write!(f, "rotateByteString"),
+            CountSetBits => write!(f, "countSetBits"),
+            FindFirstSetBit => write!(f, "findFirstSetBit"),
+            Ripemd_160 => write!(f, "ripemd160"),
+            ExpModInteger => write!(f, "expModInteger"),
+            // CaseList => write!(f, "caseList"),
+            // CaseData => write!(f, "caseData"),
         }
     }
 }
@@ -536,6 +582,21 @@ impl DefaultFunction {
             Bls12_381_FinalVerify => "bls12_381_final_verify",
             IntegerToByteString => "integer_to_bytearray",
             ByteStringToInteger => "bytearray_to_integer",
+            AndByteString => "and_bytearray",
+            OrByteString => "or_bytearray",
+            XorByteString => "xor_bytearray",
+            ComplementByteString => "complement_bytearray",
+            ReadBit => "read_bit",
+            WriteBits => "write_bits",
+            ReplicateByte => "replicate_byte",
+            ShiftByteString => "shift_bytearray",
+            RotateByteString => "rotate_bytearray",
+            CountSetBits => "count_set_bits",
+            FindFirstSetBit => "find_first_set_bit",
+            Ripemd_160 => "ripemd160",
+            ExpModInteger => "exp_mod_integer",
+            // CaseList => "case_list",
+            // CaseData => "case_data",
         }
         .to_string()
     }

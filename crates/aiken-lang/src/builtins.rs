@@ -908,6 +908,19 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
 
             (tipo, 2)
         }
+        DefaultFunction::AndByteString => todo!(),
+        DefaultFunction::OrByteString => todo!(),
+        DefaultFunction::XorByteString => todo!(),
+        DefaultFunction::ComplementByteString => todo!(),
+        DefaultFunction::ReadBit => todo!(),
+        DefaultFunction::WriteBits => todo!(),
+        DefaultFunction::ReplicateByte => todo!(),
+        DefaultFunction::ShiftByteString => todo!(),
+        DefaultFunction::RotateByteString => todo!(),
+        DefaultFunction::CountSetBits => todo!(),
+        DefaultFunction::FindFirstSetBit => todo!(),
+        DefaultFunction::Ripemd_160 => todo!(),
+        DefaultFunction::ExpModInteger => todo!(),
     };
 
     ValueConstructor::public(
