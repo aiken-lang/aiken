@@ -215,6 +215,25 @@ impl EventListener for Terminal {
                     "dependencies".if_supports_color(Stderr, |s| s.bold())
                 )
             }
+            Event::RunningBenchmarks => {
+                eprintln!(
+                    "{} {}",
+                    "  Benchmarking"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.purple()),
+                    "...".if_supports_color(Stderr, |s| s.bold())
+                );
+            }
+            Event::FinishedBenchmarks { seed: _, tests: _ } => {
+                eprintln!(
+                    "{} {}",
+                    "     Complete"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.green()),
+                    format!("benchmark results written to CSV")
+                        .if_supports_color(Stderr, |s| s.bold())
+                );
+            }
         }
     }
 }
@@ -271,6 +290,20 @@ fn fmt_test(
                     " "
                 ),
                 if *iterations > 1 { "s" } else { "" }
+            );
+        }
+        TestResult::Benchmark(benchmark) => {
+            let mem_pad = pretty::pad_left(benchmark.cost.mem.to_string(), max_mem, " ");
+            let cpu_pad = pretty::pad_left(benchmark.cost.cpu.to_string(), max_cpu, " ");
+
+            test = format!(
+                "{test} [mem: {mem_unit}, cpu: {cpu_unit}]",
+                mem_unit = pretty::style_if(styled, mem_pad, |s| s
+                    .if_supports_color(Stderr, |s| s.cyan())
+                    .to_string()),
+                cpu_unit = pretty::style_if(styled, cpu_pad, |s| s
+                    .if_supports_color(Stderr, |s| s.cyan())
+                    .to_string()),
             );
         }
     }
