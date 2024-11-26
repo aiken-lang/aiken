@@ -1,11 +1,7 @@
-use super::build::{filter_traces_parser, trace_level_parser};
-use aiken_lang::ast::{TraceLevel, Tracing};
-use aiken_project::{
-    test_framework::PropertyTest,
-    watch::{self, watch_project, with_project},
-};
+use aiken_lang::test_framework::PropertyTest;
+use aiken_project::watch::with_project;
 use rand::prelude::*;
-use std::{path::PathBuf, process};
+use std::{io::{self, IsTerminal},path::PathBuf, process};
 
 #[derive(clap::Args)]
 /// Type-check an Aiken project
@@ -31,6 +27,14 @@ pub struct Args {
     /// It forces test names to match exactly
     #[clap(short, long)]
     exact_match: bool,
+
+    /// Environment to use for benchmarking
+    #[clap(short, long)]
+    env: Option<String>,
+
+    /// Output file for benchmark results
+    #[clap(short, long)]
+    output: PathBuf,
 }
 
 pub fn exec(
@@ -40,22 +44,24 @@ pub fn exec(
         exact_match,
         seed,
         max_success,
+        env,
+        output,
     }: Args,
 ) -> miette::Result<()> {
-    // Actually we don't want to use check right? 
     let mut rng = rand::thread_rng();
 
     let seed = seed.unwrap_or_else(|| rng.gen());
 
-    let result = with_project(directory.as_deref(), false, |p| {
+    let result = with_project(directory.as_deref(), false, !io::stdout().is_terminal(), |p| {
         // We don't want to check here, we want to benchmark
         p.benchmark(
             match_tests.clone(),
             exact_match,
             seed,
-            max_success
+            max_success,
+            env.clone(),
+            output.clone(),
         )
     });
-// todo riley - We need to either print or output the results to a file.
     result.map_err(|_| process::exit(1))
 }
