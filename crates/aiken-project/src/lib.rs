@@ -40,7 +40,7 @@ use aiken_lang::{
     format::{Formatter, MAX_COLUMNS},
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
-    test_framework::{Test, TestResult, BenchmarkResult},
+    test_framework::{Test, TestResult},
     tipo::{Type, TypeInfo},
     utils, IdGenerator,
 };
@@ -315,8 +315,8 @@ where
                 seed,
                 property_max_success,
                 output,
-            }
-
+            },
+            blueprint_path: self.blueprint_path(None),
         };
 
         self.compile(options)
@@ -473,6 +473,7 @@ where
                 exact_match,
                 seed,
                 property_max_success,
+                output,
             } => {
                 let tests =
                     self.collect_tests(false, match_tests, exact_match, options.tracing)?;
@@ -500,17 +501,42 @@ where
                         if e.is_success() {
                             None
                         } else {
-                            Some(e.into_error(false))
+                            Some(Error::from_test_result(e, false))
                         }
                     })
                     .collect();
 
                 self.event_listener
-                    .handle_event(Event::FinishedTests { seed, tests });
+                    .handle_event(Event::FinishedBenchmarks { seed, tests: tests.clone() });
 
                 if !errors.is_empty() {
                     Err(errors)
                 } else {
+                    // Write benchmark results to CSV
+                    use std::fs::File;
+                    use std::io::Write;
+
+                    let mut writer = File::create(&output)
+                        .map_err(|error| vec![Error::FileIo { error, path: output.clone() }])?;
+
+                    // Write CSV header
+                    writeln!(writer, "test_name,module,memory,cpu")
+                        .map_err(|error| vec![Error::FileIo { error, path: output.clone() }])?;
+
+                    // Write benchmark results
+                    for test in tests {
+                        if let TestResult::Benchmark(result) = test {
+                            writeln!(
+                                writer,
+                                "{},{},{},{}",
+                                result.test.name,
+                                result.test.module,
+                                result.cost.mem,
+                                result.cost.cpu
+                            ).map_err(|error| vec![Error::FileIo { error, path: output.clone() }])?;
+                        }
+                    }
+
                     Ok(())
                 }
             }
@@ -1101,15 +1127,18 @@ where
         use rayon::prelude::*;
 
         let data_types = utils::indexmap::as_ref_values(&self.data_types);
-
         let plutus_version = &self.config.plutus;
 
         tests
             .into_par_iter()
-            .map(|test| match test {
-                Test::UnitTest(unit_test) => unit_test.run(plutus_version),
+            .flat_map(|test| match test {
+                Test::UnitTest(_) => Vec::new(),
                 Test::PropertyTest(property_test) => {
-                    property_test.run(seed, property_max_success, plutus_version)
+                    property_test
+                        .benchmark(seed, property_max_success, plutus_version)
+                        .into_iter()
+                        .map(|result| TestResult::Benchmark(result))
+                        .collect::<Vec<_>>()
                 }
             })
             .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
