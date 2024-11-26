@@ -61,7 +61,7 @@ use std::{
 use telemetry::EventListener;
 use uplc::{
     ast::{Constant, Name, Program},
-    PlutusData
+    PlutusData,
 };
 
 #[derive(Debug)]
@@ -418,7 +418,7 @@ where
                         path: options.blueprint_path,
                     }
                 })?;
-                
+
                 Ok(())
             }
             CodeGenMode::Test {
@@ -428,8 +428,7 @@ where
                 seed,
                 property_max_success,
             } => {
-                let tests =
-                    self.collect_tests(false, match_tests, exact_match, options.tracing)?;
+                let tests = self.collect_tests(false, match_tests, exact_match, options.tracing)?;
 
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningTests);
@@ -475,8 +474,7 @@ where
                 property_max_success,
                 output,
             } => {
-                let tests =
-                    self.collect_tests(false, match_tests, exact_match, options.tracing)?;
+                let tests = self.collect_tests(false, match_tests, exact_match, options.tracing)?;
 
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningTests);
@@ -506,8 +504,10 @@ where
                     })
                     .collect();
 
-                self.event_listener
-                    .handle_event(Event::FinishedBenchmarks { seed, tests: tests.clone() });
+                self.event_listener.handle_event(Event::FinishedBenchmarks {
+                    seed,
+                    tests: tests.clone(),
+                });
 
                 if !errors.is_empty() {
                     Err(errors)
@@ -516,12 +516,20 @@ where
                     use std::fs::File;
                     use std::io::Write;
 
-                    let mut writer = File::create(&output)
-                        .map_err(|error| vec![Error::FileIo { error, path: output.clone() }])?;
+                    let mut writer = File::create(&output).map_err(|error| {
+                        vec![Error::FileIo {
+                            error,
+                            path: output.clone(),
+                        }]
+                    })?;
 
                     // Write CSV header
-                    writeln!(writer, "test_name,module,memory,cpu")
-                        .map_err(|error| vec![Error::FileIo { error, path: output.clone() }])?;
+                    writeln!(writer, "test_name,module,memory,cpu").map_err(|error| {
+                        vec![Error::FileIo {
+                            error,
+                            path: output.clone(),
+                        }]
+                    })?;
 
                     // Write benchmark results
                     for test in tests {
@@ -533,7 +541,13 @@ where
                                 result.test.module,
                                 result.cost.mem,
                                 result.cost.cpu
-                            ).map_err(|error| vec![Error::FileIo { error, path: output.clone() }])?;
+                            )
+                            .map_err(|error| {
+                                vec![Error::FileIo {
+                                    error,
+                                    path: output.clone(),
+                                }]
+                            })?;
                         }
                     }
 
@@ -1133,13 +1147,11 @@ where
             .into_par_iter()
             .flat_map(|test| match test {
                 Test::UnitTest(_) => Vec::new(),
-                Test::PropertyTest(property_test) => {
-                    property_test
-                        .benchmark(seed, property_max_success, plutus_version)
-                        .into_iter()
-                        .map(|result| TestResult::Benchmark(result))
-                        .collect::<Vec<_>>()
-                }
+                Test::PropertyTest(property_test) => property_test
+                    .benchmark(seed, property_max_success, plutus_version)
+                    .into_iter()
+                    .map(|result| TestResult::Benchmark(result))
+                    .collect::<Vec<_>>(),
             })
             .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
             .into_iter()
