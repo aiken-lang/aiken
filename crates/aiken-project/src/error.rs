@@ -193,6 +193,11 @@ impl Error {
                 test.input_path.to_path_buf(),
                 test.program.to_pretty(),
             ),
+            TestResult::Benchmark(_) => (
+                "benchmark".to_string(),
+                PathBuf::new(),
+                String::new(),
+            ),
         };
 
         Error::TestFailure {
