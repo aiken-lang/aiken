@@ -40,7 +40,7 @@ use aiken_lang::{
     format::{Formatter, MAX_COLUMNS},
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
-    test_framework::{Test, TestResult},
+    test_framework::{Test, TestResult, BenchmarkResult},
     tipo::{Type, TypeInfo},
     utils, IdGenerator,
 };
@@ -61,7 +61,7 @@ use std::{
 use telemetry::EventListener;
 use uplc::{
     ast::{Constant, Name, Program},
-    PlutusData,
+    PlutusData
 };
 
 #[derive(Debug)]
@@ -303,15 +303,20 @@ where
         exact_match: bool,
         seed: u32,
         property_max_success: usize,
+        env: Option<String>,
+        output: PathBuf,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
             tracing: Tracing::silent(),
+            env,
             code_gen_mode: CodeGenMode::Benchmark {
                 match_tests,
                 exact_match,
                 seed,
                 property_max_success,
+                output,
             }
+
         };
 
         self.compile(options)
@@ -412,8 +417,9 @@ where
                         error,
                         path: options.blueprint_path,
                     }
-                    .into()
-                })
+                })?;
+                
+                Ok(())
             }
             CodeGenMode::Test {
                 match_tests,
