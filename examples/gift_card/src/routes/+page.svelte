@@ -31,9 +31,9 @@
 
   let { data }: Props = $props();
 
-  const weld = getWeldContext();
+  let weld = getWeldContext();
 
-  const displayedBalance = $derived(weld.wallet.balanceAda?.toFixed(2) ?? '-');
+  let displayedBalance = $derived(weld.wallet.balanceAda?.toFixed(2) ?? '-');
 
   let blockfrostAPIKey = $state('');
   let tokenName = $state('');
