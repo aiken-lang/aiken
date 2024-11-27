@@ -477,21 +477,10 @@ where
                 let tests = self.collect_tests(false, match_tests, exact_match, options.tracing)?;
 
                 if !tests.is_empty() {
-                    self.event_listener.handle_event(Event::RunningTests);
+                    self.event_listener.handle_event(Event::RunningBenchmarks);
                 }
 
                 let tests = self.run_benchmarks(tests, seed, property_max_success);
-
-                self.checks_count = if tests.is_empty() {
-                    None
-                } else {
-                    Some(tests.iter().fold(0, |acc, test| {
-                        acc + match test {
-                            TestResult::PropertyTestResult(r) => r.iterations,
-                            _ => 1,
-                        }
-                    }))
-                };
 
                 let errors: Vec<Error> = tests
                     .iter()

@@ -8,7 +8,7 @@ use std::{
 };
 
 #[derive(clap::Args)]
-/// Type-check an Aiken project
+/// Benchmark an Aiken project
 pub struct Args {
     /// Path to project
     directory: Option<PathBuf>,
@@ -33,7 +33,6 @@ pub struct Args {
     exact_match: bool,
 
     /// Environment to use for benchmarking
-    #[clap(short, long)]
     env: Option<String>,
 
     /// Output file for benchmark results

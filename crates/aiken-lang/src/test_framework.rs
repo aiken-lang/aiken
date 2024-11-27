@@ -450,16 +450,29 @@ impl PropertyTest {
             match prng.sample(&self.fuzzer.program) {
                 Ok(Some((new_prng, value))) => {
                     prng = new_prng;
-                    let mut eval_result = self.eval(&value, plutus_version);
+                    match self.eval(&value, plutus_version) {
+                        mut eval_result => {
+                            results.push(BenchmarkResult {
+                                test: self.clone(),
+                                cost: eval_result.cost(),
+                                success: true,
+                                traces: eval_result.logs().to_vec(),
+                            });
+                        }
+                    }
+                }
+                Ok(None) => {
+                    break;
+                }
+                Err(e) => {
                     results.push(BenchmarkResult {
                         test: self.clone(),
-                        cost: eval_result.cost(),
-                        success: !eval_result.failed(false),
-                        traces: eval_result.logs().to_vec(),
+                        cost: ExBudget::default(),
+                        success: false,
+                        traces: vec![format!("Fuzzer error: {}", e)],
                     });
+                    break;
                 }
-                Ok(None) => {}
-                Err(_) => break,
             }
             remaining -= 1;
         }
