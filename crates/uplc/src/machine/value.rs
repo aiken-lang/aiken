@@ -1,4 +1,7 @@
-use super::{runtime::BuiltinRuntime, Error};
+use super::{
+    runtime::{self, BuiltinRuntime},
+    Error,
+};
 use crate::{
     ast::{Constant, NamedDeBruijn, Term, Type},
     builtins::DefaultFunction,
@@ -206,6 +209,27 @@ impl Value {
 
     pub fn is_bool(&self) -> bool {
         matches!(self, Value::Con(b) if matches!(b.as_ref(), Constant::Bool(_)))
+    }
+
+    pub fn cost_as_size(&self) -> Result<i64, Error> {
+        let size = self.unwrap_integer()?;
+
+        if size.is_negative() {
+            return Err(Error::IntegerToByteStringNegativeSize(size.clone()));
+        }
+
+        if size > &BigInt::from(runtime::INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH) {
+            return Err(Error::IntegerToByteStringSizeTooBig(
+                size.clone(),
+                runtime::INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH,
+            ));
+        }
+
+        let arg1: i64 = u64::try_from(size).unwrap().try_into().unwrap();
+
+        let arg1_exmem = if arg1 == 0 { 0 } else { ((arg1 - 1) / 8) + 1 };
+
+        Ok(arg1_exmem)
     }
 
     // TODO: Make this to_ex_mem not recursive.

@@ -120,6 +120,8 @@ pub enum Error {
     DeserialisationError(String, Value),
     #[error("integer overflow")]
     OverflowError,
+    #[error("{0} is not within the bounds of Natural")]
+    OutsideNaturalBounds(BigInt),
     #[error("blst error {0:?}")]
     Blst(blst::BLST_ERROR),
     #[error("blst::hashToGroup")]

@@ -505,7 +505,7 @@ pub fn plutus(id_gen: &IdGenerator) -> TypeInfo {
         annotations: HashMap::new(),
     };
 
-    for builtin in DefaultFunction::iter() {
+    for builtin in DefaultFunction::iter().take(75) {
         let value = from_default_function(builtin, id_gen);
 
         plutus.values.insert(builtin.aiken_name(), value);
