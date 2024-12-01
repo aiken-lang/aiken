@@ -9,6 +9,7 @@ use crate::{
     machine::value::integer_log2,
     plutus_data_to_bytes,
 };
+use itertools::Itertools;
 use num_bigint::BigInt;
 use num_integer::Integer;
 use num_traits::{Signed, Zero};
@@ -1495,11 +1496,118 @@ impl DefaultFunction {
 
                 Ok(Value::Con(constant.into()))
             }
-            DefaultFunction::AndByteString => todo!(),
-            DefaultFunction::OrByteString => todo!(),
-            DefaultFunction::XorByteString => todo!(),
-            DefaultFunction::ComplementByteString => todo!(),
-            DefaultFunction::ReadBit => todo!(),
+            DefaultFunction::AndByteString => {
+                let should_pad = args[0].unwrap_bool()?;
+                let bytes1 = args[1].unwrap_byte_string()?;
+                let bytes2 = args[2].unwrap_byte_string()?;
+
+                let bytes_result = if *should_pad {
+                    bytes1
+                        .into_iter()
+                        .zip_longest(bytes2)
+                        .map(|b| match b {
+                            itertools::EitherOrBoth::Both(left_byte, right_byte) => {
+                                left_byte & right_byte
+                            }
+                            // Shorter is appended with FF bytes that when and-ed produce the other bytestring
+                            itertools::EitherOrBoth::Left(byte)
+                            | itertools::EitherOrBoth::Right(byte) => *byte,
+                        })
+                        .collect_vec()
+                } else {
+                    bytes1
+                        .into_iter()
+                        .zip(bytes2)
+                        .map(|(b1, b2)| b1 & b2)
+                        .collect_vec()
+                };
+
+                Ok(Value::Con(Constant::ByteString(bytes_result).into()))
+            }
+            DefaultFunction::OrByteString => {
+                let should_pad = args[0].unwrap_bool()?;
+                let bytes1 = args[1].unwrap_byte_string()?;
+                let bytes2 = args[2].unwrap_byte_string()?;
+
+                let bytes_result = if *should_pad {
+                    bytes1
+                        .into_iter()
+                        .zip_longest(bytes2)
+                        .map(|b| match b {
+                            itertools::EitherOrBoth::Both(left_byte, right_byte) => {
+                                left_byte | right_byte
+                            }
+                            // Shorter is appended with 00 bytes that when or-ed produce the other bytestring
+                            itertools::EitherOrBoth::Left(byte)
+                            | itertools::EitherOrBoth::Right(byte) => *byte,
+                        })
+                        .collect_vec()
+                } else {
+                    bytes1
+                        .into_iter()
+                        .zip(bytes2)
+                        .map(|(b1, b2)| b1 | b2)
+                        .collect_vec()
+                };
+
+                Ok(Value::Con(Constant::ByteString(bytes_result).into()))
+            }
+            DefaultFunction::XorByteString => {
+                let should_pad = args[0].unwrap_bool()?;
+                let bytes1 = args[1].unwrap_byte_string()?;
+                let bytes2 = args[2].unwrap_byte_string()?;
+
+                let bytes_result = if *should_pad {
+                    bytes1
+                        .into_iter()
+                        .zip_longest(bytes2)
+                        .map(|b| match b {
+                            itertools::EitherOrBoth::Both(left_byte, right_byte) => {
+                                left_byte ^ right_byte
+                            }
+                            // Shorter is appended with 00 bytes that when xor-ed produce the other bytestring
+                            itertools::EitherOrBoth::Left(byte)
+                            | itertools::EitherOrBoth::Right(byte) => *byte,
+                        })
+                        .collect_vec()
+                } else {
+                    bytes1
+                        .into_iter()
+                        .zip(bytes2)
+                        .map(|(b1, b2)| b1 ^ b2)
+                        .collect_vec()
+                };
+
+                Ok(Value::Con(Constant::ByteString(bytes_result).into()))
+            }
+            DefaultFunction::ComplementByteString => {
+                let bytes = args[0].unwrap_byte_string()?;
+
+                let result = bytes.into_iter().map(|b| b ^ 255).collect_vec();
+
+                Ok(Value::Con(Constant::ByteString(result).into()))
+            }
+            DefaultFunction::ReadBit => {
+                let bytes = args[0].unwrap_byte_string()?;
+                let bit_index = args[1].unwrap_integer()?;
+
+                // This ensures there is at least one byte in bytes
+                if *bit_index < 0.into() || *bit_index >= (bytes.len() * 8).into() {
+                    return Err(Error::ReadBitOutOfBounds);
+                }
+
+                let (byte_index, bit_offset) = bit_index.div_rem(&8.into());
+
+                let bit_offset = usize::try_from(bit_offset).unwrap();
+
+                let flipped_index = bytes.len() - 1 - usize::try_from(byte_index).unwrap();
+
+                let byte = bytes[flipped_index];
+
+                let bit_test = (byte >> bit_offset) & 1 == 1;
+
+                Ok(Value::Con(Constant::Bool(bit_test).into()))
+            }
             DefaultFunction::WriteBits => todo!(),
             DefaultFunction::ReplicateByte => todo!(),
             DefaultFunction::ShiftByteString => todo!(),

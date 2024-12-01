@@ -122,6 +122,8 @@ pub enum Error {
     OverflowError,
     #[error("{0} is not within the bounds of Natural")]
     OutsideNaturalBounds(BigInt),
+    #[error("readBit: index out of bounds")]
+    ReadBitOutOfBounds,
     #[error("blst error {0:?}")]
     Blst(blst::BLST_ERROR),
     #[error("blst::hashToGroup")]
