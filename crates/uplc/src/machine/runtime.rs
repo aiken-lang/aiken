@@ -15,7 +15,7 @@ use num_integer::Integer;
 use num_traits::{FromPrimitive, Signed, Zero};
 use once_cell::sync::Lazy;
 use pallas_primitives::conway::{Language, PlutusData};
-use std::{io::Read, mem::size_of, ops::Deref, rc::Rc};
+use std::{mem::size_of, ops::Deref, rc::Rc};
 
 static SCALAR_PERIOD: Lazy<BigInt> = Lazy::new(|| {
     BigInt::from_bytes_be(
