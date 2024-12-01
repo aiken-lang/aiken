@@ -10,12 +10,12 @@ use crate::{
     plutus_data_to_bytes,
 };
 use itertools::Itertools;
-use num_bigint::BigInt;
+use num_bigint::{BigInt, Sign};
 use num_integer::Integer;
-use num_traits::{Signed, Zero};
+use num_traits::{FromPrimitive, Signed, Zero};
 use once_cell::sync::Lazy;
 use pallas_primitives::conway::{Language, PlutusData};
-use std::{mem::size_of, ops::Deref, rc::Rc};
+use std::{io::Read, mem::size_of, ops::Deref, rc::Rc};
 
 static SCALAR_PERIOD: Lazy<BigInt> = Lazy::new(|| {
     BigInt::from_bytes_be(
@@ -1522,7 +1522,7 @@ impl DefaultFunction {
                         .collect_vec()
                 };
 
-                Ok(Value::Con(Constant::ByteString(bytes_result).into()))
+                Ok(Value::byte_string(bytes_result))
             }
             DefaultFunction::OrByteString => {
                 let should_pad = args[0].unwrap_bool()?;
@@ -1550,7 +1550,7 @@ impl DefaultFunction {
                         .collect_vec()
                 };
 
-                Ok(Value::Con(Constant::ByteString(bytes_result).into()))
+                Ok(Value::byte_string(bytes_result))
             }
             DefaultFunction::XorByteString => {
                 let should_pad = args[0].unwrap_bool()?;
@@ -1578,14 +1578,14 @@ impl DefaultFunction {
                         .collect_vec()
                 };
 
-                Ok(Value::Con(Constant::ByteString(bytes_result).into()))
+                Ok(Value::byte_string(bytes_result))
             }
             DefaultFunction::ComplementByteString => {
                 let bytes = args[0].unwrap_byte_string()?;
 
                 let result = bytes.into_iter().map(|b| b ^ 255).collect_vec();
 
-                Ok(Value::Con(Constant::ByteString(result).into()))
+                Ok(Value::byte_string(result))
             }
             DefaultFunction::ReadBit => {
                 let bytes = args[0].unwrap_byte_string()?;
@@ -1606,11 +1606,88 @@ impl DefaultFunction {
 
                 let bit_test = (byte >> bit_offset) & 1 == 1;
 
-                Ok(Value::Con(Constant::Bool(bit_test).into()))
+                Ok(Value::bool(bit_test))
             }
-            DefaultFunction::WriteBits => todo!(),
-            DefaultFunction::ReplicateByte => todo!(),
-            DefaultFunction::ShiftByteString => todo!(),
+            DefaultFunction::WriteBits => {
+                let mut bytes = args[0].unwrap_byte_string()?.clone();
+                let indices = args[1].unwrap_int_list()?;
+                let set_bit = args[2].unwrap_bool()?;
+
+                for index in indices {
+                    let Constant::Integer(bit_index) = index else {
+                        unreachable!()
+                    };
+
+                    if *bit_index < 0.into() || *bit_index >= (bytes.len() * 8).into() {
+                        return Err(Error::WriteBitsOutOfBounds);
+                    }
+
+                    let (byte_index, bit_offset) = bit_index.div_rem(&8.into());
+
+                    let bit_offset = usize::try_from(bit_offset).unwrap();
+
+                    let flipped_index = bytes.len() - 1 - usize::try_from(byte_index).unwrap();
+
+                    let bit_mask: u8 = 1 >> bit_offset;
+
+                    if *set_bit {
+                        bytes[flipped_index] |= bit_mask;
+                    } else {
+                        bytes[flipped_index] &= !bit_mask;
+                    }
+                }
+
+                Ok(Value::byte_string(bytes))
+            }
+            DefaultFunction::ReplicateByte => {
+                let size = args[0].unwrap_integer()?;
+                let byte = args[1].unwrap_integer()?;
+
+                // Safe since this is checked by cost model
+                let size = usize::try_from(size).unwrap();
+
+                let Ok(byte) = u8::try_from(byte) else {
+                    return Err(Error::OutsideByteBounds(byte.clone()));
+                };
+
+                let value = if size == 0 {
+                    Value::byte_string(vec![])
+                } else {
+                    Value::byte_string([byte].repeat(size - 1))
+                };
+
+                Ok(value)
+            }
+            DefaultFunction::ShiftByteString => {
+                let bytes = args[0].unwrap_byte_string()?;
+                let shift = args[1].unwrap_integer()?;
+
+                let byte_length = bytes.len();
+
+                if BigInt::from_usize(byte_length).unwrap() * 8 < shift.abs() {
+                    let mut new_vec = vec![];
+
+                    new_vec.resize(byte_length, 0);
+                    return Ok(Value::byte_string(new_vec));
+                }
+
+                let bytes = BigInt::from_bytes_be(Sign::NoSign, bytes);
+
+                let is_shl = shift >= &0.into();
+
+                let bytes = if is_shl {
+                    bytes << usize::try_from(shift.abs()).unwrap()
+                } else {
+                    bytes >> usize::try_from(shift.abs()).unwrap()
+                }
+                .to_bytes_be()
+                .1
+                .into_iter()
+                .take(byte_length)
+                .collect_vec();
+
+                Ok(Value::byte_string(bytes))
+            }
             DefaultFunction::RotateByteString => todo!(),
             DefaultFunction::CountSetBits => todo!(),
             DefaultFunction::FindFirstSetBit => todo!(),

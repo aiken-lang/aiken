@@ -173,6 +173,19 @@ impl Value {
         Ok(list)
     }
 
+    pub(super) fn unwrap_int_list(&self) -> Result<&Vec<Constant>, Error> {
+        let inner = self.unwrap_constant()?;
+
+        let Constant::ProtoList(Type::Integer, list) = inner else {
+            return Err(Error::TypeMismatch(
+                Type::List(Type::Integer.into()),
+                inner.into(),
+            ));
+        };
+
+        Ok(list)
+    }
+
     pub(super) fn unwrap_bls12_381_g1_element(&self) -> Result<&blst::blst_p1, Error> {
         let inner = self.unwrap_constant()?;
 
@@ -211,18 +224,30 @@ impl Value {
         matches!(self, Value::Con(b) if matches!(b.as_ref(), Constant::Bool(_)))
     }
 
-    pub fn cost_as_size(&self) -> Result<i64, Error> {
+    pub fn cost_as_size(&self, func: DefaultFunction) -> Result<i64, Error> {
         let size = self.unwrap_integer()?;
 
         if size.is_negative() {
-            return Err(Error::IntegerToByteStringNegativeSize(size.clone()));
+            let error = match func {
+                DefaultFunction::IntegerToByteString => {
+                    Error::IntegerToByteStringNegativeSize(size.clone())
+                }
+                DefaultFunction::ReplicateByte => todo!(),
+                _ => unreachable!(),
+            };
+            return Err(error);
         }
 
         if size > &BigInt::from(runtime::INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH) {
-            return Err(Error::IntegerToByteStringSizeTooBig(
-                size.clone(),
-                runtime::INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH,
-            ));
+            let error = match func {
+                DefaultFunction::IntegerToByteString => Error::IntegerToByteStringSizeTooBig(
+                    size.clone(),
+                    runtime::INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH,
+                ),
+                DefaultFunction::ReplicateByte => todo!(),
+                _ => unreachable!(),
+            };
+            return Err(error);
         }
 
         let arg1: i64 = u64::try_from(size).unwrap().try_into().unwrap();
