@@ -239,7 +239,7 @@ impl<'a> Deserialize<'a> for SerializableProgram {
                     .and_then(|program| {
                         let cbor = || program.to_cbor().unwrap().into();
 
-                        if conway::PlutusScript::<1>(cbor()).compute_hash().to_string() == hash {
+                        if conway::PlutusScript::<3>(cbor()).compute_hash().to_string() == hash {
                             return Ok(SerializableProgram::PlutusV3Program(program));
                         }
 
@@ -247,7 +247,7 @@ impl<'a> Deserialize<'a> for SerializableProgram {
                             return Ok(SerializableProgram::PlutusV2Program(program));
                         }
 
-                        if conway::PlutusScript::<3>(cbor()).compute_hash().to_string() == hash {
+                        if conway::PlutusScript::<1>(cbor()).compute_hash().to_string() == hash {
                             return Ok(SerializableProgram::PlutusV1Program(program));
                         }
 

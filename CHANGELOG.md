@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.8 - UNRELEASED
+
+### Changed
+
+- **aiken**: Fix `aiken blueprint policy` computing hashes as PlutusV1, instead of relying on the plutus version from the Blueprint. @KtorZ
+
 ## v1.1.7 - 2024-11-19
 
 ### Changed
