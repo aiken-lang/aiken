@@ -230,7 +230,7 @@ impl EventListener for Terminal {
                     "     Complete"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.green()),
-                    format!("benchmark results written to CSV")
+                    "benchmark results written to CSV"
                         .if_supports_color(Stderr, |s| s.bold())
                 );
             }
