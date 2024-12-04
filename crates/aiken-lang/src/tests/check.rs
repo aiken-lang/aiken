@@ -1876,6 +1876,45 @@ fn fuzzer_err_unify_3() {
 }
 
 #[test]
+fn scaled_fuzzer_ok_basic() {
+    let source_code = r#"
+        fn int() -> ScaledFuzzer<Int> { todo }
+        test prop(n via int()) { True }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn scaled_fuzzer_ok_explicit() {
+    let source_code = r#"
+        fn int(prng: PRNG, complexity: Int) -> Option<(PRNG, Int)> { todo }
+        test prop(n via int) { True }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn scaled_fuzzer_err_unify() {
+    let source_code = r#"
+        fn int() -> ScaledFuzzer<Int> { todo }
+        test prop(n: Bool via int()) { True }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((
+            _,
+            Error::CouldNotUnify {
+                situation: Some(UnifyErrorSituation::FuzzerAnnotationMismatch),
+                ..
+            }
+        ))
+    ));
+}
+
+#[test]
 fn utf8_hex_literal_warning() {
     let source_code = r#"
         pub const policy_id = "f43a62fdc3965df486de8a0d32fe800963589c41b38946602a0dc535"
