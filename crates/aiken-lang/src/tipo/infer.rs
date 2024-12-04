@@ -861,8 +861,12 @@ fn infer_scaled_fuzzer(
             // Check if this is a ScaledFuzzer (fn(PRNG, Int) -> Option<(PRNG, a)>)
             if args.len() == 2 {
                 match ret.borrow() {
-                    Type::App { module, name, args: ret_args, .. }
-                        if module.is_empty() && name == "Option" && ret_args.len() == 1 => {
+                    Type::App {
+                        module,
+                        name,
+                        args: ret_args,
+                        ..
+                    } if module.is_empty() && name == "Option" && ret_args.len() == 1 => {
                         if let Type::Tuple { elems, .. } = ret_args[0].borrow() {
                             if elems.len() == 2 {
                                 let wrapped = &elems[1];
@@ -879,7 +883,7 @@ fn infer_scaled_fuzzer(
                             }
                         }
                     }
-                    _ => ()
+                    _ => (),
                 }
             }
 
