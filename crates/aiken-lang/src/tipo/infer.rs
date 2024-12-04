@@ -357,12 +357,23 @@ fn infer_definition(
                         .map(|ann| hydrator.type_from_annotation(ann, environment))
                         .transpose()?;
 
-                    let (inferred_annotation, inferred_inner_type) = infer_fuzzer(
+                    let (inferred_annotation, inferred_inner_type) = match infer_fuzzer(
                         environment,
                         provided_inner_type.clone(),
                         &typed_via.tipo(),
                         &arg.via.location(),
-                    )?;
+                    ) {
+                        Ok(result) => Ok(result),
+                        Err(err) => match err {
+                            Error::CouldNotUnify { .. } => infer_scaled_fuzzer(
+                                environment,
+                                provided_inner_type.clone(),
+                                &typed_via.tipo(),
+                                &arg.via.location(),
+                            ),
+                            _ => Err(err),
+                        },
+                    }?;
 
                     // Ensure that the annotation, if any, matches the type inferred from the
                     // Fuzzer.
@@ -823,6 +834,71 @@ fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
                 location: *location,
             })
         }
+    }
+}
+
+#[allow(clippy::result_large_err)]
+fn infer_scaled_fuzzer(
+    environment: &mut Environment<'_>,
+    expected_inner_type: Option<Rc<Type>>,
+    tipo: &Rc<Type>,
+    location: &Span,
+) -> Result<(Annotation, Rc<Type>), Error> {
+    let could_not_unify = || Error::CouldNotUnify {
+        location: *location,
+        expected: Type::scaled_fuzzer(
+            expected_inner_type
+                .clone()
+                .unwrap_or_else(|| Type::generic_var(0)),
+        ),
+        given: tipo.clone(),
+        situation: None,
+        rigid_type_names: Default::default(),
+    };
+
+    match tipo.borrow() {
+        Type::Fn { ret, args, .. } => {
+            // Check if this is a ScaledFuzzer (fn(PRNG, Int) -> Option<(PRNG, a)>)
+            if args.len() == 2 {
+                match ret.borrow() {
+                    Type::App { module, name, args: ret_args, .. }
+                        if module.is_empty() && name == "Option" && ret_args.len() == 1 => {
+                        if let Type::Tuple { elems, .. } = ret_args[0].borrow() {
+                            if elems.len() == 2 {
+                                let wrapped = &elems[1];
+
+                                // Unify with expected ScaledFuzzer type
+                                environment.unify(
+                                    tipo.clone(),
+                                    Type::scaled_fuzzer(wrapped.clone()),
+                                    *location,
+                                    false,
+                                )?;
+
+                                return Ok((annotate_fuzzer(wrapped, location)?, wrapped.clone()));
+                            }
+                        }
+                    }
+                    _ => ()
+                }
+            }
+
+            Err(could_not_unify())
+        }
+
+        Type::Var { tipo, alias } => match &*tipo.deref().borrow() {
+            TypeVar::Link { tipo } => infer_scaled_fuzzer(
+                environment,
+                expected_inner_type,
+                &Type::with_alias(tipo.clone(), alias.clone()),
+                location,
+            ),
+            _ => Err(Error::GenericLeftAtBoundary {
+                location: *location,
+            }),
+        },
+
+        Type::App { .. } | Type::Tuple { .. } | Type::Pair { .. } => Err(could_not_unify()),
     }
 }
 

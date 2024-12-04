@@ -9,6 +9,7 @@ pub const BOOL_CONSTRUCTORS: &[&str] = &["False", "True"];
 pub const BYTE_ARRAY: &str = "ByteArray";
 pub const DATA: &str = "Data";
 pub const FUZZER: &str = "Fuzzer";
+pub const SCALED_FUZZER: &str = "ScaledFuzzer";
 pub const G1_ELEMENT: &str = "G1Element";
 pub const G2_ELEMENT: &str = "G2Element";
 pub const INT: &str = "Int";
@@ -216,6 +217,53 @@ impl Type {
                     },
                 }
                 .into(),
+            ),
+        })
+    }
+
+    pub fn scaled_fuzzer(a: Rc<Type>) -> Rc<Type> {
+        let prng_annotation = Annotation::Constructor {
+            location: Span::empty(),
+            module: None,
+            name: PRNG.to_string(),
+            arguments: vec![],
+        };
+
+        Rc::new(Type::Fn {
+            args: vec![Type::prng(), Type::int()],
+            ret: Type::option(Type::tuple(vec![Type::prng(), a])),
+            alias: Some(
+                TypeAliasAnnotation {
+                    alias: SCALED_FUZZER.to_string(),
+                    parameters: vec!["a".to_string()],
+                    annotation: Annotation::Fn {
+                        location: Span::empty(),
+                        arguments: vec![
+                            prng_annotation.clone(),
+                            Annotation::Constructor {
+                                location: Span::empty(),
+                                module: None,
+                                name: INT.to_string(),
+                                arguments: vec![],
+                            },
+                        ],
+                        ret: Annotation::Constructor {
+                            location: Span::empty(),
+                            module: None,
+                            name: OPTION.to_string(),
+                            arguments: vec![Annotation::Tuple {
+                                location: Span::empty(),
+                                elems: vec![
+                                    prng_annotation,
+                                    Annotation::Var {
+                                        location: Span::empty(),
+                                        name: "a".to_string(),
+                                    },
+                                ],
+                            }],
+                        }.into(),
+                    },
+                }.into(),
             ),
         })
     }
