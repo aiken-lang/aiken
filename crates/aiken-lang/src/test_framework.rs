@@ -385,7 +385,9 @@ impl PropertyTest {
                 value,
                 choices: next_prng.choices(),
                 cache: Cache::new(move |choices| {
-                    match Prng::from_choices(choices, iteration).sample(&self.fuzzer.program, iteration) {
+                    match Prng::from_choices(choices, iteration)
+                        .sample(&self.fuzzer.program, iteration)
+                    {
                         Err(..) => Status::Invalid,
                         Ok(None) => Status::Invalid,
                         Ok(Some((_, value))) => {
@@ -504,13 +506,13 @@ impl PropertyTest {
 ///
 #[derive(Debug)]
 pub enum Prng {
-    Seeded { 
-        choices: Vec<u8>, 
+    Seeded {
+        choices: Vec<u8>,
         uplc: PlutusData,
         iteration: usize,
     },
-    Replayed { 
-        choices: Vec<u8>, 
+    Replayed {
+        choices: Vec<u8>,
         uplc: PlutusData,
         iteration: usize,
     },
@@ -556,10 +558,7 @@ impl Prng {
             choices: vec![],
             uplc: Data::constr(
                 Prng::SEEDED,
-                vec![
-                    Data::bytestring(digest.to_vec()),
-                    Data::bytestring(vec![]),
-                ],
+                vec![Data::bytestring(digest.to_vec()), Data::bytestring(vec![])],
             ),
             iteration: 0,
         }
@@ -591,7 +590,7 @@ impl Prng {
         let program_clone = program.clone();
 
         let result = program.eval(ExBudget::max());
-        
+
         match result.result() {
             Ok(term) if matches!(term, Term::Constant(_)) => {
                 // If we got a valid constant result, process it
@@ -599,22 +598,19 @@ impl Prng {
             }
             _ => {
                 // Use the cloned program for the second attempt
-                let program_with_iteration = Program::<NamedDeBruijn>::try_from(
-                    program_clone.apply_data(Data::integer(num_bigint::BigInt::from(iteration as i64)))
-                ).unwrap();
-                
+                let program_with_iteration = program_clone
+                    .apply_data(Data::integer(num_bigint::BigInt::from(iteration as i64)));
+
                 let mut result = program_with_iteration.eval(ExBudget::max());
                 match result.result() {
                     Ok(term) if matches!(term, Term::Constant(_)) => {
                         Ok(Prng::from_result(term, iteration))
                     }
-                    Err(uplc_error) => {
-                        Err(FuzzerError {
-                            traces: result.logs(),
-                            uplc_error,
-                        })
-                    }
-                    _ => unreachable!("Fuzzer returned a malformed result? {result:#?}")
+                    Err(uplc_error) => Err(FuzzerError {
+                        traces: result.logs(),
+                        uplc_error,
+                    }),
+                    _ => unreachable!("Fuzzer returned a malformed result? {result:#?}"),
                 }
             }
         }
@@ -630,7 +626,10 @@ impl Prng {
     /// made during shrinking aren't breaking underlying invariants (if only, because we run out of
     /// values to replay). In such case, the replayed sequence is simply invalid and the fuzzer
     /// aborted altogether with 'None'.
-    pub fn from_result(result: Term<NamedDeBruijn>, iteration: usize) -> Option<(Self, PlutusData)> {
+    pub fn from_result(
+        result: Term<NamedDeBruijn>,
+        iteration: usize,
+    ) -> Option<(Self, PlutusData)> {
         /// Interpret the given 'PlutusData' as one of two Prng constructors.
         fn as_prng(cst: &PlutusData, iteration: usize) -> Prng {
             if let PlutusData::Constr(Constr { tag, fields, .. }) = cst {
