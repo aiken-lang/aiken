@@ -417,9 +417,8 @@ where
                         error,
                         path: options.blueprint_path,
                     }
-                })?;
-
-                Ok(())
+                    .into()
+                })
             }
             CodeGenMode::Test {
                 match_tests,

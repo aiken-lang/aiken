@@ -499,7 +499,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     //   fn(PRNG, Int) -> Option<(PRNG, a)>
     let scaled_fuzzer_value = Type::generic_var(id_gen.next());
     prelude.types.insert(
-        well_known::SCALED_FUZZER.to_string(), 
+        well_known::SCALED_FUZZER.to_string(),
         TypeConstructor {
             location: Span::empty(),
             parameters: vec![scaled_fuzzer_value.clone()],
