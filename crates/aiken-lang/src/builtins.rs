@@ -493,6 +493,22 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         },
     );
 
+    // ScaledFuzzer
+    //
+    // pub type ScaledFuzzer<a> =
+    //   fn(PRNG, Int) -> Option<(PRNG, a)>
+    let scaled_fuzzer_value = Type::generic_var(id_gen.next());
+    prelude.types.insert(
+        well_known::SCALED_FUZZER.to_string(), 
+        TypeConstructor {
+            location: Span::empty(),
+            parameters: vec![scaled_fuzzer_value.clone()],
+            tipo: Type::scaled_fuzzer(scaled_fuzzer_value),
+            module: "".to_string(),
+            public: true,
+        },
+    );
+
     prelude
 }
 
