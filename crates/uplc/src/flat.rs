@@ -632,7 +632,7 @@ fn encode_type(typ: &Type, bytes: &mut Vec<u8>) {
     }
 }
 
-impl<'b> Decode<'b> for Constant {
+impl Decode<'_> for Constant {
     fn decode(d: &mut Decoder) -> Result<Self, de::Error> {
         match &decode_constant(d)?[..] {
             [0] => Ok(Constant::Integer(BigInt::decode(d)?)),
@@ -806,7 +806,7 @@ impl Encode for Unique {
     }
 }
 
-impl<'b> Decode<'b> for Unique {
+impl Decode<'_> for Unique {
     fn decode(d: &mut Decoder) -> Result<Self, de::Error> {
         Ok(isize::decode(d)?.into())
     }
@@ -821,7 +821,7 @@ impl Encode for Name {
     }
 }
 
-impl<'b> Decode<'b> for Name {
+impl Decode<'_> for Name {
     fn decode(d: &mut Decoder) -> Result<Self, de::Error> {
         Ok(Name {
             text: String::decode(d)?,
@@ -830,7 +830,7 @@ impl<'b> Decode<'b> for Name {
     }
 }
 
-impl<'b> Binder<'b> for Name {
+impl Binder<'_> for Name {
     fn binder_encode(&self, e: &mut Encoder) -> Result<(), en::Error> {
         self.encode(e)?;
 
@@ -855,7 +855,7 @@ impl Encode for NamedDeBruijn {
     }
 }
 
-impl<'b> Decode<'b> for NamedDeBruijn {
+impl Decode<'_> for NamedDeBruijn {
     fn decode(d: &mut Decoder) -> Result<Self, de::Error> {
         Ok(NamedDeBruijn {
             text: String::decode(d)?,
@@ -864,7 +864,7 @@ impl<'b> Decode<'b> for NamedDeBruijn {
     }
 }
 
-impl<'b> Binder<'b> for NamedDeBruijn {
+impl Binder<'_> for NamedDeBruijn {
     fn binder_encode(&self, e: &mut Encoder) -> Result<(), en::Error> {
         self.text.encode(e)?;
         self.index.encode(e)?;
@@ -892,13 +892,13 @@ impl Encode for DeBruijn {
     }
 }
 
-impl<'b> Decode<'b> for DeBruijn {
+impl Decode<'_> for DeBruijn {
     fn decode(d: &mut Decoder) -> Result<Self, de::Error> {
         Ok(usize::decode(d)?.into())
     }
 }
 
-impl<'b> Binder<'b> for DeBruijn {
+impl Binder<'_> for DeBruijn {
     fn binder_encode(&self, _: &mut Encoder) -> Result<(), en::Error> {
         Ok(())
     }
@@ -922,7 +922,7 @@ impl Encode for FakeNamedDeBruijn {
     }
 }
 
-impl<'b> Decode<'b> for FakeNamedDeBruijn {
+impl Decode<'_> for FakeNamedDeBruijn {
     fn decode(d: &mut Decoder) -> Result<Self, de::Error> {
         let index = DeBruijn::decode(d)?;
 
@@ -930,7 +930,7 @@ impl<'b> Decode<'b> for FakeNamedDeBruijn {
     }
 }
 
-impl<'b> Binder<'b> for FakeNamedDeBruijn {
+impl Binder<'_> for FakeNamedDeBruijn {
     fn binder_encode(&self, _: &mut Encoder) -> Result<(), en::Error> {
         Ok(())
     }
@@ -954,7 +954,7 @@ impl Encode for DefaultFunction {
     }
 }
 
-impl<'b> Decode<'b> for DefaultFunction {
+impl Decode<'_> for DefaultFunction {
     fn decode(d: &mut Decoder) -> Result<Self, de::Error> {
         let builtin_tag = d.bits8(BUILTIN_TAG_WIDTH as usize)?;
         builtin_tag.try_into()

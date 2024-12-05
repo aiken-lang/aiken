@@ -206,7 +206,7 @@ impl Printer {
     }
 }
 
-fn qualify_type_name(module: &String, typ_name: &str) -> Document<'static> {
+fn qualify_type_name(module: &str, typ_name: &str) -> Document<'static> {
     if module.is_empty() {
         docvec!["aiken.", Document::String(typ_name.to_string())]
     } else {

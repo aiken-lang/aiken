@@ -52,7 +52,7 @@ struct ModuleTemplate<'a> {
     timestamp: String,
 }
 
-impl<'a> ModuleTemplate<'a> {
+impl ModuleTemplate<'_> {
     pub fn is_current_module(&self, module: &DocLink) -> bool {
         match module.path.split(".html").next() {
             None => false,
@@ -75,7 +75,7 @@ struct PageTemplate<'a> {
     timestamp: &'a str,
 }
 
-impl<'a> PageTemplate<'a> {
+impl PageTemplate<'_> {
     pub fn is_current_module(&self, _module: &DocLink) -> bool {
         false
     }

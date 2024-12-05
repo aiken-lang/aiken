@@ -132,7 +132,7 @@ impl ToPlutusData for Address {
     }
 }
 
-impl<'a> ToPlutusData for WithWrappedTransactionId<'a, TransactionInput> {
+impl ToPlutusData for WithWrappedTransactionId<'_, TransactionInput> {
     fn to_plutus_data(&self) -> PlutusData {
         wrap_multiple_with_constr(
             0,
@@ -197,7 +197,7 @@ where
     }
 }
 
-impl<'a> ToPlutusData for WithWrappedTransactionId<'a, KeyValuePairs<ScriptPurpose, Redeemer>> {
+impl ToPlutusData for WithWrappedTransactionId<'_, KeyValuePairs<ScriptPurpose, Redeemer>> {
     fn to_plutus_data(&self) -> PlutusData {
         let mut data_vec: Vec<(PlutusData, PlutusData)> = vec![];
         for (key, value) in self.0.iter() {
@@ -210,7 +210,7 @@ impl<'a> ToPlutusData for WithWrappedTransactionId<'a, KeyValuePairs<ScriptPurpo
     }
 }
 
-impl<'a> ToPlutusData for WithNeverRegistrationDeposit<'a, Vec<Certificate>> {
+impl ToPlutusData for WithNeverRegistrationDeposit<'_, Vec<Certificate>> {
     fn to_plutus_data(&self) -> PlutusData {
         self.0
             .iter()
@@ -220,7 +220,7 @@ impl<'a> ToPlutusData for WithNeverRegistrationDeposit<'a, Vec<Certificate>> {
     }
 }
 
-impl<'a> ToPlutusData for WithNeverRegistrationDeposit<'a, KeyValuePairs<ScriptPurpose, Redeemer>> {
+impl ToPlutusData for WithNeverRegistrationDeposit<'_, KeyValuePairs<ScriptPurpose, Redeemer>> {
     fn to_plutus_data(&self) -> PlutusData {
         let mut data_vec: Vec<(PlutusData, PlutusData)> = vec![];
         for (key, value) in self.0.iter() {
@@ -309,7 +309,7 @@ impl ToPlutusData for PositiveCoin {
     }
 }
 
-impl<'a> ToPlutusData for WithZeroAdaAsset<'a, Value> {
+impl ToPlutusData for WithZeroAdaAsset<'_, Value> {
     fn to_plutus_data(&self) -> PlutusData {
         match self.0 {
             Value::Coin(coin) => {
@@ -345,7 +345,7 @@ impl ToPlutusData for Value {
     }
 }
 
-impl<'a> ToPlutusData for WithZeroAdaAsset<'a, MintValue> {
+impl ToPlutusData for WithZeroAdaAsset<'_, MintValue> {
     fn to_plutus_data(&self) -> PlutusData {
         value_to_plutus_data(
             self.0.mint_value.iter(),
@@ -429,7 +429,7 @@ impl<'a> ToPlutusData for WithOptionDatum<'a, WithZeroAdaAsset<'a, Vec<Transacti
     }
 }
 
-impl<'a> ToPlutusData for WithZeroAdaAsset<'a, Vec<TransactionOutput>> {
+impl ToPlutusData for WithZeroAdaAsset<'_, Vec<TransactionOutput>> {
     fn to_plutus_data(&self) -> PlutusData {
         Data::list(
             self.0
@@ -465,7 +465,7 @@ impl<'a> ToPlutusData for WithOptionDatum<'a, WithZeroAdaAsset<'a, TransactionOu
     }
 }
 
-impl<'a> ToPlutusData for WithZeroAdaAsset<'a, TransactionOutput> {
+impl ToPlutusData for WithZeroAdaAsset<'_, TransactionOutput> {
     fn to_plutus_data(&self) -> PlutusData {
         match self.0 {
             TransactionOutput::Legacy(legacy_output) => {
@@ -528,7 +528,7 @@ impl ToPlutusData for StakeCredential {
     }
 }
 
-impl<'a> ToPlutusData for WithPartialCertificates<'a, Vec<Certificate>> {
+impl ToPlutusData for WithPartialCertificates<'_, Vec<Certificate>> {
     fn to_plutus_data(&self) -> PlutusData {
         self.0
             .iter()
@@ -538,7 +538,7 @@ impl<'a> ToPlutusData for WithPartialCertificates<'a, Vec<Certificate>> {
     }
 }
 
-impl<'a> ToPlutusData for WithPartialCertificates<'a, Certificate> {
+impl ToPlutusData for WithPartialCertificates<'_, Certificate> {
     fn to_plutus_data(&self) -> PlutusData {
         match self.0 {
             Certificate::StakeRegistration(stake_credential) => {
@@ -586,7 +586,7 @@ impl<'a> ToPlutusData for WithPartialCertificates<'a, Certificate> {
     }
 }
 
-impl<'a> ToPlutusData for WithNeverRegistrationDeposit<'a, Certificate> {
+impl ToPlutusData for WithNeverRegistrationDeposit<'_, Certificate> {
     fn to_plutus_data(&self) -> PlutusData {
         match self.0 {
             Certificate::StakeRegistration(stake_credential) => wrap_multiple_with_constr(
@@ -870,7 +870,7 @@ impl ToPlutusData for TxInInfo {
 // NOTE: This is a _small_ abuse of the 'WithWrappedTransactionId'. We know the wrapped
 // is needed for V1 and V2, and it also appears that for V1 and V2, the certifying
 // purpose mustn't include the certificate index. So, we also short-circuit it here.
-impl<'a> ToPlutusData for WithWrappedTransactionId<'a, ScriptPurpose> {
+impl ToPlutusData for WithWrappedTransactionId<'_, ScriptPurpose> {
     fn to_plutus_data(&self) -> PlutusData {
         match self.0 {
             ScriptPurpose::Minting(policy_id) => wrap_with_constr(0, policy_id.to_plutus_data()),
@@ -891,7 +891,7 @@ impl<'a> ToPlutusData for WithWrappedTransactionId<'a, ScriptPurpose> {
     }
 }
 
-impl<'a> ToPlutusData for WithNeverRegistrationDeposit<'a, ScriptPurpose> {
+impl ToPlutusData for WithNeverRegistrationDeposit<'_, ScriptPurpose> {
     fn to_plutus_data(&self) -> PlutusData {
         match self.0 {
             ScriptPurpose::Minting(policy_id) => wrap_with_constr(0, policy_id.to_plutus_data()),
@@ -1210,14 +1210,14 @@ impl ToPlutusData for RationalNumber {
     }
 }
 
-impl<'a> ToPlutusData for WithArrayRational<'a, RationalNumber> {
+impl ToPlutusData for WithArrayRational<'_, RationalNumber> {
     fn to_plutus_data(&self) -> PlutusData {
         let gcd = self.0.numerator.gcd(&self.0.denominator);
         vec![self.0.numerator / gcd, self.0.denominator / gcd].to_plutus_data()
     }
 }
 
-impl<'a> ToPlutusData for WithWrappedStakeCredential<'a, Vec<(Address, Coin)>> {
+impl ToPlutusData for WithWrappedStakeCredential<'_, Vec<(Address, Coin)>> {
     fn to_plutus_data(&self) -> PlutusData {
         self.0
             .iter()
@@ -1232,7 +1232,7 @@ impl<'a> ToPlutusData for WithWrappedStakeCredential<'a, Vec<(Address, Coin)>> {
     }
 }
 
-impl<'a> ToPlutusData for WithWrappedStakeCredential<'a, KeyValuePairs<Address, Coin>> {
+impl ToPlutusData for WithWrappedStakeCredential<'_, KeyValuePairs<Address, Coin>> {
     fn to_plutus_data(&self) -> PlutusData {
         KeyValuePairs::from(
             self.0
@@ -1249,7 +1249,7 @@ impl<'a> ToPlutusData for WithWrappedStakeCredential<'a, KeyValuePairs<Address, 
     }
 }
 
-impl<'a> ToPlutusData for WithWrappedStakeCredential<'a, StakeCredential> {
+impl ToPlutusData for WithWrappedStakeCredential<'_, StakeCredential> {
     fn to_plutus_data(&self) -> PlutusData {
         wrap_with_constr(0, self.0.to_plutus_data())
     }
@@ -1291,7 +1291,7 @@ impl ToPlutusData for Vote {
     }
 }
 
-impl<'a, T> ToPlutusData for WithNeverRegistrationDeposit<'a, ScriptInfo<T>>
+impl<T> ToPlutusData for WithNeverRegistrationDeposit<'_, ScriptInfo<T>>
 where
     T: ToPlutusData,
 {

@@ -881,7 +881,7 @@ pub enum Located<'a> {
     Annotation(&'a Annotation),
 }
 
-impl<'a> Located<'a> {
+impl Located<'_> {
     pub fn definition_location(&self) -> Option<DefinitionLocation<'_>> {
         match self {
             Self::Expression(expression) => expression.definition_location(),
@@ -1996,7 +1996,7 @@ impl<'de> serde::Deserialize<'de> for Bls12_381Point {
             {
                 struct FieldVisitor;
 
-                impl<'de> serde::de::Visitor<'de> for FieldVisitor {
+                impl serde::de::Visitor<'_> for FieldVisitor {
                     type Value = Field;
 
                     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

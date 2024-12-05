@@ -1284,7 +1284,7 @@ fn suggest_pattern(
     }
 }
 
-fn suggest_generic(name: &String, expected: usize) -> String {
+fn suggest_generic(name: &str, expected: usize) -> String {
     if expected == 0 {
         return name.to_doc().to_pretty_string(70);
     }

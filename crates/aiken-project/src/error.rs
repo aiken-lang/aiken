@@ -720,7 +720,7 @@ struct DisplayWarning<'a> {
     help: Option<String>,
 }
 
-impl<'a> Diagnostic for DisplayWarning<'a> {
+impl Diagnostic for DisplayWarning<'_> {
     fn severity(&self) -> Option<miette::Severity> {
         Some(miette::Severity::Warning)
     }
@@ -749,7 +749,7 @@ impl<'a> Diagnostic for DisplayWarning<'a> {
     }
 }
 
-impl<'a> Debug for DisplayWarning<'a> {
+impl Debug for DisplayWarning<'_> {
     fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         unreachable!("Display warning are never shown directly.");
     }
