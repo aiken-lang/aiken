@@ -666,12 +666,12 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                     let mut b = b.clone();
 
                     // It's impossible for duplicates since we check before insertion
-                    while let Ordering::Equal = a.get(0).cmp(&b.get(0)) {
+                    while let Ordering::Equal = a.first().cmp(&b.first()) {
                         a.remove(0);
                         b.remove(0);
                     }
 
-                    a.get(0).cmp(&b.get(0))
+                    a.first().cmp(&b.first())
                 })
                 .map(|col| {
                     // remove opaqueconstr paths since they are just type information
@@ -914,7 +914,7 @@ impl<'a, 'b> TreeGen<'a, 'b> {
 
                 let new_paths = new_cols.iter().map(|col| col.path.clone()).collect_vec();
 
-                if let Some(a) = relevant_columns.iter_mut().find(|a| (**a).0 == case) {
+                if let Some(a) = relevant_columns.iter_mut().find(|a| a.0 == case) {
                     new_paths.iter().for_each(|col| {
                         if !a.1.contains(col) {
                             a.1.push(col.clone());
@@ -932,7 +932,7 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                     default_matrix.push(row.clone());
 
                     case_matrices.iter_mut().for_each(|(case, matrix)| {
-                        let Some(a) = relevant_columns.iter_mut().find(|a| (**a).0 == *case) else {
+                        let Some(a) = relevant_columns.iter_mut().find(|a| a.0 == *case) else {
                             unreachable!()
                         };
 
@@ -958,7 +958,7 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                             let case = CaseTest::List(elem_count);
 
                             // paths first
-                            if let Some(a) = relevant_columns.iter_mut().find(|a| (**a).0 == case) {
+                            if let Some(a) = relevant_columns.iter_mut().find(|a| a.0 == case) {
                                 new_paths.iter().for_each(|col| {
                                     if !a.1.contains(col) {
                                         a.1.push(col.clone());
@@ -988,7 +988,7 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                     for elem_count in tail_case_length..=longest_elems_with_tail {
                         let case = CaseTest::ListWithTail(elem_count);
 
-                        if let Some(a) = relevant_columns.iter_mut().find(|a| (**a).0 == case) {
+                        if let Some(a) = relevant_columns.iter_mut().find(|a| a.0 == case) {
                             new_paths.iter().for_each(|col| {
                                 if !a.1.contains(col) {
                                     a.1.push(col.clone());
@@ -1009,15 +1009,13 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                             case_matrices.push((case, rows));
                         }
                     }
+                } else if let Some(entry) = case_matrices.iter_mut().find(|item| item.0 == case) {
+                    entry.1.push(row);
                 } else {
-                    if let Some(entry) = case_matrices.iter_mut().find(|item| item.0 == case) {
-                        entry.1.push(row);
-                    } else {
-                        let mut rows = default_matrix.clone();
+                    let mut rows = default_matrix.clone();
 
-                        rows.push(row);
-                        case_matrices.push((case, rows));
-                    }
+                    rows.push(row);
+                    case_matrices.push((case, rows));
                 }
 
                 (default_matrix, case_matrices)
@@ -1036,12 +1034,12 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                             let mut b = b.clone();
 
                             // It's impossible for duplicates since we check before insertion
-                            while let Ordering::Equal = a.get(0).cmp(&b.get(0)) {
+                            while let Ordering::Equal = a.first().cmp(&b.first()) {
                                 a.remove(0);
                                 b.remove(0);
                             }
 
-                            a.get(0).cmp(&b.get(0))
+                            a.first().cmp(&b.first())
                         })
                         .map(|col| {
                             // remove opaqueconstr paths since they are just type information

@@ -1,0 +1,12 @@
+name = "aiken-lang/acceptance_test_006"
+version = "0.0.0"
+compiler = "v1.1.7"
+plutus = "v3"
+description = ""
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "v2.1.0"
+source = "github"
+
+[config]
