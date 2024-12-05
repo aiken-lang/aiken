@@ -622,7 +622,7 @@ pub struct Counterexample<'a> {
     pub cache: Cache<'a, PlutusData>,
 }
 
-impl<'a> Counterexample<'a> {
+impl Counterexample<'_> {
     fn consider(&mut self, choices: &[u8]) -> bool {
         if choices == self.choices {
             return true;

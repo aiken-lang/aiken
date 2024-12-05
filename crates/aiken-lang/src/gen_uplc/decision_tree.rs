@@ -584,7 +584,7 @@ impl<'a> DecisionTree<'a> {
     }
 }
 
-impl<'a> Display for DecisionTree<'a> {
+impl Display for DecisionTree<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.to_pretty())
     }
