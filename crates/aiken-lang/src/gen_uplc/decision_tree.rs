@@ -69,21 +69,21 @@ impl Eq for Path {}
 
 impl PartialOrd for Path {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (self, other) {
-            (Path::Pair(a), Path::Pair(b))
-            | (Path::Tuple(a), Path::Tuple(b))
-            | (Path::List(a), Path::List(b))
-            | (Path::ListTail(a), Path::ListTail(b))
-            | (Path::Constr(_, a), Path::Constr(_, b)) => Some(a.cmp(b)),
-            (Path::OpaqueConstr(_), Path::OpaqueConstr(_)) => Some(Ordering::Equal),
-            _ => None,
-        }
+        Some(self.cmp(other))
     }
 }
 
 impl Ord for Path {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap_or(Ordering::Equal)
+        match (self, other) {
+            (Path::Pair(a), Path::Pair(b))
+            | (Path::Tuple(a), Path::Tuple(b))
+            | (Path::List(a), Path::List(b))
+            | (Path::ListTail(a), Path::ListTail(b))
+            | (Path::Constr(_, a), Path::Constr(_, b)) => a.cmp(b),
+            (Path::OpaqueConstr(_), Path::OpaqueConstr(_)) => Ordering::Equal,
+            _ => Ordering::Equal,
+        }
     }
 }
 
