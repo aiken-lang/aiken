@@ -1504,7 +1504,7 @@ impl DefaultFunction {
 
                 let bytes_result = if *should_pad {
                     bytes1
-                        .into_iter()
+                        .iter()
                         .zip_longest(bytes2)
                         .map(|b| match b {
                             itertools::EitherOrBoth::Both(left_byte, right_byte) => {
@@ -1517,7 +1517,7 @@ impl DefaultFunction {
                         .collect_vec()
                 } else {
                     bytes1
-                        .into_iter()
+                        .iter()
                         .zip(bytes2)
                         .map(|(b1, b2)| b1 & b2)
                         .collect_vec()
@@ -1532,7 +1532,7 @@ impl DefaultFunction {
 
                 let bytes_result = if *should_pad {
                     bytes1
-                        .into_iter()
+                        .iter()
                         .zip_longest(bytes2)
                         .map(|b| match b {
                             itertools::EitherOrBoth::Both(left_byte, right_byte) => {
@@ -1545,7 +1545,7 @@ impl DefaultFunction {
                         .collect_vec()
                 } else {
                     bytes1
-                        .into_iter()
+                        .iter()
                         .zip(bytes2)
                         .map(|(b1, b2)| b1 | b2)
                         .collect_vec()
@@ -1560,7 +1560,7 @@ impl DefaultFunction {
 
                 let bytes_result = if *should_pad {
                     bytes1
-                        .into_iter()
+                        .iter()
                         .zip_longest(bytes2)
                         .map(|b| match b {
                             itertools::EitherOrBoth::Both(left_byte, right_byte) => {
@@ -1573,7 +1573,7 @@ impl DefaultFunction {
                         .collect_vec()
                 } else {
                     bytes1
-                        .into_iter()
+                        .iter()
                         .zip(bytes2)
                         .map(|(b1, b2)| b1 ^ b2)
                         .collect_vec()
@@ -1584,7 +1584,7 @@ impl DefaultFunction {
             DefaultFunction::ComplementByteString => {
                 let bytes = args[0].unwrap_byte_string()?;
 
-                let result = bytes.into_iter().map(|b| b ^ 255).collect_vec();
+                let result = bytes.iter().map(|b| b ^ 255).collect_vec();
 
                 Ok(Value::byte_string(result))
             }
@@ -1666,9 +1666,8 @@ impl DefaultFunction {
                 let byte_length = bytes.len();
 
                 if BigInt::from_usize(byte_length).unwrap() * 8 <= shift.abs() {
-                    let mut new_vec = vec![];
+                    let new_vec = vec![0; byte_length];
 
-                    new_vec.resize(byte_length, 0);
                     return Ok(Value::byte_string(new_vec));
                 }
 
