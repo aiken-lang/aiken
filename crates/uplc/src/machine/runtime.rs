@@ -9,8 +9,9 @@ use crate::{
     machine::value::integer_log2,
     plutus_data_to_bytes,
 };
+use bitvec::{order::Lsb0, vec::BitVec};
 use itertools::Itertools;
-use num_bigint::{BigInt, Sign};
+use num_bigint::BigInt;
 use num_integer::Integer;
 use num_traits::{FromPrimitive, Signed, Zero};
 use once_cell::sync::Lazy;
@@ -1664,34 +1665,62 @@ impl DefaultFunction {
 
                 let byte_length = bytes.len();
 
-                if BigInt::from_usize(byte_length).unwrap() * 8 < shift.abs() {
+                if BigInt::from_usize(byte_length).unwrap() * 8 <= shift.abs() {
                     let mut new_vec = vec![];
 
                     new_vec.resize(byte_length, 0);
                     return Ok(Value::byte_string(new_vec));
                 }
 
-                let bytes = BigInt::from_bytes_be(Sign::NoSign, bytes);
-
                 let is_shl = shift >= &0.into();
 
-                let bytes = if is_shl {
-                    bytes << usize::try_from(shift.abs()).unwrap()
-                } else {
-                    bytes >> usize::try_from(shift.abs()).unwrap()
-                }
-                .to_bytes_be()
-                .1
-                .into_iter()
-                .take(byte_length)
-                .collect_vec();
+                let mut bv = BitVec::<u8, Lsb0>::from_vec(bytes.clone());
 
-                Ok(Value::byte_string(bytes))
+                if is_shl {
+                    bv.shift_left(usize::try_from(shift.abs()).unwrap());
+                } else {
+                    bv.shift_right(usize::try_from(shift.abs()).unwrap());
+                }
+
+                Ok(Value::byte_string(bv.into_vec()))
             }
-            DefaultFunction::RotateByteString => todo!(),
-            DefaultFunction::CountSetBits => todo!(),
+            DefaultFunction::RotateByteString => {
+                let bytes = args[0].unwrap_byte_string()?;
+                let shift = args[1].unwrap_integer()?;
+
+                let byte_length = bytes.len();
+
+                let shift = shift % byte_length;
+
+                let mut bv = BitVec::<u8, Lsb0>::from_vec(bytes.clone());
+
+                bv.rotate_right(usize::try_from(shift).unwrap());
+
+                Ok(Value::byte_string(bv.into_vec()))
+            }
+            DefaultFunction::CountSetBits => {
+                let bytes = args[0].unwrap_byte_string()?;
+
+                Ok(Value::integer(hamming::weight(bytes).into()))
+            }
             DefaultFunction::FindFirstSetBit => todo!(),
-            DefaultFunction::Ripemd_160 => todo!(),
+            DefaultFunction::Ripemd_160 => {
+                use cryptoxide::{digest::Digest, ripemd160::Ripemd160};
+
+                let arg1 = args[0].unwrap_byte_string()?;
+
+                let mut hasher = Ripemd160::new();
+
+                hasher.input(arg1);
+
+                let mut bytes = vec![0; hasher.output_bytes()];
+
+                hasher.result(&mut bytes);
+
+                let value = Value::byte_string(bytes);
+
+                Ok(value)
+            }
             DefaultFunction::ExpModInteger => todo!(),
         }
     }

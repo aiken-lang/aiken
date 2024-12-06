@@ -33,6 +33,8 @@ strum_macros = "0.24.3"
 thiserror = "1.0.39"
 blst = "0.3.11"
 once_cell = "1.18.0"
+hamming = "0.1.3"
+bitvec = "1.0.1"
 
 [target.'cfg(not(target_family="wasm"))'.dependencies]
 secp256k1 = { version = "0.26.0" }
