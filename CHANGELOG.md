@@ -2,9 +2,16 @@
 
 ## v1.1.8 - UNRELEASED
 
+### Added
+
+- **aiken**: Generate a default 'placeholder' validator when using `aiken new`. See [#1061](https://github.com/aiken-lang/aiken/pull/1061) @Waalge
+
 ### Changed
 
 - **aiken**: Fix `aiken blueprint policy` computing hashes as PlutusV1, instead of relying on the plutus version from the Blueprint. @KtorZ
+- **uplc**: Parse tild in identifiers for UPLC nodes. @SupernaviX
+- **examples**: Update "Hello, World!" source code tutorial to match website, now using MeshJS. @jinglescode
+- **examples**: Update "Gift Card" source code tutorial to match website, now using Lucid-Evolution and Weld. @rvcas
 
 ## v1.1.7 - 2024-11-19
 
