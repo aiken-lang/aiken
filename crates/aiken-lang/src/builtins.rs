@@ -910,27 +910,27 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
         }
         DefaultFunction::AndByteString => {
             let tipo = Type::function(
-                vec![Type::byte_array(), Type::byte_array()],
+                vec![Type::bool(), Type::byte_array(), Type::byte_array()],
                 Type::byte_array(),
             );
 
-            (tipo, 2)
+            (tipo, 3)
         }
         DefaultFunction::OrByteString => {
             let tipo = Type::function(
-                vec![Type::byte_array(), Type::byte_array()],
+                vec![Type::bool(), Type::byte_array(), Type::byte_array()],
                 Type::byte_array(),
             );
 
-            (tipo, 2)
+            (tipo, 3)
         }
         DefaultFunction::XorByteString => {
             let tipo = Type::function(
-                vec![Type::byte_array(), Type::byte_array()],
+                vec![Type::bool(), Type::byte_array(), Type::byte_array()],
                 Type::byte_array(),
             );
 
-            (tipo, 2)
+            (tipo, 3)
         }
         DefaultFunction::ComplementByteString => {
             let tipo = Type::function(vec![Type::byte_array()], Type::byte_array());
