@@ -2,7 +2,7 @@ use super::{value::integer_log2, Error, Value};
 use crate::builtins::DefaultFunction;
 use num_traits::Signed;
 use pallas_primitives::conway::Language;
-use std::{collections::HashMap, i64};
+use std::collections::HashMap;
 
 macro_rules! hashmap {
     // map-like

@@ -1711,7 +1711,7 @@ impl DefaultFunction {
 
                 let first_bit =
                     bytes
-                        .into_iter()
+                        .iter()
                         .rev()
                         .enumerate()
                         .find_map(|(byte_index, value)| {
