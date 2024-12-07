@@ -42,7 +42,6 @@ fn create_project(args: Args, package_name: &PackageName) -> miette::Result<()> 
     if !args.lib {
         create_env(&root)?;
         create_validators(&root)?;
-        create_validator(&root)?;
     }
 
     readme(&root, &package_name.repo)?;
@@ -108,11 +107,11 @@ fn create_lib(root: &Path) -> miette::Result<()> {
 
 fn create_validators(root: &Path) -> miette::Result<()> {
     let validators = root.join("validators");
-    fs::create_dir_all(validators).into_diagnostic()
+    fs::create_dir_all(validators).into_diagnostic()?;
+    create_validator_placeholder(&validators)
 }
 
-fn create_validator(root: &Path) -> miette::Result<()> {
-    let validators = root.join("validators");
+fn create_validator_placeholder(validators: &Path) -> miette::Result<()> {
     fs::write(
         validators.join("placeholder.ak"),
         indoc! {
