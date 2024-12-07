@@ -908,19 +908,83 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
 
             (tipo, 2)
         }
-        DefaultFunction::AndByteString => todo!(),
-        DefaultFunction::OrByteString => todo!(),
-        DefaultFunction::XorByteString => todo!(),
-        DefaultFunction::ComplementByteString => todo!(),
-        DefaultFunction::ReadBit => todo!(),
-        DefaultFunction::WriteBits => todo!(),
-        DefaultFunction::ReplicateByte => todo!(),
-        DefaultFunction::ShiftByteString => todo!(),
-        DefaultFunction::RotateByteString => todo!(),
-        DefaultFunction::CountSetBits => todo!(),
-        DefaultFunction::FindFirstSetBit => todo!(),
-        DefaultFunction::Ripemd_160 => todo!(),
-        DefaultFunction::ExpModInteger => todo!(),
+        DefaultFunction::AndByteString => {
+            let tipo = Type::function(
+                vec![Type::byte_array(), Type::byte_array()],
+                Type::byte_array(),
+            );
+
+            (tipo, 2)
+        }
+        DefaultFunction::OrByteString => {
+            let tipo = Type::function(
+                vec![Type::byte_array(), Type::byte_array()],
+                Type::byte_array(),
+            );
+
+            (tipo, 2)
+        }
+        DefaultFunction::XorByteString => {
+            let tipo = Type::function(
+                vec![Type::byte_array(), Type::byte_array()],
+                Type::byte_array(),
+            );
+
+            (tipo, 2)
+        }
+        DefaultFunction::ComplementByteString => {
+            let tipo = Type::function(vec![Type::byte_array()], Type::byte_array());
+
+            (tipo, 1)
+        }
+        DefaultFunction::ReadBit => {
+            let tipo = Type::function(vec![Type::byte_array(), Type::int()], Type::bool());
+
+            (tipo, 2)
+        }
+        DefaultFunction::WriteBits => {
+            let tipo = Type::function(
+                vec![Type::byte_array(), Type::list(Type::int()), Type::bool()],
+                Type::byte_array(),
+            );
+
+            (tipo, 3)
+        }
+        DefaultFunction::ReplicateByte => {
+            let tipo = Type::function(vec![Type::int(), Type::int()], Type::byte_array());
+
+            (tipo, 2)
+        }
+        DefaultFunction::ShiftByteString => {
+            let tipo = Type::function(vec![Type::byte_array(), Type::int()], Type::byte_array());
+
+            (tipo, 2)
+        }
+        DefaultFunction::RotateByteString => {
+            let tipo = Type::function(vec![Type::byte_array(), Type::int()], Type::byte_array());
+
+            (tipo, 2)
+        }
+        DefaultFunction::CountSetBits => {
+            let tipo = Type::function(vec![Type::byte_array()], Type::int());
+
+            (tipo, 1)
+        }
+        DefaultFunction::FindFirstSetBit => {
+            let tipo = Type::function(vec![Type::byte_array()], Type::int());
+
+            (tipo, 1)
+        }
+        DefaultFunction::Ripemd_160 => {
+            let tipo = Type::function(vec![Type::byte_array()], Type::byte_array());
+
+            (tipo, 1)
+        }
+        DefaultFunction::ExpModInteger => {
+            let tipo = Type::function(vec![Type::int(), Type::int(), Type::int()], Type::int());
+
+            (tipo, 3)
+        }
     };
 
     ValueConstructor::public(
