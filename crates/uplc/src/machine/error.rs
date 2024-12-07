@@ -75,6 +75,8 @@ pub enum Error {
     MachineNeverReachedDone,
     #[error("integerToByteString encountered negative size\n{:>13} {0}", "Size")]
     IntegerToByteStringNegativeSize(BigInt),
+    #[error("replicateByte encountered negative size\n{:>13} {0}", "Size")]
+    ReplicateByteNegativeSize(BigInt),
     #[error("integerToByteString encountered negative input\n{:>13} {0}", "Input")]
     IntegerToByteStringNegativeInput(BigInt),
     #[error(
@@ -83,6 +85,12 @@ pub enum Error {
         "Maximum"
     )]
     IntegerToByteStringSizeTooBig(BigInt, i64),
+    #[error(
+        "bytes size beyond limit when replicate byte\n{:>13} {0}\n{:>13} {1}",
+        "Size",
+        "Maximum"
+    )]
+    ReplicateByteSizeTooBig(BigInt, i64),
     #[error(
         "bytes size below limit when converting from integer\n{:>13} {0}\n{:>13} {1}",
         "Size",

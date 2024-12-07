@@ -232,7 +232,7 @@ impl Value {
                 DefaultFunction::IntegerToByteString => {
                     Error::IntegerToByteStringNegativeSize(size.clone())
                 }
-                DefaultFunction::ReplicateByte => todo!(),
+                DefaultFunction::ReplicateByte => Error::ReplicateByteNegativeSize(size.clone()),
                 _ => unreachable!(),
             };
             return Err(error);
@@ -244,7 +244,10 @@ impl Value {
                     size.clone(),
                     runtime::INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH,
                 ),
-                DefaultFunction::ReplicateByte => todo!(),
+                DefaultFunction::ReplicateByte => Error::ReplicateByteSizeTooBig(
+                    size.clone(),
+                    runtime::INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH,
+                ),
                 _ => unreachable!(),
             };
             return Err(error);

@@ -9,7 +9,7 @@ use crate::{
     machine::value::integer_log2,
     plutus_data_to_bytes,
 };
-use bitvec::{order::Lsb0, vec::BitVec};
+use bitvec::{order::Msb0, vec::BitVec};
 use itertools::Itertools;
 use num_bigint::BigInt;
 use num_integer::Integer;
@@ -1629,7 +1629,7 @@ impl DefaultFunction {
 
                     let flipped_index = bytes.len() - 1 - usize::try_from(byte_index).unwrap();
 
-                    let bit_mask: u8 = 1 >> bit_offset;
+                    let bit_mask: u8 = 1 << bit_offset;
 
                     if *set_bit {
                         bytes[flipped_index] |= bit_mask;
@@ -1654,7 +1654,7 @@ impl DefaultFunction {
                 let value = if size == 0 {
                     Value::byte_string(vec![])
                 } else {
-                    Value::byte_string([byte].repeat(size - 1))
+                    Value::byte_string([byte].repeat(size))
                 };
 
                 Ok(value)
@@ -1673,7 +1673,7 @@ impl DefaultFunction {
 
                 let is_shl = shift >= &0.into();
 
-                let mut bv = BitVec::<u8, Lsb0>::from_vec(bytes.clone());
+                let mut bv = BitVec::<u8, Msb0>::from_vec(bytes.clone());
 
                 if is_shl {
                     bv.shift_left(usize::try_from(shift.abs()).unwrap());
@@ -1689,11 +1689,15 @@ impl DefaultFunction {
 
                 let byte_length = bytes.len();
 
-                let shift = shift % byte_length;
+                if bytes.is_empty() {
+                    return Ok(Value::byte_string(bytes.clone()));
+                }
 
-                let mut bv = BitVec::<u8, Lsb0>::from_vec(bytes.clone());
+                let shift = shift.mod_floor(&(byte_length * 8).into());
 
-                bv.rotate_right(usize::try_from(shift).unwrap());
+                let mut bv = BitVec::<u8, Msb0>::from_vec(bytes.clone());
+
+                bv.rotate_left(usize::try_from(shift).unwrap());
 
                 Ok(Value::byte_string(bv.into_vec()))
             }
@@ -1713,21 +1717,21 @@ impl DefaultFunction {
                         .find_map(|(byte_index, value)| {
                             let value = value.reverse_bits();
 
-                            let first_bit: Option<usize> = if value > 128 {
+                            let first_bit: Option<usize> = if value >= 128 {
                                 Some(0)
-                            } else if value > 64 {
+                            } else if value >= 64 {
                                 Some(1)
-                            } else if value > 32 {
+                            } else if value >= 32 {
                                 Some(2)
-                            } else if value > 16 {
+                            } else if value >= 16 {
                                 Some(3)
-                            } else if value > 8 {
+                            } else if value >= 8 {
                                 Some(4)
-                            } else if value > 4 {
+                            } else if value >= 4 {
                                 Some(5)
-                            } else if value > 2 {
+                            } else if value >= 2 {
                                 Some(6)
-                            } else if value > 1 {
+                            } else if value >= 1 {
                                 Some(7)
                             } else {
                                 None

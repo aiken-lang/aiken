@@ -2,7 +2,7 @@ use super::{value::integer_log2, Error, Value};
 use crate::builtins::DefaultFunction;
 use num_traits::Signed;
 use pallas_primitives::conway::Language;
-use std::collections::HashMap;
+use std::{collections::HashMap, i64};
 
 macro_rules! hashmap {
     // map-like
@@ -2641,7 +2641,10 @@ impl BuiltinCosts {
             DefaultFunction::ShiftByteString => {
                 let literal = args[1].unwrap_integer()?;
 
-                let arg1: i64 = u64::try_from(literal.abs()).unwrap().try_into().unwrap();
+                let arg1: i64 = u64::try_from(literal.abs())
+                    .unwrap()
+                    .try_into()
+                    .unwrap_or(i64::MAX);
 
                 ExBudget {
                     mem: self.shift_byte_string.mem.cost(args[0].to_ex_mem(), arg1),
@@ -2651,7 +2654,10 @@ impl BuiltinCosts {
             DefaultFunction::RotateByteString => {
                 let literal = args[1].unwrap_integer()?;
 
-                let arg1: i64 = u64::try_from(literal.abs()).unwrap().try_into().unwrap();
+                let arg1: i64 = u64::try_from(literal.abs())
+                    .unwrap()
+                    .try_into()
+                    .unwrap_or(i64::MAX);
 
                 ExBudget {
                     mem: self.rotate_byte_string.mem.cost(args[0].to_ex_mem(), arg1),
