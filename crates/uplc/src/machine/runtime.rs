@@ -1709,36 +1709,35 @@ impl DefaultFunction {
             DefaultFunction::FindFirstSetBit => {
                 let bytes = args[0].unwrap_byte_string()?;
 
-                let first_bit =
-                    bytes
-                        .iter()
-                        .rev()
-                        .enumerate()
-                        .find_map(|(byte_index, value)| {
-                            let value = value.reverse_bits();
+                let first_bit = bytes
+                    .iter()
+                    .rev()
+                    .enumerate()
+                    .find_map(|(byte_index, value)| {
+                        let value = value.reverse_bits();
 
-                            let first_bit: Option<usize> = if value >= 128 {
-                                Some(0)
-                            } else if value >= 64 {
-                                Some(1)
-                            } else if value >= 32 {
-                                Some(2)
-                            } else if value >= 16 {
-                                Some(3)
-                            } else if value >= 8 {
-                                Some(4)
-                            } else if value >= 4 {
-                                Some(5)
-                            } else if value >= 2 {
-                                Some(6)
-                            } else if value >= 1 {
-                                Some(7)
-                            } else {
-                                None
-                            };
+                        let first_bit: Option<usize> = if value >= 128 {
+                            Some(0)
+                        } else if value >= 64 {
+                            Some(1)
+                        } else if value >= 32 {
+                            Some(2)
+                        } else if value >= 16 {
+                            Some(3)
+                        } else if value >= 8 {
+                            Some(4)
+                        } else if value >= 4 {
+                            Some(5)
+                        } else if value >= 2 {
+                            Some(6)
+                        } else if value >= 1 {
+                            Some(7)
+                        } else {
+                            None
+                        };
 
-                            first_bit.map(|bit| isize::try_from(bit + byte_index * 8).unwrap())
-                        });
+                        first_bit.map(|bit| isize::try_from(bit + byte_index * 8).unwrap())
+                    });
 
                 Ok(Value::integer(first_bit.unwrap_or(-1).into()))
             }
