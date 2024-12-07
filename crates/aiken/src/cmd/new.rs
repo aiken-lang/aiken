@@ -114,7 +114,7 @@ fn create_validators(root: &Path) -> miette::Result<()> {
 fn create_validator(root: &Path) -> miette::Result<()> {
     let validators = root.join("validators");
     fs::write(
-        validators.join("hello.ak"),
+        validators.join("placeholder.ak"),
         indoc! {
             r#"
             use cardano/address.{{Credential}}
