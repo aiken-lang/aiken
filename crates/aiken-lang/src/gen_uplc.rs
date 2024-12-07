@@ -44,7 +44,6 @@ use builder::{
     introduce_name, introduce_pattern, pop_pattern, softcast_data_to_type_otherwise,
     unknown_data_to_type, DISCARDED,
 };
-
 use decision_tree::{get_tipo_by_path, Assigned, CaseTest, DecisionTree, TreeGen};
 use indexmap::IndexMap;
 use interner::AirInterner;

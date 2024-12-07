@@ -1592,6 +1592,10 @@ impl DefaultFunction {
                 let bytes = args[0].unwrap_byte_string()?;
                 let bit_index = args[1].unwrap_integer()?;
 
+                if bytes.is_empty() {
+                    return Err(Error::EmptyByteArray);
+                }
+
                 // This ensures there is at least one byte in bytes
                 if *bit_index < 0.into() || *bit_index >= (bytes.len() * 8).into() {
                     return Err(Error::ReadBitOutOfBounds);

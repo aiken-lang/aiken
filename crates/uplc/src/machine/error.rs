@@ -136,6 +136,8 @@ pub enum Error {
     ReadBitOutOfBounds,
     #[error("writeBits: index out of bounds")]
     WriteBitsOutOfBounds,
+    #[error("illegal operation on empty ByteArray")]
+    EmptyByteArray,
     #[error("blst error {0:?}")]
     Blst(blst::BLST_ERROR),
     #[error("blst::hashToGroup")]

@@ -505,10 +505,13 @@ pub fn plutus(id_gen: &IdGenerator) -> TypeInfo {
         annotations: HashMap::new(),
     };
 
-    for builtin in DefaultFunction::iter().take(75) {
-        let value = from_default_function(builtin, id_gen);
-
-        plutus.values.insert(builtin.aiken_name(), value);
+    for builtin in DefaultFunction::iter() {
+        // FIXME: Disabling WriteBits for now, since its signature requires the ability to create
+        // list of raw integers, which isn't possible through Aiken at the moment.
+        if !matches!(builtin, DefaultFunction::WriteBits) {
+            let value = from_default_function(builtin, id_gen);
+            plutus.values.insert(builtin.aiken_name(), value);
+        }
     }
 
     plutus
