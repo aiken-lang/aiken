@@ -1,4 +1,4 @@
-use super::{value::integer_log2, Error, Value};
+use super::{Error, Value};
 use crate::builtins::DefaultFunction;
 use num_traits::Signed;
 use pallas_primitives::conway::Language;
@@ -2676,31 +2676,31 @@ impl BuiltinCosts {
                 mem: self.ripemd_160.mem.cost(args[0].to_ex_mem()),
                 cpu: self.ripemd_160.cpu.cost(args[0].to_ex_mem()),
             },
-            DefaultFunction::ExpModInteger => {
-                let arg3 = args[2].unwrap_integer()?;
-                if arg3.lt(&(0.into())) {
-                    return Err(Error::OutsideNaturalBounds(arg3.clone()));
-                }
+            // DefaultFunction::ExpModInteger => {
+            //     let arg3 = args[2].unwrap_integer()?;
+            //     if arg3.lt(&(0.into())) {
+            //         return Err(Error::OutsideNaturalBounds(arg3.clone()));
+            //     }
 
-                let arg3_exmem = if *arg3 == 0.into() {
-                    1
-                } else {
-                    (integer_log2(arg3.abs()) / 64) + 1
-                };
+            //     let arg3_exmem = if *arg3 == 0.into() {
+            //         1
+            //     } else {
+            //         (integer_log2(arg3.abs()) / 64) + 1
+            //     };
 
-                ExBudget {
-                    mem: self.exp_mod_int.mem.cost(
-                        args[0].to_ex_mem(),
-                        args[1].to_ex_mem(),
-                        arg3_exmem,
-                    ),
-                    cpu: self.exp_mod_int.cpu.cost(
-                        args[0].to_ex_mem(),
-                        args[1].to_ex_mem(),
-                        arg3_exmem,
-                    ),
-                }
-            }
+            //     ExBudget {
+            //         mem: self.exp_mod_int.mem.cost(
+            //             args[0].to_ex_mem(),
+            //             args[1].to_ex_mem(),
+            //             arg3_exmem,
+            //         ),
+            //         cpu: self.exp_mod_int.cpu.cost(
+            //             args[0].to_ex_mem(),
+            //             args[1].to_ex_mem(),
+            //             arg3_exmem,
+            //         ),
+            //     }
+            // }
         })
     }
 }

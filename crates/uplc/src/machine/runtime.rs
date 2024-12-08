@@ -191,8 +191,8 @@ impl DefaultFunction {
             | DefaultFunction::RotateByteString
             | DefaultFunction::CountSetBits
             | DefaultFunction::FindFirstSetBit
-            | DefaultFunction::Ripemd_160
-            | DefaultFunction::ExpModInteger => false,
+            | DefaultFunction::Ripemd_160 => false,
+            // | DefaultFunction::ExpModInteger
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
         }
@@ -287,7 +287,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 1,
             DefaultFunction::FindFirstSetBit => 1,
             DefaultFunction::Ripemd_160 => 1,
-            DefaultFunction::ExpModInteger => 3,
+            // DefaultFunction::ExpModInteger => 3,
         }
     }
 
@@ -380,7 +380,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 0,
             DefaultFunction::FindFirstSetBit => 0,
             DefaultFunction::Ripemd_160 => 0,
-            DefaultFunction::ExpModInteger => 0,
+            // DefaultFunction::ExpModInteger => 0,
         }
     }
 
@@ -1761,8 +1761,7 @@ impl DefaultFunction {
                 let value = Value::byte_string(bytes);
 
                 Ok(value)
-            }
-            DefaultFunction::ExpModInteger => todo!(),
+            } // DefaultFunction::ExpModInteger => todo!(),
         }
     }
 }
