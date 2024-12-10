@@ -268,15 +268,38 @@ fn generate_module(
         timestamp: timestamp.as_secs().to_string(),
     };
 
+    let rendered_content = convert_latex_markers(
+                                    inject_math_library(
+                                        module.render().expect("Module documentation template rendering"),
+                                        )
+                                    );
+
     (
         search_indexes,
         DocFile {
             path: PathBuf::from(format!("{}.html", module.module_name)),
-            content: module
-                .render()
-                .expect("Module documentation template rendering"),
+            content: rendered_content,
         },
     )
+}
+
+
+fn convert_latex_markers(input: String) -> String {
+    input.replace("#[", "\\(")
+         .replace("]#", "\\)")
+}
+
+fn inject_math_library(html: String) -> String {
+    let mathjax_script = r#"
+    <script type="text/javascript" id="MathJax-script" async
+        src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+    </script>
+    <script>
+      MathJax.typeset();
+    </script>
+    "#;
+
+    html.replace("</head>", &format!("{}\n</head>", mathjax_script))
 }
 
 fn generate_static_assets(search_indexes: Vec<SearchIndex>) -> Vec<DocFile> {
