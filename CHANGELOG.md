@@ -5,6 +5,8 @@
 ### Added
 
 - **aiken**: Generate a default 'placeholder' validator when using `aiken new`. See [#1061](https://github.com/aiken-lang/aiken/pull/1061) @Waalge
+- **aiken-lang**: Add `ScaledFuzzer` type that takes both PRNG and complexity parameter to allow generating larger test inputs in later iterations @Riley-Kilgore
+- **aiken-project**: Enable CSV output of benchmark results from property-based tests, including memory and CPU costs @Riley-Kilgore
 
 ### Changed
 
