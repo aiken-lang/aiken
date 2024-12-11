@@ -50,6 +50,7 @@ fn fmt_test_json(result: &TestResult<UntypedExpr, UntypedExpr>) -> serde_json::V
         TestResult::PropertyTestResult(PropertyTestResult { ref test, .. }) => {
             &test.on_test_failure
         }
+        TestResult::Benchmark(_) => unreachable!("benchmark returned in JSON output"),
     };
 
     let mut test = json!({
@@ -95,6 +96,7 @@ fn fmt_test_json(result: &TestResult<UntypedExpr, UntypedExpr>) -> serde_json::V
                 Err(err) => json!({"error": err.to_string()}),
             };
         }
+        TestResult::Benchmark(_) => unreachable!("benchmark returned in JSON output"),
     }
 
     if !result.traces().is_empty() {

@@ -43,7 +43,12 @@ pub enum Event {
         path: PathBuf,
     },
     RunningTests,
+    RunningBenchmarks,
     FinishedTests {
+        seed: u32,
+        tests: Vec<TestResult<UntypedExpr, UntypedExpr>>,
+    },
+    FinishedBenchmarks {
         seed: u32,
         tests: Vec<TestResult<UntypedExpr, UntypedExpr>>,
     },
@@ -128,6 +133,10 @@ pub(crate) fn find_max_execution_units<T>(xs: &[TestResult<T, T>]) -> (usize, us
                     } else {
                         (max_mem, max_cpu, max_iter)
                     }
+                }
+                TestResult::Benchmark(..) => {
+                    // todo riley - should this be reachable?
+                    unreachable!("property returned benchmark result ?!")
                 }
             });
 
