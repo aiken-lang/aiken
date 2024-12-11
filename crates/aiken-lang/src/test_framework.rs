@@ -322,6 +322,10 @@ impl PropertyTest {
         })
     }
 
+    // TODO : Riley add way to accumulate the coverage traces instead of discarding them
+    // We should handle this in a way that is similar with benchmarking and we should
+    // combine them once both PRs are merged.
+
     pub fn run_n_times<'a>(
         &'a self,
         remaining: &mut usize,

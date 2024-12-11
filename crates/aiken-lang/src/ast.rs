@@ -2276,6 +2276,7 @@ pub enum TraceLevel {
     Silent,  // No traces
     Compact, // Line numbers only
     Verbose, // Full verbose traces as provided by the user or the compiler
+    Coverage, // Coverage traces
 }
 
 impl Tracing {
@@ -2315,6 +2316,7 @@ impl Display for TraceLevel {
             TraceLevel::Silent => f.write_str("silent"),
             TraceLevel::Compact => f.write_str("compact"),
             TraceLevel::Verbose => f.write_str("verbose"),
+            TraceLevel::Coverage => f.write_str("coverage"),
         }
     }
 }
