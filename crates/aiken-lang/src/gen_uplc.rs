@@ -232,6 +232,56 @@ impl<'a> CodeGenerator<'a> {
         program
     }
 
+    fn coverage_trace(&mut self, location: Span, module_name: &str, context: &str) -> AirTree {
+        let msg = format!("COVERAGE:{}:{}:{}:{}",
+            module_name,
+            location.start,
+            location.end,
+            context
+        );
+            
+        AirTree::trace(
+            AirTree::string(&msg),
+            Type::void(),
+            AirTree::void()
+        )
+    }
+    
+    fn maybe_add_coverage_trace(
+        &mut self,
+        tree: AirTree,
+        location: Span,
+        module_name: &str,
+        context: &str
+    ) -> AirTree {
+        if matches!(self.tracing, TraceLevel::Coverage) {
+            AirTree::NoOp {
+                then: Box::new(AirTree::NoOp {
+                    then: Box::new(self.coverage_trace(location, module_name, context))
+                })
+            }
+        } else {
+            tree
+        }
+    }
+    
+    // Add coverage traces to various expression types
+    fn build_with_coverage(
+        &mut self,
+        expr: &TypedExpr,
+        module_name: &str,
+        context: &[TypedExpr],
+        trace_context: &str
+    ) -> AirTree {
+        let result = self.build(expr, module_name, context);
+        self.maybe_add_coverage_trace(
+            result,
+            expr.location(),
+            module_name,
+            trace_context
+        )
+    }
+
     fn build(
         &mut self,
         body: &TypedExpr,
@@ -261,6 +311,9 @@ impl<'a> CodeGenerator<'a> {
                     }
                     (TraceLevel::Verbose, _) => {
                         get_src_code_by_span(module_build_name, location, &self.module_src)
+                    }
+                    (TraceLevel::Coverage, _) => {
+                        "".to_string()
                     }
                 };
 
@@ -317,7 +370,29 @@ impl<'a> CodeGenerator<'a> {
                     let (expr, dangling_expressions) = expressions
                         .split_first()
                         .expect("Sequence or Pipeline should have at least one expression");
-                    self.build(expr, module_build_name, dangling_expressions)
+                    if matches!(self.tracing, TraceLevel::Coverage) {
+                        let mut result = self.build_with_coverage(
+                            expr,
+                            module_build_name,
+                            dangling_expressions,
+                            "sequence"
+                        );
+                        
+                        // Add coverage traces between expressions
+                        if !dangling_expressions.is_empty() {
+                            result = self.maybe_add_coverage_trace(
+                                result,
+                                expr.location(),
+                                module_build_name,
+                                "sequence_step"
+                            );
+                        }
+                        
+                        result
+                    } else {
+                        self.build(expr, module_build_name, dangling_expressions)
+                    }
+                    //self.build(expr, module_build_name, dangling_expressions)
                 }
 
                 TypedExpr::Var {
