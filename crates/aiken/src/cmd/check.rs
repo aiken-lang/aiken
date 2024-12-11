@@ -98,6 +98,7 @@ pub struct Args {
     ///   - silent: disable traces altogether
     ///   - compact: only culprit line numbers are shown on failures
     ///   - verbose: enable full verbose traces as provided by the user or the compiler
+    ///   - coverage: enable test coverage reporting
     ///
     /// [optional]
     #[clap(short, long, value_parser=trace_level_parser(), default_value_t=TraceLevel::Verbose, verbatim_doc_comment)]

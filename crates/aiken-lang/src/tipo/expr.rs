@@ -678,7 +678,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         .to_pretty_string(999)
                 ),
             }),
-            TraceLevel::Compact | TraceLevel::Silent => None,
+            TraceLevel::Coverage | TraceLevel::Compact | TraceLevel::Silent => None,
         };
 
         let typed_value = self.infer(value)?;
@@ -2427,7 +2427,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         }
 
         match self.tracing.trace_level(false) {
-            TraceLevel::Silent => Ok(then),
+            TraceLevel::Coverage | TraceLevel::Silent => Ok(then),
             TraceLevel::Compact => {
                 let text = self.infer(label)?;
                 self.unify(Type::string(), text.tipo(), text.location(), false)?;

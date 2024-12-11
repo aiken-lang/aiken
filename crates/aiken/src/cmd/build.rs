@@ -115,7 +115,7 @@ pub fn exec(
 #[allow(clippy::type_complexity)]
 pub fn trace_filter_parser(
 ) -> MapValueParser<PossibleValuesParser, fn(String) -> fn(TraceLevel) -> Tracing> {
-    PossibleValuesParser::new(["user-defined", "compiler-generated", "all"]).map(
+    PossibleValuesParser::new([ "user-defined", "compiler-generated", "all"]).map(
         |s: String| match s.as_str() {
             "user-defined" => Tracing::UserDefined,
             "compiler-generated" => Tracing::CompilerGenerated,
@@ -127,10 +127,11 @@ pub fn trace_filter_parser(
 
 #[allow(clippy::type_complexity)]
 pub fn trace_level_parser() -> MapValueParser<PossibleValuesParser, fn(String) -> TraceLevel> {
-    PossibleValuesParser::new(["silent", "compact", "verbose"]).map(|s| match s.as_str() {
+    PossibleValuesParser::new(["coverage", "silent", "compact", "verbose"]).map(|s| match s.as_str() {
         "silent" => TraceLevel::Silent,
         "compact" => TraceLevel::Compact,
         "verbose" => TraceLevel::Verbose,
+        "coverage" => TraceLevel::Coverage,
         _ => unreachable!(),
     })
 }
