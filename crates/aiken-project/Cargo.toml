@@ -53,6 +53,7 @@ uplc = { path = '../uplc', version = "1.1.7" }
 vec1 = "1.10.1"
 walkdir.workspace = true
 zip = "0.6.4"
+katex = "0.4"
 
 [dev-dependencies]
 blst = "0.3.11"
