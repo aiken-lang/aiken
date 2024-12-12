@@ -13,7 +13,9 @@ use aiken_lang::{
 };
 use askama::Template;
 use itertools::Itertools;
+use katex::{Opts, OutputType};
 use pulldown_cmark as markdown;
+use regex::Regex;
 use serde::Serialize;
 use serde_json as json;
 use std::{
@@ -268,15 +270,46 @@ fn generate_module(
         timestamp: timestamp.as_secs().to_string(),
     };
 
+    let rendered_content = convert_latex_markers(
+                                        module.render().expect("Module documentation template rendering"),
+                                    );
+
     (
         search_indexes,
         DocFile {
             path: PathBuf::from(format!("{}.html", module.module_name)),
-            content: module
-                .render()
-                .expect("Module documentation template rendering"),
+            content: rendered_content,
         },
     )
+}
+
+
+fn convert_latex_markers(input: String) -> String {
+    let re_inline = Regex::new(r#"<span class="math math-inline">\s*(.+?)\s*</span>"#).unwrap();
+    let re_block = Regex::new(r#"<span class="math math-display">\s*(.+?)\s*</span>"#).unwrap();
+
+    let opts_inline = Opts::builder()
+        .display_mode(false) // Inline math
+        .output_type(OutputType::Mathml)
+        .build()
+        .unwrap();
+
+    let opts_block = katex::Opts::builder()
+        .display_mode(true) // Block math
+        .output_type(OutputType::Mathml)
+        .build()
+        .unwrap();
+
+    let input = re_inline.replace_all(&input, |caps: &regex::Captures| {
+        let formula = &caps[1];
+        katex::render_with_opts(formula, &opts_inline).unwrap_or_else(|_| formula.to_string())
+    });
+
+    re_block.replace_all(&input, |caps: &regex::Captures| {
+        let formula = &caps[1];
+        katex::render_with_opts(formula, &opts_block).unwrap_or_else(|_| formula.to_string())
+    })
+    .to_string()
 }
 
 fn generate_static_assets(search_indexes: Vec<SearchIndex>) -> Vec<DocFile> {
