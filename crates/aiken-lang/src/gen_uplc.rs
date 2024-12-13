@@ -324,7 +324,15 @@ impl<'a> CodeGenerator<'a> {
                     constructor, name, ..
                 } => match constructor.variant {
                     ValueConstructorVariant::LocalVariable { .. } => {
-                        AirTree::var(constructor.clone(), self.interner.lookup_interned(name), "")
+                        if name != CONSTR_INDEX_EXPOSER && name != CONSTR_FIELDS_EXPOSER {
+                            AirTree::var(
+                                constructor.clone(),
+                                self.interner.lookup_interned(name),
+                                "",
+                            )
+                        } else {
+                            AirTree::var(constructor.clone(), name, "")
+                        }
                     }
                     _ => AirTree::var(constructor.clone(), name, ""),
                 },
@@ -2492,16 +2500,7 @@ impl<'a> CodeGenerator<'a> {
                     clauses,
                 );
 
-                builtins_to_add.produce_air(
-                    // The only reason I pass this in is to ensure I signal
-                    // whether or not constr_fields_exposer was used. I could
-                    // probably optimize this part out to simplify codegen in
-                    // the future
-                    &mut self.special_functions,
-                    prev_subject_name,
-                    prev_tipo,
-                    when_air_clauses,
-                )
+                builtins_to_add.produce_air(prev_subject_name, prev_tipo, when_air_clauses)
             }
             DecisionTree::ListSwitch {
                 path,
@@ -2685,16 +2684,7 @@ impl<'a> CodeGenerator<'a> {
                     list_clauses.1,
                 );
 
-                builtins_to_add.produce_air(
-                    // The only reason I pass this in is to ensure I signal
-                    // whether or not constr_fields_exposer was used. I could
-                    // probably optimize this part out to simplify codegen in
-                    // the future
-                    &mut self.special_functions,
-                    prev_subject_name,
-                    prev_tipo,
-                    when_list_cases,
-                )
+                builtins_to_add.produce_air(prev_subject_name, prev_tipo, when_list_cases)
             }
             DecisionTree::HoistedLeaf(name, args) => {
                 let air_args = args
@@ -2806,12 +2796,7 @@ impl<'a> CodeGenerator<'a> {
                     self.handle_assigns(subject_name, subject_tipo, rest, stick_set, then),
                 );
 
-                builtins_to_add.produce_air(
-                    &mut self.special_functions,
-                    prev_subject_name,
-                    prev_tipo,
-                    assignment,
-                )
+                builtins_to_add.produce_air(prev_subject_name, prev_tipo, assignment)
             }
         }
     }
@@ -3768,10 +3753,7 @@ impl<'a> CodeGenerator<'a> {
 
                     value = self.hoist_functions_to_validator(value);
 
-                    let term = self
-                        .uplc_code_gen(value.to_vec())
-                        .constr_fields_exposer()
-                        .constr_index_exposer();
+                    let term = self.uplc_code_gen(value.to_vec());
 
                     let mut program =
                         self.new_program(self.special_functions.apply_used_functions(term));
@@ -4511,11 +4493,7 @@ impl<'a> CodeGenerator<'a> {
 
                     Some(UplcType::Data) => subject,
 
-                    None => Term::var(
-                        self.special_functions
-                            .use_function_uplc(CONSTR_INDEX_EXPOSER.to_string()),
-                    )
-                    .apply(subject),
+                    None => Term::var(CONSTR_INDEX_EXPOSER).apply(subject),
                 };
 
                 let mut term = arg_stack.pop().unwrap();
@@ -4741,13 +4719,9 @@ impl<'a> CodeGenerator<'a> {
                         Some(UplcType::Bls12_381G2Element) => Term::bls12_381_g2_equal()
                             .apply(checker)
                             .apply(Term::var(subject_name)),
-                        None => Term::equals_integer().apply(checker).apply(
-                            Term::var(
-                                self.special_functions
-                                    .use_function_uplc(CONSTR_INDEX_EXPOSER.to_string()),
-                            )
-                            .apply(Term::var(subject_name)),
-                        ),
+                        None => Term::equals_integer()
+                            .apply(checker)
+                            .apply(Term::var(CONSTR_INDEX_EXPOSER).apply(Term::var(subject_name))),
                     };
 
                     Some(condition.if_then_else(then.delay(), term).force())
@@ -4934,13 +4908,7 @@ impl<'a> CodeGenerator<'a> {
                         otherwise,
                     );
 
-                    term = term.apply(
-                        Term::var(
-                            self.special_functions
-                                .use_function_uplc(CONSTR_FIELDS_EXPOSER.to_string()),
-                        )
-                        .apply(value),
-                    );
+                    term = term.apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(value));
 
                     Some(term)
                 } else {
@@ -4953,13 +4921,10 @@ impl<'a> CodeGenerator<'a> {
                 let mut term = arg_stack.pop().unwrap();
                 let otherwise = arg_stack.pop().unwrap();
 
-                term = Term::var(
-                    self.special_functions
-                        .use_function_uplc(CONSTR_FIELDS_EXPOSER.to_string()),
-                )
-                .apply(value)
-                .choose_list(term.delay(), otherwise)
-                .force();
+                term = Term::var(CONSTR_FIELDS_EXPOSER)
+                    .apply(value)
+                    .choose_list(term.delay(), otherwise)
+                    .force();
 
                 Some(term)
             }
@@ -5133,13 +5098,9 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
 
-                term = term.lambda(format!("{tail_name_prefix}_0")).apply(
-                    Term::var(
-                        self.special_functions
-                            .use_function_uplc(CONSTR_FIELDS_EXPOSER.to_string()),
-                    )
-                    .apply(record),
-                );
+                term = term
+                    .lambda(format!("{tail_name_prefix}_0"))
+                    .apply(Term::var(CONSTR_FIELDS_EXPOSER).apply(record));
 
                 Some(term)
             }

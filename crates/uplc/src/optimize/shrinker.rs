@@ -1448,6 +1448,17 @@ impl Term<Name> {
                         Term::unconstr_data().apply(std::mem::replace(arg, Term::Error.force())),
                     )
                 }
+            } else if let Term::Lambda {
+                parameter_name,
+                body,
+            } = Rc::make_mut(function)
+            {
+                if parameter_name.text == CONSTR_INDEX_EXPOSER
+                    || parameter_name.text == CONSTR_FIELDS_EXPOSER
+                {
+                    let body = Rc::make_mut(body);
+                    *self = std::mem::replace(body, Term::Error)
+                }
             }
         }
     }

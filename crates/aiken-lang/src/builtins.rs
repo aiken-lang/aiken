@@ -15,7 +15,10 @@ use crate::{
 use indexmap::IndexMap;
 use std::{collections::HashMap, rc::Rc};
 use strum::IntoEnumIterator;
-use uplc::builtins::DefaultFunction;
+use uplc::{
+    builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
+    builtins::DefaultFunction,
+};
 
 pub const PRELUDE: &str = "aiken";
 pub const BUILTIN: &str = "aiken/builtin";
@@ -514,6 +517,38 @@ pub fn plutus(id_gen: &IdGenerator) -> TypeInfo {
         }
     }
 
+    let index_tipo = Type::function(vec![Type::data()], Type::int());
+    plutus.values.insert(
+        "constr_index".to_string(),
+        ValueConstructor::public(
+            index_tipo,
+            ValueConstructorVariant::ModuleFn {
+                name: "constr_index".to_string(),
+                field_map: None,
+                module: "aiken/builtin".to_string(),
+                arity: 1,
+                location: Span::empty(),
+                builtin: None,
+            },
+        ),
+    );
+
+    let fields_tipo = Type::function(vec![Type::data()], Type::list(Type::data()));
+    plutus.values.insert(
+        "constr_fields".to_string(),
+        ValueConstructor::public(
+            fields_tipo,
+            ValueConstructorVariant::ModuleFn {
+                name: "constr_fields".to_string(),
+                field_map: None,
+                module: "aiken/builtin".to_string(),
+                arity: 1,
+                location: Span::empty(),
+                builtin: None,
+            },
+        ),
+    );
+
     plutus
 }
 
@@ -1007,6 +1042,134 @@ pub fn prelude_functions(
     module_types: &HashMap<String, TypeInfo>,
 ) -> IndexMap<FunctionAccessKey, TypedFunction> {
     let mut functions = IndexMap::new();
+
+    let constr_index_body = TypedExpr::Call {
+        location: Span::empty(),
+        tipo: Type::int(),
+        fun: TypedExpr::local_var(
+            CONSTR_INDEX_EXPOSER,
+            Type::function(vec![Type::data()], Type::int()),
+            Span::empty(),
+        )
+        .into(),
+        args: vec![CallArg {
+            label: None,
+            location: Span::empty(),
+            value: TypedExpr::Var {
+                location: Span::empty(),
+                constructor: ValueConstructor {
+                    public: true,
+                    tipo: Type::data(),
+                    variant: ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                },
+                name: "constr".to_string(),
+            },
+        }],
+    };
+
+    let constr_index_func = Function {
+        arguments: vec![TypedArg {
+            arg_name: ArgName::Named {
+                name: "constr".to_string(),
+                label: "constr".to_string(),
+                location: Span::empty(),
+            },
+            is_validator_param: false,
+            doc: None,
+            location: Span::empty(),
+            annotation: None,
+            tipo: Type::data(),
+        }],
+        on_test_failure: OnTestFailure::FailImmediately,
+        doc: Some(
+            indoc::indoc! {
+                r#"
+                /// Access the index of a constr typed as Data. Fails if the Data object is not a constr.
+                "#
+            }.to_string()
+        ),
+        location: Span::empty(),
+        name: "constr_index".to_string(),
+        public: true,
+        return_annotation: None,
+        return_type: Type::int(),
+        end_position: 0,
+        body: constr_index_body,
+    };
+
+    functions.insert(
+        FunctionAccessKey {
+            module_name: "aiken/builtin".to_string(),
+            function_name: "constr_index".to_string(),
+        },
+        constr_index_func,
+    );
+
+    let constr_fields_body = TypedExpr::Call {
+        location: Span::empty(),
+        tipo: Type::list(Type::data()),
+        fun: TypedExpr::local_var(
+            CONSTR_FIELDS_EXPOSER,
+            Type::function(vec![Type::data()], Type::list(Type::data())),
+            Span::empty(),
+        )
+        .into(),
+        args: vec![CallArg {
+            label: None,
+            location: Span::empty(),
+            value: TypedExpr::Var {
+                location: Span::empty(),
+                constructor: ValueConstructor {
+                    public: true,
+                    tipo: Type::data(),
+                    variant: ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                },
+                name: "constr".to_string(),
+            },
+        }],
+    };
+
+    let constr_fields_func = Function {
+        arguments: vec![TypedArg {
+            arg_name: ArgName::Named {
+                name: "constr".to_string(),
+                label: "constr".to_string(),
+                location: Span::empty(),
+            },
+            is_validator_param: false,
+            doc: None,
+            location: Span::empty(),
+            annotation: None,
+            tipo: Type::data(),
+        }],
+        on_test_failure: OnTestFailure::FailImmediately,
+        doc: Some(
+            indoc::indoc! {
+                r#"
+                /// Access the fields of a constr typed as Data. Fails if the Data object is not a constr.
+                "#
+            }.to_string()
+        ),
+        location: Span::empty(),
+        name: "constr_fields".to_string(),
+        public: true,
+        return_annotation: None,
+        return_type: Type::list(Type::data()),
+        end_position: 0,
+        body: constr_fields_body,
+    };
+
+    functions.insert(
+        FunctionAccessKey {
+            module_name: "aiken/builtin".to_string(),
+            function_name: "constr_fields".to_string(),
+        },
+        constr_fields_func,
+    );
 
     // /// Negate the argument. Useful for map/fold and pipelines.
     // pub fn not(self: Bool) -> Bool {

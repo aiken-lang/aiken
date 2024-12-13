@@ -100,7 +100,12 @@ impl CodeGenSpecialFuncs {
         );
 
         CodeGenSpecialFuncs {
-            used_funcs: vec![],
+            // Always use these functions since they are filtered out automatically by
+            // the optimization code later on
+            used_funcs: vec![
+                CONSTR_FIELDS_EXPOSER.to_string(),
+                CONSTR_INDEX_EXPOSER.to_string(),
+            ],
             key_to_func,
         }
     }

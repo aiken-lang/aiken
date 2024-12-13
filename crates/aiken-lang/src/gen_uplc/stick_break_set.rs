@@ -6,7 +6,6 @@ use uplc::{builder::CONSTR_FIELDS_EXPOSER, builtins::DefaultFunction};
 use crate::expr::Type;
 
 use super::{
-    builder::CodeGenSpecialFuncs,
     decision_tree::{get_tipo_by_path, CaseTest, Path},
     tree::AirTree,
 };
@@ -38,7 +37,7 @@ impl PartialEq for Builtin {
 impl Eq for Builtin {}
 
 impl Builtin {
-    fn produce_air(self, special_funcs: &mut CodeGenSpecialFuncs, arg: AirTree) -> AirTree {
+    fn produce_air(self, arg: AirTree) -> AirTree {
         match self {
             Builtin::HeadList(t) => AirTree::builtin(DefaultFunction::HeadList, t, vec![arg]),
             Builtin::ExtractField(t) => AirTree::extract_field(t, arg),
@@ -48,7 +47,10 @@ impl Builtin {
                 vec![arg],
             ),
             Builtin::UnConstrFields => AirTree::call(
-                special_funcs.use_function_tree(CONSTR_FIELDS_EXPOSER.to_string()),
+                AirTree::local_var(
+                    CONSTR_FIELDS_EXPOSER,
+                    Type::function(vec![Type::data()], Type::list(Type::data())),
+                ),
                 Type::list(Type::data()),
                 vec![arg],
             ),
@@ -204,13 +206,7 @@ impl Builtins {
         self
     }
 
-    pub fn produce_air(
-        self,
-        special_funcs: &mut CodeGenSpecialFuncs,
-        prev_name: String,
-        subject_tipo: Rc<Type>,
-        then: AirTree,
-    ) -> AirTree {
+    pub fn produce_air(self, prev_name: String, subject_tipo: Rc<Type>, then: AirTree) -> AirTree {
         let (_, _, name_builtins) = self.vec.into_iter().fold(
             (prev_name, subject_tipo, vec![]),
             |(prev_name, prev_tipo, mut acc), item| {
@@ -228,7 +224,7 @@ impl Builtins {
             .rfold(then, |then, (prev_name, prev_tipo, next_name, builtin)| {
                 AirTree::let_assignment(
                     next_name,
-                    builtin.produce_air(special_funcs, AirTree::local_var(prev_name, prev_tipo)),
+                    builtin.produce_air(AirTree::local_var(prev_name, prev_tipo)),
                     then,
                 )
             })
