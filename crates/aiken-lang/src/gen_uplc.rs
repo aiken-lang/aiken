@@ -2711,7 +2711,7 @@ impl<'a> CodeGenerator<'a> {
                     air_args.into_iter().map(|i| i.1).collect_vec(),
                 );
 
-                self.handle_assigns(subject_name, subject_tipo, &args, &mut stick_set, then)
+                handle_assigns(subject_name, subject_tipo, &args, &mut stick_set, then)
             }
             DecisionTree::HoistThen {
                 name,
@@ -2746,57 +2746,6 @@ impl<'a> CodeGenerator<'a> {
                 });
 
                 assign
-            }
-        }
-    }
-
-    fn handle_assigns(
-        &mut self,
-        subject_name: &String,
-        subject_tipo: Rc<Type>,
-        assigns: &[Assigned],
-        stick_set: &mut TreeSet,
-        then: AirTree,
-    ) -> AirTree {
-        match assigns {
-            [] => then,
-            [assign, rest @ ..] => {
-                let Assigned { path, assigned } = assign;
-
-                let current_tipo = get_tipo_by_path(subject_tipo.clone(), path);
-                let builtins_path = Builtins::new_from_path(subject_tipo.clone(), path.clone());
-                let current_subject_name = if builtins_path.is_empty() {
-                    subject_name.clone()
-                } else {
-                    format!("{}_{}", subject_name, builtins_path)
-                };
-
-                // Transition process from previous to current
-                let builtins_to_add = stick_set.diff_union_builtins(builtins_path.clone());
-
-                // Previous path to apply the transition process too
-                let prev_builtins = Builtins {
-                    vec: builtins_path.vec[0..(builtins_path.len() - builtins_to_add.len())]
-                        .to_vec(),
-                };
-
-                let prev_subject_name = if prev_builtins.is_empty() {
-                    subject_name.clone()
-                } else {
-                    format!("{}_{}", subject_name, prev_builtins)
-                };
-                let prev_tipo = prev_builtins
-                    .vec
-                    .last()
-                    .map_or(subject_tipo.clone(), |last| last.tipo());
-
-                let assignment = AirTree::let_assignment(
-                    assigned,
-                    AirTree::local_var(current_subject_name, current_tipo),
-                    self.handle_assigns(subject_name, subject_tipo, rest, stick_set, then),
-                );
-
-                builtins_to_add.produce_air(prev_subject_name, prev_tipo, assignment)
             }
         }
     }
@@ -5270,6 +5219,55 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(known_data_to_type(Term::head_list().apply(arg), &tipo))
             }
+        }
+    }
+}
+
+fn handle_assigns(
+    subject_name: &String,
+    subject_tipo: Rc<Type>,
+    assigns: &[Assigned],
+    stick_set: &mut TreeSet,
+    then: AirTree,
+) -> AirTree {
+    match assigns {
+        [] => then,
+        [assign, rest @ ..] => {
+            let Assigned { path, assigned } = assign;
+
+            let current_tipo = get_tipo_by_path(subject_tipo.clone(), path);
+            let builtins_path = Builtins::new_from_path(subject_tipo.clone(), path.clone());
+            let current_subject_name = if builtins_path.is_empty() {
+                subject_name.clone()
+            } else {
+                format!("{}_{}", subject_name, builtins_path)
+            };
+
+            // Transition process from previous to current
+            let builtins_to_add = stick_set.diff_union_builtins(builtins_path.clone());
+
+            // Previous path to apply the transition process too
+            let prev_builtins = Builtins {
+                vec: builtins_path.vec[0..(builtins_path.len() - builtins_to_add.len())].to_vec(),
+            };
+
+            let prev_subject_name = if prev_builtins.is_empty() {
+                subject_name.clone()
+            } else {
+                format!("{}_{}", subject_name, prev_builtins)
+            };
+            let prev_tipo = prev_builtins
+                .vec
+                .last()
+                .map_or(subject_tipo.clone(), |last| last.tipo());
+
+            let assignment = AirTree::let_assignment(
+                assigned,
+                AirTree::local_var(current_subject_name, current_tipo),
+                handle_assigns(subject_name, subject_tipo, rest, stick_set, then),
+            );
+
+            builtins_to_add.produce_air(prev_subject_name, prev_tipo, assignment)
         }
     }
 }
