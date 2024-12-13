@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.1.8 - UNRELEASED
+## v1.1.9 - 2024-12-13
 
 ### Added
 
@@ -32,6 +32,10 @@
 - **examples**: Update "Hello, World!" source code tutorial to match website, now using MeshJS. @jinglescode
 - **examples**: Update "Gift Card" source code tutorial to match website, now using Lucid-Evolution and Weld. @rvcas
 - **aiken-lang**: Fixed a code gen crash when using records in when is expressions. @Microproofs
+
+## v1.1.8
+
+- There's no v1.1.8. Nothing happened. Don't ask questions.
 
 ## v1.1.7 - 2024-11-19
 
