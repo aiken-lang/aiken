@@ -519,11 +519,11 @@ pub fn plutus(id_gen: &IdGenerator) -> TypeInfo {
 
     let index_tipo = Type::function(vec![Type::data()], Type::int());
     plutus.values.insert(
-        "constr_index".to_string(),
+        "unconstr_index".to_string(),
         ValueConstructor::public(
             index_tipo,
             ValueConstructorVariant::ModuleFn {
-                name: "constr_index".to_string(),
+                name: "unconstr_index".to_string(),
                 field_map: None,
                 module: "aiken/builtin".to_string(),
                 arity: 1,
@@ -535,11 +535,11 @@ pub fn plutus(id_gen: &IdGenerator) -> TypeInfo {
 
     let fields_tipo = Type::function(vec![Type::data()], Type::list(Type::data()));
     plutus.values.insert(
-        "constr_fields".to_string(),
+        "unconstr_fields".to_string(),
         ValueConstructor::public(
             fields_tipo,
             ValueConstructorVariant::ModuleFn {
-                name: "constr_fields".to_string(),
+                name: "unconstr_fields".to_string(),
                 field_map: None,
                 module: "aiken/builtin".to_string(),
                 arity: 1,
@@ -1043,7 +1043,7 @@ pub fn prelude_functions(
 ) -> IndexMap<FunctionAccessKey, TypedFunction> {
     let mut functions = IndexMap::new();
 
-    let constr_index_body = TypedExpr::Call {
+    let unconstr_index_body = TypedExpr::Call {
         location: Span::empty(),
         tipo: Type::int(),
         fun: TypedExpr::local_var(
@@ -1069,7 +1069,7 @@ pub fn prelude_functions(
         }],
     };
 
-    let constr_index_func = Function {
+    let unconstr_index_func = Function {
         arguments: vec![TypedArg {
             arg_name: ArgName::Named {
                 name: "constr".to_string(),
@@ -1091,23 +1091,23 @@ pub fn prelude_functions(
             }.to_string()
         ),
         location: Span::empty(),
-        name: "constr_index".to_string(),
+        name: "unconstr_index".to_string(),
         public: true,
         return_annotation: None,
         return_type: Type::int(),
         end_position: 0,
-        body: constr_index_body,
+        body: unconstr_index_body,
     };
 
     functions.insert(
         FunctionAccessKey {
             module_name: "aiken/builtin".to_string(),
-            function_name: "constr_index".to_string(),
+            function_name: "unconstr_index".to_string(),
         },
-        constr_index_func,
+        unconstr_index_func,
     );
 
-    let constr_fields_body = TypedExpr::Call {
+    let unconstr_fields_body = TypedExpr::Call {
         location: Span::empty(),
         tipo: Type::list(Type::data()),
         fun: TypedExpr::local_var(
@@ -1133,7 +1133,7 @@ pub fn prelude_functions(
         }],
     };
 
-    let constr_fields_func = Function {
+    let unconstr_fields_func = Function {
         arguments: vec![TypedArg {
             arg_name: ArgName::Named {
                 name: "constr".to_string(),
@@ -1155,20 +1155,20 @@ pub fn prelude_functions(
             }.to_string()
         ),
         location: Span::empty(),
-        name: "constr_fields".to_string(),
+        name: "unconstr_fields".to_string(),
         public: true,
         return_annotation: None,
         return_type: Type::list(Type::data()),
         end_position: 0,
-        body: constr_fields_body,
+        body: unconstr_fields_body,
     };
 
     functions.insert(
         FunctionAccessKey {
             module_name: "aiken/builtin".to_string(),
-            function_name: "constr_fields".to_string(),
+            function_name: "unconstr_fields".to_string(),
         },
-        constr_fields_func,
+        unconstr_fields_func,
     );
 
     // /// Negate the argument. Useful for map/fold and pipelines.

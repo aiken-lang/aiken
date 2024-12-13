@@ -4,9 +4,11 @@
 
 ### Added
 
-- **aiken**: Generate a default 'placeholder' validator when using `aiken new`. See [#1061](https://github.com/aiken-lang/aiken/pull/1061) @Waalge
-- **aiken-lang**: New builtins 'constr_fields' and 'constr_index'. @Microproofs
-- **aiken-lang**: New builtins from Chang2 hardfork (except for writeBits). @Microproofs, @KtorZ
+- **aiken**: Generate a default _'placeholder.ak'_ validator when using `aiken new`. See [#1061](https://github.com/aiken-lang/aiken/pull/1061) @Waalge
+- **aiken-lang**: New builtins [`unconstr_fields`](https://aiken-lang.github.io/prelude/aiken/builtin.html#unconstr_fields) and [`unconstr_index`](https://aiken-lang.github.io/prelude/aiken/builtin.html#unconstr_index). @Microproofs
+- **aiken-lang**: Added builtins from Chang2 hardfork (except for writeBits). @Microproofs, @KtorZ
+    - [Bitwise operations](https://aiken-lang.github.io/prelude/aiken/builtin.html#Bitwise)
+    - [Ripemd-160 hashing](https://aiken-lang.github.io/prelude/aiken/builtin.html#ripemd_160)
 - **aiken-projects**: The generated documentation may now include maths typesetting rendered using [KaTex](https://katex.org/). See [#1070](https://github.com/aiken-lang/aiken/pull/1070) @adrian052.
   - Both inline (delimited by single `$` symbols) and blocks (delimited by doubled `$$` symbols) are now parsed and rendered as SVG upon generating documentation. For example:
 
