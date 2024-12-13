@@ -271,8 +271,11 @@ fn generate_module(
     };
 
     let rendered_content = convert_latex_markers(
-                                        module.render().expect("Module documentation template rendering"),
-                                    );
+        module
+            .render()
+            .as_ref()
+            .expect("Module documentation template rendering"),
+    );
 
     (
         search_indexes,
@@ -283,8 +286,7 @@ fn generate_module(
     )
 }
 
-
-fn convert_latex_markers(input: String) -> String {
+fn convert_latex_markers(input: &str) -> String {
     let re_inline = Regex::new(r#"<span class="math math-inline">\s*(.+?)\s*</span>"#).unwrap();
     let re_block = Regex::new(r#"<span class="math math-display">\s*(.+?)\s*</span>"#).unwrap();
 
@@ -300,16 +302,17 @@ fn convert_latex_markers(input: String) -> String {
         .build()
         .unwrap();
 
-    let input = re_inline.replace_all(&input, |caps: &regex::Captures| {
+    let input = re_inline.replace_all(input, |caps: &regex::Captures| {
         let formula = &caps[1];
         katex::render_with_opts(formula, &opts_inline).unwrap_or_else(|_| formula.to_string())
     });
 
-    re_block.replace_all(&input, |caps: &regex::Captures| {
-        let formula = &caps[1];
-        katex::render_with_opts(formula, &opts_block).unwrap_or_else(|_| formula.to_string())
-    })
-    .to_string()
+    re_block
+        .replace_all(&input, |caps: &regex::Captures| {
+            let formula = &caps[1];
+            katex::render_with_opts(formula, &opts_block).unwrap_or_else(|_| formula.to_string())
+        })
+        .to_string()
 }
 
 fn generate_static_assets(search_indexes: Vec<SearchIndex>) -> Vec<DocFile> {
@@ -728,16 +731,39 @@ fn to_breadcrumbs(path: &str) -> String {
     }
 }
 
-#[test]
-fn to_breadcrumbs_test() {
-    // Pages
-    assert_eq!(to_breadcrumbs("a.html"), ".");
-    assert_eq!(to_breadcrumbs("/a.html"), ".");
-    assert_eq!(to_breadcrumbs("/a/b.html"), "..");
-    assert_eq!(to_breadcrumbs("/a/b/c.html"), "../..");
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    // Modules
-    assert_eq!(to_breadcrumbs("a"), ".");
-    assert_eq!(to_breadcrumbs("a/b"), "..");
-    assert_eq!(to_breadcrumbs("a/b/c"), "../..");
+    #[test]
+    fn to_breadcrumbs_test() {
+        // Pages
+        assert_eq!(to_breadcrumbs("a.html"), ".");
+        assert_eq!(to_breadcrumbs("/a.html"), ".");
+        assert_eq!(to_breadcrumbs("/a/b.html"), "..");
+        assert_eq!(to_breadcrumbs("/a/b/c.html"), "../..");
+
+        // Modules
+        assert_eq!(to_breadcrumbs("a"), ".");
+        assert_eq!(to_breadcrumbs("a/b"), "..");
+        assert_eq!(to_breadcrumbs("a/b/c"), "../..");
+    }
+
+    #[test]
+    fn convert_latex_markers_simple() {
+        assert_eq!(
+            convert_latex_markers(r#"<span class="math math-inline">\frac{4}{5}</span>"#),
+            r#"<span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mfrac><mn>4</mn><mn>5</mn></mfrac></mrow><annotation encoding="application/x-tex">\frac{4}{5}</annotation></semantics></math></span>"#,
+        );
+    }
+
+    #[test]
+    fn convert_latex_markers_sequence() {
+        assert_eq!(
+            convert_latex_markers(
+                r#"<span class="math math-inline">\frac{4}{5}</span><span class="math math-inline">e^{i \times \pi}</span>"#
+            ),
+            r#"<span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mfrac><mn>4</mn><mn>5</mn></mfrac></mrow><annotation encoding="application/x-tex">\frac{4}{5}</annotation></semantics></math></span><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>e</mi><mrow><mi>i</mi><mo>×</mo><mi>π</mi></mrow></msup></mrow><annotation encoding="application/x-tex">e^{i \times \pi}</annotation></semantics></math></span>"#,
+        );
+    }
 }
