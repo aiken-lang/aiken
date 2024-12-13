@@ -13,7 +13,6 @@ use aiken_lang::{
 };
 use askama::Template;
 use itertools::Itertools;
-use katex::{Opts, OutputType};
 use pulldown_cmark as markdown;
 use regex::Regex;
 use serde::Serialize;
@@ -273,7 +272,6 @@ fn generate_module(
     let rendered_content = convert_latex_markers(
         module
             .render()
-            .as_ref()
             .expect("Module documentation template rendering"),
     );
 
@@ -286,23 +284,29 @@ fn generate_module(
     )
 }
 
-fn convert_latex_markers(input: &str) -> String {
+#[cfg(windows)]
+fn convert_latex_markers(input: String) -> String {
+    input
+}
+
+#[cfg(not(windows))]
+fn convert_latex_markers(input: String) -> String {
     let re_inline = Regex::new(r#"<span class="math math-inline">\s*(.+?)\s*</span>"#).unwrap();
     let re_block = Regex::new(r#"<span class="math math-display">\s*(.+?)\s*</span>"#).unwrap();
 
-    let opts_inline = Opts::builder()
+    let opts_inline = katex::Opts::builder()
         .display_mode(false) // Inline math
-        .output_type(OutputType::Mathml)
+        .output_type(katex::OutputType::Mathml)
         .build()
         .unwrap();
 
     let opts_block = katex::Opts::builder()
         .display_mode(true) // Block math
-        .output_type(OutputType::Mathml)
+        .output_type(katex::OutputType::Mathml)
         .build()
         .unwrap();
 
-    let input = re_inline.replace_all(input, |caps: &regex::Captures| {
+    let input = re_inline.replace_all(&input, |caps: &regex::Captures| {
         let formula = &caps[1];
         katex::render_with_opts(formula, &opts_inline).unwrap_or_else(|_| formula.to_string())
     });
@@ -752,7 +756,9 @@ mod tests {
     #[test]
     fn convert_latex_markers_simple() {
         assert_eq!(
-            convert_latex_markers(r#"<span class="math math-inline">\frac{4}{5}</span>"#),
+            convert_latex_markers(
+                r#"<span class="math math-inline">\frac{4}{5}</span>"#.to_string()
+            ),
             r#"<span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mfrac><mn>4</mn><mn>5</mn></mfrac></mrow><annotation encoding="application/x-tex">\frac{4}{5}</annotation></semantics></math></span>"#,
         );
     }
@@ -761,7 +767,7 @@ mod tests {
     fn convert_latex_markers_sequence() {
         assert_eq!(
             convert_latex_markers(
-                r#"<span class="math math-inline">\frac{4}{5}</span><span class="math math-inline">e^{i \times \pi}</span>"#
+                r#"<span class="math math-inline">\frac{4}{5}</span><span class="math math-inline">e^{i \times \pi}</span>"#.to_string()
             ),
             r#"<span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mfrac><mn>4</mn><mn>5</mn></mfrac></mrow><annotation encoding="application/x-tex">\frac{4}{5}</annotation></semantics></math></span><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>e</mi><mrow><mi>i</mi><mo>×</mo><mi>π</mi></mrow></msup></mrow><annotation encoding="application/x-tex">e^{i \times \pi}</annotation></semantics></math></span>"#,
         );
