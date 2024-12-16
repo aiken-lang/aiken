@@ -367,6 +367,7 @@ impl<'a> Environment<'a> {
             | Definition::DataType { .. }
             | Definition::Use { .. }
             | Definition::Test { .. }
+            | Definition::Benchmark { .. }
             | Definition::ModuleConstant { .. }) => definition,
         }
     }
@@ -1061,6 +1062,7 @@ impl<'a> Environment<'a> {
                         | Definition::Validator { .. }
                         | Definition::Use { .. }
                         | Definition::ModuleConstant { .. }
+                        | Definition::Benchmark { .. }
                         | Definition::Test { .. } => None,
                     })
                     .collect::<Vec<Span>>();
@@ -1184,6 +1186,7 @@ impl<'a> Environment<'a> {
             Definition::Fn { .. }
             | Definition::Validator { .. }
             | Definition::Test { .. }
+            | Definition::Benchmark { .. }
             | Definition::Use { .. }
             | Definition::ModuleConstant { .. } => {}
         }
@@ -1385,6 +1388,24 @@ impl<'a> Environment<'a> {
                 self.warnings.push(Warning::ValidatorInLibraryModule {
                     location: *location,
                 })
+            }
+
+            Definition::Benchmark(benchmark) => {
+                let arguments = benchmark
+                    .arguments
+                    .iter()
+                    .map(|arg| arg.clone().into())
+                    .collect::<Vec<_>>();
+
+                self.register_function(
+                    &benchmark.name,
+                    &arguments,
+                    &benchmark.return_annotation,
+                    module_name,
+                    hydrators,
+                    names,
+                    &benchmark.location,
+                )?;
             }
 
             Definition::Test(test) => {

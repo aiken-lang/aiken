@@ -118,6 +118,7 @@ impl TypedModule {
             Definition::Use(_) => false,
             Definition::Test(_) => false,
             Definition::Validator(_) => false,
+            Definition::Benchmark(_) => false,
         })
     }
 
@@ -134,6 +135,7 @@ impl TypedModule {
             Definition::Use(_) => false,
             Definition::Test(_) => false,
             Definition::Validator(_) => false,
+            Definition::Benchmark(_) => false,
         })
     }
 
@@ -183,6 +185,16 @@ impl TypedModule {
                             function_name: test.name.clone(),
                         },
                         test.clone().into(),
+                    );
+                }
+
+                Definition::Benchmark(benchmark) => {
+                    functions.insert(
+                        FunctionAccessKey {
+                            module_name: self.name.clone(),
+                            function_name: benchmark.name.clone(),
+                        },
+                        benchmark.clone().into(),
                     );
                 }
 
@@ -246,6 +258,7 @@ fn str_to_keyword(word: &str) -> Option<Token> {
         "or" => Some(Token::Or),
         "validator" => Some(Token::Validator),
         "via" => Some(Token::Via),
+        "benchmark" => Some(Token::Benchmark),
         _ => None,
     }
 }
@@ -832,6 +845,8 @@ pub enum Definition<T, Arg, Expr, PackageName> {
 
     Test(Function<T, Expr, ArgVia<Arg, Expr>>),
 
+    Benchmark(Function<T, Expr, ArgVia<Arg, Expr>>),
+
     Validator(Validator<T, Arg, Expr>),
 }
 
@@ -844,6 +859,7 @@ impl<A, B, C, D> Definition<A, B, C, D> {
             | Definition::DataType(DataType { location, .. })
             | Definition::ModuleConstant(ModuleConstant { location, .. })
             | Definition::Validator(Validator { location, .. })
+            | Definition::Benchmark(Function { location, .. })
             | Definition::Test(Function { location, .. }) => *location,
         }
     }
@@ -856,6 +872,7 @@ impl<A, B, C, D> Definition<A, B, C, D> {
             | Definition::DataType(DataType { doc, .. })
             | Definition::ModuleConstant(ModuleConstant { doc, .. })
             | Definition::Validator(Validator { doc, .. })
+            | Definition::Benchmark(Function { doc, .. })
             | Definition::Test(Function { doc, .. }) => {
                 let _ = std::mem::replace(doc, Some(new_doc));
             }
@@ -870,6 +887,7 @@ impl<A, B, C, D> Definition<A, B, C, D> {
             | Definition::DataType(DataType { doc, .. })
             | Definition::ModuleConstant(ModuleConstant { doc, .. })
             | Definition::Validator(Validator { doc, .. })
+            | Definition::Benchmark(Function { doc, .. })
             | Definition::Test(Function { doc, .. }) => doc.clone(),
         }
     }

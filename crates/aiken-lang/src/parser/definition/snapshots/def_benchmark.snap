@@ -1,0 +1,47 @@
+---
+source: crates/aiken-lang/src/parser/definition/benchmark.rs
+assertion_line: 136
+description: "Code:\n\nbenchmark foo(x via fuzz.any_int) {\n    True\n}\n"
+snapshot_kind: text
+---
+Benchmark(
+    Function {
+        arguments: [
+            ArgVia {
+                arg: UntypedArg {
+                    by: ByName(
+                        Named {
+                            name: "x",
+                            label: "x",
+                            location: 14..15,
+                        },
+                    ),
+                    location: 14..15,
+                    annotation: None,
+                    doc: None,
+                    is_validator_param: false,
+                },
+                via: FieldAccess {
+                    location: 20..32,
+                    label: "any_int",
+                    container: Var {
+                        location: 20..24,
+                        name: "fuzz",
+                    },
+                },
+            },
+        ],
+        body: Var {
+            location: 40..44,
+            name: "True",
+        },
+        doc: None,
+        location: 0..33,
+        name: "foo",
+        public: false,
+        return_annotation: None,
+        return_type: (),
+        end_position: 45,
+        on_test_failure: FailImmediately,
+    },
+)

@@ -49,6 +49,7 @@ use vec1::{vec1, Vec1};
 pub enum Test {
     UnitTest(UnitTest),
     PropertyTest(PropertyTest),
+    Benchmark(Benchmark)
 }
 
 unsafe impl Send for Test {}
@@ -442,7 +443,23 @@ impl PropertyTest {
             None
         }
     }
+}
 
+/// ----- Benchmark -----------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+pub struct Benchmark {
+    pub input_path: PathBuf,
+    pub module: String,
+    pub name: String,
+    pub on_test_failure: OnTestFailure,
+    pub program: Program<Name>,
+    pub fuzzer: Fuzzer<Name>,
+}
+
+unsafe impl Send for Benchmark {}
+
+impl Benchmark {
     pub fn benchmark(
         self,
         seed: u32,
@@ -483,6 +500,14 @@ impl PropertyTest {
         }
 
         results
+    }
+
+    pub fn eval(&self, value: &PlutusData, plutus_version: &PlutusVersion) -> EvalResult {
+        let program = self.program.apply_data(value.clone());
+
+        Program::<NamedDeBruijn>::try_from(program)
+            .unwrap()
+            .eval_version(ExBudget::max(), &plutus_version.into())
     }
 }
 
@@ -558,7 +583,10 @@ impl Prng {
             choices: vec![],
             uplc: Data::constr(
                 Prng::SEEDED,
-                vec![Data::bytestring(digest.to_vec()), Data::bytestring(vec![])],
+                vec![
+                    Data::bytestring(digest.to_vec()), // Prng's seed
+                    Data::bytestring(vec![]),          // Random choices
+                ],
             ),
             iteration: 0,
         }
@@ -585,35 +613,18 @@ impl Prng {
         fuzzer: &Program<Name>,
         iteration: usize,
     ) -> Result<Option<(Prng, PlutusData)>, FuzzerError> {
-        // First try evaluating as a regular fuzzer
-        let program = Program::<NamedDeBruijn>::try_from(fuzzer.apply_data(self.uplc())).unwrap();
-        let program_clone = program.clone();
-
-        let result = program.eval(ExBudget::max());
-
-        match result.result() {
-            Ok(term) if matches!(term, Term::Constant(_)) => {
-                // If we got a valid constant result, process it
-                Ok(Prng::from_result(term, iteration))
-            }
-            _ => {
-                // Use the cloned program for the second attempt
-                let program_with_iteration = program_clone
-                    .apply_data(Data::integer(num_bigint::BigInt::from(iteration as i64)));
-
-                let mut result = program_with_iteration.eval(ExBudget::max());
-                match result.result() {
-                    Ok(term) if matches!(term, Term::Constant(_)) => {
-                        Ok(Prng::from_result(term, iteration))
-                    }
-                    Err(uplc_error) => Err(FuzzerError {
-                        traces: result.logs(),
-                        uplc_error,
-                    }),
-                    _ => unreachable!("Fuzzer returned a malformed result? {result:#?}"),
-                }
-            }
-        }
+        let program = Program::<NamedDeBruijn>::try_from(
+            fuzzer
+                .apply_data(Data::integer(num_bigint::BigInt::from(iteration as i64)))
+                .apply_data(self.uplc())).unwrap();
+        let mut result = program.eval(ExBudget::max());
+        result
+            .result()
+            .map_err(|uplc_error| FuzzerError {
+                traces: result.logs(),
+                uplc_error,
+            })
+            .map(|term| Prng::from_result(term, iteration))
     }
 
     /// Obtain a Prng back from a fuzzer execution. As a reminder, fuzzers have the following
@@ -1431,7 +1442,7 @@ impl Assertion<UntypedExpr> {
 
 #[derive(Debug, Clone)]
 pub struct BenchmarkResult {
-    pub test: PropertyTest,
+    pub test: Benchmark,
     pub cost: ExBudget,
     pub success: bool,
     pub traces: Vec<String>,
