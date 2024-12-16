@@ -1770,7 +1770,7 @@ fn pipe_wrong_arity_fully_saturated_return_fn() {
 #[test]
 fn fuzzer_ok_basic() {
     let source_code = r#"
-        fn int() -> Fuzzer<Int> { todo }
+        fn int() -> Generator<Void, Int> { todo }
         test prop(n via int()) { True }
     "#;
 
@@ -1780,7 +1780,7 @@ fn fuzzer_ok_basic() {
 #[test]
 fn fuzzer_ok_explicit() {
     let source_code = r#"
-        fn int(prng: PRNG) -> Option<(PRNG, Int)> { todo }
+        fn int(void: Void, prng: PRNG) -> Option<(PRNG, Int)> { todo }
         test prop(n via int) { Void }
     "#;
 
@@ -1790,8 +1790,8 @@ fn fuzzer_ok_explicit() {
 #[test]
 fn fuzzer_ok_list() {
     let source_code = r#"
-        fn int() -> Fuzzer<Int> { todo }
-        fn list(a: Fuzzer<a>) -> Fuzzer<List<a>> { todo }
+        fn int() -> Generator<Void, Int> { todo }
+        fn list(a: Generator<Void, a>) -> Generator<Void, List<a>> { todo }
 
         test prop(xs via list(int())) { True }
     "#;
@@ -1802,8 +1802,8 @@ fn fuzzer_ok_list() {
 #[test]
 fn fuzzer_err_unbound() {
     let source_code = r#"
-        fn any() -> Fuzzer<a> { todo }
-        fn list(a: Fuzzer<a>) -> Fuzzer<List<a>> { todo }
+        fn any() -> Generator<Void, a> { todo }
+        fn list(a: Generator<Void, a>) -> Generator<Void, List<a>> { todo }
 
         test prop(xs via list(any())) { todo }
     "#;
@@ -1835,7 +1835,7 @@ fn fuzzer_err_unify_1() {
 #[test]
 fn fuzzer_err_unify_2() {
     let source_code = r#"
-        fn any() -> Fuzzer<a> { todo }
+        fn any() -> Generator<Void, a> { todo }
         test prop(xs via any) { todo }
     "#;
 
@@ -1854,8 +1854,8 @@ fn fuzzer_err_unify_2() {
 #[test]
 fn fuzzer_err_unify_3() {
     let source_code = r#"
-        fn list(a: Fuzzer<a>) -> Fuzzer<List<a>> { todo }
-        fn int() -> Fuzzer<Int> { todo }
+        fn list(a: Generator<Void, a>) -> Generator<Void, List<a>> { todo }
+        fn int() -> Generator<Void, Int> { todo }
 
         test prop(xs: Int via list(int())) { todo }
     "#;
@@ -1870,45 +1870,6 @@ fn fuzzer_err_unify_3() {
             }
         ))
     ))
-}
-
-#[test]
-fn scaled_fuzzer_ok_basic() {
-    let source_code = r#"
-        fn int() -> ScaledFuzzer<Int> { todo }
-        test prop(n via int()) { True }
-    "#;
-
-    assert!(check(parse(source_code)).is_ok());
-}
-
-#[test]
-fn scaled_fuzzer_ok_explicit() {
-    let source_code = r#"
-        fn int(prng: PRNG, complexity: Int) -> Option<(PRNG, Int)> { todo }
-        test prop(n via int) { True }
-    "#;
-
-    assert!(check(parse(source_code)).is_ok());
-}
-
-#[test]
-fn scaled_fuzzer_err_unify() {
-    let source_code = r#"
-        fn int() -> ScaledFuzzer<Int> { todo }
-        test prop(n: Bool via int()) { True }
-    "#;
-
-    assert!(matches!(
-        check(parse(source_code)),
-        Err((
-            _,
-            Error::CouldNotUnify {
-                situation: Some(UnifyErrorSituation::FuzzerAnnotationMismatch),
-                ..
-            }
-        ))
-    ));
 }
 
 #[test]

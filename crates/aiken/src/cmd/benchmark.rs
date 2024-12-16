@@ -17,9 +17,9 @@ pub struct Args {
     #[clap(long)]
     seed: Option<u32>,
 
-    /// Maximum number of successful test run for considering a property-based test valid.
+    /// How many times we will run each benchmark in the relevant project.
     #[clap(long, default_value_t = PropertyTest::DEFAULT_MAX_SUCCESS)]
-    max_success: usize,
+    times_to_run: usize,
 
     /// Only run tests if they match any of these strings.
     /// You can match a module with `-m aiken/list` or `-m list`.
@@ -46,7 +46,7 @@ pub fn exec(
         match_tests,
         exact_match,
         seed,
-        max_success,
+        times_to_run,
         env,
         output,
     }: Args,
@@ -65,7 +65,7 @@ pub fn exec(
                 match_tests.clone(),
                 exact_match,
                 seed,
-                max_success,
+                times_to_run,
                 env.clone(),
                 output.clone(),
             )

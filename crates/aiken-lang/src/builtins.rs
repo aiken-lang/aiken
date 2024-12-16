@@ -477,33 +477,18 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         ),
     );
 
-    // Fuzzer
+    // Generator
     //
-    // pub type Fuzzer<a> =
-    //   fn(PRNG) -> Option<(PRNG, a)>
-    let fuzzer_value = Type::generic_var(id_gen.next());
+    // pub type Generator<c, a> =
+    //   fn(Data, PRNG) -> Option<(PRNG, a)>
+    let generator_context = Type::generic_var(id_gen.next());
+    let generator_value = Type::generic_var(id_gen.next());
     prelude.types.insert(
-        well_known::FUZZER.to_string(),
+        well_known::GENERATOR.to_string(),
         TypeConstructor {
             location: Span::empty(),
-            parameters: vec![fuzzer_value.clone()],
-            tipo: Type::fuzzer(fuzzer_value),
-            module: "".to_string(),
-            public: true,
-        },
-    );
-
-    // ScaledFuzzer
-    //
-    // pub type ScaledFuzzer<a> =
-    //   fn(PRNG, Int) -> Option<(PRNG, a)>
-    let scaled_fuzzer_value = Type::generic_var(id_gen.next());
-    prelude.types.insert(
-        well_known::SCALED_FUZZER.to_string(),
-        TypeConstructor {
-            location: Span::empty(),
-            parameters: vec![scaled_fuzzer_value.clone()],
-            tipo: Type::scaled_fuzzer(scaled_fuzzer_value),
+            parameters: vec![generator_context.clone(), generator_value.clone()],
+            tipo: Type::generator(generator_context, generator_value),
             module: "".to_string(),
             public: true,
         },

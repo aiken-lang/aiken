@@ -302,7 +302,7 @@ where
         match_tests: Option<Vec<String>>,
         exact_match: bool,
         seed: u32,
-        property_max_success: usize,
+        times_to_run: usize,
         env: Option<String>,
         output: PathBuf,
     ) -> Result<(), Vec<Error>> {
@@ -313,7 +313,7 @@ where
                 match_tests,
                 exact_match,
                 seed,
-                property_max_success,
+                times_to_run,
                 output,
             },
             blueprint_path: self.blueprint_path(None),
@@ -470,16 +470,17 @@ where
                 match_tests,
                 exact_match,
                 seed,
-                property_max_success,
+                times_to_run,
                 output,
             } => {
-                let tests = self.collect_tests(false, match_tests, exact_match, options.tracing)?;
+                // todo - collect benchmarks
+                let tests = self.collect_benchmarks(false, match_tests, exact_match, options.tracing)?;
 
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningBenchmarks);
                 }
 
-                let tests = self.run_benchmarks(tests, seed, property_max_success);
+                let tests = self.run_benchmarks(tests, seed, times_to_run);
 
                 let errors: Vec<Error> = tests
                     .iter()
@@ -994,6 +995,107 @@ where
         Ok(())
     }
 
+    fn collect_benchmarks(
+        &mut self,
+        verbose: bool,
+        match_tests: Option<Vec<String>>,
+        exact_match: bool,
+        tracing: Tracing,
+    ) -> Result<Vec<Test>, Error> {
+        let mut scripts = Vec::new();
+
+        let match_tests = match_tests.map(|mt| {
+            mt.into_iter()
+                .map(|match_test| {
+                    let mut match_split_dot = match_test.split('.');
+
+                    let match_module = if match_test.contains('.') || match_test.contains('/') {
+                        match_split_dot.next().unwrap_or("")
+                    } else {
+                        ""
+                    };
+
+                    let match_names = match_split_dot.next().map(|names| {
+                        let names = names.replace(&['{', '}'][..], "");
+
+                        let names_split_comma = names.split(',');
+
+                        names_split_comma.map(str::to_string).collect()
+                    });
+
+                    (match_module.to_string(), match_names)
+                })
+                .collect::<Vec<(String, Option<Vec<String>>)>>()
+        });
+
+        for checked_module in self.checked_modules.values() {
+            if checked_module.package != self.config.name.to_string() {
+                continue;
+            }
+
+            for def in checked_module.ast.definitions() {
+                if let Definition::Benchmark(func) = def {
+                    if let Some(match_tests) = &match_tests {
+                        let is_match = match_tests.iter().any(|(module, names)| {
+                            let matched_module =
+                                module.is_empty() || checked_module.name.contains(module);
+
+                            let matched_name = match names {
+                                None => true,
+                                Some(names) => names.iter().any(|name| {
+                                    if exact_match {
+                                        name == &func.name
+                                    } else {
+                                        func.name.contains(name)
+                                    }
+                                }),
+                            };
+
+                            matched_module && matched_name
+                        });
+
+                        if is_match {
+                            scripts.push((
+                                checked_module.input_path.clone(),
+                                checked_module.name.clone(),
+                                func,
+                            ))
+                        }
+                    } else {
+                        scripts.push((
+                            checked_module.input_path.clone(),
+                            checked_module.name.clone(),
+                            func,
+                        ))
+                    }
+                }
+            }
+        }
+
+        let mut generator = self.new_generator(tracing);
+
+        let mut tests = Vec::new();
+
+        for (input_path, module_name, test) in scripts.into_iter() {
+            if verbose {
+                // TODO: We may want to handle the event listener differently for benchmarks
+                self.event_listener.handle_event(Event::GeneratingUPLCFor {
+                    name: test.name.clone(),
+                    path: input_path.clone(),
+                })
+            }
+
+            tests.push(Test::from_function_definition(
+                &mut generator,
+                test.to_owned(),
+                module_name,
+                input_path,
+            ));
+        }
+
+        Ok(tests)
+    }
+
     fn collect_tests(
         &mut self,
         verbose: bool,
@@ -1113,6 +1215,7 @@ where
                 Test::PropertyTest(property_test) => {
                     property_test.run(seed, property_max_success, plutus_version)
                 }
+                Test::Benchmark(_) => unreachable!("Benchmarks cannot be run in PBT.")
             })
             .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
             .into_iter()
@@ -1134,8 +1237,8 @@ where
         tests
             .into_par_iter()
             .flat_map(|test| match test {
-                Test::UnitTest(_) => Vec::new(),
-                Test::PropertyTest(property_test) => property_test
+                Test::UnitTest(_) | Test::PropertyTest(_) => unreachable!("Tests cannot be ran during benchmarking."),
+                Test::Benchmark(benchmark) => benchmark
                     .benchmark(seed, property_max_success, plutus_version)
                     .into_iter()
                     .map(TestResult::Benchmark)

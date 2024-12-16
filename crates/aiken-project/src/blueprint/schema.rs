@@ -540,6 +540,7 @@ fn find_data_type(name: &str, definitions: &[TypedDefinition]) -> Option<TypedDa
             | Definition::TypeAlias { .. }
             | Definition::Use { .. }
             | Definition::ModuleConstant { .. }
+            | Definition::Benchmark { .. }
             | Definition::Test { .. } => continue,
         }
     }
