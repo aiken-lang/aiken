@@ -112,8 +112,10 @@ mod test {
 
             const max_int: Int = 255
 
+            pub type Fuzzer<a> = Generator<Void, a>
+
             pub fn int() -> Fuzzer<Int> {
-              fn(prng: PRNG) -> Option<(PRNG, Int)> {
+              fn(v: Void, prng: PRNG) -> Option<(PRNG, Int)> {
                 when prng is {
                   Seeded { seed, choices } -> {
                      let choice =
@@ -161,21 +163,21 @@ mod test {
             }
 
             pub fn constant(a: a) -> Fuzzer<a> {
-              fn(s0) { Some((s0, a)) }
+              fn(v, s0) { Some((s0, a)) }
             }
 
             pub fn and_then(fuzz_a: Fuzzer<a>, f: fn(a) -> Fuzzer<b>) -> Fuzzer<b> {
-              fn(s0) {
-                when fuzz_a(s0) is {
-                  Some((s1, a)) -> f(a)(s1)
+              fn(v, s0) {
+                when fuzz_a(v, s0) is {
+                  Some((s1, a)) -> f(a)(v, s1)
                   None -> None
                 }
               }
             }
 
             pub fn map(fuzz_a: Fuzzer<a>, f: fn(a) -> b) -> Fuzzer<b> {
-              fn(s0) {
-                when fuzz_a(s0) is {
+              fn(v, s0) {
+                when fuzz_a(v, s0) is {
                   Some((s1, a)) -> Some((s1, f(a)))
                   None -> None
                 }
@@ -183,10 +185,10 @@ mod test {
             }
 
             pub fn map2(fuzz_a: Fuzzer<a>, fuzz_b: Fuzzer<b>, f: fn(a, b) -> c) -> Fuzzer<c> {
-              fn(s0) {
-                when fuzz_a(s0) is {
+              fn(v, s0) {
+                when fuzz_a(v, s0) is {
                   Some((s1, a)) ->
-                    when fuzz_b(s1) is {
+                    when fuzz_b(Void, s1) is {
                       Some((s2, b)) -> Some((s2, f(a, b)))
                       None -> None
                     }
@@ -213,6 +215,9 @@ mod test {
             }
             (Test::UnitTest(..), _) => {
                 panic!("Expected to yield a PropertyTest but found a UnitTest")
+            }
+            (Test::Benchmark(..), _) => {
+                panic!("Expected to yield a PropertyTest but found a Benchmark")
             }
         }
     }

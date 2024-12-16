@@ -258,6 +258,15 @@ impl<'comments> Formatter<'comments> {
                 ..
             }) => self.definition_test(name, args, body, *end_position, on_test_failure),
 
+            Definition::Benchmark(Function {
+                name,
+                arguments: args,
+                body,
+                end_position,
+                on_test_failure,
+                ..
+            }) => self.definition_benchmark(name, args, body, *end_position, on_test_failure),
+
             Definition::TypeAlias(TypeAlias {
                 alias,
                 parameters: args,
@@ -612,6 +621,43 @@ impl<'comments> Formatter<'comments> {
                 OnTestFailure::FailImmediately => "",
                 OnTestFailure::SucceedEventually => " fail",
                 OnTestFailure::SucceedImmediately => " fail once",
+            })
+            .group();
+
+        // Format body
+        let body = self.expr(body, true);
+
+        // Add any trailing comments
+        let body = match printed_comments(self.pop_comments(end_location), false) {
+            Some(comments) => body.append(line()).append(comments),
+            None => body,
+        };
+
+        // Stick it all together
+        head.append(" {")
+            .append(line().append(body).nest(INDENT).group())
+            .append(line())
+            .append("}")
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn definition_benchmark<'a>(
+        &mut self,
+        name: &'a str,
+        args: &'a [UntypedArgVia],
+        body: &'a UntypedExpr,
+        end_location: usize,
+        on_test_failure: &'a OnTestFailure,
+    ) -> Document<'a> {
+        // Fn name and args
+        let head = "benchmark "
+            .to_doc()
+            .append(name)
+            .append(wrap_args(args.iter().map(|e| (self.fn_arg_via(e), false))))
+            .append(match on_test_failure {
+                OnTestFailure::FailImmediately => "",
+                OnTestFailure::SucceedEventually => "",
+                OnTestFailure::SucceedImmediately => "",
             })
             .group();
 
