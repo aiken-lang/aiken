@@ -135,7 +135,7 @@ mod tests {
     fn def_benchmark() {
         assert_definition!(
             r#"
-            benchmark foo(x via fuzz.any_int) {
+            bench foo(x via fuzz.any_int) {
                 True
             }
             "#
@@ -146,7 +146,7 @@ mod tests {
     fn def_invalid_benchmark() {
         assert_definition!(
             r#"
-            benchmark foo(x via f, y via g) {
+            bench foo(x via f, y via g) {
                 True
             }
             "#
@@ -157,7 +157,7 @@ mod tests {
     fn def_benchmark_annotated_fuzzer() {
         assert_definition!(
             r#"
-            benchmark foo(x: Int via foo()) {
+            bench foo(x: Int via foo()) {
                 True
             }
             "#

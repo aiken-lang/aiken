@@ -258,7 +258,7 @@ fn str_to_keyword(word: &str) -> Option<Token> {
         "or" => Some(Token::Or),
         "validator" => Some(Token::Validator),
         "via" => Some(Token::Via),
-        "benchmark" => Some(Token::Benchmark),
+        "bench" => Some(Token::Benchmark),
         _ => None,
     }
 }

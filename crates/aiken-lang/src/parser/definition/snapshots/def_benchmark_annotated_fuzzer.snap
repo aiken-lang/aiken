@@ -1,7 +1,7 @@
 ---
 source: crates/aiken-lang/src/parser/definition/benchmark.rs
 assertion_line: 158
-description: "Code:\n\nbenchmark foo(x: Int via foo()) {\n    True\n}\n"
+description: "Code:\n\nbench foo(x: Int via foo()) {\n    True\n}\n"
 snapshot_kind: text
 ---
 Benchmark(
@@ -13,13 +13,13 @@ Benchmark(
                         Named {
                             name: "x",
                             label: "x",
-                            location: 14..15,
+                            location: 10..11,
                         },
                     ),
-                    location: 14..20,
+                    location: 10..16,
                     annotation: Some(
                         Constructor {
-                            location: 17..20,
+                            location: 13..16,
                             module: None,
                             name: "Int",
                             arguments: [],
@@ -31,24 +31,24 @@ Benchmark(
                 via: Call {
                     arguments: [],
                     fun: Var {
-                        location: 25..28,
+                        location: 21..24,
                         name: "foo",
                     },
-                    location: 25..30,
+                    location: 21..26,
                 },
             },
         ],
         body: Var {
-            location: 38..42,
+            location: 34..38,
             name: "True",
         },
         doc: None,
-        location: 0..31,
+        location: 0..27,
         name: "foo",
         public: false,
         return_annotation: None,
         return_type: (),
-        end_position: 43,
+        end_position: 39,
         on_test_failure: FailImmediately,
     },
 )

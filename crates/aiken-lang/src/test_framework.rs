@@ -332,14 +332,12 @@ impl PropertyTest {
     ) -> Result<Option<Counterexample<'a>>, FuzzerError> {
         let mut prng = initial_prng;
         let mut counterexample = None;
-        let mut iteration = 0;
 
         while *remaining > 0 && counterexample.is_none() {
-            let (next_prng, cex) = self.run_once(prng, labels, plutus_version, iteration)?;
+            let (next_prng, cex) = self.run_once(prng, labels, plutus_version)?;
             prng = next_prng;
             counterexample = cex;
             *remaining -= 1;
-            iteration += 1;
         }
 
         Ok(counterexample)
@@ -350,12 +348,11 @@ impl PropertyTest {
         prng: Prng,
         labels: &mut BTreeMap<String, usize>,
         plutus_version: &'a PlutusVersion,
-        iteration: usize,
     ) -> Result<(Prng, Option<Counterexample<'a>>), FuzzerError> {
         use OnTestFailure::*;
 
         let (next_prng, value) = prng
-            .sample(&self.fuzzer.program, iteration)?
+            .sample(&self.fuzzer.program)?
             .expect("A seeded PRNG returned 'None' which indicates a fuzzer is ill-formed and implemented wrongly; please contact library's authors.");
 
         let mut result = self.eval(&value, plutus_version);
@@ -386,8 +383,8 @@ impl PropertyTest {
                 value,
                 choices: next_prng.choices(),
                 cache: Cache::new(move |choices| {
-                    match Prng::from_choices(choices, iteration)
-                        .sample(&self.fuzzer.program, iteration)
+                    match Prng::from_choices(choices)
+                        .sample(&self.fuzzer.program)
                     {
                         Err(..) => Status::Invalid,
                         Ok(None) => Status::Invalid,
@@ -454,7 +451,7 @@ pub struct Benchmark {
     pub name: String,
     pub on_test_failure: OnTestFailure,
     pub program: Program<Name>,
-    pub fuzzer: Fuzzer<Name>,
+    pub sampler: Fuzzer<Name>,
 }
 
 unsafe impl Send for Benchmark {}
@@ -467,11 +464,12 @@ impl Benchmark {
         plutus_version: &PlutusVersion,
     ) -> Vec<BenchmarkResult> {
         let mut results = Vec::with_capacity(n);
-        let mut remaining = n;
+        let mut iteration = 0;
         let mut prng = Prng::from_seed(seed);
 
-        while remaining > 0 {
-            match prng.sample(&self.fuzzer.program, n - remaining) {
+        while n > iteration {
+            let fuzzer = self.sampler.program.apply_data(Data::integer(num_bigint::BigInt::from(iteration as i64)));
+            match prng.sample(&fuzzer) {
                 Ok(Some((new_prng, value))) => {
                     prng = new_prng;
                     let mut eval_result = self.eval(&value, plutus_version);
@@ -496,7 +494,7 @@ impl Benchmark {
                     break;
                 }
             }
-            remaining -= 1;
+            iteration += 1;
         }
 
         results
@@ -534,12 +532,10 @@ pub enum Prng {
     Seeded {
         choices: Vec<u8>,
         uplc: PlutusData,
-        iteration: usize,
     },
     Replayed {
         choices: Vec<u8>,
         uplc: PlutusData,
-        iteration: usize,
     },
 }
 
@@ -588,12 +584,11 @@ impl Prng {
                     Data::bytestring(vec![]),          // Random choices
                 ],
             ),
-            iteration: 0,
         }
     }
 
     /// Construct a Pseudo-random number generator from a pre-defined list of choices.
-    pub fn from_choices(choices: &[u8], iteration: usize) -> Prng {
+    pub fn from_choices(choices: &[u8]) -> Prng {
         Prng::Replayed {
             uplc: Data::constr(
                 Prng::REPLAYED,
@@ -603,7 +598,6 @@ impl Prng {
                 ],
             ),
             choices: choices.to_vec(),
-            iteration,
         }
     }
 
@@ -611,11 +605,10 @@ impl Prng {
     pub fn sample(
         &self,
         fuzzer: &Program<Name>,
-        iteration: usize,
+        // iteration: usize,
     ) -> Result<Option<(Prng, PlutusData)>, FuzzerError> {
         let program = Program::<NamedDeBruijn>::try_from(
             fuzzer
-                .apply_data(Data::integer(num_bigint::BigInt::from(iteration as i64)))
                 .apply_data(self.uplc())).unwrap();
         let mut result = program.eval(ExBudget::max());
         result
@@ -624,7 +617,7 @@ impl Prng {
                 traces: result.logs(),
                 uplc_error,
             })
-            .map(|term| Prng::from_result(term, iteration))
+            .map(|term| Prng::from_result(term))
     }
 
     /// Obtain a Prng back from a fuzzer execution. As a reminder, fuzzers have the following
@@ -639,10 +632,9 @@ impl Prng {
     /// aborted altogether with 'None'.
     pub fn from_result(
         result: Term<NamedDeBruijn>,
-        iteration: usize,
     ) -> Option<(Self, PlutusData)> {
         /// Interpret the given 'PlutusData' as one of two Prng constructors.
-        fn as_prng(cst: &PlutusData, iteration: usize) -> Prng {
+        fn as_prng(cst: &PlutusData) -> Prng {
             if let PlutusData::Constr(Constr { tag, fields, .. }) = cst {
                 if *tag == 121 + Prng::SEEDED {
                     if let [PlutusData::BoundedBytes(bytes), PlutusData::BoundedBytes(choices)] =
@@ -659,7 +651,6 @@ impl Prng {
                                     PlutusData::BoundedBytes(vec![].into()),
                                 ],
                             ),
-                            iteration,
                         };
                     }
                 }
@@ -670,7 +661,6 @@ impl Prng {
                         return Prng::Replayed {
                             choices: choices.to_vec(),
                             uplc: cst.clone(),
-                            iteration,
                         };
                     }
                 }
@@ -684,7 +674,7 @@ impl Prng {
                 if *tag == 121 + Prng::SOME {
                     if let [PlutusData::Array(elems)] = &fields[..] {
                         if let [new_seed, value] = &elems[..] {
-                            return Some((as_prng(new_seed, iteration), value.clone()));
+                            return Some((as_prng(new_seed), value.clone()));
                         }
                     }
                 }
