@@ -1,7 +1,7 @@
 ---
 source: crates/aiken-lang/src/parser/definition/benchmark.rs
 assertion_line: 147
-description: "Code:\n\nbenchmark foo(x via f, y via g) {\n    True\n}\n"
+description: "Code:\n\nbench foo(x via f, y via g) {\n    True\n}\n"
 snapshot_kind: text
 ---
 Benchmark(
@@ -13,16 +13,16 @@ Benchmark(
                         Named {
                             name: "x",
                             label: "x",
-                            location: 14..15,
+                            location: 10..11,
                         },
                     ),
-                    location: 14..15,
+                    location: 10..11,
                     annotation: None,
                     doc: None,
                     is_validator_param: false,
                 },
                 via: Var {
-                    location: 20..21,
+                    location: 16..17,
                     name: "f",
                 },
             },
@@ -32,31 +32,31 @@ Benchmark(
                         Named {
                             name: "y",
                             label: "y",
-                            location: 23..24,
+                            location: 19..20,
                         },
                     ),
-                    location: 23..24,
+                    location: 19..20,
                     annotation: None,
                     doc: None,
                     is_validator_param: false,
                 },
                 via: Var {
-                    location: 29..30,
+                    location: 25..26,
                     name: "g",
                 },
             },
         ],
         body: Var {
-            location: 38..42,
+            location: 34..38,
             name: "True",
         },
         doc: None,
-        location: 0..31,
+        location: 0..27,
         name: "foo",
         public: false,
         return_annotation: None,
         return_type: (),
-        end_position: 43,
+        end_position: 39,
         on_test_failure: FailImmediately,
     },
 )
