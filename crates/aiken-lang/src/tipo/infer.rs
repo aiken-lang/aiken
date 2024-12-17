@@ -365,7 +365,7 @@ fn infer_definition(
                         &arg.via.location(),
                     ) {
                         Ok(result) => Ok(result),
-                        Err(err) => Err(err)
+                        Err(err) => Err(err),
                     }?;
 
                     // Ensure that the annotation, if any, matches the type inferred from the
@@ -501,7 +501,7 @@ fn infer_definition(
                         &arg.via.location(),
                     ) {
                         Ok(result) => Ok(result),
-                        Err(err) => Err(err)
+                        Err(err) => Err(err),
                     }?;
 
                     // Ensure that the annotation, if any, matches the type inferred from the
@@ -930,11 +930,13 @@ fn infer_sampler(
             ret,
             args,
             alias: _,
-        } => if args.len() == 1 && args[0].is_int() {
-            infer_fuzzer(environment, expected_inner_type, ret, &Span::empty())
-        } else {
-            Err(could_not_unify())
-        },
+        } => {
+            if args.len() == 1 && args[0].is_int() {
+                infer_fuzzer(environment, expected_inner_type, ret, &Span::empty())
+            } else {
+                Err(could_not_unify())
+            }
+        }
 
         Type::Var { tipo, alias } => match &*tipo.deref().borrow() {
             TypeVar::Link { tipo } => infer_sampler(
