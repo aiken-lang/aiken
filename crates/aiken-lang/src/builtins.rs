@@ -506,7 +506,7 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
             tipo: Type::sampler(sampler_generic),
             module: "".to_string(),
             public: true,
-        }
+        },
     );
 
     prelude
