@@ -183,7 +183,7 @@ impl fmt::Display for Token {
             Token::Once => "once",
             Token::Validator => "validator",
             Token::Via => "via",
-            Token::Benchmark => "benchmark",
+            Token::Benchmark => "bench",
         };
         write!(f, "{s}")
     }

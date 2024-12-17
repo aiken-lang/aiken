@@ -1773,8 +1773,18 @@ fn pipe_wrong_arity_fully_saturated_return_fn() {
 #[test]
 fn fuzzer_ok_basic() {
     let source_code = r#"
-        fn int() -> Generator<Void, Int> { todo }
+        fn int() -> Fuzzer<Int> { todo }
         test prop(n via int()) { True }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
+fn sampler_ok_basic() {
+    let source_code = r#"
+        fn int() -> Sampler<Int> { todo }
+        bench prop(n via int()) { True }
     "#;
 
     assert!(check(parse(source_code)).is_ok());
@@ -1783,7 +1793,7 @@ fn fuzzer_ok_basic() {
 #[test]
 fn fuzzer_ok_explicit() {
     let source_code = r#"
-        fn int(void: Void, prng: PRNG) -> Option<(PRNG, Int)> { todo }
+        fn int(prng: PRNG) -> Option<(PRNG, Int)> { todo }
         test prop(n via int) { Void }
     "#;
 
@@ -1793,8 +1803,8 @@ fn fuzzer_ok_explicit() {
 #[test]
 fn fuzzer_ok_list() {
     let source_code = r#"
-        fn int() -> Generator<Void, Int> { todo }
-        fn list(a: Generator<Void, a>) -> Generator<Void, List<a>> { todo }
+        fn int() -> Fuzzer<Int> { todo }
+        fn list(a: Fuzzer<a>) -> Fuzzer<List<a>> { todo }
 
         test prop(xs via list(int())) { True }
     "#;
@@ -1805,8 +1815,8 @@ fn fuzzer_ok_list() {
 #[test]
 fn fuzzer_err_unbound() {
     let source_code = r#"
-        fn any() -> Generator<Void, a> { todo }
-        fn list(a: Generator<Void, a>) -> Generator<Void, List<a>> { todo }
+        fn any() -> Fuzzer<a> { todo }
+        fn list(a: Fuzzer<a>) -> Fuzzer<List<a>> { todo }
 
         test prop(xs via list(any())) { todo }
     "#;
@@ -1838,7 +1848,7 @@ fn fuzzer_err_unify_1() {
 #[test]
 fn fuzzer_err_unify_2() {
     let source_code = r#"
-        fn any() -> Generator<Void, a> { todo }
+        fn any() -> Fuzzer<a> { todo }
         test prop(xs via any) { todo }
     "#;
 
@@ -1857,8 +1867,8 @@ fn fuzzer_err_unify_2() {
 #[test]
 fn fuzzer_err_unify_3() {
     let source_code = r#"
-        fn list(a: Generator<Void, a>) -> Generator<Void, List<a>> { todo }
-        fn int() -> Generator<Void, Int> { todo }
+        fn list(a: Fuzzer<a>) -> Fuzzer<List<a>> { todo }
+        fn int() -> Fuzzer<Int> { todo }
 
         test prop(xs: Int via list(int())) { todo }
     "#;

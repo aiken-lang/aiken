@@ -838,8 +838,7 @@ fn infer_fuzzer(
 ) -> Result<(Annotation, Rc<Type>), Error> {
     let could_not_unify = || Error::CouldNotUnify {
         location: *location,
-        expected: Type::generator(
-            Type::void(),
+        expected: Type::fuzzer(
             expected_inner_type
                 .clone()
                 .unwrap_or_else(|| Type::generic_var(0)),
@@ -863,7 +862,7 @@ fn infer_fuzzer(
                 contains_opaque: _,
                 alias: _,
             } if module.is_empty() && name == "Option" && args.len() == 1 => {
-                match args.first().expect("args.len() == 2 && args[0].is_void()").borrow() {
+                match args.first().expect("args.len() == 1").borrow() {
                     Type::Tuple { elems, .. } if elems.len() == 2 => {
                         let wrapped = elems.get(1).expect("Tuple has two elements");
 
@@ -878,7 +877,7 @@ fn infer_fuzzer(
                         // `unify` now that we have figured out the type carried by the fuzzer.
                         environment.unify(
                             tipo.clone(),
-                            Type::generator(Type::void(), wrapped.clone()),
+                            Type::fuzzer(wrapped.clone()),
                             *location,
                             false,
                         )?;
@@ -916,8 +915,7 @@ fn infer_sampler(
 ) -> Result<(Annotation, Rc<Type>), Error> {
     let could_not_unify = || Error::CouldNotUnify {
         location: *location,
-        expected: Type::generator(
-            Type::int(),
+        expected: Type::sampler(
             expected_inner_type
                 .clone()
                 .unwrap_or_else(|| Type::generic_var(0)),
@@ -930,34 +928,12 @@ fn infer_sampler(
     match tipo.borrow() {
         Type::Fn {
             ret,
-            args: _,
+            args,
             alias: _,
-        } => match ret.borrow() {
-            Type::App {
-                module,
-                name,
-                args,
-                public: _,
-                contains_opaque: _,
-                alias: _,
-            } if module.is_empty() && name == "Option" && args.len() == 1 => {
-                match args.first().expect("args.len() == 2 && args[0].is_int()").borrow() {
-                    Type::Tuple { elems, .. } if elems.len() == 2 => {
-                        let wrapped = elems.get(1).expect("Tuple has two elements");
-
-                        environment.unify(
-                            tipo.clone(),
-                            Type::generator(Type::int(), wrapped.clone()),
-                            *location,
-                            false,
-                        )?;
-
-                        Ok((annotate_fuzzer(wrapped, location)?, wrapped.clone()))
-                    }
-                    _ => Err(could_not_unify()),
-                }
-            }
-            _ => Err(could_not_unify()),
+        } => if args.len() == 1 && args[0].is_int() {
+            infer_fuzzer(environment, expected_inner_type, ret, &Span::empty())
+        } else {
+            Err(could_not_unify())
         },
 
         Type::Var { tipo, alias } => match &*tipo.deref().borrow() {
