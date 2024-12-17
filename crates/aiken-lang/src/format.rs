@@ -650,7 +650,7 @@ impl<'comments> Formatter<'comments> {
         on_test_failure: &'a OnTestFailure,
     ) -> Document<'a> {
         // Fn name and args
-        let head = "benchmark "
+        let head = "bench "
             .to_doc()
             .append(name)
             .append(wrap_args(args.iter().map(|e| (self.fn_arg_via(e), false))))
