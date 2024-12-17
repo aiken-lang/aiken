@@ -617,7 +617,7 @@ impl Prng {
                 traces: result.logs(),
                 uplc_error,
             })
-            .map(|term| Prng::from_result(term))
+            .map(Prng::from_result)
     }
 
     /// Obtain a Prng back from a fuzzer execution. As a reminder, fuzzers have the following
