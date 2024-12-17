@@ -261,7 +261,6 @@ impl Type {
                         }
                         .into(),
                     }
-                    .into(),
                 }
                 .into(),
             ),
