@@ -49,7 +49,7 @@ use vec1::{vec1, Vec1};
 pub enum Test {
     UnitTest(UnitTest),
     PropertyTest(PropertyTest),
-    Benchmark(Benchmark)
+    Benchmark(Benchmark),
 }
 
 unsafe impl Send for Test {}
@@ -383,9 +383,7 @@ impl PropertyTest {
                 value,
                 choices: next_prng.choices(),
                 cache: Cache::new(move |choices| {
-                    match Prng::from_choices(choices)
-                        .sample(&self.fuzzer.program)
-                    {
+                    match Prng::from_choices(choices).sample(&self.fuzzer.program) {
                         Err(..) => Status::Invalid,
                         Ok(None) => Status::Invalid,
                         Ok(Some((_, value))) => {
@@ -468,7 +466,10 @@ impl Benchmark {
         let mut prng = Prng::from_seed(seed);
 
         while n > iteration {
-            let fuzzer = self.sampler.program.apply_data(Data::integer(num_bigint::BigInt::from(iteration as i64)));
+            let fuzzer = self
+                .sampler
+                .program
+                .apply_data(Data::integer(num_bigint::BigInt::from(iteration as i64)));
             match prng.sample(&fuzzer) {
                 Ok(Some((new_prng, value))) => {
                     prng = new_prng;
@@ -529,14 +530,8 @@ impl Benchmark {
 ///
 #[derive(Debug)]
 pub enum Prng {
-    Seeded {
-        choices: Vec<u8>,
-        uplc: PlutusData,
-    },
-    Replayed {
-        choices: Vec<u8>,
-        uplc: PlutusData,
-    },
+    Seeded { choices: Vec<u8>, uplc: PlutusData },
+    Replayed { choices: Vec<u8>, uplc: PlutusData },
 }
 
 impl Prng {
@@ -607,9 +602,7 @@ impl Prng {
         fuzzer: &Program<Name>,
         // iteration: usize,
     ) -> Result<Option<(Prng, PlutusData)>, FuzzerError> {
-        let program = Program::<NamedDeBruijn>::try_from(
-            fuzzer
-                .apply_data(self.uplc())).unwrap();
+        let program = Program::<NamedDeBruijn>::try_from(fuzzer.apply_data(self.uplc())).unwrap();
         let mut result = program.eval(ExBudget::max());
         result
             .result()
@@ -630,9 +623,7 @@ impl Prng {
     /// made during shrinking aren't breaking underlying invariants (if only, because we run out of
     /// values to replay). In such case, the replayed sequence is simply invalid and the fuzzer
     /// aborted altogether with 'None'.
-    pub fn from_result(
-        result: Term<NamedDeBruijn>,
-    ) -> Option<(Self, PlutusData)> {
+    pub fn from_result(result: Term<NamedDeBruijn>) -> Option<(Self, PlutusData)> {
         /// Interpret the given 'PlutusData' as one of two Prng constructors.
         fn as_prng(cst: &PlutusData) -> Prng {
             if let PlutusData::Constr(Constr { tag, fields, .. }) = cst {

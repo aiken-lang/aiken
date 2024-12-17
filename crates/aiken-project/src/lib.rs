@@ -474,7 +474,8 @@ where
                 output,
             } => {
                 // todo - collect benchmarks
-                let tests = self.collect_benchmarks(false, match_tests, exact_match, options.tracing)?;
+                let tests =
+                    self.collect_benchmarks(false, match_tests, exact_match, options.tracing)?;
 
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningBenchmarks);
@@ -1215,7 +1216,7 @@ where
                 Test::PropertyTest(property_test) => {
                     property_test.run(seed, property_max_success, plutus_version)
                 }
-                Test::Benchmark(_) => unreachable!("Benchmarks cannot be run in PBT.")
+                Test::Benchmark(_) => unreachable!("Benchmarks cannot be run in PBT."),
             })
             .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
             .into_iter()
@@ -1237,7 +1238,9 @@ where
         tests
             .into_par_iter()
             .flat_map(|test| match test {
-                Test::UnitTest(_) | Test::PropertyTest(_) => unreachable!("Tests cannot be ran during benchmarking."),
+                Test::UnitTest(_) | Test::PropertyTest(_) => {
+                    unreachable!("Tests cannot be ran during benchmarking.")
+                }
                 Test::Benchmark(benchmark) => benchmark
                     .benchmark(seed, property_max_success, plutus_version)
                     .into_iter()
