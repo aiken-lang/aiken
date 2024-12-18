@@ -73,6 +73,7 @@ pub enum Token {
     NewLine,
     // Keywords (alphabetically):
     As,
+    Benchmark,
     Const,
     Fn,
     If,
@@ -182,6 +183,7 @@ impl fmt::Display for Token {
             Token::Once => "once",
             Token::Validator => "validator",
             Token::Via => "via",
+            Token::Benchmark => "bench",
         };
         write!(f, "{s}")
     }

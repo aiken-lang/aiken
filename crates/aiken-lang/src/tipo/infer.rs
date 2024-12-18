@@ -81,6 +81,7 @@ impl UntypedModule {
                 Definition::Validator { .. } => (),
                 Definition::Fn { .. }
                 | Definition::Test { .. }
+                | Definition::Benchmark { .. }
                 | Definition::TypeAlias { .. }
                 | Definition::DataType { .. }
                 | Definition::Use { .. } => not_consts.push(def),
@@ -357,12 +358,15 @@ fn infer_definition(
                         .map(|ann| hydrator.type_from_annotation(ann, environment))
                         .transpose()?;
 
-                    let (inferred_annotation, inferred_inner_type) = infer_fuzzer(
+                    let (inferred_annotation, inferred_inner_type) = match infer_fuzzer(
                         environment,
                         provided_inner_type.clone(),
                         &typed_via.tipo(),
                         &arg.via.location(),
-                    )?;
+                    ) {
+                        Ok(result) => Ok(result),
+                        Err(err) => Err(err),
+                    }?;
 
                     // Ensure that the annotation, if any, matches the type inferred from the
                     // Fuzzer.
@@ -390,6 +394,142 @@ fn infer_definition(
                         .scope
                         .get_mut(&f.name)
                         .expect("Could not find preregistered type for test");
+                    if let Type::Fn {
+                        ref ret,
+                        ref alias,
+                        args: _,
+                    } = scope.tipo.as_ref()
+                    {
+                        scope.tipo = Rc::new(Type::Fn {
+                            ret: ret.clone(),
+                            args: vec![inferred_inner_type.clone()],
+                            alias: alias.clone(),
+                        })
+                    }
+
+                    Ok((
+                        Some((typed_via, inferred_inner_type)),
+                        Some(inferred_annotation),
+                    ))
+                }
+                None => Ok((None, None)),
+            }?;
+
+            let typed_f = infer_function(&f.into(), module_name, hydrators, environment, tracing)?;
+
+            let is_bool = environment.unify(
+                typed_f.return_type.clone(),
+                Type::bool(),
+                typed_f.location,
+                false,
+            );
+
+            let is_void = environment.unify(
+                typed_f.return_type.clone(),
+                Type::void(),
+                typed_f.location,
+                false,
+            );
+
+            if is_bool.or(is_void).is_err() {
+                return Err(Error::IllegalTestType {
+                    location: typed_f.location,
+                });
+            }
+
+            Ok(Definition::Test(Function {
+                doc: typed_f.doc,
+                location: typed_f.location,
+                name: typed_f.name,
+                public: typed_f.public,
+                arguments: match typed_via {
+                    Some((via, tipo)) => {
+                        let arg = typed_f
+                            .arguments
+                            .first()
+                            .expect("has exactly one argument")
+                            .to_owned();
+                        vec![ArgVia {
+                            arg: TypedArg {
+                                tipo,
+                                annotation,
+                                ..arg
+                            },
+                            via,
+                        }]
+                    }
+                    None => vec![],
+                },
+                return_annotation: typed_f.return_annotation,
+                return_type: typed_f.return_type,
+                body: typed_f.body,
+                on_test_failure: typed_f.on_test_failure,
+                end_position: typed_f.end_position,
+            }))
+        }
+
+        Definition::Benchmark(f) => {
+            let (typed_via, annotation) = match f.arguments.first() {
+                Some(arg) => {
+                    if f.arguments.len() > 1 {
+                        return Err(Error::IncorrectTestArity {
+                            count: f.arguments.len(),
+                            location: f
+                                .arguments
+                                .get(1)
+                                .expect("arguments.len() > 1")
+                                .arg
+                                .location,
+                        });
+                    }
+
+                    let typed_via = ExprTyper::new(environment, tracing).infer(arg.via.clone())?;
+
+                    let hydrator: &mut Hydrator = hydrators.get_mut(&f.name).unwrap();
+
+                    let provided_inner_type = arg
+                        .arg
+                        .annotation
+                        .as_ref()
+                        .map(|ann| hydrator.type_from_annotation(ann, environment))
+                        .transpose()?;
+
+                    let (inferred_annotation, inferred_inner_type) = match infer_sampler(
+                        environment,
+                        provided_inner_type.clone(),
+                        &typed_via.tipo(),
+                        &arg.via.location(),
+                    ) {
+                        Ok(result) => Ok(result),
+                        Err(err) => Err(err),
+                    }?;
+
+                    // Ensure that the annotation, if any, matches the type inferred from the
+                    // Fuzzer.
+                    if let Some(provided_inner_type) = provided_inner_type {
+                        if !arg
+                            .arg
+                            .annotation
+                            .as_ref()
+                            .unwrap()
+                            .is_logically_equal(&inferred_annotation)
+                        {
+                            return Err(Error::CouldNotUnify {
+                                location: arg.arg.location,
+                                expected: inferred_inner_type.clone(),
+                                given: provided_inner_type.clone(),
+                                situation: Some(UnifyErrorSituation::FuzzerAnnotationMismatch),
+                                rigid_type_names: hydrator.rigid_names(),
+                            });
+                        }
+                    }
+
+                    // Replace the pre-registered type for the test function, to allow inferring
+                    // the function body with the right type arguments.
+                    let scope = environment
+                        .scope
+                        .get_mut(&f.name)
+                        .expect("Could not find preregistered type for benchmark");
                     if let Type::Fn {
                         ref ret,
                         ref alias,
@@ -752,6 +892,54 @@ fn infer_fuzzer(
 
         Type::Var { tipo, alias } => match &*tipo.deref().borrow() {
             TypeVar::Link { tipo } => infer_fuzzer(
+                environment,
+                expected_inner_type,
+                &Type::with_alias(tipo.clone(), alias.clone()),
+                location,
+            ),
+            _ => Err(Error::GenericLeftAtBoundary {
+                location: *location,
+            }),
+        },
+
+        Type::App { .. } | Type::Tuple { .. } | Type::Pair { .. } => Err(could_not_unify()),
+    }
+}
+
+#[allow(clippy::result_large_err)]
+fn infer_sampler(
+    environment: &mut Environment<'_>,
+    expected_inner_type: Option<Rc<Type>>,
+    tipo: &Rc<Type>,
+    location: &Span,
+) -> Result<(Annotation, Rc<Type>), Error> {
+    let could_not_unify = || Error::CouldNotUnify {
+        location: *location,
+        expected: Type::sampler(
+            expected_inner_type
+                .clone()
+                .unwrap_or_else(|| Type::generic_var(0)),
+        ),
+        given: tipo.clone(),
+        situation: None,
+        rigid_type_names: HashMap::new(),
+    };
+
+    match tipo.borrow() {
+        Type::Fn {
+            ret,
+            args,
+            alias: _,
+        } => {
+            if args.len() == 1 && args[0].is_int() {
+                infer_fuzzer(environment, expected_inner_type, ret, &Span::empty())
+            } else {
+                Err(could_not_unify())
+            }
+        }
+
+        Type::Var { tipo, alias } => match &*tipo.deref().borrow() {
+            TypeVar::Link { tipo } => infer_sampler(
                 environment,
                 expected_inner_type,
                 &Type::with_alias(tipo.clone(), alias.clone()),

@@ -1,5 +1,6 @@
-use aiken_lang::ast::Tracing;
 use std::path::PathBuf;
+
+use aiken_lang::ast::Tracing;
 
 pub struct Options {
     pub code_gen_mode: CodeGenMode,
@@ -28,5 +29,12 @@ pub enum CodeGenMode {
         property_max_success: usize,
     },
     Build(bool),
+    Benchmark {
+        match_tests: Option<Vec<String>>,
+        exact_match: bool,
+        seed: u32,
+        times_to_run: usize,
+        output: PathBuf,
+    },
     NoOp,
 }

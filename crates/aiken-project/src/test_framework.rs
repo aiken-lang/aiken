@@ -214,6 +214,9 @@ mod test {
             (Test::UnitTest(..), _) => {
                 panic!("Expected to yield a PropertyTest but found a UnitTest")
             }
+            (Test::Benchmark(..), _) => {
+                panic!("Expected to yield a PropertyTest but found a Benchmark")
+            }
         }
     }
 
@@ -286,6 +289,8 @@ mod test {
                     result.labels
                 )
             }
+            // todo riley - should this be reachable?
+            TestResult::Benchmark(..) => unreachable!("property returned benchmark result ?!"),
         }
     }
 
