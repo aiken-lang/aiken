@@ -13,4 +13,6 @@ const wallet = new MeshWallet({
   },
 });
  
-fs.writeFileSync('me.addr', wallet.getUnusedAddresses()[0]);
+wallet.getUnusedAddresses().then(res => {
+    fs.writeFileSync('me.addr', res[0]);
+})
