@@ -1,0 +1,13 @@
+{
+  "name": "hello_world",
+  "version": "0.0.1",
+  "scripts": {
+    "generate": "npx tsx generate-credentials.ts",
+    "lock": "npx tsx lock.ts"
+  },
+  "author": "jinglescode",
+  "dependencies": {
+    "@meshsdk/core": "^1.8.4",
+    "tsx": "^4.19.2"
+  }
+}
