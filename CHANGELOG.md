@@ -1,5 +1,12 @@
 # Changelog
 
+## unreleased
+
+### Changed
+
+- **aiken-project**: The `aiken.toml` file no longer supports `v1` and `v2` for the plutus version field. @rvcas
+- **aiken-project**: `Error::TomlLoading` now looks much better - [see](https://github.com/aiken-lang/aiken/issues/1032#issuecomment-2562122101). @rvcas
+
 ## v1.1.9 - 2024-12-13
 
 ### Added
@@ -7,9 +14,10 @@
 - **aiken**: Generate a default _'placeholder.ak'_ validator when using `aiken new`. See [#1061](https://github.com/aiken-lang/aiken/pull/1061) @Waalge
 - **aiken-lang**: New builtins [`unconstr_fields`](https://aiken-lang.github.io/prelude/aiken/builtin.html#unconstr_fields) and [`unconstr_index`](https://aiken-lang.github.io/prelude/aiken/builtin.html#unconstr_index). @Microproofs
 - **aiken-lang**: Added builtins from Chang2 hardfork (except for writeBits). @Microproofs, @KtorZ
-    - [Bitwise operations](https://aiken-lang.github.io/prelude/aiken/builtin.html#Bitwise)
-    - [Ripemd-160 hashing](https://aiken-lang.github.io/prelude/aiken/builtin.html#ripemd_160)
+  - [Bitwise operations](https://aiken-lang.github.io/prelude/aiken/builtin.html#Bitwise)
+  - [Ripemd-160 hashing](https://aiken-lang.github.io/prelude/aiken/builtin.html#ripemd_160)
 - **aiken-projects**: The generated documentation may now include maths typesetting rendered using [KaTex](https://katex.org/). See [#1070](https://github.com/aiken-lang/aiken/pull/1070) @adrian052.
+
   - (Linux & MacOS only) Both inline (delimited by single `$` symbols) and blocks (delimited by doubled `$$` symbols) are now parsed and rendered as SVG upon generating documentation. For example:
 
     ```
@@ -23,6 +31,7 @@
     $$
     g^{z} = g^{r + c \cdot x} = g^{r} g^{x \cdot c} = g^{r} (g^{x})^{c} = g^{r} u^{c}
     $$
+
 - **uplc**: New builtins from Chang2 hardfork added to the VM along with costing. @Hadelive, @Microproofs
 
 ### Changed
@@ -203,7 +212,7 @@
 - **aiken-lang**: rename some builtins. @KtorZ
 
   | old name           | new name    |
-  | ---                | ---         |
+  | ------------------ | ----------- |
   | `mk_nil_data`      | `new_list`  |
   | `mk_pair_data`     | `new_pair`  |
   | `mk_nil_pair_data` | `new_pairs` |
@@ -248,8 +257,8 @@
 
   3. Changes the behavior of the `--trace-level compact` mode to now:
 
-   - remove trace-if-false (`?` operator) traces entirely in this mode;
-   - only keep the label (first trace argument) and error when it isn't a string.
+  - remove trace-if-false (`?` operator) traces entirely in this mode;
+  - only keep the label (first trace argument) and error when it isn't a string.
 
   See also [#978](https://github.com/aiken-lang/aiken/pull/978).
 

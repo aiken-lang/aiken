@@ -15,11 +15,27 @@ use owo_colors::{
     Stream::{Stderr, Stdout},
 };
 use std::{
-    fmt::{Debug, Display},
+    fmt::{self, Debug, Display},
     io,
     path::{Path, PathBuf},
 };
 use zip::result::ZipError;
+
+pub enum TomlLoadingContext {
+    Project,
+    Manifest,
+    Package,
+}
+
+impl fmt::Display for TomlLoadingContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TomlLoadingContext::Project => write!(f, "project"),
+            TomlLoadingContext::Manifest => write!(f, "manifest"),
+            TomlLoadingContext::Package => write!(f, "package"),
+        }
+    }
+}
 
 #[allow(dead_code)]
 #[derive(thiserror::Error)]
@@ -58,8 +74,9 @@ pub enum Error {
     #[error(transparent)]
     Module(#[from] ast::Error),
 
-    #[error("{help}")]
+    #[error("I could not load the {ctx} config file.")]
     TomlLoading {
+        ctx: TomlLoadingContext,
         path: PathBuf,
         src: String,
         named: Box<NamedSource<String>>,
@@ -372,7 +389,7 @@ impl Diagnostic for Error {
             Error::NoDefaultEnvironment { .. } => Some(Box::new(
                 "Environment module names are free, but there must be at least one named 'default.ak'.",
             )),
-            Error::TomlLoading { .. } => None,
+            Error::TomlLoading { help, .. } => Some(Box::new(help)),
             Error::Format { .. } => None,
             Error::TestFailure { .. } => None,
             Error::Http(_) => None,

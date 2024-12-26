@@ -10,7 +10,7 @@ use std::{
 
 use crate::{
     config::{Config, Dependency, Platform},
-    error::Error,
+    error::{Error, TomlLoadingContext},
     package_name::PackageName,
     paths,
     telemetry::{Event, EventListener},
@@ -47,6 +47,7 @@ impl Manifest {
         let toml = fs::read_to_string(&manifest_path)?;
 
         let manifest: Self = toml::from_str(&toml).map_err(|e| Error::TomlLoading {
+            ctx: TomlLoadingContext::Manifest,
             path: manifest_path.clone(),
             src: toml.clone(),
             named: NamedSource::new(manifest_path.display().to_string(), toml).into(),
@@ -55,7 +56,7 @@ impl Manifest {
                 start: range.start,
                 end: range.end,
             }),
-            help: e.to_string(),
+            help: e.message().to_string(),
         })?;
 
         // If the config is unchanged since the manifest was written then it is up

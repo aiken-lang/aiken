@@ -1,4 +1,6 @@
-use crate::{github::repo::LatestRelease, package_name::PackageName, paths, Error};
+use crate::{
+    error::TomlLoadingContext, github::repo::LatestRelease, package_name::PackageName, paths, Error,
+};
 use aiken_lang::{
     ast::{Annotation, ByteArrayFormatPreference, ModuleConstant, Span, UntypedDefinition},
     expr::UntypedExpr,
@@ -343,6 +345,7 @@ impl Config {
         })?;
 
         let result: Self = toml::from_str(&raw_config).map_err(|e| Error::TomlLoading {
+            ctx: TomlLoadingContext::Project,
             path: config_path.clone(),
             src: raw_config.clone(),
             named: NamedSource::new(config_path.display().to_string(), raw_config).into(),
@@ -351,7 +354,7 @@ impl Config {
                 start: range.start,
                 end: range.end,
             }),
-            help: e.to_string(),
+            help: e.message().to_string(),
         })?;
 
         Ok(result)

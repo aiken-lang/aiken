@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Default, Deserialize, Serialize, Clone, Copy, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum PlutusVersion {
+    #[serde(skip_deserializing)]
     V1,
+    #[serde(skip_deserializing)]
     V2,
     #[default]
     V3,

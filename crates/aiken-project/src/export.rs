@@ -64,16 +64,16 @@ impl Export {
             })
             .collect::<Result<_, _>>()?;
 
+        let program = generator
+            .generate_raw(&func.body, &func.arguments, &module.name)
+            .to_debruijn()
+            .unwrap();
+
         let program = match plutus_version {
-            PlutusVersion::V1 => SerializableProgram::PlutusV1Program,
-            PlutusVersion::V2 => SerializableProgram::PlutusV2Program,
-            PlutusVersion::V3 => SerializableProgram::PlutusV3Program,
-        }(
-            generator
-                .generate_raw(&func.body, &func.arguments, &module.name)
-                .to_debruijn()
-                .unwrap(),
-        );
+            PlutusVersion::V1 => SerializableProgram::PlutusV1Program(program),
+            PlutusVersion::V2 => SerializableProgram::PlutusV2Program(program),
+            PlutusVersion::V3 => SerializableProgram::PlutusV3Program(program),
+        };
 
         Ok(Export {
             name: format!("{}.{}", &module.name, &func.name),
