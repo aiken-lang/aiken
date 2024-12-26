@@ -1,7 +1,5 @@
 name = "aiken-lang/104"
 version = "0.0.0"
-compiler = "v1.0.29-alpha"
-plutus = "v2"
 license = "Apache-2.0"
 description = "Aiken contracts for project 'aiken-lang/104'"
 
