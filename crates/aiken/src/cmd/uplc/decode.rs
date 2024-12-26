@@ -1,4 +1,4 @@
-use miette::IntoDiagnostic;
+use miette::{Context, IntoDiagnostic};
 use std::{path::PathBuf, println};
 use uplc::ast::{DeBruijn, Name, NamedDeBruijn, Program};
 
@@ -39,16 +39,14 @@ pub fn exec(
         std::fs::read(&input).into_diagnostic()?
     };
 
-    let pretty_uplc = match from {
+    let program: Program<Name> = match from {
         Format::Name => {
-            let program: Program<Name> = if cbor {
+            if cbor {
                 let mut flat_buffer = Vec::new();
                 Program::from_cbor(&bytes, &mut flat_buffer).into_diagnostic()?
             } else {
                 Program::from_flat(&bytes).into_diagnostic()?
-            };
-
-            program.to_pretty()
+            }
         }
         Format::NamedDebruijn => {
             let program: Program<NamedDeBruijn> = if cbor {
@@ -58,9 +56,10 @@ pub fn exec(
                 Program::from_flat(&bytes).into_diagnostic()?
             };
 
-            let program: Program<Name> = program.try_into().unwrap();
-
-            program.to_pretty()
+            program
+                .try_into()
+                .into_diagnostic()
+                .context("failed to decode, maybe try `--cbor`")?
         }
         Format::Debruijn => {
             let program: Program<DeBruijn> = if cbor {
@@ -70,13 +69,14 @@ pub fn exec(
                 Program::from_flat(&bytes).into_diagnostic()?
             };
 
-            let program: Program<Name> = program.try_into().unwrap();
-
-            program.to_pretty()
+            program
+                .try_into()
+                .into_diagnostic()
+                .context("failed to decode, maybe try `--cbor`")?
         }
     };
 
-    println!("{pretty_uplc}");
+    println!("{}", program.to_pretty());
 
     Ok(())
 }

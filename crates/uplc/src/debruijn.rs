@@ -461,7 +461,12 @@ impl Converter {
 
     fn get_unique(&mut self, index: &DeBruijn) -> Result<Unique, Error> {
         for scope in self.levels.iter().rev() {
-            let index = Level(self.current_level.0 - index.inner());
+            let index = Level(
+                self.current_level
+                    .0
+                    .checked_sub(index.inner())
+                    .ok_or(Error::FreeIndex(*index))?,
+            );
 
             if let Some(unique) = scope.get_right(&index) {
                 return Ok(*unique);

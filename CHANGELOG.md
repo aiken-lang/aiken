@@ -7,6 +7,10 @@
 - **aiken-project**: The `aiken.toml` file no longer supports `v1` and `v2` for the plutus version field. @rvcas
 - **aiken-project**: `Error::TomlLoading` now looks much better - [see](https://github.com/aiken-lang/aiken/issues/1032#issuecomment-2562122101). @rvcas
 
+### Fixed
+
+- **aiken**: Fixed the panic error when using `aiken uplc decode` on cbor encoded flat bytes. @rvcas
+
 ## v1.1.9 - 2024-12-13
 
 ### Added
