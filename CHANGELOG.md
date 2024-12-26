@@ -2,6 +2,10 @@
 
 ## unreleased
 
+### Added
+
+- **aiken-project**: `export` output now supports the functions `return_type`. @rvcas
+
 ### Changed
 
 - **aiken-project**: The `aiken.toml` file no longer supports `v1` and `v2` for the plutus version field. @rvcas
