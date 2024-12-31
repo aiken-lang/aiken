@@ -1,0 +1,13 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n    a\n    // stuff\n    // warning: wow\n    |> b\n    // Comment\n    |> c\n}\n"
+snapshot_kind: text
+---
+fn foo() {
+  a
+    // stuff
+    // warning: wow
+    |> b
+    // Comment
+    |> c
+}

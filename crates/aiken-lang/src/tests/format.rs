@@ -1420,3 +1420,19 @@ fn multiline_if_is_2() {
         "#
     );
 }
+
+#[test]
+fn comment_in_pipeline() {
+    assert_format!(
+        r#"
+        fn foo() {
+            a
+            // stuff
+            // warning: wow
+            |> b
+            // Comment
+            |> c
+        }
+        "#
+    );
+}

@@ -13,7 +13,8 @@
 
 ### Fixed
 
-- **aiken**: Fixed the panic error when using `aiken uplc decode` on cbor encoded flat bytes. @rvcas
+- **aiken**: panic error when using `aiken uplc decode` on cbor encoded flat bytes. @rvcas
+- **aiken-lang**: comment formatting in pipelines leading to confusion. @rvcas
 
 ## v1.1.9 - 2024-12-13
 

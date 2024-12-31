@@ -14,9 +14,7 @@ use crate::{
         extra::{Comment, ModuleExtra},
         token::Base,
     },
-    pretty::{
-        break_, concat, flex_break, join, line, lines, nil, prebreak, Document, Documentable,
-    },
+    pretty::{break_, concat, flex_break, join, line, lines, nil, Document, Documentable},
     tipo::{self, Type},
 };
 use itertools::Itertools;
@@ -1472,13 +1470,18 @@ impl<'comments> Formatter<'comments> {
         one_liner: bool,
     ) -> Document<'a> {
         let mut docs = Vec::with_capacity(expressions.len() * 3);
+
         let first = expressions.first();
+
         let first_precedence = first.binop_precedence();
+
         let first = self.wrap_expr(first);
+
         docs.push(self.operator_side(first, 5, first_precedence));
 
         for expr in expressions.iter().skip(1) {
             let comments = self.pop_comments(expr.location().start);
+
             let doc = match expr {
                 UntypedExpr::Fn {
                     fn_style: FnStyle::Capture,
@@ -1489,23 +1492,19 @@ impl<'comments> Formatter<'comments> {
                 _ => self.wrap_expr(expr),
             };
 
+            let space = if one_liner { break_("", " ") } else { line() };
+
+            let pipe = space
+                .append(commented("|> ".to_doc(), comments))
+                .nest(INDENT);
+
+            docs.push(pipe);
+
             let expr = self
                 .operator_side(doc, 4, expr.binop_precedence())
                 .nest(2 * INDENT);
 
-            match printed_comments(comments, true) {
-                None => {
-                    let pipe = prebreak("|> ", " |> ").nest(INDENT);
-                    docs.push(pipe.append(expr));
-                }
-                Some(comments) => {
-                    let pipe = prebreak("|> ", "|> ");
-                    docs.push(
-                        " ".to_doc()
-                            .append(comments.nest(INDENT).append(pipe.append(expr).group())),
-                    );
-                }
-            }
+            docs.push(expr);
         }
 
         if one_liner {
