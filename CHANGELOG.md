@@ -15,6 +15,7 @@
 
 - **aiken**: panic error when using `aiken uplc decode` on cbor encoded flat bytes. @rvcas
 - **aiken-lang**: comment formatting in pipelines leading to confusion. @rvcas
+- **aiken-lang**: preserve holes discard name in function captures (see [#1080](https://github.com/aiken-lang/aiken/issues/1080)). @KtorZ
 
 ## v1.1.9 - 2024-12-13
 

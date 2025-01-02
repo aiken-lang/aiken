@@ -1,5 +1,3 @@
-use chumsky::prelude::*;
-
 use crate::{
     ast,
     expr::UntypedExpr,
@@ -8,6 +6,7 @@ use crate::{
         token::Token,
     },
 };
+use chumsky::prelude::*;
 
 pub fn parser(
     r: Recursive<'_, Token, UntypedExpr, ParseError>,

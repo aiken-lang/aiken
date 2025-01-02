@@ -50,8 +50,8 @@ Sequence {
                     UntypedArg {
                         by: ByName(
                             Named {
-                                name: "_capture__0",
-                                label: "_capture__0",
+                                name: "_capture__0__",
+                                label: "_capture__0__",
                                 location: 0..0,
                             },
                         ),
@@ -68,7 +68,7 @@ Sequence {
                             location: 45..46,
                             value: Var {
                                 location: 45..46,
-                                name: "_capture__0",
+                                name: "_capture__0__",
                             },
                         },
                         CallArg {

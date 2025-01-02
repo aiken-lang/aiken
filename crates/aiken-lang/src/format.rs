@@ -992,7 +992,9 @@ impl<'comments> Formatter<'comments> {
                 }
             }
 
-            UntypedExpr::Var { name, .. } if name.contains(CAPTURE_VARIABLE) => "_".to_doc(),
+            UntypedExpr::Var { name, .. } if name.contains(CAPTURE_VARIABLE) => "_"
+                .to_doc()
+                .append(name.split('_').last().unwrap_or_default()),
 
             UntypedExpr::Var { name, .. } => name.to_doc(),
 
@@ -1560,8 +1562,14 @@ impl<'comments> Formatter<'comments> {
                 ..
             } => match args.as_slice() {
                 [first, second] if is_breakable_expr(&second.value) && first.is_capture_hole() => {
+                    let discard_name = match first.value {
+                        UntypedExpr::Var { ref name, .. } => name.split("_").last().unwrap_or("_"),
+                        _ => "",
+                    };
                     self.expr(fun, false)
-                        .append("(_, ")
+                        .append("(_")
+                        .append(discard_name)
+                        .append(", ")
                         .append(self.call_arg(second, false))
                         .append(")")
                         .group()

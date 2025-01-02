@@ -1436,3 +1436,16 @@ fn comment_in_pipeline() {
         "#
     );
 }
+
+#[test]
+fn capture_right_hand_side_assign() {
+    assert_format!(
+        r#"
+        fn foo() {
+            let (_aa, bb, _cc) = bar(foo: _a, _b, _)
+            let _ = baz(_d, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23])
+            bb
+        }
+        "#
+    );
+}

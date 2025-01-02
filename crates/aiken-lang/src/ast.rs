@@ -1107,19 +1107,6 @@ impl TypedArg {
         self.arg_name.get_name()
     }
 
-    pub fn is_capture(&self) -> bool {
-        if let ArgName::Named {
-            ref name, location, ..
-        } = self.arg_name
-        {
-            return name.starts_with(CAPTURE_VARIABLE)
-                && location == Span::empty()
-                && self.location == Span::empty();
-        }
-
-        false
-    }
-
     pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {
         if self.arg_name.location().contains(byte_index) {
             Some(Located::Argument(&self.arg_name, self.tipo.clone()))

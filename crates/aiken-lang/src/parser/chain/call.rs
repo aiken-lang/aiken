@@ -1,11 +1,10 @@
-use chumsky::prelude::*;
-
 use super::Chain;
 use crate::{
     ast::CallArg,
     expr::UntypedExpr,
     parser::{token::Token, ParseError},
 };
+use chumsky::prelude::*;
 
 pub(crate) fn parser(
     expression: Recursive<'_, Token, UntypedExpr, ParseError>,
@@ -23,11 +22,11 @@ pub(crate) fn parser(
         select! { Token::Name { name } => name }
             .then_ignore(just(Token::Colon))
             .or_not()
-            .then_ignore(select! {Token::DiscardName {name} => name })
-            .map_with_span(|label, location| CallArg {
+            .then(select! {Token::DiscardName {name} => name })
+            .map_with_span(|(label, name), location| CallArg {
                 location,
                 label,
-                value: None,
+                value: Some(UntypedExpr::Var { location, name }),
             }),
     ))
     .separated_by(just(Token::Comma))

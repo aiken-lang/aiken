@@ -763,6 +763,10 @@ impl UntypedExpr {
         UntypedExpr::do_reify_constant(&mut IndexMap::new(), data_types, cst, tipo)
     }
 
+    pub fn is_discard(&self) -> bool {
+        matches!(self, UntypedExpr::Var { name, ..} if name.starts_with("_"))
+    }
+
     // Reify some opaque 'PlutusData' into an 'UntypedExpr', using a Type annotation. We also need
     // an extra map to lookup record & enum constructor's names as they're completely erased when
     // in their PlutusData form, and the Type annotation only contains type name.
@@ -1336,17 +1340,24 @@ impl UntypedExpr {
                     value: Some(value),
                     label,
                     location,
-                } => CallArg {
+                } if !value.is_discard() => CallArg {
                     value,
                     label,
                     location,
                 },
                 CallArg {
-                    value: None,
+                    value,
                     label,
                     location,
                 } => {
-                    let name = format!("{}__{index}", ast::CAPTURE_VARIABLE);
+                    let name = format!(
+                        "{}__{index}_{}",
+                        ast::CAPTURE_VARIABLE,
+                        match value {
+                            Some(UntypedExpr::Var { ref name, .. }) => name,
+                            _ => "_",
+                        }
+                    );
 
                     holes.push(ast::UntypedArg {
                         location: Span::empty(),
@@ -1354,7 +1365,7 @@ impl UntypedExpr {
                         doc: None,
                         by: ArgBy::ByName(ast::ArgName::Named {
                             label: name.clone(),
-                            name,
+                            name: name.clone(),
                             location: Span::empty(),
                         }),
                         is_validator_param: false,
@@ -1363,10 +1374,7 @@ impl UntypedExpr {
                     ast::CallArg {
                         label,
                         location,
-                        value: UntypedExpr::Var {
-                            location,
-                            name: format!("{}__{index}", ast::CAPTURE_VARIABLE),
-                        },
+                        value: UntypedExpr::Var { location, name },
                     }
                 }
             })
