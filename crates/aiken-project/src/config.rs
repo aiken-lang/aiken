@@ -26,7 +26,7 @@ pub struct Config {
         default = "default_version"
     )]
     pub compiler: Version,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "validate_v3_only")]
     pub plutus: PlutusVersion,
     pub license: Option<String>,
     #[serde(default)]
@@ -373,6 +373,18 @@ impl Config {
         }
         self.dependencies.push(dependency.clone());
         Some(self)
+    }
+}
+
+fn validate_v3_only<'de, D>(deserializer: D) -> Result<PlutusVersion, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let version = PlutusVersion::deserialize(deserializer)?;
+
+    match version {
+        PlutusVersion::V3 => Ok(version),
+        _ => Err(serde::de::Error::custom("Aiken only supports Plutus V3")),
     }
 }
 

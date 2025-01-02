@@ -1,6 +1,5 @@
 use aiken_project::{
     blueprint::{error::Error as BlueprintError, Blueprint},
-    config::Config,
     error::Error as ProjectError,
 };
 use clap::ValueEnum;
@@ -22,7 +21,7 @@ pub struct Args {
     #[clap(short, long)]
     validator: Option<String>,
 
-    // Format to convert to
+    /// Format to convert to
     #[clap(long, default_value = "cardano-cli")]
     to: Format,
 }
@@ -56,13 +55,6 @@ pub fn exec(
     let blueprint: Blueprint =
         serde_json::from_reader(BufReader::new(blueprint)).into_diagnostic()?;
 
-    let opt_config = Config::load(&project_path).ok();
-
-    let cardano_cli_type = opt_config
-        .map(|config| config.plutus)
-        .unwrap_or_default()
-        .cardano_cli_type();
-
     // Perform the conversion
     let when_too_many =
         |known_validators| ProjectError::MoreThanOneValidatorFound { known_validators };
@@ -84,6 +76,8 @@ pub fn exec(
                 cbor_encoder.bytes(&cbor_bytes).unwrap();
 
                 let cbor_hex = hex::encode(double_cbor_bytes);
+
+                let cardano_cli_type = blueprint.preamble.plutus_version.cardano_cli_type();
 
                 Ok(json!({
                     "type": cardano_cli_type,
