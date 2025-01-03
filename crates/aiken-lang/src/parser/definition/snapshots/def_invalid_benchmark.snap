@@ -1,0 +1,62 @@
+---
+source: crates/aiken-lang/src/parser/definition/benchmark.rs
+assertion_line: 147
+description: "Code:\n\nbench foo(x via f, y via g) {\n    True\n}\n"
+snapshot_kind: text
+---
+Benchmark(
+    Function {
+        arguments: [
+            ArgVia {
+                arg: UntypedArg {
+                    by: ByName(
+                        Named {
+                            name: "x",
+                            label: "x",
+                            location: 10..11,
+                        },
+                    ),
+                    location: 10..11,
+                    annotation: None,
+                    doc: None,
+                    is_validator_param: false,
+                },
+                via: Var {
+                    location: 16..17,
+                    name: "f",
+                },
+            },
+            ArgVia {
+                arg: UntypedArg {
+                    by: ByName(
+                        Named {
+                            name: "y",
+                            label: "y",
+                            location: 19..20,
+                        },
+                    ),
+                    location: 19..20,
+                    annotation: None,
+                    doc: None,
+                    is_validator_param: false,
+                },
+                via: Var {
+                    location: 25..26,
+                    name: "g",
+                },
+            },
+        ],
+        body: Var {
+            location: 34..38,
+            name: "True",
+        },
+        doc: None,
+        location: 0..27,
+        name: "foo",
+        public: false,
+        return_annotation: None,
+        return_type: (),
+        end_position: 39,
+        on_test_failure: FailImmediately,
+    },
+)

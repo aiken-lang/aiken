@@ -1778,6 +1778,16 @@ fn fuzzer_ok_basic() {
 }
 
 #[test]
+fn sampler_ok_basic() {
+    let source_code = r#"
+        fn int() -> Sampler<Int> { todo }
+        bench prop(n via int()) { True }
+    "#;
+
+    assert!(check(parse(source_code)).is_ok());
+}
+
+#[test]
 fn fuzzer_ok_explicit() {
     let source_code = r#"
         fn int(prng: PRNG) -> Option<(PRNG, Int)> { todo }

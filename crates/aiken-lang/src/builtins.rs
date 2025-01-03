@@ -481,13 +481,29 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
     //
     // pub type Fuzzer<a> =
     //   fn(PRNG) -> Option<(PRNG, a)>
-    let fuzzer_value = Type::generic_var(id_gen.next());
+    let fuzzer_generic = Type::generic_var(id_gen.next());
     prelude.types.insert(
         well_known::FUZZER.to_string(),
         TypeConstructor {
             location: Span::empty(),
-            parameters: vec![fuzzer_value.clone()],
-            tipo: Type::fuzzer(fuzzer_value),
+            parameters: vec![fuzzer_generic.clone()],
+            tipo: Type::fuzzer(fuzzer_generic),
+            module: "".to_string(),
+            public: true,
+        },
+    );
+
+    // Sampler
+    //
+    // pub type Sampler<a> =
+    //   fn(Int) -> Fuzzer<a>
+    let sampler_generic = Type::generic_var(id_gen.next());
+    prelude.types.insert(
+        well_known::SAMPLER.to_string(),
+        TypeConstructor {
+            location: Span::empty(),
+            parameters: vec![sampler_generic.clone()],
+            tipo: Type::sampler(sampler_generic),
             module: "".to_string(),
             public: true,
         },
