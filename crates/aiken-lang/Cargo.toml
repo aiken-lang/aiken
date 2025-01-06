@@ -30,6 +30,7 @@ patricia_tree = "0.8.0"
 petgraph = "0.6.3"
 pretty = "0.12.3"
 serde = { version = "1.0.197", features = ["derive", "rc"] }
+serde_json = "1.0"
 strum = "0.24.1"
 thiserror = "1.0.39"
 uplc = { path = '../uplc', version = "1.1.10" }

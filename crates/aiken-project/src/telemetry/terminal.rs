@@ -215,6 +215,9 @@ impl EventListener for Terminal {
                     "dependencies".if_supports_color(Stderr, |s| s.bold())
                 )
             }
+            Event::GeneratingCoverageReport => {
+                eprintln!("Generating coverage report...");
+            }
         }
     }
 }

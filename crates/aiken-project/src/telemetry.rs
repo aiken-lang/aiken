@@ -35,6 +35,7 @@ pub enum Event {
     GeneratingBlueprint {
         path: PathBuf,
     },
+    GeneratingCoverageReport,
     DumpingUPLC {
         path: PathBuf,
     },

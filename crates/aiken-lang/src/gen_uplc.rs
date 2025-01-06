@@ -255,10 +255,14 @@ impl<'a> CodeGenerator<'a> {
         context: &str
     ) -> AirTree {
         if matches!(self.tracing, TraceLevel::Coverage) {
-            AirTree::NoOp {
-                then: Box::new(AirTree::NoOp {
-                    then: Box::new(self.coverage_trace(location, module_name, context))
-                })
+            // Create the coverage trace
+            let trace = self.coverage_trace(location, module_name, context);
+            
+            // Sequence the trace with the original tree while preserving the term structure
+            AirTree::Let {
+                name: "__trace".to_string(),
+                value: Box::new(trace),
+                then: Box::new(tree)
             }
         } else {
             tree
