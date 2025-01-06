@@ -103,6 +103,7 @@ dependencies = [
  "pretty 0.12.3",
  "pretty_assertions",
  "serde",
+ "serde_json",
  "strum",
  "thiserror 1.0.69",
  "uplc",

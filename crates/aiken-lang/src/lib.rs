@@ -5,6 +5,7 @@ use std::sync::{
 
 pub mod ast;
 pub mod builtins;
+pub mod coverage;
 pub mod error;
 pub mod expr;
 pub mod format;

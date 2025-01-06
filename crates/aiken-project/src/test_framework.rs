@@ -5,16 +5,7 @@ mod test {
         utils,
     };
     use aiken_lang::{
-        ast::{DataTypeKey, Definition, ModuleKind, TraceLevel, Tracing, TypedDataType},
-        builtins,
-        expr::UntypedExpr,
-        format::Formatter,
-        gen_uplc::CodeGenerator,
-        line_numbers::LineNumbers,
-        parser::{self, extra::ModuleExtra},
-        plutus_version::PlutusVersion,
-        test_framework::*,
-        IdGenerator,
+        ast::{DataTypeKey, Definition, ModuleKind, TraceLevel, Tracing, TypedDataType}, builtins, coverage::CoverageCollector, expr::UntypedExpr, format::Formatter, gen_uplc::CodeGenerator, line_numbers::LineNumbers, parser::{self, extra::ModuleExtra}, plutus_version::PlutusVersion, test_framework::*, IdGenerator
     };
     use indexmap::IndexMap;
     use indoc::indoc;
@@ -223,6 +214,7 @@ mod test {
     fn expect_failure<'a>(
         prop: &'a PropertyTest,
         plutus_version: &'a PlutusVersion,
+        mut coverage_collector: Option<&mut CoverageCollector>,
     ) -> Counterexample<'a> {
         let mut labels = BTreeMap::new();
         let mut remaining = PropertyTest::DEFAULT_MAX_SUCCESS;
@@ -231,6 +223,7 @@ mod test {
             Prng::from_seed(42),
             &mut labels,
             plutus_version,
+            coverage_collector.as_deref_mut(),
         ) {
             Ok(Some(counterexample)) => counterexample,
             _ => panic!("expected property to fail but it didn't."),
@@ -249,7 +242,8 @@ mod test {
             .run::<()>(
                 42,
                 PropertyTest::DEFAULT_MAX_SUCCESS,
-                &PlutusVersion::default()
+                &PlutusVersion::default(),
+                None
             )
             .is_success());
     }
@@ -277,6 +271,7 @@ mod test {
             42,
             PropertyTest::DEFAULT_MAX_SUCCESS,
             &PlutusVersion::default(),
+            None,
         ) {
             TestResult::UnitTestResult(..) => unreachable!("property returned unit-test result ?!"),
             TestResult::PropertyTestResult(result) => {
@@ -302,7 +297,7 @@ mod test {
         "#});
 
         let plutus_version = PlutusVersion::default();
-        let mut counterexample = expect_failure(&prop, &plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version, None);
 
         counterexample.simplify();
 
@@ -330,7 +325,7 @@ mod test {
         "#});
 
         let plutus_version = PlutusVersion::default();
-        let mut counterexample = expect_failure(&prop, &plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version, None);
 
         counterexample.simplify();
 
@@ -347,7 +342,7 @@ mod test {
         "#});
 
         let plutus_version = PlutusVersion::default();
-        let mut counterexample = expect_failure(&prop, &plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version, None);
 
         counterexample.simplify();
 
@@ -375,7 +370,7 @@ mod test {
         "#});
 
         let plutus_version = PlutusVersion::default();
-        let mut counterexample = expect_failure(&prop, &plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version, None);
 
         counterexample.simplify();
 
@@ -403,7 +398,7 @@ mod test {
         "#});
 
         let plutus_version = PlutusVersion::default();
-        let mut counterexample = expect_failure(&prop, &plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version, None);
 
         counterexample.simplify();
 
@@ -434,7 +429,7 @@ mod test {
         "#});
 
         let plutus_version = PlutusVersion::default();
-        let mut counterexample = expect_failure(&prop, &plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version, None);
 
         counterexample.simplify();
 
@@ -470,7 +465,7 @@ mod test {
 
         let plutus_version = PlutusVersion::default();
 
-        let mut counterexample = expect_failure(&prop, &plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version, None);
 
         counterexample.simplify();
 
@@ -505,7 +500,7 @@ mod test {
         "#});
 
         let plutus_version = PlutusVersion::default();
-        let mut counterexample = expect_failure(&prop, &plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version, None);
 
         counterexample.simplify();
 
@@ -540,7 +535,7 @@ mod test {
         "#});
 
         let plutus_version = PlutusVersion::default();
-        let mut counterexample = expect_failure(&prop, &plutus_version);
+        let mut counterexample = expect_failure(&prop, &plutus_version, None);
 
         counterexample.simplify();
 

@@ -234,6 +234,9 @@ impl EventListener for Terminal {
                     }
                 }
             }
+            Event::GeneratingCoverageReport => {
+                eprintln!("Generating coverage report...");
+            }
         }
     }
 }
