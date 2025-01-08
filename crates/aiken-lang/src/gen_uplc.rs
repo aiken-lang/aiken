@@ -19,26 +19,19 @@ use crate::{
         AssignmentKind, BinOp, Bls12_381Point, Curve, DataTypeKey, FunctionAccessKey, Pattern,
         Span, TraceLevel, Tracing, TypedArg, TypedDataType, TypedFunction, TypedPattern,
         TypedValidator, UnOp,
-    },
-    builtins::PRELUDE,
-    expr::TypedExpr,
-    gen_uplc::{
+    }, builtins::PRELUDE, coverage::CoverageCollector, expr::TypedExpr, gen_uplc::{
         air::ExpectLevel,
         builder::{
             erase_opaque_type_operations, get_generic_variant_name, get_line_columns_by_span,
             get_src_code_by_span, known_data_to_type, monomorphize, wrap_validator_condition,
             CodeGenFunction,
         },
-    },
-    line_numbers::LineNumbers,
-    plutus_version::PlutusVersion,
-    tipo::{
+    }, line_numbers::LineNumbers, plutus_version::PlutusVersion, tipo::{
         check_replaceable_opaque_type, convert_opaque_type, find_and_replace_generics,
         get_arg_type_name, get_generic_id_and_type, lookup_data_type_by_tipo,
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
         ValueConstructorVariant,
-    },
-    IdGenerator,
+    }, IdGenerator
 };
 use builder::{
     introduce_name, introduce_pattern, pop_pattern, softcast_data_to_type_otherwise,
@@ -49,7 +42,7 @@ use indexmap::IndexMap;
 use interner::AirInterner;
 use itertools::Itertools;
 use petgraph::{algo, Graph};
-use std::{collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use stick_break_set::{Builtins, TreeSet};
 use tree::Fields;
 use uplc::{
@@ -86,6 +79,8 @@ pub struct CodeGenerator<'a> {
     /// mutable and reset as well
     interner: AirInterner,
     id_gen: IdGenerator,
+    coverage_collector: Option<Rc<RefCell<CoverageCollector>>>,
+    // coverage_collector: Option<&'a mut CoverageCollector>
 }
 
 impl<'a> CodeGenerator<'a> {
@@ -101,6 +96,7 @@ impl<'a> CodeGenerator<'a> {
         module_types: IndexMap<&'a str, &'a TypeInfo>,
         module_src: IndexMap<&'a str, &'a (String, LineNumbers)>,
         tracing: Tracing,
+        coverage_collector: Option<Rc<RefCell<CoverageCollector>>>
     ) -> Self {
         CodeGenerator {
             plutus_version,
@@ -116,6 +112,7 @@ impl<'a> CodeGenerator<'a> {
             cyclic_functions: IndexMap::new(),
             interner: AirInterner::new(),
             id_gen: IdGenerator::new(),
+            coverage_collector: coverage_collector,
         }
     }
 
@@ -232,33 +229,37 @@ impl<'a> CodeGenerator<'a> {
         program
     }
 
-    fn coverage_trace(&mut self, location: Span, module_name: &str, context: &str) -> AirTree {
-        let msg = format!("COVERAGE:{}:{}:{}:{}",
-            module_name,
-            location.start,
-            location.end,
-            context
-        );
-            
-        AirTree::trace(
-            AirTree::string(&msg),
-            Type::void(),
-            AirTree::void()
-        )
-    }
-    
     fn maybe_add_coverage_trace(
         &mut self,
         tree: AirTree,
         location: Span,
         module_name: &str,
-        context: &str
+        context: &str,
     ) -> AirTree {
         if matches!(self.tracing, TraceLevel::Coverage) {
-            // Create the coverage trace
-            let trace = self.coverage_trace(location, module_name, context);
+            // First, format the message and record the trace
+            let msg = format!("COVERAGE:{}:{}:{}:{}",
+                module_name,
+                location.start,
+                location.end,
+                context
+            );
             
-            // Sequence the trace with the original tree while preserving the term structure
+            // Do the RefCell operations in a separate scope so the borrow is dropped
+            {
+                let collector = self.coverage_collector.as_ref()
+                    .expect("Coverage collector must be Some when coverage tracing is enabled");
+                let mut collector_guard = collector.borrow_mut();
+                collector_guard.record_potential_trace(module_name, location.start, location.end);
+            }
+            
+            // Now create the trace without needing the collector
+            let trace = AirTree::trace(
+                AirTree::string(&msg),
+                Type::void(),
+                AirTree::void()
+            );
+            
             AirTree::Let {
                 name: "__trace".to_string(),
                 value: Box::new(trace),
@@ -267,7 +268,7 @@ impl<'a> CodeGenerator<'a> {
         } else {
             tree
         }
-    }
+    } 
     
     // Add coverage traces to various expression types
     fn build_with_coverage(
@@ -275,14 +276,14 @@ impl<'a> CodeGenerator<'a> {
         expr: &TypedExpr,
         module_name: &str,
         context: &[TypedExpr],
-        trace_context: &str
+        trace_context: &str,
     ) -> AirTree {
         let result = self.build(expr, module_name, context);
         self.maybe_add_coverage_trace(
             result,
             expr.location(),
             module_name,
-            trace_context
+            trace_context,
         )
     }
 
@@ -291,6 +292,7 @@ impl<'a> CodeGenerator<'a> {
         body: &TypedExpr,
         module_build_name: &str,
         context: &[TypedExpr],
+        // coverage_collector: Option<&mut CoverageCollector>
     ) -> AirTree {
         if !context.is_empty() {
             let TypedExpr::Assignment {
@@ -379,7 +381,7 @@ impl<'a> CodeGenerator<'a> {
                             expr,
                             module_build_name,
                             dangling_expressions,
-                            "sequence"
+                            "sequence",
                         );
                         
                         // Add coverage traces between expressions
@@ -388,7 +390,7 @@ impl<'a> CodeGenerator<'a> {
                                 result,
                                 expr.location(),
                                 module_build_name,
-                                "sequence_step"
+                                "sequence_step",
                             );
                         }
                         

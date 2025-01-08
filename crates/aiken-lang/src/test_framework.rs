@@ -1,5 +1,5 @@
 use crate::{
-    ast::{BinOp, DataTypeKey, IfBranch, OnTestFailure, Span, TypedArg, TypedDataType, TypedTest}, coverage::CoverageCollector, expr::{TypedExpr, UntypedExpr}, format::Formatter, gen_uplc::CodeGenerator, plutus_version::PlutusVersion, tipo::{convert_opaque_type, Type}
+    ast::{BinOp, DataTypeKey, IfBranch, OnTestFailure, Span, TypedArg, TypedDataType, TypedTest}, expr::{TypedExpr, UntypedExpr}, format::Formatter, gen_uplc::CodeGenerator, plutus_version::PlutusVersion, tipo::{convert_opaque_type, Type}
 };
 use cryptoxide::{blake2b::Blake2b, digest::Digest};
 use indexmap::IndexMap;
@@ -173,7 +173,7 @@ pub struct UnitTest {
 unsafe impl Send for UnitTest {}
 
 impl UnitTest {
-    pub fn run<T>(self, plutus_version: &PlutusVersion, mut coverage_collector: Option<&mut CoverageCollector>) -> TestResult<(Constant, Rc<Type>), T> {
+    pub fn run<T>(self, plutus_version: &PlutusVersion) -> TestResult<(Constant, Rc<Type>), T> {
         let mut eval_result = Program::<NamedDeBruijn>::try_from(self.program.clone())
             .unwrap()
             .eval_version(ExBudget::max(), &plutus_version.into());
@@ -188,12 +188,6 @@ impl UnitTest {
             traces.push(format!("{err}"))
         }
         traces.extend(eval_result.logs());
-
-        if let Some(collector) = coverage_collector.as_deref_mut() {
-            for s in eval_result.logs() {
-                collector.record_trace(&s);
-            }
-        }
 
         TestResult::UnitTestResult(UnitTestResult {
             success,
@@ -284,7 +278,6 @@ impl PropertyTest {
         seed: u32,
         n: usize,
         plutus_version: &PlutusVersion,
-        coverage_collector: Option<&mut CoverageCollector>,
     ) -> TestResult<U, PlutusData> {
         let mut labels = BTreeMap::new();
         let mut remaining = n;
@@ -294,7 +287,6 @@ impl PropertyTest {
             Prng::from_seed(seed),
             &mut labels,
             plutus_version,
-            coverage_collector,
         ) {
             Ok(None) => (Vec::new(), Ok(None), n),
             Ok(Some(counterexample)) => (
@@ -331,13 +323,12 @@ impl PropertyTest {
         initial_prng: Prng,
         labels: &mut BTreeMap<String, usize>,
         plutus_version: &'a PlutusVersion,
-        mut coverage_collector: Option<&mut CoverageCollector>,
     ) -> Result<Option<Counterexample<'a>>, FuzzerError> {
         let mut prng = initial_prng;
         let mut counterexample = None;
 
         while *remaining > 0 && counterexample.is_none() {
-            (prng, counterexample) = self.run_once(prng, labels, plutus_version, coverage_collector.as_deref_mut())?;
+            (prng, counterexample) = self.run_once(prng, labels, plutus_version)?;
             *remaining -= 1;
         }
 
@@ -349,7 +340,6 @@ impl PropertyTest {
         prng: Prng,
         labels: &mut BTreeMap<String, usize>,
         plutus_version: &'a PlutusVersion,
-        coverage_collector: Option<&mut CoverageCollector>,
     ) -> Result<(Prng, Option<Counterexample<'a>>), FuzzerError> {
         use OnTestFailure::*;
 
@@ -358,12 +348,6 @@ impl PropertyTest {
             .expect("A seeded PRNG returned 'None' which indicates a fuzzer is ill-formed and implemented wrongly; please contact library's authors.");
 
         let mut result = self.eval(&value, plutus_version);
-
-        if let Some(collector) = coverage_collector {
-            for s in result.logs() {
-                collector.record_trace(&s);
-            }
-        }
 
         for s in result.logs() {
             // NOTE: There may be other log outputs that interefere with labels. So *by
