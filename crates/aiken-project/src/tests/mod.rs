@@ -72,6 +72,7 @@ impl TestProject {
             utils::indexmap::as_str_ref_values(&self.module_types),
             utils::indexmap::as_str_ref_values(&self.module_sources),
             tracing,
+            None
         )
     }
 

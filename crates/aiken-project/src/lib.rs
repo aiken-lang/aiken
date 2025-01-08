@@ -53,11 +53,7 @@ use package_name::PackageName;
 use pallas_addresses::{Address, Network, ShelleyAddress, ShelleyDelegationPart, StakePayload};
 use pallas_primitives::conway::PolicyId;
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
-    fs::{self, File},
-    io::BufReader,
-    path::{Path, PathBuf},
-    rc::Rc,
+    cell::RefCell, collections::{BTreeSet, HashMap, HashSet}, fs::{self, File}, io::BufReader, path::{Path, PathBuf}, rc::Rc
 };
 use telemetry::EventListener;
 use uplc::{
@@ -102,6 +98,7 @@ where
     constants: IndexMap<FunctionAccessKey, TypedExpr>,
     data_types: IndexMap<DataTypeKey, TypedDataType>,
     module_sources: HashMap<String, (String, LineNumbers)>,
+    coverage_collector: Option<Rc<RefCell<CoverageCollector>>>,
 }
 
 impl<T> Project<T>
@@ -154,6 +151,15 @@ where
             constants: IndexMap::new(),
             data_types,
             module_sources: HashMap::new(),
+            coverage_collector: None,
+        }
+    }
+
+    pub fn ensure_coverage_collector(&mut self, tracing: Tracing) {
+        if matches!(tracing, Tracing::All(TraceLevel::Coverage)) && self.coverage_collector.is_none() {
+            self.coverage_collector = Some(Rc::new(RefCell::new(
+                CoverageCollector::new(self.module_sources.clone())
+            )));
         }
     }
 
@@ -166,6 +172,7 @@ where
             utils::indexmap::as_str_ref_values(&self.module_types),
             utils::indexmap::as_str_ref_values(&self.module_sources),
             tracing,
+            self.coverage_collector.as_ref().map(|c| c.clone())
         )
     }
 
@@ -375,6 +382,9 @@ where
                 version: self.config.version.clone(),
             });
 
+         // Initialize coverage collector if needed based on tracing level
+        self.ensure_coverage_collector(options.tracing);
+
         let env = options.env.as_deref();
 
         let config = self.config_definitions(env);
@@ -433,13 +443,22 @@ where
                     self.event_listener.handle_event(Event::RunningTests);
                 }
 
-                let mut collector = if matches!(options.tracing, Tracing::All(TraceLevel::Coverage)) {
-                    Some(CoverageCollector::new(self.module_sources.clone()))
-                } else {
-                    None
-                };
+                let tests = self.run_tests(tests, seed, property_max_success);// , self.coverage_collector.as_mut());
 
-                let tests = self.run_tests(tests, seed, property_max_success, collector.as_mut());
+                // Process test results for coverage if we have a collector
+                if let Some(collector) = &self.coverage_collector {
+                    let mut collector = collector.borrow_mut();
+                    for test_result in &tests {
+                        for trace in test_result.traces() {
+                            collector.record_trace(trace);
+                        }
+                    }
+
+                    self.event_listener.handle_event(Event::GeneratingCoverageReport);
+                    collector.output_report(&self.root).map_err(|error| {
+                        vec![Error::FileIo { error, path: self.root.clone() }]
+                    })?;
+                }
 
                 self.checks_count = if tests.is_empty() {
                     None
@@ -462,14 +481,6 @@ where
                         }
                     })
                     .collect();
-
-                // Generate coverage report if we were collecting coverage
-                if let Some(collector) = collector {
-                    self.event_listener.handle_event(Event::GeneratingCoverageReport);
-                    collector.output_report(&self.root).map_err(|error| {
-                        vec![Error::FileIo { error, path: self.root.clone() }]
-                    })?;
-                }
 
                 self.event_listener
                     .handle_event(Event::FinishedTests { seed, tests });
@@ -1108,42 +1119,23 @@ where
         tests: Vec<Test>,
         seed: u32,
         property_max_success: usize,
-        mut coverage_collector: Option<&mut CoverageCollector>,
     ) -> Vec<TestResult<UntypedExpr, UntypedExpr>> {
-        use rayon::prelude::*;
-
         let data_types = utils::indexmap::as_ref_values(&self.data_types);
 
         let plutus_version = &self.config.plutus;
-        if coverage_collector.is_some() {
-            tests
-                .into_iter()
-                .map(|test| match test {
-                    Test::UnitTest(unit_test) => unit_test.run(plutus_version, coverage_collector.as_deref_mut()),
-                    Test::PropertyTest(property_test) => {
-                        property_test.run(seed, property_max_success, plutus_version, coverage_collector.as_deref_mut())
-                    }
-                    Test::Benchmark(_) => unreachable!("Benchmarks cannot be run in PBT."),
-                })
-                .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
-                .into_iter()
-                .map(|test| test.reify(&data_types))
-                .collect()
-        } else {
-            tests
-                .into_par_iter()
-                .map(|test| match test {
-                    Test::UnitTest(unit_test) => unit_test.run(plutus_version, None),
-                    Test::PropertyTest(property_test) => {
-                        property_test.run(seed, property_max_success, plutus_version, None)
-                    }
-                    Test::Benchmark(_) => unreachable!("Benchmarks cannot be run in PBT."),
-                })
-                .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
-                .into_iter()
-                .map(|test| test.reify(&data_types))
-                .collect()
-        }
+        tests
+            .into_iter()
+            .map(|test| match test {
+                Test::UnitTest(unit_test) => unit_test.run(plutus_version),
+                Test::PropertyTest(property_test) => {
+                    property_test.run(seed, property_max_success, plutus_version)
+                }
+                Test::Benchmark(_) => unreachable!("Benchmarks cannot be run in PBT."),
+            })
+            .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
+            .into_iter()
+            .map(|test| test.reify(&data_types))
+            .collect()
     }
 
     fn run_benchmarks(
