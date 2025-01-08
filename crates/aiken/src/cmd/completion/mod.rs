@@ -3,7 +3,7 @@ pub mod shell;
 use clap::Subcommand;
 use clap_complete::Shell;
 
-/// Commands for working with transactions
+/// Get completion scripts for various shells
 #[derive(Subcommand)]
 pub enum Cmd {
     Bash(shell::Args),
