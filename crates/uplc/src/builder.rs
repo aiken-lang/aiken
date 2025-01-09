@@ -30,6 +30,17 @@ where
         Term::Delay(self.into())
     }
 
+    pub fn constr(tag: usize, fields: Vec<Term<T>>) -> Self {
+        Term::Constr { tag, fields }
+    }
+
+    pub fn case(self, branches: Vec<Term<T>>) -> Self {
+        Term::Case {
+            constr: self.into(),
+            branches,
+        }
+    }
+
     // Primitives
     pub fn integer(i: num_bigint::BigInt) -> Self {
         Term::Constant(Constant::Integer(i).into())
