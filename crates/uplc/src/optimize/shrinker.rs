@@ -90,8 +90,8 @@ pub const NO_INLINE: &str = "__no_inline__";
 #[derive(PartialEq, PartialOrd, Default, Debug, Clone)]
 pub struct VarLookup {
     found: bool,
-    occurrences: isize,
-    delays: isize,
+    occurrences: usize,
+    delays: usize,
     no_inline: bool,
 }
 
@@ -123,7 +123,7 @@ impl VarLookup {
         }
     }
 
-    pub fn delay_if_found(self, delay_amount: isize) -> Self {
+    pub fn delay_if_found(self, delay_amount: usize) -> Self {
         if self.found {
             Self {
                 found: self.found,
@@ -1113,7 +1113,7 @@ impl Term<Name> {
                 }
             }
             Term::Delay(body) => {
-                let not_forced = isize::from(force_stack.pop().is_none());
+                let not_forced = usize::from(force_stack.pop().is_none());
 
                 body.var_occurrences(search_for, arg_stack, force_stack)
                     .delay_if_found(not_forced)
@@ -1130,7 +1130,7 @@ impl Term<Name> {
                 {
                     VarLookup::new()
                 } else {
-                    let not_applied: isize = isize::from(arg_stack.pop().is_none());
+                    let not_applied = usize::from(arg_stack.pop().is_none());
                     body.var_occurrences(search_for, arg_stack, force_stack)
                         .delay_if_found(not_applied)
                 }

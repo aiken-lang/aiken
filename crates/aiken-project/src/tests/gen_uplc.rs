@@ -64,7 +64,6 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool, verbo
                 version: (1, 1, 0),
                 term: expected,
             };
-            println!("BEFORE OPT IS {}", expected.to_pretty());
 
             let expected = optimize::aiken_optimize_and_intern(expected);
 

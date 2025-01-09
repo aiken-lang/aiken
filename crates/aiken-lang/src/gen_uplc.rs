@@ -217,10 +217,8 @@ impl<'a> CodeGenerator<'a> {
 
     fn finalize(&mut self, mut term: Term<Name>) -> Program<Name> {
         term = self.special_functions.apply_used_functions(term);
-        println!("PROG BEFORE IS  {}", term.to_pretty());
-        let program = aiken_optimize_and_intern(self.new_program(term));
 
-        println!("PROG IS {}", program.to_pretty());
+        let program = aiken_optimize_and_intern(self.new_program(term));
 
         // This is very important to call here.
         // If this isn't done, re-using the same instance
