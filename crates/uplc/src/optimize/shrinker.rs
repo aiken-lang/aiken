@@ -233,7 +233,6 @@ impl DefaultFunction {
             | DefaultFunction::AppendByteString
             | DefaultFunction::LessThanEqualsByteString
             | DefaultFunction::LessThanByteString
-            | DefaultFunction::DecodeUtf8
             | DefaultFunction::BData => arg_stack.iter().all(|arg| {
                 if let Term::Constant(c) = arg {
                     matches!(c.as_ref(), Constant::ByteString(_))
