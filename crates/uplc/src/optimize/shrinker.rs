@@ -1425,7 +1425,7 @@ impl Term<Name> {
                 *self = std::mem::replace(term, Term::Error.force());
             }
             _ => {
-                if arg_vec.len() > 3 {
+                if arg_vec.len() > 2 {
                     let mut fields = vec![];
 
                     for arg in arg_vec {
