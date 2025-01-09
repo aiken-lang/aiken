@@ -984,9 +984,6 @@ impl Term<Name> {
                                 inline_lambda,
                             );
                         }
-
-                        Term::Constr { .. } => todo!(),
-                        Term::Case { .. } => todo!(),
                         other => other.traverse_uplc_with_helper(
                             scope,
                             arg_stack,
@@ -1012,8 +1009,40 @@ impl Term<Name> {
                 }
             }
 
-            Term::Case { .. } => todo!(),
-            Term::Constr { .. } => todo!(),
+            Term::Case { constr, branches } => {
+                let constr = Rc::make_mut(constr);
+                constr.traverse_uplc_with_helper(
+                    scope,
+                    vec![],
+                    id_gen,
+                    with,
+                    context,
+                    inline_lambda,
+                );
+
+                for branch in branches {
+                    branch.traverse_uplc_with_helper(
+                        scope,
+                        arg_stack.clone(),
+                        id_gen,
+                        with,
+                        context,
+                        inline_lambda,
+                    );
+                }
+            }
+            Term::Constr { fields, .. } => {
+                for field in fields {
+                    field.traverse_uplc_with_helper(
+                        scope,
+                        vec![],
+                        id_gen,
+                        with,
+                        context,
+                        inline_lambda,
+                    );
+                }
+            }
 
             Term::Builtin(func) => {
                 let mut args = vec![];
@@ -2051,10 +2080,12 @@ impl Program<Name> {
         .0
     }
 
-    pub fn clean_up(self) -> Self {
+    pub fn clean_up(self, case: bool) -> Self {
         self.traverse_uplc_with(true, &mut |id, term, _arg_stack, scope, context| {
             term.remove_no_inlines(id, vec![], scope, context);
-            term.case_constr_apply_reducer(id, vec![], scope, context);
+            if case {
+                term.case_constr_apply_reducer(id, vec![], scope, context);
+            }
         })
         .0
     }

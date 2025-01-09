@@ -83,6 +83,8 @@ fn assert_outputs(
       },
     ) == list.at(outputs, 0)
 
+  trace @"This test validator has a higher hash than the one below. Change and try again."
+
   expect
     Some(
       Output {
@@ -134,7 +136,7 @@ fn assert_mint(mint: Value, our_policy_id: PolicyId, other_policy_id: PolicyId) 
 ///
 validator test_2 {
   mint(_tmp2: Void, _policy_id: PolicyId, _transaction: Transaction) {
-    trace @"slfhioer7w8yru"
+    trace @"slhhioer7w8ypuga"
     True
   }
 
