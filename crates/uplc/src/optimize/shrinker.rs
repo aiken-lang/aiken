@@ -2168,19 +2168,27 @@ impl Program<Name> {
         inline_lambda: bool,
         with: &mut impl FnMut(Option<usize>, &mut Term<Name>, Vec<Args>, &Scope, &mut Context),
     ) -> Self {
-        self.traverse_uplc_with(inline_lambda, &mut |id, term, arg_stack, scope, context| {
-            with(id, term, arg_stack, scope, context);
-            term.flip_constants(id, vec![], scope, context);
+        let (mut program, context) =
+            self.traverse_uplc_with(inline_lambda, &mut |id, term, arg_stack, scope, context| {
+                with(id, term, arg_stack, scope, context);
+                term.flip_constants(id, vec![], scope, context);
+                term.remove_inlined_ids(id, vec![], scope, context);
+            });
 
-            term.remove_inlined_ids(id, vec![], scope, context);
-        })
-        .0
+        if context.write_bits_convert {
+            program.term = program.term.data_list_to_integer_list();
+        }
+
+        program
     }
 
     pub fn clean_up(self, case: bool) -> Self {
-        let (mut program, context) =
-            self.traverse_uplc_with(true, &mut |id, term, arg_stack, scope, context| {
+        let (mut program, context) = self
+            .traverse_uplc_with(true, &mut |id, term, _arg_stack, scope, context| {
                 term.remove_no_inlines(id, vec![], scope, context);
+            })
+            .0
+            .traverse_uplc_with(true, &mut |id, term, arg_stack, scope, context| {
                 term.write_bits_convert_arg(id, arg_stack, scope, context);
 
                 if case {

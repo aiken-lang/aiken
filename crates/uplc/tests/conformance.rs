@@ -49,7 +49,7 @@ peg::parser! {
 fn actual_evaluation_result(
     file: &Path,
     language: &Language,
-) -> Result<(Program<Name>, ExBudget), String> {
+) -> Result<(Program<NamedDeBruijn>, ExBudget), String> {
     let code = fs::read_to_string(file).expect("Failed to read .uplc file");
 
     let program = parser::program(&code).map_err(|_| PARSE_ERROR.to_string())?;
@@ -68,7 +68,7 @@ fn actual_evaluation_result(
 
     let program = Program { version, term };
 
-    Ok((program.try_into().unwrap(), cost))
+    Ok((program, cost))
 }
 
 fn plutus_conformance_tests(language: Language) {
@@ -89,7 +89,8 @@ fn plutus_conformance_tests(language: Language) {
             let expected_budget_file = path.with_extension("uplc.budget.expected");
 
             let eval = actual_evaluation_result(path, &language);
-            let expected = expected_to_program(&expected_file);
+            let expected = expected_to_program(&expected_file)
+                .map(|program| Program::<NamedDeBruijn>::try_from(program).unwrap());
 
             match eval {
                 Ok((actual, cost)) => {
