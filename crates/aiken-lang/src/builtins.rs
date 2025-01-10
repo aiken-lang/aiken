@@ -509,12 +509,8 @@ pub fn plutus(id_gen: &IdGenerator) -> TypeInfo {
     };
 
     for builtin in DefaultFunction::iter() {
-        // FIXME: Disabling WriteBits for now, since its signature requires the ability to create
-        // list of raw integers, which isn't possible through Aiken at the moment.
-        if !matches!(builtin, DefaultFunction::WriteBits) {
-            let value = from_default_function(builtin, id_gen);
-            plutus.values.insert(builtin.aiken_name(), value);
-        }
+        let value = from_default_function(builtin, id_gen);
+        plutus.values.insert(builtin.aiken_name(), value);
     }
 
     let index_tipo = Type::function(vec![Type::data()], Type::int());
