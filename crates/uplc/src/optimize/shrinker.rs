@@ -2095,15 +2095,11 @@ impl Program<Name> {
                 .apply(Term::bls12_381_g2_uncompress().apply(Term::byte_string(compressed)));
         }
 
-        for default_func_index in context.builtins_map.keys().sorted().cloned() {
-            let default_func: DefaultFunction = default_func_index.try_into().unwrap();
-
+        for default_func in context.builtins_map.keys().sorted().cloned() {
             term = term.lambda(default_func.wrapped_name());
         }
 
-        for default_func_index in context.builtins_map.keys().sorted().cloned().rev() {
-            let default_func: DefaultFunction = default_func_index.try_into().unwrap();
-
+        for default_func in context.builtins_map.keys().sorted().cloned().rev() {
             term = term.apply(if default_func.force_count() == 1 {
                 Term::Builtin(default_func).force()
             } else {
