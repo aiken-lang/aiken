@@ -7,7 +7,7 @@ use crate::{
 };
 use blst::{blst_p1, blst_p2};
 use indexmap::IndexMap;
-use itertools::Itertools;
+use itertools::{FoldWhile, Itertools};
 use pallas_primitives::conway::{BigInt, PlutusData};
 use std::{cmp::Ordering, iter, ops::Neg, rc::Rc};
 
@@ -1418,7 +1418,8 @@ impl Term<Name> {
         let mut current_term = &mut std::mem::replace(self, Term::Error.force());
         let mut unsat_lams = vec![];
 
-        let mut function_groups: Vec<Vec<(Rc<Name>, Term<Name>)>> = vec![vec![]];
+        let mut function_groups = vec![vec![]];
+        let mut function_dependencies = vec![vec![]];
 
         loop {
             match current_term {
@@ -1453,11 +1454,14 @@ impl Term<Name> {
                             let insert_position = position + 1;
                             if insert_position == function_groups.len() {
                                 function_groups.push(vec![func]);
+                                function_dependencies.push(names);
                             } else {
                                 function_groups[insert_position].push(func);
+                                function_dependencies[insert_position].extend(names);
                             }
                         } else {
                             function_groups[0].push(func);
+                            function_dependencies[0].extend(names);
                         }
                     } else {
                         unsat_lams.push(parameter_name.clone());
@@ -1472,6 +1476,47 @@ impl Term<Name> {
                 _ => break,
             }
         }
+        let mut swap_postions = vec![];
+
+        function_groups
+            .iter()
+            .enumerate()
+            .for_each(|(group_index, group)| {
+                if group.len() <= 3 {
+                    group
+                        .iter()
+                        .enumerate()
+                        .rev()
+                        .for_each(|(item_index, (item_name, _))| {
+                            let current_eligible_position = function_dependencies
+                                .iter()
+                                .enumerate()
+                                .fold_while(group_index, |acc, (new_position, dependencies)| {
+                                    if dependencies.contains(item_name) {
+                                        FoldWhile::Done(acc)
+                                    } else {
+                                        FoldWhile::Continue(new_position)
+                                    }
+                                })
+                                .into_inner();
+
+                            if current_eligible_position > group_index {
+                                swap_postions.push((
+                                    group_index,
+                                    item_index,
+                                    current_eligible_position,
+                                ));
+                            }
+                        });
+                }
+            });
+
+        for (group_index, item_index, swap_index) in swap_postions {
+            let item = function_groups[group_index].remove(item_index);
+
+            function_groups[swap_index].push(item);
+        }
+
         let term_to_build_on = std::mem::replace(current_term, Term::Error.force());
 
         // Replace args that weren't consumed
