@@ -1498,6 +1498,7 @@ impl Term<Name> {
                         }
                         arg => {
                             context.write_bits_convert = true;
+
                             *arg = Term::var(INDICES_CONVERTER)
                                 .apply(std::mem::replace(arg, Term::Error.force()));
                         }
@@ -1506,10 +1507,24 @@ impl Term<Name> {
             }
 
             Term::Builtin(DefaultFunction::WriteBits) => {
-                // first arg not needed
-                arg_stack.pop();
+                if arg_stack.is_empty() {
+                    context.write_bits_convert = true;
 
-                if let Some(Args::Apply(arg_id, _)) = arg_stack.pop() {
+                    *self = Term::write_bits()
+                        .apply(Term::var("__arg_1"))
+                        .apply(Term::var(INDICES_CONVERTER).apply(Term::var("__arg_2")))
+                        .apply(Term::var("__arg_3"))
+                        .lambda("__arg_3")
+                        .lambda("__arg_2")
+                        .lambda("__arg_1")
+                } else {
+                    // first arg not needed
+                    arg_stack.pop();
+
+                    let Some(Args::Apply(arg_id, _)) = arg_stack.pop() else {
+                        return;
+                    };
+
                     context.write_bits_indices_arg.push(arg_id);
                 }
             }

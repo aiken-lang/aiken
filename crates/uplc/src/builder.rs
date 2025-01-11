@@ -408,6 +408,10 @@ where
     pub fn serialise_data() -> Self {
         Term::Builtin(DefaultFunction::SerialiseData)
     }
+
+    pub fn write_bits() -> Self {
+        Term::Builtin(DefaultFunction::WriteBits)
+    }
 }
 
 impl<T> Term<T>
