@@ -3712,7 +3712,7 @@ impl<'a> CodeGenerator<'a> {
                     interner.program(&mut program);
 
                     let eval_program: Program<NamedDeBruijn> =
-                        program.clean_up(false).try_into().unwrap();
+                        program.clean_up_no_inlines().try_into().unwrap();
 
                     Some(
                         eval_program
@@ -3822,7 +3822,7 @@ impl<'a> CodeGenerator<'a> {
                             interner.program(&mut program);
 
                             let eval_program: Program<NamedDeBruijn> =
-                                program.clean_up(false).try_into().unwrap();
+                                program.clean_up_no_inlines().try_into().unwrap();
 
                             let evaluated_term: Term<NamedDeBruijn> = eval_program
                                 .eval(ExBudget::default())
@@ -4364,7 +4364,7 @@ impl<'a> CodeGenerator<'a> {
                     interner.program(&mut program);
 
                     let eval_program: Program<NamedDeBruijn> =
-                        program.clean_up(false).try_into().unwrap();
+                        program.clean_up_no_inlines().try_into().unwrap();
 
                     let evaluated_term: Term<NamedDeBruijn> = eval_program
                         .eval(ExBudget::default())
@@ -4389,7 +4389,7 @@ impl<'a> CodeGenerator<'a> {
                     interner.program(&mut program);
 
                     let eval_program: Program<NamedDeBruijn> =
-                        program.clean_up(false).try_into().unwrap();
+                        program.clean_up_no_inlines().try_into().unwrap();
 
                     let evaluated_term: Term<NamedDeBruijn> = eval_program
                         .eval(ExBudget::default())
@@ -4802,7 +4802,7 @@ impl<'a> CodeGenerator<'a> {
                     interner.program(&mut program);
 
                     let eval_program: Program<NamedDeBruijn> =
-                        program.clean_up(false).try_into().unwrap();
+                        program.clean_up_no_inlines().try_into().unwrap();
 
                     let evaluated_term: Term<NamedDeBruijn> = eval_program
                         .eval(ExBudget::default())

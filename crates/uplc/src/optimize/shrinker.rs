@@ -1409,6 +1409,135 @@ impl Term<Name> {
         }
     }
 
+    // The ultimate function when used in conjunction with case_constr_apply
+    // This splits [lam fun_name [lam fun_name2 rest ..] ..] into
+    // [[lam fun_name lam fun_name2 rest ..]..] thus
+    // allowing for some crazy gains from cast_constr_apply_reducer
+    fn split_body_lambda(&mut self) {
+        let mut arg_stack = vec![];
+        let mut current_term = &mut std::mem::replace(self, Term::Error.force());
+        let mut unsat_lams = vec![];
+
+        let mut function_groups: Vec<Vec<(Rc<Name>, Term<Name>)>> = vec![vec![]];
+
+        loop {
+            match current_term {
+                Term::Apply { function, argument } => {
+                    current_term = Rc::make_mut(function);
+
+                    let arg = Rc::make_mut(argument);
+
+                    arg.split_body_lambda();
+
+                    arg_stack.push(std::mem::replace(arg, Term::Error.force()));
+                }
+                Term::Lambda {
+                    parameter_name,
+                    body,
+                } => {
+                    current_term = Rc::make_mut(body);
+
+                    if let Some(arg) = arg_stack.pop() {
+                        let names = arg.get_var_names();
+
+                        let func = (parameter_name.clone(), arg);
+
+                        if let Some((position, _)) =
+                            function_groups.iter().enumerate().rfind(|named_functions| {
+                                named_functions
+                                    .1
+                                    .iter()
+                                    .any(|(name, _)| names.contains(name))
+                            })
+                        {
+                            let insert_position = position + 1;
+                            if insert_position == function_groups.len() {
+                                function_groups.push(vec![func]);
+                            } else {
+                                function_groups[insert_position].push(func);
+                            }
+                        } else {
+                            function_groups[0].push(func);
+                        }
+                    } else {
+                        unsat_lams.push(parameter_name.clone());
+                    }
+                }
+                Term::Delay(term) | Term::Force(term) => {
+                    Rc::make_mut(term).split_body_lambda();
+                    break;
+                }
+                Term::Case { .. } => todo!(),
+                Term::Constr { .. } => todo!(),
+                _ => break,
+            }
+        }
+        let term_to_build_on = std::mem::replace(current_term, Term::Error.force());
+
+        // Replace args that weren't consumed
+        let term = arg_stack
+            .into_iter()
+            .rfold(term_to_build_on, |term, arg| term.apply(arg));
+
+        let term = function_groups.into_iter().rfold(term, |term, group| {
+            let term = group.iter().rfold(term, |term, (name, _)| Term::Lambda {
+                parameter_name: name.clone(),
+                body: term.into(),
+            });
+
+            group
+                .into_iter()
+                .fold(term, |term, (_, arg)| term.apply(arg))
+        });
+
+        let term = unsat_lams
+            .into_iter()
+            .rfold(term, |term, name| Term::Lambda {
+                parameter_name: name.clone(),
+                body: term.into(),
+            });
+
+        *self = term;
+    }
+
+    fn get_var_names(&self) -> Vec<Rc<Name>> {
+        let mut names = vec![];
+
+        let mut term = self;
+
+        loop {
+            match term {
+                Term::Apply { function, argument } => {
+                    let arg_names = argument.get_var_names();
+
+                    names.extend(arg_names);
+
+                    term = function;
+                }
+                Term::Var(name) => {
+                    names.push(name.clone());
+                    break;
+                }
+                Term::Delay(t) => {
+                    term = t;
+                }
+                Term::Lambda { body, .. } => {
+                    term = body;
+                }
+                Term::Constant(_) | Term::Error | Term::Builtin(_) => {
+                    break;
+                }
+                Term::Force(t) => {
+                    term = t;
+                }
+                Term::Constr { .. } => todo!(),
+                Term::Case { .. } => todo!(),
+            }
+        }
+
+        names
+    }
+
     // IMPORTANT: RUNS ONE TIME AND ONLY ON THE LAST PASS
     fn case_constr_apply_reducer(
         &mut self,
@@ -2079,14 +2208,14 @@ impl Program<Name> {
     }
     // This runs the optimizations that are only done a single time
     pub fn run_once_pass(self) -> Self {
-        let program = self
+        // First pass is necessary to ensure fst_pair and snd_pair are inlined before
+        // builtin_force_reducer is run
+        let (program, context) = self
             .traverse_uplc_with(false, &mut |id, term, _arg_stack, scope, context| {
                 term.inline_constr_ops(id, vec![], scope, context);
             })
-            .0;
-
-        let (program, context) =
-            program.traverse_uplc_with(false, &mut |id, term, arg_stack, scope, context| {
+            .0
+            .traverse_uplc_with(false, &mut |id, term, arg_stack, scope, context| {
                 term.bls381_compressor(id, vec![], scope, context);
                 term.builtin_force_reducer(id, arg_stack, scope, context);
                 term.remove_inlined_ids(id, vec![], scope, context);
@@ -2193,19 +2322,25 @@ impl Program<Name> {
         program
     }
 
-    pub fn clean_up(self, case: bool) -> Self {
-        let (mut program, context) = self
-            .traverse_uplc_with(true, &mut |id, term, _arg_stack, scope, context| {
-                term.remove_no_inlines(id, vec![], scope, context);
-            })
-            .0
-            .traverse_uplc_with(true, &mut |id, term, arg_stack, scope, context| {
-                term.write_bits_convert_arg(id, arg_stack, scope, context);
+    pub fn clean_up_no_inlines(self) -> Self {
+        self.traverse_uplc_with(true, &mut |id, term, _arg_stack, scope, context| {
+            term.remove_no_inlines(id, vec![], scope, context);
+        })
+        .0
+    }
 
-                if case {
-                    term.case_constr_apply_reducer(id, vec![], scope, context);
-                }
+    pub fn afterwards(self) -> Self {
+        let (mut program, context) =
+            self.traverse_uplc_with(true, &mut |id, term, arg_stack, scope, context| {
+                term.write_bits_convert_arg(id, arg_stack, scope, context);
             });
+
+        program = program
+            .split_body_lambda_reducer()
+            .traverse_uplc_with(true, &mut |id, term, _arg_stack, scope, context| {
+                term.case_constr_apply_reducer(id, vec![], scope, context);
+            })
+            .0;
 
         if context.write_bits_convert {
             program.term = program.term.data_list_to_integer_list();
@@ -2450,6 +2585,12 @@ impl Program<Name> {
         interner.program(&mut step_b);
 
         step_b
+    }
+
+    pub fn split_body_lambda_reducer(mut self) -> Self {
+        self.term.split_body_lambda();
+
+        self
     }
 }
 

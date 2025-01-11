@@ -38,5 +38,5 @@ pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
         }
     }
 
-    prog.clean_up(true)
+    prog.clean_up_no_inlines().afterwards()
 }

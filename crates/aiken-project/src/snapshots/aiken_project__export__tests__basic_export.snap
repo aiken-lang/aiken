@@ -1,7 +1,6 @@
 ---
 source: crates/aiken-project/src/export.rs
 description: "Code:\n\npub fn add(a: Int, b: Int) -> Int {\n    a + b\n}\n"
-snapshot_kind: text
 ---
 {
   "name": "test_module.add",
@@ -25,8 +24,8 @@ snapshot_kind: text
       "$ref": "#/definitions/Int"
     }
   },
-  "compiledCode": "500101002322337000046eb4004dd68009",
-  "hash": "b8374597a772cef80d891b7f6a03588e10cc19b780251228ba4ce9c6",
+  "compiledCode": "500101002232337000026eb4008dd68011",
+  "hash": "e5951afb3263ef11acc0b4c88cd5f5b30b8621ce63fe024b3ea2bec8",
   "definitions": {
     "Int": {
       "dataType": "integer"
