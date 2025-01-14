@@ -8,8 +8,6 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
     crate::parser::definition::test_like::parser(Token::Test)
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use crate::assert_definition;
