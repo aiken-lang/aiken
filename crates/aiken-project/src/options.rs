@@ -34,7 +34,6 @@ pub enum CodeGenMode {
         exact_match: bool,
         seed: u32,
         times_to_run: usize,
-        output: PathBuf,
     },
     NoOp,
 }

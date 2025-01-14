@@ -34,10 +34,6 @@ pub struct Args {
 
     /// Environment to use for benchmarking
     env: Option<String>,
-
-    /// Output file for benchmark results
-    #[clap(short, long)]
-    output: PathBuf,
 }
 
 pub fn exec(
@@ -48,7 +44,6 @@ pub fn exec(
         seed,
         times_to_run,
         env,
-        output,
     }: Args,
 ) -> miette::Result<()> {
     let mut rng = rand::thread_rng();
@@ -67,7 +62,6 @@ pub fn exec(
                 seed,
                 times_to_run,
                 env.clone(),
-                output.clone(),
             )
         },
     );

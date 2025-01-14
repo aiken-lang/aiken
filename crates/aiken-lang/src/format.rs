@@ -604,8 +604,9 @@ impl<'comments> Formatter<'comments> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn definition_test<'a>(
+    fn definition_test_or_bench<'a>(
         &mut self,
+        keyword: &'static str,
         name: &'a str,
         args: &'a [UntypedArgVia],
         body: &'a UntypedExpr,
@@ -613,14 +614,19 @@ impl<'comments> Formatter<'comments> {
         on_test_failure: &'a OnTestFailure,
     ) -> Document<'a> {
         // Fn name and args
-        let head = "test "
+        let head = keyword
             .to_doc()
+            .append(" ")
             .append(name)
             .append(wrap_args(args.iter().map(|e| (self.fn_arg_via(e), false))))
-            .append(match on_test_failure {
-                OnTestFailure::FailImmediately => "",
-                OnTestFailure::SucceedEventually => " fail",
-                OnTestFailure::SucceedImmediately => " fail once",
+            .append(if keyword == "test" {
+                match on_test_failure {
+                    OnTestFailure::FailImmediately => "",
+                    OnTestFailure::SucceedEventually => " fail",
+                    OnTestFailure::SucceedImmediately => " fail once",
+                }
+            } else {
+                ""
             })
             .group();
 
@@ -641,6 +647,18 @@ impl<'comments> Formatter<'comments> {
     }
 
     #[allow(clippy::too_many_arguments)]
+    fn definition_test<'a>(
+        &mut self,
+        name: &'a str,
+        args: &'a [UntypedArgVia],
+        body: &'a UntypedExpr,
+        end_location: usize,
+        on_test_failure: &'a OnTestFailure,
+    ) -> Document<'a> {
+        self.definition_test_or_bench("test", name, args, body, end_location, on_test_failure)
+    }
+
+    #[allow(clippy::too_many_arguments)]
     fn definition_benchmark<'a>(
         &mut self,
         name: &'a str,
@@ -649,32 +667,7 @@ impl<'comments> Formatter<'comments> {
         end_location: usize,
         on_test_failure: &'a OnTestFailure,
     ) -> Document<'a> {
-        // Fn name and args
-        let head = "bench "
-            .to_doc()
-            .append(name)
-            .append(wrap_args(args.iter().map(|e| (self.fn_arg_via(e), false))))
-            .append(match on_test_failure {
-                OnTestFailure::FailImmediately => "",
-                OnTestFailure::SucceedEventually => "",
-                OnTestFailure::SucceedImmediately => "",
-            })
-            .group();
-
-        // Format body
-        let body = self.expr(body, true);
-
-        // Add any trailing comments
-        let body = match printed_comments(self.pop_comments(end_location), false) {
-            Some(comments) => body.append(line()).append(comments),
-            None => body,
-        };
-
-        // Stick it all together
-        head.append(" {")
-            .append(line().append(body).nest(INDENT).group())
-            .append(line())
-            .append("}")
+        self.definition_test_or_bench("bench", name, args, body, end_location, on_test_failure)
     }
 
     fn definition_validator<'a>(

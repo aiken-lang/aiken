@@ -289,7 +289,6 @@ mod test {
                     result.labels
                 )
             }
-            // todo riley - should this be reachable?
             TestResult::Benchmark(..) => unreachable!("property returned benchmark result ?!"),
         }
     }

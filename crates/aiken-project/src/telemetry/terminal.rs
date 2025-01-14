@@ -224,14 +224,19 @@ impl EventListener for Terminal {
                     "...".if_supports_color(Stderr, |s| s.bold())
                 );
             }
-            Event::FinishedBenchmarks { seed: _, tests: _ } => {
-                eprintln!(
-                    "{} {}",
-                    "     Complete"
-                        .if_supports_color(Stderr, |s| s.bold())
-                        .if_supports_color(Stderr, |s| s.green()),
-                    "benchmark results written to CSV".if_supports_color(Stderr, |s| s.bold())
-                );
+            Event::FinishedBenchmarks { tests, .. } => {
+                for test in tests {
+                    if let TestResult::Benchmark(result) = test {
+                        println!(
+                            "{} {} ",
+                            result.test.name.bold(),
+                            "BENCH".blue(),
+                        );
+                        println!("  Memory: {} bytes", result.cost.mem);
+                        println!("  CPU: {} units", result.cost.cpu);
+                        println!();
+                    }
+                }
             }
         }
     }
