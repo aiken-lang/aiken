@@ -36,8 +36,8 @@ pub fn parser(keyword: Token) -> impl Parser<Token, ast::UntypedDefinition, Erro
                 .or_not()
                 .delimited_by(just(Token::LeftBrace), just(Token::RightBrace)),
         )
-        .map_with_span(move |((((name, arguments), fail), span_end), body), span| {
-            match keyword {
+        .map_with_span(
+            move |((((name, arguments), fail), span_end), body), span| match keyword {
                 Token::Test => ast::UntypedDefinition::Test(ast::Function {
                     arguments,
                     body: body.unwrap_or_else(|| UntypedExpr::todo(None, span)),
@@ -63,8 +63,8 @@ pub fn parser(keyword: Token) -> impl Parser<Token, ast::UntypedDefinition, Erro
                     on_test_failure: fail.unwrap_or(OnTestFailure::FailImmediately),
                 }),
                 _ => unreachable!("Only Test and Benchmark tokens are supported"),
-            }
-        })
+            },
+        )
 }
 
 pub fn via() -> impl Parser<Token, ast::UntypedArgVia, Error = ParseError> {

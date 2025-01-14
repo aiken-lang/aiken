@@ -425,7 +425,8 @@ where
                 seed,
                 property_max_success,
             } => {
-                let tests = self.collect_tests(verbose, match_tests, exact_match, options.tracing)?;
+                let tests =
+                    self.collect_tests(verbose, match_tests, exact_match, options.tracing)?;
 
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningTests);
@@ -490,10 +491,8 @@ where
                     })
                     .collect();
 
-                self.event_listener.handle_event(Event::FinishedBenchmarks {
-                    seed,
-                    tests,
-                });
+                self.event_listener
+                    .handle_event(Event::FinishedBenchmarks { seed, tests });
 
                 if !errors.is_empty() {
                     Err(errors)

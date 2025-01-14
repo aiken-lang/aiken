@@ -227,11 +227,7 @@ impl EventListener for Terminal {
             Event::FinishedBenchmarks { tests, .. } => {
                 for test in tests {
                     if let TestResult::Benchmark(result) = test {
-                        println!(
-                            "{} {} ",
-                            result.test.name.bold(),
-                            "BENCH".blue(),
-                        );
+                        println!("{} {} ", result.test.name.bold(), "BENCH".blue(),);
                         println!("  Memory: {} bytes", result.cost.mem);
                         println!("  CPU: {} units", result.cost.cpu);
                         println!();
