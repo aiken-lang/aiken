@@ -358,15 +358,12 @@ fn infer_definition(
                         .map(|ann| hydrator.type_from_annotation(ann, environment))
                         .transpose()?;
 
-                    let (inferred_annotation, inferred_inner_type) = match infer_fuzzer(
+                    let (inferred_annotation, inferred_inner_type) = infer_fuzzer(
                         environment,
                         provided_inner_type.clone(),
                         &typed_via.tipo(),
                         &arg.via.location(),
-                    ) {
-                        Ok(result) => Ok(result),
-                        Err(err) => Err(err),
-                    }?;
+                    )?;
 
                     // Ensure that the annotation, if any, matches the type inferred from the
                     // Fuzzer.
@@ -494,15 +491,12 @@ fn infer_definition(
                         .map(|ann| hydrator.type_from_annotation(ann, environment))
                         .transpose()?;
 
-                    let (inferred_annotation, inferred_inner_type) = match infer_sampler(
+                    let (inferred_annotation, inferred_inner_type) = infer_sampler(
                         environment,
                         provided_inner_type.clone(),
                         &typed_via.tipo(),
                         &arg.via.location(),
-                    ) {
-                        Ok(result) => Ok(result),
-                        Err(err) => Err(err),
-                    }?;
+                    )?;
 
                     // Ensure that the annotation, if any, matches the type inferred from the
                     // Fuzzer.
@@ -518,7 +512,7 @@ fn infer_definition(
                                 location: arg.arg.location,
                                 expected: inferred_inner_type.clone(),
                                 given: provided_inner_type.clone(),
-                                situation: Some(UnifyErrorSituation::FuzzerAnnotationMismatch),
+                                situation: Some(UnifyErrorSituation::SamplerAnnotationMismatch),
                                 rigid_type_names: hydrator.rigid_names(),
                             });
                         }

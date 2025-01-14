@@ -304,7 +304,6 @@ where
         seed: u32,
         times_to_run: usize,
         env: Option<String>,
-        output: PathBuf,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
             tracing: Tracing::silent(),
@@ -314,7 +313,6 @@ where
                 exact_match,
                 seed,
                 times_to_run,
-                output,
             },
             blueprint_path: self.blueprint_path(None),
         };
@@ -427,7 +425,7 @@ where
                 seed,
                 property_max_success,
             } => {
-                let tests = self.collect_tests(false, match_tests, exact_match, options.tracing)?;
+                let tests = self.collect_tests(verbose, match_tests, exact_match, options.tracing)?;
 
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningTests);
@@ -471,9 +469,7 @@ where
                 exact_match,
                 seed,
                 times_to_run,
-                output,
             } => {
-                // todo - collect benchmarks
                 let tests =
                     self.collect_benchmarks(false, match_tests, exact_match, options.tracing)?;
 
@@ -496,51 +492,12 @@ where
 
                 self.event_listener.handle_event(Event::FinishedBenchmarks {
                     seed,
-                    tests: tests.clone(),
+                    tests,
                 });
 
                 if !errors.is_empty() {
                     Err(errors)
                 } else {
-                    // Write benchmark results to CSV
-                    use std::fs::File;
-                    use std::io::Write;
-
-                    let mut writer = File::create(&output).map_err(|error| {
-                        vec![Error::FileIo {
-                            error,
-                            path: output.clone(),
-                        }]
-                    })?;
-
-                    // Write CSV header
-                    writeln!(writer, "test_name,module,memory,cpu").map_err(|error| {
-                        vec![Error::FileIo {
-                            error,
-                            path: output.clone(),
-                        }]
-                    })?;
-
-                    // Write benchmark results
-                    for test in tests {
-                        if let TestResult::Benchmark(result) = test {
-                            writeln!(
-                                writer,
-                                "{},{},{},{}",
-                                result.test.name,
-                                result.test.module,
-                                result.cost.mem,
-                                result.cost.cpu
-                            )
-                            .map_err(|error| {
-                                vec![Error::FileIo {
-                                    error,
-                                    path: output.clone(),
-                                }]
-                            })?;
-                        }
-                    }
-
                     Ok(())
                 }
             }

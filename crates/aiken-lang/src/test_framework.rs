@@ -382,7 +382,7 @@ impl PropertyTest {
             let mut counterexample = Counterexample {
                 value,
                 choices: next_prng.choices(),
-                cache: Cache::new(move |choices| {
+                cache: Cache::new(|choices| {
                     match Prng::from_choices(choices).sample(&self.fuzzer.program) {
                         Err(..) => Status::Invalid,
                         Ok(None) => Status::Invalid,
@@ -443,13 +443,25 @@ impl PropertyTest {
 /// ----- Benchmark -----------------------------------------------------------------
 
 #[derive(Debug, Clone)]
+pub struct Sampler<T> {
+    pub program: Program<T>,
+
+    pub type_info: Rc<Type>,
+
+    /// A version of the Fuzzer's type that has gotten rid of
+    /// all erasable opaque type. This is needed in order to
+    /// generate Plutus data with the appropriate shape.
+    pub stripped_type_info: Rc<Type>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Benchmark {
     pub input_path: PathBuf,
     pub module: String,
     pub name: String,
     pub on_test_failure: OnTestFailure,
     pub program: Program<Name>,
-    pub sampler: Fuzzer<Name>,
+    pub sampler: Sampler<Name>,
 }
 
 unsafe impl Send for Benchmark {}
@@ -458,14 +470,14 @@ impl Benchmark {
     pub fn benchmark(
         self,
         seed: u32,
-        n: usize,
+        max_iterations: usize,
         plutus_version: &PlutusVersion,
     ) -> Vec<BenchmarkResult> {
-        let mut results = Vec::with_capacity(n);
+        let mut results = Vec::with_capacity(max_iterations);
         let mut iteration = 0;
         let mut prng = Prng::from_seed(seed);
 
-        while n > iteration {
+        while max_iterations > iteration {
             let fuzzer = self
                 .sampler
                 .program

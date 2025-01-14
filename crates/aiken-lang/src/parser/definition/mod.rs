@@ -6,6 +6,7 @@ mod data_type;
 mod function;
 pub mod import;
 mod test;
+pub mod test_like;
 mod type_alias;
 mod validator;
 

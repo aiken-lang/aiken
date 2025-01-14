@@ -36,7 +36,7 @@ pub enum Cmd {
     Docs(docs::Args),
     Add(packages::add::Args),
 
-    Benchmark(benchmark::Args),
+    Bench(benchmark::Args),
 
     #[clap(subcommand)]
     Blueprint(blueprint::Cmd),

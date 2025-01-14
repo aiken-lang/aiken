@@ -1452,6 +1452,21 @@ fn suggest_unify(
             expected,
             given
         },
+        Some(UnifyErrorSituation::SamplerAnnotationMismatch) => formatdoc! {
+            r#"While comparing the return annotation of a Sampler with its actual return type, I realized that both don't match.
+
+               I am inferring the Sampler should return:
+
+                   {}
+
+               but I found a conflicting annotation saying it returns:
+
+                   {}
+
+               Either, fix (or remove) the annotation or adjust the Sampler to return the expected type."#,
+            expected,
+            given
+        },
         None => formatdoc! {
             r#"I am inferring the following type:
 
@@ -1883,6 +1898,8 @@ pub enum UnifyErrorSituation {
     Operator(BinOp),
 
     FuzzerAnnotationMismatch,
+
+    SamplerAnnotationMismatch,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

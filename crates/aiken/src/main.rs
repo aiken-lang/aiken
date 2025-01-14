@@ -24,7 +24,7 @@ fn main() -> miette::Result<()> {
         Cmd::Build(args) => build::exec(args),
         Cmd::Address(args) => address::exec(args),
         Cmd::Check(args) => check::exec(args),
-        Cmd::Benchmark(args) => benchmark::exec(args),
+        Cmd::Bench(args) => benchmark::exec(args),
         Cmd::Docs(args) => docs::exec(args),
         Cmd::Add(args) => add::exec(args),
         Cmd::Blueprint(args) => blueprint::exec(args),
