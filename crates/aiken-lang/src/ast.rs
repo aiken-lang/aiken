@@ -567,7 +567,7 @@ impl TypedValidator {
         let var_purpose_arg = "__purpose_arg__";
         let var_datum = "__datum__";
 
-        TypedExpr::sequence(&[
+        let context_handler = TypedExpr::sequence(&[
             TypedExpr::let_(
                 TypedExpr::local_var(var_context, Type::script_context(), self.location),
                 TypedPattern::Constructor {
@@ -746,7 +746,29 @@ impl TypedValidator {
                     }))
                     .collect(),
             },
-        ])
+        ]);
+
+        if self.handlers.is_empty() {
+            let fallback = &self.fallback;
+            let arg = fallback.arguments.first().unwrap();
+
+            let then = match arg.get_variable_name() {
+                Some(arg_name) => TypedExpr::sequence(&[
+                    TypedExpr::let_(
+                        TypedExpr::local_var(var_context, arg.tipo.clone(), arg.location),
+                        TypedPattern::var(arg_name),
+                        arg.tipo.clone(),
+                        arg.location,
+                    ),
+                    fallback.body.clone(),
+                ]),
+                None => fallback.body.clone(),
+            };
+
+            then
+        } else {
+            context_handler
+        }
     }
 
     pub fn find_node(&self, byte_index: usize) -> Option<Located<'_>> {

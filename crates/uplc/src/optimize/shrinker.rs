@@ -1316,7 +1316,7 @@ impl Term<Name> {
                         // So it costs more size to have them hoisted
                         Term::Delay(e) if matches!(e.as_ref(), Term::Error) => true,
                         // If it wraps a builtin with consts or arguments passed in then inline
-                        l @ Term::Lambda { .. } if is_a_builtin_wrapper(l) => true,
+                        Term::Lambda { .. } => arg_term.is_a_builtin_wrapper(&context),
                         // Inline smaller terms too
                         Term::Constant(_) | Term::Var(_) | Term::Builtin(_) => true,
 
@@ -2194,7 +2194,7 @@ impl Term<Name> {
         term
     }
 
-    pub fn pierce_no_inlines(mut self) -> Self {
+    fn pierce_no_inlines(mut self) -> Self {
         let term = &mut self;
 
         while let Term::Lambda {
@@ -2210,6 +2210,59 @@ impl Term<Name> {
         }
 
         std::mem::replace(term, Term::Error.force())
+    }
+
+    fn is_a_builtin_wrapper(&self, context: &Context) -> bool {
+        let (names, term) = self.pop_lambdas_and_get_names();
+
+        let mut arg_names = vec![];
+
+        let mut term = term;
+
+        while let Term::Apply { function, argument } = term {
+            match argument.as_ref() {
+                Term::Var(name) => arg_names.push(format!("{}_{}", name.text, name.unique)),
+
+                Term::Constant(_) => {}
+                _ => {
+                    //Break loop, it's not a builtin wrapper function
+                    return false;
+                }
+            }
+            term = function.as_ref();
+        }
+
+        let func_is_builtin = match term {
+            Term::Var(name) => context
+                .builtins_map
+                .keys()
+                .map(|func| func.wrapped_name())
+                .any(|func| func == name.text),
+
+            Term::Builtin(_) => todo!(),
+            _ => false,
+        };
+
+        arg_names.iter().all(|item| names.contains(item)) && func_is_builtin
+    }
+
+    fn pop_lambdas_and_get_names(&self) -> (Vec<String>, &Term<Name>) {
+        let mut names = vec![];
+
+        let mut term = self;
+
+        while let Term::Lambda {
+            parameter_name,
+            body,
+        } = term
+        {
+            if parameter_name.text != NO_INLINE {
+                names.push(format!("{}_{}", parameter_name.text, parameter_name.unique));
+            }
+            term = body.as_ref();
+        }
+
+        (names, term)
     }
 }
 
@@ -2649,48 +2702,6 @@ fn id_vec_function_to_var(func_name: &str, id_vec: &[usize]) -> String {
             .collect::<Vec<String>>()
             .join("_")
     )
-}
-
-fn is_a_builtin_wrapper(term: &Term<Name>) -> bool {
-    let (names, term) = pop_lambdas_and_get_names(term);
-
-    let mut arg_names = vec![];
-
-    let mut term = term;
-
-    while let Term::Apply { function, argument } = term {
-        match argument.as_ref() {
-            Term::Var(name) => arg_names.push(format!("{}_{}", name.text, name.unique)),
-
-            Term::Constant(_) => {}
-            _ => {
-                //Break loop, it's not a builtin wrapper function
-                return false;
-            }
-        }
-        term = function.as_ref();
-    }
-
-    arg_names.iter().all(|item| names.contains(item)) && matches!(term, Term::Builtin(_))
-}
-
-fn pop_lambdas_and_get_names(term: &Term<Name>) -> (Vec<String>, &Term<Name>) {
-    let mut names = vec![];
-
-    let mut term = term;
-
-    while let Term::Lambda {
-        parameter_name,
-        body,
-    } = term
-    {
-        if parameter_name.text != NO_INLINE {
-            names.push(format!("{}_{}", parameter_name.text, parameter_name.unique));
-        }
-        term = body.as_ref();
-    }
-
-    (names, term)
 }
 
 #[cfg(test)]
