@@ -1316,7 +1316,7 @@ impl Term<Name> {
                         // So it costs more size to have them hoisted
                         Term::Delay(e) if matches!(e.as_ref(), Term::Error) => true,
                         // If it wraps a builtin with consts or arguments passed in then inline
-                        Term::Lambda { .. } => arg_term.is_a_builtin_wrapper(&context),
+                        Term::Lambda { .. } => arg_term.is_a_builtin_wrapper(context),
                         // Inline smaller terms too
                         Term::Constant(_) | Term::Var(_) | Term::Builtin(_) => true,
 
