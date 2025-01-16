@@ -2239,7 +2239,7 @@ impl Term<Name> {
                 .map(|func| func.wrapped_name())
                 .any(|func| func == name.text),
 
-            Term::Builtin(_) => todo!(),
+            Term::Builtin(_) => true,
             _ => false,
         };
 
