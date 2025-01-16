@@ -237,23 +237,33 @@ impl<'a> CodeGenerator<'a> {
         context: &str,
     ) -> AirTree {
         if matches!(self.tracing, TraceLevel::Coverage) {
+            // Get line numbers from module_src, similar to get_line_columns_by_span
+            let (_, lines) = self.module_src
+                .get(module_name)
+                .unwrap_or_else(|| panic!("Missing module {module_name}"));
+
+            // Convert spans to line numbers
+            let start_line = lines.line_number(location.start)
+                .expect("Invalid start location");
+            let end_line = lines.line_number(location.end)
+                .expect("Invalid end location");
             // First, format the message and record the trace
             let msg = format!("COVERAGE:{}:{}:{}:{}",
                 module_name,
-                location.start,
-                location.end,
+                start_line,
+                end_line,
                 context
             );
-            
+
+            // println!("adding cov trace: {}", msg); // TODO: riley - remove
             // Do the RefCell operations in a separate scope so the borrow is dropped
             {
                 let collector = self.coverage_collector.as_ref()
                     .expect("Coverage collector must be Some when coverage tracing is enabled");
                 let mut collector_guard = collector.borrow_mut();
-                collector_guard.record_potential_trace(module_name, location.start, location.end);
+                collector_guard.record_potential_trace(module_name, start_line, end_line);
             }
             
-            // Now create the trace without needing the collector
             let trace = AirTree::trace(
                 AirTree::string(&msg),
                 Type::void(),

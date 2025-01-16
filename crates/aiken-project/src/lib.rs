@@ -420,16 +420,22 @@ where
                     self.event_listener.handle_event(Event::RunningTests);
                 }
 
-                let tests = self.run_tests(tests, seed, property_max_success);// , self.coverage_collector.as_mut());
+                let report_coverage = self.coverage_collector.is_some();
+                let tests = self.run_tests(tests, seed, property_max_success, report_coverage);
 
                 // Process test results for coverage if we have a collector
                 if let Some(collector) = &self.coverage_collector {
                     let mut collector = collector.borrow_mut();
                     for test_result in &tests {
                         for trace in test_result.traces() {
+                            // if let Some(trace) = trace.strip_prefix("COVERAGE:") {
+                                // println!("cov trace: {}", trace);
+                            // } else {
+                                // println!("trace: {}", trace);
+                            // } TODO: riley - remove
                             collector.record_trace(trace);
                         }
-                    }
+                    } // Does it make sense to just pass the coverage collector in instead of a bool?
 
                     self.event_listener.handle_event(Event::GeneratingCoverageReport);
                     collector.output_report(&self.root).map_err(|error| {
@@ -1025,6 +1031,7 @@ where
         tests: Vec<Test>,
         seed: u32,
         property_max_success: usize,
+        report_coverage: bool,
     ) -> Vec<TestResult<UntypedExpr, UntypedExpr>> {
         use rayon::prelude::*;
 
@@ -1037,7 +1044,7 @@ where
             .map(|test| match test {
                 Test::UnitTest(unit_test) => unit_test.run(plutus_version), //, None),
                 Test::PropertyTest(property_test) => {
-                    property_test.run(seed, property_max_success, plutus_version) //, None)
+                    property_test.run(seed, property_max_success, plutus_version, report_coverage) //, None)
                 }
             })
             .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()

@@ -278,6 +278,7 @@ impl PropertyTest {
         seed: u32,
         n: usize,
         plutus_version: &PlutusVersion,
+        report_coverage: bool,
     ) -> TestResult<U, PlutusData> {
         let mut labels = BTreeMap::new();
         let mut remaining = n;
@@ -287,9 +288,10 @@ impl PropertyTest {
             Prng::from_seed(seed),
             &mut labels,
             plutus_version,
+            report_coverage,
         ) {
-            Ok(None) => (Vec::new(), Ok(None), n),
-            Ok(Some(counterexample)) => (
+            Ok((traces, None)) => (traces, Ok(None), n),
+            Ok((_traces, Some(counterexample))) => ( // TODO: riley - consider expected failures
                 self.eval(&counterexample.value, plutus_version)
                     .logs()
                     .into_iter()
@@ -323,16 +325,18 @@ impl PropertyTest {
         initial_prng: Prng,
         labels: &mut BTreeMap<String, usize>,
         plutus_version: &'a PlutusVersion,
-    ) -> Result<Option<Counterexample<'a>>, FuzzerError> {
+        report_coverage: bool,
+    ) -> Result<(Vec<String>, Option<Counterexample<'a>>), FuzzerError> {
         let mut prng = initial_prng;
         let mut counterexample = None;
+        let mut traces = Vec::new();
 
         while *remaining > 0 && counterexample.is_none() {
-            (prng, counterexample) = self.run_once(prng, labels, plutus_version)?;
+            (traces, prng, counterexample) = self.run_once(prng, labels, plutus_version, report_coverage)?;
             *remaining -= 1;
         }
 
-        Ok(counterexample)
+        Ok((traces, counterexample))
     }
 
     fn run_once<'a>(
@@ -340,8 +344,11 @@ impl PropertyTest {
         prng: Prng,
         labels: &mut BTreeMap<String, usize>,
         plutus_version: &'a PlutusVersion,
-    ) -> Result<(Prng, Option<Counterexample<'a>>), FuzzerError> {
+        report_coverage: bool,
+    ) -> Result<(Vec<String>, Prng, Option<Counterexample<'a>>), FuzzerError> {
         use OnTestFailure::*;
+
+        let mut traces = Vec::new();
 
         let (next_prng, value) = prng
             .sample(&self.fuzzer.program)?
@@ -350,6 +357,9 @@ impl PropertyTest {
         let mut result = self.eval(&value, plutus_version);
 
         for s in result.logs() {
+            if report_coverage {
+                traces.push(s.clone());
+            }
             // NOTE: There may be other log outputs that interefere with labels. So *by
             // convention*, we treat as label strings that starts with a NUL byte, which
             // should be a guard sufficient to prevent inadvertent clashes.
@@ -409,9 +419,9 @@ impl PropertyTest {
                 counterexample.simplify();
             }
 
-            Ok((next_prng, Some(counterexample)))
+            Ok((traces, next_prng, Some(counterexample)))
         } else {
-            Ok((next_prng, None))
+            Ok((traces, next_prng, None))
         }
     }
 
