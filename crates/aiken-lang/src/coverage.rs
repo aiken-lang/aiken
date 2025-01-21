@@ -1,9 +1,8 @@
-use std::{collections::{HashMap, HashSet}, path::Path};
+use std::collections::{HashMap, HashSet};
 use crate::line_numbers::LineNumbers;
 
 pub struct CoverageData {
     pub module_name: String,
-    pub covered_spans: Vec<(usize, usize)>,
     pub total_lines: usize,
     pub covered_lines: HashSet<usize>,
 }
@@ -64,13 +63,13 @@ impl CoverageCollector {
     
                 CoverageData {
                     module_name: module.to_string(),
-                    covered_spans: Vec::new(),
                     total_lines,
                     covered_lines: HashSet::new(),
                 }
             });
     
-        entry.covered_spans.push((start, end));
+        entry.covered_lines.insert(start);
+        entry.covered_lines.insert(end);
         
         if let Some(line_numbers) = self.line_numbers.get(module) {
             let start_line = line_numbers.line_number(start);
@@ -84,17 +83,17 @@ impl CoverageCollector {
         }
     }
 
-    pub fn generate_report(&self, total_traces: &HashMap<String, Vec<(usize, usize)>>) -> HashMap<String, serde_json::Value> {
+    pub fn generate_report(&self) -> HashMap<String, serde_json::Value> {
         let mut reports = HashMap::new();
 
         // Process each module that has any traces (either total or executed)
         let all_modules: HashSet<_> = self.coverage_map.keys()
-            .chain(total_traces.keys())
+            .chain(self.potential_traces.keys())
             .collect();
 
         for module_name in all_modules {
             let coverage_data = self.coverage_map.get(module_name);
-            let total_module_traces = total_traces.get(module_name);
+            // let total_module_traces = self.potential_traces.get(module_name);
 
             let total_lines = coverage_data
                 .map(|d| d.total_lines)
@@ -104,44 +103,35 @@ impl CoverageCollector {
                 .map(|d| d.covered_lines.clone())
                 .unwrap_or_default();
 
-            let covered_spans = coverage_data
-                .map(|d| d.covered_spans.clone())
-                .unwrap_or_default();
+            // Calculate coverage percentage and uncovered lines
+            let coverage_percentage = if total_lines > 0 {
+                (covered_lines.len() as f64 / total_lines as f64) * 100.0
+            } else {
+                0.0
+            };
+
+            let uncovered_lines: Vec<usize> = if total_lines > 0 {
+                (1..=total_lines)
+                    .filter(|line| !covered_lines.contains(line))
+                    .collect()
+            } else {
+                Vec::new()
+            };
 
             // Create the report for this module
             let report = serde_json::json!({
                 "module": module_name,
-                "covered_spans": covered_spans,
-                "total_traces": total_module_traces.unwrap_or(&Vec::new()),
                 "total_lines": total_lines,
                 "covered_lines": covered_lines.iter().collect::<Vec<_>>(),
+                "uncovered_lines": uncovered_lines,
+                "coverage_percentage": coverage_percentage,
+                // "total_traces": total_module_traces.unwrap_or(&Vec::new()),
             });
 
             reports.insert(module_name.clone(), report);
         }
 
         reports
-    }
-
-    pub fn output_report(&self, root: &Path) -> Result<(), std::io::Error> {
-        let coverage_dir = root.join("coverage");
-
-        std::fs::create_dir_all(&coverage_dir)?;
-
-        let reports = self.generate_report(&self.potential_traces);
-
-        for (module_name, report) in reports {
-            let path = coverage_dir.join(format!("{}.coverage.json", module_name));
-
-            // Create parent directories if they don't exist
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-
-            std::fs::write(path, serde_json::to_string_pretty(&report)?)?;
-        }
-
-        Ok(())
     }
 
     // Record a potential trace during UPLC generation

@@ -283,15 +283,16 @@ impl PropertyTest {
         let mut labels = BTreeMap::new();
         let mut remaining = n;
 
-        let (traces, counterexample, iterations) = match self.run_n_times(
+        let (coverage_traces, traces, counterexample, iterations) = match self.run_n_times(
             &mut remaining,
             Prng::from_seed(seed),
             &mut labels,
             plutus_version,
             report_coverage,
         ) {
-            Ok((traces, None)) => (traces, Ok(None), n),
-            Ok((_traces, Some(counterexample))) => ( // TODO: riley - consider expected failures
+            Ok((traces, None)) => (traces, Vec::new(), Ok(None), n),
+            Ok((traces, Some(counterexample))) => (
+                traces,
                 self.eval(&counterexample.value, plutus_version)
                     .logs()
                     .into_iter()
@@ -301,6 +302,7 @@ impl PropertyTest {
                 n - remaining,
             ),
             Err(FuzzerError { traces, uplc_error }) => (
+                Vec::new(),
                 traces
                     .into_iter()
                     .filter(|s| PropertyTest::extract_label(s).is_none())
@@ -316,6 +318,7 @@ impl PropertyTest {
             iterations,
             labels,
             traces,
+            coverage_traces,
         })
     }
 
@@ -356,10 +359,11 @@ impl PropertyTest {
 
         let mut result = self.eval(&value, plutus_version);
 
+        if report_coverage {
+            traces.extend(result.logs());
+        }
+
         for s in result.logs() {
-            if report_coverage {
-                traces.push(s.clone());
-            }
             // NOTE: There may be other log outputs that interefere with labels. So *by
             // convention*, we treat as label strings that starts with a NUL byte, which
             // should be a guard sufficient to prevent inadvertent clashes.
@@ -1070,6 +1074,7 @@ pub struct PropertyTestResult<T> {
     pub iterations: usize,
     pub labels: BTreeMap<String, usize>,
     pub traces: Vec<String>,
+    pub coverage_traces: Vec<String>,
 }
 
 unsafe impl<T> Send for PropertyTestResult<T> {}
@@ -1090,6 +1095,7 @@ impl PropertyTestResult<PlutusData> {
             test: self.test,
             labels: self.labels,
             traces: self.traces,
+            coverage_traces: self.coverage_traces,
         }
     }
 }

@@ -220,8 +220,9 @@ mod test {
             Prng::from_seed(42),
             &mut labels,
             plutus_version,
+            false
         ) {
-            Ok(Some(counterexample)) => counterexample,
+            Ok((_, Some(counterexample))) => counterexample,
             _ => panic!("expected property to fail but it didn't."),
         }
     }
@@ -239,6 +240,7 @@ mod test {
                 42,
                 PropertyTest::DEFAULT_MAX_SUCCESS,
                 &PlutusVersion::default(),
+                false
             )
             .is_success());
     }
@@ -266,6 +268,7 @@ mod test {
             42,
             PropertyTest::DEFAULT_MAX_SUCCESS,
             &PlutusVersion::default(),
+            false
         ) {
             TestResult::UnitTestResult(..) => unreachable!("property returned unit-test result ?!"),
             TestResult::PropertyTestResult(result) => {

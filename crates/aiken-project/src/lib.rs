@@ -428,19 +428,13 @@ where
                     let mut collector = collector.borrow_mut();
                     for test_result in &tests {
                         for trace in test_result.traces() {
-                            // if let Some(trace) = trace.strip_prefix("COVERAGE:") {
-                                // println!("cov trace: {}", trace);
-                            // } else {
-                                // println!("trace: {}", trace);
-                            // } TODO: riley - remove
                             collector.record_trace(trace);
                         }
-                    } // Does it make sense to just pass the coverage collector in instead of a bool?
+                    }
 
                     self.event_listener.handle_event(Event::GeneratingCoverageReport);
-                    collector.output_report(&self.root).map_err(|error| {
-                        vec![Error::FileIo { error, path: self.root.clone() }]
-                    })?;
+                    let reports = collector.generate_report();
+                    self.event_listener.handle_event(Event::CoverageReport { reports });
                 }
 
                 self.checks_count = if tests.is_empty() {
@@ -465,8 +459,10 @@ where
                     })
                     .collect();
 
-                self.event_listener
-                    .handle_event(Event::FinishedTests { seed, tests });
+                if !report_coverage {
+                    self.event_listener
+                        .handle_event(Event::FinishedTests { seed, tests });
+                }
 
                 if !errors.is_empty() {
                     Err(errors)
@@ -1042,9 +1038,9 @@ where
         tests
             .into_par_iter()
             .map(|test| match test {
-                Test::UnitTest(unit_test) => unit_test.run(plutus_version), //, None),
+                Test::UnitTest(unit_test) => unit_test.run(plutus_version),
                 Test::PropertyTest(property_test) => {
-                    property_test.run(seed, property_max_success, plutus_version, report_coverage) //, None)
+                    property_test.run(seed, property_max_success, plutus_version, report_coverage)
                 }
             })
             .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
