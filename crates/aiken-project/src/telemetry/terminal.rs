@@ -237,6 +237,12 @@ impl EventListener for Terminal {
             Event::GeneratingCoverageReport => {
                 eprintln!("Generating coverage report...");
             }
+            Event::CoverageReport { reports } => {
+                for (module_name, report) in reports {
+                    println!("\nCoverage for module: {}", module_name);
+                    println!("{}", serde_json::to_string_pretty(&report).unwrap());
+                }
+            }
         }
     }
 }

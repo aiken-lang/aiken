@@ -255,7 +255,6 @@ impl<'a> CodeGenerator<'a> {
                 context
             );
 
-            // println!("adding cov trace: {}", msg); // TODO: riley - remove
             // Do the RefCell operations in a separate scope so the borrow is dropped
             {
                 let collector = self.coverage_collector.as_ref()

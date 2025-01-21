@@ -4,7 +4,7 @@ use aiken_lang::{
 };
 pub use json::{json_schema, Json};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     fmt::Display,
     io::{self, IsTerminal},
     path::PathBuf,
@@ -66,6 +66,9 @@ pub enum Event {
         source: DownloadSource,
     },
     ResolvingVersions,
+    CoverageReport {
+        reports: HashMap<String, serde_json::Value>
+    },
 }
 
 pub enum EventTarget {

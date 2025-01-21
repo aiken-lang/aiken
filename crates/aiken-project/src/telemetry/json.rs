@@ -13,6 +13,12 @@ pub struct Json;
 impl EventListener for Json {
     fn handle_event(&self, event: Event) {
         match event {
+            Event::CoverageReport { reports } => {
+                let json_output = serde_json::json!({
+                    "coverage": reports
+                });
+                println!("{}", serde_json::to_string_pretty(&json_output).unwrap());
+            }
             Event::FinishedTests { seed, tests, .. } => {
                 let total = tests.len();
                 let passed = tests.iter().filter(|t| t.is_success()).count();
