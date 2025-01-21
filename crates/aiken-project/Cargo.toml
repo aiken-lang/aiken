@@ -1,7 +1,7 @@
 [package]
 name = "aiken-project"
 description = "Aiken project utilities"
-version = "1.1.9"
+version = "1.1.10"
 edition = "2021"
 repository = "https://github.com/aiken-lang/aiken"
 homepage = "https://github.com/aiken-lang/aiken"
@@ -15,7 +15,7 @@ rust-version = "1.70.0"
 build = "build.rs"
 
 [dependencies]
-aiken-lang = { path = "../aiken-lang", version = "1.1.9" }
+aiken-lang = { path = "../aiken-lang", version = "1.1.10" }
 askama = { version = "0.12.0", features = ["urlencode"] }
 camino = "1.1.9"
 ciborium = "0.2.2"
@@ -49,7 +49,7 @@ strip-ansi-escapes = "0.1.1"
 thiserror = "1.0.39"
 tokio = { version = "1.26.0", features = ["full"] }
 toml = "0.7.2"
-uplc = { path = '../uplc', version = "1.1.9" }
+uplc = { path = '../uplc', version = "1.1.10" }
 vec1 = "1.10.1"
 walkdir.workspace = true
 zip = "0.6.4"

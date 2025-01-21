@@ -1,7 +1,7 @@
 [package]
 name = "aiken-lang"
 description = "The Aiken compiler"
-version = "1.1.9"
+version = "1.1.10"
 edition = "2021"
 repository = "https://github.com/aiken-lang/aiken"
 homepage = "https://github.com/aiken-lang/aiken"
@@ -32,7 +32,7 @@ pretty = "0.12.3"
 serde = { version = "1.0.197", features = ["derive", "rc"] }
 strum = "0.24.1"
 thiserror = "1.0.39"
-uplc = { path = '../uplc', version = "1.1.9" }
+uplc = { path = '../uplc', version = "1.1.10" }
 vec1 = "1.10.1"
 
 [target.'cfg(not(target_family="wasm"))'.dependencies]
