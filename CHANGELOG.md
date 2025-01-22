@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.11 - UNRELEASED
+
+### Changed
+
+- **aiken-lang**: The compiler now raises a warning when attempting to destructure a record constructor without using named fields. See [#1084](https://github.com/aiken-lang/aiken/issues/1084). @KtorZ
+
 ## v1.1.10 - 2025-01-21
 
 ### Added
