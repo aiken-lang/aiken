@@ -14,7 +14,7 @@ pub struct LexInfo {
 }
 
 pub fn run(src: &str) -> Result<LexInfo, Vec<ParseError>> {
-    let len = src.as_bytes().len();
+    let len = src.len();
 
     let tokens = lexer().parse(chumsky::Stream::from_iter(
         Span::create(len, 1),
@@ -245,7 +245,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         "via" => Token::Via,
         "bench" => Token::Benchmark,
         _ => {
-            if s.chars().next().map_or(false, |c| c.is_uppercase()) {
+            if s.chars().next().is_some_and(|c| c.is_uppercase()) {
                 Token::UpName {
                     // TODO: do not allow _ in upname
                     name: s,
