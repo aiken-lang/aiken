@@ -33,7 +33,7 @@
 
 ### Added
 
-- **aiken-lang**: support for `bench` keyword to define benchmarks. @Riley-Kilgore
+- **aiken**: support for `bench` keyword to define benchmarks. @Riley-Kilgore
 
 ## v1.1.10 - 2025-01-21
 
