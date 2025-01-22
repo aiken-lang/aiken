@@ -1,5 +1,5 @@
-use std::collections::{HashMap, HashSet};
 use crate::line_numbers::LineNumbers;
+use std::collections::{HashMap, HashSet};
 
 pub struct CoverageData {
     pub module_name: String,
@@ -20,7 +20,7 @@ impl CoverageCollector {
             .into_iter()
             .map(|(k, (_, v))| (k, v))
             .collect();
-            
+
         Self {
             coverage_map: HashMap::new(),
             line_numbers,
@@ -34,10 +34,10 @@ impl CoverageCollector {
             let parts: Vec<&str> = coverage_data.split(':').collect();
             if parts.len() == 4 {
                 let (module, start, end, _context) = (
-                    parts[0], 
-                    parts[1].parse().unwrap(), 
+                    parts[0],
+                    parts[1].parse().unwrap(),
                     parts[2].parse().unwrap(),
-                    parts[3]
+                    parts[3],
                 );
                 self.record_coverage(module, start, end);
             }
@@ -45,36 +45,38 @@ impl CoverageCollector {
     }
 
     fn record_coverage(&mut self, module: &str, start: usize, end: usize) {
-        let entry = self.coverage_map
+        let entry = self
+            .coverage_map
             .entry(module.to_string())
             .or_insert_with(|| {
                 // Find the total number of lines by searching for the last line number
-                let total_lines = self.line_numbers
+                let total_lines = self
+                    .line_numbers
                     .get(module)
-                    .and_then(|ln| {
+                    .map(|ln| {
                         // Keep trying line numbers until we get None
                         let mut i = 1;
                         while ln.line_and_column_number(i).is_some() {
                             i += 1;
                         }
-                        Some(i)
+                        i
                     })
                     .unwrap_or(0);
-    
+
                 CoverageData {
                     module_name: module.to_string(),
                     total_lines,
                     covered_lines: HashSet::new(),
                 }
             });
-    
+
         entry.covered_lines.insert(start);
         entry.covered_lines.insert(end);
-        
+
         if let Some(line_numbers) = self.line_numbers.get(module) {
             let start_line = line_numbers.line_number(start);
             let end_line = line_numbers.line_number(end);
-            
+
             if let (Some(start), Some(end)) = (start_line, end_line) {
                 for line in start..=end {
                     entry.covered_lines.insert(line);
@@ -87,7 +89,9 @@ impl CoverageCollector {
         let mut reports = HashMap::new();
 
         // Process each module that has any traces (either total or executed)
-        let all_modules: HashSet<_> = self.coverage_map.keys()
+        let all_modules: HashSet<_> = self
+            .coverage_map
+            .keys()
             .chain(self.potential_traces.keys())
             .collect();
 
@@ -95,9 +99,7 @@ impl CoverageCollector {
             let coverage_data = self.coverage_map.get(module_name);
             // let total_module_traces = self.potential_traces.get(module_name);
 
-            let total_lines = coverage_data
-                .map(|d| d.total_lines)
-                .unwrap_or(0);
+            let total_lines = coverage_data.map(|d| d.total_lines).unwrap_or(0);
 
             let covered_lines = coverage_data
                 .map(|d| d.covered_lines.clone())

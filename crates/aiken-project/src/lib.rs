@@ -32,10 +32,11 @@ use crate::{
 };
 use aiken_lang::{
     ast::{
-        self, DataTypeKey, Definition, FunctionAccessKey, ModuleKind, TraceLevel, Tracing, TypedDataType,
-        TypedFunction, UntypedDefinition
+        self, DataTypeKey, Definition, FunctionAccessKey, ModuleKind, TraceLevel, Tracing,
+        TypedDataType, TypedFunction, UntypedDefinition,
     },
     builtins,
+    coverage::CoverageCollector,
     expr::{TypedExpr, UntypedExpr},
     format::{Formatter, MAX_COLUMNS},
     gen_uplc::CodeGenerator,
@@ -43,7 +44,6 @@ use aiken_lang::{
     test_framework::{Test, TestResult},
     tipo::{Type, TypeInfo},
     utils, IdGenerator,
-    coverage::CoverageCollector,
 };
 use export::Export;
 use indexmap::IndexMap;
@@ -53,7 +53,12 @@ use package_name::PackageName;
 use pallas_addresses::{Address, Network, ShelleyAddress, ShelleyDelegationPart, StakePayload};
 use pallas_primitives::conway::PolicyId;
 use std::{
-    cell::RefCell, collections::{BTreeSet, HashMap, HashSet}, fs::{self, File}, io::BufReader, path::{Path, PathBuf}, rc::Rc
+    cell::RefCell,
+    collections::{BTreeSet, HashMap, HashSet},
+    fs::{self, File},
+    io::BufReader,
+    path::{Path, PathBuf},
+    rc::Rc,
 };
 use telemetry::EventListener;
 use uplc::{
@@ -156,10 +161,12 @@ where
     }
 
     pub fn ensure_coverage_collector(&mut self, tracing: Tracing) {
-        if matches!(tracing, Tracing::All(TraceLevel::Coverage)) && self.coverage_collector.is_none() {
-            self.coverage_collector = Some(Rc::new(RefCell::new(
-                CoverageCollector::new(self.module_sources.clone())
-            )));
+        if matches!(tracing, Tracing::All(TraceLevel::Coverage))
+            && self.coverage_collector.is_none()
+        {
+            self.coverage_collector = Some(Rc::new(RefCell::new(CoverageCollector::new(
+                self.module_sources.clone(),
+            ))));
         }
     }
 
@@ -172,7 +179,7 @@ where
             utils::indexmap::as_str_ref_values(&self.module_types),
             utils::indexmap::as_str_ref_values(&self.module_sources),
             tracing,
-            self.coverage_collector.as_ref().map(|c| c.clone())
+            self.coverage_collector.as_ref().map(|c| c.clone()),
         )
     }
 
@@ -382,7 +389,7 @@ where
                 version: self.config.version.clone(),
             });
 
-         // Initialize coverage collector if needed based on tracing level
+        // Initialize coverage collector if needed based on tracing level
         self.ensure_coverage_collector(options.tracing);
 
         let env = options.env.as_deref();
@@ -455,9 +462,11 @@ where
                         }
                     }
 
-                    self.event_listener.handle_event(Event::GeneratingCoverageReport);
+                    self.event_listener
+                        .handle_event(Event::GeneratingCoverageReport);
                     let reports = collector.generate_report();
-                    self.event_listener.handle_event(Event::CoverageReport { reports });
+                    self.event_listener
+                        .handle_event(Event::CoverageReport { reports });
                 }
 
                 self.checks_count = if tests.is_empty() {

@@ -67,7 +67,7 @@ pub enum Event {
     },
     ResolvingVersions,
     CoverageReport {
-        reports: HashMap<String, serde_json::Value>
+        reports: HashMap<String, serde_json::Value>,
     },
 }
 

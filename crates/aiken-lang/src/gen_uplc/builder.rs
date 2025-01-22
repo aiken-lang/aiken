@@ -1135,7 +1135,9 @@ pub fn cast_validator_args(
 
 pub fn wrap_validator_condition(air_tree: AirTree, trace: TraceLevel) -> AirTree {
     let otherwise = match trace {
-        TraceLevel::Coverage | TraceLevel::Silent | TraceLevel::Compact => AirTree::error(Type::void(), true),
+        TraceLevel::Coverage | TraceLevel::Silent | TraceLevel::Compact => {
+            AirTree::error(Type::void(), true)
+        }
         TraceLevel::Verbose => AirTree::trace(
             AirTree::string("Validator returned false"),
             Type::void(),

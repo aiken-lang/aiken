@@ -1,5 +1,10 @@
 use crate::{
-    ast::{BinOp, DataTypeKey, IfBranch, OnTestFailure, Span, TypedArg, TypedDataType, TypedTest}, expr::{TypedExpr, UntypedExpr}, format::Formatter, gen_uplc::CodeGenerator, plutus_version::PlutusVersion, tipo::{convert_opaque_type, Type}
+    ast::{BinOp, DataTypeKey, IfBranch, OnTestFailure, Span, TypedArg, TypedDataType, TypedTest},
+    expr::{TypedExpr, UntypedExpr},
+    format::Formatter,
+    gen_uplc::CodeGenerator,
+    plutus_version::PlutusVersion,
+    tipo::{convert_opaque_type, Type},
 };
 use cryptoxide::{blake2b::Blake2b, digest::Digest};
 use indexmap::IndexMap;
@@ -361,7 +366,7 @@ impl PropertyTest {
         })
     }
 
-    pub fn run_n_times<'a, 'b>(
+    pub fn run_n_times<'a>(
         &'a self,
         remaining: &mut usize,
         initial_prng: Prng,
@@ -374,7 +379,8 @@ impl PropertyTest {
         let mut traces = Vec::new();
 
         while *remaining > 0 && counterexample.is_none() {
-            (traces, prng, counterexample) = self.run_once(prng, labels, plutus_version, report_coverage)?;
+            (traces, prng, counterexample) =
+                self.run_once(prng, labels, plutus_version, report_coverage)?;
             *remaining -= 1;
         }
 

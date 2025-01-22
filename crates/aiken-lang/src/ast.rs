@@ -2291,9 +2291,9 @@ pub enum Tracing {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TraceLevel {
-    Silent,  // No traces
-    Compact, // Line numbers only
-    Verbose, // Full verbose traces as provided by the user or the compiler
+    Silent,   // No traces
+    Compact,  // Line numbers only
+    Verbose,  // Full verbose traces as provided by the user or the compiler
     Coverage, // Coverage traces
 }
 
