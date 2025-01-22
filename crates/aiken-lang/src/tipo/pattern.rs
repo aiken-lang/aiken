@@ -475,6 +475,9 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                                 } else {
                                     Some(CallArg {
                                         label: Some(field.clone()),
+                                        location: arg
+                                            .location
+                                            .map(|start, _| (start, start + field.len())),
                                         ..arg.clone()
                                     })
                                 }

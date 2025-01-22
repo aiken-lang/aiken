@@ -1,7 +1,10 @@
 use crate::{
-    ast::{Definition, ModuleKind, Pattern, TraceLevel, Tracing, TypedModule, UntypedModule},
+    ast::{
+        Definition, ModuleKind, Pattern, TraceLevel, Tracing, TypedModule, UntypedModule,
+        UntypedPattern,
+    },
     builtins,
-    expr::TypedExpr,
+    expr::{CallArg, Span, TypedExpr},
     parser,
     tipo::error::{Error, UnifyErrorSituation, Warning},
     IdGenerator,
@@ -3444,4 +3447,208 @@ fn constant_generic_inferred_3() {
 fn constant_generic_empty() {
     let source_code = r#"const foo: List<a> = []"#;
     assert!(check_validator(parse(source_code)).is_ok());
+}
+
+#[test]
+fn unused_record_fields_1() {
+    let source_code = r#"
+        pub type Foo {
+          Foo { field0: Bool, field1: Bool }
+          Bar
+        }
+
+        test confusing() {
+          let foo = Foo(True, True)
+          when foo is {
+            Foo(field1, field0) -> field0 || field1
+            _ -> False
+          }
+        }
+    "#;
+
+    let result = check_validator(parse(source_code));
+    assert!(result.is_ok());
+
+    let (warnings, _) = result.unwrap();
+    assert_eq!(
+        warnings[0],
+        Warning::UnusedRecordFields {
+            location: Span::create(193, 19),
+            suggestion: UntypedPattern::Constructor {
+                is_record: true,
+                location: Span::create(193, 19),
+                name: "Foo".to_string(),
+                arguments: vec![
+                    CallArg {
+                        label: Some("field0".to_string()),
+                        location: Span::create(197, 6),
+                        value: Pattern::Var {
+                            location: Span::create(197, 6),
+                            name: "field1".to_string()
+                        }
+                    },
+                    CallArg {
+                        label: Some("field1".to_string()),
+                        location: Span::create(205, 6),
+                        value: Pattern::Var {
+                            location: Span::create(205, 6),
+                            name: "field0".to_string()
+                        }
+                    }
+                ],
+                module: None,
+                constructor: (),
+                spread_location: None,
+                tipo: ()
+            }
+        }
+    );
+}
+
+#[test]
+fn unused_record_fields_2() {
+    let source_code = r#"
+        pub type Foo {
+          Foo { field0: Bool, field1: Bool }
+          Bar
+        }
+
+        test confusing() {
+          let foo = Foo(True, True)
+          when foo is {
+            Foo(field0, field1) -> field0 || field1
+            _ -> False
+          }
+        }
+    "#;
+
+    let result = check_validator(parse(source_code));
+    assert!(result.is_ok());
+
+    let (warnings, _) = result.unwrap();
+    assert_eq!(
+        warnings[0],
+        Warning::UnusedRecordFields {
+            location: Span::create(193, 19),
+            suggestion: UntypedPattern::Constructor {
+                is_record: true,
+                location: Span::create(193, 19),
+                name: "Foo".to_string(),
+                arguments: vec![
+                    CallArg {
+                        label: Some("field0".to_string()),
+                        location: Span::create(197, 6),
+                        value: Pattern::Var {
+                            location: Span::create(197, 6),
+                            name: "field0".to_string()
+                        }
+                    },
+                    CallArg {
+                        label: Some("field1".to_string()),
+                        location: Span::create(205, 6),
+                        value: Pattern::Var {
+                            location: Span::create(205, 6),
+                            name: "field1".to_string()
+                        }
+                    }
+                ],
+                module: None,
+                constructor: (),
+                spread_location: None,
+                tipo: ()
+            }
+        }
+    );
+}
+
+#[test]
+fn unused_record_fields_3() {
+    let source_code = r#"
+        pub type Foo {
+          Foo { field0: Bool, field1: Bool }
+          Bar
+        }
+
+        test confusing() {
+          let foo = Foo(True, True)
+          when foo is {
+            Foo(a, _) -> a
+            _ -> False
+          }
+        }
+    "#;
+
+    let result = check_validator(parse(source_code));
+    assert!(result.is_ok());
+
+    let (warnings, _) = result.unwrap();
+    assert_eq!(
+        warnings[0],
+        Warning::UnusedRecordFields {
+            location: Span::create(193, 9),
+            suggestion: UntypedPattern::Constructor {
+                is_record: true,
+                location: Span::create(193, 9),
+                name: "Foo".to_string(),
+                arguments: vec![CallArg {
+                    label: Some("field0".to_string()),
+                    location: Span::create(197, 6),
+                    value: Pattern::Var {
+                        location: Span::create(197, 1),
+                        name: "a".to_string()
+                    }
+                },],
+                module: None,
+                constructor: (),
+                spread_location: Some(Span::create(199, 2)),
+                tipo: ()
+            }
+        }
+    );
+}
+
+#[test]
+fn unused_record_fields_4() {
+    let source_code = r#"
+        pub type Foo {
+          Foo { field0: Bool, field1: Bool }
+          Bar
+        }
+
+        test confusing() {
+          let foo = Foo(True, True)
+          when foo is {
+            Foo(a, ..) -> a
+            _ -> False
+          }
+        }
+    "#;
+
+    let result = check_validator(parse(source_code));
+    assert!(result.is_ok());
+
+    let (warnings, _) = result.unwrap();
+    assert_eq!(
+        warnings[0],
+        Warning::UnusedRecordFields {
+            location: Span::create(193, 10),
+            suggestion: UntypedPattern::Constructor {
+                is_record: true,
+                location: Span::create(193, 10),
+                name: "Foo".to_string(),
+                arguments: vec![CallArg {
+                    label: Some("field0".to_string()),
+                    location: Span::create(197, 6),
+                    value: Pattern::Var {
+                        location: Span::create(197, 1),
+                        name: "a".to_string()
+                    }
+                },],
+                module: None,
+                constructor: (),
+                spread_location: Some(Span::create(200, 2)),
+                tipo: ()
+            }
+        }
+    );
 }
