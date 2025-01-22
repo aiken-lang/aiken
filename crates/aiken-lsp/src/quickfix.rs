@@ -11,6 +11,7 @@ const UNKNOWN_MODULE: &str = "aiken::check::unknown::module";
 const UNUSED_IMPORT_VALUE: &str = "aiken::check::unused:import::value";
 const UNUSED_IMPORT_MODULE: &str = "aiken::check::unused::import::module";
 const USE_LET: &str = "aiken::check::single_constructor_expect";
+const UNUSED_RECORD_FIELDS: &str = "aiken::check::syntax::unused_record_fields";
 const UTF8_BYTE_ARRAY_IS_VALID_HEX_STRING: &str =
     "aiken::check::syntax::bytearray_literal_is_hex_string";
 
@@ -23,6 +24,7 @@ pub enum Quickfix {
     UnusedImports(Vec<lsp_types::Diagnostic>),
     Utf8ByteArrayIsValidHexString(lsp_types::Diagnostic),
     UseLet(lsp_types::Diagnostic),
+    UnusedRecordFields(lsp_types::Diagnostic),
 }
 
 fn match_code(
@@ -69,6 +71,10 @@ pub fn assert(diagnostic: lsp_types::Diagnostic) -> Option<Quickfix> {
 
     if match_code(&diagnostic, Severity::WARNING, USE_LET) {
         return Some(Quickfix::UseLet(diagnostic));
+    }
+
+    if match_code(&diagnostic, Severity::WARNING, UNUSED_RECORD_FIELDS) {
+        return Some(Quickfix::UnusedRecordFields(diagnostic));
     }
 
     None
@@ -127,6 +133,12 @@ pub fn quickfix(
                 text_document,
                 diagnostic,
                 use_let(diagnostic),
+            ),
+            Quickfix::UnusedRecordFields(diagnostic) => each_as_distinct_action(
+                &mut actions,
+                text_document,
+                diagnostic,
+                unused_record_fields(diagnostic),
             ),
         };
     }
@@ -306,4 +318,20 @@ fn use_let(diagnostic: &lsp_types::Diagnostic) -> Vec<AnnotatedEdit> {
             new_text: "let".to_string(),
         },
     )]
+}
+
+fn unused_record_fields(diagnostic: &lsp_types::Diagnostic) -> Vec<AnnotatedEdit> {
+    let mut edits = Vec::new();
+
+    if let Some(serde_json::Value::String(new_text)) = diagnostic.data.as_ref() {
+        edits.push((
+            "Destructure using named fields".to_string(),
+            lsp_types::TextEdit {
+                range: diagnostic.range,
+                new_text: new_text.clone(),
+            },
+        ));
+    }
+
+    edits
 }

@@ -462,6 +462,50 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                     }
                 };
 
+                if let Some(field_map) = cons.field_map() {
+                    if !is_record {
+                        let arguments = field_map
+                            .fields
+                            .iter()
+                            .sorted_by(|(a, _), (b, _)| a.cmp(b))
+                            .zip(pattern_args.iter())
+                            .filter_map(|((field, (_, _)), arg)| {
+                                if arg.value.is_discard() {
+                                    None
+                                } else {
+                                    Some(CallArg {
+                                        label: Some(field.clone()),
+                                        ..arg.clone()
+                                    })
+                                }
+                            })
+                            .collect::<Vec<_>>();
+
+                        let spread_location = if arguments.len() == field_map.fields.len() {
+                            None
+                        } else {
+                            Some(Span {
+                                start: location.end - 3,
+                                end: location.end - 1,
+                            })
+                        };
+
+                        self.environment.warnings.push(Warning::UnusedRecordFields {
+                            location,
+                            suggestion: Pattern::Constructor {
+                                is_record: true,
+                                location,
+                                name: name.clone(),
+                                arguments,
+                                module: module.clone(),
+                                constructor: (),
+                                spread_location,
+                                tipo: (),
+                            },
+                        });
+                    }
+                }
+
                 let instantiated_constructor_type = self.environment.instantiate(
                     constructor_typ,
                     &mut HashMap::new(),
