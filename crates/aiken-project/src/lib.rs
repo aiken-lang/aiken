@@ -952,8 +952,9 @@ where
         Ok(())
     }
 
-    fn collect_benchmarks(
+    fn collect_test_items(
         &mut self,
+        kind: &str, // "test" or "bench"
         verbose: bool,
         match_tests: Option<Vec<String>>,
         exact_match: bool,
@@ -991,7 +992,13 @@ where
             }
 
             for def in checked_module.ast.definitions() {
-                if let Definition::Benchmark(func) = def {
+                let func = match (kind, def) {
+                    ("test", Definition::Test(func)) => Some(func),
+                    ("bench", Definition::Benchmark(func)) => Some(func),
+                    _ => None,
+                };
+
+                if let Some(func) = func {
                     if let Some(match_tests) = &match_tests {
                         let is_match = match_tests.iter().any(|(module, names)| {
                             let matched_module =
@@ -1035,19 +1042,27 @@ where
 
         for (input_path, module_name, test) in scripts.into_iter() {
             if verbose {
-                // TODO: We may want to handle the event listener differently for benchmarks
                 self.event_listener.handle_event(Event::GeneratingUPLCFor {
                     name: test.name.clone(),
                     path: input_path.clone(),
                 })
             }
 
-            tests.push(Test::from_function_definition(
-                &mut generator,
-                test.to_owned(),
-                module_name,
-                input_path,
-            ));
+            tests.push(match kind {
+                "test" => Test::from_function_definition(
+                    &mut generator,
+                    test.to_owned(),
+                    module_name,
+                    input_path,
+                ),
+                "bench" => Test::from_benchmark_definition(
+                    &mut generator,
+                    test.to_owned(),
+                    module_name,
+                    input_path,
+                ),
+                _ => unreachable!("Invalid test kind"),
+            });
         }
 
         Ok(tests)
@@ -1060,97 +1075,17 @@ where
         exact_match: bool,
         tracing: Tracing,
     ) -> Result<Vec<Test>, Error> {
-        let mut scripts = Vec::new();
+        self.collect_test_items("test", verbose, match_tests, exact_match, tracing)
+    }
 
-        let match_tests = match_tests.map(|mt| {
-            mt.into_iter()
-                .map(|match_test| {
-                    let mut match_split_dot = match_test.split('.');
-
-                    let match_module = if match_test.contains('.') || match_test.contains('/') {
-                        match_split_dot.next().unwrap_or("")
-                    } else {
-                        ""
-                    };
-
-                    let match_names = match_split_dot.next().map(|names| {
-                        let names = names.replace(&['{', '}'][..], "");
-
-                        let names_split_comma = names.split(',');
-
-                        names_split_comma.map(str::to_string).collect()
-                    });
-
-                    (match_module.to_string(), match_names)
-                })
-                .collect::<Vec<(String, Option<Vec<String>>)>>()
-        });
-
-        for checked_module in self.checked_modules.values() {
-            if checked_module.package != self.config.name.to_string() {
-                continue;
-            }
-
-            for def in checked_module.ast.definitions() {
-                if let Definition::Test(func) = def {
-                    if let Some(match_tests) = &match_tests {
-                        let is_match = match_tests.iter().any(|(module, names)| {
-                            let matched_module =
-                                module.is_empty() || checked_module.name.contains(module);
-
-                            let matched_name = match names {
-                                None => true,
-                                Some(names) => names.iter().any(|name| {
-                                    if exact_match {
-                                        name == &func.name
-                                    } else {
-                                        func.name.contains(name)
-                                    }
-                                }),
-                            };
-
-                            matched_module && matched_name
-                        });
-
-                        if is_match {
-                            scripts.push((
-                                checked_module.input_path.clone(),
-                                checked_module.name.clone(),
-                                func,
-                            ))
-                        }
-                    } else {
-                        scripts.push((
-                            checked_module.input_path.clone(),
-                            checked_module.name.clone(),
-                            func,
-                        ))
-                    }
-                }
-            }
-        }
-
-        let mut generator = self.new_generator(tracing);
-
-        let mut tests = Vec::new();
-
-        for (input_path, module_name, test) in scripts.into_iter() {
-            if verbose {
-                self.event_listener.handle_event(Event::GeneratingUPLCFor {
-                    name: test.name.clone(),
-                    path: input_path.clone(),
-                })
-            }
-
-            tests.push(Test::from_function_definition(
-                &mut generator,
-                test.to_owned(),
-                module_name,
-                input_path,
-            ));
-        }
-
-        Ok(tests)
+    fn collect_benchmarks(
+        &mut self,
+        verbose: bool,
+        match_tests: Option<Vec<String>>,
+        exact_match: bool,
+        tracing: Tracing,
+    ) -> Result<Vec<Test>, Error> {
+        self.collect_test_items("bench", verbose, match_tests, exact_match, tracing)
     }
 
     fn run_tests(
