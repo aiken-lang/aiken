@@ -117,14 +117,19 @@ impl Test {
         })
     }
 
-    pub fn from_function_definition(
+    pub fn from_test_definition(
         generator: &mut CodeGenerator<'_>,
         test: TypedTest,
         module_name: String,
         input_path: PathBuf,
+        is_benchmark: bool,
     ) -> Test {
         if test.arguments.is_empty() {
-            Self::unit_test(generator, test, module_name, input_path)
+            if is_benchmark {
+                unreachable!("benchmark must have at least one argument");
+            } else {
+                Self::unit_test(generator, test, module_name, input_path)
+            }
         } else {
             let parameter = test.arguments.first().unwrap().to_owned();
 
@@ -143,24 +148,57 @@ impl Test {
                 &module_name,
             );
 
-            // NOTE: We need not to pass any parameter to the fuzzer here because the fuzzer
+            // NOTE: We need not to pass any parameter to the fuzzer/sampler here because the fuzzer
             // argument is a Data constructor which needs not any conversion. So we can just safely
             // apply onto it later.
-            let fuzzer = generator.clone().generate_raw(&via, &[], &module_name);
+            let generator_program = generator.clone().generate_raw(&via, &[], &module_name);
 
-            Self::property_test(
-                input_path,
-                module_name,
-                test.name,
-                test.on_test_failure,
-                program,
-                Fuzzer {
-                    program: fuzzer,
-                    stripped_type_info,
-                    type_info,
-                },
-            )
+            if is_benchmark {
+                Test::Benchmark(Benchmark {
+                    input_path,
+                    module: module_name,
+                    name: test.name,
+                    program,
+                    on_test_failure: test.on_test_failure,
+                    sampler: Sampler {
+                        program: generator_program,
+                        type_info,
+                        stripped_type_info,
+                    },
+                })
+            } else {
+                Self::property_test(
+                    input_path,
+                    module_name,
+                    test.name,
+                    test.on_test_failure,
+                    program,
+                    Fuzzer {
+                        program: generator_program,
+                        stripped_type_info,
+                        type_info,
+                    },
+                )
+            }
         }
+    }
+
+    pub fn from_benchmark_definition(
+        generator: &mut CodeGenerator<'_>,
+        test: TypedTest,
+        module_name: String,
+        input_path: PathBuf,
+    ) -> Test {
+        Self::from_test_definition(generator, test, module_name, input_path, true)
+    }
+
+    pub fn from_function_definition(
+        generator: &mut CodeGenerator<'_>,
+        test: TypedTest,
+        module_name: String,
+        input_path: PathBuf,
+    ) -> Test {
+        Self::from_test_definition(generator, test, module_name, input_path, false)
     }
 }
 

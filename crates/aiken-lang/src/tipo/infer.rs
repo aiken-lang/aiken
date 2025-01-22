@@ -499,7 +499,7 @@ fn infer_definition(
                     )?;
 
                     // Ensure that the annotation, if any, matches the type inferred from the
-                    // Fuzzer.
+                    // Sampler.
                     if let Some(provided_inner_type) = provided_inner_type {
                         if !arg
                             .arg
@@ -518,7 +518,7 @@ fn infer_definition(
                         }
                     }
 
-                    // Replace the pre-registered type for the test function, to allow inferring
+                    // Replace the pre-registered type for the benchmark function, to allow inferring
                     // the function body with the right type arguments.
                     let scope = environment
                         .scope
@@ -567,7 +567,7 @@ fn infer_definition(
                 });
             }
 
-            Ok(Definition::Test(Function {
+            Ok(Definition::Benchmark(Function {
                 doc: typed_f.doc,
                 location: typed_f.location,
                 name: typed_f.name,
