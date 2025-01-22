@@ -218,7 +218,7 @@ impl EventListener for Terminal {
             Event::RunningBenchmarks => {
                 eprintln!(
                     "{} {}",
-                    "  Benchmarking"
+                    " Benchmarking"
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.purple()),
                     "...".if_supports_color(Stderr, |s| s.bold())
