@@ -19,19 +19,27 @@ use crate::{
         AssignmentKind, BinOp, Bls12_381Point, Curve, DataTypeKey, FunctionAccessKey, Pattern,
         Span, TraceLevel, Tracing, TypedArg, TypedDataType, TypedFunction, TypedPattern,
         TypedValidator, UnOp,
-    }, builtins::PRELUDE, coverage::CoverageCollector, expr::TypedExpr, gen_uplc::{
+    },
+    builtins::PRELUDE,
+    coverage::CoverageCollector,
+    expr::TypedExpr,
+    gen_uplc::{
         air::ExpectLevel,
         builder::{
             erase_opaque_type_operations, get_generic_variant_name, get_line_columns_by_span,
             get_src_code_by_span, known_data_to_type, monomorphize, wrap_validator_condition,
             CodeGenFunction,
         },
-    }, line_numbers::LineNumbers, plutus_version::PlutusVersion, tipo::{
+    },
+    line_numbers::LineNumbers,
+    plutus_version::PlutusVersion,
+    tipo::{
         check_replaceable_opaque_type, convert_opaque_type, find_and_replace_generics,
         get_arg_type_name, get_generic_id_and_type, lookup_data_type_by_tipo,
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
         ValueConstructorVariant,
-    }, IdGenerator
+    },
+    IdGenerator,
 };
 use builder::{
     introduce_name, introduce_pattern, pop_pattern, softcast_data_to_type_otherwise,
@@ -80,7 +88,6 @@ pub struct CodeGenerator<'a> {
     interner: AirInterner,
     id_gen: IdGenerator,
     coverage_collector: Option<Rc<RefCell<CoverageCollector>>>,
-    // coverage_collector: Option<&'a mut CoverageCollector>
 }
 
 impl<'a> CodeGenerator<'a> {
@@ -88,6 +95,7 @@ impl<'a> CodeGenerator<'a> {
         &self.data_types
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         plutus_version: PlutusVersion,
         functions: IndexMap<&'a FunctionAccessKey, &'a TypedFunction>,
@@ -96,7 +104,7 @@ impl<'a> CodeGenerator<'a> {
         module_types: IndexMap<&'a str, &'a TypeInfo>,
         module_src: IndexMap<&'a str, &'a (String, LineNumbers)>,
         tracing: Tracing,
-        coverage_collector: Option<Rc<RefCell<CoverageCollector>>>
+        coverage_collector: Option<Rc<RefCell<CoverageCollector>>>,
     ) -> Self {
         CodeGenerator {
             plutus_version,
@@ -112,7 +120,7 @@ impl<'a> CodeGenerator<'a> {
             cyclic_functions: IndexMap::new(),
             interner: AirInterner::new(),
             id_gen: IdGenerator::new(),
-            coverage_collector: coverage_collector,
+            coverage_collector,
         }
     }
 
@@ -238,47 +246,46 @@ impl<'a> CodeGenerator<'a> {
     ) -> AirTree {
         if matches!(self.tracing, TraceLevel::Coverage) {
             // Get line numbers from module_src, similar to get_line_columns_by_span
-            let (_, lines) = self.module_src
+            let (_, lines) = self
+                .module_src
                 .get(module_name)
                 .unwrap_or_else(|| panic!("Missing module {module_name}"));
 
             // Convert spans to line numbers
-            let start_line = lines.line_number(location.start)
+            let start_line = lines
+                .line_number(location.start)
                 .expect("Invalid start location");
-            let end_line = lines.line_number(location.end)
+            let end_line = lines
+                .line_number(location.end)
                 .expect("Invalid end location");
             // First, format the message and record the trace
-            let msg = format!("COVERAGE:{}:{}:{}:{}",
-                module_name,
-                start_line,
-                end_line,
-                context
+            let msg = format!(
+                "COVERAGE:{}:{}:{}:{}",
+                module_name, start_line, end_line, context
             );
 
             // Do the RefCell operations in a separate scope so the borrow is dropped
             {
-                let collector = self.coverage_collector.as_ref()
+                let collector = self
+                    .coverage_collector
+                    .as_ref()
                     .expect("Coverage collector must be Some when coverage tracing is enabled");
                 let mut collector_guard = collector.borrow_mut();
                 collector_guard.record_potential_trace(module_name, start_line, end_line);
             }
-            
-            let trace = AirTree::trace(
-                AirTree::string(&msg),
-                Type::void(),
-                AirTree::void()
-            );
-            
+
+            let trace = AirTree::trace(AirTree::string(&msg), Type::void(), AirTree::void());
+
             AirTree::Let {
                 name: "__trace".to_string(),
                 value: Box::new(trace),
-                then: Box::new(tree)
+                then: Box::new(tree),
             }
         } else {
             tree
         }
-    } 
-    
+    }
+
     // Add coverage traces to various expression types
     fn build_with_coverage(
         &mut self,
@@ -288,12 +295,7 @@ impl<'a> CodeGenerator<'a> {
         trace_context: &str,
     ) -> AirTree {
         let result = self.build(expr, module_name, context);
-        self.maybe_add_coverage_trace(
-            result,
-            expr.location(),
-            module_name,
-            trace_context,
-        )
+        self.maybe_add_coverage_trace(result, expr.location(), module_name, trace_context)
     }
 
     fn build(
@@ -301,7 +303,6 @@ impl<'a> CodeGenerator<'a> {
         body: &TypedExpr,
         module_build_name: &str,
         context: &[TypedExpr],
-        // coverage_collector: Option<&mut CoverageCollector>
     ) -> AirTree {
         if !context.is_empty() {
             let TypedExpr::Assignment {
@@ -327,9 +328,7 @@ impl<'a> CodeGenerator<'a> {
                     (TraceLevel::Verbose, _) => {
                         get_src_code_by_span(module_build_name, location, &self.module_src)
                     }
-                    (TraceLevel::Coverage, _) => {
-                        "".to_string()
-                    }
+                    (TraceLevel::Coverage, _) => "".to_string(),
                 };
 
                 let msg_func_name = msg.split_whitespace().join("");
@@ -392,7 +391,7 @@ impl<'a> CodeGenerator<'a> {
                             dangling_expressions,
                             "sequence",
                         );
-                        
+
                         // Add coverage traces between expressions
                         if !dangling_expressions.is_empty() {
                             result = self.maybe_add_coverage_trace(
@@ -402,7 +401,7 @@ impl<'a> CodeGenerator<'a> {
                                 "sequence_step",
                             );
                         }
-                        
+
                         result
                     } else {
                         self.build(expr, module_build_name, dangling_expressions)

@@ -5,7 +5,16 @@ mod test {
         utils,
     };
     use aiken_lang::{
-        ast::{DataTypeKey, Definition, ModuleKind, TraceLevel, Tracing, TypedDataType}, builtins, expr::UntypedExpr, format::Formatter, gen_uplc::CodeGenerator, line_numbers::LineNumbers, parser::{self, extra::ModuleExtra}, plutus_version::PlutusVersion, test_framework::*, IdGenerator
+        ast::{DataTypeKey, Definition, ModuleKind, TraceLevel, Tracing, TypedDataType},
+        builtins,
+        expr::UntypedExpr,
+        format::Formatter,
+        gen_uplc::CodeGenerator,
+        line_numbers::LineNumbers,
+        parser::{self, extra::ModuleExtra},
+        plutus_version::PlutusVersion,
+        test_framework::*,
+        IdGenerator,
     };
     use indexmap::IndexMap;
     use indoc::indoc;
@@ -84,7 +93,7 @@ mod test {
             utils::indexmap::as_str_ref_values(&module_types),
             utils::indexmap::as_str_ref_values(&module_sources),
             Tracing::All(TraceLevel::Verbose),
-            None
+            None,
         );
 
         (
@@ -220,7 +229,7 @@ mod test {
             Prng::from_seed(42),
             &mut labels,
             plutus_version,
-            false
+            false,
         ) {
             Ok((_, Some(counterexample))) => counterexample,
             _ => panic!("expected property to fail but it didn't."),
@@ -268,7 +277,7 @@ mod test {
             42,
             PropertyTest::DEFAULT_MAX_SUCCESS,
             &PlutusVersion::default(),
-            false
+            false,
         ) {
             TestResult::UnitTestResult(..) => unreachable!("property returned unit-test result ?!"),
             TestResult::PropertyTestResult(result) => {
