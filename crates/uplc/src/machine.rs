@@ -42,11 +42,15 @@ enum Context {
     NoFrame,
 }
 
+pub const TERM_COUNT: usize = 9;
+pub const BUILTIN_COUNT: usize = 87;
+
 pub struct Machine {
     costs: CostModel,
     pub ex_budget: ExBudget,
     slippage: u32,
     unbudgeted_steps: [u32; 10],
+    pub spend_counter: Option<[i64; (TERM_COUNT + BUILTIN_COUNT) * 2]>,
     pub logs: Vec<String>,
     version: Language,
 }
@@ -63,6 +67,24 @@ impl Machine {
             ex_budget: initial_budget,
             slippage,
             unbudgeted_steps: [0; 10],
+            spend_counter: None,
+            logs: vec![],
+            version,
+        }
+    }
+
+    pub fn new_debug(
+        version: Language,
+        costs: CostModel,
+        initial_budget: ExBudget,
+        slippage: u32,
+    ) -> Machine {
+        Machine {
+            costs,
+            ex_budget: initial_budget,
+            slippage,
+            unbudgeted_steps: [0; 10],
+            spend_counter: Some([0; (TERM_COUNT + BUILTIN_COUNT) * 2]),
             logs: vec![],
             version,
         }
@@ -324,6 +346,13 @@ impl Machine {
 
         self.spend_budget(cost)?;
 
+        if let Some(counter) = &mut self.spend_counter {
+            let i = (runtime.fun as usize + TERM_COUNT) * 2;
+
+            counter[i] += cost.mem;
+            counter[i + 1] += cost.cpu;
+        }
+
         runtime.call(&self.version, &mut self.logs)
     }
 
@@ -355,6 +384,11 @@ impl Machine {
             self.spend_budget(unspent_step_budget)?;
 
             self.unbudgeted_steps[i] = 0;
+
+            if let Some(counter) = &mut self.spend_counter {
+                counter[i * 2] += unspent_step_budget.mem;
+                counter[i * 2 + 1] += unspent_step_budget.cpu;
+            }
         }
 
         self.unbudgeted_steps[9] = 0;

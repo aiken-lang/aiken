@@ -7,6 +7,7 @@ pub struct EvalResult {
     remaining_budget: ExBudget,
     initial_budget: ExBudget,
     logs: Vec<String>,
+    debug_cost: Option<Vec<i64>>,
 }
 
 impl EvalResult {
@@ -15,12 +16,14 @@ impl EvalResult {
         remaining_budget: ExBudget,
         initial_budget: ExBudget,
         logs: Vec<String>,
+        debug_cost: Option<Vec<i64>>,
     ) -> EvalResult {
         EvalResult {
             result,
             remaining_budget,
             initial_budget,
             logs,
+            debug_cost,
         }
     }
 
@@ -45,6 +48,10 @@ impl EvalResult {
                   if matches!(con.as_ref(), Constant::Bool(true)) || matches!(con.as_ref(), Constant::Unit)
                 )
         }
+    }
+
+    pub fn debug_cost(&self) -> Option<Vec<i64>> {
+        self.debug_cost.clone()
     }
 
     #[allow(clippy::result_unit_err)]

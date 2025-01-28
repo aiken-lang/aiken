@@ -844,7 +844,7 @@ impl From<Term<FakeNamedDeBruijn>> for Term<NamedDeBruijn> {
 impl Program<NamedDeBruijn> {
     pub fn eval(self, initial_budget: ExBudget) -> EvalResult {
         let mut machine = Machine::new(
-            Language::PlutusV2,
+            Language::PlutusV3,
             CostModel::default(),
             initial_budget,
             200,
@@ -852,7 +852,13 @@ impl Program<NamedDeBruijn> {
 
         let term = machine.run(self.term);
 
-        EvalResult::new(term, machine.ex_budget, initial_budget, machine.logs)
+        EvalResult::new(
+            term,
+            machine.ex_budget,
+            initial_budget,
+            machine.logs,
+            machine.spend_counter.map(|i| i.into()),
+        )
     }
 
     /// Evaluate a Program as a specific PlutusVersion
@@ -861,7 +867,13 @@ impl Program<NamedDeBruijn> {
 
         let term = machine.run(self.term);
 
-        EvalResult::new(term, machine.ex_budget, initial_budget, machine.logs)
+        EvalResult::new(
+            term,
+            machine.ex_budget,
+            initial_budget,
+            machine.logs,
+            machine.spend_counter.map(|i| i.into()),
+        )
     }
 
     pub fn eval_as(
@@ -881,7 +893,32 @@ impl Program<NamedDeBruijn> {
 
         let term = machine.run(self.term);
 
-        EvalResult::new(term, machine.ex_budget, budget, machine.logs)
+        EvalResult::new(
+            term,
+            machine.ex_budget,
+            budget,
+            machine.logs,
+            machine.spend_counter.map(|i| i.into()),
+        )
+    }
+
+    pub fn eval_debug(self, initial_budget: ExBudget, version: &Language) -> EvalResult {
+        let mut machine = Machine::new_debug(
+            version.clone(),
+            CostModel::default(),
+            initial_budget,
+            200, //slippage
+        );
+
+        let term = machine.run(self.term);
+
+        EvalResult::new(
+            term,
+            machine.ex_budget,
+            initial_budget,
+            machine.logs,
+            machine.spend_counter.map(|i| i.into()),
+        )
     }
 }
 

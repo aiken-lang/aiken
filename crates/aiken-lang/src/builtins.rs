@@ -12,9 +12,11 @@ use crate::{
     },
     IdGenerator,
 };
+
 use indexmap::IndexMap;
 use std::{collections::HashMap, rc::Rc};
 use strum::IntoEnumIterator;
+
 use uplc::{
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER},
     builtins::DefaultFunction,
