@@ -4,6 +4,8 @@ use num_traits::Signed;
 use pallas_primitives::conway::Language;
 use std::collections::HashMap;
 
+use strum::{Display, EnumIter};
+
 macro_rules! hashmap {
     // map-like
     ($($k:expr => $v:expr),* $(,)?) => {{
@@ -5345,6 +5347,7 @@ pub struct TwoArgumentsQuadraticFunction {
 }
 
 #[repr(u8)]
+#[derive(Debug, EnumIter, Display, Clone, Copy)]
 pub enum StepKind {
     Constant = 0,
     Var = 1,

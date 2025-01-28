@@ -61,9 +61,6 @@ pallas-traverse = "0.31.0"
 [profile.dev.package.insta]
 opt-level = 3
 
-[profile.dev.package.similar]
-opt-level = 3
-
 # The profile that 'cargo dist' will build with
 [profile.dist]
 inherits = "release"
