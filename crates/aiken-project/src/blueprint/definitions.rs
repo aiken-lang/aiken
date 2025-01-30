@@ -1,3 +1,10 @@
+use crate::{
+    blueprint::{
+        parameter::Parameter,
+        schema::{Data, Declaration, Items},
+    },
+    Annotated, Schema,
+};
 use aiken_lang::tipo::{pretty::resolve_alias, Type, TypeAliasAnnotation, TypeVar};
 use itertools::Itertools;
 use serde::{
@@ -6,7 +13,7 @@ use serde::{
     ser::{Serialize, SerializeStruct, Serializer},
 };
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fmt::{self, Display},
     ops::Deref,
     rc::Rc,
@@ -85,6 +92,152 @@ impl<T> Definitions<T> {
         }
 
         Ok(reference)
+    }
+}
+
+impl Definitions<Annotated<Schema>> {
+    /// Remove orphan definitions. Such definitions can exist due to List of pairs being
+    /// transformed to Maps. As a consequence, we may generate temporary Pair definitions
+    /// which needs to get cleaned up later.
+    ///
+    /// Initially, we would clean those Pair definitions right-away, but this would cause
+    /// Pair definitions to be missing in some legit cases when the Pair is also used as a
+    /// standalone type.
+    pub fn prune_orphan_pairs(&mut self, parameters: Vec<&Parameter>) {
+        fn traverse_schema(
+            src: Reference,
+            schema: &Schema,
+            usage: &mut BTreeMap<Reference, BTreeSet<Reference>>,
+        ) {
+            match schema {
+                Schema::Unit
+                | Schema::Boolean
+                | Schema::Integer
+                | Schema::Bytes
+                | Schema::String => (),
+                Schema::Pair(left, right) => {
+                    mark(src.clone(), left, usage, traverse_schema);
+                    mark(src, right, usage, traverse_schema);
+                }
+                Schema::List(Items::One(item)) => {
+                    mark(src, item, usage, traverse_schema);
+                }
+                Schema::List(Items::Many(items)) => {
+                    items.iter().for_each(|item| {
+                        mark(src.clone(), item, usage, traverse_schema);
+                    });
+                }
+                Schema::Data(data) => traverse_data(src, data, usage),
+            }
+        }
+
+        fn traverse_data(
+            src: Reference,
+            data: &Data,
+            usage: &mut BTreeMap<Reference, BTreeSet<Reference>>,
+        ) {
+            match data {
+                Data::Opaque | Data::Integer | Data::Bytes => (),
+                Data::List(Items::One(item)) => {
+                    mark(src, item, usage, traverse_data);
+                }
+                Data::List(Items::Many(items)) => {
+                    items.iter().for_each(|item| {
+                        mark(src.clone(), item, usage, traverse_data);
+                    });
+                }
+                Data::Map(keys, values) => {
+                    mark(src.clone(), keys, usage, traverse_data);
+                    mark(src, values, usage, traverse_data);
+                }
+                Data::AnyOf(items) => {
+                    items.iter().for_each(|item| {
+                        item.annotated.fields.iter().for_each(|field| {
+                            mark(src.clone(), &field.annotated, usage, traverse_data);
+                        })
+                    });
+                }
+            }
+        }
+
+        /// A mutually recursive function which works with either traverse_data or traverse_schema;
+        /// it is meant to peel the 'Declaration' and keep traversing if needed (when inline).
+        fn mark<F, T>(
+            src: Reference,
+            declaration: &Declaration<T>,
+            usage: &mut BTreeMap<Reference, BTreeSet<Reference>>,
+            mut traverse: F,
+        ) where
+            F: FnMut(Reference, &T, &mut BTreeMap<Reference, BTreeSet<Reference>>),
+        {
+            match declaration {
+                Declaration::Referenced(reference) => {
+                    if let Some(dependencies) = usage.get_mut(reference) {
+                        dependencies.insert(src);
+                    }
+                }
+                Declaration::Inline(ref schema) => traverse(src, schema, usage),
+            }
+        }
+
+        let mut usage: BTreeMap<Reference, BTreeSet<Reference>> = BTreeMap::new();
+
+        // 1. List all Pairs definitions
+        for (src, annotated) in self.inner.iter() {
+            if let Some(schema) = annotated.as_ref().map(|entry| &entry.annotated) {
+                if matches!(schema, Schema::Pair(_, _)) {
+                    usage.insert(Reference::new(src), BTreeSet::new());
+                }
+            }
+        }
+
+        // 2. Mark those used in other definitions
+        for (src, annotated) in self.inner.iter() {
+            if let Some(schema) = annotated.as_ref().map(|entry| &entry.annotated) {
+                traverse_schema(Reference::new(src), schema, &mut usage)
+            }
+        }
+
+        // 3. Mark also pairs definitions used in parameters / datums / redeemers
+        for (ix, param) in parameters.iter().enumerate() {
+            mark(
+                // NOTE: The name isn't important, so long as it doesn't clash with other typical
+                // references. If a definition is used in either of the parameter, it'll appear in
+                // its dependencies and won't ever be removed because parameters are considered
+                // always necessary.
+                Reference::new(&format!("__param^{ix}")),
+                &param.schema,
+                &mut usage,
+                traverse_schema,
+            );
+        }
+
+        // 4. Repeatedly remove pairs definitions that aren't used. We need doing this repeatedly
+        //    because a Pair definition may only be used by an unused one; so as we prune the first
+        //    unused definitions, new ones may become unused.
+        let mut last_len = usage.len();
+        loop {
+            let mut unused = None;
+            for (k, v) in usage.iter() {
+                if v.is_empty() {
+                    unused = Some(k.clone());
+                }
+            }
+
+            if let Some(k) = unused {
+                usage.remove(&k);
+                self.inner.remove(k.as_key().as_str());
+                for (_, v) in usage.iter_mut() {
+                    v.remove(&k);
+                }
+            }
+
+            if usage.len() == last_len {
+                break;
+            } else {
+                last_len = usage.len();
+            }
+        }
     }
 }
 
