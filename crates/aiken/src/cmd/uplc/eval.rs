@@ -1,9 +1,17 @@
 use miette::IntoDiagnostic;
+use pallas_primitives::conway::Language;
 use serde_json::json;
 use std::{path::PathBuf, process};
+
+use strum::IntoEnumIterator;
+
 use uplc::{
     ast::{FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term},
-    machine::cost_model::ExBudget,
+    builtins::DefaultFunction,
+    machine::{
+        cost_model::{ExBudget, StepKind},
+        TERM_COUNT,
+    },
     parser,
 };
 
@@ -18,6 +26,9 @@ pub struct Args {
     #[clap(short, long)]
     cbor: bool,
 
+    #[clap(short, long, default_value_t = false)]
+    debug: bool,
+
     /// Arguments to pass to the UPLC program
     args: Vec<String>,
 }
@@ -27,6 +38,7 @@ pub fn exec(
         script,
         flat,
         args,
+        debug,
         cbor,
     }: Args,
 ) -> miette::Result<()> {
@@ -65,7 +77,11 @@ pub fn exec(
 
     let program = Program::<NamedDeBruijn>::try_from(program).into_diagnostic()?;
 
-    let mut eval_result = program.eval(budget);
+    let mut eval_result = if debug {
+        program.eval_debug(ExBudget::default(), &Language::PlutusV3)
+    } else {
+        program.eval(budget)
+    };
 
     let cost = eval_result.cost();
     let logs = eval_result.logs();
@@ -84,6 +100,43 @@ pub fn exec(
                 "{}",
                 serde_json::to_string_pretty(&output).into_diagnostic()?
             );
+
+            if debug {
+                println!("---------------DEBUG------------------");
+                let costs = eval_result.debug_cost().unwrap();
+
+                let mut output = json!([]);
+                for step in StepKind::iter() {
+                    if matches!(step, StepKind::StartUp) {
+                        continue;
+                    }
+                    let i = step as usize * 2;
+
+                    if costs[i + 1] != 0 || costs[i] != 0 {
+                        output.as_array_mut().unwrap().push(json!({
+                            "step": step.to_string(),
+                            "cpu": costs[i+1],
+                            "mem": costs[i],
+                        }));
+                    }
+                }
+
+                for fun in DefaultFunction::iter() {
+                    let i = (fun as usize + TERM_COUNT) * 2;
+                    if costs[i + 1] != 0 || costs[i] != 0 {
+                        output.as_array_mut().unwrap().push(json!({
+                            "fun": fun.to_string(),
+                            "cpu": costs[i+1],
+                            "mem": costs[i],
+                        }));
+                    }
+                }
+
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&output).into_diagnostic()?
+                );
+            }
 
             Ok(())
         }

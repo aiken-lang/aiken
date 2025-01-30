@@ -1,7 +1,7 @@
 use crate::ast::Term;
 use pallas_codec::flat::de;
 use std::{fmt::Display, rc::Rc, str::FromStr};
-use strum_macros::EnumIter;
+use strum::EnumIter;
 
 /// All the possible builtin functions in Untyped Plutus Core.
 #[repr(u8)]
