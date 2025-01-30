@@ -719,7 +719,14 @@ pub fn get_arg_type_name(tipo: &Type) -> String {
             let inner_args = elems.iter().map(|arg| get_arg_type_name(arg)).collect_vec();
             inner_args.join("_")
         }
-        _ => unreachable!(),
+        Type::Pair { fst, snd, .. } => {
+            let inner_args = [fst, snd]
+                .iter()
+                .map(|arg| get_arg_type_name(arg))
+                .collect_vec();
+            inner_args.join("_")
+        }
+        _ => unreachable!("WTF {:#?}", tipo),
     }
 }
 
