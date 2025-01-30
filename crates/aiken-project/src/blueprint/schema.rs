@@ -346,8 +346,6 @@ impl Annotated<Schema> {
                                     annotated: Schema::Pair(left, right),
                                     ..
                                 }) => {
-                                    definitions.remove(&generic);
-
                                     let left = left.map(|inner| match inner {
                                         Schema::Data(data) => data,
                                         _ => panic!("impossible: left inhabitant of pair isn't Data but: {inner:#?}"),

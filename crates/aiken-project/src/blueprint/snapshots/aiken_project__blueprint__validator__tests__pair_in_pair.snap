@@ -1,0 +1,72 @@
+---
+source: crates/aiken-project/src/blueprint/validator.rs
+description: "Code:\n\npub type MyPair =\n  Pair<Int, InnerPair>\n\npub type InnerPair =\n    Pair<Int, Bool>\n\nvalidator placeholder {\n  spend(_datum: Option<Void>, _redeemer: List<MyPair>, _utxo: Data, _self: Data,) {\n    True\n  }\n}\n"
+---
+{
+  "title": "test_module.placeholder.spend",
+  "datum": {
+    "title": "_datum",
+    "schema": {
+      "$ref": "#/definitions/Void"
+    }
+  },
+  "redeemer": {
+    "title": "_redeemer",
+    "schema": {
+      "$ref": "#/definitions/List$MyPair"
+    }
+  },
+  "compiledCode": "<redacted>",
+  "hash": "<redacted>",
+  "definitions": {
+    "Bool": {
+      "title": "Bool",
+      "anyOf": [
+        {
+          "title": "False",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "True",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "InnerPair": {
+      "title": "InnerPair",
+      "dataType": "#pair",
+      "left": {
+        "$ref": "#/definitions/Int"
+      },
+      "right": {
+        "$ref": "#/definitions/Bool"
+      }
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "List$MyPair": {
+      "dataType": "map",
+      "keys": {
+        "$ref": "#/definitions/Int"
+      },
+      "values": {
+        "$ref": "#/definitions/InnerPair"
+      }
+    },
+    "Void": {
+      "title": "Unit",
+      "anyOf": [
+        {
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        }
+      ]
+    }
+  }
+}
