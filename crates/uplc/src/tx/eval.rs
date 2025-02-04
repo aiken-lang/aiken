@@ -13,7 +13,10 @@ use crate::{
     PlutusData,
 };
 use pallas_codec::utils::Bytes;
-use pallas_primitives::conway::{CostModel, CostModels, ExUnits, Language, MintedTx, Redeemer};
+use pallas_primitives::{
+    conway::{CostModel, CostModels, ExUnits, Language, MintedTx, Redeemer},
+    KeyValuePairs, MaybeIndefArray,
+};
 
 pub fn eval_redeemer(
     tx: &MintedTx,
@@ -37,6 +40,9 @@ pub fn eval_redeemer(
             .into_script_context(redeemer, datum.as_ref())
             .expect("couldn't create script context from transaction?");
 
+        let datum = datum.map(update_maybe_indef_arrays);
+        let script_context_pd = update_maybe_indef_arrays(script_context.clone().to_plutus_data());
+
         let program = match script_context {
             ScriptContext::V1V2 { .. } => if let Some(datum) = datum {
                 program.apply_data(datum)
@@ -44,9 +50,9 @@ pub fn eval_redeemer(
                 program
             }
             .apply_data(redeemer.data.clone())
-            .apply_data(script_context.to_plutus_data()),
+            .apply_data(script_context_pd),
 
-            ScriptContext::V3 { .. } => program.apply_data(script_context.to_plutus_data()),
+            ScriptContext::V3 { .. } => program.apply_data(script_context_pd),
         };
 
         let mut eval_result = if let Some(costs) = cost_mdl_opt {
@@ -141,4 +147,65 @@ pub fn eval_redeemer(
         index: redeemer.index,
         err: Box::new(err),
     })
+}
+
+pub fn update_maybe_indef_arrays(data: PlutusData) -> PlutusData {
+    match data {
+        PlutusData::Constr(mut constr) => {
+            // Update the fields array based on its contents
+            constr.fields = match constr.fields {
+                MaybeIndefArray::Def(vec) | MaybeIndefArray::Indef(vec) => {
+                    if vec.is_empty() {
+                        MaybeIndefArray::Def(vec)
+                    } else {
+                        MaybeIndefArray::Indef(
+                            vec.into_iter().map(update_maybe_indef_arrays).collect(),
+                        )
+                    }
+                }
+            };
+            PlutusData::Constr(constr)
+        }
+        PlutusData::Map(mut map) => {
+            // Recursively process key-value pairs in the map
+            match map {
+                KeyValuePairs::Def(vec) => {
+                    map = KeyValuePairs::Def(
+                        vec.into_iter()
+                            .map(|(k, v)| {
+                                (update_maybe_indef_arrays(k), update_maybe_indef_arrays(v))
+                            })
+                            .collect(),
+                    );
+                }
+                KeyValuePairs::Indef(vec) => {
+                    map = KeyValuePairs::Indef(
+                        vec.into_iter()
+                            .map(|(k, v)| {
+                                (update_maybe_indef_arrays(k), update_maybe_indef_arrays(v))
+                            })
+                            .collect(),
+                    );
+                }
+            }
+            PlutusData::Map(map)
+        }
+        PlutusData::Array(array) => {
+            // Update the array kind based on its contents
+            let updated_array = match array {
+                MaybeIndefArray::Def(vec) | MaybeIndefArray::Indef(vec) => {
+                    if vec.is_empty() {
+                        MaybeIndefArray::Def(vec)
+                    } else {
+                        MaybeIndefArray::Indef(
+                            vec.into_iter().map(update_maybe_indef_arrays).collect(),
+                        )
+                    }
+                }
+            };
+            PlutusData::Array(updated_array)
+        }
+        PlutusData::BigInt(bigint) => PlutusData::BigInt(bigint),
+        PlutusData::BoundedBytes(bytes) => PlutusData::BoundedBytes(bytes),
+    }
 }
