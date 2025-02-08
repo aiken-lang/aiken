@@ -685,6 +685,7 @@ mod tests {
             }),
             "Identity<fn(Bool) -> Bool>",
         );
+        assert_string!(Type::sampler(Type::int()), "Sampler<Int>");
     }
 
     #[test]
