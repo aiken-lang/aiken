@@ -30,34 +30,6 @@
 - **aiken-lang**: preserve holes discard name in function captures (see [#1080](https://github.com/aiken-lang/aiken/issues/1080)). @KtorZ
 - **uplc**: Added deserialization match for the new builtin indices.
 
-## v1.1.11 - UNRELEASED
-
-### Added
-
-- **aiken**: support for `bench` keyword to define benchmarks. @Riley-Kilgore
-
-## v1.1.10 - 2025-01-21
-
-### Added
-
-- **aiken-project**: `export` output now supports the functions `return_type`. @rvcas
-- **aiken-lang**: `write_bits` can now be used from aiken/builtins. @Microproofs
-
-
-### Changed
-
-- **aiken-project**: The `aiken.toml` file no longer supports `v1` and `v2` for the plutus version field. @rvcas
-- **aiken-project**: `Error::TomlLoading` now looks much better - [see](https://github.com/aiken-lang/aiken/issues/1032#issuecomment-2562122101). @rvcas
-- **aiken-lang**: 10-20% optimization improvements via case-constr, rearranging function definitions (while maintaining dependency ordering),
-                  and allowing inlining in if_then_else_error cases which preserve the same error semantics for a program. @Microproofs
-
-### Fixed
-
-- **aiken**: panic error when using `aiken uplc decode` on cbor encoded flat bytes. @rvcas
-- **aiken-lang**: comment formatting in pipelines leading to confusion. @rvcas
-- **aiken-lang**: preserve holes discard name in function captures (see [#1080](https://github.com/aiken-lang/aiken/issues/1080)). @KtorZ
-- **uplc**: Added deserialization match for the new builtin indices.
-
 ## v1.1.9 - 2024-12-13
 
 ### Added
