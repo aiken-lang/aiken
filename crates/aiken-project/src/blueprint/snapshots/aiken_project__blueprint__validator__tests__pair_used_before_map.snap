@@ -1,0 +1,77 @@
+---
+source: crates/aiken-project/src/blueprint/validator.rs
+description: "Code:\n\npub type MyPair =\n  Pair<Int, Int>\n\npub type MyDatum {\n  pair: MyPair,\n  pairs: List<MyPair>,\n}\n\nvalidator placeholder {\n  spend(_datum: Option<MyDatum>, _redeemer: Void, _utxo: Data, _self: Data,) {\n    True\n  }\n}\n"
+---
+{
+  "title": "test_module.placeholder.spend",
+  "datum": {
+    "title": "_datum",
+    "schema": {
+      "$ref": "#/definitions/test_module~1MyDatum"
+    }
+  },
+  "redeemer": {
+    "title": "_redeemer",
+    "schema": {
+      "$ref": "#/definitions/Void"
+    }
+  },
+  "compiledCode": "<redacted>",
+  "hash": "<redacted>",
+  "definitions": {
+    "Int": {
+      "dataType": "integer"
+    },
+    "List$MyPair": {
+      "dataType": "map",
+      "keys": {
+        "$ref": "#/definitions/Int"
+      },
+      "values": {
+        "$ref": "#/definitions/Int"
+      }
+    },
+    "MyPair": {
+      "title": "MyPair",
+      "dataType": "list",
+      "items": [
+        {
+          "$ref": "#/definitions/Int"
+        },
+        {
+          "$ref": "#/definitions/Int"
+        }
+      ]
+    },
+    "Void": {
+      "title": "Unit",
+      "anyOf": [
+        {
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        }
+      ]
+    },
+    "test_module/MyDatum": {
+      "title": "MyDatum",
+      "anyOf": [
+        {
+          "title": "MyDatum",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "pair",
+              "$ref": "#/definitions/MyPair"
+            },
+            {
+              "title": "pairs",
+              "$ref": "#/definitions/List$MyPair"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

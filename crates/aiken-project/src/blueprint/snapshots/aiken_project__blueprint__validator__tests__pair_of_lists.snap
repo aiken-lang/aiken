@@ -1,0 +1,65 @@
+---
+source: crates/aiken-project/src/blueprint/validator.rs
+description: "Code:\n\npub type MyPair =\n  Pair<List<Int>, Bool>\n\nvalidator placeholder {\n  spend(_datum: Option<Data>, _redeemer: MyPair, _utxo: Data, _self: Data,) {\n    True\n  }\n}\n"
+---
+{
+  "title": "test_module.placeholder.spend",
+  "datum": {
+    "title": "_datum",
+    "schema": {
+      "$ref": "#/definitions/Data"
+    }
+  },
+  "redeemer": {
+    "title": "_redeemer",
+    "schema": {
+      "$ref": "#/definitions/MyPair"
+    }
+  },
+  "compiledCode": "<redacted>",
+  "hash": "<redacted>",
+  "definitions": {
+    "Bool": {
+      "title": "Bool",
+      "anyOf": [
+        {
+          "title": "False",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "True",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "List$Int": {
+      "dataType": "list",
+      "items": {
+        "$ref": "#/definitions/Int"
+      }
+    },
+    "MyPair": {
+      "title": "MyPair",
+      "dataType": "list",
+      "items": [
+        {
+          "$ref": "#/definitions/List$Int"
+        },
+        {
+          "$ref": "#/definitions/Bool"
+        }
+      ]
+    }
+  }
+}

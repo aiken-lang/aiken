@@ -6,6 +6,7 @@
 
 - **aiken**: support for `bench` keyword to define benchmarks. @Riley-Kilgore
 - **aiken-lang**: The compiler now raises a warning when attempting to destructure a record constructor without using named fields. See [#1084](https://github.com/aiken-lang/aiken/issues/1084). @KtorZ
+- **aiken-lang**: Fix blueprint schema definitions related to pairs (no longer omit (sometimes) Pairs definitions, and generate them as data List). See [#1086](https://github.com/aiken-lang/aiken/issues/1086) and [#970](https://github.com/aiken-lang/aiken/issues/970). @KtorZ
 
 ## v1.1.10 - 2025-01-21
 

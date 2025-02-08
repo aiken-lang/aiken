@@ -78,13 +78,15 @@ description: "Code:\n\npub type Asset = (ByteArray, Int)\n\npub type POSIXTime =
     },
     "Pair$POSIXTime_Bool": {
       "title": "Pair",
-      "dataType": "#pair",
-      "left": {
-        "$ref": "#/definitions/POSIXTime"
-      },
-      "right": {
-        "$ref": "#/definitions/Bool"
-      }
+      "dataType": "list",
+      "items": [
+        {
+          "$ref": "#/definitions/POSIXTime"
+        },
+        {
+          "$ref": "#/definitions/Bool"
+        }
+      ]
     },
     "Pairs$Asset_POSIXTime": {
       "title": "Pairs<a, POSIXTime>",
