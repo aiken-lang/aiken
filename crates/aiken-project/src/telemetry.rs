@@ -135,7 +135,7 @@ pub(crate) fn find_max_execution_units<T>(xs: &[TestResult<T, T>]) -> (usize, us
                     }
                 }
                 TestResult::BenchmarkResult(..) => {
-                    unreachable!("property returned benchmark result ?!")
+                    unreachable!("unexpected benchmark found amongst test results.")
                 }
             });
 

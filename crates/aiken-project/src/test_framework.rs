@@ -101,6 +101,7 @@ mod test {
                 test.to_owned(),
                 module_name.to_string(),
                 PathBuf::new(),
+                RunnableKind::Test,
             ),
             data_types,
         )
@@ -245,13 +246,12 @@ mod test {
             }
         "#});
 
-        assert!(prop
-            .run::<()>(
-                42,
-                PropertyTest::DEFAULT_MAX_SUCCESS,
-                &PlutusVersion::default()
-            )
-            .is_success());
+        assert!(TestResult::PropertyTestResult::<(), _>(prop.run(
+            42,
+            PropertyTest::DEFAULT_MAX_SUCCESS,
+            &PlutusVersion::default()
+        ))
+        .is_success());
     }
 
     #[test]
@@ -273,25 +273,20 @@ mod test {
             }
         "#});
 
-        match prop.run::<()>(
+        let result = prop.run(
             42,
             PropertyTest::DEFAULT_MAX_SUCCESS,
             &PlutusVersion::default(),
-        ) {
-            TestResult::BenchmarkResult(..) | TestResult::UnitTestResult(..) => {
-                unreachable!("property returned non-property result ?!")
-            }
-            TestResult::PropertyTestResult(result) => {
-                assert!(
-                    result
-                        .labels
-                        .iter()
-                        .eq(vec![(&"head".to_string(), &53), (&"tail".to_string(), &47)]),
-                    "labels: {:#?}",
-                    result.labels
-                )
-            }
-        }
+        );
+
+        assert!(
+            result
+                .labels
+                .iter()
+                .eq(vec![(&"head".to_string(), &53), (&"tail".to_string(), &47)]),
+            "labels: {:#?}",
+            result.labels
+        );
     }
 
     #[test]

@@ -30,10 +30,10 @@ pub enum CodeGenMode {
     },
     Build(bool),
     Benchmark {
-        match_tests: Option<Vec<String>>,
+        match_benchmarks: Option<Vec<String>>,
         exact_match: bool,
         seed: u32,
-        times_to_run: usize,
+        iterations: usize,
     },
     NoOp,
 }

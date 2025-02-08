@@ -47,8 +47,13 @@ impl EventListener for Json {
                             Some(serde_json::json!({
                                 "name": result.bench.name,
                                 "module": result.bench.module,
-                                "memory": result.cost.mem,
-                                "cpu": result.cost.cpu
+                                "measures": result.measures
+                                    .into_iter()
+                                    .map(|measure| serde_json::json!({
+                                        "memory": measure.mem,
+                                        "cpu": measure.cpu
+                                    }))
+                                    .collect::<Vec<_>>()
                             }))
                         } else {
                             None

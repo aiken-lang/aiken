@@ -40,7 +40,7 @@ use aiken_lang::{
     format::{Formatter, MAX_COLUMNS},
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
-    test_framework::{Test, TestResult},
+    test_framework::{RunnableKind, Test, TestResult},
     tipo::{Type, TypeInfo},
     utils, IdGenerator,
 };
@@ -81,12 +81,6 @@ pub struct Checkpoint {
 enum AddModuleBy {
     Source { name: String, code: String },
     Path(PathBuf),
-}
-
-#[derive(Debug, Clone, Copy)]
-enum Runnable {
-    Test,
-    Bench,
 }
 
 pub struct Project<T>
@@ -305,20 +299,20 @@ where
 
     pub fn benchmark(
         &mut self,
-        match_tests: Option<Vec<String>>,
+        match_benchmarks: Option<Vec<String>>,
         exact_match: bool,
         seed: u32,
-        times_to_run: usize,
+        iterations: usize,
         env: Option<String>,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
             tracing: Tracing::silent(),
             env,
             code_gen_mode: CodeGenMode::Benchmark {
-                match_tests,
+                match_benchmarks,
                 exact_match,
                 seed,
-                times_to_run,
+                iterations,
             },
             blueprint_path: self.blueprint_path(None),
         };
@@ -438,7 +432,7 @@ where
                     self.event_listener.handle_event(Event::RunningTests);
                 }
 
-                let tests = self.run_tests(tests, seed, property_max_success);
+                let tests = self.run_runnables(tests, seed, property_max_success);
 
                 self.checks_count = if tests.is_empty() {
                     None
@@ -472,21 +466,25 @@ where
                 }
             }
             CodeGenMode::Benchmark {
-                match_tests,
+                match_benchmarks,
                 exact_match,
                 seed,
-                times_to_run,
+                iterations,
             } => {
                 let verbose = false;
 
-                let tests =
-                    self.collect_benchmarks(verbose, match_tests, exact_match, options.tracing)?;
+                let benchmarks = self.collect_benchmarks(
+                    verbose,
+                    match_benchmarks,
+                    exact_match,
+                    options.tracing,
+                )?;
 
-                if !tests.is_empty() {
+                if !benchmarks.is_empty() {
                     self.event_listener.handle_event(Event::RunningBenchmarks);
                 }
 
-                let benchmarks = self.run_benchmarks(tests, seed, times_to_run);
+                let benchmarks = self.run_runnables(benchmarks, seed, iterations);
 
                 let errors: Vec<Error> = benchmarks
                     .iter()
@@ -962,7 +960,7 @@ where
 
     fn collect_test_items(
         &mut self,
-        kind: Runnable,
+        kind: RunnableKind,
         verbose: bool,
         match_tests: Option<Vec<String>>,
         exact_match: bool,
@@ -1001,8 +999,8 @@ where
 
             for def in checked_module.ast.definitions() {
                 let func = match (kind, def) {
-                    (Runnable::Test, Definition::Test(func)) => Some(func),
-                    (Runnable::Bench, Definition::Benchmark(func)) => Some(func),
+                    (RunnableKind::Test, Definition::Test(func)) => Some(func),
+                    (RunnableKind::Bench, Definition::Benchmark(func)) => Some(func),
                     _ => None,
                 };
 
@@ -1056,20 +1054,13 @@ where
                 })
             }
 
-            tests.push(match kind {
-                Runnable::Test => Test::from_function_definition(
-                    &mut generator,
-                    test.to_owned(),
-                    module_name,
-                    input_path,
-                ),
-                Runnable::Bench => Test::from_benchmark_definition(
-                    &mut generator,
-                    test.to_owned(),
-                    module_name,
-                    input_path,
-                ),
-            });
+            tests.push(Test::from_function_definition(
+                &mut generator,
+                test.to_owned(),
+                module_name,
+                input_path,
+                kind,
+            ));
         }
 
         Ok(tests)
@@ -1082,7 +1073,13 @@ where
         exact_match: bool,
         tracing: Tracing,
     ) -> Result<Vec<Test>, Error> {
-        self.collect_test_items(Runnable::Test, verbose, match_tests, exact_match, tracing)
+        self.collect_test_items(
+            RunnableKind::Test,
+            verbose,
+            match_tests,
+            exact_match,
+            tracing,
+        )
     }
 
     fn collect_benchmarks(
@@ -1092,14 +1089,20 @@ where
         exact_match: bool,
         tracing: Tracing,
     ) -> Result<Vec<Test>, Error> {
-        self.collect_test_items(Runnable::Bench, verbose, match_tests, exact_match, tracing)
+        self.collect_test_items(
+            RunnableKind::Bench,
+            verbose,
+            match_tests,
+            exact_match,
+            tracing,
+        )
     }
 
-    fn run_tests(
+    fn run_runnables(
         &self,
         tests: Vec<Test>,
         seed: u32,
-        property_max_success: usize,
+        max_success: usize,
     ) -> Vec<TestResult<UntypedExpr, UntypedExpr>> {
         use rayon::prelude::*;
 
@@ -1109,44 +1112,7 @@ where
 
         tests
             .into_par_iter()
-            .map(|test| match test {
-                Test::UnitTest(unit_test) => unit_test.run(plutus_version),
-                Test::PropertyTest(property_test) => {
-                    property_test.run(seed, property_max_success, plutus_version)
-                }
-                Test::Benchmark(_) => {
-                    unreachable!("found unexpected benchmark amongst collected tests.")
-                }
-            })
-            .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
-            .into_iter()
-            .map(|test| test.reify(&data_types))
-            .collect()
-    }
-
-    fn run_benchmarks(
-        &self,
-        tests: Vec<Test>,
-        seed: u32,
-        property_max_success: usize,
-    ) -> Vec<TestResult<UntypedExpr, UntypedExpr>> {
-        use rayon::prelude::*;
-
-        let data_types = utils::indexmap::as_ref_values(&self.data_types);
-        let plutus_version = &self.config.plutus;
-
-        tests
-            .into_par_iter()
-            .flat_map(|test| match test {
-                Test::UnitTest(_) | Test::PropertyTest(_) => {
-                    unreachable!("Tests cannot be ran during benchmarking.")
-                }
-                Test::Benchmark(benchmark) => benchmark
-                    .benchmark(seed, property_max_success, plutus_version)
-                    .into_iter()
-                    .map(TestResult::BenchmarkResult)
-                    .collect::<Vec<_>>(),
-            })
+            .map(|test| test.run(seed, max_success, plutus_version))
             .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
             .into_iter()
             .map(|test| test.reify(&data_types))

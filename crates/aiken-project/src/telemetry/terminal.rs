@@ -224,15 +224,8 @@ impl EventListener for Terminal {
                     "...".if_supports_color(Stderr, |s| s.bold())
                 );
             }
-            Event::FinishedBenchmarks { benchmarks, .. } => {
-                for bench in benchmarks {
-                    if let TestResult::BenchmarkResult(result) = bench {
-                        println!("{} {} ", result.bench.name.bold(), "BENCH".blue(),);
-                        println!("  Memory: {} bytes", result.cost.mem);
-                        println!("  CPU: {} units", result.cost.cpu);
-                        println!();
-                    }
-                }
+            Event::FinishedBenchmarks { .. } => {
+                eprintln!("TODO: FinishedBenchmarks");
             }
         }
     }
@@ -292,19 +285,8 @@ fn fmt_test(
                 if *iterations > 1 { "s" } else { "" }
             );
         }
-        TestResult::BenchmarkResult(benchmark) => {
-            let mem_pad = pretty::pad_left(benchmark.cost.mem.to_string(), max_mem, " ");
-            let cpu_pad = pretty::pad_left(benchmark.cost.cpu.to_string(), max_cpu, " ");
-
-            test = format!(
-                "{test} [mem: {mem_unit}, cpu: {cpu_unit}]",
-                mem_unit = pretty::style_if(styled, mem_pad, |s| s
-                    .if_supports_color(Stderr, |s| s.cyan())
-                    .to_string()),
-                cpu_unit = pretty::style_if(styled, cpu_pad, |s| s
-                    .if_supports_color(Stderr, |s| s.cyan())
-                    .to_string()),
-            );
+        TestResult::BenchmarkResult(..) => {
+            unreachable!("unexpected benchmark found amongst test results.")
         }
     }
 
