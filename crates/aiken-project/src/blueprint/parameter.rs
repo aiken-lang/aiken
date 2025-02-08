@@ -5,8 +5,8 @@ use super::{
 };
 use std::{iter, ops::Deref};
 use uplc::{
-    ast::{Constant, Data as UplcData},
     PlutusData,
+    ast::{Constant, Data as UplcData},
 };
 
 #[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]

@@ -1,11 +1,11 @@
 use crate::{
+    Annotated, Schema,
     blueprint::{
         parameter::Parameter,
         schema::{Data, Declaration, Items},
     },
-    Annotated, Schema,
 };
-use aiken_lang::tipo::{pretty::resolve_alias, Type, TypeAliasAnnotation, TypeVar};
+use aiken_lang::tipo::{Type, TypeAliasAnnotation, TypeVar, pretty::resolve_alias};
 use itertools::Itertools;
 use serde::{
     self,
@@ -103,7 +103,7 @@ impl Definitions<Annotated<Schema>> {
     /// Initially, we would clean those Pair definitions right-away, but this would cause
     /// Pair definitions to be missing in some legit cases when the Pair is also used as a
     /// standalone type.
-    pub fn prune_orphan_pairs(&mut self, parameters: Vec<&Parameter>) {
+    pub fn prune_orphan_pairs(&mut self, parameters: Vec<&Parameter>) -> &mut Self {
         fn traverse_schema(
             src: Reference,
             schema: &Schema,
@@ -236,6 +236,72 @@ impl Definitions<Annotated<Schema>> {
                 break;
             } else {
                 last_len = usage.len();
+            }
+        }
+
+        self
+    }
+
+    pub fn replace_pairs_with_data_lists(&mut self) {
+        fn swap_declaration(declaration: &mut Declaration<Schema>) -> Declaration<Data> {
+            match std::mem::replace(declaration, Declaration::Inline(Schema::Unit.into())) {
+                Declaration::Referenced(reference) => Declaration::Referenced(reference),
+                Declaration::Inline(mut inline) => {
+                    schema_to_data(&mut inline);
+                    if let Schema::Data(data) = *inline {
+                        Declaration::Inline(data.into())
+                    } else {
+                        unreachable!()
+                    }
+                }
+            }
+        }
+
+        fn schema_to_data(schema: &mut Schema) {
+            let items = match schema {
+                Schema::Data(_) => None,
+                Schema::Pair(ref mut left, ref mut right) => {
+                    let left = swap_declaration(left);
+                    let right = swap_declaration(right);
+                    Some(Items::Many(vec![left, right]))
+                }
+                Schema::List(Items::One(ref mut item)) => {
+                    let item = swap_declaration(item);
+                    Some(Items::One(item))
+                }
+                Schema::List(Items::Many(ref mut items)) => Some(Items::Many(
+                    items.iter_mut().map(swap_declaration).collect(),
+                )),
+                Schema::Integer => {
+                    *schema = Schema::Data(Data::Integer);
+                    None
+                }
+                Schema::Bytes => {
+                    *schema = Schema::Data(Data::Bytes);
+                    None
+                }
+                Schema::String => {
+                    *schema = Schema::Data(Data::Bytes);
+                    None
+                }
+                Schema::Unit => {
+                    *schema = Schema::void();
+                    None
+                }
+                Schema::Boolean => {
+                    *schema = Schema::bool();
+                    None
+                }
+            };
+
+            if let Some(items) = items {
+                *schema = Schema::Data(Data::List(items));
+            }
+        }
+
+        for (_, entry) in self.inner.iter_mut() {
+            if let Some(ref mut annotated) = entry {
+                schema_to_data(&mut annotated.annotated);
             }
         }
     }

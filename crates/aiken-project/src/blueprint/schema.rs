@@ -97,6 +97,48 @@ pub enum Schema {
     Data(Data),
 }
 
+impl Schema {
+    pub fn void() -> Self {
+        Schema::Data(Data::AnyOf(vec![Annotated {
+            title: None,
+            description: None,
+            annotated: Constructor {
+                index: 0,
+                fields: vec![],
+            },
+        }]))
+    }
+
+    pub fn int() -> Self {
+        Schema::Data(Data::Integer)
+    }
+
+    pub fn bytes() -> Self {
+        Schema::Data(Data::Bytes)
+    }
+
+    pub fn bool() -> Self {
+        Schema::Data(Data::AnyOf(vec![
+            Annotated {
+                title: Some("False".to_string()),
+                description: None,
+                annotated: Constructor {
+                    index: 0,
+                    fields: vec![],
+                },
+            },
+            Annotated {
+                title: Some("True".to_string()),
+                description: None,
+                annotated: Constructor {
+                    index: 1,
+                    fields: vec![],
+                },
+            },
+        ]))
+    }
+}
+
 /// A schema for Plutus' Data.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Data {
@@ -205,46 +247,22 @@ impl Annotated<Schema> {
                             annotated: Schema::Data(Data::Opaque),
                         }),
 
-                        "ByteArray" => Ok(with_title(title.as_ref(), Schema::Data(Data::Bytes))),
+                        "ByteArray" => Ok(with_title(title.as_ref(), Schema::bytes())),
 
-                        "Int" => Ok(with_title(title.as_ref(), Schema::Data(Data::Integer))),
+                        "Int" => Ok(with_title(title.as_ref(), Schema::int())),
 
                         "String" => Ok(with_title(title.as_ref(), Schema::String)),
 
                         "Void" => Ok(Annotated {
                             title: title.or(Some("Unit".to_string())),
                             description: None,
-                            annotated: Schema::Data(Data::AnyOf(vec![Annotated {
-                                title: None,
-                                description: None,
-                                annotated: Constructor {
-                                    index: 0,
-                                    fields: vec![],
-                                },
-                            }])),
+                            annotated: Schema::void(),
                         }),
 
                         "Bool" => Ok(Annotated {
                             title: title.or(Some("Bool".to_string())),
                             description: None,
-                            annotated: Schema::Data(Data::AnyOf(vec![
-                                Annotated {
-                                    title: Some("False".to_string()),
-                                    description: None,
-                                    annotated: Constructor {
-                                        index: 0,
-                                        fields: vec![],
-                                    },
-                                },
-                                Annotated {
-                                    title: Some("True".to_string()),
-                                    description: None,
-                                    annotated: Constructor {
-                                        index: 1,
-                                        fields: vec![],
-                                    },
-                                },
-                            ])),
+                            annotated: Schema::bool(),
                         }),
 
                         "Ordering" => Ok(Annotated {
@@ -1099,7 +1117,7 @@ Here's the types I followed and that led me to this problem:
 pub mod tests {
     use super::*;
     use proptest::prelude::*;
-    use serde_json::{self, json, Value};
+    use serde_json::{self, Value, json};
 
     pub fn assert_json(schema: &impl Serialize, expected: Value) {
         assert_eq!(serde_json::to_value(schema).unwrap(), expected);

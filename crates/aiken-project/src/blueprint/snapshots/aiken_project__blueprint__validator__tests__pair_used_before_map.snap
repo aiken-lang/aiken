@@ -33,13 +33,15 @@ description: "Code:\n\npub type MyPair =\n  Pair<Int, Int>\n\npub type MyDatum {
     },
     "MyPair": {
       "title": "MyPair",
-      "dataType": "#pair",
-      "left": {
-        "$ref": "#/definitions/Int"
-      },
-      "right": {
-        "$ref": "#/definitions/Int"
-      }
+      "dataType": "list",
+      "items": [
+        {
+          "$ref": "#/definitions/Int"
+        },
+        {
+          "$ref": "#/definitions/Int"
+        }
+      ]
     },
     "Void": {
       "title": "Unit",

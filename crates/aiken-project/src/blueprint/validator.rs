@@ -202,13 +202,15 @@ impl Validator {
             schema: Declaration::Inline(Box::new(Schema::Data(Data::Opaque))),
         }));
 
-        definitions.prune_orphan_pairs(
-            parameters
-                .iter()
-                .chain(redeemer.as_ref().map(|x| vec![x]).unwrap_or_default())
-                .chain(datum.as_ref().map(|x| vec![x]).unwrap_or_default())
-                .collect::<Vec<&Parameter>>(),
-        );
+        definitions
+            .prune_orphan_pairs(
+                parameters
+                    .iter()
+                    .chain(redeemer.as_ref().map(|x| vec![x]).unwrap_or_default())
+                    .chain(datum.as_ref().map(|x| vec![x]).unwrap_or_default())
+                    .collect::<Vec<&Parameter>>(),
+            )
+            .replace_pairs_with_data_lists();
 
         Ok(Validator {
             title: format!("{}.{}.{}", &module.name, &def.name, &func.name,),
@@ -798,6 +800,22 @@ mod tests {
 
             validator placeholder {
               spend(_datum: Option<Void>, _redeemer: OuterMap, _utxo: Data, _self: Data,) {
+                True
+              }
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn pair_of_lists() {
+        assert_validator!(
+            r#"
+            pub type MyPair =
+              Pair<List<Int>, Bool>
+
+            validator placeholder {
+              spend(_datum: Option<Data>, _redeemer: MyPair, _utxo: Data, _self: Data,) {
                 True
               }
             }
