@@ -539,7 +539,7 @@ impl Benchmark {
                         test: self.clone(),
                         cost: ExBudget::default(),
                         success: false,
-                        traces: vec![format!("Fuzzer error: {}", e)],
+                        traces: vec![e.to_string()],
                     });
                     break;
                 }
@@ -1133,8 +1133,8 @@ impl<U, T> TestResult<U, T> {
     pub fn traces(&self) -> &[String] {
         match self {
             TestResult::UnitTestResult(UnitTestResult { traces, .. })
-            | TestResult::PropertyTestResult(PropertyTestResult { traces, .. }) => traces,
-            TestResult::Benchmark(BenchmarkResult { traces, .. }) => traces,
+            | TestResult::PropertyTestResult(PropertyTestResult { traces, .. })
+            | TestResult::Benchmark(BenchmarkResult { traces, .. }) => traces,
         }
     }
 }
