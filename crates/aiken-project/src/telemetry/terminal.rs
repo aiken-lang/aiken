@@ -224,9 +224,9 @@ impl EventListener for Terminal {
                     "...".if_supports_color(Stderr, |s| s.bold())
                 );
             }
-            Event::FinishedBenchmarks { tests, .. } => {
-                for test in tests {
-                    if let TestResult::BenchmarkResult(result) = test {
+            Event::FinishedBenchmarks { benchmarks, .. } => {
+                for bench in benchmarks {
+                    if let TestResult::BenchmarkResult(result) = bench {
                         println!("{} {} ", result.bench.name.bold(), "BENCH".blue(),);
                         println!("  Memory: {} bytes", result.cost.mem);
                         println!("  CPU: {} units", result.cost.cpu);

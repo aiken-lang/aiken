@@ -83,6 +83,12 @@ enum AddModuleBy {
     Path(PathBuf),
 }
 
+#[derive(Debug, Clone, Copy)]
+enum Runnable {
+    Test,
+    Bench,
+}
+
 pub struct Project<T>
 where
     T: EventListener,
@@ -471,28 +477,30 @@ where
                 seed,
                 times_to_run,
             } => {
+                let verbose = false;
+
                 let tests =
-                    self.collect_benchmarks(false, match_tests, exact_match, options.tracing)?;
+                    self.collect_benchmarks(verbose, match_tests, exact_match, options.tracing)?;
 
                 if !tests.is_empty() {
                     self.event_listener.handle_event(Event::RunningBenchmarks);
                 }
 
-                let tests = self.run_benchmarks(tests, seed, times_to_run);
+                let benchmarks = self.run_benchmarks(tests, seed, times_to_run);
 
-                let errors: Vec<Error> = tests
+                let errors: Vec<Error> = benchmarks
                     .iter()
                     .filter_map(|e| {
                         if e.is_success() {
                             None
                         } else {
-                            Some(Error::from_test_result(e, false))
+                            Some(Error::from_test_result(e, verbose))
                         }
                     })
                     .collect();
 
                 self.event_listener
-                    .handle_event(Event::FinishedBenchmarks { seed, tests });
+                    .handle_event(Event::FinishedBenchmarks { seed, benchmarks });
 
                 if !errors.is_empty() {
                     Err(errors)
@@ -954,7 +962,7 @@ where
 
     fn collect_test_items(
         &mut self,
-        kind: &str, // "test" or "bench"
+        kind: Runnable,
         verbose: bool,
         match_tests: Option<Vec<String>>,
         exact_match: bool,
@@ -993,8 +1001,8 @@ where
 
             for def in checked_module.ast.definitions() {
                 let func = match (kind, def) {
-                    ("test", Definition::Test(func)) => Some(func),
-                    ("bench", Definition::Benchmark(func)) => Some(func),
+                    (Runnable::Test, Definition::Test(func)) => Some(func),
+                    (Runnable::Bench, Definition::Benchmark(func)) => Some(func),
                     _ => None,
                 };
 
@@ -1049,19 +1057,18 @@ where
             }
 
             tests.push(match kind {
-                "test" => Test::from_function_definition(
+                Runnable::Test => Test::from_function_definition(
                     &mut generator,
                     test.to_owned(),
                     module_name,
                     input_path,
                 ),
-                "bench" => Test::from_benchmark_definition(
+                Runnable::Bench => Test::from_benchmark_definition(
                     &mut generator,
                     test.to_owned(),
                     module_name,
                     input_path,
                 ),
-                _ => unreachable!("Invalid test kind"),
             });
         }
 
@@ -1075,7 +1082,7 @@ where
         exact_match: bool,
         tracing: Tracing,
     ) -> Result<Vec<Test>, Error> {
-        self.collect_test_items("test", verbose, match_tests, exact_match, tracing)
+        self.collect_test_items(Runnable::Test, verbose, match_tests, exact_match, tracing)
     }
 
     fn collect_benchmarks(
@@ -1085,7 +1092,7 @@ where
         exact_match: bool,
         tracing: Tracing,
     ) -> Result<Vec<Test>, Error> {
-        self.collect_test_items("bench", verbose, match_tests, exact_match, tracing)
+        self.collect_test_items(Runnable::Bench, verbose, match_tests, exact_match, tracing)
     }
 
     fn run_tests(
@@ -1107,7 +1114,9 @@ where
                 Test::PropertyTest(property_test) => {
                     property_test.run(seed, property_max_success, plutus_version)
                 }
-                Test::Benchmark(_) => unreachable!("Benchmarks cannot be run in PBT."),
+                Test::Benchmark(_) => {
+                    unreachable!("found unexpected benchmark amongst collected tests.")
+                }
             })
             .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
             .into_iter()
