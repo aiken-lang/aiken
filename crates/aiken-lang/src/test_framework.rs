@@ -372,9 +372,7 @@ impl PropertyTest {
         let mut counterexample = None;
 
         while *remaining > 0 && counterexample.is_none() {
-            let (next_prng, cex) = self.run_once(prng, labels, plutus_version)?;
-            prng = next_prng;
-            counterexample = cex;
+            (prng, counterexample) = self.run_once(prng, labels, plutus_version)?;
             *remaining -= 1;
         }
 
