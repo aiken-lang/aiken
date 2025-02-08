@@ -50,8 +50,9 @@ impl EventListener for Json {
                                 "measures": result.measures
                                     .into_iter()
                                     .map(|measure| serde_json::json!({
-                                        "memory": measure.mem,
-                                        "cpu": measure.cpu
+                                        "size": measure.0,
+                                        "memory": measure.1.mem,
+                                        "cpu": measure.1.cpu
                                     }))
                                     .collect::<Vec<_>>()
                             }))

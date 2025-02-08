@@ -1,4 +1,4 @@
-use aiken_lang::test_framework::PropertyTest;
+use aiken_lang::test_framework::Benchmark;
 use aiken_project::watch::with_project;
 use rand::prelude::*;
 use std::{
@@ -17,18 +17,20 @@ pub struct Args {
     #[clap(long)]
     seed: Option<u32>,
 
-    /// How many times we will run each benchmark in the relevant project.
-    #[clap(long, default_value_t = PropertyTest::DEFAULT_MAX_SUCCESS)]
-    times_to_run: usize,
+    /// The maximum size to benchmark with. Note that this does not necessarily equates the number
+    /// of measurements actually performed but controls the maximum size given to a Sampler.
+    #[clap(long, default_value_t = Benchmark::DEFAULT_MAX_SIZE)]
+    max_size: usize,
 
-    /// Only run tests if they match any of these strings.
+    /// Only run benchmarks if they match any of these strings.
+    ///
     /// You can match a module with `-m aiken/list` or `-m list`.
     /// You can match a test with `-m "aiken/list.{map}"` or `-m "aiken/option.{flatten_1}"`
     #[clap(short, long)]
-    match_tests: Option<Vec<String>>,
+    match_benchmarks: Option<Vec<String>>,
 
-    /// This is meant to be used with `--match-tests`.
-    /// It forces test names to match exactly
+    /// This is meant to be used with `--match-benchmarks`.
+    /// It forces benchmark names to match exactly
     #[clap(short, long)]
     exact_match: bool,
 
@@ -39,10 +41,10 @@ pub struct Args {
 pub fn exec(
     Args {
         directory,
-        match_tests,
+        match_benchmarks,
         exact_match,
         seed,
-        times_to_run,
+        max_size,
         env,
     }: Args,
 ) -> miette::Result<()> {
@@ -55,12 +57,11 @@ pub fn exec(
         false,
         !io::stdout().is_terminal(),
         |p| {
-            // We don't want to check here, we want to benchmark
             p.benchmark(
-                match_tests.clone(),
+                match_benchmarks.clone(),
                 exact_match,
                 seed,
-                times_to_run,
+                max_size,
                 env.clone(),
             )
         },

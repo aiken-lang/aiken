@@ -14,7 +14,7 @@ use pallas_primitives::alonzo::{Constr, PlutusData};
 use patricia_tree::PatriciaMap;
 use std::{
     borrow::Borrow,
-    collections::BTreeMap,
+    collections::{BTreeMap, VecDeque},
     convert::TryFrom,
     fmt::{Debug, Display},
     ops::Deref,
@@ -506,21 +506,84 @@ pub struct Benchmark {
 
 unsafe impl Send for Benchmark {}
 
+trait Sizer {
+    fn is_done(&self) -> bool;
+    fn next(&mut self) -> usize;
+}
+
+struct FibonacciSizer {
+    max_size: usize,
+    previous_sizes: VecDeque<usize>,
+    current_size: usize,
+}
+
+impl FibonacciSizer {
+    fn new(max_size: usize) -> Self {
+        Self {
+            max_size,
+            previous_sizes: VecDeque::new(),
+            current_size: 1,
+        }
+    }
+}
+
+impl Sizer for FibonacciSizer {
+    fn is_done(&self) -> bool {
+        self.current_size >= self.max_size
+    }
+
+    fn next(&mut self) -> usize {
+        match self.previous_sizes.len() {
+            0 => {
+                self.previous_sizes.push_front(1);
+                return 0;
+            }
+            1 => {
+                self.previous_sizes.push_front(1);
+                return 1;
+            }
+            _ => self.current_size += self.previous_sizes.pop_back().unwrap(),
+        }
+
+        self.previous_sizes.push_front(self.current_size);
+
+        self.current_size.min(self.max_size)
+    }
+}
+
+#[cfg(test)]
+mod test_sizer {
+    use super::{FibonacciSizer, Sizer};
+
+    #[test]
+    pub fn fib_sizer_sequence() {
+        let mut sizer = FibonacciSizer::new(100);
+        let mut sizes = Vec::new();
+        while !sizer.is_done() {
+            sizes.push(sizer.next())
+        }
+        assert_eq!(sizes, vec![0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 100])
+    }
+}
+
 impl Benchmark {
+    pub const DEFAULT_MAX_SIZE: usize = 10;
+
     pub fn run(
         self,
         seed: u32,
-        max_iterations: usize,
+        max_size: usize,
         plutus_version: &PlutusVersion,
     ) -> BenchmarkResult {
-        let mut measures = Vec::with_capacity(max_iterations);
-        let mut iteration = 0;
+        let mut measures = Vec::with_capacity(max_size);
+        let mut sizer = FibonacciSizer::new(max_size);
         let mut prng = Prng::from_seed(seed);
         let mut success = true;
 
-        while success && max_iterations > iteration {
-            let size = Data::integer(num_bigint::BigInt::from(iteration as i64));
-            let fuzzer = self.sampler.program.apply_data(size);
+        while success && !sizer.is_done() {
+            let size = sizer.next();
+            let size_as_data = Data::integer(num_bigint::BigInt::from(size));
+            let fuzzer = self.sampler.program.apply_data(size_as_data);
 
             match prng.sample(&fuzzer) {
                 Ok(None) => {
@@ -529,14 +592,13 @@ impl Benchmark {
 
                 Ok(Some((new_prng, value))) => {
                     prng = new_prng;
-                    measures.push(self.eval(&value, plutus_version).cost())
+                    measures.push((size, self.eval(&value, plutus_version).cost()))
                 }
 
                 Err(_e) => {
                     success = false;
                 }
             }
-            iteration += 1;
         }
 
         BenchmarkResult {
@@ -1469,7 +1531,7 @@ impl Assertion<UntypedExpr> {
 #[derive(Debug, Clone)]
 pub struct BenchmarkResult {
     pub bench: Benchmark,
-    pub measures: Vec<ExBudget>,
+    pub measures: Vec<(usize, ExBudget)>,
     pub success: bool,
 }
 
