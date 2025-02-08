@@ -278,7 +278,9 @@ mod test {
             PropertyTest::DEFAULT_MAX_SUCCESS,
             &PlutusVersion::default(),
         ) {
-            TestResult::UnitTestResult(..) => unreachable!("property returned unit-test result ?!"),
+            TestResult::BenchmarkResult(..) | TestResult::UnitTestResult(..) => {
+                unreachable!("property returned non-property result ?!")
+            }
             TestResult::PropertyTestResult(result) => {
                 assert!(
                     result
@@ -289,7 +291,6 @@ mod test {
                     result.labels
                 )
             }
-            TestResult::Benchmark(..) => unreachable!("property returned benchmark result ?!"),
         }
     }
 

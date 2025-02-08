@@ -226,8 +226,8 @@ impl EventListener for Terminal {
             }
             Event::FinishedBenchmarks { tests, .. } => {
                 for test in tests {
-                    if let TestResult::Benchmark(result) = test {
-                        println!("{} {} ", result.test.name.bold(), "BENCH".blue(),);
+                    if let TestResult::BenchmarkResult(result) = test {
+                        println!("{} {} ", result.bench.name.bold(), "BENCH".blue(),);
                         println!("  Memory: {} bytes", result.cost.mem);
                         println!("  CPU: {} units", result.cost.cpu);
                         println!();
@@ -292,7 +292,7 @@ fn fmt_test(
                 if *iterations > 1 { "s" } else { "" }
             );
         }
-        TestResult::Benchmark(benchmark) => {
+        TestResult::BenchmarkResult(benchmark) => {
             let mem_pad = pretty::pad_left(benchmark.cost.mem.to_string(), max_mem, " ");
             let cpu_pad = pretty::pad_left(benchmark.cost.cpu.to_string(), max_cpu, " ");
 

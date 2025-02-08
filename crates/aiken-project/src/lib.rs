@@ -1135,7 +1135,7 @@ where
                 Test::Benchmark(benchmark) => benchmark
                     .benchmark(seed, property_max_success, plutus_version)
                     .into_iter()
-                    .map(TestResult::Benchmark)
+                    .map(TestResult::BenchmarkResult)
                     .collect::<Vec<_>>(),
             })
             .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()

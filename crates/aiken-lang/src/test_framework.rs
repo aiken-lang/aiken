@@ -523,7 +523,7 @@ impl Benchmark {
                     prng = new_prng;
                     let mut eval_result = self.eval(&value, plutus_version);
                     results.push(BenchmarkResult {
-                        test: self.clone(),
+                        bench: self.clone(),
                         cost: eval_result.cost(),
                         success: true,
                         traces: eval_result.logs().to_vec(),
@@ -536,7 +536,7 @@ impl Benchmark {
 
                 Err(e) => {
                     results.push(BenchmarkResult {
-                        test: self.clone(),
+                        bench: self.clone(),
                         cost: ExBudget::default(),
                         success: false,
                         traces: vec![e.to_string()],
@@ -1068,7 +1068,7 @@ where
 pub enum TestResult<U, T> {
     UnitTestResult(UnitTestResult<U>),
     PropertyTestResult(PropertyTestResult<T>),
-    Benchmark(BenchmarkResult),
+    BenchmarkResult(BenchmarkResult),
 }
 
 unsafe impl<U, T> Send for TestResult<U, T> {}
@@ -1083,7 +1083,7 @@ impl TestResult<(Constant, Rc<Type>), PlutusData> {
             TestResult::PropertyTestResult(test) => {
                 TestResult::PropertyTestResult(test.reify(data_types))
             }
-            TestResult::Benchmark(result) => TestResult::Benchmark(result),
+            TestResult::BenchmarkResult(result) => TestResult::BenchmarkResult(result),
         }
     }
 }
@@ -1106,7 +1106,7 @@ impl<U, T> TestResult<U, T> {
                 }
                 OnTestFailure::SucceedImmediately => counterexample.is_some(),
             },
-            TestResult::Benchmark(BenchmarkResult { success, .. }) => *success,
+            TestResult::BenchmarkResult(BenchmarkResult { success, .. }) => *success,
         }
     }
 
@@ -1116,7 +1116,7 @@ impl<U, T> TestResult<U, T> {
             TestResult::PropertyTestResult(PropertyTestResult { ref test, .. }) => {
                 test.module.as_str()
             }
-            TestResult::Benchmark(BenchmarkResult { ref test, .. }) => test.module.as_str(),
+            TestResult::BenchmarkResult(BenchmarkResult { ref bench, .. }) => bench.module.as_str(),
         }
     }
 
@@ -1126,7 +1126,7 @@ impl<U, T> TestResult<U, T> {
             TestResult::PropertyTestResult(PropertyTestResult { ref test, .. }) => {
                 test.name.as_str()
             }
-            TestResult::Benchmark(BenchmarkResult { ref test, .. }) => test.name.as_str(),
+            TestResult::BenchmarkResult(BenchmarkResult { ref bench, .. }) => bench.name.as_str(),
         }
     }
 
@@ -1134,7 +1134,7 @@ impl<U, T> TestResult<U, T> {
         match self {
             TestResult::UnitTestResult(UnitTestResult { traces, .. })
             | TestResult::PropertyTestResult(PropertyTestResult { traces, .. })
-            | TestResult::Benchmark(BenchmarkResult { traces, .. }) => traces,
+            | TestResult::BenchmarkResult(BenchmarkResult { traces, .. }) => traces,
         }
     }
 }
@@ -1472,7 +1472,7 @@ impl Assertion<UntypedExpr> {
 
 #[derive(Debug, Clone)]
 pub struct BenchmarkResult {
-    pub test: Benchmark,
+    pub bench: Benchmark,
     pub cost: ExBudget,
     pub success: bool,
     pub traces: Vec<String>,

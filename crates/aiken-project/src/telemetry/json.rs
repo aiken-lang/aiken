@@ -43,10 +43,10 @@ impl EventListener for Json {
                 let benchmark_results: Vec<_> = tests
                     .into_iter()
                     .filter_map(|test| {
-                        if let TestResult::Benchmark(result) = test {
+                        if let TestResult::BenchmarkResult(result) = test {
                             Some(serde_json::json!({
-                                "name": result.test.name,
-                                "module": result.test.module,
+                                "name": result.bench.name,
+                                "module": result.bench.module,
                                 "memory": result.cost.mem,
                                 "cpu": result.cost.cpu
                             }))
@@ -74,7 +74,7 @@ fn fmt_test_json(result: &TestResult<UntypedExpr, UntypedExpr>) -> serde_json::V
         TestResult::PropertyTestResult(PropertyTestResult { ref test, .. }) => {
             &test.on_test_failure
         }
-        TestResult::Benchmark(_) => unreachable!("benchmark returned in JSON output"),
+        TestResult::BenchmarkResult(_) => unreachable!("benchmark returned in JSON output"),
     };
 
     let mut test = json!({
@@ -120,7 +120,7 @@ fn fmt_test_json(result: &TestResult<UntypedExpr, UntypedExpr>) -> serde_json::V
                 Err(err) => json!({"error": err.to_string()}),
             };
         }
-        TestResult::Benchmark(_) => unreachable!("benchmark returned in JSON output"),
+        TestResult::BenchmarkResult(_) => unreachable!("benchmark returned in JSON output"),
     }
 
     if !result.traces().is_empty() {
