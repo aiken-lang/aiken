@@ -317,6 +317,14 @@ You can use '{discard}' and numbers to distinguish between similar names.
         location: Span,
     },
 
+    #[error("I notice a benchmark definition without any argument.\n")]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/bench"))]
+    #[diagnostic(code("arity::bench"))]
+    IncorrectBenchmarkArity {
+        #[label("must have exactly one argument")]
+        location: Span,
+    },
+
     #[error(
         "I saw {} field{} in a context where there should be {}.\n",
         given.if_supports_color(Stdout, |s| s.purple()),
@@ -1158,6 +1166,7 @@ impl ExtraData for Error {
             | Error::UnknownPurpose { .. }
             | Error::UnknownValidatorHandler { .. }
             | Error::UnexpectedValidatorFallback { .. }
+            | Error::IncorrectBenchmarkArity { .. }
             | Error::MustInferFirst { .. } => None,
 
             Error::UnknownType { name, .. }
