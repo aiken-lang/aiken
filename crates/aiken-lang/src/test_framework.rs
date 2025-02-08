@@ -531,8 +531,9 @@ impl Benchmark {
                 }
 
                 Ok(None) => {
-                    break;
+                    panic!("A seeded PRNG returned 'None' which indicates a sampler is ill-formed and implemented wrongly; please contact library's authors.");
                 }
+
                 Err(e) => {
                     results.push(BenchmarkResult {
                         test: self.clone(),
