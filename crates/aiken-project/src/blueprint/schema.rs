@@ -1117,7 +1117,7 @@ Here's the types I followed and that led me to this problem:
 pub mod tests {
     use super::*;
     use proptest::prelude::*;
-    use serde_json::{self, Value, json};
+    use serde_json::{self, json, Value};
 
     pub fn assert_json(schema: &impl Serialize, expected: Value) {
         assert_eq!(serde_json::to_value(schema).unwrap(), expected);

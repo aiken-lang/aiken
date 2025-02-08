@@ -1,11 +1,11 @@
 use crate::{
-    Annotated, Schema,
     blueprint::{
         parameter::Parameter,
         schema::{Data, Declaration, Items},
     },
+    Annotated, Schema,
 };
-use aiken_lang::tipo::{Type, TypeAliasAnnotation, TypeVar, pretty::resolve_alias};
+use aiken_lang::tipo::{pretty::resolve_alias, Type, TypeAliasAnnotation, TypeVar};
 use itertools::Itertools;
 use serde::{
     self,
