@@ -3,7 +3,7 @@ use aiken_lang::{
     ast::{self, Span},
     error::ExtraData,
     parser::error::ParseError,
-    test_framework::{PropertyTestResult, TestResult, UnitTestResult},
+    test_framework::{BenchmarkResult, PropertyTestResult, TestResult, UnitTestResult},
     tipo,
 };
 use miette::{
@@ -193,7 +193,11 @@ impl Error {
                 test.input_path.to_path_buf(),
                 test.program.to_pretty(),
             ),
-            TestResult::Benchmark(_) => ("bench".to_string(), PathBuf::new(), String::new()), // todo
+            TestResult::BenchmarkResult(BenchmarkResult { bench, .. }) => (
+                bench.name.to_string(),
+                bench.input_path.to_path_buf(),
+                bench.program.to_pretty(),
+            ),
         };
 
         Error::TestFailure {

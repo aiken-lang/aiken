@@ -39,16 +39,22 @@ impl EventListener for Json {
                 });
                 println!("{}", serde_json::to_string_pretty(&json_output).unwrap());
             }
-            Event::FinishedBenchmarks { tests, seed } => {
-                let benchmark_results: Vec<_> = tests
+            Event::FinishedBenchmarks { benchmarks, seed } => {
+                let benchmark_results: Vec<_> = benchmarks
                     .into_iter()
                     .filter_map(|test| {
-                        if let TestResult::Benchmark(result) = test {
+                        if let TestResult::BenchmarkResult(result) = test {
                             Some(serde_json::json!({
-                                "name": result.test.name,
-                                "module": result.test.module,
-                                "memory": result.cost.mem,
-                                "cpu": result.cost.cpu
+                                "name": result.bench.name,
+                                "module": result.bench.module,
+                                "measures": result.measures
+                                    .into_iter()
+                                    .map(|measure| serde_json::json!({
+                                        "size": measure.0,
+                                        "memory": measure.1.mem,
+                                        "cpu": measure.1.cpu
+                                    }))
+                                    .collect::<Vec<_>>()
                             }))
                         } else {
                             None
@@ -74,7 +80,7 @@ fn fmt_test_json(result: &TestResult<UntypedExpr, UntypedExpr>) -> serde_json::V
         TestResult::PropertyTestResult(PropertyTestResult { ref test, .. }) => {
             &test.on_test_failure
         }
-        TestResult::Benchmark(_) => unreachable!("benchmark returned in JSON output"),
+        TestResult::BenchmarkResult(_) => unreachable!("benchmark returned in JSON output"),
     };
 
     let mut test = json!({
@@ -120,7 +126,7 @@ fn fmt_test_json(result: &TestResult<UntypedExpr, UntypedExpr>) -> serde_json::V
                 Err(err) => json!({"error": err.to_string()}),
             };
         }
-        TestResult::Benchmark(_) => unreachable!("benchmark returned in JSON output"),
+        TestResult::BenchmarkResult(_) => unreachable!("benchmark returned in JSON output"),
     }
 
     if !result.traces().is_empty() {

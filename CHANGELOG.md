@@ -2,39 +2,23 @@
 
 ## v1.1.11 - UNRELEASED
 
+### Added
+
+- **aiken**: New `aiken bench` command to run benchmarks. @Riley-Kilgore, @KtorZ
+
+  The command is very similar to `aiken check`, and will collect and run benchmarks found across the codebase. The output by default is a set of pretty terminal plots for each dimension (mem & cpu) for each test bench. The complete dataset of points can be obtained in a structured (JSON) format by redirecting the output to a file.
+
+- **aiken-lang**: New `bench` keyword and capabilities to the test framework. @Riley-Kilgore, @KtorZ
+
+  A `bench` is a new type of test that takes in a single `Sampler<a> = fn(Int) -> Fuzzer<a>` as parameter, similar to how property-based test receive `Fuzzer<a>`. A `Sampler` is in fact, a _scaled Fuzzer_ which receive a monotically increasing size as parameter. This allows fine-grained control over generated values. Unlike tests, benchmarks can return _anything_ since their output is ignored.
+
+  Read more about benchmarks in the [user manual](https://aiken-lang.org/language-tour/bench).
+
 ### Changed
 
-- **aiken**: support for `bench` keyword to define benchmarks. @Riley-Kilgore
+
 - **aiken-lang**: The compiler now raises a warning when attempting to destructure a record constructor without using named fields. See [#1084](https://github.com/aiken-lang/aiken/issues/1084). @KtorZ
 - **aiken-lang**: Fix blueprint schema definitions related to pairs (no longer omit (sometimes) Pairs definitions, and generate them as data List). See [#1086](https://github.com/aiken-lang/aiken/issues/1086) and [#970](https://github.com/aiken-lang/aiken/issues/970). @KtorZ
-
-## v1.1.10 - 2025-01-21
-
-### Added
-
-- **aiken-project**: `export` output now supports the functions `return_type`. @rvcas
-- **aiken-lang**: `write_bits` can now be used from aiken/builtins. @Microproofs
-
-
-### Changed
-
-- **aiken-project**: The `aiken.toml` file no longer supports `v1` and `v2` for the plutus version field. @rvcas
-- **aiken-project**: `Error::TomlLoading` now looks much better - [see](https://github.com/aiken-lang/aiken/issues/1032#issuecomment-2562122101). @rvcas
-- **aiken-lang**: 10-20% optimization improvements via case-constr, rearranging function definitions (while maintaining dependency ordering),
-                  and allowing inlining in if_then_else_error cases which preserve the same error semantics for a program. @Microproofs
-
-### Fixed
-
-- **aiken**: panic error when using `aiken uplc decode` on cbor encoded flat bytes. @rvcas
-- **aiken-lang**: comment formatting in pipelines leading to confusion. @rvcas
-- **aiken-lang**: preserve holes discard name in function captures (see [#1080](https://github.com/aiken-lang/aiken/issues/1080)). @KtorZ
-- **uplc**: Added deserialization match for the new builtin indices.
-
-## v1.1.11 - UNRELEASED
-
-### Added
-
-- **aiken**: support for `bench` keyword to define benchmarks. @Riley-Kilgore
 
 ## v1.1.10 - 2025-01-21
 
