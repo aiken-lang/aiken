@@ -530,7 +530,7 @@ pub struct Benchmark {
 unsafe impl Send for Benchmark {}
 
 impl Benchmark {
-    pub const DEFAULT_MAX_SIZE: usize = 10;
+    pub const DEFAULT_MAX_SIZE: usize = 30;
 
     pub fn run(
         self,

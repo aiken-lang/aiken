@@ -17,7 +17,7 @@ pub struct Args {
     /// Path to project
     directory: Option<PathBuf>,
 
-    /// An initial seed to initialize the pseudo-random generator for property-tests.
+    /// An initial seed to initialize the pseudo-random generator for benchmarks.
     #[clap(long)]
     seed: Option<u32>,
 
@@ -29,7 +29,7 @@ pub struct Args {
     /// Only run benchmarks if they match any of these strings.
     ///
     /// You can match a module with `-m aiken/list` or `-m list`.
-    /// You can match a test with `-m "aiken/list.{map}"` or `-m "aiken/option.{flatten_1}"`
+    /// You can match a benchmark with `-m "aiken/list.{map}"` or `-m "aiken/option.{flatten_1}"`
     #[clap(short, long)]
     match_benchmarks: Option<Vec<String>>,
 
