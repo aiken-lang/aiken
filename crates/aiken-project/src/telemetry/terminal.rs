@@ -247,7 +247,10 @@ impl EventListener for Terminal {
                         .iter()
                         .map(|r| fmt_test(r, max_mem, max_cpu, max_iter, true))
                         .collect::<Vec<String>>()
-                        .join("\n");
+                        .join("\n")
+                        .chars()
+                        .skip(1) // Remove extra first newline
+                        .collect::<String>();
 
                     let seed_info = format!(
                         "with {opt}={seed}",
@@ -287,7 +290,21 @@ fn fmt_test(
 ) -> String {
     // Status
     let mut test = if matches!(result, TestResult::BenchmarkResult { .. }) {
-        String::new()
+        format!(
+            "\n{label}{title}\n",
+            label = if result.is_success() {
+                String::new()
+            } else {
+                pretty::style_if(styled, "FAIL ".to_string(), |s| {
+                    s.if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.red())
+                        .to_string()
+                })
+            },
+            title = pretty::style_if(styled, result.title().to_string(), |s| s
+                .if_supports_color(Stderr, |s| s.bright_blue())
+                .to_string())
+        )
     } else if result.is_success() {
         pretty::style_if(styled, "PASS".to_string(), |s| {
             s.if_supports_color(Stderr, |s| s.bold())
@@ -334,7 +351,17 @@ fn fmt_test(
                 if *iterations > 1 { "s" } else { "" }
             );
         }
-        TestResult::BenchmarkResult(BenchmarkResult { measures, .. }) => {
+        TestResult::BenchmarkResult(BenchmarkResult { error: Some(e), .. }) => {
+            test = format!(
+                "{test}{}",
+                e.to_string().if_supports_color(Stderr, |s| s.red())
+            );
+        }
+        TestResult::BenchmarkResult(BenchmarkResult {
+            measures,
+            error: None,
+            ..
+        }) => {
             let max_size = measures
                 .iter()
                 .map(|(size, _)| *size)
@@ -384,14 +411,7 @@ fn fmt_test(
 
     // Title
     test = match result {
-        TestResult::BenchmarkResult(..) => {
-            format!(
-                "{title}\n{test}\n",
-                title = pretty::style_if(styled, result.title().to_string(), |s| s
-                    .if_supports_color(Stderr, |s| s.bright_blue())
-                    .to_string())
-            )
-        }
+        TestResult::BenchmarkResult(..) => test,
         TestResult::UnitTestResult(..) | TestResult::PropertyTestResult(..) => {
             format!(
                 "{test} {title}",

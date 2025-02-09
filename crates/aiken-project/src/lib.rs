@@ -302,17 +302,18 @@ where
         match_benchmarks: Option<Vec<String>>,
         exact_match: bool,
         seed: u32,
-        iterations: usize,
+        max_size: usize,
+        tracing: Tracing,
         env: Option<String>,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
-            tracing: Tracing::silent(),
+            tracing,
             env,
             code_gen_mode: CodeGenMode::Benchmark {
                 match_benchmarks,
                 exact_match,
                 seed,
-                iterations,
+                max_size,
             },
             blueprint_path: self.blueprint_path(None),
         };
@@ -469,7 +470,7 @@ where
                 match_benchmarks,
                 exact_match,
                 seed,
-                iterations,
+                max_size,
             } => {
                 let verbose = false;
 
@@ -484,7 +485,7 @@ where
                     self.event_listener.handle_event(Event::RunningBenchmarks);
                 }
 
-                let benchmarks = self.run_runnables(benchmarks, seed, iterations);
+                let benchmarks = self.run_runnables(benchmarks, seed, max_size);
 
                 let errors: Vec<Error> = benchmarks
                     .iter()

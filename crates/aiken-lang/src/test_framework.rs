@@ -274,7 +274,7 @@ pub struct Fuzzer<T> {
 }
 
 #[derive(Debug, Clone, thiserror::Error, miette::Diagnostic)]
-#[error("Fuzzer exited unexpectedly: {uplc_error}")]
+#[error("Fuzzer exited unexpectedly: {uplc_error}.")]
 pub struct FuzzerError {
     traces: Vec<String>,
     uplc_error: uplc::machine::Error,
@@ -494,6 +494,29 @@ pub struct Sampler<T> {
     pub stripped_type_info: Rc<Type>,
 }
 
+#[derive(Debug, Clone, thiserror::Error, miette::Diagnostic)]
+pub enum BenchmarkError {
+    #[error("Sampler exited unexpectedly: {uplc_error}.")]
+    SamplerError {
+        traces: Vec<String>,
+        uplc_error: uplc::machine::Error,
+    },
+    #[error("Bench exited unexpectedly: {uplc_error}.")]
+    BenchError {
+        traces: Vec<String>,
+        uplc_error: uplc::machine::Error,
+    },
+}
+
+impl BenchmarkError {
+    pub fn traces(&self) -> &[String] {
+        match self {
+            BenchmarkError::SamplerError { traces, .. }
+            | BenchmarkError::BenchError { traces, .. } => traces.as_slice(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Benchmark {
     pub input_path: PathBuf,
@@ -517,10 +540,10 @@ impl Benchmark {
     ) -> BenchmarkResult {
         let mut measures = Vec::with_capacity(max_size);
         let mut prng = Prng::from_seed(seed);
-        let mut success = true;
+        let mut error = None;
         let mut size = 0;
 
-        while success && max_size >= size {
+        while error.is_none() && max_size >= size {
             let fuzzer = self
                 .sampler
                 .program
@@ -533,11 +556,24 @@ impl Benchmark {
 
                 Ok(Some((new_prng, value))) => {
                     prng = new_prng;
-                    measures.push((size, self.eval(&value, plutus_version).cost()))
+                    let mut result = self.eval(&value, plutus_version);
+                    match result.result() {
+                        Ok(_) => measures.push((size, result.cost())),
+                        Err(uplc_error) => {
+                            error = Some(BenchmarkError::BenchError {
+                                traces: result
+                                    .logs()
+                                    .into_iter()
+                                    .filter(|s| PropertyTest::extract_label(s).is_none())
+                                    .collect(),
+                                uplc_error,
+                            });
+                        }
+                    }
                 }
 
-                Err(_e) => {
-                    success = false;
+                Err(FuzzerError { traces, uplc_error }) => {
+                    error = Some(BenchmarkError::SamplerError { traces, uplc_error });
                 }
             }
 
@@ -547,7 +583,7 @@ impl Benchmark {
         BenchmarkResult {
             bench: self,
             measures,
-            success,
+            error,
         }
     }
 
@@ -650,7 +686,6 @@ impl Prng {
     pub fn sample(
         &self,
         fuzzer: &Program<Name>,
-        // iteration: usize,
     ) -> Result<Option<(Prng, PlutusData)>, FuzzerError> {
         let program = Program::<NamedDeBruijn>::try_from(fuzzer.apply_data(self.uplc())).unwrap();
         let mut result = program.eval(ExBudget::max());
@@ -1107,7 +1142,7 @@ impl<U, T> TestResult<U, T> {
                 }
                 OnTestFailure::SucceedImmediately => counterexample.is_some(),
             },
-            TestResult::BenchmarkResult(BenchmarkResult { success, .. }) => *success,
+            TestResult::BenchmarkResult(BenchmarkResult { error, .. }) => error.is_none(),
         }
     }
 
@@ -1135,7 +1170,9 @@ impl<U, T> TestResult<U, T> {
         match self {
             TestResult::UnitTestResult(UnitTestResult { traces, .. })
             | TestResult::PropertyTestResult(PropertyTestResult { traces, .. }) => traces,
-            TestResult::BenchmarkResult(BenchmarkResult { .. }) => &[],
+            TestResult::BenchmarkResult(BenchmarkResult { error, .. }) => {
+                error.as_ref().map(|e| e.traces()).unwrap_or_default()
+            }
         }
     }
 }
@@ -1475,7 +1512,7 @@ impl Assertion<UntypedExpr> {
 pub struct BenchmarkResult {
     pub bench: Benchmark,
     pub measures: Vec<(usize, ExBudget)>,
-    pub success: bool,
+    pub error: Option<BenchmarkError>,
 }
 
 unsafe impl Send for BenchmarkResult {}

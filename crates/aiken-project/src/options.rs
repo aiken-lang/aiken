@@ -33,7 +33,7 @@ pub enum CodeGenMode {
         match_benchmarks: Option<Vec<String>>,
         exact_match: bool,
         seed: u32,
-        iterations: usize,
+        max_size: usize,
     },
     NoOp,
 }
