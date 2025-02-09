@@ -1,6 +1,6 @@
 use aiken_lang::{
     expr::UntypedExpr,
-    test_framework::{PropertyTestResult, TestResult, UnitTestResult},
+    test_framework::{BenchmarkResult, PropertyTestResult, TestResult, UnitTestResult},
 };
 pub use json::{json_schema, Json};
 use std::{
@@ -10,6 +10,7 @@ use std::{
     path::PathBuf,
 };
 pub use terminal::Terminal;
+use uplc::machine::cost_model::ExBudget;
 
 mod json;
 mod terminal;
@@ -117,6 +118,18 @@ pub(crate) fn group_by_module(
 }
 
 pub(crate) fn find_max_execution_units<T>(xs: &[TestResult<T, T>]) -> (usize, usize, usize) {
+    fn max_execution_units(max_mem: i64, max_cpu: i64, cost: &ExBudget) -> (i64, i64) {
+        if cost.mem >= max_mem && cost.cpu >= max_cpu {
+            (cost.mem, cost.cpu)
+        } else if cost.mem > max_mem {
+            (cost.mem, max_cpu)
+        } else if cost.cpu > max_cpu {
+            (max_mem, cost.cpu)
+        } else {
+            (max_mem, max_cpu)
+        }
+    }
+
     let (max_mem, max_cpu, max_iter) =
         xs.iter()
             .fold((0, 0, 0), |(max_mem, max_cpu, max_iter), test| match test {
@@ -124,18 +137,15 @@ pub(crate) fn find_max_execution_units<T>(xs: &[TestResult<T, T>]) -> (usize, us
                     (max_mem, max_cpu, std::cmp::max(max_iter, *iterations))
                 }
                 TestResult::UnitTestResult(UnitTestResult { spent_budget, .. }) => {
-                    if spent_budget.mem >= max_mem && spent_budget.cpu >= max_cpu {
-                        (spent_budget.mem, spent_budget.cpu, max_iter)
-                    } else if spent_budget.mem > max_mem {
-                        (spent_budget.mem, max_cpu, max_iter)
-                    } else if spent_budget.cpu > max_cpu {
-                        (max_mem, spent_budget.cpu, max_iter)
-                    } else {
-                        (max_mem, max_cpu, max_iter)
-                    }
+                    let (max_mem, max_cpu) = max_execution_units(max_mem, max_cpu, spent_budget);
+                    (max_mem, max_cpu, max_iter)
                 }
-                TestResult::BenchmarkResult(..) => {
-                    unreachable!("unexpected benchmark found amongst test results.")
+                TestResult::BenchmarkResult(BenchmarkResult { measures, .. }) => {
+                    let (mut max_mem, mut max_cpu) = (max_mem, max_cpu);
+                    for (_, measure) in measures {
+                        (max_mem, max_cpu) = max_execution_units(max_mem, max_cpu, measure);
+                    }
+                    (max_mem, max_cpu, max_iter)
                 }
             });
 

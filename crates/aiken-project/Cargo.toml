@@ -42,10 +42,12 @@ pulldown-cmark = { version = "0.12.0", default-features = false, features = [
 rayon = "1.7.0"
 regex = "1.7.1"
 reqwest = { version = "0.11.14", features = ["blocking", "json"] }
+rgb = "0.8.50"
 semver = { version = "1.0.23", features = ["serde"] }
 serde = { version = "1.0.152", features = ["derive"] }
 serde_json = { version = "1.0.94", features = ["preserve_order"] }
 strip-ansi-escapes = "0.1.1"
+textplots = { git = "https://github.com/aiken-lang/textplots-rs.git" }
 thiserror = "1.0.39"
 tokio = { version = "1.26.0", features = ["full"] }
 toml = "0.7.2"
