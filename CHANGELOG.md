@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.1.11 - UNRELEASED
+## v1.1.11 - 2025-02-11
 
 ### Added
 
@@ -16,10 +16,10 @@
 
 ### Changed
 
-
 - **aiken-lang**: The compiler now raises a warning when attempting to destructure a record constructor without using named fields. See [#1084](https://github.com/aiken-lang/aiken/issues/1084). @KtorZ
 - **aiken-lang**: Fix blueprint schema definitions related to pairs (no longer omit (sometimes) Pairs definitions, and generate them as data List). See [#1086](https://github.com/aiken-lang/aiken/issues/1086) and [#970](https://github.com/aiken-lang/aiken/issues/970). @KtorZ
-- **aiken-project**: Improve feedback returned when matching tests or modules - see [#1092](https://github.com/aiken-lang/aiken/issues/1092). @KtorZ
+- **aiken-project**: Improve feedback returned when matching tests or modules. See [#1092](https://github.com/aiken-lang/aiken/issues/1092). @KtorZ
+- **aiken-project**: Disambiguate type-alias blueprint definition using module's name. See [#1074](https://github.com/aiken-lang/aiken/issues/1092). @KtorZ
 
 ## v1.1.10 - 2025-01-21
 
@@ -27,7 +27,6 @@
 
 - **aiken-project**: `export` output now supports the functions `return_type`. @rvcas
 - **aiken-lang**: `write_bits` can now be used from aiken/builtins. @Microproofs
-
 
 ### Changed
 
