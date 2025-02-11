@@ -22,7 +22,7 @@ description: "Code:\n\npub type MyPair =\n  Pair<Int, Int>\n\npub type MyDatum {
     "Int": {
       "dataType": "integer"
     },
-    "List$MyPair": {
+    "List$test_module/MyPair": {
       "dataType": "map",
       "keys": {
         "$ref": "#/definitions/Int"
@@ -30,18 +30,6 @@ description: "Code:\n\npub type MyPair =\n  Pair<Int, Int>\n\npub type MyDatum {
       "values": {
         "$ref": "#/definitions/Int"
       }
-    },
-    "MyPair": {
-      "title": "MyPair",
-      "dataType": "list",
-      "items": [
-        {
-          "$ref": "#/definitions/Int"
-        },
-        {
-          "$ref": "#/definitions/Int"
-        }
-      ]
     },
     "Void": {
       "title": "Unit",
@@ -63,13 +51,25 @@ description: "Code:\n\npub type MyPair =\n  Pair<Int, Int>\n\npub type MyDatum {
           "fields": [
             {
               "title": "pair",
-              "$ref": "#/definitions/MyPair"
+              "$ref": "#/definitions/test_module~1MyPair"
             },
             {
               "title": "pairs",
-              "$ref": "#/definitions/List$MyPair"
+              "$ref": "#/definitions/List$test_module~1MyPair"
             }
           ]
+        }
+      ]
+    },
+    "test_module/MyPair": {
+      "title": "MyPair",
+      "dataType": "list",
+      "items": [
+        {
+          "$ref": "#/definitions/Int"
+        },
+        {
+          "$ref": "#/definitions/Int"
         }
       ]
     }

@@ -13,36 +13,12 @@ description: "Code:\n\npub type Asset = (ByteArray, Int)\n\npub type POSIXTime =
   "redeemer": {
     "title": "redeemer",
     "schema": {
-      "$ref": "#/definitions/test_module~1MyRedeemer$Asset"
+      "$ref": "#/definitions/test_module~1MyRedeemer$test_module~1Asset"
     }
   },
   "compiledCode": "<redacted>",
   "hash": "<redacted>",
   "definitions": {
-    "AlwaysNone": {
-      "title": "AlwaysNone",
-      "anyOf": [
-        {
-          "title": "Never",
-          "description": "Nothing.",
-          "dataType": "constructor",
-          "index": 1,
-          "fields": []
-        }
-      ]
-    },
-    "Asset": {
-      "title": "Asset",
-      "dataType": "list",
-      "items": [
-        {
-          "$ref": "#/definitions/ByteArray"
-        },
-        {
-          "$ref": "#/definitions/Int"
-        }
-      ]
-    },
     "Bool": {
       "title": "Bool",
       "anyOf": [
@@ -66,37 +42,57 @@ description: "Code:\n\npub type Asset = (ByteArray, Int)\n\npub type POSIXTime =
     "Int": {
       "dataType": "integer"
     },
-    "List$Asset": {
+    "List$test_module/Asset": {
       "dataType": "list",
       "items": {
-        "$ref": "#/definitions/Asset"
+        "$ref": "#/definitions/test_module~1Asset"
       }
     },
-    "POSIXTime": {
-      "title": "POSIXTime",
-      "dataType": "integer"
-    },
-    "Pair$POSIXTime_Bool": {
+    "Pair$test_module/POSIXTime_Bool": {
       "title": "Pair",
       "dataType": "list",
       "items": [
         {
-          "$ref": "#/definitions/POSIXTime"
+          "$ref": "#/definitions/test_module~1POSIXTime"
         },
         {
           "$ref": "#/definitions/Bool"
         }
       ]
     },
-    "Pairs$Asset_POSIXTime": {
+    "Pairs$test_module/Asset_test_module/POSIXTime": {
       "title": "Pairs<a, POSIXTime>",
       "dataType": "map",
       "keys": {
-        "$ref": "#/definitions/Asset"
+        "$ref": "#/definitions/test_module~1Asset"
       },
       "values": {
-        "$ref": "#/definitions/POSIXTime"
+        "$ref": "#/definitions/test_module~1POSIXTime"
       }
+    },
+    "test_module/AlwaysNone": {
+      "title": "AlwaysNone",
+      "anyOf": [
+        {
+          "title": "Never",
+          "description": "Nothing.",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "test_module/Asset": {
+      "title": "Asset",
+      "dataType": "list",
+      "items": [
+        {
+          "$ref": "#/definitions/ByteArray"
+        },
+        {
+          "$ref": "#/definitions/Int"
+        }
+      ]
     },
     "test_module/MyDatum": {
       "title": "MyDatum",
@@ -107,7 +103,7 @@ description: "Code:\n\npub type Asset = (ByteArray, Int)\n\npub type POSIXTime =
           "index": 0,
           "fields": [
             {
-              "$ref": "#/definitions/AlwaysNone"
+              "$ref": "#/definitions/test_module~1AlwaysNone"
             }
           ]
         },
@@ -117,13 +113,13 @@ description: "Code:\n\npub type Asset = (ByteArray, Int)\n\npub type POSIXTime =
           "index": 1,
           "fields": [
             {
-              "$ref": "#/definitions/Pair$POSIXTime_Bool"
+              "$ref": "#/definitions/Pair$test_module~1POSIXTime_Bool"
             }
           ]
         }
       ]
     },
-    "test_module/MyRedeemer$Asset": {
+    "test_module/MyRedeemer$test_module/Asset": {
       "title": "MyRedeemer",
       "anyOf": [
         {
@@ -133,15 +129,19 @@ description: "Code:\n\npub type Asset = (ByteArray, Int)\n\npub type POSIXTime =
           "fields": [
             {
               "title": "fst_field",
-              "$ref": "#/definitions/List$Asset"
+              "$ref": "#/definitions/List$test_module~1Asset"
             },
             {
               "title": "snd_field",
-              "$ref": "#/definitions/Pairs$Asset_POSIXTime"
+              "$ref": "#/definitions/Pairs$test_module~1Asset_test_module~1POSIXTime"
             }
           ]
         }
       ]
+    },
+    "test_module/POSIXTime": {
+      "title": "POSIXTime",
+      "dataType": "integer"
     }
   }
 }

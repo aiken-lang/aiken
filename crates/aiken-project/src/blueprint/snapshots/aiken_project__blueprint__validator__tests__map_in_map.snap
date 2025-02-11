@@ -13,7 +13,7 @@ description: "Code:\n\npub type OuterMap =\n    List<Pair<Int, InnerMap>>\n\npub
   "redeemer": {
     "title": "_redeemer",
     "schema": {
-      "$ref": "#/definitions/OuterMap"
+      "$ref": "#/definitions/test_module~1OuterMap"
     }
   },
   "compiledCode": "<redacted>",
@@ -36,28 +36,8 @@ description: "Code:\n\npub type OuterMap =\n    List<Pair<Int, InnerMap>>\n\npub
         }
       ]
     },
-    "InnerMap": {
-      "title": "InnerMap",
-      "dataType": "map",
-      "keys": {
-        "$ref": "#/definitions/Int"
-      },
-      "values": {
-        "$ref": "#/definitions/Bool"
-      }
-    },
     "Int": {
       "dataType": "integer"
-    },
-    "OuterMap": {
-      "title": "OuterMap",
-      "dataType": "map",
-      "keys": {
-        "$ref": "#/definitions/Int"
-      },
-      "values": {
-        "$ref": "#/definitions/InnerMap"
-      }
     },
     "Void": {
       "title": "Unit",
@@ -68,6 +48,26 @@ description: "Code:\n\npub type OuterMap =\n    List<Pair<Int, InnerMap>>\n\npub
           "fields": []
         }
       ]
+    },
+    "test_module/InnerMap": {
+      "title": "InnerMap",
+      "dataType": "map",
+      "keys": {
+        "$ref": "#/definitions/Int"
+      },
+      "values": {
+        "$ref": "#/definitions/Bool"
+      }
+    },
+    "test_module/OuterMap": {
+      "title": "OuterMap",
+      "dataType": "map",
+      "keys": {
+        "$ref": "#/definitions/Int"
+      },
+      "values": {
+        "$ref": "#/definitions/test_module~1InnerMap"
+      }
     }
   }
 }

@@ -26,15 +26,11 @@ description: "Code:\n\n/// On-chain state\npub type State {\n    /// The contest
     "Int": {
       "dataType": "integer"
     },
-    "List$Party": {
+    "List$test_module/Party": {
       "dataType": "list",
       "items": {
-        "$ref": "#/definitions/Party"
+        "$ref": "#/definitions/test_module~1Party"
       }
-    },
-    "Party": {
-      "title": "Party",
-      "dataType": "bytes"
     },
     "test_module/ContestationPeriod": {
       "title": "ContestationPeriod",
@@ -77,6 +73,10 @@ description: "Code:\n\n/// On-chain state\npub type State {\n    /// The contest
         }
       ]
     },
+    "test_module/Party": {
+      "title": "Party",
+      "dataType": "bytes"
+    },
     "test_module/State": {
       "title": "State",
       "description": "On-chain state",
@@ -94,7 +94,7 @@ description: "Code:\n\n/// On-chain state\npub type State {\n    /// The contest
             {
               "title": "parties",
               "description": "List of public key hashes of all participants",
-              "$ref": "#/definitions/List$Party"
+              "$ref": "#/definitions/List$test_module~1Party"
             },
             {
               "title": "utxoHash",
