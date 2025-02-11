@@ -349,12 +349,14 @@ impl Reference {
             alias,
             parameters,
             annotation,
+            module,
         }) = type_info.alias().as_deref()
         {
             if let Some(resolved_parameters) = resolve_alias(parameters, annotation, type_info) {
                 return Self::from_type_alias(
                     type_info,
-                    alias.to_string(),
+                    alias,
+                    module.as_deref(),
                     resolved_parameters,
                     type_parameters,
                 );
@@ -429,14 +431,20 @@ impl Reference {
 
     fn from_type_alias(
         type_info: &Type,
-        alias: String,
+        alias: &str,
+        module: Option<&str>,
         parameters: Vec<Rc<Type>>,
         type_parameters: &HashMap<u64, Rc<Type>>,
     ) -> Self {
+        let prefix = match module {
+            Some(module) => format!("{module}/{alias}"),
+            None => alias.to_string(),
+        };
+
         if !parameters.is_empty() {
             Reference {
                 inner: format!(
-                    "{alias}${}",
+                    "{prefix}${}",
                     parameters
                         .iter()
                         .map(|param| {
@@ -456,9 +464,7 @@ impl Reference {
                 ),
             }
         } else {
-            Reference {
-                inner: alias.clone(),
-            }
+            Reference { inner: prefix }
         }
     }
 }

@@ -193,6 +193,7 @@ impl Type {
             ret: Type::option(Type::tuple(vec![Type::prng(), a])),
             alias: Some(
                 TypeAliasAnnotation {
+                    module: None,
                     alias: FUZZER.to_string(),
                     parameters: vec!["a".to_string()],
                     annotation: Annotation::Fn {
@@ -234,6 +235,7 @@ impl Type {
             ret: Type::fuzzer(a),
             alias: Some(
                 TypeAliasAnnotation {
+                    module: None,
                     alias: SAMPLER.to_string(),
                     parameters: vec!["a".to_string()],
                     annotation: Annotation::Fn {
@@ -276,6 +278,7 @@ impl Type {
             args: vec![Type::pair(k, v)],
             alias: Some(
                 TypeAliasAnnotation {
+                    module: None,
                     alias: PAIRS.to_string(),
                     parameters: vec!["k".to_string(), "v".to_string()],
                     annotation: Annotation::Constructor {

@@ -51,6 +51,7 @@ impl Printer {
             alias,
             parameters,
             annotation,
+            module: _,
         }) = typ.alias().as_deref()
         {
             if let Some(resolved_parameters) = resolve_alias(parameters, annotation, typ) {
@@ -551,6 +552,7 @@ mod tests {
                     alias: None,
                 }),
                 alias: Some(Rc::new(TypeAliasAnnotation {
+                    module: None,
                     alias: "Fuzzer".to_string(),
                     parameters: vec!["a".to_string(),],
                     annotation: Annotation::Fn {
@@ -621,6 +623,7 @@ mod tests {
                     alias: None,
                 }),
                 alias: Some(Rc::new(TypeAliasAnnotation {
+                    module: None,
                     alias: "Fuzzer".to_string(),
                     parameters: vec!["a".to_string(),],
                     annotation: Annotation::Fn {
@@ -675,6 +678,7 @@ mod tests {
                     alias: None,
                 }),
                 alias: Some(Rc::new(TypeAliasAnnotation {
+                    module: None,
                     alias: "Identity".to_string(),
                     parameters: vec!["t".to_string()],
                     annotation: Annotation::Var {

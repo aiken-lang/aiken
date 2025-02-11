@@ -1160,6 +1160,7 @@ impl<'a> Environment<'a> {
                     .set_alias(Some(
                         TypeAliasAnnotation {
                             alias: name.to_string(),
+                            module: Some(module.to_string()),
                             parameters: args.to_vec(),
                             annotation: resolved_type.clone(),
                         }
