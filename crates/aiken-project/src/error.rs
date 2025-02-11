@@ -594,6 +594,8 @@ pub enum Warning {
     CompilerVersionMismatch { demanded: String, current: String },
     #[error("No configuration found for environment {env}.")]
     NoConfigurationForEnv { env: String },
+    #[error("Suspicious test filter (-m) yielding no test scenarios.")]
+    SuspiciousTestMatch { test: String },
 }
 
 impl ExtraData for Warning {
@@ -603,7 +605,8 @@ impl ExtraData for Warning {
             | Warning::DependencyAlreadyExists { .. }
             | Warning::InvalidModuleName { .. }
             | Warning::CompilerVersionMismatch { .. }
-            | Warning::NoConfigurationForEnv { .. } => None,
+            | Warning::NoConfigurationForEnv { .. }
+            | Warning::SuspiciousTestMatch { .. } => None,
             Warning::Type { warning, .. } => warning.extra_data(),
         }
     }
@@ -616,7 +619,8 @@ impl GetSource for Warning {
             Warning::NoValidators
             | Warning::DependencyAlreadyExists { .. }
             | Warning::NoConfigurationForEnv { .. }
-            | Warning::CompilerVersionMismatch { .. } => None,
+            | Warning::CompilerVersionMismatch { .. }
+            | Warning::SuspiciousTestMatch { .. } => None,
         }
     }
 
@@ -627,7 +631,8 @@ impl GetSource for Warning {
             | Warning::InvalidModuleName { .. }
             | Warning::DependencyAlreadyExists { .. }
             | Warning::NoConfigurationForEnv { .. }
-            | Warning::CompilerVersionMismatch { .. } => None,
+            | Warning::CompilerVersionMismatch { .. }
+            | Warning::SuspiciousTestMatch { .. } => None,
         }
     }
 }
@@ -644,7 +649,8 @@ impl Diagnostic for Warning {
             | Warning::InvalidModuleName { .. }
             | Warning::NoConfigurationForEnv { .. }
             | Warning::DependencyAlreadyExists { .. }
-            | Warning::CompilerVersionMismatch { .. } => None,
+            | Warning::CompilerVersionMismatch { .. }
+            | Warning::SuspiciousTestMatch { .. } => None,
         }
     }
 
@@ -655,7 +661,8 @@ impl Diagnostic for Warning {
             | Warning::NoValidators
             | Warning::DependencyAlreadyExists { .. }
             | Warning::NoConfigurationForEnv { .. }
-            | Warning::CompilerVersionMismatch { .. } => None,
+            | Warning::CompilerVersionMismatch { .. }
+            | Warning::SuspiciousTestMatch { .. } => None,
         }
     }
 
@@ -676,6 +683,7 @@ impl Diagnostic for Warning {
             Warning::NoConfigurationForEnv { .. } => {
                 Some(Box::new("aiken::project::config::missing::env"))
             }
+            Warning::SuspiciousTestMatch { .. } => Some(Box::new("aiken::check::suspicious_match")),
         }
     }
 
@@ -695,6 +703,12 @@ impl Diagnostic for Warning {
             )),
             Warning::NoConfigurationForEnv { .. } => Some(Box::new(
                 "When configuration keys are missing for a target environment, no 'config' module will be created. This may lead to issues down the line.",
+            )),
+            Warning::SuspiciousTestMatch { test } => Some(Box::new(
+                format!(
+                    "Did you mean to match all tests within a specific module? Like so:\n\n╰─▶ {}",
+                    format!("-m \"{test}.{{..}}\"").if_supports_color(Stderr, |s| s.bold()),
+                )
             )),
         }
     }

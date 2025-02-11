@@ -123,6 +123,7 @@ where
 
     if !json {
         for warning in &warnings {
+            eprintln!();
             warning.report()
         }
 

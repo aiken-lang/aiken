@@ -117,6 +117,53 @@ impl EventListener for Terminal {
                     name.if_supports_color(Stderr, |s| s.bright_blue()),
                 );
             }
+            Event::CollectingTests {
+                matching_module,
+                matching_names,
+            } => {
+                eprintln!(
+                    "{:>13} {tests} {module}",
+                    "Collecting"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.purple()),
+                    tests = if matching_names.is_empty() {
+                        if matching_module.is_some() {
+                            "all tests scenarios"
+                                .if_supports_color(Stderr, |s| s.bold())
+                                .to_string()
+                        } else {
+                            "all tests scenarios".to_string()
+                        }
+                    } else {
+                        format!(
+                            "test{} {}",
+                            if matching_names.len() > 1 { "s" } else { "" },
+                            matching_names
+                                .iter()
+                                .map(|s| format!("*{s}*"))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                                .if_supports_color(Stderr, |s| s.bold())
+                        )
+                    },
+                    module = match matching_module {
+                        None => format!(
+                            "across {}",
+                            if matching_names.is_empty() {
+                                "all modules".to_string()
+                            } else {
+                                "all modules"
+                                    .if_supports_color(Stderr, |s| s.bold())
+                                    .to_string()
+                            }
+                        ),
+                        Some(module) => format!(
+                            "within module(s): {}",
+                            format!("*{module}*").if_supports_color(Stderr, |s| s.bold())
+                        ),
+                    }
+                );
+            }
             Event::RunningTests => {
                 eprintln!(
                     "{} {}",

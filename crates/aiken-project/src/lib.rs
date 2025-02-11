@@ -980,18 +980,48 @@ where
                         ""
                     };
 
-                    let match_names = match_split_dot.next().map(|names| {
+                    let match_names = match_split_dot.next().and_then(|names| {
                         let names = names.replace(&['{', '}'][..], "");
-
                         let names_split_comma = names.split(',');
 
-                        names_split_comma.map(str::to_string).collect()
+                        let result = names_split_comma
+                            .filter_map(|s| {
+                                let s = s.trim();
+                                if s.is_empty() {
+                                    None
+                                } else {
+                                    Some(s.to_string())
+                                }
+                            })
+                            .collect::<Vec<_>>();
+
+                        if result.is_empty() {
+                            None
+                        } else {
+                            Some(result)
+                        }
+                    });
+
+                    self.event_listener.handle_event(Event::CollectingTests {
+                        matching_module: if match_module.is_empty() {
+                            None
+                        } else {
+                            Some(match_module.to_string())
+                        },
+                        matching_names: match_names.clone().unwrap_or_default(),
                     });
 
                     (match_module.to_string(), match_names)
                 })
                 .collect::<Vec<(String, Option<Vec<String>>)>>()
         });
+
+        if match_tests.is_none() {
+            self.event_listener.handle_event(Event::CollectingTests {
+                matching_module: None,
+                matching_names: vec![],
+            });
+        }
 
         for checked_module in self.checked_modules.values() {
             if checked_module.package != self.config.name.to_string() {
@@ -1062,6 +1092,27 @@ where
                 input_path,
                 kind,
             ));
+        }
+
+        // NOTE: The filtering syntax for tests isn't quite obvious. A common pitfall when willing
+        // to match over a top-level module is to simple pass in `-m module_name`, which will be
+        // treated as a match for a test name.
+        //
+        // In this case, we raise an additional warning to suggest a different match syntax, which
+        // may be quite helpful in teaching users how to deal with module filtering.
+        match match_tests.as_deref() {
+            Some(&[(ref s, Some(ref names))]) if tests.is_empty() => {
+                if let [test] = names.as_slice() {
+                    self.warnings.push(Warning::SuspiciousTestMatch {
+                        test: if s.is_empty() {
+                            test.to_string()
+                        } else {
+                            s.to_string()
+                        },
+                    });
+                }
+            }
+            _ => (),
         }
 
         Ok(tests)

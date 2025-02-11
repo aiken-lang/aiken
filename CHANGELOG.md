@@ -19,6 +19,7 @@
 
 - **aiken-lang**: The compiler now raises a warning when attempting to destructure a record constructor without using named fields. See [#1084](https://github.com/aiken-lang/aiken/issues/1084). @KtorZ
 - **aiken-lang**: Fix blueprint schema definitions related to pairs (no longer omit (sometimes) Pairs definitions, and generate them as data List). See [#1086](https://github.com/aiken-lang/aiken/issues/1086) and [#970](https://github.com/aiken-lang/aiken/issues/970). @KtorZ
+- **aiken-project**: Improve feedback returned when matching tests or modules - see [#1092](https://github.com/aiken-lang/aiken/issues/1092). @KtorZ
 
 ## v1.1.10 - 2025-01-21
 
@@ -31,7 +32,7 @@
 ### Changed
 
 - **aiken-project**: The `aiken.toml` file no longer supports `v1` and `v2` for the plutus version field. @rvcas
-- **aiken-project**: `Error::TomlLoading` now looks much better - [see](https://github.com/aiken-lang/aiken/issues/1032#issuecomment-2562122101). @rvcas
+- **aiken-project**: `Error::TomlLoading` now looks much better - see [#1032](https://github.com/aiken-lang/aiken/issues/1032#issuecomment-2562122101). @rvcas
 - **aiken-lang**: 10-20% optimization improvements via case-constr, rearranging function definitions (while maintaining dependency ordering),
                   and allowing inlining in if_then_else_error cases which preserve the same error semantics for a program. @Microproofs
 

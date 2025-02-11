@@ -43,6 +43,10 @@ pub enum Event {
         name: String,
         path: PathBuf,
     },
+    CollectingTests {
+        matching_module: Option<String>,
+        matching_names: Vec<String>,
+    },
     RunningTests,
     RunningBenchmarks,
     FinishedTests {
