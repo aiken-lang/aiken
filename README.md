@@ -37,10 +37,6 @@ Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md) to know how.
 
 Be on top of any updates using the [CHANGELOG](https://github.com/aiken-lang/aiken/blob/main/CHANGELOG.md) and the [Project Tracking](https://github.com/orgs/aiken-lang/projects/2/views/1).
 
-## Stats
-
-![Alt](https://repobeats.axiom.co/api/embed/c93f72d2f0dd8cac82fc230ea97fa23787b32978.svg "Repobeats analytics image")
-
 > [!NOTE]
 >
 > The name comes from [Howard Aiken](https://en.wikipedia.org/wiki/Howard_H._Aiken), an American physicist and a pioneer in computing.
