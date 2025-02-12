@@ -7,12 +7,12 @@
   <hr />
     <h2 align="center" style="border-bottom: none">A modern smart contract platform for Cardano</h2>
 
-[![Licence](https://img.shields.io/github/license/aiken-lang/aiken?style=for-the-badge)](https://github.com/aiken-lang/aiken/blob/main/LICENSE)
-[![Tests](https://img.shields.io/github/actions/workflow/status/aiken-lang/aiken/tests.yml?style=for-the-badge)](https://github.com/aiken-lang/aiken/actions/workflows/tests.yml)
-[![Twitter/X](https://img.shields.io/badge/Follow%20us-@aiken__eng-blue?logo=x&style=for-the-badge)](https://x.com/aiken_eng)
+[![Licence](https://img.shields.io/github/license/aiken-lang/aiken)](https://github.com/aiken-lang/aiken/blob/main/LICENSE)
+[![Tests](https://img.shields.io/github/actions/workflow/status/aiken-lang/aiken/tests.yml)](https://github.com/aiken-lang/aiken/actions/workflows/tests.yml)
+[![Twitter/X](https://img.shields.io/badge/Follow%20us-@aiken__eng-blue?logo=x)](https://x.com/aiken_eng)
 
-[![Crates.io](https://img.shields.io/crates/v/aiken?style=for-the-badge)](https://crates.io/crates/aiken)
-[![NPM](https://img.shields.io/npm/v/%40aiken-lang%2Faiken?style=for-the-badge)](https://www.npmjs.com/package/@aiken-lang/aiken)
+[![Crates.io](https://img.shields.io/crates/v/aiken)](https://crates.io/crates/aiken)
+[![NPM](https://img.shields.io/npm/v/%40aiken-lang%2Faiken)](https://www.npmjs.com/package/@aiken-lang/aiken)
 
   <hr/>
 </div>
