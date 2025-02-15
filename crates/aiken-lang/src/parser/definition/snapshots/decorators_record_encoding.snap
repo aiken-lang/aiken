@@ -1,0 +1,50 @@
+---
+source: crates/aiken-lang/src/parser/definition/data_type.rs
+description: "Code:\n\n@encoding(list)\npub type Thing {\n  name: ByteArray\n}\n"
+---
+DataType(
+    DataType {
+        decorators: [
+            Encoding(
+                List,
+            ),
+        ],
+        constructors: [
+            RecordConstructor {
+                decorators: [
+                    Encoding(
+                        List,
+                    ),
+                ],
+                location: 31..52,
+                name: "Thing",
+                arguments: [
+                    RecordConstructorArg {
+                        decorators: [],
+                        label: Some(
+                            "name",
+                        ),
+                        annotation: Constructor {
+                            location: 41..50,
+                            module: None,
+                            name: "ByteArray",
+                            arguments: [],
+                        },
+                        location: 35..50,
+                        tipo: (),
+                        doc: None,
+                    },
+                ],
+                doc: None,
+                sugar: true,
+            },
+        ],
+        doc: None,
+        location: 0..52,
+        name: "Thing",
+        opaque: false,
+        parameters: [],
+        public: true,
+        typed_parameters: [],
+    },
+)
