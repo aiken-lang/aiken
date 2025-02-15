@@ -1,0 +1,167 @@
+---
+source: crates/aiken-lang/src/parser/definition/data_type.rs
+description: "Code:\n\npub type L2Datum {\n  @tag(117)\n  Inactive\n\n  @tag(118)\n  BatchTxs(List<ByteArray>)\n\n  @tag(1170)\n  Committed(Bool, List<ByteArray>)\n\n  @tag(1171)\n  Withdrawn(Bool, @len(32) ByteArray)\n}\n"
+---
+DataType(
+    DataType {
+        decorators: [],
+        constructors: [
+            RecordConstructor {
+                decorators: [
+                    Tag {
+                        value: "117",
+                        base: Decimal {
+                            numeric_underscore: false,
+                        },
+                    },
+                ],
+                location: 21..41,
+                name: "Inactive",
+                arguments: [],
+                doc: None,
+                sugar: false,
+            },
+            RecordConstructor {
+                decorators: [
+                    Tag {
+                        value: "118",
+                        base: Decimal {
+                            numeric_underscore: false,
+                        },
+                    },
+                ],
+                location: 45..82,
+                name: "BatchTxs",
+                arguments: [
+                    RecordConstructorArg {
+                        decorators: [],
+                        label: None,
+                        annotation: Constructor {
+                            location: 66..81,
+                            module: None,
+                            name: "List",
+                            arguments: [
+                                Constructor {
+                                    location: 71..80,
+                                    module: None,
+                                    name: "ByteArray",
+                                    arguments: [],
+                                },
+                            ],
+                        },
+                        location: 66..81,
+                        tipo: (),
+                        doc: None,
+                    },
+                ],
+                doc: None,
+                sugar: false,
+            },
+            RecordConstructor {
+                decorators: [
+                    Tag {
+                        value: "1170",
+                        base: Decimal {
+                            numeric_underscore: false,
+                        },
+                    },
+                ],
+                location: 86..131,
+                name: "Committed",
+                arguments: [
+                    RecordConstructorArg {
+                        decorators: [],
+                        label: None,
+                        annotation: Constructor {
+                            location: 109..113,
+                            module: None,
+                            name: "Bool",
+                            arguments: [],
+                        },
+                        location: 109..113,
+                        tipo: (),
+                        doc: None,
+                    },
+                    RecordConstructorArg {
+                        decorators: [],
+                        label: None,
+                        annotation: Constructor {
+                            location: 115..130,
+                            module: None,
+                            name: "List",
+                            arguments: [
+                                Constructor {
+                                    location: 120..129,
+                                    module: None,
+                                    name: "ByteArray",
+                                    arguments: [],
+                                },
+                            ],
+                        },
+                        location: 115..130,
+                        tipo: (),
+                        doc: None,
+                    },
+                ],
+                doc: None,
+                sugar: false,
+            },
+            RecordConstructor {
+                decorators: [
+                    Tag {
+                        value: "1171",
+                        base: Decimal {
+                            numeric_underscore: false,
+                        },
+                    },
+                ],
+                location: 135..183,
+                name: "Withdrawn",
+                arguments: [
+                    RecordConstructorArg {
+                        decorators: [],
+                        label: None,
+                        annotation: Constructor {
+                            location: 158..162,
+                            module: None,
+                            name: "Bool",
+                            arguments: [],
+                        },
+                        location: 158..162,
+                        tipo: (),
+                        doc: None,
+                    },
+                    RecordConstructorArg {
+                        decorators: [
+                            Len {
+                                value: "32",
+                                base: Decimal {
+                                    numeric_underscore: false,
+                                },
+                            },
+                        ],
+                        label: None,
+                        annotation: Constructor {
+                            location: 173..182,
+                            module: None,
+                            name: "ByteArray",
+                            arguments: [],
+                        },
+                        location: 164..182,
+                        tipo: (),
+                        doc: None,
+                    },
+                ],
+                doc: None,
+                sugar: false,
+            },
+        ],
+        doc: None,
+        location: 0..185,
+        name: "L2Datum",
+        opaque: false,
+        parameters: [],
+        public: true,
+        typed_parameters: [],
+    },
+)

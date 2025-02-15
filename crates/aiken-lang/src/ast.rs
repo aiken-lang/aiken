@@ -407,6 +407,7 @@ impl From<TypedTest> for TypedFunction {
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TypeAlias<T> {
+    pub decorators: Vec<Decorator>,
     pub alias: String,
     pub annotation: Annotation,
     pub doc: Option<String>,
@@ -438,6 +439,7 @@ impl TypedDataType {
 
     pub fn known_data_type(name: &str, constructors: &[RecordConstructor<Rc<Type>>]) -> Self {
         Self {
+            decorators: vec![],
             name: name.to_string(),
             constructors: constructors.to_vec(),
             location: Span::empty(),
@@ -464,7 +466,21 @@ impl TypedDataType {
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum Decorator {
+    Tag { value: String, base: Base },
+    Len { value: String, base: Base },
+    Encoding(DecoratorEncoding),
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum DecoratorEncoding {
+    Constr,
+    List,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DataType<T> {
+    pub decorators: Vec<Decorator>,
     pub constructors: Vec<RecordConstructor<T>>,
     pub doc: Option<String>,
     pub location: Span,
@@ -981,6 +997,7 @@ impl CallArg<TypedPattern> {
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RecordConstructor<T> {
+    pub decorators: Vec<Decorator>,
     pub location: Span,
     pub name: String,
     pub arguments: Vec<RecordConstructorArg<T>>,
@@ -1000,6 +1017,7 @@ where
         names
             .iter()
             .map(|name| RecordConstructor {
+                decorators: vec![],
                 location: Span::empty(),
                 name: name.to_string(),
                 arguments: vec![],
@@ -1011,6 +1029,7 @@ where
 
     pub fn known_record(name: &str, args: &[RecordConstructorArg<A>]) -> Self {
         RecordConstructor {
+            decorators: vec![],
             location: Span::empty(),
             name: name.to_string(),
             arguments: args.to_vec(),
@@ -1022,6 +1041,7 @@ where
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RecordConstructorArg<T> {
+    pub decorators: Vec<Decorator>,
     pub label: Option<String>,
     // ast
     pub annotation: Annotation,

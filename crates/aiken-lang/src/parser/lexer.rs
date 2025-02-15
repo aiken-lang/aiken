@@ -299,7 +299,15 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         comment_parser(Token::DocComment),
         comment_parser(Token::Comment),
         choice((
-            ordinal, keyword, int, op, newlines, grouping, bytestring, string,
+            ordinal,
+            keyword,
+            int,
+            op,
+            newlines,
+            grouping,
+            bytestring,
+            string,
+            just('@').to(Token::At),
         ))
         .or(any().map(Token::Error).validate(|t, span, emit| {
             emit(ParseError::expected_input_found(
