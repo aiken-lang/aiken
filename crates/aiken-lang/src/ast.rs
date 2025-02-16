@@ -466,7 +466,13 @@ impl TypedDataType {
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum Decorator {
+pub struct Decorator {
+    pub kind: DecoratorKind,
+    pub location: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum DecoratorKind {
     Tag { value: String, base: Base },
     Len { value: String, base: Base },
     Encoding(DecoratorEncoding),
