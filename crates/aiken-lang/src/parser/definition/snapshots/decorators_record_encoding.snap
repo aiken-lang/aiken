@@ -5,16 +5,22 @@ description: "Code:\n\n@encoding(list)\npub type Thing {\n  name: ByteArray\n}\n
 DataType(
     DataType {
         decorators: [
-            Encoding(
-                List,
-            ),
+            Decorator {
+                kind: Encoding(
+                    List,
+                ),
+                location: 0..15,
+            },
         ],
         constructors: [
             RecordConstructor {
                 decorators: [
-                    Encoding(
-                        List,
-                    ),
+                    Decorator {
+                        kind: Encoding(
+                            List,
+                        ),
+                        location: 0..15,
+                    },
                 ],
                 location: 31..52,
                 name: "Thing",
