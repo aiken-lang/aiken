@@ -441,8 +441,8 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                         .map(|(location, label)| {
                             Err(Error::UnexpectedLabeledArgInPattern {
                                 location,
-                                label,
-                                name: name.clone(),
+                                label: Box::new(label),
+                                name: Box::new(name.clone()),
                                 args: pattern_args.clone(),
                                 module: module.clone(),
                                 spread_location,

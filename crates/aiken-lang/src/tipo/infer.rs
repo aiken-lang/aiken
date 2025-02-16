@@ -8,10 +8,11 @@ use super::{
 use crate::{
     IdGenerator,
     ast::{
-        Annotation, ArgBy, ArgName, ArgVia, DataType, Definition, Function, ModuleConstant,
-        ModuleKind, RecordConstructor, RecordConstructorArg, Tracing, TypeAlias, TypedArg,
-        TypedDefinition, TypedModule, TypedValidator, UntypedArg, UntypedDefinition, UntypedModule,
-        UntypedPattern, UntypedValidator, Use, Validator,
+        Annotation, ArgBy, ArgName, ArgVia, DataType, Decorator, DecoratorKind, Definition,
+        Function, ModuleConstant, ModuleKind, RecordConstructor, RecordConstructorArg, Tracing,
+        TypeAlias, TypedArg, TypedDataType, TypedDefinition, TypedModule, TypedTypeAlias,
+        TypedValidator, UntypedArg, UntypedDefinition, UntypedModule, UntypedPattern,
+        UntypedValidator, Use, Validator,
     },
     expr::{TypedExpr, UntypedAssignmentKind, UntypedExpr},
     parser::token::Token,
@@ -493,7 +494,7 @@ fn infer_definition(
                 .tipo
                 .clone();
 
-            Ok(Definition::TypeAlias(TypeAlias {
+            let typed_type_alias = TypeAlias {
                 doc,
                 location,
                 public,
@@ -502,7 +503,11 @@ fn infer_definition(
                 annotation,
                 decorators,
                 tipo,
-            }))
+            };
+
+            typed_type_alias.check_decorators()?;
+
+            Ok(Definition::TypeAlias(typed_type_alias))
         }
 
         Definition::DataType(DataType {
@@ -619,6 +624,8 @@ fn infer_definition(
                     }
                 }
             }
+
+            typed_data.check_decorators()?;
 
             Ok(Definition::DataType(typed_data))
         }
@@ -985,5 +992,154 @@ fn put_params_in_scope<'a>(
             }
             ArgName::Named { .. } | ArgName::Discarded { .. } => (),
         };
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum DecoratorContext {
+    Record,
+    Enum,
+    Field,
+    Constructor,
+    Alias,
+}
+
+impl DecoratorContext {
+    pub fn is_alias(&self) -> bool {
+        matches!(self, DecoratorContext::Alias)
+    }
+}
+
+impl fmt::Display for DecoratorContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DecoratorContext::Record => write!(f, "record"),
+            DecoratorContext::Enum => write!(f, "enum"),
+            DecoratorContext::Field => write!(f, "field"),
+            DecoratorContext::Constructor => write!(f, "constructor"),
+            DecoratorContext::Alias => write!(f, "type alias"),
+        }
+    }
+}
+
+impl TypedDataType {
+    fn check_decorators(&self) -> Result<(), Error> {
+        // First determine if this is a record or enum type
+        let is_enum = self.constructors.len() > 1;
+
+        let context = if is_enum {
+            DecoratorContext::Enum
+        } else {
+            DecoratorContext::Record
+        };
+
+        validate_decorators_in_context(&self.decorators, context, None)?;
+
+        // Validate constructor decorators
+        for constructor in &self.constructors {
+            validate_decorators_in_context(
+                &constructor.decorators,
+                DecoratorContext::Constructor,
+                None,
+            )?;
+
+            // Validate field decorators
+            for arg in &constructor.arguments {
+                validate_decorators_in_context(
+                    &arg.decorators,
+                    DecoratorContext::Field,
+                    Some(&arg.tipo),
+                )?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl TypedTypeAlias {
+    fn check_decorators(&self) -> Result<(), Error> {
+        validate_decorators_in_context(&self.decorators, DecoratorContext::Alias, Some(&self.tipo))
+    }
+}
+
+fn validate_decorators_in_context(
+    decorators: &[Decorator],
+    context: DecoratorContext,
+    tipo: Option<&Type>,
+) -> Result<(), Error> {
+    // Check for conflicts between decorators
+    for (i, d1) in decorators.iter().enumerate() {
+        // Validate context
+        if !d1.kind.allowed_contexts().contains(&context) {
+            return Err(Error::DecoratorValidation {
+                location: d1.location,
+                message: format!("this decorator not allowed in a {} context", context),
+            });
+        }
+
+        // Validate type constraints if applicable
+        if let Some(t) = tipo {
+            d1.kind.validate_type(&context, t, d1.location)?;
+        }
+
+        // Check for conflicts with other decorators
+        for d2 in decorators.iter().skip(i + 1) {
+            if d1.kind.conflicts_with(&d2.kind) {
+                return Err(Error::ConflictingDecorators {
+                    location: d1.location,
+                    conflicting_location: d2.location,
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
+impl DecoratorKind {
+    fn allowed_contexts(&self) -> &[DecoratorContext] {
+        match self {
+            DecoratorKind::Tag { .. } => &[DecoratorContext::Record, DecoratorContext::Constructor],
+            DecoratorKind::Len { .. } => &[DecoratorContext::Field, DecoratorContext::Alias],
+            DecoratorKind::Encoding(_) => &[DecoratorContext::Record],
+        }
+    }
+
+    fn validate_type(
+        &self,
+        context: &DecoratorContext,
+        tipo: &Type,
+        loc: Span,
+    ) -> Result<(), Error> {
+        match self {
+            DecoratorKind::Tag { .. } => Ok(()),
+            DecoratorKind::Len { .. } => {
+                if tipo.is_bytearray() && (tipo.alias().is_none() || context.is_alias()) {
+                    Ok(())
+                } else {
+                    Err(Error::DecoratorValidation {
+                        location: loc,
+                        message: "@len decorator can only be used with unaliased ByteArray fields"
+                            .to_string(),
+                    })
+                }
+            }
+            DecoratorKind::Encoding(_) => Ok(()),
+        }
+    }
+
+    fn conflicts_with(&self, other: &DecoratorKind) -> bool {
+        match (self, other) {
+            (DecoratorKind::Tag { .. }, DecoratorKind::Encoding(_)) => true,
+            (DecoratorKind::Tag { .. }, DecoratorKind::Tag { .. }) => true,
+            (DecoratorKind::Tag { .. }, DecoratorKind::Len { .. }) => true,
+            (DecoratorKind::Len { .. }, DecoratorKind::Tag { .. }) => true,
+            (DecoratorKind::Len { .. }, DecoratorKind::Len { .. }) => true,
+            (DecoratorKind::Len { .. }, DecoratorKind::Encoding(_)) => true,
+            (DecoratorKind::Encoding(_), DecoratorKind::Tag { .. }) => true,
+            (DecoratorKind::Encoding(_), DecoratorKind::Len { .. }) => true,
+            (DecoratorKind::Encoding(_), DecoratorKind::Encoding(_)) => true,
+        }
     }
 }
