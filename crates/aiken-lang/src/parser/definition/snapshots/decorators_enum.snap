@@ -8,11 +8,14 @@ DataType(
         constructors: [
             RecordConstructor {
                 decorators: [
-                    Tag {
-                        value: "117",
-                        base: Decimal {
-                            numeric_underscore: false,
+                    Decorator {
+                        kind: Tag {
+                            value: "117",
+                            base: Decimal {
+                                numeric_underscore: false,
+                            },
                         },
+                        location: 21..30,
                     },
                 ],
                 location: 21..41,
@@ -23,11 +26,14 @@ DataType(
             },
             RecordConstructor {
                 decorators: [
-                    Tag {
-                        value: "118",
-                        base: Decimal {
-                            numeric_underscore: false,
+                    Decorator {
+                        kind: Tag {
+                            value: "118",
+                            base: Decimal {
+                                numeric_underscore: false,
+                            },
                         },
+                        location: 45..54,
                     },
                 ],
                 location: 45..82,
@@ -59,11 +65,14 @@ DataType(
             },
             RecordConstructor {
                 decorators: [
-                    Tag {
-                        value: "1170",
-                        base: Decimal {
-                            numeric_underscore: false,
+                    Decorator {
+                        kind: Tag {
+                            value: "1170",
+                            base: Decimal {
+                                numeric_underscore: false,
+                            },
                         },
+                        location: 86..96,
                     },
                 ],
                 location: 86..131,
@@ -108,11 +117,14 @@ DataType(
             },
             RecordConstructor {
                 decorators: [
-                    Tag {
-                        value: "1171",
-                        base: Decimal {
-                            numeric_underscore: false,
+                    Decorator {
+                        kind: Tag {
+                            value: "1171",
+                            base: Decimal {
+                                numeric_underscore: false,
+                            },
                         },
+                        location: 135..145,
                     },
                 ],
                 location: 135..183,
@@ -133,11 +145,14 @@ DataType(
                     },
                     RecordConstructorArg {
                         decorators: [
-                            Len {
-                                value: "32",
-                                base: Decimal {
-                                    numeric_underscore: false,
+                            Decorator {
+                                kind: Len {
+                                    value: "32",
+                                    base: Decimal {
+                                        numeric_underscore: false,
+                                    },
                                 },
+                                location: 164..172,
                             },
                         ],
                         label: None,

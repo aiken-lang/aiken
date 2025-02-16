@@ -5,13 +5,15 @@ use crate::{
 use chumsky::prelude::*;
 
 pub fn decorators() -> impl Parser<Token, Vec<ast::Decorator>, Error = ParseError> {
-    let tag_value = select! { Token::Int { value, base } => ast::Decorator::Tag { value, base } };
-    let len_value = select! { Token::Int { value, base } => ast::Decorator::Len { value, base } };
+    let tag_value =
+        select! { Token::Int { value, base } => ast::DecoratorKind::Tag { value, base } };
+    let len_value =
+        select! { Token::Int { value, base } => ast::DecoratorKind::Len { value, base } };
     let encoding_value = select! {
         Token::Name { name } if name == "list" => ast::DecoratorEncoding::List,
         Token::Name { name } if name == "constr" => ast::DecoratorEncoding::Constr
     }
-    .map(ast::Decorator::Encoding);
+    .map(ast::DecoratorKind::Encoding);
 
     just(Token::At)
         .ignore_then(choice((
@@ -25,6 +27,10 @@ pub fn decorators() -> impl Parser<Token, Vec<ast::Decorator>, Error = ParseErro
                 encoding_value.delimited_by(just(Token::LeftParen), just(Token::RightParen)),
             ),
         )))
+        .map_with_span(|kind, span| ast::Decorator {
+            kind,
+            location: span,
+        })
         .repeated()
         .or_not()
         .map(|t| t.unwrap_or_default())

@@ -5,21 +5,27 @@ description: "Code:\n\n@tag(12)\npub type User {\n  @len(32)\n  name: ByteArray\
 DataType(
     DataType {
         decorators: [
-            Tag {
-                value: "12",
-                base: Decimal {
-                    numeric_underscore: false,
+            Decorator {
+                kind: Tag {
+                    value: "12",
+                    base: Decimal {
+                        numeric_underscore: false,
+                    },
                 },
+                location: 0..8,
             },
         ],
         constructors: [
             RecordConstructor {
                 decorators: [
-                    Tag {
-                        value: "12",
-                        base: Decimal {
-                            numeric_underscore: false,
+                    Decorator {
+                        kind: Tag {
+                            value: "12",
+                            base: Decimal {
+                                numeric_underscore: false,
+                            },
                         },
+                        location: 0..8,
                     },
                 ],
                 location: 23..55,
@@ -27,11 +33,14 @@ DataType(
                 arguments: [
                     RecordConstructorArg {
                         decorators: [
-                            Len {
-                                value: "32",
-                                base: Decimal {
-                                    numeric_underscore: false,
+                            Decorator {
+                                kind: Len {
+                                    value: "32",
+                                    base: Decimal {
+                                        numeric_underscore: false,
+                                    },
                                 },
+                                location: 27..35,
                             },
                         ],
                         label: Some(
