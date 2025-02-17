@@ -338,16 +338,11 @@ impl PropertyTest {
         ) {
             Ok(None) => (Vec::new(), Ok(None), n),
             Ok(Some(counterexample)) => (
-                self.eval(&counterexample.value, plutus_version)
-                    .logs(),
+                self.eval(&counterexample.value, plutus_version).logs(),
                 Ok(Some(counterexample.value)),
                 n - remaining,
             ),
-            Err(FuzzerError { logs, uplc_error }) => (
-                logs,
-                Err(uplc_error),
-                n - remaining + 1,
-            ),
+            Err(FuzzerError { logs, uplc_error }) => (logs, Err(uplc_error), n - remaining + 1),
         };
 
         PropertyTestResult {
@@ -495,8 +490,9 @@ pub enum BenchmarkError {
 impl BenchmarkError {
     pub fn logs(&self) -> &[String] {
         match self {
-            BenchmarkError::SamplerError { logs, .. }
-            | BenchmarkError::BenchError { logs, .. } => logs.as_slice(),
+            BenchmarkError::SamplerError { logs, .. } | BenchmarkError::BenchError { logs, .. } => {
+                logs.as_slice()
+            }
         }
     }
 }
