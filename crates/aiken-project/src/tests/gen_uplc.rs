@@ -78,7 +78,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool, verbo
                 pretty_expected,
             );
 
-            let mut eval = debruijn_program.eval(ExBudget::default());
+            let eval = debruijn_program.eval(ExBudget::default());
 
             assert_eq!(
                 eval.failed(false),
