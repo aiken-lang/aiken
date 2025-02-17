@@ -49,7 +49,7 @@ pub fn eval_redeemer(
             ScriptContext::V3 { .. } => program.apply_data(script_context.to_plutus_data()),
         };
 
-        let mut eval_result = if let Some(costs) = cost_mdl_opt {
+        let eval_result = if let Some(costs) = cost_mdl_opt {
             program.eval_as(lang, costs, Some(initial_budget))
         } else {
             program.eval_version(ExBudget::default(), lang)
