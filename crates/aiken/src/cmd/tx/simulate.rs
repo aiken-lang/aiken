@@ -137,7 +137,7 @@ pub fn exec(
                 // this should allow N scripts to be
                 let total_budget_used: Vec<ExBudget> = redeemers
                     .iter()
-                    .map(|curr| ExBudget {
+                    .map(|(curr, _)| ExBudget {
                         mem: curr.ex_units.mem as i64,
                         cpu: curr.ex_units.steps as i64,
                     })

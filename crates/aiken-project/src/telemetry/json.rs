@@ -129,8 +129,8 @@ fn fmt_test_json(result: &TestResult<UntypedExpr, UntypedExpr>) -> serde_json::V
         TestResult::BenchmarkResult(_) => unreachable!("benchmark returned in JSON output"),
     }
 
-    if !result.traces().is_empty() {
-        test["traces"] = json!(result.traces());
+    if !result.logs().is_empty() {
+        test["traces"] = json!(result.logs());
     }
 
     test

@@ -45,13 +45,42 @@ enum Context {
 pub const TERM_COUNT: usize = 9;
 pub const BUILTIN_COUNT: usize = 87;
 
+#[derive(Debug, Clone)]
+pub enum Trace {
+    Log(String),
+    Label(String),
+}
+
+impl Trace {
+    pub fn to_string(&self) -> String {
+        match self {
+            Trace::Log(log) => log.clone(),
+            Trace::Label(label) => label.clone(),
+        }
+    }
+
+    pub fn unwrap_log(self) -> Option<String> {
+        match self {
+            Trace::Log(log) => Some(log),
+            _ => None,
+        }
+    }
+
+    pub fn unwrap_label(self) -> Option<String> {
+        match self {
+            Trace::Label(label) => Some(label),
+            _ => None,
+        }
+    }
+}
+
 pub struct Machine {
     costs: CostModel,
     pub ex_budget: ExBudget,
     slippage: u32,
     unbudgeted_steps: [u32; 10],
+    pub traces: Vec<Trace>,
     pub spend_counter: Option<[i64; (TERM_COUNT + BUILTIN_COUNT) * 2]>,
-    pub logs: Vec<String>,
     version: Language,
 }
 
@@ -67,8 +96,8 @@ impl Machine {
             ex_budget: initial_budget,
             slippage,
             unbudgeted_steps: [0; 10],
+            traces: vec![],
             spend_counter: None,
-            logs: vec![],
             version,
         }
     }
@@ -84,8 +113,8 @@ impl Machine {
             ex_budget: initial_budget,
             slippage,
             unbudgeted_steps: [0; 10],
+            traces: vec![],
             spend_counter: Some([0; (TERM_COUNT + BUILTIN_COUNT) * 2]),
-            logs: vec![],
             version,
         }
     }
@@ -353,7 +382,7 @@ impl Machine {
             counter[i + 1] += cost.cpu;
         }
 
-        runtime.call(&self.version, &mut self.logs)
+        runtime.call(&self.version, &mut self.traces)
     }
 
     fn lookup_var(&mut self, name: &NamedDeBruijn, env: &[Value]) -> Result<Value, Error> {

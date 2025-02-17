@@ -254,7 +254,7 @@ fn test_eval_0() {
 
             let total_budget_used: Vec<ExBudget> = redeemers
                 .iter()
-                .map(|curr| ExBudget {
+                .map(|(curr, _)| ExBudget {
                     mem: curr.ex_units.mem as i64,
                     cpu: curr.ex_units.steps as i64,
                 })
@@ -527,7 +527,7 @@ fn test_eval_1() {
 
             let total_budget_used: Vec<ExBudget> = redeemers
                 .iter()
-                .map(|curr| ExBudget {
+                .map(|(curr, _)| ExBudget {
                     mem: curr.ex_units.mem as i64,
                     cpu: curr.ex_units.steps as i64,
                 })
@@ -638,7 +638,7 @@ fn test_eval_2() {
 
             let total_budget_used: Vec<ExBudget> = redeemers
                 .iter()
-                .map(|curr| ExBudget {
+                .map(|(curr, _)| ExBudget {
                     mem: curr.ex_units.mem as i64,
                     cpu: curr.ex_units.steps as i64,
                 })
@@ -908,7 +908,7 @@ fn test_eval_3() {
 
             let total_budget_used: Vec<ExBudget> = redeemers
                 .iter()
-                .map(|curr| ExBudget {
+                .map(|(curr, _)| ExBudget {
                     mem: curr.ex_units.mem as i64,
                     cpu: curr.ex_units.steps as i64,
                 })
@@ -1101,7 +1101,7 @@ fn test_eval_5() {
 
             let total_budget_used: Vec<ExBudget> = redeemers
                 .iter()
-                .map(|curr| ExBudget {
+                .map(|(curr, _)| ExBudget {
                     mem: curr.ex_units.mem as i64,
                     cpu: curr.ex_units.steps as i64,
                 })
@@ -1211,7 +1211,7 @@ fn test_eval_6() {
 
             let total_budget_used: Vec<ExBudget> = redeemers
                 .iter()
-                .map(|curr| ExBudget {
+                .map(|(curr, _)| ExBudget {
                     mem: curr.ex_units.mem as i64,
                     cpu: curr.ex_units.steps as i64,
                 })
@@ -1321,7 +1321,7 @@ fn test_eval_7() {
 
             let total_budget_used: Vec<ExBudget> = redeemers
                 .iter()
-                .map(|curr| ExBudget {
+                .map(|(curr, _)| ExBudget {
                     mem: curr.ex_units.mem as i64,
                     cpu: curr.ex_units.steps as i64,
                 })
@@ -1582,7 +1582,7 @@ fn test_eval_8() {
 
             let total_budget_used: Vec<ExBudget> = redeemers
                 .iter()
-                .map(|curr| ExBudget {
+                .map(|(curr, _)| ExBudget {
                     mem: curr.ex_units.mem as i64,
                     cpu: curr.ex_units.steps as i64,
                 })

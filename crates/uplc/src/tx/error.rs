@@ -1,5 +1,5 @@
 use crate::{
-    machine::{self, cost_model::ExBudget},
+    machine::{self, cost_model::ExBudget, Trace},
     TransactionInput,
 };
 use pallas_primitives::conway::Language;
@@ -15,6 +15,7 @@ pub enum Error {
     #[error("{0}")]
     FragmentDecode(#[from] pallas_primitives::Error),
     #[error("{}{}", .0, .2.iter()
+        .map(|trace| trace.to_string())
         .map(|trace| {
             format!(
                 "\n{:>13} {}",
@@ -42,7 +43,7 @@ pub enum Error {
         .join("")
         .as_str()
     )]
-    Machine(machine::Error, ExBudget, Vec<String>),
+    Machine(machine::Error, ExBudget, Vec<Trace>),
 
     #[error("native script can't be executed in phase-two")]
     NativeScriptPhaseTwo,

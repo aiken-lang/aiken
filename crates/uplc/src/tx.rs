@@ -1,6 +1,6 @@
 use crate::{
     ast::{DeBruijn, Program},
-    machine::cost_model::ExBudget,
+    machine::{cost_model::ExBudget, eval_result::EvalResult},
     PlutusData,
 };
 use error::Error;
@@ -36,7 +36,7 @@ pub fn eval_phase_two(
     slot_config: &SlotConfig,
     run_phase_one: bool,
     with_redeemer: fn(&Redeemer) -> (),
-) -> Result<Vec<Redeemer>, Error> {
+) -> Result<Vec<(Redeemer, EvalResult)>, Error> {
     let redeemers = tx.transaction_witness_set.redeemer.as_ref();
 
     let lookup_table = DataLookupTable::from_transaction(tx, utxos);
@@ -48,7 +48,7 @@ pub fn eval_phase_two(
 
     match redeemers {
         Some(rs) => {
-            let mut collected_redeemers = vec![];
+            let mut collected_results = vec![];
 
             let mut remaining_budget = *initial_budget.unwrap_or(&ExBudget::default());
 
@@ -62,7 +62,7 @@ pub fn eval_phase_two(
 
                 with_redeemer(&redeemer);
 
-                let redeemer = eval::eval_redeemer(
+                let (redeemer, eval_result) = eval::eval_redeemer(
                     tx,
                     utxos,
                     slot_config,
@@ -77,10 +77,10 @@ pub fn eval_phase_two(
                 remaining_budget.cpu -= redeemer.ex_units.steps as i64;
                 remaining_budget.mem -= redeemer.ex_units.mem as i64;
 
-                collected_redeemers.push(redeemer)
+                collected_results.push((redeemer, eval_result));
             }
 
-            Ok(collected_redeemers)
+            Ok(collected_results)
         }
         None => Ok(vec![]),
     }
@@ -98,7 +98,7 @@ pub fn eval_phase_two_raw(
     slot_config: (u64, u64, u32),
     run_phase_one: bool,
     with_redeemer: fn(&Redeemer) -> (),
-) -> Result<Vec<Vec<u8>>, Error> {
+) -> Result<Vec<(Vec<u8>, EvalResult)>, Error> {
     let multi_era_tx = MultiEraTx::decode_for_era(Era::Conway, tx_bytes)
         .or_else(|e| MultiEraTx::decode_for_era(Era::Babbage, tx_bytes).map_err(|_| e))
         .or_else(|e| MultiEraTx::decode_for_era(Era::Alonzo, tx_bytes).map_err(|_| e))?;
@@ -139,8 +139,8 @@ pub fn eval_phase_two_raw(
                 with_redeemer,
             ) {
                 Ok(redeemers) => Ok(redeemers
-                    .iter()
-                    .map(|r| r.encode_fragment().unwrap())
+                    .into_iter()
+                    .map(|(r, e)| (r.encode_fragment().unwrap(), e))
                     .collect()),
                 Err(err) => Err(err),
             }
