@@ -3,11 +3,11 @@ use crate::ast::{Constant, NamedDeBruijn, Term};
 
 #[derive(Debug)]
 pub struct EvalResult {
-    result: Result<Term<NamedDeBruijn>, Error>,
-    remaining_budget: ExBudget,
-    initial_budget: ExBudget,
-    traces: Vec<Trace>,
-    debug_cost: Option<Vec<i64>>,
+    pub result: Result<Term<NamedDeBruijn>, Error>,
+    pub remaining_budget: ExBudget,
+    pub initial_budget: ExBudget,
+    pub traces: Vec<Trace>,
+    pub debug_cost: Option<Vec<i64>>,
 }
 
 impl EvalResult {
