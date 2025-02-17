@@ -231,17 +231,17 @@ impl UnitTest {
             OnTestFailure::FailImmediately => false,
         });
 
-        let mut traces = Vec::new();
+        let mut logs = Vec::new();
         if let Err(err) = eval_result.result() {
-            traces.push(format!("{err}"))
+            logs.push(format!("{err}"))
         }
-        traces.extend(eval_result.logs());
+        logs.extend(eval_result.logs());
 
         UnitTestResult {
             success,
             test: self.to_owned(),
             spent_budget: eval_result.cost(),
-            traces,
+            logs,
             assertion: self.assertion,
         }
     }
@@ -276,7 +276,7 @@ pub struct Fuzzer<T> {
 #[derive(Debug, Clone, thiserror::Error, miette::Diagnostic)]
 #[error("Fuzzer exited unexpectedly: {uplc_error}.")]
 pub struct FuzzerError {
-    traces: Vec<String>,
+    logs: Vec<String>,
     uplc_error: uplc::machine::Error,
 }
 
@@ -330,7 +330,7 @@ impl PropertyTest {
         let mut labels = BTreeMap::new();
         let mut remaining = n;
 
-        let (traces, counterexample, iterations) = match self.run_n_times(
+        let (logs, counterexample, iterations) = match self.run_n_times(
             &mut remaining,
             Prng::from_seed(seed),
             &mut labels,
@@ -339,18 +339,12 @@ impl PropertyTest {
             Ok(None) => (Vec::new(), Ok(None), n),
             Ok(Some(counterexample)) => (
                 self.eval(&counterexample.value, plutus_version)
-                    .logs()
-                    .into_iter()
-                    .filter(|s| PropertyTest::extract_label(s).is_none())
-                    .collect(),
+                    .logs(),
                 Ok(Some(counterexample.value)),
                 n - remaining,
             ),
-            Err(FuzzerError { traces, uplc_error }) => (
-                traces
-                    .into_iter()
-                    .filter(|s| PropertyTest::extract_label(s).is_none())
-                    .collect(),
+            Err(FuzzerError { logs, uplc_error }) => (
+                logs,
                 Err(uplc_error),
                 n - remaining + 1,
             ),
@@ -361,7 +355,7 @@ impl PropertyTest {
             counterexample,
             iterations,
             labels,
-            traces,
+            logs,
         }
     }
 
@@ -397,16 +391,14 @@ impl PropertyTest {
 
         let mut result = self.eval(&value, plutus_version);
 
-        for s in result.logs() {
+        for label in result.labels() {
             // NOTE: There may be other log outputs that interefere with labels. So *by
             // convention*, we treat as label strings that starts with a NUL byte, which
             // should be a guard sufficient to prevent inadvertent clashes.
-            if let Some(label) = PropertyTest::extract_label(&s) {
-                labels
-                    .entry(label)
-                    .and_modify(|count| *count += 1)
-                    .or_insert(1);
-            }
+            labels
+                .entry(label)
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
         }
 
         let is_failure = result.failed(false);
@@ -470,14 +462,6 @@ impl PropertyTest {
             .unwrap()
             .eval_version(ExBudget::max(), &plutus_version.into())
     }
-
-    fn extract_label(s: &str) -> Option<String> {
-        if s.starts_with('\0') {
-            Some(s.split_at(1).1.to_string())
-        } else {
-            None
-        }
-    }
 }
 
 /// ----- Benchmark -----------------------------------------------------------------
@@ -498,21 +482,21 @@ pub struct Sampler<T> {
 pub enum BenchmarkError {
     #[error("Sampler exited unexpectedly: {uplc_error}.")]
     SamplerError {
-        traces: Vec<String>,
+        logs: Vec<String>,
         uplc_error: uplc::machine::Error,
     },
     #[error("Bench exited unexpectedly: {uplc_error}.")]
     BenchError {
-        traces: Vec<String>,
+        logs: Vec<String>,
         uplc_error: uplc::machine::Error,
     },
 }
 
 impl BenchmarkError {
-    pub fn traces(&self) -> &[String] {
+    pub fn logs(&self) -> &[String] {
         match self {
-            BenchmarkError::SamplerError { traces, .. }
-            | BenchmarkError::BenchError { traces, .. } => traces.as_slice(),
+            BenchmarkError::SamplerError { logs, .. }
+            | BenchmarkError::BenchError { logs, .. } => logs.as_slice(),
         }
     }
 }
@@ -561,19 +545,15 @@ impl Benchmark {
                         Ok(_) => measures.push((size, result.cost())),
                         Err(uplc_error) => {
                             error = Some(BenchmarkError::BenchError {
-                                traces: result
-                                    .logs()
-                                    .into_iter()
-                                    .filter(|s| PropertyTest::extract_label(s).is_none())
-                                    .collect(),
+                                logs: result.logs(),
                                 uplc_error,
                             });
                         }
                     }
                 }
 
-                Err(FuzzerError { traces, uplc_error }) => {
-                    error = Some(BenchmarkError::SamplerError { traces, uplc_error });
+                Err(FuzzerError { logs, uplc_error }) => {
+                    error = Some(BenchmarkError::SamplerError { logs, uplc_error });
                 }
             }
 
@@ -692,7 +672,7 @@ impl Prng {
         result
             .result()
             .map_err(|uplc_error| FuzzerError {
-                traces: result.logs(),
+                logs: result.logs(),
                 uplc_error,
             })
             .map(Prng::from_result)
@@ -1166,12 +1146,12 @@ impl<U, T> TestResult<U, T> {
         }
     }
 
-    pub fn traces(&self) -> &[String] {
+    pub fn logs(&self) -> &[String] {
         match self {
-            TestResult::UnitTestResult(UnitTestResult { traces, .. })
-            | TestResult::PropertyTestResult(PropertyTestResult { traces, .. }) => traces,
+            TestResult::UnitTestResult(UnitTestResult { logs, .. })
+            | TestResult::PropertyTestResult(PropertyTestResult { logs, .. }) => logs,
             TestResult::BenchmarkResult(BenchmarkResult { error, .. }) => {
-                error.as_ref().map(|e| e.traces()).unwrap_or_default()
+                error.as_ref().map(|e| e.logs()).unwrap_or_default()
             }
         }
     }
@@ -1181,7 +1161,7 @@ impl<U, T> TestResult<U, T> {
 pub struct UnitTestResult<T> {
     pub success: bool,
     pub spent_budget: ExBudget,
-    pub traces: Vec<String>,
+    pub logs: Vec<String>,
     pub test: UnitTest,
     pub assertion: Option<Assertion<T>>,
 }
@@ -1196,7 +1176,7 @@ impl UnitTestResult<(Constant, Rc<Type>)> {
         UnitTestResult {
             success: self.success,
             spent_budget: self.spent_budget,
-            traces: self.traces,
+            logs: self.logs,
             test: self.test,
             assertion: self.assertion.and_then(|assertion| {
                 // No need to spend time/cpu on reifying assertions for successful
@@ -1229,7 +1209,7 @@ pub struct PropertyTestResult<T> {
     pub counterexample: Result<Option<T>, uplc::machine::Error>,
     pub iterations: usize,
     pub labels: BTreeMap<String, usize>,
-    pub traces: Vec<String>,
+    pub logs: Vec<String>,
 }
 
 unsafe impl<T> Send for PropertyTestResult<T> {}
@@ -1249,7 +1229,7 @@ impl PropertyTestResult<PlutusData> {
             iterations: self.iterations,
             test: self.test,
             labels: self.labels,
-            traces: self.traces,
+            logs: self.logs,
         }
     }
 }

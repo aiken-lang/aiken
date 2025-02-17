@@ -856,7 +856,7 @@ impl Program<NamedDeBruijn> {
             term,
             machine.ex_budget,
             initial_budget,
-            machine.logs,
+            machine.traces,
             machine.spend_counter.map(|i| i.into()),
         )
     }
@@ -871,7 +871,7 @@ impl Program<NamedDeBruijn> {
             term,
             machine.ex_budget,
             initial_budget,
-            machine.logs,
+            machine.traces,
             machine.spend_counter.map(|i| i.into()),
         )
     }
@@ -897,7 +897,7 @@ impl Program<NamedDeBruijn> {
             term,
             machine.ex_budget,
             budget,
-            machine.logs,
+            machine.traces,
             machine.spend_counter.map(|i| i.into()),
         )
     }
@@ -916,7 +916,7 @@ impl Program<NamedDeBruijn> {
             term,
             machine.ex_budget,
             initial_budget,
-            machine.logs,
+            machine.traces,
             machine.spend_counter.map(|i| i.into()),
         )
     }

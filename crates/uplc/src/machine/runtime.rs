@@ -1,7 +1,5 @@
 use super::{
-    cost_model::{BuiltinCosts, ExBudget},
-    value::{from_pallas_bigint, to_pallas_bigint},
-    Error, Value,
+    cost_model::{BuiltinCosts, ExBudget}, value::{from_pallas_bigint, to_pallas_bigint}, Error, Trace, Value
 };
 use crate::{
     ast::{Constant, Data, Type},
@@ -82,8 +80,8 @@ impl BuiltinRuntime {
         self.forces += 1;
     }
 
-    pub fn call(&self, language: &Language, logs: &mut Vec<String>) -> Result<Value, Error> {
-        self.fun.call(language.into(), &self.args, logs)
+    pub fn call(&self, language: &Language, traces: &mut Vec<Trace>) -> Result<Value, Error> {
+        self.fun.call(language.into(), &self.args, traces)
     }
 
     pub fn push(&mut self, arg: Value) -> Result<(), Error> {
@@ -388,7 +386,7 @@ impl DefaultFunction {
         &self,
         semantics: BuiltinSemantics,
         args: &[Value],
-        logs: &mut Vec<String>,
+        traces: &mut Vec<Trace>,
     ) -> Result<Value, Error> {
         match self {
             DefaultFunction::AddInteger => {
@@ -777,7 +775,11 @@ impl DefaultFunction {
             DefaultFunction::Trace => {
                 let arg1 = args[0].unwrap_string()?;
 
-                logs.push(arg1.clone());
+                if arg1.starts_with('\0') {
+                    traces.push(Trace::Label(arg1.split_at(1).1.to_string()));
+                } else {
+                    traces.push(Trace::Log(arg1.clone()));
+                }
 
                 Ok(args[1].clone())
             }
