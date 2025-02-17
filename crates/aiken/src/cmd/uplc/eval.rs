@@ -77,7 +77,7 @@ pub fn exec(
 
     let program = Program::<NamedDeBruijn>::try_from(program).into_diagnostic()?;
 
-    let mut eval_result = if debug {
+    let eval_result = if debug {
         program.eval_debug(ExBudget::default(), &Language::PlutusV3)
     } else {
         program.eval(budget)

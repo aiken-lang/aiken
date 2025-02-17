@@ -222,7 +222,7 @@ unsafe impl Send for UnitTest {}
 
 impl UnitTest {
     pub fn run(self, plutus_version: &PlutusVersion) -> UnitTestResult<(Constant, Rc<Type>)> {
-        let mut eval_result = Program::<NamedDeBruijn>::try_from(self.program.clone())
+        let eval_result = Program::<NamedDeBruijn>::try_from(self.program.clone())
             .unwrap()
             .eval_version(ExBudget::max(), &plutus_version.into());
 
@@ -384,7 +384,7 @@ impl PropertyTest {
             .sample(&self.fuzzer.program)?
             .expect("A seeded PRNG returned 'None' which indicates a fuzzer is ill-formed and implemented wrongly; please contact library's authors.");
 
-        let mut result = self.eval(&value, plutus_version);
+        let result = self.eval(&value, plutus_version);
 
         for label in result.labels() {
             // NOTE: There may be other log outputs that interefere with labels. So *by
@@ -536,7 +536,7 @@ impl Benchmark {
 
                 Ok(Some((new_prng, value))) => {
                     prng = new_prng;
-                    let mut result = self.eval(&value, plutus_version);
+                    let result = self.eval(&value, plutus_version);
                     match result.result() {
                         Ok(_) => measures.push((size, result.cost())),
                         Err(uplc_error) => {
@@ -664,7 +664,7 @@ impl Prng {
         fuzzer: &Program<Name>,
     ) -> Result<Option<(Prng, PlutusData)>, FuzzerError> {
         let program = Program::<NamedDeBruijn>::try_from(fuzzer.apply_data(self.uplc())).unwrap();
-        let mut result = program.eval(ExBudget::max());
+        let result = program.eval(ExBudget::max());
         result
             .result()
             .map_err(|uplc_error| FuzzerError {

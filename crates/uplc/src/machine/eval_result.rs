@@ -31,20 +31,22 @@ impl EvalResult {
         self.initial_budget - self.remaining_budget
     }
 
-    pub fn traces(&mut self) -> Vec<Trace> {
-        std::mem::take(&mut self.traces)
+    pub fn traces(&self) -> Vec<Trace> {
+        self.traces.clone()
     }
 
-    pub fn logs(&mut self) -> Vec<String> {
-        std::mem::take(&mut self.traces)
-            .into_iter()
+    pub fn logs(&self) -> Vec<String> {
+        self.traces
+            .iter()
+            .cloned()
             .filter_map(Trace::unwrap_log)
             .collect()
     }
 
-    pub fn labels(&mut self) -> Vec<String> {
-        std::mem::take(&mut self.traces)
-            .into_iter()
+    pub fn labels(&self) -> Vec<String> {
+        self.traces
+            .iter()
+            .cloned()
             .filter_map(Trace::unwrap_label)
             .collect()
     }
