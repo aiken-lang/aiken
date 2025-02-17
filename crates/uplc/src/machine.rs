@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{fmt::Display, rc::Rc};
 
 use crate::ast::{Constant, NamedDeBruijn, Term, Type};
 
@@ -51,14 +51,16 @@ pub enum Trace {
     Label(String),
 }
 
-impl Trace {
-    pub fn to_string(&self) -> String {
+impl Display for Trace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Trace::Log(log) => log.clone(),
-            Trace::Label(label) => label.clone(),
+            Trace::Log(log) => f.write_str(log),
+            Trace::Label(label) => f.write_str(label),
         }
     }
+}
 
+impl Trace {
     pub fn unwrap_log(self) -> Option<String> {
         match self {
             Trace::Log(log) => Some(log),
