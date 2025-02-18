@@ -1,5 +1,15 @@
 # Changelog
 
+## unreleased - 2025-MM-DD
+
+### Changed
+
+- **uplc**: `eval_phase_two` and related functions now return an EvalResult @Quantumplation
+
+  In order to allow consuming tools provide better tooling experiences, the various `eval_phase_two`
+  functions provide an `EvalResult`, which includes the final term, the remaining budget, and the traces.
+  This means you can display or work with the traces of a script even if it succeeds.
+
 ## v1.1.11 - 2025-02-11
 
 ### Added
