@@ -52,11 +52,11 @@ x86_64-unknown-linux-musl = "ubuntu-22.04"
 walkdir = "2.3.2"
 insta = { version = "1.30.0", features = ["yaml", "json", "redactions"] }
 miette = { version = "7.2.0" }
-pallas-addresses = "0.31.0"
-pallas-codec = { version = "0.31.0", features = ["num-bigint"] }
-pallas-crypto = "0.31.0"
-pallas-primitives = "0.31.0"
-pallas-traverse = "0.31.0"
+pallas-addresses = "0.32.0"
+pallas-codec = { version = "0.32.0", features = ["num-bigint"] }
+pallas-crypto = "0.32.0"
+pallas-primitives = "0.32.0"
+pallas-traverse = "0.32.0"
 
 [profile.dev.package.insta]
 opt-level = 3
