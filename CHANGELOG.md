@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **aiken-project**: add back borders to the textplots
+- **aiken-project**: add back borders to the textplots @rvcas
 
 ## v1.1.13 - 2025-02-21
 
