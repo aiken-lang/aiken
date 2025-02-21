@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.14 - 2025-02-21
+
+### Changed
+
+- **aiken-project**: add back borders to the textplots
+
 ## v1.1.13 - 2025-02-21
 
 ### Changed
@@ -49,7 +55,7 @@
 - **aiken-project**: The `aiken.toml` file no longer supports `v1` and `v2` for the plutus version field. @rvcas
 - **aiken-project**: `Error::TomlLoading` now looks much better - see [#1032](https://github.com/aiken-lang/aiken/issues/1032#issuecomment-2562122101). @rvcas
 - **aiken-lang**: 10-20% optimization improvements via case-constr, rearranging function definitions (while maintaining dependency ordering),
-                  and allowing inlining in if_then_else_error cases which preserve the same error semantics for a program. @Microproofs
+  and allowing inlining in if_then_else_error cases which preserve the same error semantics for a program. @Microproofs
 
 ### Fixed
 
