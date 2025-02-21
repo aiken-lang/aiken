@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       bump:
-        description: 'Version bump type (major, minor, patch)'
+        description: "Version bump type (major, minor, patch)"
         required: true
-        default: 'patch'
+        default: "patch"
         type: choice
         options:
           - major
@@ -16,26 +16,26 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-        
+
       - name: Set up Rust
         uses: Swatinem/rust-cache@v2
-        
+
       - name: Install cargo-release
         run: cargo install cargo-release
-        
+
       - name: Configure Git
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
-          
+
       - name: Run cargo release
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_TOKEN }}
         run: |
-          cargo release ${{ github.event.inputs.bump }} --execute
+          cargo release ${{ github.event.inputs.bump }} --execute --no-confirm
