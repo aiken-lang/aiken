@@ -47,7 +47,7 @@ semver = { version = "1.0.23", features = ["serde"] }
 serde = { version = "1.0.152", features = ["derive"] }
 serde_json = { version = "1.0.94", features = ["preserve_order"] }
 strip-ansi-escapes = "0.1.1"
-textplots = "0.8.6"
+textplots = "0.8.7"
 thiserror = "1.0.39"
 tokio = { version = "1.26.0", features = ["full"] }
 toml = "0.7.2"

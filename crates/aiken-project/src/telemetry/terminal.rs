@@ -629,8 +629,7 @@ fn plot(color: &RGB8, points: Vec<(f32, f32)>, max_size: usize) -> String {
     let mut chart = Chart::new(80, 50, 1.0, max_size as f32);
     let plot = Shape::Lines(&points);
     let chart = chart.linecolorplot(&plot, *color);
-    // TODO: reintroduce this after this is merged - https://github.com/loony-bean/textplots-rs/pull/57
-    // chart.borders();
+    chart.borders();
     chart.axis();
     chart.figures();
     chart.to_string()
