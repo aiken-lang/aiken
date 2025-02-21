@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.13 - 2025-02-21
+
+### Changed
+
+- **aiken**: Bumped pallas to 0.32.0
+
 ## v1.1.12 - 2025-02-18
 
 ### Changed
