@@ -1,12 +1,25 @@
 use crate::error::Error;
 use aiken_lang::{ast::Span, line_numbers::LineNumbers};
 use itertools::Itertools;
-use lsp_types::TextEdit;
+use lsp_types::{notification::Notification, TextEdit};
 use std::path::{Path, PathBuf};
 use urlencoding::decode;
 
 pub const COMPILING_PROGRESS_TOKEN: &str = "compiling-aiken";
 pub const CREATE_COMPILING_PROGRESS_TOKEN: &str = "create-compiling-progress-token";
+
+/// Trace some information from the server.
+pub fn debug(connection: &lsp_server::Connection, message: impl serde::ser::Serialize) {
+    connection
+        .sender
+        .send(lsp_server::Message::Notification(
+            lsp_server::Notification {
+                method: lsp_types::notification::LogTrace::METHOD.to_string(),
+                params: serde_json::json! {{ "message": message }},
+            },
+        ))
+        .expect("failed to send notification");
+}
 
 pub fn text_edit_replace(new_text: String) -> TextEdit {
     TextEdit {

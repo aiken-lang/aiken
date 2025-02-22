@@ -9,7 +9,7 @@ mod edits;
 pub mod error;
 mod quickfix;
 pub mod server;
-mod utils;
+pub mod utils;
 
 #[allow(clippy::result_large_err)]
 pub fn start() -> Result<(), Error> {
