@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.15 - UNRELEASED
+
+### Changed
+
+- **aiken-lang**: fixed `UnknownTypeConstructor` wrongly reported as `UnknownVariable` (then messing up with LSP quickfix suggestions). @KtorZ
+
 ## v1.1.14 - 2025-02-21
 
 ### Changed

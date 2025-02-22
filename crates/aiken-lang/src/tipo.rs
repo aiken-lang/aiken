@@ -1357,6 +1357,10 @@ impl TypeConstructor {
             public: true,
         }
     }
+
+    pub fn might_be(name: &str) -> bool {
+        name.chars().next().unwrap().is_uppercase()
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

@@ -21,7 +21,9 @@ use crate::{
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
     parser::token::Base,
-    tipo::{fields::FieldMap, DefaultFunction, ModuleKind, PatternConstructor, TypeVar},
+    tipo::{
+        fields::FieldMap, DefaultFunction, ModuleKind, PatternConstructor, TypeConstructor, TypeVar,
+    },
     IdGenerator,
 };
 use std::{
@@ -2481,10 +2483,30 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     self.environment
                         .get_variable(name)
                         .cloned()
-                        .ok_or_else(|| Error::UnknownVariable {
-                            location: *location,
-                            name: name.to_string(),
-                            variables: self.environment.local_value_names(),
+                        .ok_or_else(|| {
+                            if TypeConstructor::might_be(name) {
+                                Error::UnknownTypeConstructor {
+                                    location: *location,
+                                    name: name.to_string(),
+                                    constructors: self
+                                        .environment
+                                        .local_value_names()
+                                        .into_iter()
+                                        .filter(|s| TypeConstructor::might_be(s))
+                                        .collect::<Vec<_>>(),
+                                }
+                            } else {
+                                Error::UnknownVariable {
+                                    location: *location,
+                                    name: name.to_string(),
+                                    variables: self
+                                        .environment
+                                        .local_value_names()
+                                        .into_iter()
+                                        .filter(|s| !TypeConstructor::might_be(s))
+                                        .collect::<Vec<_>>(),
+                                }
+                            }
                         })?;
 
                 if let ValueConstructorVariant::ModuleFn { name: fn_name, .. } =
