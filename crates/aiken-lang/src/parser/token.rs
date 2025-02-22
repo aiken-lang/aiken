@@ -50,6 +50,7 @@ pub enum Token {
     Hash,     // '#'
     Bang,     // '!'
     Question, // '?'
+    At,       // '@'
     Equal,
     EqualEqual,  // '=='
     NotEqual,    // '!='
@@ -144,6 +145,7 @@ impl fmt::Display for Token {
             Token::Bang => "!",
             Token::Equal => "=",
             Token::Question => "?",
+            Token::At => "@",
             Token::EqualEqual => "==",
             Token::NotEqual => "!=",
             Token::Vbar => "|",

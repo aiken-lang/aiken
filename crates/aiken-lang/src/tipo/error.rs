@@ -99,6 +99,25 @@ pub enum Error {
         cycle: Vec<Span>,
     },
 
+    #[error("I found an incorrect usage of decorators.\n")]
+    #[diagnostic(code("decorators::validation"))]
+    #[diagnostic(help("{message}"))]
+    DecoratorValidation {
+        #[label("found here")]
+        location: Span,
+        message: String,
+    },
+
+    #[error("I found an incorrect usage of decorators.\n")]
+    #[diagnostic(code("decorators::conflict"))]
+    #[diagnostic(help("You cannot use these two decorators together"))]
+    ConflictingDecorators {
+        #[label("here")]
+        location: Span,
+        #[label("conflicts with")]
+        conflicting_location: Span,
+    },
+
     #[error(
         "I found two function arguments both called '{}'.\n",
         label.if_supports_color(Stdout, |s| s.purple())
@@ -715,8 +734,8 @@ Perhaps, try the following:
     UnexpectedLabeledArgInPattern {
         #[label("unexpected labeled arg")]
         location: Span,
-        label: String,
-        name: String,
+        label: Box<String>,
+        name: Box<String>,
         args: Vec<CallArg<UntypedPattern>>,
         module: Option<String>,
         spread_location: Option<Span>,
@@ -1167,6 +1186,8 @@ impl ExtraData for Error {
             | Error::UnknownValidatorHandler { .. }
             | Error::UnexpectedValidatorFallback { .. }
             | Error::IncorrectBenchmarkArity { .. }
+            | Error::DecoratorValidation { .. }
+            | Error::ConflictingDecorators { .. }
             | Error::MustInferFirst { .. } => None,
 
             Error::UnknownType { name, .. }
