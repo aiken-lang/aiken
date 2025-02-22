@@ -2,6 +2,10 @@
 
 ## v1.1.15 - UNRELEASED
 
+### Added
+
+- **aiken-lsp**: an additional code action to use constructors or identifiers from qualified imports is now offered on missing constructor or identifier. @KtorZ
+
 ### Changed
 
 - **aiken-lang**: fixed `UnknownTypeConstructor` wrongly reported as `UnknownVariable` (then messing up with LSP quickfix suggestions). @KtorZ
