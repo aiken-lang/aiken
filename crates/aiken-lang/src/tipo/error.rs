@@ -898,7 +898,7 @@ Perhaps, try the following:
     #[diagnostic(code("unknown::type_constructor"))]
     #[diagnostic(help(
         "{}",
-        suggest_neighbor(name, constructors.iter(), "Did you forget to import it?")
+        suggest_neighbor(name, constructors.iter(), &suggest_import_constructor())
     ))]
     UnknownTypeConstructor {
         #[label("unknown constructor")]
@@ -914,11 +914,7 @@ Perhaps, try the following:
         suggest_neighbor(
             name,
             variables.iter(),
-            &if name.chars().next().unwrap().is_uppercase() {
-                suggest_import_constructor()
-            } else {
-                "Did you forget to import it?".to_string()
-            }
+            "Did you forget to import it?",
         )
     ))]
     UnknownVariable {
@@ -1527,29 +1523,23 @@ fn suggest_import_constructor() -> String {
 
            Data-type constructors are not automatically imported, even if their type is imported. So, if a module 'aiken/pet' defines the following type:
 
-             ┍━ aiken/pet.ak ━━━━━━━━
-             │ {keyword_pub} {keyword_type} {type_Pet} {{
-             │   {variant_Cat}
-             │   {variant_Dog}
-             │ }}
+             ┍━ aiken/pet.ak ━    ==>   ┍━ foo.ak ━━━━━━━━━━━━━━━━
+             │ {keyword_pub} {keyword_type} {type_Pet} {{           │ {keyword_use} aiken/pet.{{{type_Pet}, {variant_Dog}}}
+             │   {variant_Cat}                    │
+             │   {variant_Dog}                    │ {keyword_fn} foo(pet : {type_Pet}) {{
+             │ }}                        │   {keyword_when} pet {keyword_is} {{
+                                        │     pet.{variant_Cat} -> // ...
+                                        │     {variant_Dog} -> // ...
+                                        │   }}
+                                        │ }}
 
            You must import its constructors explicitly to use them, or prefix them with the module's name.
-
-             ┍━ foo.ak ━━━━━━━━
-             │ {keyword_use} aiken/pet.{{{type_Pet}, {variant_Dog}}}
-             │
-             │ {keyword_fn} foo(pet : {type_Pet}) {{
-             │   {keyword_when} pet {keyword_is} {{
-             │     pet.{variant_Cat} -> // ...
-             │     {variant_Dog} -> // ...
-             │   }}
-             │ }}
         "#
         , keyword_fn =  "fn".if_supports_color(Stdout, |s| s.yellow())
         , keyword_is = "is".if_supports_color(Stdout, |s| s.yellow())
-        , keyword_pub = "pub".if_supports_color(Stdout, |s| s.bright_blue())
-        , keyword_type = "type".if_supports_color(Stdout, |s| s.bright_blue())
-        , keyword_use = "use".if_supports_color(Stdout, |s| s.bright_blue())
+        , keyword_pub = "pub".if_supports_color(Stdout, |s| s.bright_purple())
+        , keyword_type = "type".if_supports_color(Stdout, |s| s.purple())
+        , keyword_use = "use".if_supports_color(Stdout, |s| s.bright_purple())
         , keyword_when = "when".if_supports_color(Stdout, |s| s.yellow())
         , type_Pet = "Pet"
             .if_supports_color(Stdout, |s| s.bright_blue())

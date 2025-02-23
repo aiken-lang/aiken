@@ -638,7 +638,7 @@ impl Server {
         self.send_work_done_notification(
             connection,
             lsp_types::WorkDoneProgress::Begin(lsp_types::WorkDoneProgressBegin {
-                title: "Compiling Aiken".into(),
+                title: "Compiling Aiken project".into(),
                 cancellable: Some(false),
                 message: None,
                 percentage: None,

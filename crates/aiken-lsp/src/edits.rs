@@ -14,7 +14,10 @@ pub struct ParsedDocument {
     source_code: String,
 }
 
-pub type AnnotatedEdit = (String, lsp_types::TextEdit);
+pub enum AnnotatedEdit {
+    SimpleEdit(String, lsp_types::TextEdit),
+    CombinedEdits(String, Vec<lsp_types::TextEdit>),
+}
 
 /// Parse the target document as an 'UntypedModule' alongside its line numbers. This is useful in
 /// case we need to manipulate the AST for a quickfix.
@@ -166,10 +169,26 @@ impl ParsedDocument {
 
         let new_text = String::new();
 
-        (
+        AnnotatedEdit::SimpleEdit(
             "Remove redundant import".to_string(),
             lsp_types::TextEdit { range, new_text },
         )
+    }
+
+    pub fn use_qualified(
+        module: &str,
+        unqualified: &str,
+        range: &lsp_types::Range,
+    ) -> Option<AnnotatedEdit> {
+        let title = format!("Use qualified from {}", module);
+        let suffix = module.split("/").last()?;
+        Some(AnnotatedEdit::SimpleEdit(
+            title,
+            lsp_types::TextEdit {
+                range: *range,
+                new_text: format!("{suffix}.{unqualified}"),
+            },
+        ))
     }
 
     fn insert_qualified_before(
@@ -178,8 +197,8 @@ impl ParsedDocument {
         unqualified: &str,
         location: Span,
     ) -> AnnotatedEdit {
-        let title = format!("Use '{}' from {}", unqualified, import.name);
-        (
+        let title = format!("Import '{}' from {}", unqualified, import.name);
+        AnnotatedEdit::SimpleEdit(
             title,
             insert_text(
                 location.start,
@@ -195,8 +214,8 @@ impl ParsedDocument {
         unqualified: &str,
         location: Span,
     ) -> AnnotatedEdit {
-        let title = format!("Use '{}' from {}", unqualified, import.name);
-        (
+        let title = format!("Import '{}' from {}", unqualified, import.name);
+        AnnotatedEdit::SimpleEdit(
             title,
             insert_text(
                 location.end,
@@ -212,8 +231,8 @@ impl ParsedDocument {
         unqualified: &str,
         location: Span,
     ) -> AnnotatedEdit {
-        let title = format!("Use '{}' from {}", unqualified, import.name);
-        (
+        let title = format!("Import '{}' from {}", unqualified, import.name);
+        AnnotatedEdit::SimpleEdit(
             title,
             insert_text(
                 location.end,
@@ -238,9 +257,9 @@ impl ParsedDocument {
             }
         );
 
-        let title = format!("Add new import line: {import_line}");
+        let title = format!("Add line: '{import_line}'");
 
-        (
+        AnnotatedEdit::SimpleEdit(
             title,
             match location {
                 None => insert_text(0, &self.line_numbers, format!("{import_line}\n")),
