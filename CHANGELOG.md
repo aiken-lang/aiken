@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.1.15 - UNRELEASED
+## v1.1.13 - 2025-02-26
 
 ### Added
 
@@ -8,19 +8,9 @@
 
 ### Changed
 
-- **aiken-lang**: fixed `UnknownTypeConstructor` wrongly reported as `UnknownVariable` (then messing up with LSP quickfix suggestions). @KtorZ
-
-## v1.1.14 - 2025-02-21
-
-### Changed
-
-- **aiken-project**: add back borders to the textplots @rvcas
-
-## v1.1.13 - 2025-02-21
-
-### Changed
-
 - **aiken**: Bumped pallas to 0.32.0
+- **aiken-project**: add back borders to the textplots @rvcas
+- **aiken-lang**: fixed `UnknownTypeConstructor` wrongly reported as `UnknownVariable` (then messing up with LSP quickfix suggestions). @KtorZ
 
 ## v1.1.12 - 2025-02-18
 
