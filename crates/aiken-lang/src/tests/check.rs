@@ -33,6 +33,7 @@ fn check_module(
 
     for (package, module) in extra {
         let mut warnings = vec![];
+
         let typed_module = module
             .infer(
                 &id_gen,
@@ -3307,6 +3308,28 @@ fn softcasting_unused_let_binding() {
 
     let (warnings, _) = result.unwrap();
     assert!(warnings.is_empty(), "should not contain any warnings");
+}
+
+#[test]
+fn dangling_let_in_block() {
+    let source_code = r#"
+        fn for_each(xs: List<Int>, with: fn(Int) -> a) -> a {
+            todo
+        }
+
+        test foo() {
+            {
+                let _ <- for_each([1, 2, 3])
+            }
+        }
+    "#;
+
+    let result = check_validator(parse(source_code));
+
+    assert!(
+        matches!(result, Err((_, Error::LastExpressionIsAssignment { .. }))),
+        "{result:?}"
+    )
 }
 
 #[test]

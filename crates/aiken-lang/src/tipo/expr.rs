@@ -1970,11 +1970,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         PipeTyper::infer(self, expressions)
     }
 
+    #[allow(clippy::result_large_err)]
     fn backpass(
         &mut self,
         breakpoint: UntypedExpr,
         mut continuation: Vec<UntypedExpr>,
-    ) -> UntypedExpr {
+    ) -> Result<UntypedExpr, Error> {
         let UntypedExpr::Assignment {
             location,
             value,
@@ -1984,6 +1985,15 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         else {
             unreachable!("backpass misuse: breakpoint isn't an Assignment ?!");
         };
+
+        if continuation.is_empty() {
+            return Err(Error::LastExpressionIsAssignment {
+                location,
+                expr: *value,
+                patterns: patterns.clone(),
+                kind,
+            });
+        }
 
         let value_location = value.location();
 
@@ -2101,11 +2111,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     value: UntypedExpr::lambda(names, continuation, lambda_span),
                 });
 
-                UntypedExpr::Call {
+                Ok(UntypedExpr::Call {
                     location: call_location,
                     fun,
                     arguments: new_arguments,
-                }
+                })
             }
 
             // This typically occurs on function captures. We do not try to assert anything on the
@@ -2136,15 +2146,15 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 };
 
                 if arguments.is_empty() {
-                    call
+                    Ok(call)
                 } else {
-                    UntypedExpr::Fn {
+                    Ok(UntypedExpr::Fn {
                         location: call_location,
                         fn_style,
                         arguments,
                         body: call.into(),
                         return_annotation,
-                    }
+                    })
                 }
             }
 
@@ -2152,7 +2162,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             // with our continuation. If the expression isn't callable? No problem, the
             // type-checker will catch that eventually in exactly the same way as if the code was
             // written like that to begin with.
-            _ => UntypedExpr::Call {
+            _ => Ok(UntypedExpr::Call {
                 location: call_location,
                 fun: value,
                 arguments: vec![CallArg {
@@ -2160,7 +2170,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     label: None,
                     value: UntypedExpr::lambda(names, continuation, lambda_span),
                 }],
-            },
+            }),
         }
     }
 
@@ -2203,7 +2213,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         }
 
         if let Some(breakpoint) = breakpoint {
-            prefix.push(self.backpass(breakpoint, suffix));
+            prefix.push(self.backpass(breakpoint, suffix)?);
             return self.infer_seq(location, prefix);
         }
 
