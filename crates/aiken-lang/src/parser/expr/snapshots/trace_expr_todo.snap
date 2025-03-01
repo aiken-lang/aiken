@@ -5,17 +5,9 @@ description: "Code:\n\ntrace some_var\n"
 Trace {
     kind: Trace,
     location: 0..14,
-    then: Trace {
-        kind: Todo,
+    then: Var {
         location: 0..14,
-        then: ErrorTerm {
-            location: 0..14,
-        },
-        label: String {
-            location: 0..14,
-            value: "aiken::todo",
-        },
-        arguments: [],
+        name: "Void",
     },
     label: Var {
         location: 6..14,

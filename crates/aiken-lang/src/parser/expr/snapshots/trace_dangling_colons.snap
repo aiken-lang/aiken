@@ -1,0 +1,72 @@
+---
+source: crates/aiken-lang/src/parser/expr/fail_todo_trace.rs
+description: "Invalid code (parse error):\n\nlet debug = fn() {\n  trace \"foo\":\n}\n"
+---
+[
+    ParseError {
+        kind: Unexpected(
+            Token(
+                RightBrace,
+            ),
+        ),
+        span: 34..35,
+        while_parsing: None,
+        expected: {
+            Token(
+                If,
+            ),
+            Token(
+                Expect,
+            ),
+            Token(
+                Minus,
+            ),
+            Token(
+                When,
+            ),
+            Token(
+                And,
+            ),
+            Token(
+                Or,
+            ),
+            Token(
+                LeftParen,
+            ),
+            Token(
+                Todo,
+            ),
+            Token(
+                LeftSquare,
+            ),
+            Token(
+                NewLineMinus,
+            ),
+            Token(
+                Bang,
+            ),
+            Token(
+                Fail,
+            ),
+            Token(
+                NewLineLeftParen,
+            ),
+            Token(
+                LeftBrace,
+            ),
+            Token(
+                Trace,
+            ),
+            Token(
+                Let,
+            ),
+            Token(
+                Hash,
+            ),
+            Token(
+                Fn,
+            ),
+        },
+        label: None,
+    },
+]

@@ -3333,6 +3333,22 @@ fn dangling_let_in_block() {
 }
 
 #[test]
+fn default_trace_return() {
+    let source_code = r#"
+        fn debug() {
+          trace @"patate": Void
+        }
+
+        test foo() {
+            debug()
+            True
+        }
+    "#;
+
+    assert!(matches!(check_validator(parse(source_code)), Ok(..)))
+}
+
+#[test]
 fn dangling_trace_let_standalone() {
     let source_code = r#"
         test foo() {
