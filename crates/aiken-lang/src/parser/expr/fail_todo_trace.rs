@@ -1,5 +1,5 @@
 use crate::{
-    ast::TraceKind,
+    ast::{well_known, TraceKind},
     expr::UntypedExpr,
     parser::{
         error::{ParseError, Pattern},
@@ -32,7 +32,8 @@ pub fn parser<'a>(
                 choice((just(Token::Colon), just(Token::Comma)))
                     .then(
                         choice((string::hybrid(), expression.clone()))
-                            .separated_by(just(Token::Comma)),
+                            .separated_by(just(Token::Comma))
+                            .at_least(1),
                     )
                     .validate(|(token, arguments), span, emit| {
                         if token != Token::Colon {
@@ -53,7 +54,10 @@ pub fn parser<'a>(
                 |((label, arguments), continuation), span| UntypedExpr::Trace {
                     kind: TraceKind::Trace,
                     location: span,
-                    then: Box::new(continuation.unwrap_or_else(|| UntypedExpr::todo(None, span))),
+                    then: Box::new(continuation.unwrap_or_else(|| UntypedExpr::Var {
+                        location: span,
+                        name: well_known::VOID.to_string(),
+                    })),
                     label: Box::new(label),
                     arguments,
                 },
@@ -190,6 +194,17 @@ mod tests {
         assert_expr!(
             r#"
             trace "foo": @"bar", baz
+            "#
+        );
+    }
+
+    #[test]
+    fn trace_dangling_colons() {
+        assert_expr!(
+            r#"
+            let debug = fn() {
+              trace "foo":
+            }
             "#
         );
     }

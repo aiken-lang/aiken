@@ -1,0 +1,5 @@
+---
+source: crates/aiken-lang/src/parser/expr/fail_todo_trace.rs
+description: "Invalid code (parse error):\n\nlet debug = fn() {\n  trace \"foo\":\n}\n"
+---
+I found an unexpected token '}'.
