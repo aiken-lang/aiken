@@ -89,6 +89,7 @@ pub fn exec(
     let result = with_project(
         directory.as_deref(),
         false,
+        false,
         !io::stdout().is_terminal(),
         |p| {
             p.benchmark(

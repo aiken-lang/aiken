@@ -13,6 +13,10 @@ pub struct Args {
     #[clap(short = 'D', long)]
     deny: bool,
 
+    /// Silence warnings; warnings will not be printed
+    #[clap(short = 'S', long)]
+    silent: bool,
+
     /// When enabled, re-run the command on file changes instead of exiting
     #[clap(short, long)]
     watch: bool,
@@ -75,6 +79,7 @@ pub fn exec(
     Args {
         directory,
         deny,
+        silent,
         watch,
         uplc,
         trace_filter,
@@ -96,7 +101,7 @@ pub fn exec(
             )
         })
     } else {
-        with_project(directory.as_deref(), deny, false, |p| {
+        with_project(directory.as_deref(), deny, silent, false, |p| {
             p.build(
                 uplc,
                 match trace_filter {

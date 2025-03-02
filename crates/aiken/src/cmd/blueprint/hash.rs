@@ -36,7 +36,7 @@ pub fn exec(
         validator,
     }: Args,
 ) -> miette::Result<()> {
-    with_project(directory.as_deref(), false, false, |p| {
+    with_project(directory.as_deref(), false, false, false, |p| {
         let address = p.address(
             module.as_deref(),
             validator.as_deref(),
