@@ -45,7 +45,7 @@ macro_rules! assert_expr {
                     prepend_module_to_snapshot => false,
                     omit_expression => true
                 }, {
-                    insta::assert_debug_snapshot!(err);
+                    insta::assert_snapshot!(err.into_iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n"));
                 })
             }
         }

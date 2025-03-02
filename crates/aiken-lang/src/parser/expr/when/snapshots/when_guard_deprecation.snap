@@ -2,14 +2,4 @@
 source: crates/aiken-lang/src/parser/expr/when/mod.rs
 description: "Invalid code (parse error):\n\nwhen a is {\n  2 if x > 1 -> 3\n  _ -> 1\n}\n"
 ---
-[
-    ParseError {
-        kind: DeprecatedWhenClause,
-        span: 14..29,
-        while_parsing: None,
-        expected: {},
-        label: Some(
-            "deprecated",
-        ),
-    },
-]
+I found a now-deprecated clause guard in a when/is expression.

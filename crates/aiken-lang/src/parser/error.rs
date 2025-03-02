@@ -3,6 +3,7 @@ use crate::{
     parser::token::Token,
 };
 use indoc::formatdoc;
+use itertools::Itertools;
 use miette::Diagnostic;
 use owo_colors::{OwoColorize, Stream::Stdout};
 use std::collections::HashSet;
@@ -18,6 +19,7 @@ use std::collections::HashSet;
                     "I am looking for one of the following patterns:\n{}",
                     expected
                         .iter()
+                        .sorted()
                         .map(|x| format!(
                             "→ {}",
                             x.to_aiken()
@@ -320,7 +322,7 @@ fn fmt_unknown_curve(curve: &String, point: &Option<String>) -> String {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Diagnostic, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Diagnostic, thiserror::Error)]
 pub enum Pattern {
     #[error("I found an unexpected char '{0:?}'.")]
     #[diagnostic(help("Try removing it!"))]

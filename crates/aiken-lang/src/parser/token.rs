@@ -1,12 +1,14 @@
 use std::fmt;
 
-#[derive(Clone, Debug, PartialEq, Hash, Eq, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Debug, PartialEq, PartialOrd, Ord, Hash, Eq, Copy, serde::Serialize, serde::Deserialize,
+)]
 pub enum Base {
     Decimal { numeric_underscore: bool },
     Hexadecimal,
 }
 
-#[derive(Clone, Debug, PartialEq, Hash, Eq)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Ord, Hash, Eq)]
 pub enum Token {
     Error(char),
     Name { name: String },
