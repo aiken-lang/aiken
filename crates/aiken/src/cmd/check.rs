@@ -35,6 +35,10 @@ pub struct Args {
     #[clap(short = 'D', long)]
     deny: bool,
 
+    /// Silence warnings; warnings will not be printed
+    #[clap(short = 'S', long)]
+    silent: bool,
+
     /// Skip tests; run only the type-checker
     #[clap(short, long)]
     skip_tests: bool,
@@ -108,6 +112,7 @@ pub fn exec(
     Args {
         directory,
         deny,
+        silent,
         skip_tests,
         debug,
         show_json_schema,
@@ -150,6 +155,7 @@ pub fn exec(
         with_project(
             directory.as_deref(),
             deny,
+            silent,
             !io::stdout().is_terminal(),
             |p| {
                 p.check(

@@ -91,6 +91,7 @@ pub fn default_filter(evt: &Event) -> bool {
 pub fn with_project<A>(
     directory: Option<&Path>,
     deny: bool,
+    silent: bool,
     json: bool,
     mut action: A,
 ) -> miette::Result<()>
@@ -122,9 +123,11 @@ where
     let warning_count = warnings.len();
 
     if !json {
-        for warning in &warnings {
-            eprintln!();
-            warning.report()
+        if !silent {
+            for warning in &warnings {
+                eprintln!();
+                warning.report()
+            }
         }
 
         if let Err(errs) = build_result {
@@ -156,7 +159,7 @@ where
         }
     }
 
-    if warning_count > 0 && deny {
+    if warning_count > 0 && deny && !silent {
         Err(ExitFailure::into_report())
     } else {
         Ok(())
@@ -249,7 +252,7 @@ where
                     .if_supports_color(Stderr, |s| s.bold())
                     .if_supports_color(Stderr, |s| s.purple()),
             );
-            with_project(directory, false, false, &mut action).unwrap_or(())
+            with_project(directory, false, false, false, &mut action).unwrap_or(())
         }
     }
 }
