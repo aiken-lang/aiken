@@ -463,7 +463,17 @@ impl<'comments> Formatter<'comments> {
                 ..
             } => "fn"
                 .to_doc()
-                .append(wrap_args(args.iter().map(|t| (self.annotation(t), false))))
+                .append(wrap_args(args.iter().map(|t| {
+                    let comments = self.pop_comments(t.location().start);
+
+                    let doc_comments = self.doc_comments(t.location().start);
+
+                    let doc = doc_comments.append(self.annotation(t)).group();
+
+                    let doc = commented(doc, comments);
+
+                    (doc, false)
+                })))
                 .group()
                 .append(" ->")
                 .append(break_("", " ").append(self.annotation(retrn)).nest(INDENT)),
