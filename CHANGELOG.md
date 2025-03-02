@@ -2,6 +2,10 @@
 
 ## v1.1.14 - UNRELEASED
 
+### Added
+
+- **aiken**: New `-S` flag on `check` and `build` that blocks the printing of warnings but it still shows the total warning count.
+
 ### Changed
 
 - **aiken-lang**: Prevent (type error) backpassing blocks with empty continuation. See [#1111](https://github.com/aiken-lang/aiken/issues/1111). @KtorZ

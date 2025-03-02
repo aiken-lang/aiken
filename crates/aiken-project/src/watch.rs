@@ -159,7 +159,7 @@ where
         }
     }
 
-    if warning_count > 0 && deny && !silent {
+    if warning_count > 0 && deny {
         Err(ExitFailure::into_report())
     } else {
         Ok(())
