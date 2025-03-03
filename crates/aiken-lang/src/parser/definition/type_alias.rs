@@ -5,13 +5,17 @@ use crate::{
     parser::{annotation, error::ParseError, token::Token, utils},
 };
 
+use super::data_type::decorators;
+
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
-    utils::optional_flag(Token::Pub)
+    decorators()
+        .then(utils::optional_flag(Token::Pub))
         .then(utils::type_name_with_args())
         .then_ignore(just(Token::Equal))
         .then(annotation())
-        .map_with_span(|((public, (alias, parameters)), annotation), span| {
+        .map_with_span(|(((d, public), (alias, parameters)), annotation), span| {
             ast::UntypedDefinition::TypeAlias(ast::TypeAlias {
+                decorators: d,
                 alias,
                 annotation,
                 doc: None,
