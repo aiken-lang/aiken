@@ -4,13 +4,17 @@
 
 ### Added
 
-- **aiken**: New `-S` flag on `check` and `build` that blocks the printing of warnings but it still shows the total warning count.
+- **aiken**: New `-S` flag on `check` and `build` that blocks the printing of warnings but it still shows the total warning count. @rvcas
 
 ### Changed
 
 - **aiken-lang**: Prevent (type error) backpassing blocks with empty continuation. See [#1111](https://github.com/aiken-lang/aiken/issues/1111). @KtorZ
 - **aiken-lang**: Change default placeholder for `trace` to `Void` instead of `todo`. @KtorZ
 - **aiken-lang**: Disallow (parse error) dangling colon `:` in traces. See [#1113](https://github.com/aiken-lang/aiken/issues/1113). @KtorZ
+
+### Fixed
+
+- **aiken-lang**: Formatter was removing comments from function type annotation args @rvcas
 
 ## v1.1.13 - 2025-02-26
 
