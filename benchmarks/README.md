@@ -41,6 +41,22 @@ queens5x5/fc               1867    179227518621      1023295666
 -->
 
 <!--
+v1.1.13
+    ┍━ benchmarks/clausify/benchmark ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │ PASS [mem:  39891097, cpu:  12325496028] bench_clausify_f1
+    │ PASS [mem:  50524767, cpu:  15570882882] bench_clausify_f2
+    │ PASS [mem: 136054751, cpu:  41872495549] bench_clausify_f3
+    │ PASS [mem: 181055087, cpu:  56754761923] bench_clausify_f4
+    │ PASS [mem: 660668247, cpu: 203182153626] bench_clausify_f5
+    ┕━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5 tests | 5 passed | 0 failed
+
+
+    ┍━ benchmarks/knights/benchmark ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │ PASS [mem: 160204421, cpu:  54958831939] bench_knights_100_4x4
+    │ PASS [mem: 292216349, cpu: 131954064320] bench_knights_100_6x6
+    │ PASS [mem: 540217437, cpu: 270266226527] bench_knights_100_8x8
+    ┕━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3 tests | 3 passed | 0 failed
+
 v1.1.0
 
     ┍━ benchmarks/clausify/benchmark ━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -74,97 +90,34 @@ v1.0.29-alpha & v1.0.28-alpha
     │ PASS [mem: 601065675, cpu: 319834775948] bench_knights_100_8x8
     ┕━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3 tests | 3 passed | 0 failed
 
-==== There's no 1.0.27-alpha
-
-v1.0.26-alpha & V1.0.25-alpha
-
-    ┍━ benchmarks/clausify/benchmark ━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    │ PASS [mem:  52538257, cpu:  20243486892] bench_clausify_f1
-    │ PASS [mem:  65404263, cpu:  25235091975] bench_clausify_f2
-    │ PASS [mem: 174866054, cpu:  67523028814] bench_clausify_f3
-    │ PASS [mem: 225087758, cpu:  88367835856] bench_clausify_f4
-    │ PASS [mem: 851294369, cpu: 328896952793] bench_clausify_f5
-    ┕━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5 tests | 5 passed | 0 failed
-
-    ┍━ benchmarks/knights ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    │ PASS [mem: 171421863, cpu:  72861467671] bench_knights_100_4x4
-    │ PASS [mem: 354137347, cpu: 174027736310] bench_knights_100_6x6
-    │ PASS [mem: 688090183, cpu: 356296429240] bench_knights_100_8x8
-    ┕━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3 tests | 3 passed | 0 failed
-
-v1.0.24-alpha & V1.0.23-alpha
-
-    ┍━ benchmarks/clausify/benchmark ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    │ PASS [mem:   64738801, cpu:  24123180244] bench_clausify_f1
-    │ PASS [mem:   80280627, cpu:  29901360387] bench_clausify_f2
-    │ PASS [mem:  214423277, cpu:  79840016473] bench_clausify_f3
-    │ PASS [mem:  269232481, cpu: 101739948515] bench_clausify_f4
-    │ PASS [mem: 1045036759, cpu: 389233562263] bench_clausify_f5
-    ┕━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5 tests | 5 passed | 0 failed
-
-    ┍━ benchmarks/knights ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    │ PASS [mem: 180946463, cpu:  75052125671] bench_knights_100_4x4
-    │ PASS [mem: 374910247, cpu: 178805503310] bench_knights_100_6x6
-    │ PASS [mem: 729107683, cpu: 365730454240] bench_knights_100_8x8
-    ┕━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3 tests | 3 passed | 0 failed
-
-==== There's no 1.0.22-alpha
-
-V1.0.21-alpha
-
-    ┍━ benchmarks/clausify/benchmark ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    │ PASS [mem:   64738801, cpu:  24123180244] bench_clausify_f1
-    │ PASS [mem:   80280627, cpu:  29901360387] bench_clausify_f2
-    │ PASS [mem:  214423277, cpu:  79840016473] bench_clausify_f3
-    │ PASS [mem:  269232481, cpu: 101739948515] bench_clausify_f4
-    │ PASS [mem: 1045036759, cpu: 389233562263] bench_clausify_f5
-    ┕━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5 tests | 5 passed | 0 failed
-
-    ┍━ benchmarks/knights ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    │ PASS [mem: 180697463, cpu:  74944457471] bench_knights_100_4x4
-    │ PASS [mem: 374661247, cpu: 178697835110] bench_knights_100_6x6
-    │ PASS [mem: 728858683, cpu: 365622786040] bench_knights_100_8x8
-    ┕━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3 tests | 3 passed | 0 failed
-
-V1.0.20-alpha, v1.0.19-alpha & v1.0.18-alpha
-
-    ┍━ benchmarks/clausify/benchmark ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    │ PASS [mem:   64861501, cpu:  24151401244] bench_clausify_f1
-    │ PASS [mem:   80442927, cpu:  29938689387] bench_clausify_f2
-    │ PASS [mem:  214833977, cpu:  79934477473] bench_clausify_f3
-    │ PASS [mem:  269959981, cpu: 101907273515] bench_clausify_f4
-    │ PASS [mem: 1046684059, cpu: 389612441263] bench_clausify_f5
-    ┕━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5 tests | 5 passed | 0 failed
-
-    ┍━ benchmarks/knights ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    │ PASS [mem: 182244075, cpu:  75300076471] bench_knights_100_4x4
-    │ PASS [mem: 380548699, cpu: 180051720110] bench_knights_100_6x6
-    │ PASS [mem: 740194031, cpu: 368229509040] bench_knights_100_8x8
-    ┕━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3 tests | 3 passed | 0 failed
 -->
+
+> [!NOTE]
+>
+> Comparing version: `v1.1.13`
 
 ### CPU
 
-| Benchmark         | `v1.1.0`     | vs `v1.0.29` | vs `v1.0.25` | vs `v1.0.23` | vs `v1.0.21` |
-| ---               | ---:         | ---:         | ---:         | ---:         | ---:         |
-| `clausify_f1`     | 16198154564  | -24.99%      | -6.26%       | +11.71%      | +11.71%      |
-| `clausify_f2`     | 20169891270  | -24.92%      | -6.07%       | +11.30%      | +11.30%      |
-| `clausify_f3`     | 53923018831  | -24.91%      | -5.98%       | +11.17%      | +11.17%      |
-| `clausify_f4`     | 70014384566  | -24.74%      | -5.01%       | +9.37%       | +9.37%       |
-| `clausify_f5`     | 262421671684 | -25.00%      | -6.00%       | +11.24%      | +11.24%      |
-| `knights_100_4x4` | 57037226471  | -20.62%      | +1.40%       | +4.45%       | +4.30%       |
-| `knights_100_6x6` | 137399466410 | -14.00%      | +8.93%       | +11.92%      | +11.85%      |
-| `knights_100_8x8` | 281418742606 | -12.00%      | +11.40%      | +14.35%      | +14.32%      |
+| Benchmark         | vs `v1.1.0` | vs `v1.0.29` |
+| ---               | ---:        | ---:         |
+| `clausify_f1`     | -23.91%     | -42.92%      |
+| `clausify_f2`     | -22.80%     | -42.04%      |
+| `clausify_f3`     | -22.35%     | -41.69%      |
+| `clausify_f4`     | -18.94%     | -38.99%      |
+| `clausify_f5`     | -22.57%     | -41.93%      |
+| `knights_100_4x4` | -3.64%      | -7.00%       |
+| `knights_100_6x6` | -3.96%      | -17.41%      |
+| `knights_100_8x8` | -3.96%      | -15.50%      |
 
 ### Mem
 
-| Benchmark         | `v1.1.0`  | vs `v1.0.29` | vs `v1.0.25` | vs `v1.0.23` | vs `v1.0.21` |
-| ---               | ---:      | ---:         | ---:         | ---:         | ---:         |
-| `clausify_f1`     | 53769377  | ± 0.00%      | -2.29%       | +20.40%      | +20.40%      |
-| `clausify_f2`     | 67108683  | ± 0.00%      | -2.54%       | +19.63%      | +19.63%      |
-| `clausify_f3`     | 179606857 | ± 0.00%      | -2.64%       | +19.38%      | +19.38%      |
-| `clausify_f4`     | 231444137 | ± 0.00%      | -2.75%       | +16.33%      | +16.33%      |
-| `clausify_f5`     | 874286879 | ± 0.00%      | -2.63%       | +19.53%      | +19.53%      |
-| `knights_100_4x4` | 172246681 | -0.01%       | -0.48%       | +5.04%       | +4.90%       |
-| `knights_100_6x6` | 321690197 | -0.01%       | +10.08%      | +16.54%      | +16.46%      |
-| `knights_100_8x8` | 601026745 | -0.01%       | +14.48%      | +21.30%      | +21.26%      |
+| Benchmark         | vs `v1.1.0` | vs `v1.0.29` |
+| ---               | ---:        | ---:         |
+| `clausify_f1`     | -25.81%     | -25.81%      |
+| `clausify_f2`     | -24.71%     | -24.71%      |
+| `clausify_f3`     | -24.25%     | -24.25%      |
+| `clausify_f4`     | -21.78%     | -21.78%      |
+| `clausify_f5`     | -24.43%     | -24.43%      |
+| `knights_100_4x4` | -6.99%      | -7.00%       |
+| `knights_100_6x6` | -9.16%      | -9.17%       |
+| `knights_100_8x8` | -10.12%     | -10.12%      |
