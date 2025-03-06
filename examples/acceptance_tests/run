@@ -21,7 +21,12 @@ if [ "$?" -eq "0" ]; then
   if [ -z "$VALIDATORS" ]; then
     echo "✅ $(basename $TARGET)"
   else
-    cargo run -r --quiet -- build $TARGET 1>$TMP 2>/dev/null
+    if [ ! -f "$TARGET/assert.sh" ]; then
+      cargo run -r --quiet -- build $TARGET 1>$TMP 2>/dev/null
+    else
+      $TARGET/assert.sh 1>$TMP 2>/dev/null
+    fi
+
     if [ "$?" -eq "0" ]; then
       echo "✅ $(basename $TARGET)"
     else

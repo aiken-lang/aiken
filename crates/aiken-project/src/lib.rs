@@ -714,12 +714,13 @@ where
         blueprint.validators = blueprint
             .validators
             .into_iter()
-            .map(|validator| {
+            .map(|mut validator| {
                 if prefix(&applied_validator.title) == prefix(&validator.title) {
-                    applied_validator.clone()
-                } else {
-                    validator
+                    validator.program = applied_validator.program.clone();
+                    validator.parameters = applied_validator.parameters.clone();
                 }
+
+                validator
             })
             .collect();
 

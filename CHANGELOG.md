@@ -11,6 +11,7 @@
 - **aiken-lang**: Prevent (type error) backpassing blocks with empty continuation. See [#1111](https://github.com/aiken-lang/aiken/issues/1111). @KtorZ
 - **aiken-lang**: Change default placeholder for `trace` to `Void` instead of `todo`. @KtorZ
 - **aiken-lang**: Disallow (parse error) dangling colon `:` in traces. See [#1113](https://github.com/aiken-lang/aiken/issues/1113). @KtorZ
+- **aiken-lang**: Fix `aiken blueprint apply` wrongly overriding all validators handlers names & ABI to the mint's one. See [#1099](https://github.com/aiken-lang/aiken/issues/1099). @KtorZ
 
 ### Fixed
 
