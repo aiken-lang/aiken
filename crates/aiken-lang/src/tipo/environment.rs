@@ -1092,6 +1092,7 @@ impl<'a> Environment<'a> {
                 parameters,
                 location,
                 constructors,
+                decorators: _,
                 doc: _,
                 typed_parameters: _,
             }) => {
@@ -1137,6 +1138,7 @@ impl<'a> Environment<'a> {
             Definition::TypeAlias(TypeAlias {
                 location,
                 public,
+                decorators: _,
                 parameters: args,
                 alias: name,
                 annotation: resolved_type,
@@ -1436,6 +1438,7 @@ impl<'a> Environment<'a> {
                 location: _,
                 parameters: _,
                 typed_parameters: _,
+                decorators: _,
             }) => {
                 let mut hydrator = hydrators
                     .remove(name)
@@ -1480,6 +1483,7 @@ impl<'a> Environment<'a> {
                             location,
                             tipo: _,
                             doc: _,
+                            decorators: _,
                         },
                     ) in constructor.arguments.iter().enumerate()
                     {
