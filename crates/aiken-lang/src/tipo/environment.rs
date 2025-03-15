@@ -92,6 +92,19 @@ pub struct Environment<'a> {
 
 impl<'a> Environment<'a> {
     #[allow(clippy::result_large_err)]
+    pub fn err_unknown_module(&self, name: String, location: Span) -> Error {
+        Error::UnknownModule {
+            name,
+            location,
+            known_modules: self
+                .importable_modules
+                .keys()
+                .map(|t| t.to_string())
+                .collect(),
+        }
+    }
+
+    #[allow(clippy::result_large_err)]
     pub fn find_module(&self, fragments: &[String], location: Span) -> Result<&'a TypeInfo, Error> {
         let mut name = fragments.join("/");
 
@@ -118,11 +131,7 @@ impl<'a> Environment<'a> {
                         .collect(),
                 }
             } else {
-                Error::UnknownModule {
-                    location,
-                    name,
-                    known_modules: self.importable_modules.keys().cloned().collect(),
-                }
+                self.err_unknown_module(name, location)
             }
         })
     }
@@ -386,15 +395,7 @@ impl<'a> Environment<'a> {
                 }
             })
             .next()
-            .ok_or_else(|| Error::UnknownModule {
-                location,
-                name: name.to_string(),
-                known_modules: self
-                    .importable_modules
-                    .keys()
-                    .map(|t| t.to_string())
-                    .collect(),
-            })
+            .ok_or_else(|| self.err_unknown_module(name.to_string(), location))
     }
 
     #[allow(clippy::result_large_err)]
@@ -404,18 +405,10 @@ impl<'a> Environment<'a> {
         (type_name, type_location): (&str, Span),
         (value, value_location): (&str, Span),
     ) -> Result<&ValueConstructor, Error> {
-        let module =
-            self.importable_modules
-                .get(module_name)
-                .ok_or_else(|| Error::UnknownModule {
-                    location: module_location,
-                    name: module_name.to_string(),
-                    known_modules: self
-                        .importable_modules
-                        .keys()
-                        .map(|t| t.to_string())
-                        .collect(),
-                })?;
+        let module = self
+            .importable_modules
+            .get(module_name)
+            .ok_or_else(|| self.err_unknown_module(module_name.to_string(), module_location))?;
 
         let constructors =
             module
@@ -483,18 +476,10 @@ impl<'a> Environment<'a> {
                 }),
 
             Some(m) => {
-                let (_, module) =
-                    self.imported_modules
-                        .get(m)
-                        .ok_or_else(|| Error::UnknownModule {
-                            location,
-                            name: name.to_string(),
-                            known_modules: self
-                                .importable_modules
-                                .keys()
-                                .map(|t| t.to_string())
-                                .collect(),
-                        })?;
+                let (_, module) = self
+                    .imported_modules
+                    .get(m)
+                    .ok_or_else(|| self.err_unknown_module(name.to_string(), location))?;
 
                 self.unused_modules.remove(m);
 
@@ -534,18 +519,9 @@ impl<'a> Environment<'a> {
 
                 // Lookup the module using the declared name (which may have been rebind with
                 // 'as'), to obtain its _full unambiguous name_.
-                let (_, module) =
-                    self.imported_modules
-                        .get(module_name)
-                        .ok_or_else(|| Error::UnknownModule {
-                            location: module_location,
-                            name: module_name.to_string(),
-                            known_modules: self
-                                .importable_modules
-                                .keys()
-                                .map(|t| t.to_string())
-                                .collect(),
-                        })?;
+                let (_, module) = self.imported_modules.get(module_name).ok_or_else(|| {
+                    self.err_unknown_module(module_name.to_string(), module_location)
+                })?;
 
                 let type_location = Span::create(module_location.end + 1, t.len());
 
@@ -583,18 +559,9 @@ impl<'a> Environment<'a> {
             }
 
             Some(Namespace::Module(m)) => {
-                let (_, module) =
-                    self.imported_modules
-                        .get(m)
-                        .ok_or_else(|| Error::UnknownModule {
-                            name: m.to_string(),
-                            known_modules: self
-                                .importable_modules
-                                .keys()
-                                .map(|t| t.to_string())
-                                .collect(),
-                            location: Span::create(location.start, m.len()),
-                        })?;
+                let (_, module) = self.imported_modules.get(m).ok_or_else(|| {
+                    self.err_unknown_module(m.to_string(), Span::create(location.start, m.len()))
+                })?;
 
                 self.unused_modules.remove(m);
 
@@ -1985,15 +1952,7 @@ impl<'a> Environment<'a> {
             let module = self
                 .importable_modules
                 .get(full_module_name)
-                .ok_or_else(|| Error::UnknownModule {
-                    location,
-                    name: name.to_string(),
-                    known_modules: self
-                        .importable_modules
-                        .keys()
-                        .map(|t| t.to_string())
-                        .collect(),
-                })?;
+                .ok_or_else(|| self.err_unknown_module(name.to_string(), location))?;
 
             self.unused_modules.remove(full_module_name);
 

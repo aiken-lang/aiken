@@ -1107,15 +1107,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         .environment
                         .imported_modules
                         .get(module_name)
-                        .ok_or_else(|| Error::UnknownModule {
-                            location: *module_location,
-                            name: module_name.to_string(),
-                            known_modules: self
-                                .environment
-                                .importable_modules
-                                .keys()
-                                .map(|t| t.to_string())
-                                .collect(),
+                        .ok_or_else(|| {
+                            self.environment
+                                .err_unknown_module(module_name.to_string(), *module_location)
                         })?;
 
                     return self.infer_inner_type_constructor_access(
@@ -1175,15 +1169,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 .environment
                 .imported_modules
                 .get(module_alias)
-                .ok_or_else(|| Error::UnknownModule {
-                    name: module_alias.to_string(),
-                    location: *module_location,
-                    known_modules: self
-                        .environment
-                        .importable_modules
-                        .keys()
-                        .map(|t| t.to_string())
-                        .collect(),
+                .ok_or_else(|| {
+                    self.environment
+                        .err_unknown_module(module_alias.to_string(), *module_location)
                 })?;
 
             let constructor =
@@ -2683,15 +2671,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     .environment
                     .imported_modules
                     .get(module_name)
-                    .ok_or_else(|| Error::UnknownModule {
-                        location: *location,
-                        name: module_name.to_string(),
-                        known_modules: self
-                            .environment
-                            .importable_modules
-                            .keys()
-                            .map(|t| t.to_string())
-                            .collect(),
+                    .ok_or_else(|| {
+                        self.environment
+                            .err_unknown_module(module_name.to_string(), *location)
                     })?;
 
                 module
