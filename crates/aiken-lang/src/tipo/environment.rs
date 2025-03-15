@@ -505,8 +505,10 @@ impl<'a> Environment<'a> {
                 }),
 
             Some(Namespace::Type(t)) => {
+                let type_location = location.map(|start, _| (start, start + t.len()));
+
                 let parent_type = self.module_types.get(t).ok_or_else(|| Error::UnknownType {
-                    location,
+                    location: type_location,
                     name: t.to_string(),
                     types: self.known_type_names(),
                 })?;
@@ -514,8 +516,8 @@ impl<'a> Environment<'a> {
                 self.unused_modules.remove(&parent_type.module);
 
                 self.get_fully_qualified_value_constructor(
-                    (parent_type.module.as_str(), location),
-                    (t, location),
+                    (parent_type.module.as_str(), type_location),
+                    (t, type_location),
                     (name, location.map(|start, end| (start + t.len() + 1, end))),
                 )
             }

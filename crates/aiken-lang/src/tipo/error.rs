@@ -808,7 +808,7 @@ Perhaps, try the following:
     },
 
     #[error(
-        "I looked for '{}' in '{}' but couldn't find it.\n",
+        "I looked for '{}' in module '{}' but couldn't find it.\n",
         name.if_supports_color(Stdout, |s| s.purple()),
         module_name.if_supports_color(Stdout, |s| s.purple())
     )]
@@ -822,7 +822,7 @@ Perhaps, try the following:
         )
     ))]
     UnknownModuleType {
-        #[label("unknown import")]
+        #[label("not exported?")]
         location: Span,
         name: String,
         module_name: String,
@@ -1529,14 +1529,15 @@ fn suggest_import_constructor() -> String {
              ┍━ aiken/pet.ak ━    ==>   ┍━ foo.ak ━━━━━━━━━━━━━━━━
              │ {keyword_pub} {keyword_type} {type_Pet} {{           │ {keyword_use} aiken/pet.{{{type_Pet}, {variant_Dog}}}
              │   {variant_Cat}                    │
-             │   {variant_Dog}                    │ {keyword_fn} foo(pet : {type_Pet}) {{
-             │ }}                        │   {keyword_when} pet {keyword_is} {{
-                                        │     pet.{variant_Cat} -> // ...
+             │   {variant_Dog}                    │ {keyword_fn} foo(pet: {type_Pet}) {{
+             │   {variant_Fox}                    │   {keyword_when} pet {keyword_is} {{
+             │ }}                        │     pet.{variant_Cat} -> // ...
                                         │     {variant_Dog} -> // ...
+                                        │     {type_Pet}.{variant_Fox} -> // ...
                                         │   }}
                                         │ }}
 
-           You must import its constructors explicitly to use them, or prefix them with the module's name.
+           You must import its constructors explicitly to use them, or prefix them with the module or type's name.
         "#
         , keyword_fn =  "fn".if_supports_color(Stdout, |s| s.yellow())
         , keyword_is = "is".if_supports_color(Stdout, |s| s.yellow())
@@ -1551,6 +1552,9 @@ fn suggest_import_constructor() -> String {
             .if_supports_color(Stdout, |s| s.bright_blue())
             .if_supports_color(Stdout, |s| s.bold())
         , variant_Dog = "Dog"
+            .if_supports_color(Stdout, |s| s.bright_blue())
+            .if_supports_color(Stdout, |s| s.bold())
+        , variant_Fox = "Fox"
             .if_supports_color(Stdout, |s| s.bright_blue())
             .if_supports_color(Stdout, |s| s.bold())
     }

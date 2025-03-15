@@ -1078,7 +1078,10 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             } if TypeConstructor::might_be(type_name) => {
                 return self.infer_type_constructor_access(
                     (type_name, type_location),
-                    (&label, access_location),
+                    (
+                        &label,
+                        access_location.map(|start, end| (start + type_name.len() + 1, end)),
+                    ),
                 );
             }
 
@@ -1094,8 +1097,16 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 {
                     return self.infer_inner_type_constructor_access(
                         (module_name, *module_location),
-                        (type_name, type_location),
-                        (&label, access_location),
+                        (
+                            type_name,
+                            type_location.map(|start, end| (start + module_name.len() + 1, end)),
+                        ),
+                        (
+                            &label,
+                            access_location.map(|start, end| {
+                                (start + module_name.len() + type_name.len() + 2, end)
+                            }),
+                        ),
                     );
                 }
             }
@@ -1203,6 +1214,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         (type_name, type_location): (&str, Span),
         (label, label_location): (&str, Span),
     ) -> Result<TypedExpr, Error> {
+        self.environment.increment_usage(type_name);
+
         let parent_type = self
             .environment
             .module_types
@@ -1234,6 +1247,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             (type_name, type_location),
             (label, label_location),
         )?;
+
+        self.environment.unused_modules.remove(module_name);
+
         self.infer_module_access(
             module_name,
             label.to_string(),
