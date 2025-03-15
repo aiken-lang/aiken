@@ -796,8 +796,7 @@ impl<'a> Environment<'a> {
         self.module_types
             .keys()
             .filter_map(|t| {
-                // Avoid leaking special internal types such as __ScriptContext or
-                // __ScriptPurpose.
+                // Avoid leaking special internal types in error hints.
                 if t.starts_with("__") {
                     None
                 } else {
@@ -811,6 +810,9 @@ impl<'a> Environment<'a> {
         self.scope
             .keys()
             .filter(|&t| PIPE_VARIABLE != t)
+            // Avoid leaking internal functions in error hints.
+            .filter(|&t| !crate::builtins::INTERNAL_FUNCTIONS.contains(t.as_str()))
+            .filter(|&t| !t.starts_with("__") && !TypeConstructor::might_be(t))
             .map(|t| t.to_string())
             .collect()
     }
@@ -818,7 +820,9 @@ impl<'a> Environment<'a> {
     pub fn local_constructor_names(&self) -> Vec<String> {
         self.scope
             .keys()
-            .filter(|&t| t.chars().next().unwrap_or_default().is_uppercase())
+            // Avoid leaking internal constructors in error hints.
+            .filter(|&t| !t.starts_with("__"))
+            .filter(|&t| TypeConstructor::might_be(t))
             .map(|t| t.to_string())
             .collect()
     }

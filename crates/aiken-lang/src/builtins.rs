@@ -12,6 +12,7 @@ use crate::{
     },
     IdGenerator,
 };
+use std::{collections::BTreeSet, sync::LazyLock};
 
 use indexmap::IndexMap;
 use std::{collections::HashMap, rc::Rc};
@@ -24,6 +25,16 @@ use uplc::{
 
 pub const PRELUDE: &str = "aiken";
 pub const BUILTIN: &str = "aiken/builtin";
+
+pub static INTERNAL_FUNCTIONS: LazyLock<BTreeSet<&'static str>> = LazyLock::new(|| {
+    let mut set = BTreeSet::new();
+    set.insert("diagnostic");
+    set.insert("do_from_int");
+    set.insert("encode_base16");
+    set.insert("enumerate");
+    set.insert("from_int");
+    set
+});
 
 /// Build a prelude that can be injected
 /// into a compiler pipeline
