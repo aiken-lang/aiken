@@ -1079,7 +1079,7 @@ The best thing to do from here is to remove it."#))]
         available_purposes: Vec<String>,
     },
 
-    #[error("I could not find an appropriate handler in the validator definition\n")]
+    #[error("I could not find an appropriate handler in the validator definition.\n")]
     #[diagnostic(code("unknown::handler"))]
     #[diagnostic(help(
         "When referring to a validator handler via record access, you must refer to one of the declared handlers{}{}",
@@ -1095,7 +1095,7 @@ The best thing to do from here is to remove it."#))]
         available_handlers: Vec<String>,
     },
 
-    #[error("I caught an extraneous fallback handler in an already exhaustive validator\n")]
+    #[error("I caught an extraneous fallback handler in an already exhaustive validator.\n")]
     #[diagnostic(code("extraneous::fallback"))]
     #[diagnostic(help(
         "Validator handlers must be exhaustive and either cover all purposes, or provide a fallback handler. Here, you have successfully covered all script purposes with your handler, but left an extraneous fallback branch. I cannot let that happen, but removing it for you would probably be deemed rude. So please, remove the fallback."
@@ -1103,6 +1103,16 @@ The best thing to do from here is to remove it."#))]
     UnexpectedValidatorFallback {
         #[label("redundant fallback handler")]
         fallback: Span,
+    },
+
+    #[error("I was stopped by a suspicious field access chain.\n")]
+    #[diagnostic(code("invalid::field_access"))]
+    #[diagnostic(help(
+        "It seems like you've got things mixed up a little here? You can only access fields exported by modules or, by types within those modules. Double-check the culprit field access chain, there's likely something wrong about it."
+    ))]
+    InvalidFieldAccess {
+        #[label("invalid field access")]
+        location: Span,
     },
 }
 
@@ -1166,7 +1176,8 @@ impl ExtraData for Error {
             | Error::UnknownValidatorHandler { .. }
             | Error::UnexpectedValidatorFallback { .. }
             | Error::IncorrectBenchmarkArity { .. }
-            | Error::MustInferFirst { .. } => None,
+            | Error::MustInferFirst { .. }
+            | Error::InvalidFieldAccess { .. } => None,
 
             Error::UnknownType { name, .. }
             | Error::UnknownTypeConstructor { name, .. }

@@ -1095,6 +1095,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     location: module_location,
                 } = type_container.as_ref()
                 {
+                    if TypeConstructor::might_be(module_name) {
+                        return Err(Error::InvalidFieldAccess {
+                            location: access_location,
+                        });
+                    }
+
                     // Lookup the module using the declared name (which may have been rebind with
                     // 'as'), to obtain its _full unambiguous name_.
                     let (_, module) = self

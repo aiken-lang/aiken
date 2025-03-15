@@ -2725,6 +2725,64 @@ fn use_non_imported_module_as_namespace() {
 }
 
 #[test]
+fn invalid_type_field_access_chain() {
+    let dependency = r#"
+        pub type Foo {
+          I(Int)
+          B(Bool)
+        }
+    "#;
+
+    let source_code = r#"
+        use foo.{Foo}
+
+        test my_test() {
+          trace Foo.I.Int(42)
+          Void
+        }
+    "#;
+
+    let result = check_with_deps(parse(source_code), vec![(parse_as(dependency, "foo"))]);
+
+    assert!(
+        matches!(
+            &result,
+            Err((warnings, Error::InvalidFieldAccess { .. })) if warnings.is_empty(),
+        ),
+        "{result:#?}"
+    );
+}
+
+#[test]
+fn invalid_type_field_access_chain_2() {
+    let dependency = r#"
+        pub type Foo {
+          I(Int)
+          B(Bool)
+        }
+    "#;
+
+    let source_code = r#"
+        use foo.{Foo}
+
+        test my_test() {
+          trace Foo.i(42)
+          Void
+        }
+    "#;
+
+    let result = check_with_deps(parse(source_code), vec![(parse_as(dependency, "foo"))]);
+
+    assert!(
+        matches!(
+            &result,
+            Err((warnings, Error::UnknownTypeConstructor { .. })) if warnings.is_empty(),
+        ),
+        "{result:#?}"
+    );
+}
+
+#[test]
 fn forbid_importing_or_using_opaque_constructors() {
     let dependency = r#"
         pub opaque type Thing {
