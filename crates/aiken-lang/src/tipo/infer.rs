@@ -17,7 +17,12 @@ use crate::{
     tipo::{expr::infer_function, Span, Type, TypeVar},
     IdGenerator,
 };
-use std::{borrow::Borrow, collections::HashMap, ops::Deref, rc::Rc};
+use std::{
+    borrow::Borrow,
+    collections::{BTreeSet, HashMap},
+    ops::Deref,
+    rc::Rc,
+};
 
 impl UntypedModule {
     #[allow(clippy::too_many_arguments)]
@@ -116,7 +121,13 @@ impl UntypedModule {
             .module_types
             .retain(|_, info| info.public && info.module == module_name);
 
+        let own_types = environment.module_types.keys().collect::<BTreeSet<_>>();
+
         environment.module_values.retain(|_, info| info.public);
+
+        environment
+            .module_types_constructors
+            .retain(|k, _| own_types.contains(k));
 
         environment
             .accessors
