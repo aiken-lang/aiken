@@ -2329,6 +2329,31 @@ fn use_type_as_namespace_for_patterns() {
 }
 
 #[test]
+fn use_nested_type_as_namespace_for_patterns() {
+    let dependency = r#"
+        pub type Foo {
+          A
+          B
+        }
+    "#;
+
+    let source_code = r#"
+        use foo.{Foo}
+
+        fn bar(x: Foo) {
+          when x is {
+            foo.Foo.A -> True
+            foo.Foo.B -> False
+          }
+        }
+    "#;
+
+    let result = check_with_deps(parse(source_code), vec![(parse_as(dependency, "foo"))]);
+
+    assert!(matches!(result, Ok(..)), "{result:#?}");
+}
+
+#[test]
 fn use_opaque_type_as_namespace_for_patterns_fails() {
     let dependency = r#"
         pub opaque type Foo {

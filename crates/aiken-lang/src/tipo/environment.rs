@@ -529,7 +529,42 @@ impl<'a> Environment<'a> {
                     constructors: self.local_constructor_names(),
                 }),
 
-            Some(Namespace::Type(t)) => {
+            Some(Namespace::Type(Some(module_name), t)) => {
+                let module_location = location.map(|start, _| (start, start + module_name.len()));
+
+                // Lookup the module using the declared name (which may have been rebind with
+                // 'as'), to obtain its _full unambiguous name_.
+                let (_, module) =
+                    self.imported_modules
+                        .get(module_name)
+                        .ok_or_else(|| Error::UnknownModule {
+                            location: module_location,
+                            name: module_name.to_string(),
+                            known_modules: self
+                                .importable_modules
+                                .keys()
+                                .map(|t| t.to_string())
+                                .collect(),
+                        })?;
+
+                let type_location = Span::create(module_location.end + 1, t.len());
+
+                let parent_type = module.types.get(t).ok_or_else(|| Error::UnknownType {
+                    location: type_location,
+                    name: t.to_string(),
+                    types: self.known_type_names(),
+                })?;
+
+                self.unused_modules.remove(&parent_type.module);
+
+                self.get_fully_qualified_value_constructor(
+                    (parent_type.module.as_str(), module_location),
+                    (t, type_location),
+                    (name, location.map(|_, end| (type_location.end + 1, end))),
+                )
+            }
+
+            Some(Namespace::Type(None, t)) => {
                 let type_location = location.map(|start, _| (start, start + t.len()));
 
                 let parent_type = self.module_types.get(t).ok_or_else(|| Error::UnknownType {
@@ -558,7 +593,7 @@ impl<'a> Environment<'a> {
                                 .keys()
                                 .map(|t| t.to_string())
                                 .collect(),
-                            location,
+                            location: Span::create(location.start, m.len()),
                         })?;
 
                 self.unused_modules.remove(m);

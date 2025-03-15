@@ -1217,9 +1217,15 @@ impl<'comments> Formatter<'comments> {
         }
 
         let name = match module {
-            Some(Namespace::Module(m)) | Some(Namespace::Type(m)) => {
+            Some(Namespace::Module(m)) | Some(Namespace::Type(None, m)) => {
                 m.to_doc().append(".").append(name)
             }
+            Some(Namespace::Type(Some(m), c)) => m
+                .to_doc()
+                .append(".")
+                .append(c.as_str())
+                .append(".")
+                .append(name),
             None => name.to_doc(),
         };
 

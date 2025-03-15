@@ -9,6 +9,27 @@ pub fn parser(
     pattern: Recursive<'_, Token, UntypedPattern, ParseError>,
 ) -> impl Parser<Token, UntypedPattern, Error = ParseError> + '_ {
     choice((
+        select! { Token::Name { name } => name }
+            .then(just(Token::Dot).ignore_then(select! {Token::UpName { name } => name}))
+            .then(
+                just(Token::Dot).ignore_then(
+                    select! {Token::UpName { name } => name}.then(args(pattern.clone())),
+                ),
+            )
+            .map_with_span(
+                |((module, namespace), (name, (arguments, spread_location, is_record))), span| {
+                    UntypedPattern::Constructor {
+                        is_record,
+                        location: span,
+                        name,
+                        arguments,
+                        module: Some(Namespace::Type(Some(module), namespace)),
+                        constructor: (),
+                        spread_location,
+                        tipo: (),
+                    }
+                },
+            ),
         select! { Token::UpName { name } => name }
             .then(
                 just(Token::Dot).ignore_then(
@@ -22,7 +43,7 @@ pub fn parser(
                         location: span,
                         name,
                         arguments,
-                        module: Some(Namespace::Type(namespace)),
+                        module: Some(Namespace::Type(None, namespace)),
                         constructor: (),
                         spread_location,
                         tipo: (),

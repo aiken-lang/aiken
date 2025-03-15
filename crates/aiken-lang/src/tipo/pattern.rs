@@ -573,7 +573,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                                 // NOTE:
                                 // Type namespaces are completely erased during type-check.
                                 module: match module {
-                                    None | Some(Namespace::Type(_)) => None,
+                                    None | Some(Namespace::Type(..)) => None,
                                     Some(Namespace::Module(m)) => Some(m),
                                 },
                                 name,
@@ -609,7 +609,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                                 // NOTE:
                                 // Type namespaces are completely erased during type-check.
                                 module: match module {
-                                    None | Some(Namespace::Type(_)) => None,
+                                    None | Some(Namespace::Type(..)) => None,
                                     Some(Namespace::Module(m)) => Some(m),
                                 },
                                 name,

@@ -1656,7 +1656,7 @@ impl TypedPattern {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Namespace {
     Module(String),
-    Type(String),
+    Type(Option<String>, String),
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]

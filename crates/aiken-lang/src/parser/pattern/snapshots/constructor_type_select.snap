@@ -9,6 +9,7 @@ Constructor {
     arguments: [],
     module: Some(
         Type(
+            None,
             "Foo",
         ),
     ),
