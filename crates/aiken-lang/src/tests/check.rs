@@ -2279,7 +2279,7 @@ fn use_type_as_namespace_for_patterns() {
     let source_code = r#"
         use thing.{Foo}
 
-        pub fn bar(foo: Foo) {
+        fn bar(foo: Foo) {
           when foo is {
             Foo.A -> True
             Foo.B -> False
@@ -2335,8 +2335,6 @@ fn use_wrong_type_as_namespace_for_patterns_fails() {
           C
           D
         }
-
-
     "#;
 
     let source_code = r#"
@@ -2356,6 +2354,237 @@ fn use_wrong_type_as_namespace_for_patterns_fails() {
         matches!(
             &result,
             Err((warnings, Error::UnknownTypeConstructor { name, .. })) if name == "D" && warnings.is_empty(),
+        ),
+        "{result:#?}"
+    );
+}
+
+#[test]
+fn use_type_as_namespace_for_constructors() {
+    let dependency = r#"
+        pub type Foo {
+          I(Int)
+          B(Bool)
+        }
+    "#;
+
+    let source_code = r#"
+        use foo.{Foo}
+
+        test my_test() {
+          and {
+            Foo.I(42) == foo.I(42),
+            foo.B(True) == Foo.B(True),
+          }
+        }
+    "#;
+
+    let result = check_with_deps(parse(source_code), vec![(parse_as(dependency, "foo"))]);
+
+    assert!(matches!(result, Ok(..)), "{result:#?}");
+}
+
+#[test]
+fn use_type_as_nested_namespace_for_constructors() {
+    let dependency = r#"
+        pub type Foo {
+          I(Int)
+          B(Bool)
+        }
+    "#;
+
+    let source_code = r#"
+        use foo
+
+        test my_test() {
+          trace foo.Foo.I(42)
+          Void
+        }
+    "#;
+
+    let result = check_with_deps(parse(source_code), vec![(parse_as(dependency, "foo"))]);
+
+    assert!(matches!(result, Ok(..)), "{result:#?}");
+}
+
+#[test]
+fn use_type_as_namespace_unknown_constructor() {
+    let dependency = r#"
+        pub type Foo {
+          I(Int)
+          B(Bool)
+        }
+    "#;
+
+    let source_code = r#"
+        use foo.{Foo}
+
+        test my_test() {
+          Foo.A == Foo.I(42)
+        }
+    "#;
+
+    let result = check_with_deps(parse(source_code), vec![(parse_as(dependency, "foo"))]);
+
+    assert!(
+        matches!(
+            &result,
+            Err((warnings, Error::UnknownTypeConstructor { name, .. })) if name == "A" && warnings.is_empty(),
+        ),
+        "{result:#?}"
+    );
+}
+
+#[test]
+fn use_wrong_type_as_namespace() {
+    let dependency = r#"
+        pub type Foo {
+          I(Int)
+          B(Bool)
+        }
+
+        pub type Bar {
+          S(String)
+          L(List<Int>)
+        }
+    "#;
+
+    let source_code = r#"
+        use foo.{Foo}
+
+        test my_test() {
+          trace Foo.S(@"wut")
+          Void
+        }
+    "#;
+
+    let result = check_with_deps(parse(source_code), vec![(parse_as(dependency, "foo"))]);
+
+    assert!(
+        matches!(
+            &result,
+            Err((warnings, Error::UnknownTypeConstructor { name, .. })) if name == "S" && warnings.is_empty(),
+        ),
+        "{result:#?}"
+    );
+}
+
+#[test]
+fn use_wrong_nested_type_as_namespace() {
+    let dependency = r#"
+        pub type Foo {
+          I(Int)
+          B(Bool)
+        }
+
+        pub type Bar {
+          S(String)
+          L(List<Int>)
+        }
+    "#;
+
+    let source_code = r#"
+        use foo
+
+        test my_test() {
+          trace foo.Foo.S(@"wut")
+          Void
+        }
+    "#;
+
+    let result = check_with_deps(parse(source_code), vec![(parse_as(dependency, "foo"))]);
+
+    assert!(
+        matches!(
+            &result,
+            Err((warnings, Error::UnknownTypeConstructor { name, .. })) if name == "S" && warnings.is_empty(),
+        ),
+        "{result:#?}"
+    );
+}
+
+#[test]
+fn use_private_type_as_nested_namespace_fails() {
+    let dependency = r#"
+        type Foo {
+          I(Int)
+          B(Bool)
+        }
+    "#;
+
+    let source_code = r#"
+        use foo
+
+        test my_test() {
+          trace foo.Foo.I(42)
+          Void
+        }
+    "#;
+
+    let result = check_with_deps(parse(source_code), vec![(parse_as(dependency, "foo"))]);
+
+    assert!(
+        matches!(
+            &result,
+            Err((warnings, Error::UnknownModuleType { name, .. })) if name == "Foo" && warnings.is_empty(),
+        ),
+        "{result:#?}"
+    );
+}
+
+#[test]
+fn use_opaque_type_as_namespace_for_constructors_fails() {
+    let dependency = r#"
+        pub opaque type Foo {
+          I(Int)
+          B(Bool)
+        }
+    "#;
+
+    let source_code = r#"
+        use foo.{Foo}
+
+        test my_test() {
+          trace Foo.I(42)
+          Void
+        }
+    "#;
+
+    let result = check_with_deps(parse(source_code), vec![(parse_as(dependency, "foo"))]);
+
+    assert!(
+        matches!(
+            &result,
+            Err((warnings, Error::UnknownTypeConstructor { name, .. })) if name == "I" && warnings.is_empty(),
+        ),
+        "{result:#?}"
+    );
+}
+
+#[test]
+fn use_opaque_type_as_nested_namespace_for_constructors_fails() {
+    let dependency = r#"
+        pub opaque type Foo {
+          I(Int)
+          B(Bool)
+        }
+    "#;
+
+    let source_code = r#"
+        use foo
+
+        test my_test() {
+          trace foo.Foo.I(42)
+          Void
+        }
+    "#;
+
+    let result = check_with_deps(parse(source_code), vec![(parse_as(dependency, "foo"))]);
+
+    assert!(
+        matches!(
+            &result,
+            Err((warnings, Error::UnknownTypeConstructor { name, .. })) if name == "I" && warnings.is_empty(),
         ),
         "{result:#?}"
     );

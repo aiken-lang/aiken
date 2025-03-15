@@ -1068,6 +1068,41 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             return shortcircuit;
         }
 
+        // In case where we find an uppercase var name in a record access chain, we treat the type
+        // as a namespace and lookup the next constructor as if it were imported from the module's
+        // the type originally belong to.
+        match container {
+            UntypedExpr::Var {
+                name: ref type_name,
+                location: type_location,
+            } if TypeConstructor::might_be(type_name) => {
+                return self.infer_type_constructor_access(
+                    (type_name, type_location),
+                    (&label, access_location),
+                );
+            }
+
+            UntypedExpr::FieldAccess {
+                location: type_location,
+                label: ref type_name,
+                container: ref type_container,
+            } if TypeConstructor::might_be(type_name) => {
+                if let UntypedExpr::Var {
+                    name: ref module_name,
+                    location: module_location,
+                } = type_container.as_ref()
+                {
+                    return self.infer_inner_type_constructor_access(
+                        (module_name, *module_location),
+                        (type_name, type_location),
+                        (&label, access_location),
+                    );
+                }
+            }
+
+            _ => (),
+        };
+
         // Attempt to infer the container as a record access. If that fails, we may be shadowing the name
         // of an imported module, so attempt to infer the container as a module access.
         // TODO: Remove this cloning
@@ -1075,7 +1110,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             Ok(record_access) => Ok(record_access),
 
             Err(err) => match container {
-                UntypedExpr::Var { name, location } => {
+                UntypedExpr::Var { name, location } if !TypeConstructor::might_be(&name) => {
                     let module_access =
                         self.infer_module_access(&name, label, &location, access_location);
 
@@ -1163,15 +1198,59 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     }
 
     #[allow(clippy::result_large_err)]
+    fn infer_type_constructor_access(
+        &mut self,
+        (type_name, type_location): (&str, Span),
+        (label, label_location): (&str, Span),
+    ) -> Result<TypedExpr, Error> {
+        let parent_type = self
+            .environment
+            .module_types
+            .get(type_name)
+            .ok_or_else(|| Error::UnknownType {
+                location: type_location,
+                name: type_name.to_string(),
+                types: self.environment.known_type_names(),
+            })?;
+
+        let module_name = parent_type.module.clone();
+
+        self.infer_inner_type_constructor_access(
+            (module_name.as_str(), type_location),
+            (type_name, type_location),
+            (label, label_location),
+        )
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn infer_inner_type_constructor_access(
+        &mut self,
+        (module_name, module_location): (&str, Span),
+        (type_name, type_location): (&str, Span),
+        (label, label_location): (&str, Span),
+    ) -> Result<TypedExpr, Error> {
+        self.environment.get_fully_qualified_value_constructor(
+            (module_name, module_location),
+            (type_name, type_location),
+            (label, label_location),
+        )?;
+        self.infer_module_access(
+            module_name,
+            label.to_string(),
+            &type_location,
+            label_location,
+        )
+    }
+
+    #[allow(clippy::result_large_err)]
     fn infer_record_access(
         &mut self,
         record: UntypedExpr,
         label: String,
         location: Span,
     ) -> Result<TypedExpr, Error> {
-        // Infer the type of the (presumed) record
+        // Infer the type of the (presumed) record.
         let record = self.infer(record)?;
-
         self.infer_known_record_access(record, label, location)
     }
 
