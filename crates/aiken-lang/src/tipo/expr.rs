@@ -11,11 +11,11 @@ use super::{
 use crate::{
     ast::{
         self, Annotation, ArgName, AssignmentKind, AssignmentPattern, BinOp, Bls12_381Point,
-        ByteArrayFormatPreference, CallArg, Curve, Function, IfBranch, LogicalOpChainKind, Pattern,
-        RecordUpdateSpread, Span, TraceKind, TraceLevel, Tracing, TypedArg, TypedCallArg,
-        TypedClause, TypedIfBranch, TypedPattern, TypedRecordUpdateArg, TypedValidator, UnOp,
-        UntypedArg, UntypedAssignmentKind, UntypedClause, UntypedFunction, UntypedIfBranch,
-        UntypedPattern, UntypedRecordUpdateArg,
+        ByteArrayFormatPreference, CallArg, Curve, Function, IfBranch, LogicalOpChainKind,
+        Namespace, Pattern, RecordUpdateSpread, Span, TraceKind, TraceLevel, Tracing, TypedArg,
+        TypedCallArg, TypedClause, TypedIfBranch, TypedPattern, TypedRecordUpdateArg,
+        TypedValidator, UnOp, UntypedArg, UntypedAssignmentKind, UntypedClause, UntypedFunction,
+        UntypedIfBranch, UntypedPattern, UntypedRecordUpdateArg,
     },
     builtins::{from_default_function, BUILTIN},
     expr::{FnStyle, TypedExpr, UntypedExpr},
@@ -404,7 +404,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 module_alias,
                 label,
                 ..
-            } => (Some(module_alias), label),
+            } => (Some(Namespace::Module(module_alias.to_string())), label),
 
             TypedExpr::Var { name, .. } => (None, name),
 
@@ -413,7 +413,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         Ok(self
             .environment
-            .get_value_constructor(module, name, location)?
+            .get_value_constructor(module.as_ref(), name, location)?
             .field_map())
     }
 
@@ -792,12 +792,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         args: Vec<UntypedRecordUpdateArg>,
         location: Span,
     ) -> Result<TypedExpr, Error> {
-        let (module, name): (Option<String>, String) = match self.infer(constructor.clone())? {
+        let (module, name): (Option<Namespace>, String) = match self.infer(constructor.clone())? {
             TypedExpr::ModuleSelect {
                 module_alias,
                 label,
                 ..
-            } => (Some(module_alias), label),
+            } => (Some(Namespace::Module(module_alias)), label),
 
             TypedExpr::Var { name, .. } => (None, name),
 

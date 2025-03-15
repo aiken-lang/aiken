@@ -1,6 +1,9 @@
 use super::Type;
 use crate::{
-    ast::{Annotation, BinOp, CallArg, LogicalOpChainKind, Span, UntypedFunction, UntypedPattern},
+    ast::{
+        Annotation, BinOp, CallArg, LogicalOpChainKind, Namespace, Span, UntypedFunction,
+        UntypedPattern,
+    },
     error::ExtraData,
     expr::{self, AssignmentPattern, UntypedAssignmentKind, UntypedExpr},
     format::Formatter,
@@ -395,7 +398,7 @@ From there, you can define 'increment', a function that takes a single argument 
         expected: usize,
         given: Vec<CallArg<UntypedPattern>>,
         name: String,
-        module: Option<String>,
+        module: Option<Namespace>,
         is_record: bool,
     },
 
@@ -718,7 +721,7 @@ Perhaps, try the following:
         label: String,
         name: String,
         args: Vec<CallArg<UntypedPattern>>,
-        module: Option<String>,
+        module: Option<Namespace>,
         spread_location: Option<Span>,
     },
 
@@ -1274,7 +1277,7 @@ fn suggest_pattern(
     expected: usize,
     name: &str,
     given: &[CallArg<UntypedPattern>],
-    module: &Option<String>,
+    module: &Option<Namespace>,
     is_record: bool,
 ) -> Option<String> {
     if expected > given.len() {
@@ -1309,7 +1312,7 @@ fn suggest_generic(name: &str, expected: usize) -> String {
 fn suggest_constructor_pattern(
     name: &str,
     args: &[CallArg<UntypedPattern>],
-    module: &Option<String>,
+    module: &Option<Namespace>,
     spread_location: Option<Span>,
 ) -> String {
     let fixed_args = args

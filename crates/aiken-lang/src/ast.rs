@@ -1535,8 +1535,8 @@ impl BinOp {
     }
 }
 
-pub type UntypedPattern = Pattern<(), ()>;
-pub type TypedPattern = Pattern<PatternConstructor, Rc<Type>>;
+pub type UntypedPattern = Pattern<(), (), Namespace>;
+pub type TypedPattern = Pattern<PatternConstructor, Rc<Type>, String>;
 
 impl TypedPattern {
     pub fn var(name: &str) -> Self {
@@ -1654,7 +1654,13 @@ impl TypedPattern {
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum Pattern<Constructor, Type> {
+pub enum Namespace {
+    Module(String),
+    Type(String),
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum Pattern<Constructor, Type, NamespaceKind> {
     Int {
         location: Span,
         value: String,
@@ -1707,7 +1713,7 @@ pub enum Pattern<Constructor, Type> {
         location: Span,
         name: String,
         arguments: Vec<CallArg<Self>>,
-        module: Option<String>,
+        module: Option<NamespaceKind>,
         constructor: Constructor,
         spread_location: Option<Span>,
         tipo: Type,
@@ -1725,7 +1731,7 @@ pub enum Pattern<Constructor, Type> {
     },
 }
 
-impl<A, B> Pattern<A, B> {
+impl<A, B, C> Pattern<A, B, C> {
     pub fn location(&self) -> Span {
         match self {
             Pattern::Assign { pattern, .. } => pattern.location(),
@@ -2201,22 +2207,23 @@ impl<T: Default> AssignmentKind<T> {
     }
 }
 
-pub type MultiPattern<PatternConstructor, Type> = Vec<Pattern<PatternConstructor, Type>>;
+pub type MultiPattern<PatternConstructor, Type, NamespaceKind> =
+    Vec<Pattern<PatternConstructor, Type, NamespaceKind>>;
 
-pub type UntypedMultiPattern = MultiPattern<(), ()>;
-pub type TypedMultiPattern = MultiPattern<PatternConstructor, Rc<Type>>;
+pub type UntypedMultiPattern = MultiPattern<(), (), Namespace>;
+pub type TypedMultiPattern = MultiPattern<PatternConstructor, Rc<Type>, String>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UntypedClause {
     pub location: Span,
-    pub patterns: Vec1<Pattern<(), ()>>,
+    pub patterns: Vec1<UntypedPattern>,
     pub then: UntypedExpr,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TypedClause {
     pub location: Span,
-    pub pattern: Pattern<PatternConstructor, Rc<Type>>,
+    pub pattern: TypedPattern,
     pub then: TypedExpr,
 }
 

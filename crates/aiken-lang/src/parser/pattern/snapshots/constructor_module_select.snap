@@ -8,7 +8,9 @@ Constructor {
     name: "Foo",
     arguments: [],
     module: Some(
-        "module",
+        Module(
+            "module",
+        ),
     ),
     constructor: (),
     spread_location: None,

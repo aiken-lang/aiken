@@ -8,9 +8,9 @@ use super::{
 use crate::{
     ast::{
         self, Annotation, CallArg, DataType, Definition, Function, ModuleConstant, ModuleKind,
-        RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition, TypedFunction,
-        TypedPattern, TypedValidator, UnqualifiedImport, UntypedArg, UntypedDefinition,
-        UntypedFunction, Use, Validator, PIPE_VARIABLE,
+        Namespace, RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition,
+        TypedFunction, TypedPattern, TypedValidator, UnqualifiedImport, UntypedArg,
+        UntypedDefinition, UntypedFunction, Use, Validator, PIPE_VARIABLE,
     },
     tipo::{fields::FieldMap, TypeAliasAnnotation},
     IdGenerator,
@@ -443,7 +443,7 @@ impl<'a> Environment<'a> {
     #[allow(clippy::result_large_err)]
     pub fn get_value_constructor(
         &mut self,
-        module: Option<&String>,
+        module: Option<&Namespace>,
         name: &str,
         location: Span,
     ) -> Result<&ValueConstructor, Error> {
@@ -457,7 +457,11 @@ impl<'a> Environment<'a> {
                     constructors: self.local_constructor_names(),
                 }),
 
-            Some(m) => {
+            Some(Namespace::Type(..)) => {
+                todo!()
+            }
+
+            Some(Namespace::Module(m)) => {
                 let (_, module) =
                     self.imported_modules
                         .get(m)

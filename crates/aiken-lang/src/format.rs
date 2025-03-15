@@ -2,7 +2,7 @@ use crate::{
     ast::{
         Annotation, ArgBy, ArgName, ArgVia, AssignmentKind, AssignmentPattern, BinOp,
         ByteArrayFormatPreference, CallArg, CurveType, DataType, Definition, Function,
-        LogicalOpChainKind, ModuleConstant, OnTestFailure, Pattern, RecordConstructor,
+        LogicalOpChainKind, ModuleConstant, Namespace, OnTestFailure, Pattern, RecordConstructor,
         RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg,
         TypedValidator, UnOp, UnqualifiedImport, UntypedArg, UntypedArgVia, UntypedAssignmentKind,
         UntypedClause, UntypedDefinition, UntypedFunction, UntypedIfBranch, UntypedModule,
@@ -1202,7 +1202,7 @@ impl<'comments> Formatter<'comments> {
         &mut self,
         name: &'a str,
         args: &'a [CallArg<UntypedPattern>],
-        module: &'a Option<String>,
+        module: &'a Option<Namespace>,
         spread_location: Option<Span>,
         is_record: bool,
     ) -> Document<'a> {
@@ -1217,7 +1217,9 @@ impl<'comments> Formatter<'comments> {
         }
 
         let name = match module {
-            Some(m) => m.to_doc().append(".").append(name),
+            Some(Namespace::Module(m)) | Some(Namespace::Type(m)) => {
+                m.to_doc().append(".").append(name)
+            }
             None => name.to_doc(),
         };
 
