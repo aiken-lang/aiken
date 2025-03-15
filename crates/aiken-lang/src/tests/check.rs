@@ -11,15 +11,23 @@ use crate::{
 };
 use std::collections::HashMap;
 
+const DEFAULT_MODULE_NAME: &str = "my_module";
+const DEFAULT_PACKAGE: &str = "test/project";
+
 fn parse(source_code: &str) -> UntypedModule {
+    parse_as(source_code, DEFAULT_MODULE_NAME)
+}
+
+fn parse_as(source_code: &str, name: &str) -> UntypedModule {
     let kind = ModuleKind::Lib;
-    let (ast, _) = parser::module(source_code, kind).expect("Failed to parse module");
+    let (mut ast, _) = parser::module(source_code, kind).expect("Failed to parse module");
+    ast.name = name.to_string();
     ast
 }
 
 fn check_module(
     ast: UntypedModule,
-    extra: Vec<(String, UntypedModule)>,
+    extra: Vec<UntypedModule>,
     kind: ModuleKind,
     tracing: Tracing,
 ) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
@@ -31,27 +39,32 @@ fn check_module(
     module_types.insert("aiken".to_string(), builtins::prelude(&id_gen));
     module_types.insert("aiken/builtin".to_string(), builtins::plutus(&id_gen));
 
-    for (package, module) in extra {
+    for module in extra {
         let mut warnings = vec![];
+
+        if module.name == DEFAULT_MODULE_NAME {
+            panic!("passed extra modules with default name! Use 'parse_as' to define tests instead of 'parse'.");
+        }
 
         let typed_module = module
             .infer(
                 &id_gen,
                 kind,
-                &package,
+                DEFAULT_PACKAGE,
                 &module_types,
                 Tracing::All(TraceLevel::Verbose),
                 &mut warnings,
                 None,
             )
             .expect("extra dependency did not compile");
-        module_types.insert(package.clone(), typed_module.type_info.clone());
+
+        module_types.insert(typed_module.name.clone(), typed_module.type_info.clone());
     }
 
     let result = ast.infer(
         &id_gen,
         kind,
-        "test/project",
+        DEFAULT_PACKAGE,
         &module_types,
         tracing,
         &mut warnings,
@@ -76,7 +89,7 @@ fn check_with_verbosity(
 
 fn check_with_deps(
     ast: UntypedModule,
-    extra: Vec<(String, UntypedModule)>,
+    extra: Vec<UntypedModule>,
 ) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
     check_module(ast, extra, ModuleKind::Lib, Tracing::verbose())
 }
@@ -2358,7 +2371,7 @@ fn forbid_importing_or_using_opaque_constructors() {
     "#;
 
     let source_code = r#"
-        use foo/thing.{Thing, Foo}
+        use thing.{Thing, Foo}
 
         fn bar(thing: Thing) {
           expect Foo(a) = thing
@@ -2367,15 +2380,12 @@ fn forbid_importing_or_using_opaque_constructors() {
     "#;
 
     assert!(matches!(
-        check_with_deps(
-            parse(source_code),
-            vec![("foo/thing".to_string(), parse(dependency))],
-        ),
+        check_with_deps(parse(source_code), vec![(parse_as(dependency, "thing"))],),
         Err((_, Error::UnknownModuleField { .. })),
     ));
 
     let source_code = r#"
-        use foo/thing.{Thing}
+        use thing.{Thing}
 
         fn bar(thing: Thing) {
           expect Foo(a) = thing
@@ -2384,10 +2394,7 @@ fn forbid_importing_or_using_opaque_constructors() {
     "#;
 
     assert!(matches!(
-        check_with_deps(
-            parse(source_code),
-            vec![("foo/thing".to_string(), parse(dependency))],
-        ),
+        check_with_deps(parse(source_code), vec![(parse_as(dependency, "thing"))],),
         Err((_, Error::UnknownTypeConstructor { .. })),
     ));
 }
