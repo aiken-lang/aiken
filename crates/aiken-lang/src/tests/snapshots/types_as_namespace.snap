@@ -1,0 +1,19 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nuse foo.{ Foo }\n\nfn predicate(val) {\n  when val is {\n    Foo.I(n) -> n >= 14\n    foo.Foo.B(bytes) -> bytes == \"aiken\"\n  }\n}\n\ntest my_test() {\n  and {\n    predicate(foo.Foo.I(42)),\n    predicate(Foo.b(\"aiken\"))\n  }\n}\n"
+---
+use foo.{Foo}
+
+fn predicate(val) {
+  when val is {
+    Foo.I(n) -> n >= 14
+    foo.Foo.B(bytes) -> bytes == "aiken"
+  }
+}
+
+test my_test() {
+  and {
+    predicate(foo.Foo.I(42)),
+    predicate(Foo.b("aiken")),
+  }
+}
