@@ -2268,6 +2268,42 @@ fn allow_expect_into_opaque_type_constructor_without_typecasting_in_module() {
 }
 
 #[test]
+fn use_imported_type_as_namespace_for_patterns() {
+    let dependency = r#"
+        pub type Credential {
+          VerificationKey(ByteArray)
+          Script(ByteArray)
+        }
+    "#;
+
+    let source_code = r#"
+        use cardano/address.{Credential, Script, VerificationKey}
+
+        pub fn compare(left: Credential, right: Credential) -> Ordering {
+          when left is {
+            Script(left) ->
+              when right is {
+                Script(right) -> Equal
+                _ -> Less
+              }
+            VerificationKey(left) ->
+              when right is {
+                Script(_) -> Greater
+                VerificationKey(right) -> Equal
+              }
+          }
+        }
+    "#;
+
+    let result = check_with_deps(
+        dbg!(parse(source_code)),
+        vec![(parse_as(dependency, "cardano/address"))],
+    );
+
+    assert!(matches!(result, Ok(..)), "{result:#?}");
+}
+
+#[test]
 fn use_type_as_namespace_for_patterns() {
     let dependency = r#"
         pub type Foo {
