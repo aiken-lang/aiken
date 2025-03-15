@@ -1095,8 +1095,25 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     location: module_location,
                 } = type_container.as_ref()
                 {
+                    // Lookup the module using the declared name (which may have been rebind with
+                    // 'as'), to obtain its _full unambiguous name_.
+                    let (_, module) = self
+                        .environment
+                        .imported_modules
+                        .get(module_name)
+                        .ok_or_else(|| Error::UnknownModule {
+                            location: *module_location,
+                            name: module_name.to_string(),
+                            known_modules: self
+                                .environment
+                                .importable_modules
+                                .keys()
+                                .map(|t| t.to_string())
+                                .collect(),
+                        })?;
+
                     return self.infer_inner_type_constructor_access(
-                        (module_name, *module_location),
+                        (module.name.as_str(), *module_location),
                         (
                             type_name,
                             type_location.map(|start, end| (start + module_name.len() + 1, end)),
@@ -1251,7 +1268,9 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         self.environment.unused_modules.remove(module_name);
 
         self.infer_module_access(
-            module_name,
+            &self
+                .environment
+                .local_module_name(module_name, module_location)?,
             label.to_string(),
             &type_location,
             label_location,

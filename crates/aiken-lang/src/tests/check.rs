@@ -2296,7 +2296,7 @@ fn use_imported_type_as_namespace_for_patterns() {
     "#;
 
     let result = check_with_deps(
-        dbg!(parse(source_code)),
+        parse(source_code),
         vec![(parse_as(dependency, "cardano/address"))],
     );
 
@@ -2434,6 +2434,52 @@ fn use_type_as_nested_namespace_for_constructors() {
 
         test my_test() {
           trace foo.Foo.I(42)
+          Void
+        }
+    "#;
+
+    let result = check_with_deps(parse(source_code), vec![(parse_as(dependency, "foo"))]);
+
+    assert!(matches!(result, Ok(..)), "{result:#?}");
+}
+
+#[test]
+fn use_type_as_nested_namespace_for_constructors_from_multi_level_module() {
+    let dependency = r#"
+        pub type Foo {
+          I(Int)
+          B(Bool)
+        }
+    "#;
+
+    let source_code = r#"
+        use foo/bar
+
+        test my_test() {
+          trace bar.Foo.I(42)
+          Void
+        }
+    "#;
+
+    let result = check_with_deps(parse(source_code), vec![(parse_as(dependency, "foo/bar"))]);
+
+    assert!(matches!(result, Ok(..)), "{result:#?}");
+}
+
+#[test]
+fn use_type_as_nested_namespace_for_constructors_from_module_alias() {
+    let dependency = r#"
+        pub type Foo {
+          I(Int)
+          B(Bool)
+        }
+    "#;
+
+    let source_code = r#"
+        use foo as bar
+
+        test my_test() {
+          trace bar.Foo.I(42)
           Void
         }
     "#;
@@ -2621,6 +2667,33 @@ fn use_opaque_type_as_nested_namespace_for_constructors_fails() {
         matches!(
             &result,
             Err((warnings, Error::UnknownTypeConstructor { name, .. })) if name == "I" && warnings.is_empty(),
+        ),
+        "{result:#?}"
+    );
+}
+
+#[test]
+fn use_non_imported_module_as_namespace() {
+    let dependency = r#"
+        pub type Foo {
+          I(Int)
+          B(Bool)
+        }
+    "#;
+
+    let source_code = r#"
+        test my_test() {
+          trace foo.Foo.I(14)
+          Void
+        }
+    "#;
+
+    let result = check_with_deps(parse(source_code), vec![(parse_as(dependency, "foo"))]);
+
+    assert!(
+        matches!(
+            &result,
+            Err((warnings, Error::UnknownModule { name, .. })) if name == "foo" && warnings.is_empty(),
         ),
         "{result:#?}"
     );

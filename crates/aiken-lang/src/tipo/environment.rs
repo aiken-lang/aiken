@@ -372,6 +372,31 @@ impl<'a> Environment<'a> {
         }
     }
 
+    /// Get an imported module's actual name in the current module, from its fully qualified module
+    /// name.
+    #[allow(clippy::result_large_err)]
+    pub fn local_module_name(&self, name: &str, location: Span) -> Result<String, Error> {
+        self.imported_modules
+            .iter()
+            .filter_map(|(k, module)| {
+                if module.1.name == name {
+                    Some(k.to_string())
+                } else {
+                    None
+                }
+            })
+            .next()
+            .ok_or_else(|| Error::UnknownModule {
+                location,
+                name: name.to_string(),
+                known_modules: self
+                    .importable_modules
+                    .keys()
+                    .map(|t| t.to_string())
+                    .collect(),
+            })
+    }
+
     #[allow(clippy::result_large_err)]
     pub fn get_fully_qualified_value_constructor(
         &self,
@@ -379,8 +404,8 @@ impl<'a> Environment<'a> {
         (type_name, type_location): (&str, Span),
         (value, value_location): (&str, Span),
     ) -> Result<&ValueConstructor, Error> {
-        let (_, module) =
-            self.imported_modules
+        let module =
+            self.importable_modules
                 .get(module_name)
                 .ok_or_else(|| Error::UnknownModule {
                     location: module_location,
