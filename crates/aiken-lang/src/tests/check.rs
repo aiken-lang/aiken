@@ -2255,6 +2255,100 @@ fn allow_expect_into_opaque_type_constructor_without_typecasting_in_module() {
 }
 
 #[test]
+fn use_type_as_namespace_for_patterns() {
+    let dependency = r#"
+        pub type Foo {
+          A
+          B
+        }
+    "#;
+
+    let source_code = r#"
+        use thing.{Foo}
+
+        pub fn bar(foo: Foo) {
+          when foo is {
+            Foo.A -> True
+            Foo.B -> False
+          }
+        }
+    "#;
+
+    let result = check_with_deps(parse(source_code), vec![(parse_as(dependency, "thing"))]);
+
+    assert!(matches!(result, Ok(..)), "{result:#?}");
+}
+
+#[test]
+fn use_opaque_type_as_namespace_for_patterns_fails() {
+    let dependency = r#"
+        pub opaque type Foo {
+          A
+          B
+        }
+    "#;
+
+    let source_code = r#"
+        use thing.{Foo}
+
+        fn bar(foo: Foo) {
+          when foo is {
+            Foo.A -> True
+            Foo.B -> False
+          }
+        }
+    "#;
+
+    let result = check_with_deps(parse(source_code), vec![(parse_as(dependency, "thing"))]);
+
+    assert!(
+        matches!(
+            &result,
+            Err((warnings, Error::UnknownTypeConstructor { name, .. })) if name == "A" && warnings.is_empty(),
+        ),
+        "{result:#?}"
+    );
+}
+
+#[test]
+fn use_wrong_type_as_namespace_for_patterns_fails() {
+    let dependency = r#"
+        pub type Foo {
+          A
+          B
+        }
+
+        pub type Bar {
+          C
+          D
+        }
+
+
+    "#;
+
+    let source_code = r#"
+        use thing.{Foo}
+
+        fn bar(foo: Foo) {
+          when foo is {
+            Foo.A -> True
+            Foo.D -> False
+          }
+        }
+    "#;
+
+    let result = check_with_deps(parse(source_code), vec![(parse_as(dependency, "thing"))]);
+
+    assert!(
+        matches!(
+            &result,
+            Err((warnings, Error::UnknownTypeConstructor { name, .. })) if name == "D" && warnings.is_empty(),
+        ),
+        "{result:#?}"
+    );
+}
+
+#[test]
 fn forbid_importing_or_using_opaque_constructors() {
     let dependency = r#"
         pub opaque type Thing {

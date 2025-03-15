@@ -1,5 +1,6 @@
 use super::Chain;
 use crate::{
+    ast::well_known,
     expr::UntypedExpr,
     parser::{token::Token, ParseError},
 };
@@ -8,7 +9,7 @@ use chumsky::prelude::*;
 pub(crate) fn parser() -> impl Parser<Token, Chain, Error = ParseError> {
     just(Token::Dot)
         .ignore_then(choice((
-            select! { Token::Else => "else".to_string() },
+            select! { Token::Else => well_known::VALIDATOR_ELSE.to_string() },
             select! { Token::Name { name } => name, },
         )))
         .map_with_span(Chain::FieldAccess)

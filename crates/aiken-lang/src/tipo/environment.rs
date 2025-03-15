@@ -378,7 +378,7 @@ impl<'a> Environment<'a> {
         name: &str,
         location: Span,
     ) -> Result<&mut TypeConstructor, Error> {
-        let types = self.module_types.keys().map(|t| t.to_string()).collect();
+        let types = self.known_type_names();
 
         let constructor = self
             .module_types
@@ -407,7 +407,7 @@ impl<'a> Environment<'a> {
                 .ok_or_else(|| Error::UnknownType {
                     location,
                     name: name.to_string(),
-                    types: self.module_types.keys().map(|t| t.to_string()).collect(),
+                    types: self.known_type_names(),
                 }),
 
             Some(m) => {
@@ -457,8 +457,42 @@ impl<'a> Environment<'a> {
                     constructors: self.local_constructor_names(),
                 }),
 
-            Some(Namespace::Type(..)) => {
-                todo!()
+            Some(Namespace::Type(t)) => {
+                let parent_type = self.module_types.get(t).ok_or_else(|| Error::UnknownType {
+                    location,
+                    name: t.to_string(),
+                    types: self.known_type_names(),
+                })?;
+
+                let (_, module) =
+                    self.imported_modules
+                        .get(&parent_type.module)
+                        .ok_or_else(|| Error::UnknownModule {
+                            name: parent_type.module.to_string(),
+                            known_modules: self
+                                .importable_modules
+                                .keys()
+                                .map(|t| t.to_string())
+                                .collect(),
+                            location,
+                        })?;
+
+                self.unused_modules.remove(&parent_type.module);
+
+                let empty_vec = vec![];
+                let constructors = module.types_constructors.get(t).unwrap_or(&empty_vec);
+
+                let unknown_type_constructor = || Error::UnknownTypeConstructor {
+                    location,
+                    name: name.to_string(),
+                    constructors: constructors.clone(),
+                };
+
+                if !constructors.iter().any(|constructor| constructor == name) {
+                    return Err(unknown_type_constructor());
+                }
+
+                module.values.get(name).ok_or_else(unknown_type_constructor)
             }
 
             Some(Namespace::Module(m)) => {
@@ -730,6 +764,22 @@ impl<'a> Environment<'a> {
                 alias.clone(),
             ),
         }
+    }
+
+    /// Get a list of known type names, for suggestions in errors.
+    pub fn known_type_names(&self) -> Vec<String> {
+        self.module_types
+            .keys()
+            .filter_map(|t| {
+                // Avoid leaking special internal types such as __ScriptContext or
+                // __ScriptPurpose.
+                if t.starts_with("__") {
+                    None
+                } else {
+                    Some(t.to_string())
+                }
+            })
+            .collect()
     }
 
     pub fn local_value_names(&self) -> Vec<String> {
@@ -1820,7 +1870,7 @@ impl<'a> Environment<'a> {
                 .get(name)
                 .ok_or_else(|| Error::UnknownType {
                     name: name.to_string(),
-                    types: self.module_types.keys().map(|t| t.to_string()).collect(),
+                    types: self.known_type_names(),
                     location,
                 })?
                 .iter()
