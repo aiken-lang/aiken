@@ -16,6 +16,7 @@
 ### Fixed
 
 - **aiken-lang**: Formatter was removing comments from function type annotation args @rvcas
+- **aiken-lang**: Parser wrongly merged two adjacent sequences together, effectively fusioning scopes. @KtorZ
 
 ## v1.1.13 - 2025-02-26
 

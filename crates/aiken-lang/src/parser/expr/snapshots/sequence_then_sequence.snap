@@ -1,0 +1,80 @@
+---
+source: crates/aiken-lang/src/parser/expr/block.rs
+description: "Code:\n\ntest foo() {\n  {\n    let a = Void\n    a\n  }\n  let _ = True\n  True\n}\n"
+---
+Test(
+    Function {
+        arguments: [],
+        body: Sequence {
+            location: 38..65,
+            expressions: [
+                Sequence {
+                    location: 21..39,
+                    expressions: [
+                        Assignment {
+                            location: 21..33,
+                            value: Var {
+                                location: 29..33,
+                                name: "Void",
+                            },
+                            patterns: [
+                                AssignmentPattern {
+                                    pattern: Var {
+                                        location: 25..26,
+                                        name: "a",
+                                    },
+                                    annotation: None,
+                                    location: 25..26,
+                                },
+                            ],
+                            kind: Let {
+                                backpassing: false,
+                            },
+                        },
+                        Var {
+                            location: 38..39,
+                            name: "a",
+                        },
+                    ],
+                },
+                Sequence {
+                    location: 46..65,
+                    expressions: [
+                        Assignment {
+                            location: 46..58,
+                            value: Var {
+                                location: 54..58,
+                                name: "True",
+                            },
+                            patterns: [
+                                AssignmentPattern {
+                                    pattern: Discard {
+                                        name: "_",
+                                        location: 50..51,
+                                    },
+                                    annotation: None,
+                                    location: 50..51,
+                                },
+                            ],
+                            kind: Let {
+                                backpassing: false,
+                            },
+                        },
+                        Var {
+                            location: 61..65,
+                            name: "True",
+                        },
+                    ],
+                },
+            ],
+        },
+        doc: None,
+        location: 0..10,
+        name: "foo",
+        public: false,
+        return_annotation: None,
+        return_type: (),
+        end_position: 66,
+        on_test_failure: FailImmediately,
+    },
+)
