@@ -16,6 +16,7 @@
 ### Fixed
 
 - **aiken-lang**: Formatter was removing comments from function type annotation args @rvcas
+- **aiken-lang**: Fix hint when suggesting to use named fields, wrongly suggesting args in lexicographical order instead of definition order. @KtorZ
 
 ## v1.1.13 - 2025-02-26
 
