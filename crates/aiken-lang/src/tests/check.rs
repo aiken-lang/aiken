@@ -2307,7 +2307,7 @@ fn use_imported_type_as_namespace_for_patterns() {
 fn use_type_as_namespace_for_patterns() {
     let dependency = r#"
         pub type Foo {
-          A
+          A { a: Int }
           B
         }
     "#;
@@ -2317,7 +2317,7 @@ fn use_type_as_namespace_for_patterns() {
 
         fn bar(foo: Foo) {
           when foo is {
-            Foo.A -> True
+            Foo.A { a } -> a > 10
             Foo.B -> False
           }
         }
@@ -2332,7 +2332,7 @@ fn use_type_as_namespace_for_patterns() {
 fn use_nested_type_as_namespace_for_patterns() {
     let dependency = r#"
         pub type Foo {
-          A
+          A { a: Int }
           B
         }
     "#;
@@ -2342,7 +2342,7 @@ fn use_nested_type_as_namespace_for_patterns() {
 
         fn bar(x: Foo) {
           when x is {
-            foo.Foo.A -> True
+            foo.Foo.A { a } -> a > 10
             foo.Foo.B -> False
           }
         }
@@ -2357,7 +2357,7 @@ fn use_nested_type_as_namespace_for_patterns() {
 fn use_opaque_type_as_namespace_for_patterns_fails() {
     let dependency = r#"
         pub opaque type Foo {
-          A
+          A { a: Int }
           B
         }
     "#;
@@ -2367,7 +2367,7 @@ fn use_opaque_type_as_namespace_for_patterns_fails() {
 
         fn bar(foo: Foo) {
           when foo is {
-            Foo.A -> True
+            Foo.A { a } -> a > 10
             Foo.B -> False
           }
         }
@@ -2388,7 +2388,7 @@ fn use_opaque_type_as_namespace_for_patterns_fails() {
 fn use_wrong_type_as_namespace_for_patterns_fails() {
     let dependency = r#"
         pub type Foo {
-          A
+          A { a: Int }
           B
         }
 
@@ -2403,7 +2403,7 @@ fn use_wrong_type_as_namespace_for_patterns_fails() {
 
         fn bar(foo: Foo) {
           when foo is {
-            Foo.A -> True
+            Foo.A { .. } -> True
             Foo.D -> False
           }
         }
@@ -2424,7 +2424,7 @@ fn use_wrong_type_as_namespace_for_patterns_fails() {
 fn use_type_as_namespace_for_constructors() {
     let dependency = r#"
         pub type Foo {
-          I(Int)
+          I { i: Int }
           B(Bool)
         }
     "#;
@@ -2434,7 +2434,7 @@ fn use_type_as_namespace_for_constructors() {
 
         test my_test() {
           and {
-            Foo.I(42) == foo.I(42),
+            Foo.I { i: 42 } == foo.I(42),
             foo.B(True) == Foo.B(True),
           }
         }
@@ -2449,7 +2449,7 @@ fn use_type_as_namespace_for_constructors() {
 fn use_type_as_nested_namespace_for_constructors() {
     let dependency = r#"
         pub type Foo {
-          I(Int)
+          I { i: Int }
           B(Bool)
         }
     "#;
@@ -2458,7 +2458,8 @@ fn use_type_as_nested_namespace_for_constructors() {
         use foo
 
         test my_test() {
-          trace foo.Foo.I(42)
+          trace foo.Foo.I { i: 42 }
+          trace foo.Foo.B(False)
           Void
         }
     "#;
@@ -2472,7 +2473,7 @@ fn use_type_as_nested_namespace_for_constructors() {
 fn use_type_as_nested_namespace_for_constructors_from_multi_level_module() {
     let dependency = r#"
         pub type Foo {
-          I(Int)
+          I { i: Int }
           B(Bool)
         }
     "#;
@@ -2481,7 +2482,8 @@ fn use_type_as_nested_namespace_for_constructors_from_multi_level_module() {
         use foo/bar
 
         test my_test() {
-          trace bar.Foo.I(42)
+          trace bar.Foo.I { i: 42 }
+          trace bar.Foo.B(True)
           Void
         }
     "#;
@@ -2495,7 +2497,7 @@ fn use_type_as_nested_namespace_for_constructors_from_multi_level_module() {
 fn use_type_as_nested_namespace_for_constructors_from_module_alias() {
     let dependency = r#"
         pub type Foo {
-          I(Int)
+          I { i: Int }
           B(Bool)
         }
     "#;
@@ -2504,7 +2506,8 @@ fn use_type_as_nested_namespace_for_constructors_from_module_alias() {
         use foo as bar
 
         test my_test() {
-          trace bar.Foo.I(42)
+          trace bar.Foo.I { i: 42 }
+          trace bar.Foo.B(True)
           Void
         }
     "#;
@@ -2518,7 +2521,7 @@ fn use_type_as_nested_namespace_for_constructors_from_module_alias() {
 fn use_type_as_namespace_unknown_constructor() {
     let dependency = r#"
         pub type Foo {
-          I(Int)
+          I { i: Int }
           B(Bool)
         }
     "#;
@@ -2527,7 +2530,7 @@ fn use_type_as_namespace_unknown_constructor() {
         use foo.{Foo}
 
         test my_test() {
-          Foo.A == Foo.I(42)
+          Foo.I(42) == Foo.A
         }
     "#;
 
@@ -2546,12 +2549,12 @@ fn use_type_as_namespace_unknown_constructor() {
 fn use_wrong_type_as_namespace() {
     let dependency = r#"
         pub type Foo {
-          I(Int)
+          I { i: Int }
           B(Bool)
         }
 
         pub type Bar {
-          S(String)
+          S { s: String }
           L(List<Int>)
         }
     "#;
@@ -2580,12 +2583,12 @@ fn use_wrong_type_as_namespace() {
 fn use_wrong_nested_type_as_namespace() {
     let dependency = r#"
         pub type Foo {
-          I(Int)
+          I { i: Int }
           B(Bool)
         }
 
         pub type Bar {
-          S(String)
+          S { s: String }
           L(List<Int>)
         }
     "#;
@@ -2614,7 +2617,7 @@ fn use_wrong_nested_type_as_namespace() {
 fn use_private_type_as_nested_namespace_fails() {
     let dependency = r#"
         type Foo {
-          I(Int)
+          I { i: Int }
           B(Bool)
         }
     "#;
@@ -2623,7 +2626,7 @@ fn use_private_type_as_nested_namespace_fails() {
         use foo
 
         test my_test() {
-          trace foo.Foo.I(42)
+          trace foo.Foo.I { i: 42 }
           Void
         }
     "#;
@@ -2643,7 +2646,7 @@ fn use_private_type_as_nested_namespace_fails() {
 fn use_opaque_type_as_namespace_for_constructors_fails() {
     let dependency = r#"
         pub opaque type Foo {
-          I(Int)
+          I { i: Int }
           B(Bool)
         }
     "#;
@@ -2672,7 +2675,7 @@ fn use_opaque_type_as_namespace_for_constructors_fails() {
 fn use_opaque_type_as_nested_namespace_for_constructors_fails() {
     let dependency = r#"
         pub opaque type Foo {
-          I(Int)
+          I { i: Int }
           B(Bool)
         }
     "#;
