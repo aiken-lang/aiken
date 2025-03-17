@@ -8,9 +8,9 @@ use super::{
 use crate::{
     ast::{
         self, Annotation, CallArg, DataType, Definition, Function, ModuleConstant, ModuleKind,
-        RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition, TypedFunction,
-        TypedPattern, TypedValidator, UnqualifiedImport, UntypedArg, UntypedDefinition,
-        UntypedFunction, Use, Validator, PIPE_VARIABLE,
+        Namespace, RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition,
+        TypedFunction, TypedPattern, TypedValidator, UnqualifiedImport, UntypedArg,
+        UntypedDefinition, UntypedFunction, Use, Validator, PIPE_VARIABLE,
     },
     tipo::{fields::FieldMap, TypeAliasAnnotation},
     IdGenerator,
@@ -92,6 +92,19 @@ pub struct Environment<'a> {
 
 impl<'a> Environment<'a> {
     #[allow(clippy::result_large_err)]
+    pub fn err_unknown_module(&self, name: String, location: Span) -> Error {
+        Error::UnknownModule {
+            name,
+            location,
+            known_modules: self
+                .importable_modules
+                .keys()
+                .map(|t| t.to_string())
+                .collect(),
+        }
+    }
+
+    #[allow(clippy::result_large_err)]
     pub fn find_module(&self, fragments: &[String], location: Span) -> Result<&'a TypeInfo, Error> {
         let mut name = fragments.join("/");
 
@@ -118,11 +131,7 @@ impl<'a> Environment<'a> {
                         .collect(),
                 }
             } else {
-                Error::UnknownModule {
-                    location,
-                    name,
-                    known_modules: self.importable_modules.keys().cloned().collect(),
-                }
+                self.err_unknown_module(name, location)
             }
         })
     }
@@ -372,13 +381,69 @@ impl<'a> Environment<'a> {
         }
     }
 
+    /// Get an imported module's actual name in the current module, from its fully qualified module
+    /// name.
+    #[allow(clippy::result_large_err)]
+    pub fn local_module_name(&self, name: &str, location: Span) -> Result<String, Error> {
+        self.imported_modules
+            .iter()
+            .filter_map(|(k, module)| {
+                if module.1.name == name {
+                    Some(k.to_string())
+                } else {
+                    None
+                }
+            })
+            .next()
+            .ok_or_else(|| self.err_unknown_module(name.to_string(), location))
+    }
+
+    #[allow(clippy::result_large_err)]
+    pub fn get_fully_qualified_value_constructor(
+        &self,
+        (module_name, module_location): (&str, Span),
+        (type_name, type_location): (&str, Span),
+        (value, value_location): (&str, Span),
+    ) -> Result<&ValueConstructor, Error> {
+        let module = self
+            .importable_modules
+            .get(module_name)
+            .ok_or_else(|| self.err_unknown_module(module_name.to_string(), module_location))?;
+
+        let constructors =
+            module
+                .types_constructors
+                .get(type_name)
+                .ok_or_else(|| Error::UnknownModuleType {
+                    location: type_location,
+                    name: type_name.to_string(),
+                    module_name: module.name.clone(),
+                    type_constructors: module.types.keys().map(|t| t.to_string()).collect(),
+                })?;
+
+        let unknown_type_constructor = || Error::UnknownTypeConstructor {
+            location: value_location,
+            name: value.to_string(),
+            constructors: constructors.clone(),
+        };
+
+        if !constructors.iter().any(|s| s.as_str() == value) {
+            return Err(unknown_type_constructor());
+        }
+
+        module
+            .values
+            .get(value)
+            .ok_or_else(unknown_type_constructor)
+    }
+
     #[allow(clippy::result_large_err)]
     pub fn get_type_constructor_mut(
         &mut self,
         name: &str,
         location: Span,
     ) -> Result<&mut TypeConstructor, Error> {
-        let types = self.module_types.keys().map(|t| t.to_string()).collect();
+        let types = self.known_type_names();
 
         let constructor = self
             .module_types
@@ -407,22 +472,14 @@ impl<'a> Environment<'a> {
                 .ok_or_else(|| Error::UnknownType {
                     location,
                     name: name.to_string(),
-                    types: self.module_types.keys().map(|t| t.to_string()).collect(),
+                    types: self.known_type_names(),
                 }),
 
             Some(m) => {
-                let (_, module) =
-                    self.imported_modules
-                        .get(m)
-                        .ok_or_else(|| Error::UnknownModule {
-                            location,
-                            name: name.to_string(),
-                            known_modules: self
-                                .importable_modules
-                                .keys()
-                                .map(|t| t.to_string())
-                                .collect(),
-                        })?;
+                let (_, module) = self
+                    .imported_modules
+                    .get(m)
+                    .ok_or_else(|| self.err_unknown_module(name.to_string(), location))?;
 
                 self.unused_modules.remove(m);
 
@@ -443,7 +500,7 @@ impl<'a> Environment<'a> {
     #[allow(clippy::result_large_err)]
     pub fn get_value_constructor(
         &mut self,
-        module: Option<&String>,
+        module: Option<&Namespace>,
         name: &str,
         location: Span,
     ) -> Result<&ValueConstructor, Error> {
@@ -457,19 +514,54 @@ impl<'a> Environment<'a> {
                     constructors: self.local_constructor_names(),
                 }),
 
-            Some(m) => {
-                let (_, module) =
-                    self.imported_modules
-                        .get(m)
-                        .ok_or_else(|| Error::UnknownModule {
-                            name: m.to_string(),
-                            known_modules: self
-                                .importable_modules
-                                .keys()
-                                .map(|t| t.to_string())
-                                .collect(),
-                            location,
-                        })?;
+            Some(Namespace::Type(Some(module_name), t)) => {
+                let module_location = location.map(|start, _| (start, start + module_name.len()));
+
+                // Lookup the module using the declared name (which may have been rebind with
+                // 'as'), to obtain its _full unambiguous name_.
+                let (_, module) = self.imported_modules.get(module_name).ok_or_else(|| {
+                    self.err_unknown_module(module_name.to_string(), module_location)
+                })?;
+
+                let type_location = Span::create(module_location.end + 1, t.len());
+
+                let parent_type = module.types.get(t).ok_or_else(|| Error::UnknownType {
+                    location: type_location,
+                    name: t.to_string(),
+                    types: self.known_type_names(),
+                })?;
+
+                self.unused_modules.remove(&parent_type.module);
+
+                self.get_fully_qualified_value_constructor(
+                    (parent_type.module.as_str(), module_location),
+                    (t, type_location),
+                    (name, location.map(|_, end| (type_location.end + 1, end))),
+                )
+            }
+
+            Some(Namespace::Type(None, t)) => {
+                let type_location = location.map(|start, _| (start, start + t.len()));
+
+                let parent_type = self.module_types.get(t).ok_or_else(|| Error::UnknownType {
+                    location: type_location,
+                    name: t.to_string(),
+                    types: self.known_type_names(),
+                })?;
+
+                self.unused_modules.remove(&parent_type.module);
+
+                self.get_fully_qualified_value_constructor(
+                    (parent_type.module.as_str(), type_location),
+                    (t, type_location),
+                    (name, location.map(|start, end| (start + t.len() + 1, end))),
+                )
+            }
+
+            Some(Namespace::Module(m)) => {
+                let (_, module) = self.imported_modules.get(m).ok_or_else(|| {
+                    self.err_unknown_module(m.to_string(), Span::create(location.start, m.len()))
+                })?;
 
                 self.unused_modules.remove(m);
 
@@ -728,10 +820,28 @@ impl<'a> Environment<'a> {
         }
     }
 
+    /// Get a list of known type names, for suggestions in errors.
+    pub fn known_type_names(&self) -> Vec<String> {
+        self.module_types
+            .keys()
+            .filter_map(|t| {
+                // Avoid leaking special internal types in error hints.
+                if t.starts_with("__") {
+                    None
+                } else {
+                    Some(t.to_string())
+                }
+            })
+            .collect()
+    }
+
     pub fn local_value_names(&self) -> Vec<String> {
         self.scope
             .keys()
             .filter(|&t| PIPE_VARIABLE != t)
+            // Avoid leaking internal functions in error hints.
+            .filter(|&t| !crate::builtins::INTERNAL_FUNCTIONS.contains(t.as_str()))
+            .filter(|&t| !t.starts_with("__") && !TypeConstructor::might_be(t))
             .map(|t| t.to_string())
             .collect()
     }
@@ -739,7 +849,9 @@ impl<'a> Environment<'a> {
     pub fn local_constructor_names(&self) -> Vec<String> {
         self.scope
             .keys()
-            .filter(|&t| t.chars().next().unwrap_or_default().is_uppercase())
+            // Avoid leaking internal constructors in error hints.
+            .filter(|&t| !t.starts_with("__"))
+            .filter(|&t| TypeConstructor::might_be(t))
             .map(|t| t.to_string())
             .collect()
     }
@@ -1816,7 +1928,7 @@ impl<'a> Environment<'a> {
                 .get(name)
                 .ok_or_else(|| Error::UnknownType {
                     name: name.to_string(),
-                    types: self.module_types.keys().map(|t| t.to_string()).collect(),
+                    types: self.known_type_names(),
                     location,
                 })?
                 .iter()
@@ -1840,15 +1952,7 @@ impl<'a> Environment<'a> {
             let module = self
                 .importable_modules
                 .get(full_module_name)
-                .ok_or_else(|| Error::UnknownModule {
-                    location,
-                    name: name.to_string(),
-                    known_modules: self
-                        .importable_modules
-                        .keys()
-                        .map(|t| t.to_string())
-                        .collect(),
-                })?;
+                .ok_or_else(|| self.err_unknown_module(name.to_string(), location))?;
 
             self.unused_modules.remove(full_module_name);
 

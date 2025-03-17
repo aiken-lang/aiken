@@ -16,6 +16,12 @@ pub fn parser(
             .map_with_span(|module, span: ast::Span| (module, span))
             .then_ignore(just(Token::Dot))
             .or_not()
+            .then(
+                select! {Token::UpName { name } => name}
+                    .map_with_span(|name, span| (name, span))
+                    .then_ignore(just(Token::Dot))
+                    .or_not(),
+            )
             .then(select! {Token::UpName { name } => name}.map_with_span(|name, span| (name, span)))
             .then(
                 choice((
@@ -117,6 +123,12 @@ pub fn parser(
             .map_with_span(|module, span| (module, span))
             .then_ignore(just(Token::Dot))
             .or_not()
+            .then(
+                select! {Token::UpName { name } => name}
+                    .map_with_span(|name, span| (name, span))
+                    .then_ignore(just(Token::Dot))
+                    .or_not(),
+            )
             .then(select! {Token::UpName { name } => name}.map_with_span(|name, span| (name, span)))
             .then(
                 select! {Token::Name {name} => name}
@@ -157,29 +169,52 @@ pub fn parser(
                     .delimited_by(just(Token::LeftParen), just(Token::RightParen)),
             ),
     ))
-    .map_with_span(|((module, (name, n_span)), arguments), span| {
-        let fun = if let Some((module, m_span)) = module {
-            UntypedExpr::FieldAccess {
-                location: m_span.union(n_span),
-                label: name,
-                container: Box::new(UntypedExpr::Var {
-                    location: m_span,
-                    name: module,
-                }),
-            }
-        } else {
-            UntypedExpr::Var {
-                location: n_span,
-                name,
-            }
-        };
+    .map_with_span(
+        |(((module, namespace), (label, label_span)), arguments), span| {
+            let fun = match (module, namespace) {
+                (Some((module, module_span)), Some((namespace, namespace_span))) => {
+                    UntypedExpr::FieldAccess {
+                        location: module_span.union(namespace_span).union(label_span),
+                        label,
+                        container: Box::new(UntypedExpr::FieldAccess {
+                            location: module_span.union(namespace_span),
+                            label: namespace,
+                            container: Box::new(UntypedExpr::Var {
+                                location: module_span,
+                                name: module,
+                            }),
+                        }),
+                    }
+                }
+                (None, Some((namespace, namespace_span))) => UntypedExpr::FieldAccess {
+                    location: namespace_span.union(label_span),
+                    label,
+                    container: Box::new(UntypedExpr::Var {
+                        location: namespace_span,
+                        name: namespace,
+                    }),
+                },
+                (Some((module, module_span)), None) => UntypedExpr::FieldAccess {
+                    location: module_span.union(label_span),
+                    label,
+                    container: Box::new(UntypedExpr::Var {
+                        location: module_span,
+                        name: module,
+                    }),
+                },
+                (None, None) => UntypedExpr::Var {
+                    location: label_span,
+                    name: label,
+                },
+            };
 
-        UntypedExpr::Call {
-            arguments,
-            fun: Box::new(fun),
-            location: span,
-        }
-    })
+            UntypedExpr::Call {
+                arguments,
+                fun: Box::new(fun),
+                location: span,
+            }
+        },
+    )
 }
 
 #[cfg(test)]

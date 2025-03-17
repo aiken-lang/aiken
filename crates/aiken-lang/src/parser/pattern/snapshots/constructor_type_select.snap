@@ -1,15 +1,16 @@
 ---
 source: crates/aiken-lang/src/parser/pattern/constructor.rs
-description: "Code:\n\nmodule.Foo"
+description: "Code:\n\nFoo.Bar"
 ---
 Constructor {
     is_record: false,
-    location: 0..10,
-    name: "Foo",
+    location: 0..7,
+    name: "Bar",
     arguments: [],
     module: Some(
-        Module(
-            "module",
+        Type(
+            None,
+            "Foo",
         ),
     ),
     constructor: (),

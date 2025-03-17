@@ -731,7 +731,7 @@ impl Warning {
 
 impl Debug for Warning {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        default_miette_handler(0)
+        default_miette_handler(1)
             .debug(
                 &DisplayWarning {
                     title: &self.to_string(),

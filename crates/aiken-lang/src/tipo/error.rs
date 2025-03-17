@@ -1,6 +1,9 @@
 use super::Type;
 use crate::{
-    ast::{Annotation, BinOp, CallArg, LogicalOpChainKind, Span, UntypedFunction, UntypedPattern},
+    ast::{
+        Annotation, BinOp, CallArg, LogicalOpChainKind, Namespace, Span, UntypedFunction,
+        UntypedPattern,
+    },
     error::ExtraData,
     expr::{self, AssignmentPattern, UntypedAssignmentKind, UntypedExpr},
     format::Formatter,
@@ -395,7 +398,7 @@ From there, you can define 'increment', a function that takes a single argument 
         expected: usize,
         given: Vec<CallArg<UntypedPattern>>,
         name: String,
-        module: Option<String>,
+        module: Option<Namespace>,
         is_record: bool,
     },
 
@@ -718,7 +721,7 @@ Perhaps, try the following:
         label: String,
         name: String,
         args: Vec<CallArg<UntypedPattern>>,
-        module: Option<String>,
+        module: Option<Namespace>,
         spread_location: Option<Span>,
     },
 
@@ -805,7 +808,7 @@ Perhaps, try the following:
     },
 
     #[error(
-        "I looked for '{}' in '{}' but couldn't find it.\n",
+        "I looked for '{}' in module '{}' but couldn't find it.\n",
         name.if_supports_color(Stdout, |s| s.purple()),
         module_name.if_supports_color(Stdout, |s| s.purple())
     )]
@@ -819,7 +822,7 @@ Perhaps, try the following:
         )
     ))]
     UnknownModuleType {
-        #[label("unknown import")]
+        #[label("not exported?")]
         location: Span,
         name: String,
         module_name: String,
@@ -1076,7 +1079,7 @@ The best thing to do from here is to remove it."#))]
         available_purposes: Vec<String>,
     },
 
-    #[error("I could not find an appropriate handler in the validator definition\n")]
+    #[error("I could not find an appropriate handler in the validator definition.\n")]
     #[diagnostic(code("unknown::handler"))]
     #[diagnostic(help(
         "When referring to a validator handler via record access, you must refer to one of the declared handlers{}{}",
@@ -1092,7 +1095,7 @@ The best thing to do from here is to remove it."#))]
         available_handlers: Vec<String>,
     },
 
-    #[error("I caught an extraneous fallback handler in an already exhaustive validator\n")]
+    #[error("I caught an extraneous fallback handler in an already exhaustive validator.\n")]
     #[diagnostic(code("extraneous::fallback"))]
     #[diagnostic(help(
         "Validator handlers must be exhaustive and either cover all purposes, or provide a fallback handler. Here, you have successfully covered all script purposes with your handler, but left an extraneous fallback branch. I cannot let that happen, but removing it for you would probably be deemed rude. So please, remove the fallback."
@@ -1100,6 +1103,16 @@ The best thing to do from here is to remove it."#))]
     UnexpectedValidatorFallback {
         #[label("redundant fallback handler")]
         fallback: Span,
+    },
+
+    #[error("I was stopped by a suspicious field access chain.\n")]
+    #[diagnostic(code("invalid::field_access"))]
+    #[diagnostic(help(
+        "It seems like you've got things mixed up a little here? You can only access fields exported by modules or, by types within those modules. Double-check the culprit field access chain, there's likely something wrong about it."
+    ))]
+    InvalidFieldAccess {
+        #[label("invalid field access")]
+        location: Span,
     },
 }
 
@@ -1163,7 +1176,8 @@ impl ExtraData for Error {
             | Error::UnknownValidatorHandler { .. }
             | Error::UnexpectedValidatorFallback { .. }
             | Error::IncorrectBenchmarkArity { .. }
-            | Error::MustInferFirst { .. } => None,
+            | Error::MustInferFirst { .. }
+            | Error::InvalidFieldAccess { .. } => None,
 
             Error::UnknownType { name, .. }
             | Error::UnknownTypeConstructor { name, .. }
@@ -1274,7 +1288,7 @@ fn suggest_pattern(
     expected: usize,
     name: &str,
     given: &[CallArg<UntypedPattern>],
-    module: &Option<String>,
+    module: &Option<Namespace>,
     is_record: bool,
 ) -> Option<String> {
     if expected > given.len() {
@@ -1309,7 +1323,7 @@ fn suggest_generic(name: &str, expected: usize) -> String {
 fn suggest_constructor_pattern(
     name: &str,
     args: &[CallArg<UntypedPattern>],
-    module: &Option<String>,
+    module: &Option<Namespace>,
     spread_location: Option<Span>,
 ) -> String {
     let fixed_args = args
@@ -1526,14 +1540,15 @@ fn suggest_import_constructor() -> String {
              ┍━ aiken/pet.ak ━    ==>   ┍━ foo.ak ━━━━━━━━━━━━━━━━
              │ {keyword_pub} {keyword_type} {type_Pet} {{           │ {keyword_use} aiken/pet.{{{type_Pet}, {variant_Dog}}}
              │   {variant_Cat}                    │
-             │   {variant_Dog}                    │ {keyword_fn} foo(pet : {type_Pet}) {{
-             │ }}                        │   {keyword_when} pet {keyword_is} {{
-                                        │     pet.{variant_Cat} -> // ...
+             │   {variant_Dog}                    │ {keyword_fn} foo(pet: {type_Pet}) {{
+             │   {variant_Fox}                    │   {keyword_when} pet {keyword_is} {{
+             │ }}                        │     pet.{variant_Cat} -> // ...
                                         │     {variant_Dog} -> // ...
+                                        │     {type_Pet}.{variant_Fox} -> // ...
                                         │   }}
                                         │ }}
 
-           You must import its constructors explicitly to use them, or prefix them with the module's name.
+           You must import its constructors explicitly to use them, or prefix them with the module or type's name.
         "#
         , keyword_fn =  "fn".if_supports_color(Stdout, |s| s.yellow())
         , keyword_is = "is".if_supports_color(Stdout, |s| s.yellow())
@@ -1548,6 +1563,9 @@ fn suggest_import_constructor() -> String {
             .if_supports_color(Stdout, |s| s.bright_blue())
             .if_supports_color(Stdout, |s| s.bold())
         , variant_Dog = "Dog"
+            .if_supports_color(Stdout, |s| s.bright_blue())
+            .if_supports_color(Stdout, |s| s.bold())
+        , variant_Fox = "Fox"
             .if_supports_color(Stdout, |s| s.bright_blue())
             .if_supports_color(Stdout, |s| s.bold())
     }

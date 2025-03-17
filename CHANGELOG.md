@@ -5,6 +5,7 @@
 ### Added
 
 - **aiken**: New `-S` flag on `check` and `build` that blocks the printing of warnings but it still shows the total warning count. @rvcas
+- **aiken-lang**: Allow types to be used as namespaces for constructors. Importing each constructor variants independently is no longer required in neither pattern-matches nor value construction. One can simply use the type name as a prefix/namespace now. @KtorZ
 
 ### Changed
 
@@ -17,6 +18,7 @@
 
 - **aiken-lang**: Formatter was removing comments from function type annotation args @rvcas
 - **aiken-lang**: Parser wrongly merged two adjacent sequences together, effectively fusioning scopes. @KtorZ
+- **aiken-lang**: Fix hint when suggesting to use named fields, wrongly suggesting args in lexicographical order instead of definition order. @KtorZ
 
 ## v1.1.13 - 2025-02-26
 
