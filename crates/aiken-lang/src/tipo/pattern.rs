@@ -467,7 +467,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                         let arguments = field_map
                             .fields
                             .iter()
-                            .sorted_by(|(a, _), (b, _)| a.cmp(b))
+                            .sorted_by(|(_, (a, _)), (_, (b, _))| a.cmp(b))
                             .zip(pattern_args.iter())
                             .filter_map(|((field, (_, _)), arg)| {
                                 if arg.value.is_discard() {

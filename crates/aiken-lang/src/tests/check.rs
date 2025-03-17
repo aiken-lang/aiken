@@ -4226,3 +4226,56 @@ fn unused_record_fields_4() {
         }
     );
 }
+
+#[test]
+fn unused_record_fields_5() {
+    let source_code = r#"
+        pub type Foo {
+          b_is_before_a: Bool,
+          a_is_after_b: Bool,
+        }
+
+        test confusing() {
+          let Foo(a, b) = Foo(True, True)
+          a || b
+        }
+    "#;
+
+    let result = check_validator(parse(source_code));
+    assert!(result.is_ok());
+
+    let (warnings, _) = result.unwrap();
+    assert_eq!(
+        warnings[0],
+        Warning::UnusedRecordFields {
+            location: Span::create(137, 9),
+            suggestion: UntypedPattern::Constructor {
+                is_record: true,
+                location: Span::create(137, 9),
+                name: "Foo".to_string(),
+                arguments: vec![
+                    CallArg {
+                        label: Some("b_is_before_a".to_string()),
+                        location: Span::create(141, 13),
+                        value: Pattern::Var {
+                            location: Span::create(141, 1),
+                            name: "a".to_string()
+                        }
+                    },
+                    CallArg {
+                        label: Some("a_is_after_b".to_string()),
+                        location: Span::create(144, 12),
+                        value: Pattern::Var {
+                            location: Span::create(144, 1),
+                            name: "b".to_string()
+                        }
+                    }
+                ],
+                module: None,
+                constructor: (),
+                spread_location: None,
+                tipo: ()
+            }
+        }
+    );
+}
