@@ -31,7 +31,7 @@ pub fn parser(
 
 #[cfg(test)]
 mod tests {
-    use crate::assert_expr;
+    use crate::{assert_definition, assert_expr};
 
     #[test]
     fn block_let() {
@@ -50,6 +50,37 @@ mod tests {
         assert_expr!(
             r#"{
             foo
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn sequence_then_expr() {
+        assert_definition!(
+            r#"
+            test foo() {
+              {
+                let a = Void
+                a
+              }
+              True
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn sequence_then_sequence() {
+        assert_definition!(
+            r#"
+            test foo() {
+              {
+                let a = Void
+                a
+              }
+              let _ = True
+              True
             }
             "#
         );

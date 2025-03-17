@@ -1,0 +1,55 @@
+---
+source: crates/aiken-lang/src/parser/expr/block.rs
+description: "Code:\n\ntest foo() {\n  {\n    let a = Void\n    a\n  }\n  True\n}\n"
+---
+Test(
+    Function {
+        arguments: [],
+        body: Sequence {
+            location: 38..50,
+            expressions: [
+                Sequence {
+                    location: 21..39,
+                    expressions: [
+                        Assignment {
+                            location: 21..33,
+                            value: Var {
+                                location: 29..33,
+                                name: "Void",
+                            },
+                            patterns: [
+                                AssignmentPattern {
+                                    pattern: Var {
+                                        location: 25..26,
+                                        name: "a",
+                                    },
+                                    annotation: None,
+                                    location: 25..26,
+                                },
+                            ],
+                            kind: Let {
+                                backpassing: false,
+                            },
+                        },
+                        Var {
+                            location: 38..39,
+                            name: "a",
+                        },
+                    ],
+                },
+                Var {
+                    location: 46..50,
+                    name: "True",
+                },
+            ],
+        },
+        doc: None,
+        location: 0..10,
+        name: "foo",
+        public: false,
+        return_annotation: None,
+        return_type: (),
+        end_position: 51,
+        on_test_failure: FailImmediately,
+    },
+)
