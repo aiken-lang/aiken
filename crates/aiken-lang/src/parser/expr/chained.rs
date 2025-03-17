@@ -53,7 +53,6 @@ pub fn chain_start<'a>(
         pair(expression.clone()),
         record_update(expression.clone()),
         record(expression.clone()),
-        field_access::constructor(),
         and_or_chain(expression.clone()),
         var(),
         tuple(expression.clone()),

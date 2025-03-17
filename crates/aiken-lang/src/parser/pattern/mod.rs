@@ -27,9 +27,9 @@ pub use var::parser as var;
 pub fn parser() -> impl Parser<Token, UntypedPattern, Error = ParseError> {
     recursive(|pattern| {
         choice((
-            var(pattern.clone()),
             pair(pattern.clone()),
             constructor(pattern.clone()),
+            var(pattern.clone()),
             discard(),
             int(),
             bytearray(),

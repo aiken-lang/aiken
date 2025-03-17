@@ -4,6 +4,7 @@ pub(crate) mod call;
 pub(crate) mod field_access;
 pub(crate) mod tuple_index;
 
+#[derive(Debug)]
 pub(crate) enum Chain {
     Call(Vec<ParsedCallArg>, Span),
     FieldAccess(String, Span),

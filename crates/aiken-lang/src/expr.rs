@@ -2,16 +2,15 @@ pub(crate) use crate::{
     ast::{
         self, Annotation, ArgBy, ArgName, AssignmentKind, AssignmentPattern, BinOp, Bls12_381Point,
         ByteArrayFormatPreference, CallArg, Curve, DataType, DataTypeKey, DefinitionLocation,
-        Located, LogicalOpChainKind, ParsedCallArg, Pattern, RecordConstructorArg,
-        RecordUpdateSpread, Span, TraceKind, TypedArg, TypedAssignmentKind, TypedClause,
-        TypedDataType, TypedIfBranch, TypedPattern, TypedRecordUpdateArg, UnOp, UntypedArg,
-        UntypedAssignmentKind, UntypedClause, UntypedIfBranch, UntypedRecordUpdateArg,
+        Located, LogicalOpChainKind, ParsedCallArg, RecordConstructorArg, RecordUpdateSpread, Span,
+        TraceKind, TypedArg, TypedAssignmentKind, TypedClause, TypedDataType, TypedIfBranch,
+        TypedPattern, TypedRecordUpdateArg, UnOp, UntypedArg, UntypedAssignmentKind, UntypedClause,
+        UntypedIfBranch, UntypedRecordUpdateArg,
     },
     parser::token::Base,
     tipo::{
         check_replaceable_opaque_type, convert_opaque_type, lookup_data_type_by_tipo,
-        ModuleValueConstructor, PatternConstructor, Type, TypeVar, ValueConstructor,
-        ValueConstructorVariant,
+        ModuleValueConstructor, Type, TypeVar, ValueConstructor, ValueConstructorVariant,
     },
 };
 use indexmap::IndexMap;
@@ -109,7 +108,7 @@ pub enum TypedExpr {
         location: Span,
         tipo: Rc<Type>,
         value: Box<Self>,
-        pattern: Pattern<PatternConstructor, Rc<Type>>,
+        pattern: TypedPattern,
         kind: TypedAssignmentKind,
     },
 

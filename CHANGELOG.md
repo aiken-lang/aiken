@@ -5,6 +5,7 @@
 ### Added
 
 - **aiken**: New `-S` flag on `check` and `build` that blocks the printing of warnings but it still shows the total warning count. @rvcas
+- **aiken-lang**: Allow types to be used as namespaces for constructors. Importing each constructor variants independently is no longer required in neither pattern-matches nor value construction. One can simply use the type name as a prefix/namespace now. @KtorZ
 
 ### Changed
 

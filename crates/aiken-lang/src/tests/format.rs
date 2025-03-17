@@ -1449,3 +1449,26 @@ fn capture_right_hand_side_assign() {
         "#
     );
 }
+
+#[test]
+fn types_as_namespace() {
+    assert_format!(
+        r#"
+        use foo.{ Foo }
+
+        fn predicate(val) {
+          when val is {
+            Foo.I(n) -> n >= 14
+            foo.Foo.B(bytes) -> bytes == "aiken"
+          }
+        }
+
+        test my_test() {
+          and {
+            predicate(foo.Foo.I(42)),
+            predicate(Foo.b("aiken"))
+          }
+        }
+        "#
+    );
+}

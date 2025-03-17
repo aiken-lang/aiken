@@ -6,7 +6,7 @@ use super::{
     hydrator::Hydrator,
     PatternConstructor, Type, ValueConstructorVariant,
 };
-use crate::ast::{CallArg, Pattern, Span, TypedPattern, UntypedPattern};
+use crate::ast::{CallArg, Namespace, Pattern, Span, TypedPattern, UntypedPattern};
 use itertools::Itertools;
 use std::{
     collections::{HashMap, HashSet},
@@ -570,7 +570,12 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
 
                             Ok(Pattern::Constructor {
                                 location,
-                                module,
+                                // NOTE:
+                                // Type namespaces are completely erased during type-check.
+                                module: match module {
+                                    None | Some(Namespace::Type(..)) => None,
+                                    Some(Namespace::Module(m)) => Some(m),
+                                },
                                 name,
                                 arguments: pattern_args,
                                 constructor,
@@ -601,7 +606,12 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
 
                             Ok(Pattern::Constructor {
                                 location,
-                                module,
+                                // NOTE:
+                                // Type namespaces are completely erased during type-check.
+                                module: match module {
+                                    None | Some(Namespace::Type(..)) => None,
+                                    Some(Namespace::Module(m)) => Some(m),
+                                },
                                 name,
                                 arguments: vec![],
                                 constructor,

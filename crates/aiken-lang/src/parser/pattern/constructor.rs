@@ -1,29 +1,72 @@
 use chumsky::prelude::*;
 
 use crate::{
-    ast::{CallArg, Span, UntypedPattern},
+    ast::{CallArg, Namespace, Span, UntypedPattern},
     parser::{error::ParseError, token::Token},
 };
 
 pub fn parser(
     pattern: Recursive<'_, Token, UntypedPattern, ParseError>,
 ) -> impl Parser<Token, UntypedPattern, Error = ParseError> + '_ {
-    select! {Token::UpName { name } => name}
-        .then(args(pattern))
-        .map_with_span(
-            |(name, (arguments, spread_location, is_record)), location| {
-                UntypedPattern::Constructor {
-                    is_record,
-                    location,
-                    name,
-                    arguments,
-                    module: None,
-                    constructor: (),
-                    spread_location,
-                    tipo: (),
-                }
-            },
-        )
+    choice((
+        select! { Token::Name { name } => name }
+            .then(just(Token::Dot).ignore_then(select! {Token::UpName { name } => name}))
+            .then(
+                just(Token::Dot).ignore_then(
+                    select! {Token::UpName { name } => name}.then(args(pattern.clone())),
+                ),
+            )
+            .map_with_span(
+                |((module, namespace), (name, (arguments, spread_location, is_record))), span| {
+                    UntypedPattern::Constructor {
+                        is_record,
+                        location: span,
+                        name,
+                        arguments,
+                        module: Some(Namespace::Type(Some(module), namespace)),
+                        constructor: (),
+                        spread_location,
+                        tipo: (),
+                    }
+                },
+            ),
+        select! { Token::UpName { name } => name }
+            .then(
+                just(Token::Dot).ignore_then(
+                    select! {Token::UpName { name } => name}.then(args(pattern.clone())),
+                ),
+            )
+            .map_with_span(
+                |(namespace, (name, (arguments, spread_location, is_record))), span| {
+                    UntypedPattern::Constructor {
+                        is_record,
+                        location: span,
+                        name,
+                        arguments,
+                        module: Some(Namespace::Type(None, namespace)),
+                        constructor: (),
+                        spread_location,
+                        tipo: (),
+                    }
+                },
+            ),
+        select! {Token::UpName { name } => name}
+            .then(args(pattern))
+            .map_with_span(
+                |(name, (arguments, spread_location, is_record)), location| {
+                    UntypedPattern::Constructor {
+                        is_record,
+                        location,
+                        name,
+                        arguments,
+                        module: None,
+                        constructor: (),
+                        spread_location,
+                        tipo: (),
+                    }
+                },
+            ),
+    ))
 }
 
 pub(crate) fn args(
@@ -101,5 +144,10 @@ mod tests {
     #[test]
     fn constructor_module_select() {
         assert_pattern!("module.Foo");
+    }
+
+    #[test]
+    fn constructor_type_select() {
+        assert_pattern!("Foo.Bar");
     }
 }
