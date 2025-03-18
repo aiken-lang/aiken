@@ -2506,6 +2506,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
     #[allow(clippy::result_large_err)]
     fn infer_trace_arg(&mut self, arg: UntypedExpr) -> Result<TypedExpr, Error> {
+        let location = arg.location();
         let typed_arg = self.infer(arg)?;
         match self.unify(
             Type::string(),
@@ -2514,6 +2515,12 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             false,
         ) {
             Err(_) => {
+                if matches!(self.tracing.trace_level(false), TraceLevel::Compact) {
+                    self.environment
+                        .warnings
+                        .push(Warning::CompactTraceLabelIsNotstring { location });
+                }
+
                 self.unify(Type::data(), typed_arg.tipo(), typed_arg.location(), true)?;
                 Ok(diagnose_expr(typed_arg))
             }
@@ -2546,44 +2553,38 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             })
         }
 
+        let label = self.infer_trace_arg(label)?;
+
+        let text = if typed_arguments.is_empty() {
+            label.clone()
+        } else {
+            let delimiter = |ix| TypedExpr::String {
+                location: Span::empty(),
+                tipo: Type::string(),
+                value: if ix == 0 { ": " } else { ", " }.to_string(),
+            };
+            typed_arguments
+                .into_iter()
+                .enumerate()
+                .fold(label.clone(), |text, (ix, arg)| {
+                    append_string_expr(append_string_expr(text, delimiter(ix)), arg)
+                })
+        };
+
         match self.tracing.trace_level(false) {
             TraceLevel::Silent => Ok(then),
-            TraceLevel::Compact => {
-                let text = self.infer(label)?;
-                self.unify(Type::string(), text.tipo(), text.location(), false)?;
-                Ok(TypedExpr::Trace {
-                    location,
-                    tipo,
-                    then: Box::new(then),
-                    text: Box::new(text),
-                })
-            }
-            TraceLevel::Verbose => {
-                let label = self.infer_trace_arg(label)?;
-
-                let text = if typed_arguments.is_empty() {
-                    label
-                } else {
-                    let delimiter = |ix| TypedExpr::String {
-                        location: Span::empty(),
-                        tipo: Type::string(),
-                        value: if ix == 0 { ": " } else { ", " }.to_string(),
-                    };
-                    typed_arguments
-                        .into_iter()
-                        .enumerate()
-                        .fold(label, |text, (ix, arg)| {
-                            append_string_expr(append_string_expr(text, delimiter(ix)), arg)
-                        })
-                };
-
-                Ok(TypedExpr::Trace {
-                    location,
-                    tipo,
-                    then: Box::new(then),
-                    text: Box::new(text),
-                })
-            }
+            TraceLevel::Compact => Ok(TypedExpr::Trace {
+                location,
+                tipo,
+                then: Box::new(then),
+                text: Box::new(label),
+            }),
+            TraceLevel::Verbose => Ok(TypedExpr::Trace {
+                location,
+                tipo,
+                then: Box::new(then),
+                text: Box::new(text),
+            }),
         }
     }
 

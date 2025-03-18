@@ -13,6 +13,7 @@
 - **aiken-lang**: Change default placeholder for `trace` to `Void` instead of `todo`. @KtorZ
 - **aiken-lang**: Disallow (parse error) dangling colon `:` in traces. See [#1113](https://github.com/aiken-lang/aiken/issues/1113). @KtorZ
 - **aiken-lang**: Fix `aiken blueprint apply` wrongly overriding all validators handlers names & ABI to the mint's one. See [#1099](https://github.com/aiken-lang/aiken/issues/1099). @KtorZ
+- **aiken-lang**: Always type-check trace label irrespective of the trace level, to avoid unnecessary warnings in compact or silent mode. See [#1122](https://github.com/aiken-lang/aiken/issues/1122). @KtorZ
 
 ### Fixed
 
