@@ -29,24 +29,16 @@ pub fn parser(
                         .then_ignore(just(Token::Colon))
                         .then(choice((
                             r.clone(),
-                            select! {Token::DiscardName {name} => name }.validate(
-                                |_name, span, emit| {
-                                    emit(ParseError::expected_input_found(
-                                        span,
-                                        None,
-                                        Some(error::Pattern::Discard),
-                                    ));
-
-                                    UntypedExpr::Var {
-                                        location: span,
-                                        name: ast::CAPTURE_VARIABLE.to_string(),
-                                    }
+                            choice((select! {Token::DiscardName {name} => name }.map_with_span(
+                                |name, span| UntypedExpr::Var {
+                                    location: span,
+                                    name,
                                 },
-                            ),
+                            ),)),
                         )))
                         .map_with_span(|(label, value), span| ast::CallArg {
                             location: span,
-                            value,
+                            value: Some(value),
                             label: Some(label),
                         }),
                     choice((
@@ -111,7 +103,7 @@ pub fn parser(
                     )
                     .map(|(value, name)| ast::CallArg {
                         location: value.location(),
-                        value,
+                        value: Some(value),
                         label: Some(name),
                     }),
                 ))
@@ -144,24 +136,16 @@ pub fn parser(
                     .or_not()
                     .then(choice((
                         r.clone(),
-                        select! {Token::DiscardName {name} => name }.validate(
-                            |_name, span, emit| {
-                                emit(ParseError::expected_input_found(
-                                    span,
-                                    None,
-                                    Some(error::Pattern::Discard),
-                                ));
-
-                                UntypedExpr::Var {
-                                    location: span,
-                                    name: ast::CAPTURE_VARIABLE.to_string(),
-                                }
-                            },
-                        ),
+                        select! {Token::DiscardName {name} => name }.map_with_span(|name, span| {
+                            UntypedExpr::Var {
+                                location: span,
+                                name,
+                            }
+                        }),
                     )))
                     .map(|(_label, value)| ast::CallArg {
                         location: value.location(),
-                        value,
+                        value: Some(value),
                         label: None,
                     })
                     .separated_by(just(Token::Comma))
@@ -208,11 +192,7 @@ pub fn parser(
                 },
             };
 
-            UntypedExpr::Call {
-                arguments,
-                fun: Box::new(fun),
-                location: span,
-            }
+            fun.call(arguments, span)
         },
     )
 }
