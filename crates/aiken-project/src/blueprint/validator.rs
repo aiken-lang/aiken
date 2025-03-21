@@ -46,6 +46,20 @@ pub struct Validator {
 }
 
 impl Validator {
+    pub fn get_module_and_name(&self) -> (&str, &str) {
+        let mut split = self.title.split('.');
+
+        let known_module_name = split
+            .next()
+            .expect("validator's name must have two dot-separated components.");
+
+        let known_validator_name = split
+            .next()
+            .expect("validator's name must have two dot-separated components.");
+
+        (known_module_name, known_validator_name)
+    }
+
     pub fn from_checked_module(
         modules: &CheckedModules,
         generator: &mut CodeGenerator,

@@ -6,6 +6,7 @@
 
 - **aiken**: New `-S` flag on `check` and `build` that blocks the printing of warnings but it still shows the total warning count. @rvcas
 - **aiken-lang**: Allow types to be used as namespaces for constructors. Importing each constructor variants independently is no longer required in neither pattern-matches nor value construction. One can simply use the type name as a prefix/namespace now. @KtorZ
+- **aiken-lang**: Allow capture on constructor calls. @KtorZ
 
 ### Changed
 
@@ -14,12 +15,10 @@
 - **aiken-lang**: Disallow (parse error) dangling colon `:` in traces. See [#1113](https://github.com/aiken-lang/aiken/issues/1113). @KtorZ
 - **aiken-lang**: Fix `aiken blueprint apply` wrongly overriding all validators handlers names & ABI to the mint's one. See [#1099](https://github.com/aiken-lang/aiken/issues/1099). @KtorZ
 - **aiken-lang**: Always type-check trace label irrespective of the trace level, to avoid unnecessary warnings in compact or silent mode. See [#1122](https://github.com/aiken-lang/aiken/issues/1122). @KtorZ
-
-### Fixed
-
 - **aiken-lang**: Formatter was removing comments from function type annotation args @rvcas
 - **aiken-lang**: Parser wrongly merged two adjacent sequences together, effectively fusioning scopes. @KtorZ
 - **aiken-lang**: Fix hint when suggesting to use named fields, wrongly suggesting args in lexicographical order instead of definition order. @KtorZ
+- **aiken-project**: Better errors on `blueprint apply` when matching multiple or no validators. See [#1127](https://github.com/aiken-lang/aiken/issues/1127) @KtorZ
 
 ## v1.1.13 - 2025-02-26
 

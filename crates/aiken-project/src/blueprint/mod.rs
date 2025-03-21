@@ -13,7 +13,7 @@ use aiken_lang::gen_uplc::CodeGenerator;
 use definitions::Definitions;
 pub use error::Error;
 use schema::{Annotated, Schema};
-use std::fmt::Debug;
+use std::{collections::BTreeSet, fmt::Debug};
 use validator::Validator;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
@@ -99,15 +99,7 @@ impl Blueprint {
         let mut validator = None;
 
         for v in self.validators.iter() {
-            let mut split = v.title.split('.');
-
-            let known_module_name = split
-                .next()
-                .expect("validator's name must have two dot-separated components.");
-
-            let known_validator_name = split
-                .next()
-                .expect("validator's name must have two dot-separated components.");
+            let (known_module_name, known_validator_name) = v.get_module_and_name();
 
             let is_target = match (want_module_name, want_validator_name) {
                 (None, None) => true,
@@ -143,8 +135,8 @@ impl Blueprint {
         &self,
         module_name: Option<&str>,
         validator_name: Option<&str>,
-        when_too_many: fn(Vec<String>) -> E,
-        when_missing: fn(Vec<String>) -> E,
+        when_too_many: fn(BTreeSet<(String, String, bool)>) -> E,
+        when_missing: fn(BTreeSet<(String, String, bool)>) -> E,
         action: F,
     ) -> Result<A, E>
     where
@@ -153,10 +145,35 @@ impl Blueprint {
         match self.lookup(module_name, validator_name) {
             Some(LookupResult::One(_, validator)) => action(validator),
             Some(LookupResult::Many) => Err(when_too_many(
-                self.validators.iter().map(|v| v.title.clone()).collect(),
+                self.validators
+                    .iter()
+                    .filter_map(|v| {
+                        let (l, r) = v.get_module_and_name();
+
+                        if let Some(module_name) = module_name {
+                            if l != module_name {
+                                return None;
+                            }
+                        }
+
+                        if let Some(validator_name) = validator_name {
+                            if r != validator_name {
+                                return None;
+                            }
+                        }
+
+                        Some((l.to_string(), r.to_string(), !v.parameters.is_empty()))
+                    })
+                    .collect(),
             )),
             None => Err(when_missing(
-                self.validators.iter().map(|v| v.title.clone()).collect(),
+                self.validators
+                    .iter()
+                    .map(|v| {
+                        let (l, r) = v.get_module_and_name();
+                        (l.to_string(), r.to_string(), !v.parameters.is_empty())
+                    })
+                    .collect(),
             )),
         }
     }
