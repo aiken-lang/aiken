@@ -15,6 +15,7 @@ use owo_colors::{
     Stream::{Stderr, Stdout},
 };
 use std::{
+    collections::BTreeSet,
     fmt::{self, Debug, Display},
     io,
     path::{Path, PathBuf},
@@ -137,10 +138,14 @@ pub enum Error {
     },
 
     #[error("I didn't find any validator matching your criteria.")]
-    NoValidatorNotFound { known_validators: Vec<String> },
+    NoValidatorNotFound {
+        known_validators: BTreeSet<(String, String, bool)>,
+    },
 
     #[error("I found multiple suitable validators and I need you to tell me which one to pick.")]
-    MoreThanOneValidatorFound { known_validators: Vec<String> },
+    MoreThanOneValidatorFound {
+        known_validators: BTreeSet<(String, String, bool)>,
+    },
 
     #[error("I couldn't find any exportable function named '{name}' in module '{module}'.")]
     ExportNotFound { module: String, name: String },
@@ -423,27 +428,13 @@ impl Diagnostic for Error {
                     None => String::new(),
                 }
             ))),
-            Error::NoValidatorNotFound { known_validators } => Some(Box::new(format!(
-                "Here's a list of all validators I've found in your project. Please double-check this list against the options that you've provided:\n\n{}",
-                known_validators
-                    .iter()
-                    .map(|title| format!(
-                        "→ {title}",
-                        title = title.if_supports_color(Stdout, |s| s.purple())
-                    ))
-                    .collect::<Vec<String>>()
-                    .join("\n")
+            Error::NoValidatorNotFound { known_validators } => Some(Box::new(hint_validators(
+                known_validators,
+                "Here's a list of all validators I've found in your project.\nPlease double-check this list against the options that you've provided."
             ))),
-            Error::MoreThanOneValidatorFound { known_validators } => Some(Box::new(format!(
-                "Here's a list of all validators I've found in your project. Select one of them using the appropriate options:\n\n{}",
-                known_validators
-                    .iter()
-                    .map(|title| format!(
-                        "→ {title}",
-                        title = title.if_supports_color(Stdout, |s| s.purple())
-                    ))
-                    .collect::<Vec<String>>()
-                    .join("\n")
+            Error::MoreThanOneValidatorFound { known_validators } => Some(Box::new(hint_validators(
+                known_validators,
+                "Here's a list of matching validators I've found in your project.\nPlease narrow the selection using additional options.",
             ))),
             Error::Module(e) => e.help(),
         }
@@ -808,4 +799,54 @@ fn default_miette_handler(context_lines: usize) -> MietteHandler {
         .terminal_links(true)
         .context_lines(context_lines)
         .build()
+}
+
+fn hint_validators(known_validators: &BTreeSet<(String, String, bool)>, hint: &str) -> String {
+    let (pad_module, pad_validator) = known_validators.iter().fold(
+        (9, 12),
+        |(module_len, validator_len), (module, validator, _)| {
+            (
+                module_len.max(module.len()),
+                validator_len.max(validator.len()),
+            )
+        },
+    );
+
+    format!(
+        "{hint}\n\n\
+         {:<pad_module$}   {:<pad_validator$}\n\
+         {:─<pad_module$}┒ ┎{:─<pad_validator$}\n\
+         {}\n\nFor convenience, I have highlighted in {bold_green} suitable candidates that {has_params}.",
+        "module(s)",
+        "validator(s)",
+        "─",
+        "─",
+        {
+            known_validators
+                .iter()
+                .map(|(module, validator, has_params)|  {
+                    let title = format!(
+                        "{:>pad_module$} . {:<pad_validator$}",
+                        module,
+                        validator,
+                    );
+                    if *has_params {
+                        title
+                            .if_supports_color(Stderr, |s| s.bold())
+                            .if_supports_color(Stderr, |s| s.green())
+                            .to_string()
+                    } else {
+                        title
+                    }
+                })
+                .collect::<Vec<String>>()
+                .join("\n")
+        },
+        bold_green = "bold green"
+            .if_supports_color(Stderr, |s| s.bold())
+            .if_supports_color(Stderr, |s| s.green()),
+        has_params = "can take parameters"
+            .if_supports_color(Stderr, |s| s.bold())
+            .if_supports_color(Stderr, |s| s.green()),
+    )
 }
