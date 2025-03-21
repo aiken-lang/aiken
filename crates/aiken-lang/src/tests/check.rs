@@ -1321,8 +1321,8 @@ fn trace_non_string_label_compact() {
     "#;
 
     assert!(matches!(
-        check_with_verbosity(parse(source_code), TraceLevel::Compact),
-        Err((_, Error::CouldNotUnify { .. }))
+        &check_with_verbosity(parse(source_code), TraceLevel::Compact),
+        Ok((warnings, _)) if warnings == &[Warning::CompactTraceLabelIsNotstring { location: Span::create(40, 7) }],
     ))
 }
 

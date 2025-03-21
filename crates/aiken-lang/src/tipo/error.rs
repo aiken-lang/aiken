@@ -1865,6 +1865,15 @@ pub enum Warning {
         location: Span,
         suggestion: UntypedPattern,
     },
+
+    #[error("I noticed a (compact) dynamic trace label which is not a string")]
+    #[diagnostic(help("Compiling with a compact trace-level, you are probably expecting compact traces although here, the entire label will need to be serialise *at runtime* which will add a significant overhead.\n\nAs a reminder, trace arguments are fully ignored in compact tracing. Hence, you probably want to put a cute little label here and move the current trace as argument!"))]
+    #[diagnostic(code("trace::label_is_not_string"))]
+    #[diagnostic(url("https://aiken-lang.org/language-tour/troubleshooting#traces"))]
+    CompactTraceLabelIsNotstring {
+        #[label("compact trace label is not String")]
+        location: Span,
+    },
 }
 
 impl ExtraData for Warning {
@@ -1884,6 +1893,7 @@ impl ExtraData for Warning {
             | Warning::UnusedVariable { .. }
             | Warning::DiscardedLetAssignment { .. }
             | Warning::ValidatorInLibraryModule { .. }
+            | Warning::CompactTraceLabelIsNotstring { .. }
             | Warning::UseWhenInstead { .. } => None,
             Warning::Utf8ByteArrayIsValidHexString { value, .. } => Some(value.clone()),
             Warning::UnusedImportedModule { location, .. } => {
