@@ -649,7 +649,7 @@ pub enum UntypedExpr {
 
     ByteArray {
         location: Span,
-        bytes: Vec<u8>,
+        bytes: Vec<(u8, Span)>,
         preferred_format: ByteArrayFormatPreference,
     },
 
@@ -977,7 +977,7 @@ impl UntypedExpr {
                             location: Span::empty(),
                             value: UntypedExpr::ByteArray {
                                 location: Span::empty(),
-                                bytes,
+                                bytes: bytes.into_iter().map(|b| (b, Span::empty())).collect(),
                                 preferred_format: ByteArrayFormatPreference::HexadecimalString,
                             },
                         }],
@@ -1001,11 +1001,15 @@ impl UntypedExpr {
                 value: from_pallas_bigint(i).to_string(),
             },
 
-            PlutusData::BoundedBytes(bytes) => UntypedExpr::ByteArray {
-                location: Span::empty(),
-                bytes: bytes.into(),
-                preferred_format: ByteArrayFormatPreference::HexadecimalString,
-            },
+            PlutusData::BoundedBytes(bytes) => {
+                let bytes: Vec<u8> = bytes.into();
+
+                UntypedExpr::ByteArray {
+                    location: Span::empty(),
+                    bytes: bytes.into_iter().map(|b| (b, Span::empty())).collect(),
+                    preferred_format: ByteArrayFormatPreference::HexadecimalString,
+                }
+            }
 
             PlutusData::Array(elems) => UntypedExpr::List {
                 location: Span::empty(),
@@ -1113,9 +1117,10 @@ impl UntypedExpr {
                             value: String::from_utf8(bytes.to_vec()).expect("invalid UTF-8 string"),
                         })
                     } else {
+                        let bytes: Vec<u8> = bytes.into();
                         Ok(UntypedExpr::ByteArray {
                             location: Span::empty(),
-                            bytes: bytes.into(),
+                            bytes: bytes.into_iter().map(|b| (b, Span::empty())).collect(),
                             preferred_format: ByteArrayFormatPreference::HexadecimalString,
                         })
                     }

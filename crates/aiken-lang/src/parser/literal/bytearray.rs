@@ -10,7 +10,7 @@ use crate::{
 
 pub fn parser<A>(
     into: impl Fn(
-        Vec<u8>,
+        Vec<(u8, ast::Span)>,
         ast::ByteArrayFormatPreference,
         Option<ast::CurveType>,
         ast::Span,
@@ -20,7 +20,13 @@ pub fn parser<A>(
     choice((
         array_of_bytes(),
         hex_string(),
-        utf8_string().map(|(p, b)| (None, p, b)),
+        utf8_string().map(|(p, b)| {
+            (
+                None,
+                p,
+                b.into_iter().map(|b| (b, ast::Span::empty())).collect(),
+            )
+        }),
     ))
     .validate(move |(curve, preferred_format, bytes), span, emit| {
         into(bytes, preferred_format, curve, span, emit)
@@ -66,7 +72,7 @@ pub fn array_of_bytes() -> impl Parser<
     (
         Option<ast::CurveType>,
         ast::ByteArrayFormatPreference,
-        Vec<u8>,
+        Vec<(u8, ast::Span)>,
     ),
     Error = ParseError,
 > {
@@ -86,14 +92,14 @@ pub fn array_of_bytes() -> impl Parser<
                             0
                         }
                     };
-                    (byte, base)
+                    (byte, base, span)
                 })
                 .separated_by(just(Token::Comma))
                 .allow_trailing()
                 .delimited_by(just(Token::LeftSquare), just(Token::RightSquare)),
         )
         .validate(|(curve, bytes), span, emit| {
-            let base = bytes.iter().try_fold(None, |acc, (_, base)| match acc {
+            let base = bytes.iter().try_fold(None, |acc, (_, base, _)| match acc {
                 None => Ok(Some(base)),
                 Some(previous_base) if previous_base == base => Ok(Some(base)),
                 _ => Err(()),
@@ -114,7 +120,10 @@ pub fn array_of_bytes() -> impl Parser<
 
             (
                 curve,
-                bytes.into_iter().map(|(b, _)| b).collect::<Vec<u8>>(),
+                bytes
+                    .into_iter()
+                    .map(|(b, _, span)| (b, span))
+                    .collect::<Vec<(u8, ast::Span)>>(),
                 base,
             )
         })
@@ -132,7 +141,7 @@ pub fn hex_string() -> impl Parser<
     (
         Option<ast::CurveType>,
         ast::ByteArrayFormatPreference,
-        Vec<u8>,
+        Vec<(u8, ast::Span)>,
     ),
     Error = ParseError,
 > {
@@ -153,7 +162,7 @@ pub fn hex_string() -> impl Parser<
             (
                 curve,
                 ast::ByteArrayFormatPreference::HexadecimalString,
-                token,
+                token.into_iter().map(|b| (b, ast::Span::empty())).collect(),
             )
         })
 }

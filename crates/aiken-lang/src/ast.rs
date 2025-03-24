@@ -1535,8 +1535,8 @@ impl BinOp {
     }
 }
 
-pub type UntypedPattern = Pattern<(), (), Namespace>;
-pub type TypedPattern = Pattern<PatternConstructor, Rc<Type>, String>;
+pub type UntypedPattern = Pattern<(), (), Namespace, (u8, Span)>;
+pub type TypedPattern = Pattern<PatternConstructor, Rc<Type>, String, u8>;
 
 impl TypedPattern {
     pub fn var(name: &str) -> Self {
@@ -1660,7 +1660,7 @@ pub enum Namespace {
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum Pattern<Constructor, Type, NamespaceKind> {
+pub enum Pattern<Constructor, Type, NamespaceKind, ByteValue> {
     Int {
         location: Span,
         value: String,
@@ -1669,7 +1669,7 @@ pub enum Pattern<Constructor, Type, NamespaceKind> {
 
     ByteArray {
         location: Span,
-        value: Vec<u8>,
+        value: Vec<ByteValue>,
         preferred_format: ByteArrayFormatPreference,
     },
 
@@ -1731,7 +1731,7 @@ pub enum Pattern<Constructor, Type, NamespaceKind> {
     },
 }
 
-impl<A, B, C> Pattern<A, B, C> {
+impl<A, B, C, BV> Pattern<A, B, C, BV> {
     pub fn location(&self) -> Span {
         match self {
             Pattern::Assign { pattern, .. } => pattern.location(),
@@ -2207,11 +2207,11 @@ impl<T: Default> AssignmentKind<T> {
     }
 }
 
-pub type MultiPattern<PatternConstructor, Type, NamespaceKind> =
-    Vec<Pattern<PatternConstructor, Type, NamespaceKind>>;
+pub type MultiPattern<PatternConstructor, Type, NamespaceKind, ByteValue> =
+    Vec<Pattern<PatternConstructor, Type, NamespaceKind, ByteValue>>;
 
-pub type UntypedMultiPattern = MultiPattern<(), (), Namespace>;
-pub type TypedMultiPattern = MultiPattern<PatternConstructor, Rc<Type>, String>;
+pub type UntypedMultiPattern = MultiPattern<(), (), Namespace, (u8, Span)>;
+pub type TypedMultiPattern = MultiPattern<PatternConstructor, Rc<Type>, String, u8>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UntypedClause {
