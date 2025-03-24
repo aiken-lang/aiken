@@ -1,0 +1,11 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\npub const thing =\n  #[\n    // thing\n    0x12,\n    // wow\n    0x10,\n  ]\n"
+---
+pub const thing =
+  #[
+    // thing
+    0x12,
+    // wow
+    0x10,
+  ]
