@@ -1,6 +1,22 @@
 # Changelog
 
-## v1.1.15 - unreleased
+## v1.1.16 - unreleased
+
+### Added
+
+- **aiken**: Very simple support for monorepos via a `members` property in the
+  root `aiken.toml` file. Globs are supported you one could do this:
+
+  ```toml
+  members = ["pkgs/*"]
+  ```
+
+  @rvcas
+
+### Fixed
+
+- **aiken**: Summary should always print at the end of the output not just when
+  checks plus warnings is greater than zero. @rvcas
 
 ## v1.1.14 - 2025-03-21
 
