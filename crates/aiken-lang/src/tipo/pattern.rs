@@ -210,7 +210,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
 
                 Ok(Pattern::ByteArray {
                     location,
-                    value,
+                    value: value.into_iter().map(|(b, _)| b).collect(),
                     preferred_format,
                 })
             }

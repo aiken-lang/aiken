@@ -555,7 +555,11 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 bytes,
                 preferred_format,
                 location,
-            } => self.infer_bytearray(bytes, preferred_format, location),
+            } => self.infer_bytearray(
+                bytes.into_iter().map(|(b, _)| b).collect(),
+                preferred_format,
+                location,
+            ),
 
             UntypedExpr::CurvePoint {
                 location,

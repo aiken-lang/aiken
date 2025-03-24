@@ -5,9 +5,18 @@ description: "Code:\n\n#[0, 170, 255]"
 ByteArray {
     location: 0..14,
     bytes: [
-        0,
-        170,
-        255,
+        (
+            0,
+            2..3,
+        ),
+        (
+            170,
+            5..8,
+        ),
+        (
+            255,
+            10..13,
+        ),
     ],
     preferred_format: ArrayOfBytes(
         Decimal {
