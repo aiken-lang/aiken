@@ -18,6 +18,9 @@
 - **aiken**: Summary should always print at the end of the output not just when
   checks plus warnings is greater than zero. @rvcas
 
+- **aiken-lang**: Fix comments not being able to occur in ByteArray array
+  members. @rvcas
+
 ## v1.1.14 - 2025-03-21
 
 ### Added
