@@ -5,6 +5,7 @@ use crate::{
     utils,
 };
 use aiken_lang::{
+    IdGenerator,
     ast::{
         DataTypeKey, FunctionAccessKey, ModuleKind, TraceLevel, Tracing, TypedDataType,
         TypedFunction,
@@ -15,7 +16,6 @@ use aiken_lang::{
     parser,
     plutus_version::PlutusVersion,
     tipo::TypeInfo,
-    IdGenerator,
 };
 use indexmap::IndexMap;
 use std::{collections::HashMap, path::PathBuf};

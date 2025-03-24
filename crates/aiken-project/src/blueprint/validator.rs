@@ -7,17 +7,17 @@ use super::{
 };
 use crate::module::{CheckedModule, CheckedModules};
 use aiken_lang::{
-    ast::{well_known, Annotation, TypedArg, TypedFunction, TypedValidator},
+    ast::{Annotation, TypedArg, TypedFunction, TypedValidator, well_known},
     gen_uplc::CodeGenerator,
     plutus_version::PlutusVersion,
-    tipo::{collapse_links, Type},
+    tipo::{Type, collapse_links},
 };
 use miette::NamedSource;
 use serde;
 use std::borrow::Borrow;
 use uplc::{
-    ast::{Constant, SerializableProgram},
     PlutusData,
+    ast::{Constant, SerializableProgram},
 };
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
@@ -245,8 +245,8 @@ impl Validator {
 pub fn tipo_or_annotation<'a>(module: &'a CheckedModule, arg: &'a TypedArg) -> &'a Type {
     match collapse_links(arg.tipo.clone()).borrow() {
         Type::App {
-            module: ref module_name,
-            name: ref type_name,
+            module: module_name,
+            name: type_name,
             ..
         } if module_name.is_empty() && &type_name[..] == "Data" => match arg.annotation {
             Some(Annotation::Constructor { ref arguments, .. }) if !arguments.is_empty() => module
@@ -301,7 +301,7 @@ impl Validator {
                         description: None,
                         annotated: schema.as_ref().clone(),
                     },
-                    Declaration::Referenced(ref link) => definitions
+                    Declaration::Referenced(link) => definitions
                         .lookup(link)
                         .map(|s| {
                             Ok(Annotated {
@@ -1032,11 +1032,13 @@ mod tests {
         let mut definitions = fixture_definitions();
         definitions.insert(
             &schema,
-            Schema::Data(Data::AnyOf(vec![Constructor {
-                index: 0,
-                fields: vec![Declaration::Referenced(Reference::new("Bool")).into()],
-            }
-            .into()]))
+            Schema::Data(Data::AnyOf(vec![
+                Constructor {
+                    index: 0,
+                    fields: vec![Declaration::Referenced(Reference::new("Bool")).into()],
+                }
+                .into(),
+            ]))
             .into(),
         );
 

@@ -2,7 +2,7 @@ use super::Chain;
 use crate::{
     ast::CallArg,
     expr::UntypedExpr,
-    parser::{token::Token, ParseError},
+    parser::{ParseError, token::Token},
 };
 use chumsky::prelude::*;
 

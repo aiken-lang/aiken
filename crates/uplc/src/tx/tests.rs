@@ -1,9 +1,9 @@
-use super::{eval_phase_two, ResolvedInput, SlotConfig};
+use super::{ResolvedInput, SlotConfig, eval_phase_two};
 use crate::machine::cost_model::ExBudget;
 use pallas_codec::utils::MaybeIndefArray;
 use pallas_primitives::{
-    conway::{CostModels, TransactionInput, TransactionOutput},
     Fragment,
+    conway::{CostModels, TransactionInput, TransactionOutput},
 };
 use pallas_traverse::{Era, MultiEraTx};
 
@@ -1001,16 +1001,18 @@ fn test_eval_4() {
         .unwrap();
     match multi_era_tx {
         MultiEraTx::Conway(tx) => {
-            assert!(eval_phase_two(
-                &tx,
-                &utxos,
-                Some(&cost_mdl),
-                Some(&initial_budget),
-                &slot_config,
-                false,
-                |_| (),
-            )
-            .is_err());
+            assert!(
+                eval_phase_two(
+                    &tx,
+                    &utxos,
+                    Some(&cost_mdl),
+                    Some(&initial_budget),
+                    &slot_config,
+                    false,
+                    |_| (),
+                )
+                .is_err()
+            );
         }
         _ => unreachable!(),
     };
@@ -1757,16 +1759,18 @@ fn eval_extraneous_redeemer() {
 
     match multi_era_tx {
         MultiEraTx::Conway(tx) => {
-            assert!(eval_phase_two(
-                &tx,
-                &utxos,
-                Some(&cost_mdl),
-                Some(&initial_budget),
-                &slot_config,
-                false,
-                |_| (),
-            )
-            .is_err());
+            assert!(
+                eval_phase_two(
+                    &tx,
+                    &utxos,
+                    Some(&cost_mdl),
+                    Some(&initial_budget),
+                    &slot_config,
+                    false,
+                    |_| (),
+                )
+                .is_err()
+            );
         }
         _ => unreachable!(),
     };

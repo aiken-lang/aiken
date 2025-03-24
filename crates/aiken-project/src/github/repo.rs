@@ -1,4 +1,4 @@
-use reqwest::{blocking::Client, header::USER_AGENT, Error};
+use reqwest::{Error, blocking::Client, header::USER_AGENT};
 use serde::Deserialize;
 
 #[derive(Deserialize)]

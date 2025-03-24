@@ -1,6 +1,6 @@
 use super::{
-    runtime::{self, BuiltinRuntime},
     Error,
+    runtime::{self, BuiltinRuntime},
 };
 use crate::{
     ast::{Constant, NamedDeBruijn, Term, Type},
@@ -480,7 +480,7 @@ pub fn to_pallas_bigint(n: &BigInt) -> conway::BigInt {
 mod tests {
     use crate::{
         ast::Constant,
-        machine::value::{integer_log2, Value},
+        machine::value::{Value, integer_log2},
     };
     use num_bigint::BigInt;
 

@@ -1,6 +1,6 @@
 use super::{
     error::Error,
-    script_context::{sort_voters, DataLookupTable, ResolvedInput, ScriptPurpose, ScriptVersion},
+    script_context::{DataLookupTable, ResolvedInput, ScriptPurpose, ScriptVersion, sort_voters},
 };
 use crate::tx::script_context::sort_reward_accounts;
 use itertools::Itertools;

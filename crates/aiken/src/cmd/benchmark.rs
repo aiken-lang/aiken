@@ -84,7 +84,7 @@ pub fn exec(
 ) -> miette::Result<()> {
     let mut rng = rand::thread_rng();
 
-    let seed = seed.unwrap_or_else(|| rng.gen());
+    let seed = seed.unwrap_or_else(|| rng.r#gen());
 
     let result = with_project(
         directory.as_deref(),

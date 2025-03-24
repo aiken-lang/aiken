@@ -1,6 +1,6 @@
 use crate::{
-    machine::{self, cost_model::ExBudget, Trace},
     TransactionInput,
+    machine::{self, Trace, cost_model::ExBudget},
 };
 use pallas_primitives::conway::Language;
 

@@ -1,16 +1,15 @@
 use crate::{
-    aiken_fn,
+    IdGenerator, aiken_fn,
     ast::{
-        well_known, Annotation, ArgName, CallArg, DataType, DataTypeKey, Function,
-        FunctionAccessKey, ModuleKind, OnTestFailure, RecordConstructor, RecordConstructorArg,
-        Span, TypedArg, TypedDataType, TypedFunction, UnOp,
+        Annotation, ArgName, CallArg, DataType, DataTypeKey, Function, FunctionAccessKey,
+        ModuleKind, OnTestFailure, RecordConstructor, RecordConstructorArg, Span, TypedArg,
+        TypedDataType, TypedFunction, UnOp, well_known,
     },
     expr::TypedExpr,
     tipo::{
-        fields::FieldMap, Type, TypeConstructor, TypeInfo, ValueConstructor,
-        ValueConstructorVariant,
+        Type, TypeConstructor, TypeInfo, ValueConstructor, ValueConstructorVariant,
+        fields::FieldMap,
     },
-    IdGenerator,
 };
 use std::{collections::BTreeSet, sync::LazyLock};
 

@@ -17,7 +17,7 @@ use std::{
     rc::Rc,
 };
 use uplc::machine::runtime::Compressable;
-use vec1::{vec1, Vec1};
+use vec1::{Vec1, vec1};
 
 pub const BACKPASS_VARIABLE: &str = "_backpass";
 pub const CAPTURE_VARIABLE: &str = "_capture";
@@ -956,7 +956,7 @@ pub struct CallArg<A> {
 impl CallArg<UntypedExpr> {
     pub fn is_capture_hole(&self) -> bool {
         match &self.value {
-            UntypedExpr::Var { ref name, .. } => name.contains(CAPTURE_VARIABLE),
+            UntypedExpr::Var { name, .. } => name.contains(CAPTURE_VARIABLE),
             _ => false,
         }
     }

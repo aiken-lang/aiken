@@ -1,10 +1,10 @@
 use crate::{
-    blueprint::definitions::{Definitions, Reference},
     CheckedModule,
+    blueprint::definitions::{Definitions, Reference},
 };
 use aiken_lang::{
     ast::{Definition, TypedDataType, TypedDefinition},
-    tipo::{pretty, Type, TypeVar},
+    tipo::{Type, TypeVar, pretty},
 };
 use owo_colors::{OwoColorize, Stream::Stdout};
 use serde::{
@@ -1117,7 +1117,7 @@ Here's the types I followed and that led me to this problem:
 pub mod tests {
     use super::*;
     use proptest::prelude::*;
-    use serde_json::{self, json, Value};
+    use serde_json::{self, Value, json};
 
     pub fn assert_json(schema: &impl Serialize, expected: Value) {
         assert_eq!(serde_json::to_value(schema).unwrap(), expected);
@@ -1198,11 +1198,13 @@ pub mod tests {
 
     #[test]
     fn serialize_data_constr_1() {
-        let schema = Schema::Data(Data::AnyOf(vec![Constructor {
-            index: 0,
-            fields: vec![],
-        }
-        .into()]));
+        let schema = Schema::Data(Data::AnyOf(vec![
+            Constructor {
+                index: 0,
+                fields: vec![],
+            }
+            .into(),
+        ]));
         assert_json(
             &schema,
             json!({
@@ -1363,14 +1365,16 @@ pub mod tests {
     #[test]
     fn deserialize_any_of() {
         assert_eq!(
-            Data::AnyOf(vec![Constructor {
-                index: 0,
-                fields: vec![
-                    Declaration::Referenced(Reference::new("foo")).into(),
-                    Declaration::Referenced(Reference::new("bar")).into()
-                ],
-            }
-            .into()]),
+            Data::AnyOf(vec![
+                Constructor {
+                    index: 0,
+                    fields: vec![
+                        Declaration::Referenced(Reference::new("foo")).into(),
+                        Declaration::Referenced(Reference::new("bar")).into()
+                    ],
+                }
+                .into()
+            ]),
             serde_json::from_value(json!({
                 "anyOf": [{
                     "index": 0,
@@ -1391,14 +1395,16 @@ pub mod tests {
     #[test]
     fn deserialize_one_of() {
         assert_eq!(
-            Data::AnyOf(vec![Constructor {
-                index: 0,
-                fields: vec![
-                    Declaration::Referenced(Reference::new("foo")).into(),
-                    Declaration::Referenced(Reference::new("bar")).into()
-                ],
-            }
-            .into()]),
+            Data::AnyOf(vec![
+                Constructor {
+                    index: 0,
+                    fields: vec![
+                        Declaration::Referenced(Reference::new("foo")).into(),
+                        Declaration::Referenced(Reference::new("bar")).into()
+                    ],
+                }
+                .into()
+            ]),
             serde_json::from_value(json!({
                 "oneOf": [{
                     "index": 0,

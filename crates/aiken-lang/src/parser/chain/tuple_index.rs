@@ -1,7 +1,7 @@
 use chumsky::prelude::*;
 
 use super::Chain;
-use crate::parser::{token::Token, ParseError};
+use crate::parser::{ParseError, token::Token};
 
 pub(crate) fn parser() -> impl Parser<Token, Chain, Error = ParseError> {
     just(Token::Dot)

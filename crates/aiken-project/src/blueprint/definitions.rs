@@ -1,11 +1,11 @@
 use crate::{
+    Annotated, Schema,
     blueprint::{
         parameter::Parameter,
         schema::{Data, Declaration, Items},
     },
-    Annotated, Schema,
 };
-use aiken_lang::tipo::{pretty::resolve_alias, Type, TypeAliasAnnotation, TypeVar};
+use aiken_lang::tipo::{Type, TypeAliasAnnotation, TypeVar, pretty::resolve_alias};
 use itertools::Itertools;
 use serde::{
     self,
@@ -176,7 +176,7 @@ impl Definitions<Annotated<Schema>> {
                         dependencies.insert(src);
                     }
                 }
-                Declaration::Inline(ref schema) => traverse(src, schema, usage),
+                Declaration::Inline(schema) => traverse(src, schema, usage),
             }
         }
 
@@ -260,16 +260,16 @@ impl Definitions<Annotated<Schema>> {
         fn schema_to_data(schema: &mut Schema) {
             let items = match schema {
                 Schema::Data(_) => None,
-                Schema::Pair(ref mut left, ref mut right) => {
+                Schema::Pair(left, right) => {
                     let left = swap_declaration(left);
                     let right = swap_declaration(right);
                     Some(Items::Many(vec![left, right]))
                 }
-                Schema::List(Items::One(ref mut item)) => {
+                Schema::List(Items::One(item)) => {
                     let item = swap_declaration(item);
                     Some(Items::One(item))
                 }
-                Schema::List(Items::Many(ref mut items)) => Some(Items::Many(
+                Schema::List(Items::Many(items)) => Some(Items::Many(
                     items.iter_mut().map(swap_declaration).collect(),
                 )),
                 Schema::Integer => {
@@ -300,7 +300,7 @@ impl Definitions<Annotated<Schema>> {
         }
 
         for (_, entry) in self.inner.iter_mut() {
-            if let Some(ref mut annotated) = entry {
+            if let Some(annotated) = entry {
                 schema_to_data(&mut annotated.annotated);
             }
         }

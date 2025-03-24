@@ -8,13 +8,14 @@ pub mod tree;
 use self::{
     air::Air,
     builder::{
+        AssignmentProperties, CodeGenSpecialFuncs, CycleFunctionNames, HoistableFunction, Variant,
         cast_validator_args, convert_type_to_data, extract_constant, modify_cyclic_calls,
-        modify_self_calls, AssignmentProperties, CodeGenSpecialFuncs, CycleFunctionNames,
-        HoistableFunction, Variant,
+        modify_self_calls,
     },
     tree::{AirTree, TreePath},
 };
 use crate::{
+    IdGenerator,
     ast::{
         AssignmentKind, BinOp, Bls12_381Point, Curve, DataTypeKey, FunctionAccessKey, Pattern,
         Span, TraceLevel, Tracing, TypedArg, TypedDataType, TypedFunction, TypedPattern,
@@ -25,30 +26,29 @@ use crate::{
     gen_uplc::{
         air::ExpectLevel,
         builder::{
-            erase_opaque_type_operations, get_generic_variant_name, get_line_columns_by_span,
-            get_src_code_by_span, known_data_to_type, monomorphize, wrap_validator_condition,
-            CodeGenFunction,
+            CodeGenFunction, erase_opaque_type_operations, get_generic_variant_name,
+            get_line_columns_by_span, get_src_code_by_span, known_data_to_type, monomorphize,
+            wrap_validator_condition,
         },
     },
     line_numbers::LineNumbers,
     plutus_version::PlutusVersion,
     tipo::{
-        check_replaceable_opaque_type, convert_opaque_type, find_and_replace_generics,
-        get_arg_type_name, get_generic_id_and_type, lookup_data_type_by_tipo,
         ModuleValueConstructor, PatternConstructor, Type, TypeInfo, ValueConstructor,
-        ValueConstructorVariant,
+        ValueConstructorVariant, check_replaceable_opaque_type, convert_opaque_type,
+        find_and_replace_generics, get_arg_type_name, get_generic_id_and_type,
+        lookup_data_type_by_tipo,
     },
-    IdGenerator,
 };
 use builder::{
-    introduce_name, introduce_pattern, pop_pattern, softcast_data_to_type_otherwise,
-    unknown_data_to_type, DISCARDED,
+    DISCARDED, introduce_name, introduce_pattern, pop_pattern, softcast_data_to_type_otherwise,
+    unknown_data_to_type,
 };
-use decision_tree::{get_tipo_by_path, Assigned, CaseTest, DecisionTree, TreeGen};
+use decision_tree::{Assigned, CaseTest, DecisionTree, TreeGen, get_tipo_by_path};
 use indexmap::IndexMap;
 use interner::AirInterner;
 use itertools::Itertools;
-use petgraph::{algo, Graph};
+use petgraph::{Graph, algo};
 use std::{collections::HashMap, rc::Rc};
 use stick_break_set::{Builtins, TreeSet};
 use tree::Fields;
@@ -2451,7 +2451,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let last_clause = if data_type
                     .as_ref()
-                    .map_or(true, |d| d.constructors.len() != cases.len())
+                    .is_none_or(|d| d.constructors.len() != cases.len())
                 {
                     *default.unwrap()
                 } else {

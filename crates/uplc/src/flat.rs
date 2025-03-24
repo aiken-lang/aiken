@@ -7,11 +7,11 @@ use crate::{
 };
 use num_bigint::BigInt;
 use pallas_codec::flat::{
+    Flat,
     de::{self, Decode, Decoder},
     en::{self, Encode, Encoder},
-    Flat,
 };
-use pallas_primitives::{conway::PlutusData, Fragment};
+use pallas_primitives::{Fragment, conway::PlutusData};
 use std::{collections::VecDeque, fmt::Debug, rc::Rc};
 
 const BUILTIN_TAG_WIDTH: u32 = 7;

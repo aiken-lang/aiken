@@ -3,7 +3,7 @@ use super::script_context::{
 };
 use crate::{
     ast::Data,
-    machine::runtime::{convert_constr_to_tag, ANY_TAG},
+    machine::runtime::{ANY_TAG, convert_constr_to_tag},
     tx::script_context::from_alonzo_output,
 };
 use num_integer::Integer;
@@ -421,7 +421,7 @@ impl<'a> ToPlutusData for WithOptionDatum<'a, WithZeroAdaAsset<'a, Vec<Transacti
     fn to_plutus_data(&self) -> PlutusData {
         Data::list(
             self.0
-                 .0
+                .0
                 .iter()
                 .map(|p| WithOptionDatum(&WithZeroAdaAsset(p)).to_plutus_data())
                 .collect(),
@@ -442,7 +442,7 @@ impl ToPlutusData for WithZeroAdaAsset<'_, Vec<TransactionOutput>> {
 
 impl<'a> ToPlutusData for WithOptionDatum<'a, WithZeroAdaAsset<'a, TransactionOutput>> {
     fn to_plutus_data(&self) -> PlutusData {
-        match self.0 .0 {
+        match self.0.0 {
             TransactionOutput::Legacy(legacy_output) => {
                 WithOptionDatum(&WithZeroAdaAsset(&from_alonzo_output(legacy_output)))
                     .to_plutus_data()
@@ -805,8 +805,8 @@ impl<'a> ToPlutusData
     fn to_plutus_data(&self) -> PlutusData {
         Data::list(
             self.0
-                 .0
-                 .0
+                .0
+                .0
                 .iter()
                 .map(|p| {
                     WithOptionDatum(&WithZeroAdaAsset(&WithWrappedTransactionId(p)))
@@ -821,7 +821,7 @@ impl<'a> ToPlutusData for WithZeroAdaAsset<'a, WithWrappedTransactionId<'a, Vec<
     fn to_plutus_data(&self) -> PlutusData {
         Data::list(
             self.0
-                 .0
+                .0
                 .iter()
                 .map(|p| WithZeroAdaAsset(&WithWrappedTransactionId(p)).to_plutus_data())
                 .collect(),
@@ -834,8 +834,8 @@ impl<'a> ToPlutusData for WithZeroAdaAsset<'a, WithWrappedTransactionId<'a, TxIn
         wrap_multiple_with_constr(
             0,
             vec![
-                WithWrappedTransactionId(&self.0 .0.out_ref).to_plutus_data(),
-                WithZeroAdaAsset(&self.0 .0.resolved).to_plutus_data(),
+                WithWrappedTransactionId(&self.0.0.out_ref).to_plutus_data(),
+                WithZeroAdaAsset(&self.0.0.resolved).to_plutus_data(),
             ],
         )
     }
@@ -848,8 +848,8 @@ impl<'a> ToPlutusData
         wrap_multiple_with_constr(
             0,
             vec![
-                WithWrappedTransactionId(&self.0 .0 .0.out_ref).to_plutus_data(),
-                WithOptionDatum(&WithZeroAdaAsset(&self.0 .0 .0.resolved)).to_plutus_data(),
+                WithWrappedTransactionId(&self.0.0.0.out_ref).to_plutus_data(),
+                WithOptionDatum(&WithZeroAdaAsset(&self.0.0.0.resolved)).to_plutus_data(),
             ],
         )
     }

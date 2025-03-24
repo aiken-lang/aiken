@@ -2,6 +2,21 @@
 members = ["crates/*"]
 resolver = "2"
 
+[workspace.package]
+description = "Cardano smart contract language and toolchain"
+documentation = "https://aiken-lang.org"
+version = "1.1.15"
+edition = "2024"
+repository = "https://github.com/aiken-lang/aiken"
+homepage = "https://github.com/aiken-lang/aiken"
+license = "Apache-2.0"
+authors = [
+    "Lucas Rosa <x@rvcas.dev>",
+    "Kasey White <kwhitemsg@gmail.com>",
+    "KtorZ <matthias.benkort@gmail.com>",
+]
+rust-version = "1.85.0"
+
 [workspace.metadata.release]
 shared-version = true
 tag-name = "v{{version}}"
@@ -17,7 +32,12 @@ installers = ["shell", "powershell", "npm", "homebrew"]
 # A GitHub repo to push Homebrew formulas to
 tap = "aiken-lang/homebrew-tap"
 # Target platforms to build apps for (Rust target-triple syntax)
-targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-musl", "x86_64-pc-windows-msvc"]
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-musl",
+    "x86_64-pc-windows-msvc",
+]
 # The archive format to use for windows builds (defaults .zip)
 windows-archive = ".tar.gz"
 # The archive format to use for non-windows builds (defaults .tar.xz)

@@ -3,9 +3,9 @@ use crate::{
     debruijn::{self, Converter},
     flat::Binder,
     machine::{
-        cost_model::{initialize_cost_model, CostModel, ExBudget},
-        eval_result::EvalResult,
         Machine,
+        cost_model::{CostModel, ExBudget, initialize_cost_model},
+        eval_result::EvalResult,
     },
     optimize::interner::CodeGenInterner,
 };

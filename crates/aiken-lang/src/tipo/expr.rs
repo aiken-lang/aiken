@@ -1,14 +1,15 @@
 use super::{
+    RecordAccessor, Type, ValueConstructor, ValueConstructorVariant,
     environment::{
-        assert_no_labeled_arguments, collapse_links, generalise, EntityKind, Environment,
+        EntityKind, Environment, assert_no_labeled_arguments, collapse_links, generalise,
     },
     error::{Error, Warning},
     hydrator::Hydrator,
     pattern::PatternTyper,
     pipe::PipeTyper,
-    RecordAccessor, Type, ValueConstructor, ValueConstructorVariant,
 };
 use crate::{
+    IdGenerator,
     ast::{
         self, Annotation, ArgName, AssignmentKind, AssignmentPattern, BinOp, Bls12_381Point,
         ByteArrayFormatPreference, CallArg, Curve, Function, IfBranch, LogicalOpChainKind,
@@ -17,14 +18,13 @@ use crate::{
         TypedValidator, UnOp, UntypedArg, UntypedAssignmentKind, UntypedClause, UntypedFunction,
         UntypedIfBranch, UntypedPattern, UntypedRecordUpdateArg,
     },
-    builtins::{from_default_function, BUILTIN},
+    builtins::{BUILTIN, from_default_function},
     expr::{FnStyle, TypedExpr, UntypedExpr},
     format,
     parser::token::Base,
     tipo::{
-        fields::FieldMap, DefaultFunction, ModuleKind, PatternConstructor, TypeConstructor, TypeVar,
+        DefaultFunction, ModuleKind, PatternConstructor, TypeConstructor, TypeVar, fields::FieldMap,
     },
-    IdGenerator,
 };
 use std::{
     cmp::Ordering,
@@ -970,7 +970,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 location,
             } => {
                 if let UntypedExpr::Var {
-                    name: ref module,
+                    name: module,
                     location: module_location,
                 } = container.as_ref()
                 {
@@ -1091,7 +1091,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 container: ref type_container,
             } if TypeConstructor::might_be(type_name) => {
                 if let UntypedExpr::Var {
-                    name: ref module_name,
+                    name: module_name,
                     location: module_location,
                 } = type_container.as_ref()
                 {

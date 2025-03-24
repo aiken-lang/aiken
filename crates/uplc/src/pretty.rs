@@ -2,7 +2,7 @@ use crate::{
     ast::{Constant, Program, Term, Type},
     flat::Binder,
     machine::{
-        runtime::{convert_tag_to_constr, Compressable},
+        runtime::{Compressable, convert_tag_to_constr},
         value::from_pallas_bigint,
     },
 };

@@ -1,6 +1,6 @@
 use crate::{
-    config::{ProjectConfig, Platform},
     CheckedModule,
+    config::{Platform, ProjectConfig},
 };
 use aiken_lang::{ast::Span, line_numbers::LineNumbers};
 use camino::{Utf8Component, Utf8Path};

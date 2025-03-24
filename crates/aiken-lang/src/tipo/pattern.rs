@@ -1,10 +1,10 @@
 //! Type inference and checking of patterns used in case expressions
 //! and variables bindings.
 use super::{
-    environment::{assert_no_labeled_arguments, collapse_links, EntityKind, Environment},
+    PatternConstructor, Type, ValueConstructorVariant,
+    environment::{EntityKind, Environment, assert_no_labeled_arguments, collapse_links},
     error::{Error, Warning},
     hydrator::Hydrator,
-    PatternConstructor, Type, ValueConstructorVariant,
 };
 use crate::ast::{CallArg, Namespace, Pattern, Span, TypedPattern, UntypedPattern};
 use itertools::Itertools;

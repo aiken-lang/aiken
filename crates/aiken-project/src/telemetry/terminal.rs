@@ -1,4 +1,4 @@
-use super::{find_max_execution_units, group_by_module, DownloadSource, Event, EventListener};
+use super::{DownloadSource, Event, EventListener, find_max_execution_units, group_by_module};
 use crate::pretty;
 use aiken_lang::{
     ast::OnTestFailure,

@@ -1,7 +1,7 @@
 use super::{
+    Error, Trace, Value,
     cost_model::{BuiltinCosts, ExBudget},
     value::{from_pallas_bigint, to_pallas_bigint},
-    Error, Trace, Value,
 };
 use crate::{
     ast::{Constant, Data, Type},
@@ -1882,7 +1882,7 @@ pub static ANY_TAG: u64 = 102;
 
 #[cfg(not(target_family = "wasm"))]
 fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Value, Error> {
-    use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1};
+    use secp256k1::{Message, PublicKey, Secp256k1, ecdsa::Signature};
 
     let secp = Secp256k1::verification_only();
 
@@ -1901,7 +1901,7 @@ fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<V
 /// The message needs to be 32 bytes (ideally prehashed, but not a requirement).
 #[cfg(not(target_family = "wasm"))]
 fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Value, Error> {
-    use secp256k1::{schnorr::Signature, Message, Secp256k1, XOnlyPublicKey};
+    use secp256k1::{Message, Secp256k1, XOnlyPublicKey, schnorr::Signature};
 
     let secp = Secp256k1::verification_only();
 

@@ -1,5 +1,5 @@
 use crate::{
-    ast::{well_known, TraceKind},
+    ast::{TraceKind, well_known},
     expr::UntypedExpr,
     parser::{
         error::{ParseError, Pattern},

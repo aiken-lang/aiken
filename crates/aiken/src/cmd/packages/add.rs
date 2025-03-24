@@ -1,5 +1,5 @@
 use aiken_project::{
-    config::{ProjectConfig, Dependency, Platform},
+    config::{Dependency, Platform, ProjectConfig},
     error::Warning,
     package_name::PackageName,
     pretty,

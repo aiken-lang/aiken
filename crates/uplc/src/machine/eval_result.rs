@@ -1,4 +1,4 @@
-use super::{cost_model::ExBudget, Error, Trace};
+use super::{Error, Trace, cost_model::ExBudget};
 use crate::ast::{Constant, NamedDeBruijn, Term};
 
 #[derive(Debug)]

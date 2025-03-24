@@ -36,11 +36,7 @@ pub fn ansi_len(s: &str) -> usize {
 pub fn len_longest_line(zero: usize, s: &str) -> usize {
     s.lines().fold(zero, |max, l| {
         let n = ansi_len(l);
-        if n > max {
-            n
-        } else {
-            max
-        }
+        if n > max { n } else { max }
     })
 }
 
@@ -154,11 +150,7 @@ pub fn pad_right(mut text: String, n: usize, delimiter: &str) -> String {
 }
 
 pub fn style_if(styled: bool, s: String, apply_style: fn(String) -> String) -> String {
-    if styled {
-        apply_style(s)
-    } else {
-        s
-    }
+    if styled { apply_style(s) } else { s }
 }
 
 pub fn multiline(max_len: usize, s: String) -> Vec<String> {

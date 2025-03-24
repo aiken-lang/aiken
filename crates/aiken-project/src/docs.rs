@@ -104,7 +104,11 @@ impl DocLink {
 /// The documentation is built using template files located at the root of this crate.
 /// With the documentation, we also build a client-side search index to ease navigation
 /// across multiple modules.
-pub fn generate_all(root: &Path, config: &ProjectConfig, modules: Vec<&CheckedModule>) -> Vec<DocFile> {
+pub fn generate_all(
+    root: &Path,
+    config: &ProjectConfig,
+    modules: Vec<&CheckedModule>,
+) -> Vec<DocFile> {
     let timestamp = new_timestamp();
     let modules_links = generate_modules_links(&modules);
 

@@ -1,8 +1,8 @@
 use self::{environment::Environment, pretty::Printer};
 use crate::{
     ast::{
-        well_known, Annotation, DataType, DataTypeKey, DefinitionLocation, ModuleKind, Span,
-        TypedDataType,
+        Annotation, DataType, DataTypeKey, DefinitionLocation, ModuleKind, Span, TypedDataType,
+        well_known,
     },
     tipo::fields::FieldMap,
 };
@@ -212,8 +212,8 @@ impl Type {
         match self {
             Type::App { module, name, .. } => Some((module.to_string(), name.to_string())),
             Type::Fn { .. } => None,
-            Type::Var { ref tipo, .. } => match &*tipo.borrow() {
-                TypeVar::Link { ref tipo } => tipo.qualifier(),
+            Type::Var { tipo, .. } => match &*tipo.borrow() {
+                TypeVar::Link { tipo } => tipo.qualifier(),
                 _ => None,
             },
             Type::Tuple { .. } => Some((String::new(), "Tuple".to_string())),
@@ -1109,11 +1109,13 @@ impl TypeVar {
             Self::Link { tipo } => tipo.get_inner_types(),
             Self::Unbound { .. } => vec![],
             var => {
-                vec![Type::Var {
-                    tipo: RefCell::new(var.clone()).into(),
-                    alias: None,
-                }
-                .into()]
+                vec![
+                    Type::Var {
+                        tipo: RefCell::new(var.clone()).into(),
+                        alias: None,
+                    }
+                    .into(),
+                ]
             }
         }
     }

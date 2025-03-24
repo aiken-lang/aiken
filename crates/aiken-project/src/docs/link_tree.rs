@@ -78,10 +78,7 @@ impl LinkTree {
                 }
             }
 
-            LinkTree::Leaf {
-                value: ref mut leaf,
-                ..
-            } => {
+            LinkTree::Leaf { value: leaf, .. } => {
                 // In case we try to insert a module that already exists, there's nothing to do.
                 if module == leaf {
                     return;
@@ -138,9 +135,7 @@ impl LinkTree {
             }
 
             LinkTree::Node {
-                ref mut prefix,
-                ref mut children,
-                ..
+                prefix, children, ..
             } => {
                 // When `module.starts_with(prefix)` is true, it means that the module being
                 // inserted belong to our sub-tree. We do not know *where* exactly though, so we
@@ -274,8 +269,8 @@ impl LinkTree {
     fn path(&self) -> &str {
         match self {
             LinkTree::Empty => "",
-            LinkTree::Leaf { ref value, .. } => value.as_str(),
-            LinkTree::Node { ref prefix, .. } => prefix.as_str(),
+            LinkTree::Leaf { value, .. } => value.as_str(),
+            LinkTree::Node { prefix, .. } => prefix.as_str(),
         }
     }
 }

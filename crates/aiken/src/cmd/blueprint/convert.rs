@@ -1,5 +1,5 @@
 use aiken_project::{
-    blueprint::{error::Error as BlueprintError, Blueprint},
+    blueprint::{Blueprint, error::Error as BlueprintError},
     error::Error as ProjectError,
 };
 use clap::ValueEnum;

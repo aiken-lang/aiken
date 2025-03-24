@@ -4,7 +4,7 @@ use crate::{
     format::Formatter,
     gen_uplc::CodeGenerator,
     plutus_version::PlutusVersion,
-    tipo::{convert_opaque_type, Type},
+    tipo::{Type, convert_opaque_type},
 };
 use cryptoxide::{blake2b::Blake2b, digest::Digest};
 use indexmap::IndexMap;
@@ -26,7 +26,7 @@ use uplc::{
     ast::{Constant, Data, Name, NamedDeBruijn, Program, Term},
     machine::{cost_model::ExBudget, eval_result::EvalResult},
 };
-use vec1::{vec1, Vec1};
+use vec1::{Vec1, vec1};
 
 #[derive(Debug, Clone, Copy)]
 pub enum RunnableKind {
@@ -531,7 +531,9 @@ impl Benchmark {
 
             match prng.sample(&fuzzer) {
                 Ok(None) => {
-                    panic!("A seeded PRNG returned 'None' which indicates a sampler is ill-formed and implemented wrongly; please contact library's authors.");
+                    panic!(
+                        "A seeded PRNG returned 'None' which indicates a sampler is ill-formed and implemented wrongly; please contact library's authors."
+                    );
                 }
 
                 Ok(Some((new_prng, value))) => {
@@ -689,8 +691,10 @@ impl Prng {
         fn as_prng(cst: &PlutusData) -> Prng {
             if let PlutusData::Constr(Constr { tag, fields, .. }) = cst {
                 if *tag == 121 + Prng::SEEDED {
-                    if let [PlutusData::BoundedBytes(bytes), PlutusData::BoundedBytes(choices)] =
-                        &fields[..]
+                    if let [
+                        PlutusData::BoundedBytes(bytes),
+                        PlutusData::BoundedBytes(choices),
+                    ] = &fields[..]
                     {
                         return Prng::Seeded {
                             choices: choices.to_vec(),
@@ -1124,21 +1128,17 @@ impl<U, T> TestResult<U, T> {
 
     pub fn module(&self) -> &str {
         match self {
-            TestResult::UnitTestResult(UnitTestResult { ref test, .. }) => test.module.as_str(),
-            TestResult::PropertyTestResult(PropertyTestResult { ref test, .. }) => {
-                test.module.as_str()
-            }
-            TestResult::BenchmarkResult(BenchmarkResult { ref bench, .. }) => bench.module.as_str(),
+            TestResult::UnitTestResult(UnitTestResult { test, .. }) => test.module.as_str(),
+            TestResult::PropertyTestResult(PropertyTestResult { test, .. }) => test.module.as_str(),
+            TestResult::BenchmarkResult(BenchmarkResult { bench, .. }) => bench.module.as_str(),
         }
     }
 
     pub fn title(&self) -> &str {
         match self {
-            TestResult::UnitTestResult(UnitTestResult { ref test, .. }) => test.name.as_str(),
-            TestResult::PropertyTestResult(PropertyTestResult { ref test, .. }) => {
-                test.name.as_str()
-            }
-            TestResult::BenchmarkResult(BenchmarkResult { ref bench, .. }) => bench.name.as_str(),
+            TestResult::UnitTestResult(UnitTestResult { test, .. }) => test.name.as_str(),
+            TestResult::PropertyTestResult(PropertyTestResult { test, .. }) => test.name.as_str(),
+            TestResult::BenchmarkResult(BenchmarkResult { bench, .. }) => bench.name.as_str(),
         }
     }
 
@@ -1279,9 +1279,11 @@ impl TryFrom<TypedExpr> for Assertion<TypedExpr> {
                 final_else,
                 ..
             } => {
-                if let [IfBranch {
-                    condition, body, ..
-                }] = &branches[..]
+                if let [
+                    IfBranch {
+                        condition, body, ..
+                    },
+                ] = &branches[..]
                 {
                     let then_is_true = match body {
                         TypedExpr::Var {

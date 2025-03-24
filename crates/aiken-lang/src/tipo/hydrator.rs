@@ -1,7 +1,7 @@
 use super::{
+    Type, TypeConstructor,
     environment::Environment,
     error::{Error, Warning},
-    Type, TypeConstructor,
 };
 use crate::{ast::Annotation, tipo::Span};
 use std::{collections::HashMap, rc::Rc};

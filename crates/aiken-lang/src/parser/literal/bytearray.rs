@@ -158,8 +158,8 @@ pub fn hex_string() -> impl Parser<
         })
 }
 
-pub fn utf8_string(
-) -> impl Parser<Token, (ast::ByteArrayFormatPreference, Vec<u8>), Error = ParseError> {
+pub fn utf8_string()
+-> impl Parser<Token, (ast::ByteArrayFormatPreference, Vec<u8>), Error = ParseError> {
     select! {Token::ByteString {value} => value.into_bytes() }
         .map(|token| (ast::ByteArrayFormatPreference::Utf8String, token))
 }

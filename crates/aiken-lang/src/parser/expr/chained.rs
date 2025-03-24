@@ -9,7 +9,7 @@ use super::{
 use crate::{
     expr::UntypedExpr,
     parser::{
-        chain::{call::parser as call, field_access, tuple_index::parser as tuple_index, Chain},
+        chain::{Chain, call::parser as call, field_access, tuple_index::parser as tuple_index},
         error::ParseError,
         token::Token,
     },

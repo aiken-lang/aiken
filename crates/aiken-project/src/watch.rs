@@ -1,4 +1,4 @@
-use crate::{config::WorkspaceConfig, telemetry::EventTarget, Project};
+use crate::{Project, config::WorkspaceConfig, telemetry::EventTarget};
 use miette::{Diagnostic, IntoDiagnostic};
 use notify::{Event, RecursiveMode, Watcher};
 use owo_colors::{OwoColorize, Stream::Stderr};

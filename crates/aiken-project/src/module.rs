@@ -1,5 +1,6 @@
 use crate::{Error, Warning};
 use aiken_lang::{
+    IdGenerator,
     ast::{
         DataType, DataTypeKey, Definition, Function, FunctionAccessKey, Located, ModuleKind,
         Tracing, TypedDataType, TypedFunction, TypedModule, TypedValidator, UntypedModule,
@@ -7,13 +8,12 @@ use aiken_lang::{
     },
     expr::TypedExpr,
     line_numbers::LineNumbers,
-    parser::extra::{comments_before, Comment, ModuleExtra},
+    parser::extra::{Comment, ModuleExtra, comments_before},
     tipo::TypeInfo,
-    IdGenerator,
 };
 use indexmap::IndexMap;
 use miette::NamedSource;
-use petgraph::{algo, graph::NodeIndex, Direction, Graph};
+use petgraph::{Direction, Graph, algo, graph::NodeIndex};
 use std::{
     collections::{BTreeSet, HashMap},
     io,

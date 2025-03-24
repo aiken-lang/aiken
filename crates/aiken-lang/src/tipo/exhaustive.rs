@@ -1,6 +1,6 @@
 use crate::{
     ast,
-    tipo::{self, environment::Environment, error::Error, Type},
+    tipo::{self, Type, environment::Environment, error::Error},
 };
 use itertools::Itertools;
 use std::{collections::BTreeMap, iter, ops::Deref};
@@ -407,11 +407,7 @@ impl Pattern {
                     .filter_map(|(index, p)| {
                         if index == 1 {
                             let tail = pretty_tail(p);
-                            if tail == "[]" {
-                                None
-                            } else {
-                                Some(tail)
-                            }
+                            if tail == "[]" { None } else { Some(tail) }
                         } else {
                             Some(p.pretty())
                         }
