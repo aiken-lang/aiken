@@ -372,13 +372,24 @@ impl<'comments> Formatter<'comments> {
                 bytes,
                 preferred_format,
                 ..
-            } => self.bytearray(bytes, None, preferred_format),
+            } => self.bytearray(
+                &bytes
+                    .iter()
+                    .map(|b| (*b, Span::empty()))
+                    .collect::<Vec<(u8, Span)>>(),
+                None,
+                preferred_format,
+            ),
             TypedExpr::CurvePoint {
                 point,
                 preferred_format,
                 ..
             } => self.bytearray(
-                &point.compress(),
+                &point
+                    .compress()
+                    .into_iter()
+                    .map(|b| (b, Span::empty()))
+                    .collect::<Vec<(u8, Span)>>(),
                 Some(point.as_ref().into()),
                 preferred_format,
             ),
@@ -895,7 +906,7 @@ impl<'comments> Formatter<'comments> {
 
     pub fn bytearray<'a>(
         &mut self,
-        bytes: &[u8],
+        bytes: &[(u8, Span)],
         curve: Option<CurveType>,
         preferred_format: &ByteArrayFormatPreference,
     ) -> Document<'a> {
@@ -906,7 +917,9 @@ impl<'comments> Formatter<'comments> {
                     curve.map(|c| c.to_string()).unwrap_or_default(),
                 ))
                 .append("\"")
-                .append(Document::String(hex::encode(bytes)))
+                .append(Document::String(hex::encode(
+                    bytes.iter().map(|(b, _)| *b).collect::<Vec<u8>>(),
+                )))
                 .append("\""),
             ByteArrayFormatPreference::ArrayOfBytes(Base::Decimal { .. }) => "#"
                 .to_doc()
@@ -914,8 +927,19 @@ impl<'comments> Formatter<'comments> {
                     curve.map(|c| c.to_string()).unwrap_or_default(),
                 ))
                 .append(
-                    flex_break("[", "[")
-                        .append(join(bytes.iter().map(|b| b.to_doc()), break_(",", ", ")))
+                    break_("[", "[")
+                        .append(join(
+                            bytes.iter().map(|b| {
+                                let doc = b.0.to_doc();
+
+                                if b.1 == Span::empty() {
+                                    doc
+                                } else {
+                                    commented(doc, self.pop_comments(b.1.start))
+                                }
+                            }),
+                            break_(",", ", "),
+                        ))
                         .nest(INDENT)
                         .append(break_(",", ""))
                         .append("]"),
@@ -927,14 +951,20 @@ impl<'comments> Formatter<'comments> {
                     curve.map(|c| c.to_string()).unwrap_or_default(),
                 ))
                 .append(
-                    flex_break("[", "[")
+                    break_("[", "[")
                         .append(join(
                             bytes.iter().map(|b| {
-                                Document::String(if *b < 16 {
-                                    format!("0x0{b:x}")
+                                let doc = Document::String(if b.0 < 16 {
+                                    format!("0x0{:x}", b.0)
                                 } else {
-                                    format!("{b:#x}")
-                                })
+                                    format!("{:#x}", b.0)
+                                });
+
+                                if b.1 == Span::empty() {
+                                    doc
+                                } else {
+                                    commented(doc, self.pop_comments(b.1.start))
+                                }
                             }),
                             break_(",", ", "),
                         ))
@@ -946,7 +976,8 @@ impl<'comments> Formatter<'comments> {
             ByteArrayFormatPreference::Utf8String => nil()
                 .append("\"")
                 .append(Document::String(escape(
-                    core::str::from_utf8(bytes).unwrap(),
+                    core::str::from_utf8(&bytes.iter().map(|(b, _)| *b).collect::<Vec<u8>>())
+                        .unwrap(),
                 )))
                 .append("\""),
         }
@@ -1007,7 +1038,11 @@ impl<'comments> Formatter<'comments> {
                 preferred_format,
                 ..
             } => self.bytearray(
-                &point.compress(),
+                &point
+                    .compress()
+                    .into_iter()
+                    .map(|b| (b, Span::empty()))
+                    .collect::<Vec<(u8, Span)>>(),
                 Some(point.as_ref().into()),
                 preferred_format,
             ),

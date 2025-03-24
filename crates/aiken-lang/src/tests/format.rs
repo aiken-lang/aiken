@@ -45,6 +45,21 @@ fn format_nul_byte() {
 }
 
 #[test]
+fn format_allow_comments_in_byte_array() {
+    assert_format!(
+        r#"
+        pub const thing =
+          #[
+            // thing
+            0x12,
+            // wow
+            0x10,
+          ]
+        "#
+    );
+}
+
+#[test]
 fn format_g1_element_constant() {
     assert_format!(
         r#"
