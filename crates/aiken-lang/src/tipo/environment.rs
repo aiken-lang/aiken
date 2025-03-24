@@ -1,19 +1,19 @@
 use super::{
-    error::{Error, Warning},
-    exhaustive::{simplify, Matrix, PatternStack},
-    hydrator::Hydrator,
     AccessorsMap, RecordAccessor, Type, TypeConstructor, TypeInfo, TypeVar, ValueConstructor,
     ValueConstructorVariant,
+    error::{Error, Warning},
+    exhaustive::{Matrix, PatternStack, simplify},
+    hydrator::Hydrator,
 };
 use crate::{
+    IdGenerator,
     ast::{
         self, Annotation, CallArg, DataType, Definition, Function, ModuleConstant, ModuleKind,
-        Namespace, RecordConstructor, RecordConstructorArg, Span, TypeAlias, TypedDefinition,
-        TypedFunction, TypedPattern, TypedValidator, UnqualifiedImport, UntypedArg,
-        UntypedDefinition, UntypedFunction, Use, Validator, PIPE_VARIABLE,
+        Namespace, PIPE_VARIABLE, RecordConstructor, RecordConstructorArg, Span, TypeAlias,
+        TypedDefinition, TypedFunction, TypedPattern, TypedValidator, UnqualifiedImport,
+        UntypedArg, UntypedDefinition, UntypedFunction, Use, Validator,
     },
-    tipo::{fields::FieldMap, TypeAliasAnnotation},
-    IdGenerator,
+    tipo::{TypeAliasAnnotation, fields::FieldMap},
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -1157,7 +1157,7 @@ impl<'a> Environment<'a> {
             let first_error = unknowns.first().cloned();
 
             unknowns.retain(|err| {
-                if let Error::UnknownType { ref name, .. } = err {
+                if let Error::UnknownType { name, .. } = err {
                     !type_definitions.contains(&Some(name))
                 } else {
                     false

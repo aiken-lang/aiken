@@ -2,11 +2,11 @@ use aiken_project::{config, pretty};
 #[cfg(not(target_os = "windows"))]
 use cmd::completion;
 use cmd::{
-    benchmark,
+    Cmd, benchmark,
     blueprint::{self, address},
     build, check, docs, export, fmt, lsp, new,
     packages::{self, add},
-    tx, uplc, Cmd,
+    tx, uplc,
 };
 use owo_colors::OwoColorize;
 

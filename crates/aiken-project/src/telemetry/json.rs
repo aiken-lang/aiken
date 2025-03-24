@@ -1,4 +1,4 @@
-use super::{group_by_module, Event, EventListener};
+use super::{Event, EventListener, group_by_module};
 use aiken_lang::{
     ast::OnTestFailure,
     expr::UntypedExpr,
@@ -76,10 +76,8 @@ impl EventListener for Json {
 
 fn fmt_test_json(result: &TestResult<UntypedExpr, UntypedExpr>) -> serde_json::Value {
     let on_test_failure = match result {
-        TestResult::UnitTestResult(UnitTestResult { ref test, .. }) => &test.on_test_failure,
-        TestResult::PropertyTestResult(PropertyTestResult { ref test, .. }) => {
-            &test.on_test_failure
-        }
+        TestResult::UnitTestResult(UnitTestResult { test, .. }) => &test.on_test_failure,
+        TestResult::PropertyTestResult(PropertyTestResult { test, .. }) => &test.on_test_failure,
         TestResult::BenchmarkResult(_) => unreachable!("benchmark returned in JSON output"),
     };
 

@@ -6,7 +6,7 @@ pub mod schema;
 pub mod validator;
 
 use crate::{
-    config::{self, ProjectConfig, PlutusVersion},
+    config::{self, PlutusVersion, ProjectConfig},
     module::CheckedModules,
 };
 use aiken_lang::gen_uplc::CodeGenerator;

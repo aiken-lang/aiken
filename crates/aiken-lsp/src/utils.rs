@@ -1,7 +1,7 @@
 use crate::error::Error;
 use aiken_lang::{ast::Span, line_numbers::LineNumbers};
 use itertools::Itertools;
-use lsp_types::{notification::Notification, TextEdit};
+use lsp_types::{TextEdit, notification::Notification};
 use std::path::{Path, PathBuf};
 use urlencoding::decode;
 

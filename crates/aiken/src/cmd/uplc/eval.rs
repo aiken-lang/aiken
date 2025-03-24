@@ -9,8 +9,8 @@ use uplc::{
     ast::{FakeNamedDeBruijn, Name, NamedDeBruijn, Program, Term},
     builtins::DefaultFunction,
     machine::{
-        cost_model::{ExBudget, StepKind},
         TERM_COUNT,
+        cost_model::{ExBudget, StepKind},
     },
     parser,
 };

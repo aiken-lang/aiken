@@ -5,8 +5,8 @@ use crate::{
     quickfix,
     quickfix::Quickfix,
     utils::{
-        path_to_uri, span_to_lsp_range, text_edit_replace, uri_to_module_name,
-        COMPILING_PROGRESS_TOKEN, CREATE_COMPILING_PROGRESS_TOKEN,
+        COMPILING_PROGRESS_TOKEN, CREATE_COMPILING_PROGRESS_TOKEN, path_to_uri, span_to_lsp_range,
+        text_edit_replace, uri_to_module_name,
     },
 };
 use aiken_lang::{
@@ -25,6 +25,7 @@ use indoc::formatdoc;
 use itertools::Itertools;
 use lsp_server::{Connection, Message};
 use lsp_types::{
+    DocumentFormattingParams, InitializeParams, TextEdit,
     notification::{
         DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument, DidSaveTextDocument,
         Notification, Progress, PublishDiagnostics, ShowMessage,
@@ -33,7 +34,6 @@ use lsp_types::{
         CodeActionRequest, Completion, Formatting, GotoDefinition, HoverRequest, Request,
         WorkDoneProgressCreate,
     },
-    DocumentFormattingParams, InitializeParams, TextEdit,
 };
 use miette::Diagnostic;
 use std::{

@@ -1,9 +1,9 @@
 use num_bigint::ToBigInt;
 use pallas_codec::utils::MaybeIndefArray;
 use uplc::{
+    Constr, PlutusData,
     ast::{Constant, Name, Term, Type},
     parser::term,
-    Constr, PlutusData,
 };
 
 // Examples sourced from https://github.com/input-output-hk/plutus/issues/4751#issuecomment-1538377273

@@ -1,7 +1,7 @@
 use super::Chain;
 use crate::{
     ast::well_known,
-    parser::{token::Token, ParseError},
+    parser::{ParseError, token::Token},
 };
 use chumsky::prelude::*;
 

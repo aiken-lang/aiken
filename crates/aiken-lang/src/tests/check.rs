@@ -1,4 +1,5 @@
 use crate::{
+    IdGenerator,
     ast::{
         Definition, ModuleKind, Pattern, TraceLevel, Tracing, TypedModule, UntypedModule,
         UntypedPattern,
@@ -7,7 +8,6 @@ use crate::{
     expr::{CallArg, Span, TypedExpr},
     parser,
     tipo::error::{Error, UnifyErrorSituation, Warning},
-    IdGenerator,
 };
 use std::collections::HashMap;
 
@@ -43,7 +43,9 @@ fn check_module(
         let mut warnings = vec![];
 
         if module.name == DEFAULT_MODULE_NAME {
-            panic!("passed extra modules with default name! Use 'parse_as' to define tests instead of 'parse'.");
+            panic!(
+                "passed extra modules with default name! Use 'parse_as' to define tests instead of 'parse'."
+            );
         }
 
         let typed_module = module
@@ -2976,7 +2978,7 @@ fn correct_span_for_backpassing_args() {
     let (warnings, _ast) = check(parse(source_code)).unwrap();
 
     assert!(
-        matches!(&warnings[0], Warning::UnusedVariable { ref name, location } if name == "b" && location.start == 245 && location.end == 246)
+        matches!(&warnings[0], Warning::UnusedVariable { name, location } if name == "b" && location.start == 245 && location.end == 246)
     );
 }
 
@@ -3407,7 +3409,7 @@ fn side_effects() {
 
     assert!(warnings.is_empty(), "no warnings: {warnings:#?}");
 
-    if let Some(Definition::Fn(ref foo)) = ast.definitions().last() {
+    if let Some(Definition::Fn(foo)) = ast.definitions().last() {
         if let TypedExpr::Sequence {
             ref expressions, ..
         } = foo.body

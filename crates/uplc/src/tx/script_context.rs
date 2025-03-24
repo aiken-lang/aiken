@@ -1,4 +1,4 @@
-use super::{to_plutus_data::MintValue, Error};
+use super::{Error, to_plutus_data::MintValue};
 use crate::tx::iter_redeemers;
 use itertools::Itertools;
 use pallas_addresses::{Address, Network, StakePayload};
@@ -1134,14 +1134,14 @@ mod tests {
     use crate::{
         ast::Data,
         tx::{
+            ResolvedInput, SlotConfig,
             script_context::{TxInfo, TxInfoV3},
             to_plutus_data::ToPlutusData,
-            ResolvedInput, SlotConfig,
         },
     };
     use pallas_primitives::{
-        conway::{ExUnits, PlutusData, Redeemer, RedeemerTag, TransactionInput, TransactionOutput},
         Fragment,
+        conway::{ExUnits, PlutusData, Redeemer, RedeemerTag, TransactionInput, TransactionOutput},
     };
     use pallas_traverse::{Era, MultiEraTx};
 

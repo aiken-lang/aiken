@@ -7,7 +7,7 @@ use itertools::{Either, Itertools, Position};
 
 use crate::{
     ast::{DataTypeKey, Pattern, TypedClause, TypedDataType, TypedPattern},
-    expr::{lookup_data_type_by_tipo, Type, TypeVar, TypedExpr},
+    expr::{Type, TypeVar, TypedExpr, lookup_data_type_by_tipo},
 };
 
 use super::{interner::AirInterner, tree::AirTree};
@@ -726,10 +726,12 @@ impl<'a, 'b> TreeGen<'a, 'b> {
 
         // First step make sure all rows have same number of columns
         // or something went wrong
-        assert!(matrix
-            .rows
-            .iter()
-            .all(|row| { row.columns.len() == column_length }));
+        assert!(
+            matrix
+                .rows
+                .iter()
+                .all(|row| { row.columns.len() == column_length })
+        );
 
         // Find which column has the most important pattern
         let occurrence_col = highest_occurrence(&matrix, column_length);
@@ -1367,6 +1369,7 @@ mod tester {
     use indexmap::IndexMap;
 
     use crate::{
+        IdGenerator,
         ast::{
             Definition, ModuleKind, Span, TraceLevel, Tracing, TypedModule, TypedPattern,
             UntypedModule,
@@ -1376,7 +1379,7 @@ mod tester {
         gen_uplc::{decision_tree::TreeGen, interner::AirInterner},
         parser,
         tipo::error::{Error, Warning},
-        utils, IdGenerator,
+        utils,
     };
 
     fn parse(source_code: &str) -> UntypedModule {

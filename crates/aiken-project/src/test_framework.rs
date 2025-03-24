@@ -5,6 +5,7 @@ mod test {
         utils,
     };
     use aiken_lang::{
+        IdGenerator,
         ast::{DataTypeKey, Definition, ModuleKind, TraceLevel, Tracing, TypedDataType},
         builtins,
         expr::UntypedExpr,
@@ -14,7 +15,6 @@ mod test {
         parser::{self, extra::ModuleExtra},
         plutus_version::PlutusVersion,
         test_framework::*,
-        IdGenerator,
     };
     use indexmap::IndexMap;
     use indoc::indoc;
@@ -246,12 +246,14 @@ mod test {
             }
         "#});
 
-        assert!(TestResult::PropertyTestResult::<(), _>(prop.run(
-            42,
-            PropertyTest::DEFAULT_MAX_SUCCESS,
-            &PlutusVersion::default()
-        ))
-        .is_success());
+        assert!(
+            TestResult::PropertyTestResult::<(), _>(prop.run(
+                42,
+                PropertyTest::DEFAULT_MAX_SUCCESS,
+                &PlutusVersion::default()
+            ))
+            .is_success()
+        );
     }
 
     #[test]

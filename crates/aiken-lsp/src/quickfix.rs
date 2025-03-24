@@ -238,7 +238,7 @@ fn unknown_identifier(
 ) -> Vec<AnnotatedEdit> {
     let mut edits = Vec::new();
 
-    if let Some(serde_json::Value::String(ref var_name)) = data {
+    if let Some(serde_json::Value::String(var_name)) = data {
         for module in compiler.project.modules() {
             if module.ast.has_definition(var_name) {
                 if let Some(edit) = parsed_document.import(&module, Some(var_name)) {
@@ -263,7 +263,7 @@ fn unknown_constructor(
 ) -> Vec<AnnotatedEdit> {
     let mut edits = Vec::new();
 
-    if let Some(serde_json::Value::String(ref constructor_name)) = data {
+    if let Some(serde_json::Value::String(constructor_name)) = data {
         for module in compiler.project.modules() {
             if module.ast.has_constructor(constructor_name) {
                 if let Some(edit) = parsed_document.import(&module, Some(constructor_name)) {
@@ -316,7 +316,7 @@ fn unknown_module(
 ) -> Vec<AnnotatedEdit> {
     let mut edits = Vec::new();
 
-    if let Some(serde_json::Value::String(ref module_name)) = data {
+    if let Some(serde_json::Value::String(module_name)) = data {
         for module in compiler.project.modules() {
             if module.name.ends_with(module_name) {
                 if let Some(edit) = parsed_document.import(&module, None) {
@@ -336,7 +336,7 @@ fn unused_imports(
     let mut edits = Vec::new();
 
     for data in datas.iter().rev().flatten() {
-        if let serde_json::Value::String(ref args) = data {
+        if let serde_json::Value::String(args) = data {
             let args = args.split(',').collect::<Vec<&str>>();
             match args.as_slice() {
                 &[is_qualified, start] => {
@@ -362,7 +362,7 @@ fn unused_imports(
 fn utf8_byte_array_is_hex_string(diagnostic: &lsp_types::Diagnostic) -> Vec<AnnotatedEdit> {
     let mut edits = Vec::new();
 
-    if let Some(serde_json::Value::String(ref value)) = diagnostic.data.as_ref() {
+    if let Some(serde_json::Value::String(value)) = diagnostic.data.as_ref() {
         edits.push(AnnotatedEdit::SimpleEdit(
             "Prefix with #".to_string(),
             lsp_types::TextEdit {

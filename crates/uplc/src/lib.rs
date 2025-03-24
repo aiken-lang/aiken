@@ -12,9 +12,9 @@ pub mod tx;
 pub use pallas_codec::utils::KeyValuePairs;
 pub use pallas_crypto::hash::Hash;
 pub use pallas_primitives::{
+    Error, Fragment,
     alonzo::{BigInt, Constr, PlutusData},
     babbage::{PostAlonzoTransactionOutput, TransactionInput, TransactionOutput, Value},
-    Error, Fragment,
 };
 pub use tx::redeemer_tag_to_string;
 

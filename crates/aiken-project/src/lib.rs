@@ -21,9 +21,9 @@ mod tests;
 
 use crate::{
     blueprint::{
+        Blueprint,
         definitions::Definitions,
         schema::{Annotated, Schema},
-        Blueprint,
     },
     config::ProjectConfig,
     error::{Error, Warning},
@@ -31,6 +31,7 @@ use crate::{
     telemetry::Event,
 };
 use aiken_lang::{
+    IdGenerator,
     ast::{
         self, DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Tracing, TypedDataType,
         TypedFunction, UntypedDefinition,
@@ -42,7 +43,7 @@ use aiken_lang::{
     line_numbers::LineNumbers,
     test_framework::{RunnableKind, Test, TestResult},
     tipo::{Type, TypeInfo},
-    utils, IdGenerator,
+    utils,
 };
 use export::Export;
 use indexmap::IndexMap;
@@ -60,8 +61,8 @@ use std::{
 };
 use telemetry::EventListener;
 use uplc::{
-    ast::{Constant, Name, Program},
     PlutusData,
+    ast::{Constant, Name, Program},
 };
 
 #[derive(Debug)]

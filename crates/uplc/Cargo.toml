@@ -1,13 +1,15 @@
 [package]
 name = "uplc"
+version.workspace = true
+edition.workspace = true
 description = "Utilities for working with Untyped Plutus Core"
-version = "1.1.15"
-edition = "2021"
-repository = "https://github.com/aiken-lang/aiken"
-homepage = "https://github.com/aiken-lang/aiken"
-license = "Apache-2.0"
+license.workspace = true
 authors = ["Lucas Rosa <x@rvcas.dev>", "Kasey White <kwhitemsg@gmail.com>"]
-rust-version = "1.70.0"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+rust-version.workspace = true
+
 exclude = ["test_data/*"]
 
 [dependencies]

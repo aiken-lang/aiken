@@ -9,17 +9,17 @@ pub(crate) use crate::{
     },
     parser::token::Base,
     tipo::{
-        check_replaceable_opaque_type, convert_opaque_type, lookup_data_type_by_tipo,
         ModuleValueConstructor, Type, TypeVar, ValueConstructor, ValueConstructorVariant,
+        check_replaceable_opaque_type, convert_opaque_type, lookup_data_type_by_tipo,
     },
 };
 use indexmap::IndexMap;
 use pallas_primitives::alonzo::{Constr, PlutusData};
 use std::{fmt::Debug, rc::Rc};
 use uplc::{
+    KeyValuePairs,
     ast::Data,
     machine::{runtime::convert_tag_to_constr, value::from_pallas_bigint},
-    KeyValuePairs,
 };
 use vec1::Vec1;
 
@@ -1219,31 +1219,23 @@ impl UntypedExpr {
                                     name: constructor.name.to_string(),
                                 })
                             } else {
-                                let arguments =
-                                    fields
-                                        .to_vec()
-                                        .into_iter()
-                                        .zip(constructor.arguments.iter())
-                                        .map(
-                                            |(
-                                                field,
-                                                RecordConstructorArg {
-                                                    ref label,
-                                                    ref tipo,
-                                                    ..
-                                                },
-                                            )| {
-                                                UntypedExpr::do_reify_data(
-                                                    generics, data_types, field, tipo,
-                                                )
-                                                .map(|value| CallArg {
-                                                    label: label.clone(),
-                                                    location: Span::empty(),
-                                                    value,
-                                                })
-                                            },
+                                let arguments = fields
+                                    .to_vec()
+                                    .into_iter()
+                                    .zip(constructor.arguments.iter())
+                                    .map(|(field, RecordConstructorArg { label, tipo, .. })| {
+                                        UntypedExpr::do_reify_data(
+                                            generics, data_types, field, tipo,
                                         )
-                                        .collect::<Result<Vec<_>, _>>()?;
+                                        .map(|value| {
+                                            CallArg {
+                                                label: label.clone(),
+                                                location: Span::empty(),
+                                                value,
+                                            }
+                                        })
+                                    })
+                                    .collect::<Result<Vec<_>, _>>()?;
 
                                 Ok(UntypedExpr::Call {
                                     location: Span::empty(),

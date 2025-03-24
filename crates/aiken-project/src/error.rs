@@ -432,12 +432,14 @@ impl Diagnostic for Error {
             ))),
             Error::NoValidatorNotFound { known_validators } => Some(Box::new(hint_validators(
                 known_validators,
-                "Here's a list of all validators I've found in your project.\nPlease double-check this list against the options that you've provided."
+                "Here's a list of all validators I've found in your project.\nPlease double-check this list against the options that you've provided.",
             ))),
-            Error::MoreThanOneValidatorFound { known_validators } => Some(Box::new(hint_validators(
-                known_validators,
-                "Here's a list of matching validators I've found in your project.\nPlease narrow the selection using additional options.",
-            ))),
+            Error::MoreThanOneValidatorFound { known_validators } => {
+                Some(Box::new(hint_validators(
+                    known_validators,
+                    "Here's a list of matching validators I've found in your project.\nPlease narrow the selection using additional options.",
+                )))
+            }
             Error::Module(e) => e.help(),
         }
     }
@@ -697,12 +699,10 @@ impl Diagnostic for Warning {
             Warning::NoConfigurationForEnv { .. } => Some(Box::new(
                 "When configuration keys are missing for a target environment, no 'config' module will be created. This may lead to issues down the line.",
             )),
-            Warning::SuspiciousTestMatch { test } => Some(Box::new(
-                format!(
-                    "Did you mean to match all tests within a specific module? Like so:\n\n╰─▶ {}",
-                    format!("-m \"{test}.{{..}}\"").if_supports_color(Stderr, |s| s.bold()),
-                )
-            )),
+            Warning::SuspiciousTestMatch { test } => Some(Box::new(format!(
+                "Did you mean to match all tests within a specific module? Like so:\n\n╰─▶ {}",
+                format!("-m \"{test}.{{..}}\"").if_supports_color(Stderr, |s| s.bold()),
+            ))),
         }
     }
 }
@@ -826,12 +826,8 @@ fn hint_validators(known_validators: &BTreeSet<(String, String, bool)>, hint: &s
         {
             known_validators
                 .iter()
-                .map(|(module, validator, has_params)|  {
-                    let title = format!(
-                        "{:>pad_module$} . {:<pad_validator$}",
-                        module,
-                        validator,
-                    );
+                .map(|(module, validator, has_params)| {
+                    let title = format!("{:>pad_module$} . {:<pad_validator$}", module, validator,);
                     if *has_params {
                         title
                             .if_supports_color(Stderr, |s| s.bold())

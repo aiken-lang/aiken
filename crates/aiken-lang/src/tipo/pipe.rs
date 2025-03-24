@@ -1,10 +1,10 @@
 use super::{
+    Type, ValueConstructor, ValueConstructorVariant,
     error::{Error, UnifyErrorSituation},
     expr::ExprTyper,
-    Type, ValueConstructor, ValueConstructorVariant,
 };
 use crate::{
-    ast::{AssignmentKind, CallArg, Pattern, Span, PIPE_VARIABLE},
+    ast::{AssignmentKind, CallArg, PIPE_VARIABLE, Pattern, Span},
     expr::{TypedExpr, UntypedExpr},
 };
 use std::{ops::Deref, rc::Rc};

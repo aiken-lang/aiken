@@ -6,7 +6,7 @@ use uplc::{builder::CONSTR_FIELDS_EXPOSER, builtins::DefaultFunction};
 use crate::expr::Type;
 
 use super::{
-    decision_tree::{get_tipo_by_path, CaseTest, Path},
+    decision_tree::{CaseTest, Path, get_tipo_by_path},
     tree::AirTree,
 };
 

@@ -133,7 +133,7 @@ pub fn exec(
 
     let mut rng = rand::thread_rng();
 
-    let seed = seed.unwrap_or_else(|| rng.gen());
+    let seed = seed.unwrap_or_else(|| rng.r#gen());
 
     let result = if watch {
         watch_project(directory.as_deref(), watch::default_filter, 500, |p| {

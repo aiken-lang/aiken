@@ -1,20 +1,20 @@
 use crate::{
     ast::{
         Annotation, ArgBy, ArgName, ArgVia, AssignmentKind, AssignmentPattern, BinOp,
-        ByteArrayFormatPreference, CallArg, CurveType, DataType, Definition, Function,
-        LogicalOpChainKind, ModuleConstant, Namespace, OnTestFailure, Pattern, RecordConstructor,
-        RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias, TypedArg,
-        TypedValidator, UnOp, UnqualifiedImport, UntypedArg, UntypedArgVia, UntypedAssignmentKind,
-        UntypedClause, UntypedDefinition, UntypedFunction, UntypedIfBranch, UntypedModule,
-        UntypedPattern, UntypedRecordUpdateArg, Use, Validator, CAPTURE_VARIABLE,
+        ByteArrayFormatPreference, CAPTURE_VARIABLE, CallArg, CurveType, DataType, Definition,
+        Function, LogicalOpChainKind, ModuleConstant, Namespace, OnTestFailure, Pattern,
+        RecordConstructor, RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias,
+        TypedArg, TypedValidator, UnOp, UnqualifiedImport, UntypedArg, UntypedArgVia,
+        UntypedAssignmentKind, UntypedClause, UntypedDefinition, UntypedFunction, UntypedIfBranch,
+        UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use, Validator,
     },
     docvec,
-    expr::{FnStyle, TypedExpr, UntypedExpr, DEFAULT_ERROR_STR, DEFAULT_TODO_STR},
+    expr::{DEFAULT_ERROR_STR, DEFAULT_TODO_STR, FnStyle, TypedExpr, UntypedExpr},
     parser::{
         extra::{Comment, ModuleExtra},
         token::Base,
     },
-    pretty::{break_, concat, flex_break, join, line, lines, nil, Document, Documentable},
+    pretty::{Document, Documentable, break_, concat, flex_break, join, line, lines, nil},
     tipo::{self, Type},
 };
 use itertools::Itertools;
@@ -84,7 +84,10 @@ impl<'comments> Formatter<'comments> {
 
     // Pop comments that occur before a byte-index in the source, consuming
     // and retaining any empty lines contained within.
-    fn pop_comments(&mut self, limit: usize) -> impl Iterator<Item = Option<&'comments str>> {
+    fn pop_comments(
+        &mut self,
+        limit: usize,
+    ) -> impl Iterator<Item = Option<&'comments str>> + use<'comments> {
         let (popped, rest, empty_lines) =
             comments_before(self.comments, self.empty_lines, limit, true);
 
@@ -2130,11 +2133,7 @@ impl<'a> Documentable<'a> for &'a ArgName {
 }
 
 fn pub_(public: bool) -> Document<'static> {
-    if public {
-        "pub ".to_doc()
-    } else {
-        nil()
-    }
+    if public { "pub ".to_doc() } else { nil() }
 }
 
 impl<'a> Documentable<'a> for &'a UnqualifiedImport {

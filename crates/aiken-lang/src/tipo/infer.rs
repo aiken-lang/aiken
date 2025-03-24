@@ -1,11 +1,12 @@
 use super::{
+    TypeInfo, ValueConstructor, ValueConstructorVariant,
     environment::{EntityKind, Environment},
     error::{Error, UnifyErrorSituation, Warning},
     expr::ExprTyper,
     hydrator::Hydrator,
-    TypeInfo, ValueConstructor, ValueConstructorVariant,
 };
 use crate::{
+    IdGenerator,
     ast::{
         Annotation, ArgBy, ArgName, ArgVia, DataType, Definition, Function, ModuleConstant,
         ModuleKind, RecordConstructor, RecordConstructorArg, Tracing, TypeAlias, TypedArg,
@@ -14,8 +15,7 @@ use crate::{
     },
     expr::{TypedExpr, UntypedAssignmentKind, UntypedExpr},
     parser::token::Token,
-    tipo::{expr::infer_function, Span, Type, TypeVar},
-    IdGenerator,
+    tipo::{Span, Type, TypeVar, expr::infer_function},
 };
 use std::{
     borrow::Borrow,
@@ -758,8 +758,8 @@ where
         .get_mut(&f.name)
         .expect("Could not find preregistered type for test");
     if let Type::Fn {
-        ref ret,
-        ref alias,
+        ret,
+        alias,
         args: _,
     } = scope.tipo.as_ref()
     {

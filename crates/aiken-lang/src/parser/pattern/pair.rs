@@ -1,5 +1,5 @@
 use crate::{
-    ast::{well_known, UntypedPattern},
+    ast::{UntypedPattern, well_known},
     parser::{error::ParseError, token::Token},
 };
 use chumsky::prelude::*;

@@ -1662,9 +1662,7 @@ pub enum Warning {
         "I discovered an unused constructor: {}",
         name.if_supports_color(Stderr, |s| s.default_color())
     )]
-    #[diagnostic(help(
-        "No big deal, but you might want to remove it to get rid of that warning."
-    ))]
+    #[diagnostic(help("No big deal, but you might want to remove it to get rid of that warning."))]
     #[diagnostic(code("unused::constructor"))]
     UnusedConstructor {
         #[label("unused constructor")]
@@ -1676,9 +1674,7 @@ pub enum Warning {
         "I discovered an unused imported module: {}",
         name.if_supports_color(Stderr, |s| s.default_color()),
     )]
-    #[diagnostic(help(
-        "No big deal, but you might want to remove it to get rid of that warning."
-    ))]
+    #[diagnostic(help("No big deal, but you might want to remove it to get rid of that warning."))]
     #[diagnostic(code("unused::import::module"))]
     UnusedImportedModule {
         #[label("unused module")]
@@ -1690,9 +1686,7 @@ pub enum Warning {
         "I discovered an unused imported value: {}",
         name.if_supports_color(Stderr, |s| s.default_color()),
     )]
-    #[diagnostic(help(
-        "No big deal, but you might want to remove it to get rid of that warning."
-    ))]
+    #[diagnostic(help("No big deal, but you might want to remove it to get rid of that warning."))]
     #[diagnostic(code("unused:import::value"))]
     UnusedImportedValueOrType {
         #[label("unused import")]
@@ -1867,7 +1861,9 @@ pub enum Warning {
     },
 
     #[error("I noticed a (compact) dynamic trace label which is not a string")]
-    #[diagnostic(help("Compiling with a compact trace-level, you are probably expecting compact traces although here, the entire label will need to be serialise *at runtime* which will add a significant overhead.\n\nAs a reminder, trace arguments are fully ignored in compact tracing. Hence, you probably want to put a cute little label here and move the current trace as argument!"))]
+    #[diagnostic(help(
+        "Compiling with a compact trace-level, you are probably expecting compact traces although here, the entire label will need to be serialise *at runtime* which will add a significant overhead.\n\nAs a reminder, trace arguments are fully ignored in compact tracing. Hence, you probably want to put a cute little label here and move the current trace as argument!"
+    ))]
     #[diagnostic(code("trace::label_is_not_string"))]
     #[diagnostic(url("https://aiken-lang.org/language-tour/troubleshooting#traces"))]
     CompactTraceLabelIsNotstring {

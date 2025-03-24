@@ -1,17 +1,15 @@
 [package]
 name = "aiken-project"
-description = "Aiken project utilities"
-version = "1.1.15"
-edition = "2021"
-repository = "https://github.com/aiken-lang/aiken"
-homepage = "https://github.com/aiken-lang/aiken"
-license = "Apache-2.0"
-authors = [
-    "Lucas Rosa <x@rvcas.dev>",
-    "Kasey White <kwhitemsg@gmail.com>",
-    "KtorZ <matthias.benkort@gmail.com>",
-]
-rust-version = "1.80.0"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+rust-version.workspace = true
+
 build = "build.rs"
 
 [dependencies]

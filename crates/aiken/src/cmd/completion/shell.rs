@@ -1,6 +1,6 @@
 use crate::{cmd::Cmd as MainCmd, pretty};
 use clap::{Command, Subcommand};
-use clap_complete::{generate, Shell};
+use clap_complete::{Shell, generate};
 use std::{
     fmt::{self, Display},
     fs::{File, OpenOptions},

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
 
 use crate::{
-    config::{ProjectConfig, Dependency},
+    config::{Dependency, ProjectConfig},
     error::{Error, TomlLoadingContext},
     package_name::PackageName,
     paths,
@@ -133,7 +133,11 @@ impl From<&Manifest> for LocalPackages {
     }
 }
 
-pub fn download<T>(event_listener: &T, root_path: &Path, config: &ProjectConfig) -> Result<Manifest, Error>
+pub fn download<T>(
+    event_listener: &T,
+    root_path: &Path,
+    config: &ProjectConfig,
+) -> Result<Manifest, Error>
 where
     T: EventListener,
 {

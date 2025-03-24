@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use vec1::{vec1, Vec1};
+use vec1::{Vec1, vec1};
 
 #[derive(Clone)]
 pub struct AirInterner {

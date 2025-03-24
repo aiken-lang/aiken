@@ -1,5 +1,5 @@
 use crate::{
-    error::TomlLoadingContext, github::repo::LatestRelease, package_name::PackageName, paths, Error,
+    Error, error::TomlLoadingContext, github::repo::LatestRelease, package_name::PackageName, paths,
 };
 use aiken_lang::{
     ast::{Annotation, ByteArrayFormatPreference, ModuleConstant, Span, UntypedDefinition},
@@ -11,9 +11,8 @@ use glob::glob;
 use miette::NamedSource;
 use semver::Version;
 use serde::{
-    de,
+    Deserialize, Serialize, de,
     ser::{self, SerializeSeq, SerializeStruct},
-    Deserialize, Serialize,
 };
 use std::{
     collections::BTreeMap,

@@ -5,8 +5,8 @@ use super::{
 };
 use std::{iter, ops::Deref};
 use uplc::{
-    ast::{Constant, Data as UplcData},
     PlutusData,
+    ast::{Constant, Data as UplcData},
 };
 
 #[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
@@ -34,7 +34,7 @@ impl Parameter {
     ) -> Result<(), Error> {
         let schema = match &self.schema {
             Declaration::Inline(schema) => schema,
-            Declaration::Referenced(ref link) => {
+            Declaration::Referenced(link) => {
                 &definitions
                     .lookup(link)
                     .map(Ok)
@@ -353,11 +353,13 @@ fn expect_data_constr(term: &Constant, index: usize) -> Result<Vec<Constant>, Er
 
     Err(mismatch(
         term,
-        Schema::Data(Data::AnyOf(vec![Constructor {
-            index,
-            fields: vec![],
-        }
-        .into()])),
+        Schema::Data(Data::AnyOf(vec![
+            Constructor {
+                index,
+                fields: vec![],
+            }
+            .into(),
+        ])),
     ))
 }
 

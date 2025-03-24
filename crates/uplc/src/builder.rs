@@ -799,7 +799,7 @@ mod tests {
     use crate::{
         ast::{Data, Name, NamedDeBruijn, Program, Term},
         builder::Constant,
-        machine::{cost_model::ExBudget, Error},
+        machine::{Error, cost_model::ExBudget},
         optimize::interner::CodeGenInterner,
     };
 

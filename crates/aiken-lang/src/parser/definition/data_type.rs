@@ -84,8 +84,8 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
         )
 }
 
-fn labeled_constructor_type_args(
-) -> impl Parser<Token, Vec<ast::RecordConstructorArg<()>>, Error = ParseError> {
+fn labeled_constructor_type_args()
+-> impl Parser<Token, Vec<ast::RecordConstructorArg<()>>, Error = ParseError> {
     select! {Token::Name {name} => name}
         .then_ignore(just(Token::Colon))
         .then(annotation())

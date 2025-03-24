@@ -4,7 +4,7 @@ use crate::{
     expr::UntypedExpr,
     parser::{
         annotation,
-        chain::{call::parser as call, field_access, tuple_index::parser as tuple_index, Chain},
+        chain::{Chain, call::parser as call, field_access, tuple_index::parser as tuple_index},
         error::ParseError,
         expr::{self, bytearray, int as uint, list, string, tuple, var},
         pattern,

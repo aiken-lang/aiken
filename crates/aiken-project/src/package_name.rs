@@ -1,5 +1,5 @@
 use owo_colors::{OwoColorize, Stream::Stdout};
-use serde::{de::Visitor, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::Visitor};
 use std::{
     fmt::{self, Display},
     str::FromStr,

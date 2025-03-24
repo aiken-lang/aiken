@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{
-    config::{ProjectConfig, Dependency, Platform},
+    config::{Dependency, Platform, ProjectConfig},
     error::{Error, TomlLoadingContext},
     package_name::PackageName,
     paths,
