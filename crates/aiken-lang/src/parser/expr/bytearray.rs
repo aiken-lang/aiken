@@ -11,12 +11,14 @@ pub fn parser() -> impl Parser<Token, UntypedExpr, Error = ParseError> {
         |bytes, preferred_format, curve, location, emit| match curve {
             Some(curve @ ast::CurveType::Bls12_381(point)) => {
                 let point = match point {
-                    ast::Bls12_381PointType::G1 => {
-                        blst::blst_p1::uncompress(&bytes).map(ast::Bls12_381Point::G1)
-                    }
-                    ast::Bls12_381PointType::G2 => {
-                        blst::blst_p2::uncompress(&bytes).map(ast::Bls12_381Point::G2)
-                    }
+                    ast::Bls12_381PointType::G1 => blst::blst_p1::uncompress(
+                        &bytes.iter().map(|&(byte, _)| byte).collect::<Vec<u8>>(),
+                    )
+                    .map(ast::Bls12_381Point::G1),
+                    ast::Bls12_381PointType::G2 => blst::blst_p2::uncompress(
+                        &bytes.iter().map(|&(byte, _)| byte).collect::<Vec<u8>>(),
+                    )
+                    .map(ast::Bls12_381Point::G2),
                 };
 
                 let point = point.unwrap_or_else(|_err| {

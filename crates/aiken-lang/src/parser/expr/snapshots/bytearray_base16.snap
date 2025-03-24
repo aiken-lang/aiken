@@ -5,9 +5,18 @@ description: "Code:\n\n#\"00aaff\""
 ByteArray {
     location: 0..9,
     bytes: [
-        0,
-        170,
-        255,
+        (
+            0,
+            0..0,
+        ),
+        (
+            170,
+            0..0,
+        ),
+        (
+            255,
+            0..0,
+        ),
     ],
     preferred_format: HexadecimalString,
 }

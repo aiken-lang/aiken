@@ -18,9 +18,18 @@ Module {
                             value: ByteArray {
                                 location: 21..26,
                                 bytes: [
-                                    226,
-                                    152,
-                                    133,
+                                    (
+                                        226,
+                                        0..0,
+                                    ),
+                                    (
+                                        152,
+                                        0..0,
+                                    ),
+                                    (
+                                        133,
+                                        0..0,
+                                    ),
                                 ],
                                 preferred_format: Utf8String,
                             },

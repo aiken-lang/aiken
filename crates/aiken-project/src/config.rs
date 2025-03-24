@@ -126,7 +126,7 @@ impl SimpleExpr {
             },
             SimpleExpr::ByteArray(bs, preferred_format) => UntypedExpr::ByteArray {
                 location: Span::empty(),
-                bytes: bs.to_vec(),
+                bytes: bs.iter().map(|b| (*b, Span::empty())).collect(),
                 preferred_format: *preferred_format,
             },
             SimpleExpr::List(es) => match annotation {
