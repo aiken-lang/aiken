@@ -1,5 +1,5 @@
 use aiken_project::{
-    config::{self, Config},
+    config::{self, ProjectConfig},
     package_name::{self, PackageName},
 };
 use indoc::{formatdoc, indoc};
@@ -46,7 +46,7 @@ fn create_project(args: Args, package_name: &PackageName) -> miette::Result<()> 
 
     readme(&root, &package_name.repo)?;
 
-    Config::default(package_name)
+    ProjectConfig::default(package_name)
         .save(&root)
         .into_diagnostic()?;
 

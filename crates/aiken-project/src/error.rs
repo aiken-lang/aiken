@@ -26,6 +26,7 @@ pub enum TomlLoadingContext {
     Project,
     Manifest,
     Package,
+    Workspace,
 }
 
 impl fmt::Display for TomlLoadingContext {
@@ -34,6 +35,7 @@ impl fmt::Display for TomlLoadingContext {
             TomlLoadingContext::Project => write!(f, "project"),
             TomlLoadingContext::Manifest => write!(f, "manifest"),
             TomlLoadingContext::Package => write!(f, "package"),
+            TomlLoadingContext::Workspace => write!(f, "workspace"),
         }
     }
 }

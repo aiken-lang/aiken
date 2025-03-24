@@ -1,5 +1,5 @@
 use aiken_project::{
-    config::{Config, Dependency, Platform},
+    config::{ProjectConfig, Dependency, Platform},
     error::Warning,
     package_name::PackageName,
     pretty,
@@ -35,7 +35,7 @@ pub fn exec(args: Args) -> miette::Result<()> {
         source: Platform::Github,
     };
 
-    let config = match Config::load(&root) {
+    let config = match ProjectConfig::load(&root) {
         Ok(config) => config,
         Err(e) => {
             e.report();

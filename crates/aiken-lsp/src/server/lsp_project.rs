@@ -1,5 +1,5 @@
 use aiken_lang::{ast::Tracing, line_numbers::LineNumbers, test_framework::PropertyTest};
-use aiken_project::{config::Config, error::Error as ProjectError, module::CheckedModule, Project};
+use aiken_project::{config::ProjectConfig, error::Error as ProjectError, module::CheckedModule, Project};
 use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Debug)]
@@ -18,7 +18,7 @@ pub struct LspProject {
 }
 
 impl LspProject {
-    pub fn new(config: Config, root: PathBuf, telemetry: super::telemetry::Lsp) -> Self {
+    pub fn new(config: ProjectConfig, root: PathBuf, telemetry: super::telemetry::Lsp) -> Self {
         Self {
             project: Project::new_with_config(config, root, telemetry),
             modules: HashMap::new(),

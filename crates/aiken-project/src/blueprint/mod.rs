@@ -6,7 +6,7 @@ pub mod schema;
 pub mod validator;
 
 use crate::{
-    config::{self, Config, PlutusVersion},
+    config::{self, ProjectConfig, PlutusVersion},
     module::CheckedModules,
 };
 use aiken_lang::gen_uplc::CodeGenerator;
@@ -58,7 +58,7 @@ pub enum LookupResult<'a, T> {
 
 impl Blueprint {
     pub fn new(
-        config: &Config,
+        config: &ProjectConfig,
         modules: &CheckedModules,
         generator: &mut CodeGenerator,
     ) -> Result<Self, Error> {
@@ -179,8 +179,8 @@ impl Blueprint {
     }
 }
 
-impl From<&Config> for Preamble {
-    fn from(config: &Config) -> Self {
+impl From<&ProjectConfig> for Preamble {
+    fn from(config: &ProjectConfig) -> Self {
         Preamble {
             title: config.name.to_string(),
             description: if config.description.is_empty() {
