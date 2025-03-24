@@ -7,6 +7,7 @@ use aiken_lang::{
     parser::token::Base,
 };
 pub use aiken_lang::{plutus_version::PlutusVersion, version::compiler_version};
+use glob::glob;
 use miette::NamedSource;
 use semver::Version;
 use serde::{
@@ -14,28 +15,92 @@ use serde::{
     ser::{self, SerializeSeq, SerializeStruct},
     Deserialize, Serialize,
 };
-use std::{collections::BTreeMap, fmt::Display, fs, io, path::Path};
+use std::{
+    collections::BTreeMap,
+    fmt::Display,
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 #[derive(Deserialize, Serialize, Clone)]
-pub struct Config {
+pub struct ProjectConfig {
     pub name: PackageName,
+
     pub version: String,
+
     #[serde(
         deserialize_with = "deserialize_version",
         serialize_with = "serialize_version",
         default = "default_version"
     )]
     pub compiler: Version,
+
     #[serde(default, deserialize_with = "validate_v3_only")]
     pub plutus: PlutusVersion,
+
     pub license: Option<String>,
+
     #[serde(default)]
     pub description: String,
+
     pub repository: Option<Repository>,
+
     #[serde(default)]
     pub dependencies: Vec<Dependency>,
+
     #[serde(default)]
     pub config: BTreeMap<String, BTreeMap<String, SimpleExpr>>,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+struct RawWorkspaceConfig {
+    members: Vec<String>,
+}
+
+impl RawWorkspaceConfig {
+    pub fn expand_members(self, root: &Path) -> Vec<PathBuf> {
+        let mut result = Vec::new();
+
+        for member in self.members {
+            let pattern = root.join(member);
+
+            let glob_result: Vec<_> = pattern
+                .to_str()
+                .and_then(|s| glob(s).ok())
+                .map_or(Vec::new(), |g| g.filter_map(Result::ok).collect());
+
+            if glob_result.is_empty() {
+                // No matches (or glob failed), treat as literal path
+                result.push(pattern);
+            } else {
+                // Glob worked, add all matches
+                result.extend(glob_result);
+            }
+        }
+
+        result
+    }
+}
+
+pub struct WorkspaceConfig {
+    pub members: Vec<PathBuf>,
+}
+
+impl WorkspaceConfig {
+    pub fn load(dir: &Path) -> Result<WorkspaceConfig, Error> {
+        let config_path = dir.join(paths::project_config());
+        let raw_config = fs::read_to_string(&config_path).map_err(|_| Error::MissingManifest {
+            path: dir.to_path_buf(),
+        })?;
+
+        let raw: RawWorkspaceConfig = toml::from_str(&raw_config).map_err(|e| {
+            from_toml_de_error(e, config_path, raw_config, TomlLoadingContext::Workspace)
+        })?;
+
+        let members = raw.expand_members(dir);
+
+        Ok(WorkspaceConfig { members })
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -303,9 +368,9 @@ impl Display for Platform {
     }
 }
 
-impl Config {
+impl ProjectConfig {
     pub fn default(name: &PackageName) -> Self {
-        Config {
+        ProjectConfig {
             name: name.clone(),
             version: "0.0.0".to_string(),
             compiler: default_version(),
@@ -338,23 +403,14 @@ impl Config {
         fs::write(aiken_toml_path, aiken_toml)
     }
 
-    pub fn load(dir: &Path) -> Result<Config, Error> {
+    pub fn load(dir: &Path) -> Result<ProjectConfig, Error> {
         let config_path = dir.join(paths::project_config());
         let raw_config = fs::read_to_string(&config_path).map_err(|_| Error::MissingManifest {
             path: dir.to_path_buf(),
         })?;
 
-        let result: Self = toml::from_str(&raw_config).map_err(|e| Error::TomlLoading {
-            ctx: TomlLoadingContext::Project,
-            path: config_path.clone(),
-            src: raw_config.clone(),
-            named: NamedSource::new(config_path.display().to_string(), raw_config).into(),
-            // this isn't actually a legit way to get the span
-            location: e.span().map(|range| Span {
-                start: range.start,
-                end: range.end,
-            }),
-            help: e.message().to_string(),
+        let result: Self = toml::from_str(&raw_config).map_err(|e| {
+            from_toml_de_error(e, config_path, raw_config, TomlLoadingContext::Project)
         })?;
 
         Ok(result)
@@ -385,6 +441,26 @@ where
     match version {
         PlutusVersion::V3 => Ok(version),
         _ => Err(serde::de::Error::custom("Aiken only supports Plutus V3")),
+    }
+}
+
+fn from_toml_de_error(
+    e: toml::de::Error,
+    config_path: PathBuf,
+    raw_config: String,
+    ctx: TomlLoadingContext,
+) -> Error {
+    Error::TomlLoading {
+        ctx,
+        path: config_path.clone(),
+        src: raw_config.clone(),
+        named: NamedSource::new(config_path.display().to_string(), raw_config).into(),
+        // this isn't actually a legit way to get the span
+        location: e.span().map(|range| Span {
+            start: range.start,
+            end: range.end,
+        }),
+        help: e.message().to_string(),
     }
 }
 

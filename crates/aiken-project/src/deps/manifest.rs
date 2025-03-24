@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{
-    config::{Config, Dependency, Platform},
+    config::{ProjectConfig, Dependency, Platform},
     error::{Error, TomlLoadingContext},
     package_name::PackageName,
     paths,
@@ -27,7 +27,7 @@ pub struct Manifest {
 impl Manifest {
     pub fn load<T>(
         event_listener: &T,
-        config: &Config,
+        config: &ProjectConfig,
         root_path: &Path,
     ) -> Result<(Self, bool), Error>
     where
@@ -121,7 +121,7 @@ pub struct Package {
     pub source: Platform,
 }
 
-fn resolve_versions<T>(config: &Config, event_listener: &T) -> Result<Manifest, Error>
+fn resolve_versions<T>(config: &ProjectConfig, event_listener: &T) -> Result<Manifest, Error>
 where
     T: EventListener,
 {

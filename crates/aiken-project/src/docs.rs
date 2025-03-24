@@ -1,5 +1,5 @@
 use crate::{
-    config::{Config, Repository},
+    config::{ProjectConfig, Repository},
     module::CheckedModule,
 };
 use aiken_lang::{
@@ -104,7 +104,7 @@ impl DocLink {
 /// The documentation is built using template files located at the root of this crate.
 /// With the documentation, we also build a client-side search index to ease navigation
 /// across multiple modules.
-pub fn generate_all(root: &Path, config: &Config, modules: Vec<&CheckedModule>) -> Vec<DocFile> {
+pub fn generate_all(root: &Path, config: &ProjectConfig, modules: Vec<&CheckedModule>) -> Vec<DocFile> {
     let timestamp = new_timestamp();
     let modules_links = generate_modules_links(&modules);
 
@@ -155,7 +155,7 @@ pub fn generate_all(root: &Path, config: &Config, modules: Vec<&CheckedModule>) 
 
 fn generate_module(
     root: &Path,
-    config: &Config,
+    config: &ProjectConfig,
     module: &CheckedModule,
     modules: &[DocLink],
     source: &DocLink,
@@ -376,7 +376,7 @@ fn generate_static_assets(search_indexes: Vec<SearchIndex>) -> Vec<DocFile> {
 
 fn generate_readme(
     root: &Path,
-    config: &Config,
+    config: &ProjectConfig,
     modules: &[DocLink],
     source: &DocLink,
     timestamp: &Duration,

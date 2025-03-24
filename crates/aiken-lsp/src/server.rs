@@ -17,7 +17,7 @@ use aiken_lang::{
     tipo::pretty::Printer,
 };
 use aiken_project::{
-    config::{self, Config},
+    config::{self, ProjectConfig},
     error::{Error as ProjectError, GetSource},
     module::CheckedModule,
 };
@@ -50,7 +50,7 @@ pub struct Server {
     // Project root directory
     root: PathBuf,
 
-    config: Option<config::Config>,
+    config: Option<config::ProjectConfig>,
 
     /// Files that have been edited in memory
     edited: HashMap<String, String>,
@@ -235,7 +235,7 @@ impl Server {
             }
 
             DidChangeWatchedFiles::METHOD => {
-                if let Ok(config) = Config::load(&self.root) {
+                if let Ok(config) = ProjectConfig::load(&self.root) {
                     self.config = Some(config);
                     self.create_new_compiler();
                     self.compile(connection)?;
@@ -603,7 +603,7 @@ impl Server {
 
     pub fn new(
         initialize_params: InitializeParams,
-        config: Option<config::Config>,
+        config: Option<config::ProjectConfig>,
         root: PathBuf,
     ) -> Self {
         let mut server = Server {

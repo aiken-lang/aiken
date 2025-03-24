@@ -1,5 +1,5 @@
 use crate::{
-    config::{Config, Platform},
+    config::{ProjectConfig, Platform},
     CheckedModule,
 };
 use aiken_lang::{ast::Span, line_numbers::LineNumbers};
@@ -12,7 +12,7 @@ pub struct SourceLinker {
 }
 
 impl SourceLinker {
-    pub fn new(root: &Path, config: &Config, module: &CheckedModule) -> Self {
+    pub fn new(root: &Path, config: &ProjectConfig, module: &CheckedModule) -> Self {
         let utf8_path = <&Utf8Path>::try_from(
             module
                 .input_path

@@ -1,4 +1,4 @@
-use crate::{telemetry::EventTarget, Project};
+use crate::{config::WorkspaceConfig, telemetry::EventTarget, Project};
 use miette::{Diagnostic, IntoDiagnostic};
 use notify::{Event, RecursiveMode, Watcher};
 use owo_colors::{OwoColorize, Stream::Stderr};
@@ -108,17 +108,57 @@ where
         current_dir
     };
 
-    let mut project = match Project::new(project_path, EventTarget::default()) {
-        Ok(p) => Ok(p),
-        Err(e) => {
-            e.report();
-            Err(ExitFailure::into_report())
+    let mut warnings = Vec::new();
+    let mut errs: Vec<crate::error::Error> = Vec::new();
+    let mut check_count = None;
+
+    if let Ok(workspace) = WorkspaceConfig::load(&project_path) {
+        let res_projects = workspace
+            .members
+            .into_iter()
+            .map(|member| Project::new(member, EventTarget::default()))
+            .collect::<Result<Vec<Project<_>>, crate::error::Error>>();
+
+        let projects = match res_projects {
+            Ok(p) => Ok(p),
+            Err(e) => {
+                e.report();
+                Err(ExitFailure::into_report())
+            }
+        }?;
+
+        for mut project in projects {
+            let build_result = action(&mut project);
+
+            warnings.extend(project.warnings());
+
+            let sum = check_count.unwrap_or(0) + project.checks_count.unwrap_or(0);
+            check_count = if sum > 0 { Some(sum) } else { None };
+
+            if let Err(e) = build_result {
+                errs.extend(e);
+            }
         }
-    }?;
+    } else {
+        let mut project = match Project::new(project_path, EventTarget::default()) {
+            Ok(p) => Ok(p),
+            Err(e) => {
+                e.report();
+                Err(ExitFailure::into_report())
+            }
+        }?;
 
-    let build_result = action(&mut project);
+        let build_result = action(&mut project);
 
-    let warnings = project.warnings();
+        warnings.extend(project.warnings());
+
+        let sum = check_count.unwrap_or(0) + project.checks_count.unwrap_or(0);
+        check_count = if sum > 0 { Some(sum) } else { None };
+
+        if let Err(e) = build_result {
+            errs.extend(e);
+        }
+    }
 
     let warning_count = warnings.len();
 
@@ -130,7 +170,7 @@ where
             }
         }
 
-        if let Err(errs) = build_result {
+        if !errs.is_empty() {
             for err in &errs {
                 err.report()
             }
@@ -138,7 +178,7 @@ where
             eprintln!(
                 "{}",
                 Summary {
-                    check_count: project.checks_count,
+                    check_count,
                     warning_count,
                     error_count: errs.len(),
                 }
@@ -147,16 +187,14 @@ where
             return Err(ExitFailure::into_report());
         }
 
-        if project.checks_count.unwrap_or_default() + warning_count > 0 {
-            eprintln!(
-                "{}",
-                Summary {
-                    check_count: project.checks_count,
-                    error_count: 0,
-                    warning_count
-                }
-            );
-        }
+        eprintln!(
+            "{}",
+            Summary {
+                check_count,
+                error_count: 0,
+                warning_count
+            }
+        );
     }
 
     if warning_count > 0 && deny {
@@ -172,6 +210,7 @@ where
 /// // Note: doctest disabled, because aiken_project doesn't have an implementation of EventListener I can use
 /// use aiken_project::watch::{watch_project, default_filter};
 /// use aiken_project::{Project};
+///
 /// watch_project(None, default_filter, 500, |project| {
 ///   println!("Project changed!");
 ///   Ok(())

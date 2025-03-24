@@ -25,7 +25,7 @@ use crate::{
         schema::{Annotated, Schema},
         Blueprint,
     },
-    config::Config,
+    config::ProjectConfig,
     error::{Error, Warning},
     module::{CheckedModule, CheckedModules, ParsedModule, ParsedModules},
     telemetry::Event,
@@ -87,7 +87,7 @@ pub struct Project<T>
 where
     T: EventListener,
 {
-    config: Config,
+    config: ProjectConfig,
     defined_modules: HashMap<String, PathBuf>,
     checked_modules: CheckedModules,
     id_gen: IdGenerator,
@@ -108,7 +108,7 @@ where
     T: EventListener,
 {
     pub fn new(root: PathBuf, event_listener: T) -> Result<Project<T>, Error> {
-        let config = Config::load(&root)?;
+        let config = ProjectConfig::load(&root)?;
 
         let demanded_compiler_version = format!("v{}", config.compiler);
 
@@ -126,7 +126,7 @@ where
         Ok(project)
     }
 
-    pub fn new_with_config(config: Config, root: PathBuf, event_listener: T) -> Project<T> {
+    pub fn new_with_config(config: ProjectConfig, root: PathBuf, event_listener: T) -> Project<T> {
         let id_gen = IdGenerator::new();
 
         let mut module_types = HashMap::new();
