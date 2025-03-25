@@ -25,8 +25,8 @@
           darwin.apple_sdk.frameworks.SystemConfiguration
         ];
 
-      cargoTomlContents = builtins.readFile ./crates/aiken/Cargo.toml;
-      version = (builtins.fromTOML cargoTomlContents).package.version;
+      cargoTomlContents = builtins.readFile ./Cargo.toml;
+      version = (builtins.fromTOML cargoTomlContents).workspace.package.version;
 
       aiken = pkgs.rustPlatform.buildRustPackage {
         inherit version;
@@ -39,9 +39,6 @@
         src = pkgs.lib.cleanSourceWith {src = self;};
 
         cargoLock.lockFile = ./Cargo.lock;
-        cargoLock.outputHashes = {
-          "textplots-0.9.6" = "sha256-Bx3zFEOnvqT7ZVfO5T8ii5u+3cPBeQTmw0F6CHQimao=";
-        };
 
         GIT_COMMIT_HASH_SHORT = self.shortRev or "unknown";
         postPatch = ''
