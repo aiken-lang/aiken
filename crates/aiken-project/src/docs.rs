@@ -327,8 +327,8 @@ fn generate_static_assets(search_indexes: Vec<SearchIndex>) -> Vec<DocFile> {
     let mut assets: Vec<DocFile> = vec![];
 
     assets.push(DocFile {
-        path: PathBuf::from("favicon.png"),
-        content: std::include_str!("../templates/favicon.png").to_string(),
+        path: PathBuf::from("favicon.svg"),
+        content: std::include_str!("../templates/favicon.svg").to_string(),
     });
 
     assets.push(DocFile {
