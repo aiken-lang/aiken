@@ -874,7 +874,6 @@ pub fn find_script(
             .ok_or(Error::MissingScriptForRedeemer)
             .and_then(|cert| match cert {
                 Certificate::StakeDeregistration(stake_credential)
-                | Certificate::StakeRegistration(stake_credential)
                 | Certificate::Reg(stake_credential, _)
                 | Certificate::UnReg(stake_credential, _)
                 | Certificate::VoteDeleg(stake_credential, _)
@@ -891,9 +890,9 @@ pub fn find_script(
                     StakeCredential::ScriptHash(hash) => Ok(hash),
                     _ => Err(Error::NonScriptStakeCredential),
                 },
-                Certificate::PoolRetirement { .. } | Certificate::PoolRegistration { .. } => {
-                    Err(Error::UnsupportedCertificateType)
-                }
+                Certificate::StakeRegistration { .. }
+                | Certificate::PoolRetirement { .. }
+                | Certificate::PoolRegistration { .. } => Err(Error::UnsupportedCertificateType),
             })
             .and_then(lookup_script),
 
