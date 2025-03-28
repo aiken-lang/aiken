@@ -21,6 +21,8 @@
 - **aiken-lang**: Fix comments not being able to occur in ByteArray array
   members. @rvcas
 
+- **uplc**: `find_script` now supports stake registrations certificates @mpizenberg
+
 ## v1.1.14 - 2025-03-21
 
 ### Added
