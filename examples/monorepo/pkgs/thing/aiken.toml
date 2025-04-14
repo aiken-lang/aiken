@@ -1,0 +1,19 @@
+name = "scratch/thing"
+version = "0.0.0"
+license = "Apache-2.0"
+description = "Aiken contracts for project 'thing/scratch'"
+
+[repository]
+user = "thing"
+project = "scratch"
+platform = "github"
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "v2"
+source = "github"
+
+[[dependencies]]
+name = "aiken-lang/fuzz"
+version = "v2.1.1"
+source = "github"
