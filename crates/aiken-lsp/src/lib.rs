@@ -1,7 +1,11 @@
 use crate::server::Server;
-use aiken_project::{config::ProjectConfig, paths};
+use aiken_project::{
+    config::{ProjectConfig, WorkspaceConfig},
+    paths,
+};
 use error::Error;
 use lsp_server::Connection;
+use server::LspConfig;
 use std::env;
 
 mod cast;
@@ -18,12 +22,28 @@ pub fn start() -> Result<(), Error> {
     // Forcibly disable colors on outputs for LSP
     owo_colors::set_override(false);
 
-    let root = env::current_dir()?;
+    let root = if std::env::consts::OS == "windows" {
+        env::current_dir().expect("failed to get current dir")
+    } else {
+        let mut current_dir = std::path::PathBuf::new();
+
+        current_dir.push(".");
+
+        current_dir
+    };
 
     let config = if paths::project_config().exists() {
         tracing::info!("Aiken project detected");
 
-        Some(ProjectConfig::load(&root).expect("failed to load aiken.toml"))
+        if let Ok(config) = WorkspaceConfig::load(&root) {
+            Some(LspConfig::Workspace(config))
+        } else if let Ok(config) = ProjectConfig::load(&root) {
+            Some(LspConfig::Project(config))
+        } else {
+            tracing::info!("Aiken project config failed to load");
+
+            None
+        }
     } else {
         tracing::info!("Aiken project config not found");
 
