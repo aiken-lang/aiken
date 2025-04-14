@@ -1,3 +1,5 @@
+#![allow(clippy::doc_overindented_list_items)]
+
 use aiken_lang::ast::{TraceLevel, Tracing};
 use aiken_project::watch::{self, watch_project, with_project};
 use clap::builder::{MapValueParser, PossibleValuesParser, TypedValueParser};

@@ -255,7 +255,7 @@ impl ExtraData for Error {
             | Error::NoValidatorNotFound { .. }
             | Error::MoreThanOneValidatorFound { .. }
             | Error::Module { .. }
-            | Error::NoDefaultEnvironment { .. }
+            | Error::NoDefaultEnvironment
             | Error::ModuleNotFound { .. }
             | Error::ExportNotFound { .. } => None,
             Error::Type { error, .. } => error.extra_data(),
@@ -287,7 +287,7 @@ impl GetSource for Error {
             | Error::MoreThanOneValidatorFound { .. }
             | Error::ModuleNotFound { .. }
             | Error::ExportNotFound { .. }
-            | Error::NoDefaultEnvironment { .. }
+            | Error::NoDefaultEnvironment
             | Error::Module { .. } => None,
             Error::DuplicateModule { second: path, .. }
             | Error::MissingManifest { path }
@@ -316,7 +316,7 @@ impl GetSource for Error {
             | Error::Json { .. }
             | Error::MalformedStakeAddress { .. }
             | Error::NoValidatorNotFound { .. }
-            | Error::NoDefaultEnvironment { .. }
+            | Error::NoDefaultEnvironment
             | Error::MoreThanOneValidatorFound { .. }
             | Error::ModuleNotFound { .. }
             | Error::ExportNotFound { .. }
@@ -374,7 +374,7 @@ impl Diagnostic for Error {
             Error::MoreThanOneValidatorFound { .. } => None,
             Error::ExportNotFound { .. } => None,
             Error::ModuleNotFound { .. } => None,
-            Error::NoDefaultEnvironment { .. } => None,
+            Error::NoDefaultEnvironment => None,
             Error::Module(e) => e.code().map(boxed),
         }
     }
@@ -398,7 +398,7 @@ impl Diagnostic for Error {
             Error::MissingManifest { .. } => Some(Box::new(
                 "Try running `aiken new <REPOSITORY/PROJECT>` to initialise a project with an example manifest.",
             )),
-            Error::NoDefaultEnvironment { .. } => Some(Box::new(
+            Error::NoDefaultEnvironment => Some(Box::new(
                 "Environment module names are free, but there must be at least one named 'default.ak'.",
             )),
             Error::TomlLoading { help, .. } => Some(Box::new(help)),
@@ -475,7 +475,7 @@ impl Diagnostic for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
-            Error::NoDefaultEnvironment { .. } => None,
+            Error::NoDefaultEnvironment => None,
             Error::ModuleNotFound { .. } => None,
             Error::Module(e) => e.labels(),
         }
@@ -489,7 +489,7 @@ impl Diagnostic for Error {
             Error::ModuleNotFound { .. } => None,
             Error::ExportNotFound { .. } => None,
             Error::Blueprint(e) => e.source_code(),
-            Error::NoDefaultEnvironment { .. } => None,
+            Error::NoDefaultEnvironment => None,
             Error::Parse { named, .. } => Some(named.as_ref()),
             Error::Type { named, .. } => Some(named),
             Error::StandardIo(_) => None,
@@ -534,7 +534,7 @@ impl Diagnostic for Error {
             Error::MalformedStakeAddress { .. } => None,
             Error::NoValidatorNotFound { .. } => None,
             Error::MoreThanOneValidatorFound { .. } => None,
-            Error::NoDefaultEnvironment { .. } => None,
+            Error::NoDefaultEnvironment => None,
             Error::Module(e) => e.url(),
         }
     }
@@ -550,7 +550,7 @@ impl Diagnostic for Error {
             Error::Parse { .. } => None,
             Error::Type { error, .. } => error.related(),
             Error::StandardIo(_) => None,
-            Error::NoDefaultEnvironment { .. } => None,
+            Error::NoDefaultEnvironment => None,
             Error::MissingManifest { .. } => None,
             Error::TomlLoading { .. } => None,
             Error::Format { .. } => None,
@@ -596,7 +596,7 @@ pub enum Warning {
 impl ExtraData for Warning {
     fn extra_data(&self) -> Option<String> {
         match self {
-            Warning::NoValidators { .. }
+            Warning::NoValidators
             | Warning::DependencyAlreadyExists { .. }
             | Warning::InvalidModuleName { .. }
             | Warning::CompilerVersionMismatch { .. }

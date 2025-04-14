@@ -1,3 +1,5 @@
+#![allow(clippy::doc_overindented_list_items)]
+
 use super::build::{trace_filter_parser, trace_level_parser};
 use aiken_lang::ast::{TraceLevel, Tracing};
 use aiken_project::{options::Options, watch::with_project};

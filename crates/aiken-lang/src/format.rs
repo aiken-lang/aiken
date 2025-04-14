@@ -1081,7 +1081,7 @@ impl<'comments> Formatter<'comments> {
 
             UntypedExpr::Var { name, .. } if name.contains(CAPTURE_VARIABLE) => "_"
                 .to_doc()
-                .append(name.split('_').last().unwrap_or_default()),
+                .append(name.split('_').next_back().unwrap_or_default()),
 
             UntypedExpr::Var { name, .. } => name.to_doc(),
 
