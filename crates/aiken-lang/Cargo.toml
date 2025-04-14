@@ -30,7 +30,7 @@ pretty = "0.12.3"
 serde = { version = "1.0.197", features = ["derive", "rc"] }
 strum = { version = "0.26.3", features = ["derive"] }
 thiserror = "1.0.39"
-uplc = { path = '../uplc', version = "1.1.15" }
+uplc = { path = '../uplc', version = "1.1.16" }
 vec1 = "1.10.1"
 
 [target.'cfg(not(target_family="wasm"))'.dependencies]
