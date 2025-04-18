@@ -734,21 +734,16 @@ where
     // Ensure that the annotation, if any, matches the type inferred from the
     // Fuzzer.
     if let Some(provided_inner_type) = provided_inner_type {
-        if !arg
-            .arg
-            .annotation
-            .as_ref()
-            .unwrap()
-            .is_logically_equal(&inferred_annotation)
-        {
-            return Err(Error::CouldNotUnify {
-                location: arg.arg.location,
-                expected: inferred_inner_type.clone(),
-                given: provided_inner_type.clone(),
-                situation: Some(UnifyErrorSituation::FuzzerAnnotationMismatch),
-                rigid_type_names: hydrator.rigid_names(),
-            });
-        }
+        environment
+            .unify(
+                inferred_inner_type.clone(),
+                provided_inner_type.clone(),
+                arg.via.location(),
+                false,
+            )
+            .map_err(|err| {
+                err.with_unify_error_situation(UnifyErrorSituation::FuzzerAnnotationMismatch)
+            })?;
     }
 
     // Replace the pre-registered type for the test function, to allow inferring
