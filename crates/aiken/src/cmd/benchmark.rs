@@ -14,6 +14,7 @@ use std::{
 };
 
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 /// Benchmark an Aiken project
 pub struct Args {
     /// Path to project

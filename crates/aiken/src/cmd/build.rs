@@ -6,6 +6,7 @@ use clap::builder::{MapValueParser, PossibleValuesParser, TypedValueParser};
 use std::{path::PathBuf, process};
 
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 /// Build an Aiken project
 pub struct Args {
     /// Path to project

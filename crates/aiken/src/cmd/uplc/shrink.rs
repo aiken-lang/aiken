@@ -1,11 +1,14 @@
 use miette::IntoDiagnostic;
 use std::path::PathBuf;
-use uplc::ast::{DeBruijn, Name, NamedDeBruijn, Program};
-use uplc::optimize::aiken_optimize_and_intern;
+use uplc::{
+    ast::{DeBruijn, Name, NamedDeBruijn, Program},
+    optimize::aiken_optimize_and_intern,
+};
 
 use super::{Format, encode};
 
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 /// Shrink / Optimize UPLC code using a variety of optimization steps
 pub struct Args {
     /// Flat encoded Untyped Plutus Core file

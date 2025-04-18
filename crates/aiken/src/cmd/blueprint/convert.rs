@@ -9,6 +9,7 @@ use std::{env, fs::File, io::BufReader, path::PathBuf, process};
 
 /// Convert a blueprint into other formats.
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 pub struct Args {
     /// Path to project
     directory: Option<PathBuf>,

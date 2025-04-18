@@ -9,6 +9,7 @@ use owo_colors::{OwoColorize, Stream::Stderr};
 use std::{path::PathBuf, process, str::FromStr};
 
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 /// Add a new project package as dependency
 pub struct Args {
     /// Package name, in the form of {owner}/{repository}.

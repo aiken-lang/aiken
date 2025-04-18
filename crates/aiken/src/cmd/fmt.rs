@@ -1,4 +1,5 @@
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 /// Format an Aiken project
 pub struct Args {
     /// Files to format

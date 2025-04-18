@@ -5,6 +5,7 @@ use clap_complete::Shell;
 
 /// Get completion scripts for various shells
 #[derive(Subcommand)]
+#[clap(disable_version_flag(true))]
 pub enum Cmd {
     Bash(shell::Args),
     Zsh(shell::Args),

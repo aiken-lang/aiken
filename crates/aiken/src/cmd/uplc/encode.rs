@@ -13,6 +13,7 @@ use super::Format;
 
 /// Encode textual Untyped Plutus Core to flat bytes
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 pub struct Args {
     /// Textual Untyped Plutus Core file
     input: PathBuf,

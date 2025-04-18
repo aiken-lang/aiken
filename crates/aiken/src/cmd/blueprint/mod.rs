@@ -8,6 +8,7 @@ use clap::Subcommand;
 
 /// Commands for working with Plutus blueprints
 #[derive(Subcommand)]
+#[clap(disable_version_flag(true))]
 pub enum Cmd {
     Address(address::Args),
     Policy(policy::Args),

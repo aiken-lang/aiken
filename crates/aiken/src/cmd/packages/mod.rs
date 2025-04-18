@@ -6,6 +6,7 @@ use clap::Subcommand;
 
 /// Managing project dependencies
 #[derive(Subcommand)]
+#[clap(disable_version_flag(true))]
 pub enum Cmd {
     /// Add a new package dependency
     Add(add::Args),
