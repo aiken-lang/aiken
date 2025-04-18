@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 /// Compute a minting scripts Policy ID
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 pub struct Args {
     /// Path to project
     directory: Option<PathBuf>,

@@ -10,6 +10,7 @@ use std::{
 
 /// Generates shell completion scripts
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 pub struct Args {
     /// Install the completion scripts
     #[arg(short, long, default_value_t = false)]

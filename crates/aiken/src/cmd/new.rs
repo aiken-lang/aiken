@@ -12,6 +12,7 @@ use std::{
 };
 
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 /// Create a new Aiken project
 pub struct Args {
     /// Project name

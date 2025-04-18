@@ -1,6 +1,7 @@
 use miette::IntoDiagnostic;
 
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 /// Start the Aiken language server
 pub struct Args {
     /// Run on stdio

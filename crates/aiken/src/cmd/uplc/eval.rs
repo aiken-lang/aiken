@@ -16,6 +16,7 @@ use uplc::{
 };
 
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 /// Evaluate an Untyped Plutus Core program
 pub struct Args {
     script: PathBuf,

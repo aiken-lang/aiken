@@ -2,6 +2,7 @@ use aiken_project::watch::{self, watch_project, with_project};
 use std::{path::PathBuf, process};
 
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 /// Build the documentation for an Aiken project
 pub struct Args {
     /// Path to project

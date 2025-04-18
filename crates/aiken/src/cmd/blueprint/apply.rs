@@ -18,6 +18,7 @@ use uplc::ast::Data as UplcData;
 
 /// Apply a parameter to a parameterized validator.
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 pub struct Args {
     /// The parameter, as a Plutus Data (CBOR, hex-encoded).
     ///

@@ -1,6 +1,7 @@
 use super::add;
 
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 /// Change the version of an installed dependency
 pub struct Args {
     /// Package name, in the form of {owner}/{repository}.

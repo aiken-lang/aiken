@@ -3,6 +3,7 @@ use std::{fs, path::PathBuf};
 use uplc::parser;
 
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 /// Format an Untyped Plutus Core program
 pub struct Args {
     /// Textual Untyped Plutus Core file

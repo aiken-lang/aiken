@@ -5,6 +5,7 @@ use uplc::ast::{DeBruijn, Name, NamedDeBruijn, Program};
 use super::Format;
 
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 /// Decode flat bytes to textual Untyped Plutus Core
 pub struct Args {
     /// Flat encoded Untyped Plutus Core file

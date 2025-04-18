@@ -15,6 +15,7 @@ pub(super) enum Format {
 
 /// Commands for working with untyped Plutus-core
 #[derive(Subcommand)]
+#[clap(disable_version_flag(true))]
 pub enum Cmd {
     Fmt(fmt::Args),
     Eval(eval::Args),

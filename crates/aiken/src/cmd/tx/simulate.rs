@@ -15,6 +15,7 @@ use uplc::{
 };
 
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 /// Simulate a transaction by evaluating it's script
 pub struct Args {
     /// A file containing cbor hex for a transaction

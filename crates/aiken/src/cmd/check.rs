@@ -17,6 +17,7 @@ use std::{
 };
 
 #[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
 #[command(
     verbatim_doc_comment,
     about = color_print::cstr!(r#"
