@@ -2161,15 +2161,6 @@ pub(super) fn assert_no_labeled_arguments<A>(args: &[CallArg<A>]) -> Option<(Spa
     None
 }
 
-pub fn collapse_links(t: Rc<Type>) -> Rc<Type> {
-    if let Type::Var { tipo, alias } = t.deref() {
-        if let TypeVar::Link { tipo } = tipo.borrow().deref() {
-            return Type::with_alias(tipo.clone(), alias.clone());
-        }
-    }
-    t
-}
-
 /// Returns the fields that have the same label and type across all variants of
 /// the given type.
 fn get_compatible_record_fields<A>(

@@ -10,7 +10,7 @@ use aiken_lang::{
     ast::{Annotation, TypedArg, TypedFunction, TypedValidator, well_known},
     gen_uplc::CodeGenerator,
     plutus_version::PlutusVersion,
-    tipo::{Type, collapse_links},
+    tipo::Type,
 };
 use miette::NamedSource;
 use serde;
@@ -243,7 +243,7 @@ impl Validator {
 }
 
 pub fn tipo_or_annotation<'a>(module: &'a CheckedModule, arg: &'a TypedArg) -> &'a Type {
-    match collapse_links(arg.tipo.clone()).borrow() {
+    match Type::collapse_links(arg.tipo.clone()).borrow() {
         Type::App {
             module: module_name,
             name: type_name,

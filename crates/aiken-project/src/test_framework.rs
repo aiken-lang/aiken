@@ -205,8 +205,9 @@ mod test {
 
                 let reify = move |counterexample| {
                     let data_type_refs = utils::indexmap::as_ref_values(&data_types);
-                    let expr = UntypedExpr::reify_data(&data_type_refs, counterexample, &type_info)
-                        .expect("Failed to reify value.");
+                    let expr =
+                        UntypedExpr::reify_data(&data_type_refs, counterexample, type_info.clone())
+                            .expect("Failed to reify value.");
                     Formatter::new().expr(&expr, false).to_pretty_string(70)
                 };
 

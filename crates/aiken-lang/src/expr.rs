@@ -15,7 +15,7 @@ pub(crate) use crate::{
 };
 use indexmap::IndexMap;
 use pallas_primitives::alonzo::{Constr, PlutusData};
-use std::{fmt::Debug, rc::Rc};
+use std::{fmt::Debug, ops::Deref, rc::Rc};
 use uplc::{
     KeyValuePairs,
     ast::Data,
@@ -757,7 +757,7 @@ impl UntypedExpr {
     pub fn reify_constant(
         data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
         cst: uplc::ast::Constant,
-        tipo: &Type,
+        tipo: Rc<Type>,
     ) -> Result<Self, String> {
         UntypedExpr::do_reify_constant(&mut IndexMap::new(), data_types, cst, tipo)
     }
@@ -775,7 +775,7 @@ impl UntypedExpr {
     pub fn reify_data(
         data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
         data: PlutusData,
-        tipo: &Type,
+        tipo: Rc<Type>,
     ) -> Result<Self, String> {
         UntypedExpr::do_reify_data(&mut IndexMap::new(), data_types, data, tipo)
     }
@@ -784,7 +784,7 @@ impl UntypedExpr {
         generics: &mut IndexMap<u64, Rc<Type>>,
         data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
         t: T,
-        tipo: &Type,
+        tipo: Rc<Type>,
         with: F,
     ) -> Result<Self, String>
     where
@@ -793,17 +793,17 @@ impl UntypedExpr {
             &mut IndexMap<u64, Rc<Type>>,
             &IndexMap<&DataTypeKey, &TypedDataType>,
             T,
-            &Type,
+            Rc<Type>,
         ) -> Result<Self, String>,
     {
-        if let Type::Var { tipo: var_tipo, .. } = tipo {
+        if let Type::Var { tipo: var_tipo, .. } = tipo.deref() {
             match &*var_tipo.borrow() {
                 TypeVar::Link { tipo } => {
-                    return Self::reify_with(generics, data_types, t, tipo, with);
+                    return Self::reify_with(generics, data_types, t, tipo.clone(), with);
                 }
                 TypeVar::Generic { id } => {
                     if let Some(tipo) = generics.get(id) {
-                        return Self::reify_with(generics, data_types, t, &tipo.clone(), with);
+                        return Self::reify_with(generics, data_types, t, tipo.clone(), with);
                     }
                 }
                 _ => unreachable!("unbound type during reification {tipo:?} -> {t:?}"),
@@ -818,13 +818,13 @@ impl UntypedExpr {
         // wrapper. That means the underlying PlutusData has no residue of that
         // wrapper. So we have to manually reconstruct it before crawling further
         // down the type tree.
-        if check_replaceable_opaque_type(tipo, data_types) {
-            let DataType { name, .. } = lookup_data_type_by_tipo(data_types, tipo)
+        if check_replaceable_opaque_type(&tipo, data_types) {
+            let DataType { name, .. } = lookup_data_type_by_tipo(data_types, &tipo)
                 .expect("Type just disappeared from known types? {tipo:?}");
 
-            let inner_type = convert_opaque_type(&tipo.clone().into(), data_types, false);
+            let inner_type = convert_opaque_type(&tipo, data_types, false);
 
-            let value = Self::reify_with(generics, data_types, t, &inner_type, with)?;
+            let value = Self::reify_with(generics, data_types, t, inner_type, with)?;
 
             return Ok(UntypedExpr::Call {
                 location: Span::empty(),
@@ -847,7 +847,7 @@ impl UntypedExpr {
         generics: &mut IndexMap<u64, Rc<Type>>,
         data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
         cst: uplc::ast::Constant,
-        tipo: &Type,
+        tipo: Rc<Type>,
     ) -> Result<Self, String> {
         Self::reify_with(
             generics,
@@ -867,7 +867,7 @@ impl UntypedExpr {
                     UntypedExpr::do_reify_data(generics, data_types, Data::bytestring(bytes), tipo)
                 }
 
-                uplc::ast::Constant::ProtoList(_, args) => match tipo {
+                uplc::ast::Constant::ProtoList(_, args) => match tipo.deref() {
                     Type::App {
                         module,
                         name,
@@ -881,7 +881,10 @@ impl UntypedExpr {
                                     .into_iter()
                                     .map(|arg| {
                                         UntypedExpr::do_reify_constant(
-                                            generics, data_types, arg, inner,
+                                            generics,
+                                            data_types,
+                                            arg,
+                                            inner.clone(),
                                         )
                                     })
                                     .collect::<Result<Vec<_>, _>>()?,
@@ -900,7 +903,12 @@ impl UntypedExpr {
                             .into_iter()
                             .zip(elems)
                             .map(|(arg, arg_type)| {
-                                UntypedExpr::do_reify_constant(generics, data_types, arg, arg_type)
+                                UntypedExpr::do_reify_constant(
+                                    generics,
+                                    data_types,
+                                    arg,
+                                    arg_type.clone(),
+                                )
                             })
                             .collect::<Result<Vec<_>, _>>()?,
                     }),
@@ -909,7 +917,7 @@ impl UntypedExpr {
                     )),
                 },
 
-                uplc::ast::Constant::ProtoPair(_, _, left, right) => match tipo {
+                uplc::ast::Constant::ProtoPair(_, _, left, right) => match tipo.deref() {
                     Type::Pair { fst, snd, .. } => {
                         let elems = [left.as_ref(), right.as_ref()]
                             .into_iter()
@@ -919,7 +927,7 @@ impl UntypedExpr {
                                     generics,
                                     data_types,
                                     arg.to_owned(),
-                                    arg_type,
+                                    arg_type.clone(),
                                 )
                             })
                             .collect::<Result<Vec<_>, _>>()?;
@@ -1088,9 +1096,11 @@ impl UntypedExpr {
         generics: &mut IndexMap<u64, Rc<Type>>,
         data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
         data: PlutusData,
-        tipo: &Type,
+        tipo: Rc<Type>,
     ) -> Result<Self, String> {
-        if let Type::App { name, module, .. } = tipo {
+        let tipo = Type::collapse_links(tipo);
+
+        if let Type::App { name, module, .. } = tipo.deref() {
             if module.is_empty() && name == "Data" {
                 return Ok(Self::reify_blind(data));
             }
@@ -1126,7 +1136,7 @@ impl UntypedExpr {
                     }
                 }
 
-                PlutusData::Array(args) => match tipo {
+                PlutusData::Array(args) => match tipo.deref() {
                     Type::App {
                         module,
                         name,
@@ -1140,7 +1150,12 @@ impl UntypedExpr {
                                     .to_vec()
                                     .into_iter()
                                     .map(|arg| {
-                                        UntypedExpr::do_reify_data(generics, data_types, arg, inner)
+                                        UntypedExpr::do_reify_data(
+                                            generics,
+                                            data_types,
+                                            arg,
+                                            inner.clone(),
+                                        )
                                     })
                                     .collect::<Result<Vec<_>, _>>()?,
                                 tail: None,
@@ -1159,7 +1174,12 @@ impl UntypedExpr {
                             .into_iter()
                             .zip(elems)
                             .map(|(arg, arg_type)| {
-                                UntypedExpr::do_reify_data(generics, data_types, arg, arg_type)
+                                UntypedExpr::do_reify_data(
+                                    generics,
+                                    data_types,
+                                    arg,
+                                    arg_type.clone(),
+                                )
                             })
                             .collect::<Result<Vec<_>, _>>()?,
                     }),
@@ -1169,7 +1189,12 @@ impl UntypedExpr {
                             .into_iter()
                             .zip([fst, snd])
                             .map(|(arg, arg_type)| {
-                                UntypedExpr::do_reify_data(generics, data_types, arg, arg_type)
+                                UntypedExpr::do_reify_data(
+                                    generics,
+                                    data_types,
+                                    arg,
+                                    arg_type.clone(),
+                                )
                             })
                             .collect::<Result<Vec<_>, _>>()?;
 
@@ -1191,12 +1216,12 @@ impl UntypedExpr {
                 }) => {
                     let ix = convert_tag_to_constr(tag).or(any_constructor).unwrap() as usize;
 
-                    if let Type::App { args, .. } = tipo {
+                    if let Type::App { args, .. } = tipo.deref() {
                         if let Some(DataType {
                             constructors,
                             typed_parameters,
                             ..
-                        }) = lookup_data_type_by_tipo(data_types, tipo)
+                        }) = lookup_data_type_by_tipo(data_types, &tipo)
                         {
                             if constructors.is_empty() {
                                 return Ok(UntypedExpr::Var {
@@ -1230,7 +1255,10 @@ impl UntypedExpr {
                                     .zip(constructor.arguments.iter())
                                     .map(|(field, RecordConstructorArg { label, tipo, .. })| {
                                         UntypedExpr::do_reify_data(
-                                            generics, data_types, field, tipo,
+                                            generics,
+                                            data_types,
+                                            field,
+                                            tipo.clone(),
                                         )
                                         .map(|value| {
                                             CallArg {

@@ -1184,12 +1184,12 @@ impl UnitTestResult<(Constant, Rc<Type>)> {
                 Some(Assertion {
                     bin_op: assertion.bin_op,
                     head: assertion.head.map(|(cst, tipo)| {
-                        UntypedExpr::reify_constant(data_types, cst, &tipo)
+                        UntypedExpr::reify_constant(data_types, cst, tipo)
                             .expect("failed to reify assertion operand?")
                     }),
                     tail: assertion.tail.map(|xs| {
                         xs.mapped(|(cst, tipo)| {
-                            UntypedExpr::reify_constant(data_types, cst, &tipo)
+                            UntypedExpr::reify_constant(data_types, cst, tipo)
                                 .expect("failed to reify assertion operand?")
                         })
                     }),
@@ -1218,8 +1218,12 @@ impl PropertyTestResult<PlutusData> {
         PropertyTestResult {
             counterexample: self.counterexample.map(|ok| {
                 ok.map(|counterexample| {
-                    UntypedExpr::reify_data(data_types, counterexample, &self.test.fuzzer.type_info)
-                        .expect("failed to reify counterexample?")
+                    UntypedExpr::reify_data(
+                        data_types,
+                        counterexample,
+                        self.test.fuzzer.type_info.clone(),
+                    )
+                    .expect("failed to reify counterexample?")
                 })
             }),
             iterations: self.iterations,
