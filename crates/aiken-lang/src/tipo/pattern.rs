@@ -2,7 +2,7 @@
 //! and variables bindings.
 use super::{
     PatternConstructor, Type, ValueConstructorVariant,
-    environment::{EntityKind, Environment, assert_no_labeled_arguments, collapse_links},
+    environment::{EntityKind, Environment, assert_no_labeled_arguments},
     error::{Error, Warning},
     hydrator::Hydrator,
 };
@@ -257,112 +257,116 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                 }),
             },
 
-            Pattern::Pair { fst, snd, location } => match collapse_links(tipo.clone()).deref() {
-                Type::Pair {
-                    fst: t_fst,
-                    snd: t_snd,
-                    ..
-                } => {
-                    let fst = Box::new(self.unify(*fst, t_fst.clone(), None, false)?);
-                    let snd = Box::new(self.unify(*snd, t_snd.clone(), None, false)?);
-                    Ok(Pattern::Pair { fst, snd, location })
-                }
+            Pattern::Pair { fst, snd, location } => {
+                match Type::collapse_links(tipo.clone()).deref() {
+                    Type::Pair {
+                        fst: t_fst,
+                        snd: t_snd,
+                        ..
+                    } => {
+                        let fst = Box::new(self.unify(*fst, t_fst.clone(), None, false)?);
+                        let snd = Box::new(self.unify(*snd, t_snd.clone(), None, false)?);
+                        Ok(Pattern::Pair { fst, snd, location })
+                    }
 
-                Type::Var { .. } => {
-                    let t_fst = self.environment.new_unbound_var();
-                    let t_snd = self.environment.new_unbound_var();
+                    Type::Var { .. } => {
+                        let t_fst = self.environment.new_unbound_var();
+                        let t_snd = self.environment.new_unbound_var();
 
-                    self.environment.unify(
-                        Type::pair(t_fst.clone(), t_snd.clone()),
-                        tipo,
-                        location,
-                        false,
-                    )?;
-
-                    let fst = Box::new(self.unify(*fst, t_fst, None, false)?);
-                    let snd = Box::new(self.unify(*snd, t_snd, None, false)?);
-
-                    Ok(Pattern::Pair { fst, snd, location })
-                }
-
-                _ => Err(Error::CouldNotUnify {
-                    given: Type::pair(
-                        self.environment.new_unbound_var(),
-                        self.environment.new_unbound_var(),
-                    ),
-                    expected: tipo,
-                    situation: None,
-                    location,
-                    rigid_type_names: HashMap::new(),
-                }),
-            },
-
-            Pattern::Tuple { elems, location } => match collapse_links(tipo.clone()).deref() {
-                Type::Tuple {
-                    elems: type_elems, ..
-                } => {
-                    if elems.len() != type_elems.len() {
-                        return Err(Error::IncorrectTupleArity {
+                        self.environment.unify(
+                            Type::pair(t_fst.clone(), t_snd.clone()),
+                            tipo,
                             location,
-                            expected: type_elems.len(),
-                            given: elems.len(),
-                        });
+                            false,
+                        )?;
+
+                        let fst = Box::new(self.unify(*fst, t_fst, None, false)?);
+                        let snd = Box::new(self.unify(*snd, t_snd, None, false)?);
+
+                        Ok(Pattern::Pair { fst, snd, location })
                     }
 
-                    let mut patterns = vec![];
-
-                    for (pattern, typ) in elems.into_iter().zip(type_elems) {
-                        let typed_pattern = self.unify(pattern, typ.clone(), None, false)?;
-
-                        patterns.push(typed_pattern);
-                    }
-
-                    Ok(Pattern::Tuple {
-                        elems: patterns,
-                        location,
-                    })
-                }
-
-                Type::Var { .. } => {
-                    let elems_types: Vec<_> = (0..(elems.len()))
-                        .map(|_| self.environment.new_unbound_var())
-                        .collect();
-
-                    self.environment.unify(
-                        Type::tuple(elems_types.clone()),
-                        tipo,
-                        location,
-                        false,
-                    )?;
-
-                    let mut patterns = vec![];
-
-                    for (pattern, type_) in elems.into_iter().zip(elems_types) {
-                        let typed_pattern = self.unify(pattern, type_, None, false)?;
-
-                        patterns.push(typed_pattern);
-                    }
-
-                    Ok(Pattern::Tuple {
-                        elems: patterns,
-                        location,
-                    })
-                }
-
-                _ => {
-                    let elems_types = (0..(elems.len()))
-                        .map(|_| self.environment.new_unbound_var())
-                        .collect();
-
-                    Err(Error::CouldNotUnify {
-                        given: Type::tuple(elems_types),
+                    _ => Err(Error::CouldNotUnify {
+                        given: Type::pair(
+                            self.environment.new_unbound_var(),
+                            self.environment.new_unbound_var(),
+                        ),
                         expected: tipo,
                         situation: None,
                         location,
                         rigid_type_names: HashMap::new(),
-                    })
+                    }),
                 }
-            },
+            }
+
+            Pattern::Tuple { elems, location } => {
+                match Type::collapse_links(tipo.clone()).deref() {
+                    Type::Tuple {
+                        elems: type_elems, ..
+                    } => {
+                        if elems.len() != type_elems.len() {
+                            return Err(Error::IncorrectTupleArity {
+                                location,
+                                expected: type_elems.len(),
+                                given: elems.len(),
+                            });
+                        }
+
+                        let mut patterns = vec![];
+
+                        for (pattern, typ) in elems.into_iter().zip(type_elems) {
+                            let typed_pattern = self.unify(pattern, typ.clone(), None, false)?;
+
+                            patterns.push(typed_pattern);
+                        }
+
+                        Ok(Pattern::Tuple {
+                            elems: patterns,
+                            location,
+                        })
+                    }
+
+                    Type::Var { .. } => {
+                        let elems_types: Vec<_> = (0..(elems.len()))
+                            .map(|_| self.environment.new_unbound_var())
+                            .collect();
+
+                        self.environment.unify(
+                            Type::tuple(elems_types.clone()),
+                            tipo,
+                            location,
+                            false,
+                        )?;
+
+                        let mut patterns = vec![];
+
+                        for (pattern, type_) in elems.into_iter().zip(elems_types) {
+                            let typed_pattern = self.unify(pattern, type_, None, false)?;
+
+                            patterns.push(typed_pattern);
+                        }
+
+                        Ok(Pattern::Tuple {
+                            elems: patterns,
+                            location,
+                        })
+                    }
+
+                    _ => {
+                        let elems_types = (0..(elems.len()))
+                            .map(|_| self.environment.new_unbound_var())
+                            .collect();
+
+                        Err(Error::CouldNotUnify {
+                            given: Type::tuple(elems_types),
+                            expected: tipo,
+                            situation: None,
+                            location,
+                            rigid_type_names: HashMap::new(),
+                        })
+                    }
+                }
+            }
 
             Pattern::Constructor {
                 location,

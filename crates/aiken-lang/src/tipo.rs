@@ -22,8 +22,6 @@ mod pattern;
 mod pipe;
 pub mod pretty;
 
-pub use environment::collapse_links;
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TypeAliasAnnotation {
     pub module: Option<String>,
@@ -163,6 +161,15 @@ impl PartialEq for Type {
 }
 
 impl Type {
+    pub fn collapse_links(t: Rc<Self>) -> Rc<Self> {
+        if let Type::Var { tipo, alias } = t.deref() {
+            if let TypeVar::Link { tipo } = tipo.borrow().deref() {
+                return Type::with_alias(tipo.clone(), alias.clone());
+            }
+        }
+        t
+    }
+
     pub fn alias(&self) -> Option<Rc<TypeAliasAnnotation>> {
         match self {
             Type::App { alias, .. }

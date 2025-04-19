@@ -1,8 +1,6 @@
 use super::{
     RecordAccessor, Type, ValueConstructor, ValueConstructorVariant,
-    environment::{
-        EntityKind, Environment, assert_no_labeled_arguments, collapse_links, generalise,
-    },
+    environment::{EntityKind, Environment, assert_no_labeled_arguments, generalise},
     error::{Error, Warning},
     hydrator::Hydrator,
     pattern::PatternTyper,
@@ -1313,7 +1311,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         };
 
         // Check to see if it's a Type that can have accessible fields
-        let accessors = match collapse_links(record.tipo()).as_ref() {
+        let accessors = match Type::collapse_links(record.tipo()).as_ref() {
             // A type in the current module which may have fields
             Type::App { module, name, .. } if module == self.environment.current_module => {
                 self.environment.accessors.get(name)
@@ -1640,7 +1638,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         value: UntypedExpr,
         tipo: Rc<Type>,
     ) -> Result<TypedExpr, Error> {
-        let tipo = collapse_links(tipo);
+        let tipo = Type::collapse_links(tipo);
 
         let value = match (&*tipo, value) {
             // If the argument is expected to be a function and we are passed a
@@ -2459,7 +2457,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     ) -> Result<TypedExpr, Error> {
         let tuple_or_pair = self.infer(tuple_or_pair)?;
 
-        let tipo = match *collapse_links(tuple_or_pair.tipo()) {
+        let tipo = match *Type::collapse_links(tuple_or_pair.tipo()) {
             Type::Tuple {
                 ref elems,
                 alias: _,
