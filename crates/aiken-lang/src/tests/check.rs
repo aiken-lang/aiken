@@ -1902,6 +1902,35 @@ fn fuzzer_err_unify_3() {
 }
 
 #[test]
+fn fuzzer_unify_across_deps() {
+    let dependency = r#"
+        pub type Credential {
+          VerificationKey(ByteArray)
+          Script(ByteArray)
+        }
+    "#;
+
+    let source_code = r#"
+        use cardano/address.{Credential}
+
+        fn fuzz_credential(prng: PRNG) -> Option<(PRNG, Credential)> {
+            Some((prng, Credential.Script("")))
+        }
+
+        test foo(c: Credential via fuzz_credential) {
+            c == Credential.Script("")
+        }
+    "#;
+
+    let result = check_with_deps(
+        parse(source_code),
+        vec![(parse_as(dependency, "cardano/address"))],
+    );
+
+    assert!(matches!(result, Ok(..)), "{result:#?}");
+}
+
+#[test]
 fn utf8_hex_literal_warning() {
     let source_code = r#"
         pub const policy_id = "f43a62fdc3965df486de8a0d32fe800963589c41b38946602a0dc535"

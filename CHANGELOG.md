@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.17 - UNRELEASED
+
+### Fixed
+
+- **aiken-lang**: Correctly infer Fuzzer & Sampler via type annotations when referring to foreign types. @KtorZ
+
 ## v1.1.16 - 2025-04-14
 
 ### Added

@@ -1242,23 +1242,15 @@ impl Error {
         }
     }
 
-    pub fn with_unify_error_situation(self, situation: UnifyErrorSituation) -> Self {
-        match self {
-            Self::CouldNotUnify {
-                expected,
-                given,
-                location,
-                rigid_type_names,
-                ..
-            } => Self::CouldNotUnify {
-                expected,
-                given,
-                situation: Some(situation),
-                location,
-                rigid_type_names,
-            },
-            other => other,
+    pub fn with_unify_error_situation(mut self, new_situation: UnifyErrorSituation) -> Self {
+        if let Error::CouldNotUnify {
+            ref mut situation, ..
+        } = self
+        {
+            *situation = Some(new_situation);
         }
+
+        self
     }
 }
 

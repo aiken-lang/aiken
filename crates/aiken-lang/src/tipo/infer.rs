@@ -360,7 +360,7 @@ fn infer_definition(
                     }
 
                     extract_via_information(&f, arg, hydrators, environment, tracing, infer_fuzzer)
-                        .map(|(typed_via, annotation)| (Some(typed_via), Some(annotation)))
+                        .map(|(typed_via, annotation)| (Some(typed_via), annotation))
                 }
                 None => Ok((None, None)),
             }?;
@@ -450,7 +450,7 @@ fn infer_definition(
                 vec![ArgVia {
                     arg: TypedArg {
                         tipo: typed_via.1,
-                        annotation: Some(annotation),
+                        annotation,
                         ..arg
                     },
                     via: typed_via.0,
@@ -696,7 +696,7 @@ fn infer_definition(
     }
 }
 
-#[allow(clippy::result_large_err)]
+#[allow(clippy::result_large_err, clippy::type_complexity)]
 fn extract_via_information<F>(
     f: &Function<(), UntypedExpr, ArgVia<UntypedArg, UntypedExpr>>,
     arg: &ArgVia<UntypedArg, UntypedExpr>,
@@ -704,14 +704,9 @@ fn extract_via_information<F>(
     environment: &mut Environment<'_>,
     tracing: Tracing,
     infer_via: F,
-) -> Result<((TypedExpr, Rc<Type>), Annotation), Error>
+) -> Result<((TypedExpr, Rc<Type>), Option<Annotation>), Error>
 where
-    F: FnOnce(
-        &mut Environment<'_>,
-        Option<Rc<Type>>,
-        &Rc<Type>,
-        &Span,
-    ) -> Result<(Annotation, Rc<Type>), Error>,
+    F: FnOnce(&mut Environment<'_>, Option<Rc<Type>>, &Rc<Type>, &Span) -> Result<Rc<Type>, Error>,
 {
     let typed_via = ExprTyper::new(environment, tracing).infer(arg.via.clone())?;
 
@@ -724,7 +719,7 @@ where
         .map(|ann| hydrator.type_from_annotation(ann, environment))
         .transpose()?;
 
-    let (inferred_annotation, inferred_inner_type) = infer_via(
+    let inferred_inner_type = infer_via(
         environment,
         provided_inner_type.clone(),
         &typed_via.tipo(),
@@ -734,21 +729,16 @@ where
     // Ensure that the annotation, if any, matches the type inferred from the
     // Fuzzer.
     if let Some(provided_inner_type) = provided_inner_type {
-        if !arg
-            .arg
-            .annotation
-            .as_ref()
-            .unwrap()
-            .is_logically_equal(&inferred_annotation)
-        {
-            return Err(Error::CouldNotUnify {
-                location: arg.arg.location,
-                expected: inferred_inner_type.clone(),
-                given: provided_inner_type.clone(),
-                situation: Some(UnifyErrorSituation::FuzzerAnnotationMismatch),
-                rigid_type_names: hydrator.rigid_names(),
-            });
-        }
+        environment
+            .unify(
+                inferred_inner_type.clone(),
+                provided_inner_type.clone(),
+                arg.via.location(),
+                false,
+            )
+            .map_err(|err| {
+                err.with_unify_error_situation(UnifyErrorSituation::FuzzerAnnotationMismatch)
+            })?;
     }
 
     // Replace the pre-registered type for the test function, to allow inferring
@@ -770,7 +760,7 @@ where
         })
     }
 
-    Ok(((typed_via, inferred_inner_type), inferred_annotation))
+    Ok(((typed_via, inferred_inner_type), arg.arg.annotation.clone()))
 }
 
 #[allow(clippy::result_large_err)]
@@ -779,7 +769,7 @@ fn infer_fuzzer(
     expected_inner_type: Option<Rc<Type>>,
     tipo: &Rc<Type>,
     location: &Span,
-) -> Result<(Annotation, Rc<Type>), Error> {
+) -> Result<Rc<Type>, Error> {
     let could_not_unify = || Error::CouldNotUnify {
         location: *location,
         expected: Type::fuzzer(
@@ -810,6 +800,10 @@ fn infer_fuzzer(
                     Type::Tuple { elems, .. } if elems.len() == 2 => {
                         let wrapped = elems.get(1).expect("Tuple has two elements");
 
+                        // Disallow generics and functions as fuzzer targets. Only allow plain
+                        // concrete types.
+                        is_valid_fuzzer(wrapped, location)?;
+
                         // NOTE: Although we've drilled through the Fuzzer structure to get here,
                         // we still need to enforce that:
                         //
@@ -826,7 +820,7 @@ fn infer_fuzzer(
                             false,
                         )?;
 
-                        Ok((annotate_fuzzer(wrapped, location)?, wrapped.clone()))
+                        Ok(wrapped.clone())
                     }
                     _ => Err(could_not_unify()),
                 }
@@ -856,7 +850,7 @@ fn infer_sampler(
     expected_inner_type: Option<Rc<Type>>,
     tipo: &Rc<Type>,
     location: &Span,
-) -> Result<(Annotation, Rc<Type>), Error> {
+) -> Result<Rc<Type>, Error> {
     let could_not_unify = || Error::CouldNotUnify {
         location: *location,
         expected: Type::sampler(
@@ -899,45 +893,25 @@ fn infer_sampler(
 }
 
 #[allow(clippy::result_large_err)]
-fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
+fn is_valid_fuzzer(tipo: &Type, location: &Span) -> Result<(), Error> {
     match tipo {
         Type::App {
-            name,
-            module,
+            name: _name,
+            module: _module,
             args,
             public: _,
             contains_opaque: _,
             alias: _,
-        } => {
-            let arguments = args
-                .iter()
-                .map(|arg| annotate_fuzzer(arg, location))
-                .collect::<Result<Vec<Annotation>, _>>()?;
-            Ok(Annotation::Constructor {
-                name: name.to_owned(),
-                module: if module.is_empty() {
-                    None
-                } else {
-                    Some(module.to_owned())
-                },
-                arguments,
-                location: *location,
-            })
-        }
+        } => args
+            .iter()
+            .try_for_each(|arg| is_valid_fuzzer(arg, location)),
 
-        Type::Tuple { elems, alias: _ } => {
-            let elems = elems
-                .iter()
-                .map(|arg| annotate_fuzzer(arg, location))
-                .collect::<Result<Vec<Annotation>, _>>()?;
-            Ok(Annotation::Tuple {
-                elems,
-                location: *location,
-            })
-        }
+        Type::Tuple { elems, alias: _ } => elems
+            .iter()
+            .try_for_each(|arg| is_valid_fuzzer(arg, location)),
 
         Type::Var { tipo, alias: _ } => match &*tipo.deref().borrow() {
-            TypeVar::Link { tipo } => annotate_fuzzer(tipo, location),
+            TypeVar::Link { tipo } => is_valid_fuzzer(tipo, location),
             _ => Err(Error::GenericLeftAtBoundary {
                 location: *location,
             }),
@@ -947,13 +921,9 @@ fn annotate_fuzzer(tipo: &Type, location: &Span) -> Result<Annotation, Error> {
             tipo: Rc::new(tipo.clone()),
         }),
         Type::Pair { fst, snd, .. } => {
-            let fst = annotate_fuzzer(fst, location)?;
-            let snd = annotate_fuzzer(snd, location)?;
-            Ok(Annotation::Pair {
-                fst: Box::new(fst),
-                snd: Box::new(snd),
-                location: *location,
-            })
+            is_valid_fuzzer(fst, location)?;
+            is_valid_fuzzer(snd, location)?;
+            Ok(())
         }
     }
 }
