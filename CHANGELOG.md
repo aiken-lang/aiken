@@ -2,6 +2,14 @@
 
 ## v1.1.17 - UNRELEASED
 
+### Added
+
+- **aiken-lang**: New prelude function to conveniently upcast any serialisable type into `Data` in places where the compiler cannot do it implicitly.
+
+  ```aiken
+  pub fn as_data(data: Data) -> Data
+  ```
+
 ### Fixed
 
 - **aiken-lang**: Correctly infer Fuzzer & Sampler via type annotations when referring to foreign types. @KtorZ

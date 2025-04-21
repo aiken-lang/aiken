@@ -6449,3 +6449,37 @@ fn dangling_trace_expect_in_trace() {
 
     assert_uplc(src, program, false, true)
 }
+
+#[test]
+fn as_data() {
+    let src = r#"
+        type Foo {
+            foo: Int
+        }
+
+        type Bar {
+            bar: Int
+        }
+
+        test foo() {
+            [as_data(Foo(14)), as_data(Bar(42))] != []
+        }
+    "#;
+
+    let program = Term::equals_data()
+        .apply(
+            Term::list_data().apply(
+                Term::mk_cons()
+                    .apply(Term::data(Data::constr(0, vec![Data::integer(14.into())])))
+                    .apply(
+                        Term::mk_cons()
+                            .apply(Term::data(Data::constr(0, vec![Data::integer(42.into())])))
+                            .apply(Term::empty_list()),
+                    ),
+            ),
+        )
+        .apply(Term::data(Data::list(vec![])))
+        .if_then_else(Term::bool(false), Term::bool(true));
+
+    assert_uplc(src, program, false, true)
+}
