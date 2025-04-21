@@ -4310,3 +4310,22 @@ fn unused_record_fields_5() {
         }
     );
 }
+
+#[test]
+fn as_data() {
+    let source_code = r#"
+        type Foo {
+            foo: Int
+        }
+
+        type Bar {
+            bar: Int
+        }
+
+        test foo() {
+            [as_data(Foo(14)), as_data(Bar(42))] != []
+        }
+    "#;
+
+    assert!(matches!(check_validator(parse(source_code)), Ok(..)))
+}

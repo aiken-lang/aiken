@@ -285,6 +285,22 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         ),
     );
 
+    // as_data
+    prelude.values.insert(
+        "as_data".to_string(),
+        ValueConstructor::public(
+            Type::function(vec![Type::data()], Type::data()),
+            ValueConstructorVariant::ModuleFn {
+                name: "as_data".to_string(),
+                field_map: None,
+                module: "".to_string(),
+                arity: 1,
+                location: Span::empty(),
+                builtin: None,
+            },
+        ),
+    );
+
     // enumerate
     let enumerate_a = Type::generic_var(id_gen.next());
     let enumerate_b = Type::generic_var(id_gen.next());
@@ -1193,6 +1209,53 @@ pub fn prelude_functions(
             function_name: "unconstr_fields".to_string(),
         },
         unconstr_fields_func,
+    );
+
+    functions.insert(
+        FunctionAccessKey {
+            module_name: "".to_string(),
+            function_name: "as_data".to_string(),
+        },
+        Function {
+            arguments: vec![TypedArg {
+                arg_name: ArgName::Named {
+                    name: "data".to_string(),
+                    label: "data".to_string(),
+                    location: Span::empty(),
+                },
+                is_validator_param: false,
+                location: Span::empty(),
+                annotation: None,
+                doc: None,
+                tipo: Type::data(),
+            }],
+            on_test_failure: OnTestFailure::FailImmediately,
+            body: TypedExpr::Var {
+                location: Span::empty(),
+                constructor: ValueConstructor {
+                    public: true,
+                    tipo: Type::data(),
+                    variant: ValueConstructorVariant::LocalVariable {
+                        location: Span::empty(),
+                    },
+                },
+                name: "data".to_string(),
+            },
+            doc: Some(
+                indoc::indoc! {
+                    r#"
+                    A function for explicitly upcasting any serialisable type into `Data`.
+                    "#
+                }
+                .to_string(),
+            ),
+            location: Span::empty(),
+            name: "as_data".to_string(),
+            public: true,
+            return_annotation: None,
+            return_type: Type::data(),
+            end_position: 0,
+        },
     );
 
     // /// Negate the argument. Useful for map/fold and pipelines.
