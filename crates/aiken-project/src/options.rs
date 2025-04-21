@@ -1,6 +1,6 @@
-use std::path::PathBuf;
-
+use crate::telemetry::CoverageMode;
 use aiken_lang::ast::Tracing;
+use std::path::PathBuf;
 
 pub struct Options {
     pub code_gen_mode: CodeGenMode,
@@ -27,6 +27,7 @@ pub enum CodeGenMode {
         exact_match: bool,
         seed: u32,
         property_max_success: usize,
+        coverage_mode: CoverageMode,
     },
     Build(bool),
     Benchmark {

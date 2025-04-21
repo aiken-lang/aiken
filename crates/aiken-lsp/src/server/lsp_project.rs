@@ -1,6 +1,7 @@
 use aiken_lang::{ast::Tracing, line_numbers::LineNumbers, test_framework::PropertyTest};
 use aiken_project::{
     Project, config::ProjectConfig, error::Error as ProjectError, module::CheckedModule,
+    telemetry::CoverageMode,
 };
 use std::{collections::HashMap, path::PathBuf};
 
@@ -38,6 +39,7 @@ impl LspProject {
             false,
             u32::default(),
             PropertyTest::DEFAULT_MAX_SUCCESS,
+            CoverageMode::default(),
             Tracing::verbose(),
             None,
         );

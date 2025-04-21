@@ -28,7 +28,7 @@ use crate::{
     config::ProjectConfig,
     error::{Error, Warning},
     module::{CheckedModule, CheckedModules, ParsedModule, ParsedModules},
-    telemetry::Event,
+    telemetry::{CoverageMode, Event},
 };
 use aiken_lang::{
     IdGenerator,
@@ -275,6 +275,7 @@ where
         exact_match: bool,
         seed: u32,
         property_max_success: usize,
+        coverage_mode: CoverageMode,
         tracing: Tracing,
         env: Option<String>,
     ) -> Result<(), Vec<Error>> {
@@ -290,6 +291,7 @@ where
                     exact_match,
                     seed,
                     property_max_success,
+                    coverage_mode,
                 }
             },
             blueprint_path: self.blueprint_path(None),
@@ -426,6 +428,7 @@ where
                 exact_match,
                 seed,
                 property_max_success,
+                coverage_mode,
             } => {
                 let tests =
                     self.collect_tests(verbose, match_tests, exact_match, options.tracing)?;
@@ -458,8 +461,11 @@ where
                     })
                     .collect();
 
-                self.event_listener
-                    .handle_event(Event::FinishedTests { seed, tests });
+                self.event_listener.handle_event(Event::FinishedTests {
+                    seed,
+                    coverage_mode,
+                    tests,
+                });
 
                 if !errors.is_empty() {
                     Err(errors)
