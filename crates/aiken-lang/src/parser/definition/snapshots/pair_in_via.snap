@@ -1,0 +1,78 @@
+---
+source: crates/aiken-lang/src/parser/definition/test_like.rs
+description: "Code:\n\ntest foo(x via some_generator(Pair(14, 42))) {\n  x == 56\n}\n"
+---
+Test(
+    Function {
+        arguments: [
+            ArgVia {
+                arg: UntypedArg {
+                    by: ByName(
+                        Named {
+                            name: "x",
+                            label: "x",
+                            location: 9..10,
+                        },
+                    ),
+                    location: 9..10,
+                    annotation: None,
+                    doc: None,
+                    is_validator_param: false,
+                },
+                via: Call {
+                    arguments: [
+                        CallArg {
+                            label: None,
+                            location: 30..42,
+                            value: Pair {
+                                location: 34..42,
+                                fst: UInt {
+                                    location: 35..37,
+                                    value: "14",
+                                    base: Decimal {
+                                        numeric_underscore: false,
+                                    },
+                                },
+                                snd: UInt {
+                                    location: 39..41,
+                                    value: "42",
+                                    base: Decimal {
+                                        numeric_underscore: false,
+                                    },
+                                },
+                            },
+                        },
+                    ],
+                    fun: Var {
+                        location: 15..29,
+                        name: "some_generator",
+                    },
+                    location: 15..43,
+                },
+            },
+        ],
+        body: BinOp {
+            location: 49..56,
+            name: Eq,
+            left: Var {
+                location: 49..50,
+                name: "x",
+            },
+            right: UInt {
+                location: 54..56,
+                value: "56",
+                base: Decimal {
+                    numeric_underscore: false,
+                },
+            },
+        },
+        doc: None,
+        location: 0..44,
+        name: "foo",
+        public: false,
+        return_annotation: None,
+        return_type: (),
+        end_position: 57,
+        on_test_failure: FailImmediately,
+    },
+)

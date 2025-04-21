@@ -6,6 +6,7 @@
 
 - **aiken-lang**: Correctly infer Fuzzer & Sampler via type annotations when referring to foreign types. @KtorZ
 - **aiken-lang**: Allow type reification to pierce through Data aliases (e.g. Redeemer) holding lists, tuples or pairs, instead of crashing the compiler. @KtorZ
+- **aiken-lang**: Allow `Pair` to be used inline in Fuzzer's eDSL. @KtorZ
 
 ## v1.1.16 - 2025-04-14
 
