@@ -6,7 +6,7 @@ use crate::{
         annotation,
         chain::{Chain, call::parser as call, field_access, tuple_index::parser as tuple_index},
         error::ParseError,
-        expr::{self, bytearray, int as uint, list, string, tuple, var},
+        expr::{self, bytearray, int as uint, list, pair, string, tuple, var},
         pattern,
         token::Token,
     },
@@ -129,6 +129,7 @@ pub fn fuzzer<'a>() -> impl Parser<Token, UntypedExpr, Error = ParseError> + 'a 
             int(),
             string(),
             bytearray(),
+            pair(expression.clone()),
             tuple(expression.clone()),
             list(expression.clone()),
             var(),
@@ -140,4 +141,20 @@ pub fn fuzzer<'a>() -> impl Parser<Token, UntypedExpr, Error = ParseError> + 'a 
             Chain::TupleIndex(index, span) => expr.tuple_index(index, span),
         })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::assert_definition;
+
+    #[test]
+    fn test_pair_in_via() {
+        assert_definition!(
+            r#"
+            test foo(x via some_generator(Pair(14, 42))) {
+              x == 56
+            }
+            "#
+        );
+    }
 }
