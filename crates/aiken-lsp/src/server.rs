@@ -17,7 +17,7 @@ use aiken_lang::{
     tipo::pretty::Printer,
 };
 use aiken_project::{
-    config::{self, ProjectConfig},
+    config::{self, ProjectConfig, WorkspaceConfig},
     error::{Error as ProjectError, GetSource},
     module::CheckedModule,
 };
@@ -45,12 +45,17 @@ use std::{
 pub mod lsp_project;
 pub mod telemetry;
 
+pub enum LspConfig {
+    Project(ProjectConfig),
+    Workspace(WorkspaceConfig),
+}
+
 #[allow(dead_code)]
 pub struct Server {
     // Project root directory
     root: PathBuf,
 
-    config: Option<config::ProjectConfig>,
+    config: Option<LspConfig>,
 
     /// Files that have been edited in memory
     edited: HashMap<String, String>,
@@ -145,7 +150,12 @@ impl Server {
 
     fn create_new_compiler(&mut self) {
         if let Some(config) = self.config.as_ref() {
-            let compiler = LspProject::new(config.clone(), self.root.clone(), telemetry::Lsp);
+            let roots = match config {
+                LspConfig::Project(_config) => vec![self.root.clone()],
+                LspConfig::Workspace(config) => config.members.clone(),
+            };
+
+            let compiler = LspProject::new(roots, telemetry::Lsp);
 
             self.compiler = Some(compiler);
         }
@@ -603,7 +613,7 @@ impl Server {
 
     pub fn new(
         initialize_params: InitializeParams,
-        config: Option<config::ProjectConfig>,
+        config: Option<LspConfig>,
         root: PathBuf,
     ) -> Self {
         let mut server = Server {
