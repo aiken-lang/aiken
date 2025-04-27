@@ -10,6 +10,22 @@
   pub fn as_data(data: Data) -> Data
   ```
 
+- **aiken**: New `--property-coverage` flag to the `check` command, to switch the coverage denominator between the number of iterations and the total number of labels. @KtorZ
+
+  ```
+  -P, --property-coverage <COVERAGE_MODE>
+          Display options for the coverage.
+            - relative-to-labels:
+                Ratio of each label over the total number of labels.
+                Better when labels are mutually-exclusive and present in each test.
+
+            - relative-to-tests:
+                Ratio of each label over the total number of tests/iterations.
+                Better when labels are occasional and non-exclusive per test.
+
+          [default: relative-to-labels]
+  ```
+
 ### Fixed
 
 - **aiken-lang**: Correctly infer Fuzzer & Sampler via type annotations when referring to foreign types. @KtorZ
