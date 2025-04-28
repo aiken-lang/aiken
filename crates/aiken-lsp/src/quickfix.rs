@@ -18,6 +18,7 @@ const UTF8_BYTE_ARRAY_IS_VALID_HEX_STRING: &str =
 const UNEXPECTED_TYPE_HOLE: &str = "aiken::check::unexpected::type_hole";
 const UNUSED_PRIVATE_FUNCTION: &str = "aiken::check::unused::function";
 const UNUSED_PRIVATE_CONSTANT: &str = "aiken::check::unused::constant";
+const UNUSED_PRIVATE_TYPE: &str = "aiken::check::unused::type";
 const PRIVATE_TYPE_LEAK: &str = "aiken::check::private_leak";
 
 /// Errors for which we can provide quickfixes
@@ -91,6 +92,7 @@ pub fn assert(diagnostic: lsp_types::Diagnostic) -> Option<Quickfix> {
 
     if match_code(&diagnostic, Severity::WARNING, UNUSED_PRIVATE_FUNCTION)
         || match_code(&diagnostic, Severity::WARNING, UNUSED_PRIVATE_CONSTANT)
+        || match_code(&diagnostic, Severity::WARNING, UNUSED_PRIVATE_TYPE)
     {
         return Some(Quickfix::UnusedPrivate(diagnostic));
     }
