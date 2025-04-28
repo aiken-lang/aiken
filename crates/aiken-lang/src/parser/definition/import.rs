@@ -1,5 +1,6 @@
 use crate::{
     ast,
+    expr::Span,
     parser::{error::ParseError, token::Token},
 };
 use chumsky::prelude::*;
@@ -39,13 +40,14 @@ pub fn parser() -> impl Parser<Token, ast::UntypedUse, Error = ParseError> {
     let module_path = select! {Token::Name { name } => name}
         .separated_by(just(Token::Slash))
         .then(unqualified_imports)
+        .map_with_span(|(module, unqualified), span: Span| (module, (span, unqualified)))
         .then(as_name);
 
     just(Token::Use).ignore_then(module_path).map_with_span(
-        |((module, unqualified), as_name), span| ast::Use {
+        |((module, (unqualified_start, unqualified)), as_name), span| ast::Use {
             module,
             as_name,
-            unqualified: unqualified.unwrap_or_default(),
+            unqualified: (unqualified_start.end, unqualified.unwrap_or_default()),
             package: (),
             location: span,
         },

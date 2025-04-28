@@ -16,23 +16,26 @@ Module {
                     "list",
                 ],
                 package: (),
-                unqualified: [
-                    UnqualifiedImport {
-                        location: 16..19,
-                        name: "bar",
-                        as_name: None,
-                    },
-                    UnqualifiedImport {
-                        location: 21..24,
-                        name: "foo",
-                        as_name: None,
-                    },
-                    UnqualifiedImport {
-                        location: 42..45,
-                        name: "baz",
-                        as_name: None,
-                    },
-                ],
+                unqualified: (
+                    25,
+                    [
+                        UnqualifiedImport {
+                            location: 16..19,
+                            name: "bar",
+                            as_name: None,
+                        },
+                        UnqualifiedImport {
+                            location: 21..24,
+                            name: "foo",
+                            as_name: None,
+                        },
+                        UnqualifiedImport {
+                            location: 42..45,
+                            name: "baz",
+                            as_name: None,
+                        },
+                    ],
+                ),
             },
         ),
     ],

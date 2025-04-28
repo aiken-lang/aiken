@@ -66,7 +66,7 @@ impl ParsedDocument {
                 Definition::Use(Use {
                     location,
                     module: existing_module,
-                    unqualified: unqualified_list,
+                    unqualified: (unqualified_end, unqualified_list),
                     ..
                 }) => {
                     last_import = Some(*location);
@@ -110,9 +110,11 @@ impl ParsedDocument {
                             return match last_unqualified {
                                 // Only happens if 'unqualified_list' is empty, in which case, we
                                 // simply create a new unqualified list of import.
-                                None => {
-                                    Some(self.add_new_qualified(import, unqualified, *location))
-                                }
+                                None => Some(self.add_new_qualified(
+                                    import,
+                                    unqualified,
+                                    *unqualified_end,
+                                )),
                                 // Happens if the new qualified import is lexicographically after
                                 // all existing ones.
                                 Some(location) => {
@@ -229,13 +231,13 @@ impl ParsedDocument {
         &self,
         import: &CheckedModule,
         unqualified: &str,
-        location: Span,
+        position: usize,
     ) -> AnnotatedEdit {
         let title = format!("Import '{}' from {}", unqualified, import.name);
         AnnotatedEdit::SimpleEdit(
             title,
             insert_text(
-                location.end,
+                position,
                 &self.line_numbers,
                 format!(".{{{}}}", unqualified),
             ),
