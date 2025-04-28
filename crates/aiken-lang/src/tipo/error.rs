@@ -1873,7 +1873,6 @@ impl ExtraData for Warning {
             | Warning::SingleConstructorExpect { .. }
             | Warning::SingleWhenClause { .. }
             | Warning::Todo { .. }
-            | Warning::UnexpectedTypeHole { .. }
             | Warning::UnusedConstructor { .. }
             | Warning::UnusedPrivateFunction { .. }
             | Warning::UnusedPrivateModuleConstant { .. }
@@ -1884,13 +1883,13 @@ impl ExtraData for Warning {
             | Warning::CompactTraceLabelIsNotstring { .. }
             | Warning::UseWhenInstead { .. } => None,
             Warning::Utf8ByteArrayIsValidHexString { value, .. } => Some(value.clone()),
+            Warning::UnexpectedTypeHole { tipo, .. } => Some(tipo.to_pretty(0)),
             Warning::UnusedImportedModule { location, .. } => {
                 Some(format!("{},{}", false, location.start))
             }
             Warning::UnusedImportedValueOrType { location, .. } => {
                 Some(format!("{},{}", true, location.start))
             }
-
             Warning::UnusedRecordFields { suggestion, .. } => {
                 Some(Formatter::new().pattern(suggestion).to_pretty_string(80))
             }

@@ -101,7 +101,7 @@ impl Hydrator {
         let mut unbounds = vec![];
         let tipo = self.do_type_from_annotation(annotation, environment, &mut unbounds)?;
 
-        if let Some(location) = unbounds.last() {
+        if let Some((tipo, location)) = unbounds.last() {
             environment.warnings.push(Warning::UnexpectedTypeHole {
                 location: **location,
                 tipo: tipo.clone(),
@@ -117,7 +117,7 @@ impl Hydrator {
         &mut self,
         annotation: &'a Annotation,
         environment: &mut Environment,
-        unbounds: &mut Vec<&'a Span>,
+        unbounds: &mut Vec<(Rc<Type>, &'a Span)>,
     ) -> Result<Rc<Type>, Error> {
         let return_type = match annotation {
             Annotation::Constructor {
@@ -229,8 +229,9 @@ impl Hydrator {
             },
 
             Annotation::Hole { location, .. } => {
-                unbounds.push(location);
-                Ok(environment.new_unbound_var())
+                let unbound = environment.new_unbound_var();
+                unbounds.push((unbound.clone(), location));
+                Ok(unbound)
             }
 
             Annotation::Tuple { elems, .. } => {
