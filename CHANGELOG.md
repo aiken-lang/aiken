@@ -26,8 +26,9 @@
   pub fn as_data(data: Data) -> Data
   ```
 
-- **aiken-lsp**: New quickfix to automatically plucking inferred types in holes within annotations. @KtorZ
-- **aiken-lsp**: New quickfix to automatically make functions and constants public when detected unused. @KtorZ
+- **aiken-lsp**: New quickfix to pluck inferred types in holes within annotations. @KtorZ
+- **aiken-lsp**: New quickfix to make functions and constants public when detected unused. @KtorZ
+- **aiken-lsp**: New quickfix to make types public when 'leaking' from a public function (e.g. validator handlers). @KtorZ
 
 ### Fixed
 
