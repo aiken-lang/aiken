@@ -1874,14 +1874,14 @@ impl ExtraData for Warning {
             | Warning::SingleWhenClause { .. }
             | Warning::Todo { .. }
             | Warning::UnusedConstructor { .. }
-            | Warning::UnusedPrivateFunction { .. }
-            | Warning::UnusedPrivateModuleConstant { .. }
             | Warning::UnusedType { .. }
             | Warning::UnusedVariable { .. }
             | Warning::DiscardedLetAssignment { .. }
             | Warning::ValidatorInLibraryModule { .. }
             | Warning::CompactTraceLabelIsNotstring { .. }
             | Warning::UseWhenInstead { .. } => None,
+            Warning::UnusedPrivateFunction { name, .. }
+            | Warning::UnusedPrivateModuleConstant { name, .. } => Some(name.clone()),
             Warning::Utf8ByteArrayIsValidHexString { value, .. } => Some(value.clone()),
             Warning::UnexpectedTypeHole { tipo, .. } => Some(tipo.to_pretty(0)),
             Warning::UnusedImportedModule { location, .. } => {

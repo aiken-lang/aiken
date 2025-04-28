@@ -16,6 +16,8 @@ const UNUSED_RECORD_FIELDS: &str = "aiken::check::syntax::unused_record_fields";
 const UTF8_BYTE_ARRAY_IS_VALID_HEX_STRING: &str =
     "aiken::check::syntax::bytearray_literal_is_hex_string";
 const UNEXPECTED_TYPE_HOLE: &str = "aiken::check::unexpected::type_hole";
+const UNUSED_PRIVATE_FUNCTION: &str = "aiken::check::unused::function";
+const UNUSED_PRIVATE_CONSTANT: &str = "aiken::check::unused::constant";
 
 /// Errors for which we can provide quickfixes
 #[allow(clippy::enum_variant_names)]
@@ -28,6 +30,7 @@ pub enum Quickfix {
     UseLet(lsp_types::Diagnostic),
     UnusedRecordFields(lsp_types::Diagnostic),
     UnexpectedTypeHole(lsp_types::Diagnostic),
+    UnusedPrivate(lsp_types::Diagnostic),
 }
 
 fn match_code(
@@ -82,6 +85,12 @@ pub fn assert(diagnostic: lsp_types::Diagnostic) -> Option<Quickfix> {
 
     if match_code(&diagnostic, Severity::WARNING, UNEXPECTED_TYPE_HOLE) {
         return Some(Quickfix::UnexpectedTypeHole(diagnostic));
+    }
+
+    if match_code(&diagnostic, Severity::WARNING, UNUSED_PRIVATE_FUNCTION)
+        || match_code(&diagnostic, Severity::WARNING, UNUSED_PRIVATE_CONSTANT)
+    {
+        return Some(Quickfix::UnusedPrivate(diagnostic));
     }
 
     None
@@ -162,6 +171,12 @@ pub fn quickfix(
                 text_document,
                 diagnostic,
                 fill_type_hole(diagnostic),
+            ),
+            Quickfix::UnusedPrivate(diagnostic) => each_as_distinct_action(
+                &mut actions,
+                text_document,
+                diagnostic,
+                make_value_public(diagnostic),
             ),
         };
     }
@@ -422,6 +437,25 @@ fn fill_type_hole(diagnostic: &lsp_types::Diagnostic) -> Vec<AnnotatedEdit> {
             lsp_types::TextEdit {
                 range: diagnostic.range,
                 new_text: inferred_type.to_string(),
+            },
+        ));
+    }
+
+    edits
+}
+
+fn make_value_public(diagnostic: &lsp_types::Diagnostic) -> Vec<AnnotatedEdit> {
+    let mut edits = Vec::new();
+
+    if let Some(serde_json::Value::String(name)) = diagnostic.data.as_ref() {
+        edits.push(AnnotatedEdit::SimpleEdit(
+            format!("Make '{}' public", name),
+            lsp_types::TextEdit {
+                range: lsp_types::Range {
+                    start: diagnostic.range.start,
+                    end: diagnostic.range.start,
+                },
+                new_text: "pub ".to_string(),
             },
         ));
     }
