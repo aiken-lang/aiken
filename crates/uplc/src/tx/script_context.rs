@@ -9,12 +9,11 @@ use pallas_crypto::hash::Hash;
 use pallas_primitives::{
     alonzo,
     conway::{
-        AddrKeyhash, Certificate, Coin, DatumHash, DatumOption, GovAction, GovActionId, Mint,
-        MintedTransactionBody, MintedTransactionOutput, MintedTx, MintedWitnessSet, NativeScript,
-        PlutusData, PlutusScript, PolicyId, PostAlonzoTransactionOutput, ProposalProcedure,
-        PseudoDatumOption, PseudoScript, Redeemer, RedeemerTag, RedeemersKey, RequiredSigners,
-        RewardAccount, ScriptHash, StakeCredential, TransactionInput, TransactionOutput, Value,
-        Voter, VotingProcedure,
+        self, AddrKeyhash, Certificate, Coin, DatumHash, DatumOption, GovAction, GovActionId, Mint,
+        MintedTransactionBody, MintedTransactionOutput, MintedTx, MintedWitnessSet, PlutusData,
+        PolicyId, PostAlonzoTransactionOutput, ProposalProcedure, PseudoDatumOption, PseudoScript,
+        Redeemer, RedeemerTag, RedeemersKey, RequiredSigners, RewardAccount, ScriptHash,
+        StakeCredential, TransactionInput, TransactionOutput, Value, Voter, VotingProcedure,
     },
 };
 use pallas_traverse::{ComputeHash, OriginalHash};
@@ -76,19 +75,35 @@ impl ScriptPurpose {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum ScriptVersion {
-    Native(NativeScript),
-    V1(PlutusScript<1>),
-    V2(PlutusScript<2>),
-    V3(PlutusScript<3>),
+pub enum PlutusScript {
+    V1(conway::PlutusScript<1>),
+    V2(conway::PlutusScript<2>),
+    V3(conway::PlutusScript<3>),
+}
+
+impl Deref for PlutusScript {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            PlutusScript::V1(script) => script.as_ref(),
+            PlutusScript::V2(script) => script.as_ref(),
+            PlutusScript::V3(script) => script.as_ref(),
+        }
+    }
 }
 
 pub struct DataLookupTable {
     datum: HashMap<DatumHash, PlutusData>,
-    scripts: HashMap<ScriptHash, ScriptVersion>,
+    scripts: HashMap<ScriptHash, PlutusScript>,
+    overriden_scripts: HashMap<ScriptHash, PlutusScript>,
 }
 
 impl DataLookupTable {
+    pub fn override_script(&mut self, key: ScriptHash, value: PlutusScript) {
+        self.overriden_scripts.insert(key, value);
+    }
+
     pub fn from_transaction(tx: &MintedTx, utxos: &[ResolvedInput]) -> DataLookupTable {
         let mut datum = HashMap::new();
         let mut scripts = HashMap::new();
@@ -98,13 +113,6 @@ impl DataLookupTable {
         let plutus_data_witnesses = tx
             .transaction_witness_set
             .plutus_data
-            .clone()
-            .map(|s| s.to_vec())
-            .unwrap_or_default();
-
-        let scripts_native_witnesses = tx
-            .transaction_witness_set
-            .native_script
             .clone()
             .map(|s| s.to_vec())
             .unwrap_or_default();
@@ -134,23 +142,16 @@ impl DataLookupTable {
             datum.insert(plutus_data.original_hash(), plutus_data.clone().unwrap());
         }
 
-        for script in scripts_native_witnesses.iter() {
-            scripts.insert(
-                script.compute_hash(),
-                ScriptVersion::Native(script.clone().unwrap()),
-            );
-        }
-
         for script in scripts_v1_witnesses.iter() {
-            scripts.insert(script.compute_hash(), ScriptVersion::V1(script.clone()));
+            scripts.insert(script.compute_hash(), PlutusScript::V1(script.clone()));
         }
 
         for script in scripts_v2_witnesses.iter() {
-            scripts.insert(script.compute_hash(), ScriptVersion::V2(script.clone()));
+            scripts.insert(script.compute_hash(), PlutusScript::V2(script.clone()));
         }
 
         for script in scripts_v3_witnesses.iter() {
-            scripts.insert(script.compute_hash(), ScriptVersion::V3(script.clone()));
+            scripts.insert(script.compute_hash(), PlutusScript::V3(script.clone()));
         }
 
         // discovery in utxos (script ref)
@@ -161,32 +162,39 @@ impl DataLookupTable {
                 TransactionOutput::PostAlonzo(output) => {
                     if let Some(script) = &output.script_ref {
                         match &script.0 {
-                            PseudoScript::NativeScript(ns) => {
-                                scripts
-                                    .insert(ns.compute_hash(), ScriptVersion::Native(ns.clone()));
-                            }
                             PseudoScript::PlutusV1Script(v1) => {
-                                scripts.insert(v1.compute_hash(), ScriptVersion::V1(v1.clone()));
+                                scripts.insert(v1.compute_hash(), PlutusScript::V1(v1.clone()));
                             }
                             PseudoScript::PlutusV2Script(v2) => {
-                                scripts.insert(v2.compute_hash(), ScriptVersion::V2(v2.clone()));
+                                scripts.insert(v2.compute_hash(), PlutusScript::V2(v2.clone()));
                             }
                             PseudoScript::PlutusV3Script(v3) => {
-                                scripts.insert(v3.compute_hash(), ScriptVersion::V3(v3.clone()));
+                                scripts.insert(v3.compute_hash(), PlutusScript::V3(v3.clone()));
                             }
+                            PseudoScript::NativeScript(_) => {}
                         }
                     }
                 }
             }
         }
 
-        DataLookupTable { datum, scripts }
+        DataLookupTable {
+            datum,
+            scripts,
+            overriden_scripts: HashMap::new(),
+        }
     }
 }
 
 impl DataLookupTable {
-    pub fn scripts(&self) -> HashMap<ScriptHash, ScriptVersion> {
-        self.scripts.clone()
+    pub fn get_script(&self, script_hash: &ScriptHash) -> Option<&PlutusScript> {
+        self.overriden_scripts
+            .get(script_hash)
+            .or_else(|| self.scripts.get(script_hash))
+    }
+
+    pub fn iter_script_hashes(&self) -> impl Iterator<Item = &ScriptHash> {
+        self.scripts.keys()
     }
 }
 
@@ -822,7 +830,7 @@ pub fn find_script(
     tx: &MintedTx,
     utxos: &[ResolvedInput],
     lookup_table: &DataLookupTable,
-) -> Result<(ScriptVersion, Option<PlutusData>), Error> {
+) -> Result<(PlutusScript, Option<PlutusData>), Error> {
     let lookup_script = |script_hash: &ScriptHash| match lookup_table.scripts.get(script_hash) {
         Some(s) => Ok((s.clone(), None)),
         None => Err(Error::MissingRequiredScript {
@@ -913,7 +921,7 @@ pub fn find_script(
                     let datum = lookup_datum(output_datum(&input.resolved))?;
 
                     if datum.is_none()
-                        && matches!(script, ScriptVersion::V1(..) | ScriptVersion::V2(..))
+                        && matches!(script, PlutusScript::V1(..) | PlutusScript::V2(..))
                     {
                         return Err(Error::MissingRequiredInlineDatumOrHash);
                     }

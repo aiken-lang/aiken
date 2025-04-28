@@ -543,10 +543,7 @@ where
             Some(StakePayload::Script(script)) => ShelleyDelegationPart::Script(script),
         };
 
-        // Read blueprint
-        let blueprint = File::open(blueprint_path)
-            .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
-        let blueprint: Blueprint = serde_json::from_reader(BufReader::new(blueprint))?;
+        let blueprint = self.blueprint(blueprint_path)?;
 
         // Calculate the address
         let when_too_many = |known_validators| {
@@ -591,10 +588,7 @@ where
         validator_name: Option<&str>,
         blueprint_path: &Path,
     ) -> Result<PolicyId, Error> {
-        // Read blueprint
-        let blueprint = File::open(blueprint_path)
-            .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
-        let blueprint: Blueprint = serde_json::from_reader(BufReader::new(blueprint))?;
+        let blueprint = self.blueprint(blueprint_path)?;
 
         // Error handlers for ambiguous / missing validators
         let when_too_many = |known_validators| {
@@ -616,7 +610,7 @@ where
                 if n > 0 {
                     Err(blueprint::error::Error::ParameterizedValidator { n }.into())
                 } else {
-                    Ok(validator.program.compiled_code_and_hash().1)
+                    Ok(validator.program.compiled_code_and_hash().0)
                 }
             },
         )
@@ -654,6 +648,12 @@ where
                 module: module.to_string(),
                 name: name.to_string(),
             })
+    }
+
+    pub fn blueprint(&self, path: &Path) -> Result<Blueprint, Error> {
+        let blueprint =
+            File::open(path).map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
+        Ok(serde_json::from_reader(BufReader::new(blueprint))?)
     }
 
     fn with_dependencies(&mut self, parsed_packages: &mut ParsedModules) -> Result<(), Vec<Error>> {

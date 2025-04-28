@@ -69,6 +69,7 @@ dependencies = [
  "openssl-probe",
  "ordinal",
  "owo-colors 3.5.0",
+ "pallas-addresses",
  "pallas-codec",
  "pallas-primitives",
  "pallas-traverse",

@@ -1,6 +1,6 @@
 use super::{
     error::Error,
-    script_context::{DataLookupTable, ResolvedInput, ScriptPurpose, ScriptVersion, sort_voters},
+    script_context::{DataLookupTable, PlutusScript, ResolvedInput, ScriptPurpose, sort_voters},
 };
 use crate::tx::script_context::sort_reward_accounts;
 use itertools::Itertools;
@@ -10,7 +10,6 @@ use pallas_primitives::conway::{
     Certificate, GovAction, MintedTx, PolicyId, RedeemerTag, Redeemers, RedeemersKey,
     RewardAccount, StakeCredential, TransactionOutput, Voter,
 };
-use std::collections::HashMap;
 
 type ScriptsNeeded = Vec<(ScriptPurpose, ScriptHash)>;
 
@@ -22,19 +21,20 @@ pub fn eval_phase_one(
 ) -> Result<(), Error> {
     let scripts_needed = scripts_needed(tx, utxos)?;
 
-    validate_missing_scripts(&scripts_needed, lookup_table.scripts())?;
+    validate_missing_scripts(
+        &scripts_needed,
+        lookup_table.iter_script_hashes().copied().collect(),
+    )?;
 
-    has_exact_set_of_redeemers(tx, &scripts_needed, lookup_table.scripts())?;
+    has_exact_set_of_redeemers(tx, &scripts_needed, lookup_table)?;
 
     Ok(())
 }
 
-pub fn validate_missing_scripts(
+pub fn validate_missing_scripts<'a>(
     needed: &ScriptsNeeded,
-    txscripts: HashMap<ScriptHash, ScriptVersion>,
+    received_hashes: Vec<ScriptHash>,
 ) -> Result<(), Error> {
-    let received_hashes = txscripts.keys().copied().collect::<Vec<ScriptHash>>();
-
     let needed_hashes = needed.iter().map(|x| x.1).collect::<Vec<ScriptHash>>();
 
     let missing: Vec<_> = needed_hashes
@@ -198,26 +198,25 @@ pub fn scripts_needed(tx: &MintedTx, utxos: &[ResolvedInput]) -> Result<ScriptsN
 pub fn has_exact_set_of_redeemers(
     tx: &MintedTx,
     needed: &ScriptsNeeded,
-    tx_scripts: HashMap<ScriptHash, ScriptVersion>,
+    lookup_table: &DataLookupTable,
 ) -> Result<(), Error> {
     let mut redeemers_needed = Vec::new();
 
     for (script_purpose, script_hash) in needed {
         let redeemer_key = build_redeemer_key(tx, script_purpose)?;
-        let script = tx_scripts.get(script_hash);
+        let script = lookup_table.get_script(script_hash);
 
         if let (Some(key), Some(script)) = (redeemer_key, script) {
             match script {
-                ScriptVersion::V1(_) => {
+                PlutusScript::V1(_) => {
                     redeemers_needed.push((key, script_purpose.clone(), *script_hash))
                 }
-                ScriptVersion::V2(_) => {
+                PlutusScript::V2(_) => {
                     redeemers_needed.push((key, script_purpose.clone(), *script_hash))
                 }
-                ScriptVersion::V3(_) => {
+                PlutusScript::V3(_) => {
                     redeemers_needed.push((key, script_purpose.clone(), *script_hash))
                 }
-                ScriptVersion::Native(_) => (),
             }
         }
     }

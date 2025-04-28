@@ -1,9 +1,12 @@
+use std::collections::HashMap;
+
 use crate::{
     PlutusData,
     ast::{DeBruijn, Program},
     machine::{cost_model::ExBudget, eval_result::EvalResult},
 };
 use error::Error;
+use pallas_addresses::ScriptHash;
 use pallas_primitives::{
     Fragment,
     conway::{
@@ -13,6 +16,7 @@ use pallas_primitives::{
 };
 use pallas_traverse::{Era, MultiEraTx};
 pub use phase_one::{eval_phase_one, redeemer_tag_to_string};
+use script_context::PlutusScript;
 pub use script_context::{DataLookupTable, ResolvedInput, SlotConfig};
 
 pub mod error;
@@ -37,14 +41,42 @@ pub fn eval_phase_two(
     run_phase_one: bool,
     with_redeemer: fn(&Redeemer) -> (),
 ) -> Result<Vec<(Redeemer, EvalResult)>, Error> {
+    eval_phase_two_with_override(
+        tx,
+        utxos,
+        cost_mdls,
+        initial_budget,
+        slot_config,
+        HashMap::new(),
+        run_phase_one,
+        with_redeemer,
+    )
+}
+
+/// Like eval_phase_two, but allows replacing scripts dynamically for simulations
+pub fn eval_phase_two_with_override(
+    tx: &MintedTx,
+    utxos: &[ResolvedInput],
+    cost_mdls: Option<&CostModels>,
+    initial_budget: Option<&ExBudget>,
+    slot_config: &SlotConfig,
+    override_scripts: HashMap<ScriptHash, PlutusScript>,
+    run_phase_one: bool,
+    with_redeemer: fn(&Redeemer) -> (),
+) -> Result<Vec<(Redeemer, EvalResult)>, Error> {
     let redeemers = tx.transaction_witness_set.redeemer.as_ref();
 
-    let lookup_table = DataLookupTable::from_transaction(tx, utxos);
+    let mut lookup_table = DataLookupTable::from_transaction(tx, utxos);
 
     if run_phase_one {
         // subset of phase 1 check on redeemers and scripts
         eval_phase_one(tx, utxos, &lookup_table)?;
     }
+
+    // Override scripts
+    override_scripts
+        .into_iter()
+        .for_each(|(hash, script)| lookup_table.override_script(hash, script));
 
     match redeemers {
         Some(rs) => {

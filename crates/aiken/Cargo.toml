@@ -38,6 +38,7 @@ ordinal = "0.3.2"
 owo-colors = { version = "3.5.0", features = ["supports-colors"] }
 pallas-codec.workspace = true
 pallas-primitives.workspace = true
+pallas-addresses.workspace = true
 pallas-traverse.workspace = true
 rand = "0.8.5"
 regex = "1.7.1"

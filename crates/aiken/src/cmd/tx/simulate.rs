@@ -1,16 +1,18 @@
+use aiken_project::{error::Error, watch::with_project};
 use miette::IntoDiagnostic;
 use owo_colors::{OwoColorize, Stream::Stderr};
+use pallas_addresses::ScriptHash;
 use pallas_primitives::{
     Fragment,
     conway::{Redeemer, TransactionInput, TransactionOutput},
 };
 use pallas_traverse::{Era, MultiEraTx};
-use std::{fmt, fs, path::PathBuf, process};
+use std::{collections::HashMap, fmt, fs, path::PathBuf, process};
 use uplc::{
     machine::cost_model::ExBudget,
     tx::{
         self, redeemer_tag_to_string,
-        script_context::{ResolvedInput, SlotConfig},
+        script_context::{PlutusScript, ResolvedInput, SlotConfig},
     },
 };
 
@@ -45,6 +47,14 @@ pub struct Args {
     /// Slot number at the start of the shelley hardfork
     #[clap(long, default_value_t = 4492800, value_name = "SLOT")]
     zero_slot: u64,
+
+    /// An Aiken blueprint JSON file containing the overriding scripts, if applicable
+    #[clap(value_name = "FILEPATH")]
+    blueprint: Option<PathBuf>,
+
+    /// The "from" hash which is being replaced and the hash "to" hash which is being overriden in the form "FROM:TO"
+    #[clap(long("script-override"), num_args(0..))]
+    script_overrides: Vec<String>,
 }
 
 pub fn exec(
@@ -56,6 +66,8 @@ pub fn exec(
         slot_length,
         zero_time,
         zero_slot,
+        blueprint,
+        script_overrides,
     }: Args,
 ) -> miette::Result<()> {
     eprintln!(
@@ -84,6 +96,71 @@ pub fn exec(
     };
 
     let tx = MultiEraTx::decode_for_era(Era::Conway, &tx_bytes).into_diagnostic()?;
+
+    let mut overrides: HashMap<ScriptHash, PlutusScript> = HashMap::new();
+
+    if !script_overrides.is_empty() {
+        with_project(None, false, true, false, |p| {
+            eprintln!(
+                "{} script overrides",
+                "      Computing"
+                    .if_supports_color(Stderr, |s| s.purple())
+                    .if_supports_color(Stderr, |s| s.bold()),
+            );
+            let hash_overrides: HashMap<ScriptHash, ScriptHash> = script_overrides
+                .iter()
+                .try_fold::<_, _, Result<_, aiken_project::error::Error>>(
+                    HashMap::new(),
+                    |mut acc, script_override| {
+                        let mut parts = script_override.split(":");
+
+                        let from = parts
+                            .next()
+                            .ok_or(Error::ScriptOverrideArgumentParseError {
+                                value: script_override.clone(),
+                            })?;
+
+                        let to = parts
+                            .next()
+                            .ok_or(Error::ScriptOverrideArgumentParseError {
+                                value: script_override.clone(),
+                            })?;
+
+                        let from_hash = ScriptHash::from(
+                            hex::decode(from)
+                                .map_err(|_| Error::ScriptOverrideArgumentParseError {
+                                    value: script_override.clone(),
+                                })?
+                                .as_slice(),
+                        );
+
+                        let to_hash = ScriptHash::from(
+                            hex::decode(to)
+                                .map_err(|_| Error::ScriptOverrideArgumentParseError {
+                                    value: script_override.clone(),
+                                })?
+                                .as_slice(),
+                        );
+
+                        acc.insert(from_hash, to_hash);
+                        Ok(acc)
+                    },
+                )?;
+
+            let blueprint_path = p.blueprint_path(blueprint.as_deref());
+            let blueprint = p.blueprint(&blueprint_path)?;
+            overrides = blueprint.into();
+            for (from, to) in hash_overrides {
+                let to_script = overrides
+                    .get(&to)
+                    .ok_or(Error::ScriptOverrideNotFound { script_hash: to })?;
+
+                overrides.insert(from, to_script.clone());
+            }
+
+            Ok(())
+        })?;
+    }
 
     eprintln!(
         "{} {}",
@@ -123,12 +200,13 @@ pub fn exec(
             )
         };
 
-        let result = tx::eval_phase_two(
+        let result = tx::eval_phase_two_with_override(
             tx_conway,
             &resolved_inputs,
             None,
             None,
             &slot_config,
+            overrides,
             true,
             with_redeemer,
         );
