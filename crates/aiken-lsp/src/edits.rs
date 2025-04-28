@@ -67,6 +67,7 @@ impl ParsedDocument {
                     location,
                     module: existing_module,
                     unqualified: (unqualified_end, unqualified_list),
+                    as_name,
                     ..
                 }) => {
                     last_import = Some(*location);
@@ -99,6 +100,7 @@ impl ParsedDocument {
                                 } else if unqualified < existing_name.as_str() {
                                     return Some(self.insert_qualified_before(
                                         import,
+                                        as_name.as_deref(),
                                         unqualified,
                                         existing_unqualified.location,
                                     ));
@@ -112,14 +114,18 @@ impl ParsedDocument {
                                 // simply create a new unqualified list of import.
                                 None => Some(self.add_new_qualified(
                                     import,
+                                    as_name.as_deref(),
                                     unqualified,
                                     *unqualified_end,
                                 )),
                                 // Happens if the new qualified import is lexicographically after
                                 // all existing ones.
-                                Some(location) => {
-                                    Some(self.insert_qualified_after(import, unqualified, location))
-                                }
+                                Some(location) => Some(self.insert_qualified_after(
+                                    import,
+                                    as_name.as_deref(),
+                                    unqualified,
+                                    location,
+                                )),
                             };
                         }
                     }
@@ -178,12 +184,31 @@ impl ParsedDocument {
     }
 
     pub fn use_qualified(
-        module: &str,
+        &self,
+        module: &CheckedModule,
         unqualified: &str,
         range: &lsp_types::Range,
     ) -> Option<AnnotatedEdit> {
-        let title = format!("Use qualified from {}", module);
-        let suffix = module.split("/").last()?;
+        let mut as_name = None;
+
+        for def in self.definitions.iter() {
+            if let Definition::Use(Use {
+                module: path,
+                as_name: imported_as,
+                ..
+            }) = def
+            {
+                if path.join("/") == module.name {
+                    as_name = imported_as.as_deref();
+                }
+            }
+        }
+
+        let title = format!(
+            "Use qualified from {}",
+            as_name.unwrap_or(module.name.as_str())
+        );
+        let suffix = as_name.or_else(|| module.name.split("/").last())?;
         Some(AnnotatedEdit::SimpleEdit(
             title,
             lsp_types::TextEdit {
@@ -196,10 +221,15 @@ impl ParsedDocument {
     fn insert_qualified_before(
         &self,
         import: &CheckedModule,
+        as_name: Option<&str>,
         unqualified: &str,
         location: Span,
     ) -> AnnotatedEdit {
-        let title = format!("Import '{}' from {}", unqualified, import.name);
+        let title = format!(
+            "Import '{}' from {}",
+            unqualified,
+            as_name.unwrap_or(import.name.as_str())
+        );
         AnnotatedEdit::SimpleEdit(
             title,
             insert_text(
@@ -213,10 +243,15 @@ impl ParsedDocument {
     fn insert_qualified_after(
         &self,
         import: &CheckedModule,
+        as_name: Option<&str>,
         unqualified: &str,
         location: Span,
     ) -> AnnotatedEdit {
-        let title = format!("Import '{}' from {}", unqualified, import.name);
+        let title = format!(
+            "Import '{}' from {}",
+            unqualified,
+            as_name.unwrap_or(import.name.as_str())
+        );
         AnnotatedEdit::SimpleEdit(
             title,
             insert_text(
@@ -230,10 +265,15 @@ impl ParsedDocument {
     fn add_new_qualified(
         &self,
         import: &CheckedModule,
+        as_name: Option<&str>,
         unqualified: &str,
         position: usize,
     ) -> AnnotatedEdit {
-        let title = format!("Import '{}' from {}", unqualified, import.name);
+        let title = format!(
+            "Import '{}' from {}",
+            unqualified,
+            as_name.unwrap_or(import.name.as_str())
+        );
         AnnotatedEdit::SimpleEdit(
             title,
             insert_text(
