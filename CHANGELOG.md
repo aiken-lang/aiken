@@ -32,6 +32,7 @@
 - **aiken-lang**: Allow type reification to pierce through Data aliases (e.g. Redeemer) holding lists, tuples or pairs, instead of crashing the compiler. @KtorZ
 - **aiken-lang**: Allow `Pair` to be used inline in Fuzzer's eDSL. @KtorZ
 - **aiken-lang**: Do not mark imported types as _unused_ when used only as namespace in patterns. @KtorZ
+- **aiken-lang**: Do not warn about unused constructors when already warning about unused type. @KtorZ
 - **aiken-lsp**: Fix module's inhabitant import quickfix for renamed modules. @KtorZ
 - **aiken-lsp**: Fix quickfix suggestion to use qualified for renamed modules. @KtorZ
 
