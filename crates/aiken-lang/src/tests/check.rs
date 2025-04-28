@@ -2360,6 +2360,40 @@ fn use_type_as_namespace_for_patterns() {
 }
 
 #[test]
+fn use_type_as_namespace_for_patterns_marked_used() {
+    let dependency = r#"
+        pub type Foo {
+          I(Int)
+          B(Bool)
+        }
+
+        pub type Bar {
+          Bar1
+          Bar2
+        }
+    "#;
+
+    let source_code = r#"
+        use foo.{Foo, Bar}
+
+        pub fn foo_to_string(x) -> String {
+          when x is {
+            Foo.I(..) -> @"I"
+            Foo.B(..) -> @"B"
+          }
+        }
+    "#;
+
+    let (warnings, _) =
+        check_with_deps(parse(source_code), vec![(parse_as(dependency, "foo"))]).unwrap();
+
+    assert!(
+        matches!(warnings.as_slice(), &[Warning::UnusedImportedValueOrType { ref name, .. }] if name == "Bar"),
+        "{warnings:#?}"
+    );
+}
+
+#[test]
 fn use_nested_type_as_namespace_for_patterns() {
     let dependency = r#"
         pub type Foo {
