@@ -52,7 +52,7 @@ pub struct Args {
     #[clap(value_name = "FILEPATH")]
     blueprint: Option<PathBuf>,
 
-    /// The "from" hash which is being replaced and the hash "to" hash which is being overriden in the form "FROM:TO"
+    /// Key specifying which script hash is being overridden and the hash of the overiding script in the form "FROM:TO"
     #[clap(long("script-override"), num_args(0..))]
     script_overrides: Vec<String>,
 }
