@@ -41,9 +41,9 @@ pub fn module(
                     }
                     Some((location, unqualified)) => {
                         let mut merged_unqualified = Vec::new();
-                        merged_unqualified.extend(unqualified);
-                        merged_unqualified.extend(import.unqualified);
-                        store.insert(key, (location, merged_unqualified));
+                        merged_unqualified.extend(unqualified.1);
+                        merged_unqualified.extend(import.unqualified.1);
+                        store.insert(key, (location, (unqualified.0, merged_unqualified)));
                     }
                 }
             }

@@ -484,7 +484,7 @@ pub struct Use<PackageName> {
     pub location: Span,
     pub module: Vec<String>,
     pub package: PackageName,
-    pub unqualified: Vec<UnqualifiedImport>,
+    pub unqualified: (usize, Vec<UnqualifiedImport>),
 }
 
 pub type TypedModuleConstant = ModuleConstant<TypedExpr>;

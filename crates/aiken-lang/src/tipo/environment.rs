@@ -953,7 +953,7 @@ impl<'a> Environment<'a> {
             Definition::Use(Use {
                 module,
                 as_name,
-                unqualified,
+                unqualified: (_, unqualified),
                 location,
                 package: _,
             }) => {

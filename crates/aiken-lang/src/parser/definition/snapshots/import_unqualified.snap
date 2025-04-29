@@ -10,20 +10,23 @@ Use {
         "address",
     ],
     package: (),
-    unqualified: [
-        UnqualifiedImport {
-            location: 17..29,
-            name: "Address",
-            as_name: Some(
-                "A",
-            ),
-        },
-        UnqualifiedImport {
-            location: 31..41,
-            name: "thing",
-            as_name: Some(
-                "w",
-            ),
-        },
-    ],
+    unqualified: (
+        42,
+        [
+            UnqualifiedImport {
+                location: 17..29,
+                name: "Address",
+                as_name: Some(
+                    "A",
+                ),
+            },
+            UnqualifiedImport {
+                location: 31..41,
+                name: "thing",
+                as_name: Some(
+                    "w",
+                ),
+            },
+        ],
+    ),
 }

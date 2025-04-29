@@ -317,7 +317,7 @@ impl<'comments> Formatter<'comments> {
         Use {
             module,
             as_name,
-            unqualified,
+            unqualified: (_, unqualified),
             ..
         }: &'a Use<()>,
     ) -> Document<'a> {
