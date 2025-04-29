@@ -190,7 +190,7 @@ pub fn quickfix(
                 &mut actions,
                 text_document,
                 diagnostic,
-                make_type_public(&parsed_document, diagnostic),
+                make_type_public(parsed_document, diagnostic),
             ),
         };
     }
