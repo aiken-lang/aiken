@@ -16,7 +16,7 @@ use crate::{
     tipo::{TypeAliasAnnotation, fields::FieldMap},
 };
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     ops::Deref,
     rc::Rc,
 };
@@ -592,27 +592,52 @@ impl<'a> Environment<'a> {
     }
 
     fn handle_unused(&mut self, unused: HashMap<String, (EntityKind, Span, bool)>) {
+        let mut unused_types = BTreeSet::new();
+        let mut unused_constructors = BTreeMap::new();
+
         for (name, (kind, location, _)) in unused.into_iter().filter(|(_, (_, _, used))| !used) {
-            let warning = match kind {
+            match kind {
                 EntityKind::ImportedType
                 | EntityKind::ImportedTypeAndConstructor
                 | EntityKind::ImportedConstructor
-                | EntityKind::ImportedValue => {
-                    Warning::UnusedImportedValueOrType { name, location }
+                | EntityKind::ImportedValue => self
+                    .warnings
+                    .push(Warning::UnusedImportedValueOrType { name, location }),
+                EntityKind::PrivateConstant => self
+                    .warnings
+                    .push(Warning::UnusedPrivateModuleConstant { name, location }),
+                EntityKind::PrivateTypeConstructor(parent_type) => {
+                    // Only trigger 'PrivateTypeConstructor' in cases where 'PrivateType' isn't
+                    // already triggered. Otherwise things get very noisy since every constructor
+                    if !unused_types.contains(&parent_type) {
+                        let possible_warning = || Warning::UnusedConstructor {
+                            name: name.clone(),
+                            location,
+                        };
+                        unused_constructors
+                            .entry(parent_type)
+                            .and_modify(|warnings: &mut Vec<Warning>| {
+                                warnings.push(possible_warning())
+                            })
+                            .or_insert(vec![possible_warning()]);
+                    }
                 }
-                EntityKind::PrivateConstant => {
-                    Warning::UnusedPrivateModuleConstant { name, location }
+                EntityKind::PrivateFunction => self
+                    .warnings
+                    .push(Warning::UnusedPrivateFunction { name, location }),
+                EntityKind::PrivateType => {
+                    unused_constructors.remove(&name);
+                    unused_types.insert(name.clone());
+                    self.warnings.push(Warning::UnusedType { name, location })
                 }
-                EntityKind::PrivateTypeConstructor(_) => {
-                    Warning::UnusedConstructor { name, location }
-                }
-                EntityKind::PrivateFunction => Warning::UnusedPrivateFunction { name, location },
-                EntityKind::PrivateType => Warning::UnusedType { name, location },
-                EntityKind::Variable => Warning::UnusedVariable { name, location },
+                EntityKind::Variable => self
+                    .warnings
+                    .push(Warning::UnusedVariable { name, location }),
             };
-
-            self.warnings.push(warning);
         }
+
+        self.warnings
+            .extend(unused_constructors.into_values().flatten())
     }
 
     pub fn in_new_scope<T>(&mut self, process_scope: impl FnOnce(&mut Self) -> T) -> T {

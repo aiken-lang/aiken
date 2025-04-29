@@ -4363,3 +4363,40 @@ fn as_data() {
 
     assert!(matches!(check_validator(parse(source_code)), Ok(..)))
 }
+
+#[test]
+fn unused_constructors() {
+    let source_code = r#"
+        type Foo {
+          A
+          B
+        }
+
+        type Bar {
+          C
+          D
+        }
+
+        pub fn to_string() -> String {
+          if C == C {
+            @"C"
+          } else {
+            @""
+          }
+        }
+    "#;
+
+    let (warnings, _) = check_validator(parse(source_code)).unwrap();
+
+    assert!(
+        matches!(
+            warnings.as_slice(),
+            [
+                Warning::UnusedType { name: unused_type, .. },
+                Warning::UnusedConstructor { name: unused_constr, .. }
+            ]
+            if unused_type == "Foo" && unused_constr == "D",
+        ),
+        "{warnings:#?}"
+    );
+}
