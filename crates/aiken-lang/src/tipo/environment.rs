@@ -533,8 +533,12 @@ impl<'a> Environment<'a> {
 
                 self.unused_modules.remove(&parent_type.module);
 
+                let module = parent_type.module.as_str();
+
+                self.increment_usage(t);
+
                 self.get_fully_qualified_value_constructor(
-                    (parent_type.module.as_str(), module_location),
+                    (module, module_location),
                     (t, type_location),
                     (name, location.map(|_, end| (type_location.end + 1, end))),
                 )
@@ -551,8 +555,12 @@ impl<'a> Environment<'a> {
 
                 self.unused_modules.remove(&parent_type.module);
 
+                let module = parent_type.module.to_string();
+
+                self.increment_usage(t);
+
                 self.get_fully_qualified_value_constructor(
-                    (parent_type.module.as_str(), type_location),
+                    (&module, type_location),
                     (t, type_location),
                     (name, location.map(|start, end| (start + t.len() + 1, end))),
                 )
