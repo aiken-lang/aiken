@@ -51,6 +51,7 @@ pub enum Event {
     RunningBenchmarks,
     FinishedTests {
         seed: u32,
+        coverage_mode: CoverageMode,
         tests: Vec<TestResult<UntypedExpr, UntypedExpr>>,
     },
     FinishedBenchmarks {
@@ -70,6 +71,39 @@ pub enum Event {
         source: DownloadSource,
     },
     ResolvingVersions,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub enum CoverageMode {
+    RelativeToTests,
+    #[default]
+    RelativeToLabels,
+}
+
+impl CoverageMode {
+    pub fn parse(raw_str: &str) -> Result<Self, String> {
+        if raw_str == "relative-to-tests" {
+            return Ok(CoverageMode::RelativeToTests);
+        }
+
+        if raw_str == "relative-to-labels" {
+            return Ok(CoverageMode::RelativeToLabels);
+        }
+
+        Err(
+            "unexpected coverage mode: neither 'relative-to-tests' nor 'relative-to-labels'"
+                .to_string(),
+        )
+    }
+}
+
+impl Display for CoverageMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CoverageMode::RelativeToTests => write!(f, "relative-to-tests"),
+            CoverageMode::RelativeToLabels => write!(f, "relative-to-labels"),
+        }
+    }
 }
 
 pub enum EventTarget {

@@ -15,7 +15,10 @@ Module {
                     "aiken",
                 ],
                 package: (),
-                unqualified: [],
+                unqualified: (
+                    9,
+                    [],
+                ),
             },
         ),
     ],

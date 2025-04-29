@@ -1,5 +1,5 @@
 use super::{DownloadSource, Event, EventListener, find_max_execution_units, group_by_module};
-use crate::pretty;
+use crate::{CoverageMode, pretty};
 use aiken_lang::{
     ast::OnTestFailure,
     expr::UntypedExpr,
@@ -173,7 +173,11 @@ impl EventListener for Terminal {
                     "...".if_supports_color(Stderr, |s| s.bold())
                 );
             }
-            Event::FinishedTests { seed, tests } => {
+            Event::FinishedTests {
+                seed,
+                tests,
+                coverage_mode,
+            } => {
                 let (max_mem, max_cpu, max_iter) = find_max_execution_units(&tests);
 
                 for (module, results) in &group_by_module(&tests) {
@@ -184,7 +188,7 @@ impl EventListener for Terminal {
 
                     let tests = results
                         .iter()
-                        .map(|r| fmt_test(r, max_mem, max_cpu, max_iter, true))
+                        .map(|r| fmt_test(r, max_mem, max_cpu, max_iter, true, coverage_mode))
                         .collect::<Vec<String>>()
                         .join("\n");
 
@@ -292,7 +296,9 @@ impl EventListener for Terminal {
 
                     let benchmarks = results
                         .iter()
-                        .map(|r| fmt_test(r, max_mem, max_cpu, max_iter, true))
+                        .map(|r| {
+                            fmt_test(r, max_mem, max_cpu, max_iter, true, CoverageMode::default())
+                        })
                         .collect::<Vec<String>>()
                         .join("\n")
                         .chars()
@@ -334,6 +340,7 @@ fn fmt_test(
     max_cpu: usize,
     max_iter: usize,
     styled: bool,
+    coverage_mode: CoverageMode,
 ) -> String {
     // Status
     let mut test = if matches!(result, TestResult::BenchmarkResult { .. }) {
@@ -554,18 +561,29 @@ fn fmt_test(
     }
 
     // Labels
-    if let TestResult::PropertyTestResult(PropertyTestResult { labels, .. }) = result {
+    if let TestResult::PropertyTestResult(PropertyTestResult {
+        labels, iterations, ..
+    }) = result
+    {
         if !labels.is_empty() && result.is_success() {
             test = format!(
                 "{test}\n{title}",
                 title = "· with coverage".if_supports_color(Stderr, |s| s.bold())
             );
+
             let mut total = 0;
             let mut pad = 0;
             for (k, v) in labels {
                 total += v;
                 if k.len() > pad {
                     pad = k.len();
+                }
+            }
+
+            match coverage_mode {
+                CoverageMode::RelativeToLabels => {}
+                CoverageMode::RelativeToTests => {
+                    total = *iterations;
                 }
             }
 

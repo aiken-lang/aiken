@@ -289,7 +289,7 @@ fn suggest_qualified(
     range: &lsp_types::Range,
 ) -> Option<AnnotatedEdit> {
     if let Some(AnnotatedEdit::SimpleEdit(use_qualified_title, use_qualified)) =
-        ParsedDocument::use_qualified(&module.name, identifier, range)
+        parsed_document.use_qualified(module, identifier, range)
     {
         if let Some(AnnotatedEdit::SimpleEdit(_, add_new_line)) =
             parsed_document.import(module, None)

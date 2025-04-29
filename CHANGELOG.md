@@ -10,12 +10,30 @@
   pub fn as_data(data: Data) -> Data
   ```
 
+- **aiken**: New `--property-coverage` flag to the `check` command, to switch the coverage denominator between the number of iterations and the total number of labels. @KtorZ
+
+  ```
+  -P, --property-coverage <COVERAGE_MODE>
+          Display options for the coverage.
+            - relative-to-labels:
+                Ratio of each label over the total number of labels.
+                Better when labels are mutually-exclusive and present in each test.
+
+            - relative-to-tests:
+                Ratio of each label over the total number of tests/iterations.
+                Better when labels are occasional and non-exclusive per test.
+
+          [default: relative-to-labels]
+  ```
+
 ### Fixed
 
 - **aiken-lang**: Correctly infer Fuzzer & Sampler via type annotations when referring to foreign types. @KtorZ
 - **aiken-lang**: Allow type reification to pierce through Data aliases (e.g. Redeemer) holding lists, tuples or pairs, instead of crashing the compiler. @KtorZ
 - **aiken-lang**: Allow `Pair` to be used inline in Fuzzer's eDSL. @KtorZ
 - **aiken-lang**: Do not mark imported types as _unused_ when used only as namespace in patterns. @KtorZ
+- **aiken-lsp**: Fix module's inhabitant import quickfix for renamed modules. @KtorZ
+- **aiken-lsp**: Fix quickfix suggestion to use qualified for renamed modules. @KtorZ
 
 ## v1.1.16 - 2025-04-14
 

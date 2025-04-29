@@ -6,7 +6,7 @@ use aiken_lang::{
     test_framework::PropertyTest,
 };
 use aiken_project::{
-    telemetry::json_schema,
+    telemetry::{CoverageMode, json_schema},
     watch::{self, watch_project, with_project},
 };
 use rand::prelude::*;
@@ -67,6 +67,25 @@ pub struct Args {
     #[clap(long, default_value_t = PropertyTest::DEFAULT_MAX_SUCCESS, value_name="UINT")]
     max_success: usize,
 
+    /// Display options for the property tests labels coverage.
+    ///
+    ///   - relative-to-labels:
+    ///       Ratio of each label over the total number of labels.
+    ///       Better when labels are mutually-exclusive and present in each test.
+    ///
+    ///   - relative-to-tests:
+    ///       Ratio of each label over the total number of tests/iterations.
+    ///       Better when labels are occasional and non-exclusive per test.
+    #[clap(
+        long,
+        short = 'P',
+        default_value_t = CoverageMode::default(),
+        value_parser = CoverageMode::parse,
+        value_name="COVERAGE_MODE",
+        verbatim_doc_comment
+    )]
+    property_coverage: CoverageMode,
+
     /// Only run tests if they match any of these strings.
     /// You can match a module with `-m aiken/list` or `-m list`.
     /// You can match a test with `-m "aiken/list.{map}"` or `-m "aiken/option.{flatten_1}"`
@@ -120,6 +139,7 @@ pub fn exec(
         debug,
         show_json_schema,
         match_tests,
+        property_coverage,
         exact_match,
         watch,
         trace_filter,
@@ -147,6 +167,7 @@ pub fn exec(
                 exact_match,
                 seed,
                 max_success,
+                property_coverage,
                 match trace_filter {
                     Some(trace_filter) => trace_filter(trace_level),
                     None => Tracing::All(trace_level),
@@ -168,6 +189,7 @@ pub fn exec(
                     exact_match,
                     seed,
                     max_success,
+                    property_coverage,
                     match trace_filter {
                         Some(trace_filter) => trace_filter(trace_level),
                         None => Tracing::All(trace_level),
