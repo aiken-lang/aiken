@@ -52,6 +52,18 @@ fn insert_text(at: usize, line_numbers: &LineNumbers, new_text: String) -> lsp_t
 /// whether the import is a newline or not. It is set to 'false' when adding a qualified import
 /// to an existing list.
 impl ParsedDocument {
+    pub fn position(&self, index: usize) -> lsp_types::Position {
+        let cursor = self
+            .line_numbers
+            .line_and_column_number(index)
+            .expect("Spans are within bounds");
+
+        lsp_types::Position {
+            line: cursor.line as u32 - 1,
+            character: cursor.column as u32 - 1,
+        }
+    }
+
     pub fn import(
         &self,
         import: &CheckedModule,

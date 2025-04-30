@@ -4,12 +4,6 @@
 
 ### Added
 
-- **aiken-lang**: New prelude function to conveniently upcast any serialisable type into `Data` in places where the compiler cannot do it implicitly.
-
-  ```aiken
-  pub fn as_data(data: Data) -> Data
-  ```
-
 - **aiken**: New `--property-coverage` flag to the `check` command, to switch the coverage denominator between the number of iterations and the total number of labels. @KtorZ
 
   ```
@@ -25,6 +19,16 @@
 
           [default: relative-to-labels]
   ```
+
+- **aiken-lang**: New prelude function to conveniently upcast any serialisable type into `Data` in places where the compiler cannot do it implicitly.
+
+  ```aiken
+  pub fn as_data(data: Data) -> Data
+  ```
+
+- **aiken-lsp**: New quickfix to pluck inferred types in holes within annotations. @KtorZ
+- **aiken-lsp**: New quickfix to make private functions, types or constants public when detected unused. @KtorZ
+- **aiken-lsp**: New quickfix to make types public when 'leaking' from a public function (e.g. validator handlers). @KtorZ
 
 ### Fixed
 

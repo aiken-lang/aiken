@@ -586,13 +586,23 @@ The culprit is:
 {type_info}
 
 Maybe you meant to turn it public using the '{keyword_pub}' keyword?"#
-        , type_info = leaked.to_pretty(4).if_supports_color(Stdout, |s| s.red())
+        , type_info = if leaked.alias().is_some() {
+            let alias = leaked.to_pretty(0).if_supports_color(Stdout, |s| s.magenta()).to_string();
+            format!(
+                "{} aliased as {alias}",
+                leaked.clone().set_alias(None).to_pretty(4).if_supports_color(Stdout, |s| s.red()),
+            )
+        } else {
+            leaked.to_pretty(4).if_supports_color(Stdout, |s| s.red()).to_string()
+        }
         , keyword_pub = "pub".if_supports_color(Stdout, |s| s.bright_blue())
     ))]
     PrivateTypeLeak {
         #[label("private type leak")]
         location: Span,
         leaked: Type,
+        #[label("defined here")]
+        leaked_location: Option<Span>,
     },
 
     #[error(
@@ -1148,7 +1158,6 @@ impl ExtraData for Error {
             | Error::NotExhaustivePatternMatch { .. }
             | Error::NotFn { .. }
             | Error::PositionalArgumentAfterLabeled { .. }
-            | Error::PrivateTypeLeak { .. }
             | Error::RecordAccessUnknownType { .. }
             | Error::RecordUpdateInvalidConstructor { .. }
             | Error::RecursiveType { .. }
@@ -1178,6 +1187,18 @@ impl ExtraData for Error {
             | Error::IncorrectBenchmarkArity { .. }
             | Error::MustInferFirst { .. }
             | Error::InvalidFieldAccess { .. } => None,
+
+            Error::PrivateTypeLeak {
+                leaked,
+                leaked_location,
+                ..
+            } => leaked_location.map(|span| {
+                format!(
+                    "{},{}",
+                    leaked.clone().set_alias(None).to_pretty(0),
+                    span.start
+                )
+            }),
 
             Error::UnknownType { name, .. }
             | Error::UnknownTypeConstructor { name, .. }
@@ -1873,24 +1894,23 @@ impl ExtraData for Warning {
             | Warning::SingleConstructorExpect { .. }
             | Warning::SingleWhenClause { .. }
             | Warning::Todo { .. }
-            | Warning::UnexpectedTypeHole { .. }
             | Warning::UnusedConstructor { .. }
-            | Warning::UnusedPrivateFunction { .. }
-            | Warning::UnusedPrivateModuleConstant { .. }
-            | Warning::UnusedType { .. }
             | Warning::UnusedVariable { .. }
             | Warning::DiscardedLetAssignment { .. }
             | Warning::ValidatorInLibraryModule { .. }
             | Warning::CompactTraceLabelIsNotstring { .. }
             | Warning::UseWhenInstead { .. } => None,
+            Warning::UnusedPrivateFunction { name, .. }
+            | Warning::UnusedType { name, .. }
+            | Warning::UnusedPrivateModuleConstant { name, .. } => Some(name.clone()),
             Warning::Utf8ByteArrayIsValidHexString { value, .. } => Some(value.clone()),
+            Warning::UnexpectedTypeHole { tipo, .. } => Some(tipo.to_pretty(0)),
             Warning::UnusedImportedModule { location, .. } => {
                 Some(format!("{},{}", false, location.start))
             }
             Warning::UnusedImportedValueOrType { location, .. } => {
                 Some(format!("{},{}", true, location.start))
             }
-
             Warning::UnusedRecordFields { suggestion, .. } => {
                 Some(Formatter::new().pattern(suggestion).to_pretty_string(80))
             }

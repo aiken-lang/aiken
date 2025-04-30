@@ -117,13 +117,29 @@ impl UntypedModule {
         environment.convert_unused_to_warnings();
 
         // Remove private and imported types and values to create the public interface
+        environment.module_values.retain(|_, info| info.public);
+
+        // Ensure no exported values have private types in their type signature
+        for value in environment.module_values.values() {
+            if let Some(leaked) = value.tipo.find_private_type() {
+                return Err(Error::PrivateTypeLeak {
+                    location: value.variant.location(),
+                    leaked_location: match &leaked {
+                        Type::App { name, .. } => {
+                            environment.module_types.get(name).map(|info| info.location)
+                        }
+                        _ => None,
+                    },
+                    leaked,
+                });
+            }
+        }
+
         environment
             .module_types
             .retain(|_, info| info.public && info.module == module_name);
 
         let own_types = environment.module_types.keys().collect::<BTreeSet<_>>();
-
-        environment.module_values.retain(|_, info| info.public);
 
         environment
             .module_types_constructors
@@ -132,16 +148,6 @@ impl UntypedModule {
         environment
             .accessors
             .retain(|_, accessors| accessors.public);
-
-        // Ensure no exported values have private types in their type signature
-        for value in environment.module_values.values() {
-            if let Some(leaked) = value.tipo.find_private_type() {
-                return Err(Error::PrivateTypeLeak {
-                    location: value.variant.location(),
-                    leaked,
-                });
-            }
-        }
 
         let Environment {
             module_types: types,

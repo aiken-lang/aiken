@@ -15,6 +15,11 @@ const USE_LET: &str = "aiken::check::single_constructor_expect";
 const UNUSED_RECORD_FIELDS: &str = "aiken::check::syntax::unused_record_fields";
 const UTF8_BYTE_ARRAY_IS_VALID_HEX_STRING: &str =
     "aiken::check::syntax::bytearray_literal_is_hex_string";
+const UNEXPECTED_TYPE_HOLE: &str = "aiken::check::unexpected::type_hole";
+const UNUSED_PRIVATE_FUNCTION: &str = "aiken::check::unused::function";
+const UNUSED_PRIVATE_CONSTANT: &str = "aiken::check::unused::constant";
+const UNUSED_PRIVATE_TYPE: &str = "aiken::check::unused::type";
+const PRIVATE_TYPE_LEAK: &str = "aiken::check::private_leak";
 
 /// Errors for which we can provide quickfixes
 #[allow(clippy::enum_variant_names)]
@@ -26,6 +31,9 @@ pub enum Quickfix {
     Utf8ByteArrayIsValidHexString(lsp_types::Diagnostic),
     UseLet(lsp_types::Diagnostic),
     UnusedRecordFields(lsp_types::Diagnostic),
+    UnexpectedTypeHole(lsp_types::Diagnostic),
+    UnusedPrivate(lsp_types::Diagnostic),
+    PrivateLeak(lsp_types::Diagnostic),
 }
 
 fn match_code(
@@ -76,6 +84,21 @@ pub fn assert(diagnostic: lsp_types::Diagnostic) -> Option<Quickfix> {
 
     if match_code(&diagnostic, Severity::WARNING, UNUSED_RECORD_FIELDS) {
         return Some(Quickfix::UnusedRecordFields(diagnostic));
+    }
+
+    if match_code(&diagnostic, Severity::WARNING, UNEXPECTED_TYPE_HOLE) {
+        return Some(Quickfix::UnexpectedTypeHole(diagnostic));
+    }
+
+    if match_code(&diagnostic, Severity::WARNING, UNUSED_PRIVATE_FUNCTION)
+        || match_code(&diagnostic, Severity::WARNING, UNUSED_PRIVATE_CONSTANT)
+        || match_code(&diagnostic, Severity::WARNING, UNUSED_PRIVATE_TYPE)
+    {
+        return Some(Quickfix::UnusedPrivate(diagnostic));
+    }
+
+    if match_code(&diagnostic, Severity::ERROR, PRIVATE_TYPE_LEAK) {
+        return Some(Quickfix::PrivateLeak(diagnostic));
     }
 
     None
@@ -150,6 +173,24 @@ pub fn quickfix(
                 text_document,
                 diagnostic,
                 unused_record_fields(diagnostic),
+            ),
+            Quickfix::UnexpectedTypeHole(diagnostic) => each_as_distinct_action(
+                &mut actions,
+                text_document,
+                diagnostic,
+                fill_type_hole(diagnostic),
+            ),
+            Quickfix::UnusedPrivate(diagnostic) => each_as_distinct_action(
+                &mut actions,
+                text_document,
+                diagnostic,
+                make_value_public(diagnostic),
+            ),
+            Quickfix::PrivateLeak(diagnostic) => each_as_distinct_action(
+                &mut actions,
+                text_document,
+                diagnostic,
+                make_type_public(parsed_document, diagnostic),
             ),
         };
     }
@@ -396,6 +437,74 @@ fn unused_record_fields(diagnostic: &lsp_types::Diagnostic) -> Vec<AnnotatedEdit
                 new_text: new_text.clone(),
             },
         ));
+    }
+
+    edits
+}
+
+fn fill_type_hole(diagnostic: &lsp_types::Diagnostic) -> Vec<AnnotatedEdit> {
+    let mut edits = Vec::new();
+
+    if let Some(serde_json::Value::String(inferred_type)) = diagnostic.data.as_ref() {
+        edits.push(AnnotatedEdit::SimpleEdit(
+            format!("Pluck '{}'", inferred_type),
+            lsp_types::TextEdit {
+                range: diagnostic.range,
+                new_text: inferred_type.to_string(),
+            },
+        ));
+    }
+
+    edits
+}
+
+fn make_value_public(diagnostic: &lsp_types::Diagnostic) -> Vec<AnnotatedEdit> {
+    let mut edits = Vec::new();
+
+    if let Some(serde_json::Value::String(name)) = diagnostic.data.as_ref() {
+        edits.push(AnnotatedEdit::SimpleEdit(
+            format!("Make '{}' public", name),
+            lsp_types::TextEdit {
+                range: lsp_types::Range {
+                    start: diagnostic.range.start,
+                    end: diagnostic.range.start,
+                },
+                new_text: "pub ".to_string(),
+            },
+        ));
+    }
+
+    edits
+}
+
+fn make_type_public(
+    parsed_document: &ParsedDocument,
+    diagnostic: &lsp_types::Diagnostic,
+) -> Vec<AnnotatedEdit> {
+    let mut edits = Vec::new();
+
+    if let Some(serde_json::Value::String(args)) = diagnostic.data.as_ref() {
+        let args = args.split(',').collect::<Vec<&str>>();
+        match args.as_slice() {
+            &[name, start] => {
+                let start = parsed_document.position(
+                    start
+                        .parse::<usize>()
+                        .expect("malformed unused_imports argument: not a usize"),
+                );
+
+                edits.push(AnnotatedEdit::SimpleEdit(
+                    format!("Make '{}' public", name),
+                    lsp_types::TextEdit {
+                        range: lsp_types::Range { start, end: start },
+                        new_text: "pub ".to_string(),
+                    },
+                ));
+            }
+            _ => {
+                panic!("malformed unused_imports arguments: not a 2-tuple");
+            }
+        }
     }
 
     edits
