@@ -4,9 +4,9 @@ use super::{
 };
 use aiken_lang::ast::Span;
 use miette::{Diagnostic, NamedSource};
-use owo_colors::{OwoColorize, Stream::Stdout};
+use owo_colors::{OwoColorize, Stream::Stderr, Stream::Stdout};
 use pallas_codec::minicbor as cbor;
-use std::fmt::Debug;
+use std::{collections::BTreeSet, fmt::Debug};
 use uplc::ast::Constant;
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
@@ -31,6 +31,24 @@ pub enum Error {
             .if_supports_color(Stdout, |s| s.bold())
     ))]
     InvalidOrMissingFile,
+
+    #[error("I didn't find any validator matching your criteria.")]
+    #[diagnostic(help(
+        "{hint}",
+        hint = hint_validators(known_validators, "Here's a list of matching validators I've found in your project.\nPlease narrow the selection using additional options.")
+    ))]
+    NoValidatorNotFound {
+        known_validators: BTreeSet<(String, String, bool)>,
+    },
+
+    #[error("I found multiple suitable validators and I need you to tell me which one to pick.")]
+    #[diagnostic(help(
+        "{hint}",
+        hint = hint_validators(known_validators, "Here's a list of matching validators I've found in your project.\nPlease narrow the selection using additional options.")
+    ))]
+    MoreThanOneValidatorFound {
+        known_validators: BTreeSet<(String, String, bool)>,
+    },
 
     #[error("I didn't find any parameters to apply in the given validator.")]
     #[diagnostic(code("aiken::blueprint::apply::no_parameters"))]
@@ -122,3 +140,49 @@ pub enum Error {
 unsafe impl Send for Error {}
 
 unsafe impl Sync for Error {}
+
+fn hint_validators(known_validators: &BTreeSet<(String, String, bool)>, hint: &str) -> String {
+    let (pad_module, pad_validator) = known_validators.iter().fold(
+        (9, 12),
+        |(module_len, validator_len), (module, validator, _)| {
+            (
+                module_len.max(module.len()),
+                validator_len.max(validator.len()),
+            )
+        },
+    );
+
+    format!(
+        "{hint}\n\n\
+         {:<pad_module$}   {:<pad_validator$}\n\
+         {:─<pad_module$}┒ ┎{:─<pad_validator$}\n\
+         {}\n\nFor convenience, I have highlighted in {bold_green} suitable candidates that {has_params}.",
+        "module(s)",
+        "validator(s)",
+        "─",
+        "─",
+        {
+            known_validators
+                .iter()
+                .map(|(module, validator, has_params)| {
+                    let title = format!("{:>pad_module$} . {:<pad_validator$}", module, validator,);
+                    if *has_params {
+                        title
+                            .if_supports_color(Stderr, |s| s.bold())
+                            .if_supports_color(Stderr, |s| s.green())
+                            .to_string()
+                    } else {
+                        title
+                    }
+                })
+                .collect::<Vec<String>>()
+                .join("\n")
+        },
+        bold_green = "bold green"
+            .if_supports_color(Stderr, |s| s.bold())
+            .if_supports_color(Stderr, |s| s.green()),
+        has_params = "can take parameters"
+            .if_supports_color(Stderr, |s| s.bold())
+            .if_supports_color(Stderr, |s| s.green()),
+    )
+}

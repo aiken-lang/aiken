@@ -14,6 +14,7 @@ use definitions::Definitions;
 pub use error::Error;
 use schema::{Annotated, Schema};
 use std::{collections::BTreeSet, fmt::Debug};
+use uplc::PlutusData;
 use validator::Validator;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
@@ -129,6 +130,59 @@ impl Blueprint {
         }
 
         validator
+    }
+
+    pub fn construct_parameter_incrementally<F>(
+        &self,
+        module_name: Option<&str>,
+        validator_name: Option<&str>,
+        ask: F,
+    ) -> Result<PlutusData, Error>
+    where
+        F: Fn(&Annotated<Schema>, &Definitions<Annotated<Schema>>) -> Result<PlutusData, Error>,
+    {
+        // Construct parameter
+        let when_too_many =
+            |known_validators| Error::MoreThanOneValidatorFound { known_validators };
+        let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
+
+        self.with_validator(
+            module_name,
+            validator_name,
+            when_too_many,
+            when_missing,
+            |validator| validator.ask_next_parameter(&self.definitions, &ask),
+        )
+    }
+
+    pub fn apply_parameter(
+        &mut self,
+        module_name: Option<&str>,
+        validator_name: Option<&str>,
+        param: &PlutusData,
+    ) -> Result<(), Error> {
+        let when_too_many =
+            |known_validators| Error::MoreThanOneValidatorFound { known_validators };
+        let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
+
+        let applied_validator = self.with_validator(
+            module_name,
+            validator_name,
+            when_too_many,
+            when_missing,
+            |validator| validator.clone().apply(&self.definitions, param),
+        )?;
+
+        // Overwrite validator
+        let prefix = |v: &str| v.split('.').take(2).collect::<Vec<&str>>().join(".");
+        for validator in &mut self.validators {
+            if prefix(&applied_validator.title) == prefix(&validator.title) {
+                validator.program = applied_validator.program.clone();
+                validator.parameters = applied_validator.parameters.clone();
+            }
+        }
+
+        Ok(())
     }
 
     pub fn with_validator<F, A, E>(

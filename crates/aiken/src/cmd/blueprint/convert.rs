@@ -1,11 +1,8 @@
-use aiken_project::{
-    blueprint::{Blueprint, error::Error as BlueprintError},
-    error::Error as ProjectError,
-};
+use aiken_project::blueprint::{Blueprint, error::Error as BlueprintError};
 use clap::ValueEnum;
 use miette::IntoDiagnostic;
 use serde_json::json;
-use std::{env, fs::File, io::BufReader, path::PathBuf, process};
+use std::{env, fs::File, io::BufReader, path::PathBuf};
 
 /// Convert a blueprint into other formats.
 #[derive(clap::Args)]
@@ -58,8 +55,8 @@ pub fn exec(
 
     // Perform the conversion
     let when_too_many =
-        |known_validators| ProjectError::MoreThanOneValidatorFound { known_validators };
-    let when_missing = |known_validators| ProjectError::NoValidatorNotFound { known_validators };
+        |known_validators| BlueprintError::MoreThanOneValidatorFound { known_validators };
+    let when_missing = |known_validators| BlueprintError::NoValidatorNotFound { known_validators };
 
     let result = blueprint.with_validator(
         module.as_deref(),
@@ -88,19 +85,8 @@ pub fn exec(
             }
         },
     );
-
-    match result {
-        Ok(value) => {
-            let json = serde_json::to_string_pretty(&value).unwrap();
-
-            println!("{json}");
-
-            Ok(())
-        }
-        Err(err) => {
-            err.report();
-
-            process::exit(1)
-        }
-    }
+    let value = result.into_diagnostic()?;
+    let json = serde_json::to_string_pretty(&value).unwrap();
+    println!("{json}");
+    Ok(())
 }
