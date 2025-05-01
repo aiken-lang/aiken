@@ -1,19 +1,25 @@
 use aiken_project::{
     blueprint::{
-        self,
+        self, Blueprint,
         definitions::Definitions,
         schema::{Annotated, Constructor, Data, Declaration, Items, Schema},
     },
     error::Error,
     pretty::multiline,
-    watch::with_project,
+    watch::{with_project, without_project},
 };
 use inquire;
 use num_bigint::BigInt;
 use ordinal::Ordinal;
 use owo_colors::{OwoColorize, Stream::Stderr};
 use pallas_primitives::alonzo::PlutusData;
-use std::{fs, path::PathBuf, process, str::FromStr};
+use std::{
+    fs::{self, File},
+    io::BufReader,
+    path::PathBuf,
+    process,
+    str::FromStr,
+};
 use uplc::ast::Data as UplcData;
 
 /// Apply a parameter to a parameterized validator.
@@ -63,15 +69,20 @@ pub fn exec(
         validator,
     }: Args,
 ) -> miette::Result<()> {
-    with_project(None, false, false, false, |p| {
-        eprintln!(
-            "{} blueprint",
-            "    Analyzing"
-                .if_supports_color(Stderr, |s| s.purple())
-                .if_supports_color(Stderr, |s| s.bold()),
-        );
+    eprintln!(
+        "{} blueprint",
+        "    Analyzing"
+            .if_supports_color(Stderr, |s| s.purple())
+            .if_supports_color(Stderr, |s| s.bold()),
+    );
 
-        let blueprint_input_path = p.blueprint_path(input.as_deref());
+    let apply = |blueprint_input_path: PathBuf| {
+        // Read blueprint
+        let blueprint = File::open(&blueprint_input_path)
+            .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)
+            .map_err(Error::from)?;
+        let mut blueprint: Blueprint =
+            serde_json::from_reader(BufReader::new(blueprint)).map_err(Error::from)?;
 
         let data: PlutusData = match &parameter {
             Some(param) => {
@@ -109,12 +120,13 @@ pub fn exec(
                     })
             }
 
-            None => p.construct_parameter_incrementally(
-                module.as_deref(),
-                validator.as_deref(),
-                &blueprint_input_path,
-                ask_schema,
-            )?,
+            None => blueprint
+                .construct_parameter_incrementally(
+                    module.as_deref(),
+                    validator.as_deref(),
+                    ask_schema,
+                )
+                .map_err(Error::from)?,
         };
 
         eprintln!(
@@ -128,28 +140,28 @@ pub fn exec(
             }
         );
 
-        let blueprint = p.apply_parameter(
-            module.as_deref(),
-            validator.as_deref(),
-            &blueprint_input_path,
-            &data,
-        )?;
+        blueprint
+            .apply_parameter(module.as_deref(), validator.as_deref(), &data)
+            .map_err(Error::from)?;
 
         let json = serde_json::to_string_pretty(&blueprint).unwrap();
 
         match output {
             None => {
                 println!("\n{}\n", json);
-                Ok(())
             }
             Some(ref path) => {
-                let blueprint_output_path = p.blueprint_path(Some(path));
-                fs::write(&blueprint_output_path, json).map_err(|error| Error::FileIo {
-                    error,
-                    path: blueprint_output_path,
-                })
+                fs::write(path, json)
+                    .map_err(|error| Error::FileIo {
+                        error,
+                        path: path.clone(),
+                    })
+                    .unwrap_or_else(|e| {
+                        e.report();
+                        process::exit(1)
+                    });
             }
-        }?;
+        };
 
         eprintln!(
             "{}",
@@ -159,8 +171,16 @@ pub fn exec(
         );
 
         Ok(())
-    })
-    .map_err(|_| std::process::exit(1))
+    };
+
+    match input {
+        Some(path) => without_project(|| apply(path.clone())).map_err(|_| std::process::exit(1)),
+        None => with_project(None, false, false, false, |p| {
+            let path = p.blueprint_path(None);
+            apply(path)
+        })
+        .map_err(|_| std::process::exit(1)),
+    }
 }
 
 fn ask_schema(

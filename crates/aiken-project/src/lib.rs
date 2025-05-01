@@ -22,7 +22,6 @@ mod tests;
 use crate::{
     blueprint::{
         Blueprint,
-        definitions::Definitions,
         schema::{Annotated, Schema},
     },
     config::ProjectConfig,
@@ -550,9 +549,14 @@ where
         let blueprint: Blueprint = serde_json::from_reader(BufReader::new(blueprint))?;
 
         // Calculate the address
-        let when_too_many =
-            |known_validators| Error::MoreThanOneValidatorFound { known_validators };
-        let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
+        let when_too_many = |known_validators| {
+            Error::Blueprint(blueprint::error::Error::MoreThanOneValidatorFound {
+                known_validators,
+            })
+        };
+        let when_missing = |known_validators| {
+            Error::Blueprint(blueprint::error::Error::NoValidatorNotFound { known_validators })
+        };
 
         blueprint.with_validator(
             module_name,
@@ -593,9 +597,14 @@ where
         let blueprint: Blueprint = serde_json::from_reader(BufReader::new(blueprint))?;
 
         // Error handlers for ambiguous / missing validators
-        let when_too_many =
-            |known_validators| Error::MoreThanOneValidatorFound { known_validators };
-        let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
+        let when_too_many = |known_validators| {
+            Error::Blueprint(blueprint::error::Error::MoreThanOneValidatorFound {
+                known_validators,
+            })
+        };
+        let when_missing = |known_validators| {
+            Error::Blueprint(blueprint::error::Error::NoValidatorNotFound { known_validators })
+        };
 
         blueprint.with_validator(
             module_name,
@@ -645,93 +654,6 @@ where
                 module: module.to_string(),
                 name: name.to_string(),
             })
-    }
-
-    pub fn construct_parameter_incrementally<F>(
-        &self,
-        module_name: Option<&str>,
-        validator_name: Option<&str>,
-        blueprint_path: &Path,
-        ask: F,
-    ) -> Result<PlutusData, Error>
-    where
-        F: Fn(
-            &Annotated<Schema>,
-            &Definitions<Annotated<Schema>>,
-        ) -> Result<PlutusData, blueprint::error::Error>,
-    {
-        // Read blueprint
-        let blueprint = File::open(blueprint_path)
-            .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
-        let blueprint: Blueprint = serde_json::from_reader(BufReader::new(blueprint))?;
-
-        // Construct parameter
-        let when_too_many =
-            |known_validators| Error::MoreThanOneValidatorFound { known_validators };
-        let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
-
-        let data = blueprint.with_validator(
-            module_name,
-            validator_name,
-            when_too_many,
-            when_missing,
-            |validator| {
-                validator
-                    .ask_next_parameter(&blueprint.definitions, &ask)
-                    .map_err(|e| e.into())
-            },
-        )?;
-
-        Ok(data)
-    }
-
-    pub fn apply_parameter(
-        &self,
-        module_name: Option<&str>,
-        validator_name: Option<&str>,
-        blueprint_path: &Path,
-        param: &PlutusData,
-    ) -> Result<Blueprint, Error> {
-        // Read blueprint
-        let blueprint = File::open(blueprint_path)
-            .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
-        let mut blueprint: Blueprint = serde_json::from_reader(BufReader::new(blueprint))?;
-
-        // Apply parameters
-        let when_too_many =
-            |known_validators| Error::MoreThanOneValidatorFound { known_validators };
-        let when_missing = |known_validators| Error::NoValidatorNotFound { known_validators };
-
-        let applied_validator = blueprint.with_validator(
-            module_name,
-            validator_name,
-            when_too_many,
-            when_missing,
-            |validator| {
-                validator
-                    .clone()
-                    .apply(&blueprint.definitions, param)
-                    .map_err(|e| e.into())
-            },
-        )?;
-
-        let prefix = |v: &str| v.split('.').take(2).collect::<Vec<&str>>().join(".");
-
-        // Overwrite validator
-        blueprint.validators = blueprint
-            .validators
-            .into_iter()
-            .map(|mut validator| {
-                if prefix(&applied_validator.title) == prefix(&validator.title) {
-                    validator.program = applied_validator.program.clone();
-                    validator.parameters = applied_validator.parameters.clone();
-                }
-
-                validator
-            })
-            .collect();
-
-        Ok(blueprint)
     }
 
     fn with_dependencies(&mut self, parsed_packages: &mut ParsedModules) -> Result<(), Vec<Error>> {

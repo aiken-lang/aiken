@@ -88,6 +88,31 @@ pub fn default_filter(evt: &Event) -> bool {
     }
 }
 
+/// Mimic the way `with_project` wraps the `action`, except there is no project to load.
+pub fn without_project<A>(mut action: A) -> miette::Result<()>
+where
+    A: FnMut() -> Result<(), Vec<crate::error::Error>>,
+{
+    let summary = |err_count| Summary {
+        check_count: None,
+        warning_count: 0,
+        error_count: err_count,
+    };
+    match action() {
+        Ok(_) => {
+            eprintln!("{}", summary(0));
+            Ok(())
+        }
+        Err(errs) => {
+            for err in &errs {
+                err.report();
+            }
+            eprintln!("{}", summary(errs.len()));
+            Err(ExitFailure::into_report())
+        }
+    }
+}
+
 pub fn with_project<A>(
     directory: Option<&Path>,
     deny: bool,
