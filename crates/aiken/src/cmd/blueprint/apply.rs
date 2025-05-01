@@ -17,7 +17,6 @@ use std::{
     fs::{self, File},
     io::BufReader,
     path::PathBuf,
-    process,
     str::FromStr,
 };
 use uplc::ast::Data as UplcData;
@@ -94,40 +93,23 @@ pub fn exec(
                 );
 
                 let bytes = hex::decode(param)
-                    .map_err::<Error, _>(|e| {
-                        blueprint::error::Error::MalformedParameter {
-                            hint: format!("Invalid hex-encoded string: {e}"),
-                        }
-                        .into()
+                    .map_err(|e| blueprint::error::Error::MalformedParameter {
+                        hint: format!("Invalid hex-encoded string: {e}"),
                     })
-                    .unwrap_or_else(|e| {
-                        println!();
-                        e.report();
-                        process::exit(1)
-                    });
+                    .map_err(Error::from)?;
 
-                uplc::plutus_data(&bytes)
-                    .map_err::<Error, _>(|e| {
-                        blueprint::error::Error::MalformedParameter {
-                            hint: format!("Invalid Plutus data; malformed CBOR encoding: {e}"),
-                        }
-                        .into()
-                    })
-                    .unwrap_or_else(|e| {
-                        println!();
-                        e.report();
-                        process::exit(1)
-                    })
+                uplc::plutus_data(&bytes).map_err(|e| blueprint::error::Error::MalformedParameter {
+                    hint: format!("Invalid Plutus data; malformed CBOR encoding: {e}"),
+                })
             }
 
-            None => blueprint
-                .construct_parameter_incrementally(
-                    module.as_deref(),
-                    validator.as_deref(),
-                    ask_schema,
-                )
-                .map_err(Error::from)?,
-        };
+            None => blueprint.construct_parameter_incrementally(
+                module.as_deref(),
+                validator.as_deref(),
+                ask_schema,
+            ),
+        }
+        .map_err(Error::from)?;
 
         eprintln!(
             "{} {}",
@@ -151,15 +133,10 @@ pub fn exec(
                 println!("\n{}\n", json);
             }
             Some(ref path) => {
-                fs::write(path, json)
-                    .map_err(|error| Error::FileIo {
-                        error,
-                        path: path.clone(),
-                    })
-                    .unwrap_or_else(|e| {
-                        e.report();
-                        process::exit(1)
-                    });
+                fs::write(path, json).map_err(|error| Error::FileIo {
+                    error,
+                    path: path.clone(),
+                })?;
             }
         };
 
