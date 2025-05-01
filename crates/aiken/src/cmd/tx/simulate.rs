@@ -1,5 +1,9 @@
-use aiken_project::{error::Error, watch::with_project};
+use aiken_project::{
+    error::{Error, ScriptOverrideArugmentError},
+    watch::with_project,
+};
 use miette::IntoDiagnostic;
+use ordinal::Ordinal;
 use owo_colors::{OwoColorize, Stream::Stderr};
 use pallas_addresses::ScriptHash;
 use pallas_primitives::{
@@ -52,8 +56,9 @@ pub struct Args {
     #[clap(value_name = "FILEPATH")]
     blueprint: Option<PathBuf>,
 
-    /// Key specifying which script hash is being overridden and the hash of the overiding script in the form "FROM:TO"
-    #[clap(long("script-override"), num_args(0..))]
+    /// A mapping (colon-separated) from a script hash (in the transaction) to override by another script found in the blueprint.
+    /// For example:`d27cee75:197c9353`
+    #[clap(long("script-override"), value_name = "FROM:TO", num_args(0..), verbatim_doc_comment)]
     script_overrides: Vec<String>,
 }
 
@@ -102,61 +107,68 @@ pub fn exec(
     if !script_overrides.is_empty() {
         with_project(None, false, true, false, |p| {
             eprintln!(
-                "{} script overrides",
-                "      Computing"
+                "{} scripts",
+                "      Overriding"
                     .if_supports_color(Stderr, |s| s.purple())
                     .if_supports_color(Stderr, |s| s.bold()),
             );
-            let hash_overrides: HashMap<ScriptHash, ScriptHash> = script_overrides
+
+            let blueprint_path = p.blueprint_path(blueprint.as_deref());
+            let blueprint = p.blueprint(&blueprint_path)?;
+            let blueprint_validators: HashMap<ScriptHash, PlutusScript> = blueprint.into();
+
+            script_overrides
                 .iter()
-                .try_fold::<_, _, Result<_, aiken_project::error::Error>>(
-                    HashMap::new(),
-                    |mut acc, script_override| {
+                .enumerate()
+                .try_for_each::<_, Result<_, aiken_project::error::Error>>(
+                    |(i, script_override)| {
                         let mut parts = script_override.split(":");
 
                         let from = parts
                             .next()
                             .ok_or(Error::ScriptOverrideArgumentParseError {
-                                value: script_override.clone(),
+                                index: Ordinal(i).suffix().to_string(),
+                                error: ScriptOverrideArugmentError::InvalidFormat,
                             })?;
 
                         let to = parts
                             .next()
                             .ok_or(Error::ScriptOverrideArgumentParseError {
-                                value: script_override.clone(),
+                                index: Ordinal(i).suffix().to_string(),
+                                error: ScriptOverrideArugmentError::InvalidFormat,
                             })?;
 
                         let from_hash = ScriptHash::from(
                             hex::decode(from)
-                                .map_err(|_| Error::ScriptOverrideArgumentParseError {
-                                    value: script_override.clone(),
+                                .map_err(|e| Error::ScriptOverrideArgumentParseError {
+                                    index: Ordinal(i).suffix().to_string(),
+                                    error: ScriptOverrideArugmentError::InvalidHash(e),
                                 })?
                                 .as_slice(),
                         );
 
                         let to_hash = ScriptHash::from(
                             hex::decode(to)
-                                .map_err(|_| Error::ScriptOverrideArgumentParseError {
-                                    value: script_override.clone(),
+                                .map_err(|e| Error::ScriptOverrideArgumentParseError {
+                                    index: Ordinal(i).suffix().to_string(),
+                                    error: ScriptOverrideArugmentError::InvalidHash(e),
                                 })?
                                 .as_slice(),
                         );
 
-                        acc.insert(from_hash, to_hash);
-                        Ok(acc)
+                        overrides.insert(
+                            from_hash,
+                            blueprint_validators
+                                .get(&to_hash)
+                                .ok_or(Error::ScriptOverrideNotFound {
+                                    script_hash: to_hash,
+                                })?
+                                .clone(),
+                        );
+
+                        Ok(())
                     },
                 )?;
-
-            let blueprint_path = p.blueprint_path(blueprint.as_deref());
-            let blueprint = p.blueprint(&blueprint_path)?;
-            overrides = blueprint.into();
-            for (from, to) in hash_overrides {
-                let to_script = overrides
-                    .get(&to)
-                    .ok_or(Error::ScriptOverrideNotFound { script_hash: to })?;
-
-                overrides.insert(from, to_script.clone());
-            }
 
             Ok(())
         })?;

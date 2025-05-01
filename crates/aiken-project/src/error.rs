@@ -6,6 +6,7 @@ use aiken_lang::{
     test_framework::{BenchmarkResult, PropertyTestResult, TestResult, UnitTestResult},
     tipo,
 };
+use hex::FromHexError;
 use miette::{
     Diagnostic, EyreContext, LabeledSpan, MietteHandler, MietteHandlerOpts, NamedSource, RgbColors,
     SourceCode,
@@ -156,8 +157,22 @@ pub enum Error {
     )]
     ScriptOverrideNotFound { script_hash: ScriptHash },
 
-    #[error("I couldn't parse the script override argument: {value}")]
-    ScriptOverrideArgumentParseError { value: String },
+    #[error("I couldn't parse the script override argument at index {index}...")]
+    ScriptOverrideArgumentParseError {
+        index: String,
+        #[source]
+        error: ScriptOverrideArugmentError,
+    },
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum ScriptOverrideArugmentError {
+    #[error(
+        "I couldn't understand the argument provided. Are you sure it's in the right format? <HASH:HASH>"
+    )]
+    InvalidFormat,
+    #[error(transparent)]
+    InvalidHash(#[from] FromHexError),
 }
 
 impl Error {

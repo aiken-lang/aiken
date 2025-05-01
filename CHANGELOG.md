@@ -18,7 +18,7 @@
                 Better when labels are occasional and non-exclusive per test.
 
           [default: relative-to-labels]
-  ``` - **aiken**: New `--script-override` flag added to the `tx simulate` command, to override script hashes with another script without modifying the transaction CBOR. @yHSJ
+- **aiken**: New `--script-override` flag added to the `tx simulate` command, to override script hashes with another script without modifying the transaction CBOR. @yHSJ
 
   ```
   --script-override [<SCRIPT_OVERRIDES>...]  The "from" hash which is being replaced and the hash "to" hash which is being overriden in the form "FROM:TO"
