@@ -831,7 +831,7 @@ pub fn find_script(
     utxos: &[ResolvedInput],
     lookup_table: &DataLookupTable,
 ) -> Result<(PlutusScript, Option<PlutusData>), Error> {
-    let lookup_script = |script_hash: &ScriptHash| match lookup_table.scripts.get(script_hash) {
+    let lookup_script = |script_hash: &ScriptHash| match lookup_table.get_script(script_hash) {
         Some(s) => Ok((s.clone(), None)),
         None => Err(Error::MissingRequiredScript {
             hash: script_hash.to_string(),
