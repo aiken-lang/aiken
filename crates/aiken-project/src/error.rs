@@ -7,10 +7,12 @@ use aiken_lang::{
     tipo,
 };
 use hex::FromHexError;
+use indoc::formatdoc;
 use miette::{
     Diagnostic, EyreContext, LabeledSpan, MietteHandler, MietteHandlerOpts, NamedSource, RgbColors,
     SourceCode,
 };
+use ordinal::Ordinal;
 use owo_colors::{
     OwoColorize,
     Stream::{Stderr, Stdout},
@@ -153,26 +155,118 @@ pub enum Error {
     NoDefaultEnvironment,
 
     #[error(
-        "I couldn't find the script corresponding to hash {script_hash} in your blueprint (plutus.json)."
+        "I couldn't find any script matching {} in your blueprint (plutus.json).",
+        script_hash.to_string().if_supports_color(Stdout, |s| s.yellow()),
     )]
-    ScriptOverrideNotFound { script_hash: ScriptHash },
+    ScriptOverrideNotFound {
+        script_hash: ScriptHash,
+        known_scripts: BTreeSet<ScriptHash>,
+    },
 
-    #[error("I couldn't parse the script override argument at index {index}...")]
+    #[error(
+        "I couldn't parse the {} script override argument.",
+        Ordinal(*index as u32 + 1).to_string().if_supports_color(Stdout, |s| s.bold()),
+    )]
     ScriptOverrideArgumentParseError {
-        index: String,
+        index: usize,
         #[source]
-        error: ScriptOverrideArugmentError,
+        error: ScriptOverrideArgumentError,
     },
 }
 
-#[derive(thiserror::Error, Debug)]
-pub enum ScriptOverrideArugmentError {
+#[derive(thiserror::Error, Debug, Diagnostic)]
+pub enum ScriptOverrideArgumentError {
     #[error(
-        "I couldn't understand the argument provided. Are you sure it's in the right format? <HASH:HASH>"
+        "I couldn't find the left side of the mapping. Are you sure you provided two colon-separated validator qualifiers?\n"
     )]
-    InvalidFormat,
-    #[error(transparent)]
-    InvalidHash(#[from] FromHexError),
+    #[diagnostic(help(
+        "{}",
+        formatdoc!{
+            r#"I am expecting a mapping {from} a validator of the transaction, {to} a replacement in the blueprint as such:
+
+                --script-override "122171C7C82348C420A47AFD8F{colon}7730C913CEEC22524B98E1604A"
+                                   {underline}
+                                    {missing}
+            "#,
+            from = "from"
+                .if_supports_color(Stdout, |s| s.bold()),
+            to = "to"
+                .if_supports_color(Stdout, |s| s.bold()),
+            colon = ":"
+                .if_supports_color(Stderr, |s| s.cyan())
+                .if_supports_color(Stderr, |s| s.bold()),
+            underline = "^^^^^^^^^^^^^^^^^^^^^^^^^^"
+                .if_supports_color(Stdout, |s| s.yellow())
+                .if_supports_color(Stdout, |s| s.bold()),
+            missing = "missing left side (from)"
+                .if_supports_color(Stdout, |s| s.yellow())
+        },
+    ))]
+    MissingFrom,
+
+    #[error(
+        "I couldn't find the right side of the mapping. Are you sure you provided two colon-separated validator qualifiers?\n"
+    )]
+    #[diagnostic(help(
+        "{}",
+        formatdoc!{
+            r#"I am expecting a mapping {from} a validator of the transaction, {to} a replacement in the blueprint as such:
+
+                --script-override "122171C7C82348C420A47AFD8F{colon}7730C913CEEC22524B98E1604A"
+                                                              {underline}
+                                                               {missing}
+            "#,
+            from = "from"
+                .if_supports_color(Stdout, |s| s.bold()),
+            to = "to"
+                .if_supports_color(Stdout, |s| s.bold()),
+            colon = ":"
+                .if_supports_color(Stderr, |s| s.cyan())
+                .if_supports_color(Stderr, |s| s.bold()),
+            underline = "^^^^^^^^^^^^^^^^^^^^^^^^^^"
+                .if_supports_color(Stdout, |s| s.yellow())
+                .if_supports_color(Stdout, |s| s.bold()),
+            missing = "missing right side (to)"
+                .if_supports_color(Stdout, |s| s.yellow())
+        },
+    ))]
+    MissingTo,
+
+    #[error(
+        "The origin qualifier ({}) isn't a valid hex-encoded hash digest.\n",
+        "from".if_supports_color(Stdout, |s| s.bold()),
+    )]
+    #[diagnostic(help("{0}"))]
+    InvalidFromHash(FromHexError),
+
+    #[error(
+        "The destination qualifier ({}) isn't a valid hex-encoded hash digest.\n",
+        "to".if_supports_color(Stdout, |s| s.bold()),
+    )]
+    #[diagnostic(help("{0}"))]
+    InvalidToHash(FromHexError),
+
+    #[error(
+        "The origin qualifier ({}) isn't a valid script hash digest.\n",
+        "from".if_supports_color(Stdout, |s| s.bold()),
+    )]
+    #[diagnostic(help(
+        "The size is incorrect. I expected to find {} bytes but found {}.",
+        "28".if_supports_color(Stdout, |s| s.green()),
+        .0.to_string().if_supports_color(Stdout, |s| s.red()),
+    ))]
+    InvalidFromSize(usize),
+
+    #[error(
+        "The destination qualifier ({}) isn't a valid script hash digest.\n",
+        "to".if_supports_color(Stdout, |s| s.bold()),
+    )]
+    #[diagnostic(help(
+        "The size is incorrect. I expected to find {} bytes but found {}.",
+        "28".if_supports_color(Stdout, |s| s.green()),
+        .0.to_string().if_supports_color(Stdout, |s| s.red()),
+    ))]
+    InvalidToSize(usize),
 }
 
 impl Error {
@@ -437,16 +531,23 @@ impl Diagnostic for Error {
                     None => String::new(),
                 }
             ))),
+            Error::ScriptOverrideNotFound { known_scripts, .. } => Some(Box::new(format!(
+                "These are all the scripts found in your blueprint:\n\n{}",
+                known_scripts
+                    .iter()
+                    .map(|s| format!("✓ {s}"))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ))),
+            Error::ScriptOverrideArgumentParseError { error, .. } => error.help(),
+            Error::Module(e) => e.help(),
             Error::StandardIo(_)
             | Error::Format { .. }
             | Error::TestFailure { .. }
             | Error::Http(_)
             | Error::ZipExtract(_)
             | Error::JoinError(_)
-            | Error::ExportNotFound { .. }
-            | Error::ScriptOverrideNotFound { .. }
-            | Error::ScriptOverrideArgumentParseError { .. } => None,
-            Error::Module(e) => e.help(),
+            | Error::ExportNotFound { .. } => None,
         }
     }
 

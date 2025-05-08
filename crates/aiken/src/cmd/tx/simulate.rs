@@ -1,9 +1,10 @@
 use aiken_project::{
-    error::{Error, ScriptOverrideArugmentError},
+    error::{Error, ScriptOverrideArgumentError},
+    telemetry::EventTarget,
     watch::with_project,
 };
+use hex::FromHexError;
 use miette::IntoDiagnostic;
-use ordinal::Ordinal;
 use owo_colors::{OwoColorize, Stream::Stderr};
 use pallas_addresses::ScriptHash;
 use pallas_primitives::{
@@ -53,7 +54,7 @@ pub struct Args {
     zero_slot: u64,
 
     /// An Aiken blueprint JSON file containing the overriding scripts, if applicable
-    #[clap(value_name = "FILEPATH")]
+    #[clap(long, value_name = "FILEPATH")]
     blueprint: Option<PathBuf>,
 
     /// A mapping (colon-separated) from a script hash (in the transaction) to override by another script found in the blueprint.
@@ -121,47 +122,44 @@ pub fn exec(
                 .iter()
                 .enumerate()
                 .try_for_each::<_, Result<_, aiken_project::error::Error>>(
-                    |(i, script_override)| {
+                    |(index, script_override)| {
                         let mut parts = script_override.split(":");
 
-                        let from = parts
-                            .next()
-                            .ok_or(Error::ScriptOverrideArgumentParseError {
-                                index: Ordinal(i).suffix().to_string(),
-                                error: ScriptOverrideArugmentError::InvalidFormat,
-                            })?;
+                        let from =
+                            get_override_part(&mut parts, ScriptOverrideArgumentError::MissingFrom)
+                                .and_then(|part| {
+                                    decode_script_hash(
+                                        part,
+                                        ScriptOverrideArgumentError::InvalidFromHash,
+                                        ScriptOverrideArgumentError::InvalidFromSize,
+                                    )
+                                })
+                                .map_err(|error| Error::ScriptOverrideArgumentParseError {
+                                    index,
+                                    error,
+                                })?;
 
-                        let to = parts
-                            .next()
-                            .ok_or(Error::ScriptOverrideArgumentParseError {
-                                index: Ordinal(i).suffix().to_string(),
-                                error: ScriptOverrideArugmentError::InvalidFormat,
-                            })?;
-
-                        let from_hash = ScriptHash::from(
-                            hex::decode(from)
-                                .map_err(|e| Error::ScriptOverrideArgumentParseError {
-                                    index: Ordinal(i).suffix().to_string(),
-                                    error: ScriptOverrideArugmentError::InvalidHash(e),
-                                })?
-                                .as_slice(),
-                        );
-
-                        let to_hash = ScriptHash::from(
-                            hex::decode(to)
-                                .map_err(|e| Error::ScriptOverrideArgumentParseError {
-                                    index: Ordinal(i).suffix().to_string(),
-                                    error: ScriptOverrideArugmentError::InvalidHash(e),
-                                })?
-                                .as_slice(),
-                        );
+                        let to =
+                            get_override_part(&mut parts, ScriptOverrideArgumentError::MissingTo)
+                                .and_then(|part| {
+                                    decode_script_hash(
+                                        part,
+                                        ScriptOverrideArgumentError::InvalidToHash,
+                                        ScriptOverrideArgumentError::InvalidToSize,
+                                    )
+                                })
+                                .map_err(|error| Error::ScriptOverrideArgumentParseError {
+                                    index,
+                                    error,
+                                })?;
 
                         overrides.insert(
-                            from_hash,
+                            from,
                             blueprint_validators
-                                .get(&to_hash)
-                                .ok_or(Error::ScriptOverrideNotFound {
-                                    script_hash: to_hash,
+                                .get(&to)
+                                .ok_or_else(|| Error::ScriptOverrideNotFound {
+                                    script_hash: to,
+                                    known_scripts: blueprint_validators.keys().cloned().collect(),
                                 })?
                                 .clone(),
                         );
@@ -257,4 +255,29 @@ pub fn exec(
     }
 
     Ok(())
+}
+
+fn get_override_part<'a>(
+    parts: &'_ mut std::str::Split<'a, &'a str>,
+    when_missing: ScriptOverrideArgumentError,
+) -> Result<&'a str, ScriptOverrideArgumentError> {
+    parts
+        .next()
+        .and_then(|s| if s.is_empty() { None } else { Some(s) })
+        .ok_or(when_missing)
+}
+
+fn decode_script_hash(
+    hex_bytes: &str,
+    when_hex_invalid: impl FnOnce(FromHexError) -> ScriptOverrideArgumentError,
+    when_size_invalid: impl FnOnce(usize) -> ScriptOverrideArgumentError,
+) -> Result<ScriptHash, ScriptOverrideArgumentError> {
+    let bytes = hex::decode(hex_bytes).map_err(when_hex_invalid)?;
+    let size = bytes.len();
+
+    if size != 28 {
+        return Err(when_size_invalid(size));
+    }
+
+    Ok(ScriptHash::from(bytes.as_slice()))
 }
