@@ -1,6 +1,5 @@
 use aiken/collection/dict.{Dict}
 use aiken/crypto.{Blake2b_224, Hash, Script}
-use aiken/primitive/bytearray
 
 pub type PolicyId =
   Hash<Blake2b_224, Script>
@@ -73,8 +72,7 @@ pub fn flatten_with(
         fn(asset_name, quantity, xs) {
           when transform(policy_id, asset_name, quantity) is {
             None -> xs
-            Some(x) ->
-              [x, ..xs]
+            Some(x) -> [x, ..xs]
           }
         },
       )
