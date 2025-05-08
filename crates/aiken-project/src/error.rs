@@ -19,6 +19,7 @@ use owo_colors::{
 };
 use pallas_addresses::ScriptHash;
 use std::{
+    collections::BTreeSet,
     fmt::{self, Debug, Display},
     io,
     path::{Path, PathBuf},

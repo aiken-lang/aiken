@@ -12,9 +12,10 @@ use pallas_primitives::{
     conway::{Redeemer, TransactionInput, TransactionOutput},
 };
 use pallas_traverse::{Era, MultiEraTx};
+use serde_json::json;
 use std::{collections::HashMap, fmt, fs, path::PathBuf, process};
 use uplc::{
-    machine::cost_model::ExBudget,
+    machine::{Trace, cost_model::ExBudget},
     tx::{
         self, redeemer_tag_to_string,
         script_context::{PlutusScript, ResolvedInput, SlotConfig},
@@ -108,8 +109,8 @@ pub fn exec(
     if !script_overrides.is_empty() {
         with_project(None, false, true, false, |p| {
             eprintln!(
-                "{} scripts",
-                "      Overriding"
+                "{:>13} scripts",
+                "Overriding"
                     .if_supports_color(Stderr, |s| s.purple())
                     .if_supports_color(Stderr, |s| s.bold()),
             );
@@ -173,8 +174,8 @@ pub fn exec(
     }
 
     eprintln!(
-        "{} {}",
-        "   Simulating"
+        "{:>13} {}",
+        "Simulating"
             .if_supports_color(Stderr, |s| s.purple())
             .if_supports_color(Stderr, |s| s.bold()),
         tx.hash()
@@ -201,8 +202,8 @@ pub fn exec(
 
         let with_redeemer = |redeemer: &Redeemer| {
             eprintln!(
-                "{} {}[{}]",
-                "   Evaluating"
+                "{:>13} {}[{}]",
+                "Evaluating"
                     .if_supports_color(Stderr, |s| s.purple())
                     .if_supports_color(Stderr, |s| s.bold()),
                 redeemer_tag_to_string(&redeemer.tag),
@@ -223,27 +224,80 @@ pub fn exec(
 
         match result {
             Ok(redeemers) => {
-                // this should allow N scripts to be
-                let total_budget_used: Vec<ExBudget> = redeemers
-                    .iter()
-                    .map(|(curr, _)| ExBudget {
-                        mem: curr.ex_units.mem as i64,
-                        cpu: curr.ex_units.steps as i64,
-                    })
-                    .collect();
+                let is_terminal = matches!(EventTarget::default(), EventTarget::Terminal(..));
 
-                eprintln!("\n");
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&total_budget_used)
-                        .map_err(|_| fmt::Error)
-                        .into_diagnostic()?
-                );
+                if is_terminal {
+                    redeemers.iter().for_each(|(redeemer, eval)| {
+                        eprintln!(
+                            "{} {}={}\n{:>6}{:>11}={}",
+                            format!(
+                                "{:>13}",
+                                format!(
+                                    "{}[{}]",
+                                    redeemer_tag_to_string(&redeemer.tag),
+                                    redeemer.index
+                                )
+                            )
+                            .if_supports_color(Stderr, |s| s.purple())
+                            .if_supports_color(Stderr, |s| s.bold()),
+                            "mem".if_supports_color(Stderr, |s| s.bold()),
+                            redeemer.ex_units.mem,
+                            "│"
+                                .if_supports_color(Stderr, |s| s.purple())
+                                .if_supports_color(Stderr, |s| s.bold()),
+                            "cpu".if_supports_color(Stderr, |s| s.bold()),
+                            redeemer.ex_units.steps,
+                        );
+
+                        let traces = eval.traces();
+
+                        eprintln!(
+                            "{:>13} {}",
+                            "└ Traces"
+                                .if_supports_color(Stderr, |s| s.purple())
+                                .if_supports_color(Stderr, |s| s.bold()),
+                            if traces.is_empty() {
+                                "ø".to_string()
+                            } else {
+                                traces
+                                    .into_iter()
+                                    .filter_map(|trace| match trace {
+                                        Trace::Log(s) => Some(s),
+                                        Trace::Label(_) => None,
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join("\n              ")
+                            }
+                        );
+                    });
+                } else {
+                    // this should allow N scripts to be
+                    let summary: Vec<serde_json::Value> = redeemers
+                        .iter()
+                        .map(|(redeemer, eval)| {
+                            json!({
+                                "mem": redeemer.ex_units.mem as i64,
+                                "cpu": redeemer.ex_units.steps as i64,
+                                "traces": eval.traces().into_iter().filter_map(|trace| match trace {
+                                    Trace::Log(s) => Some(s),
+                                    Trace::Label(_) => None,
+                                }).collect::<Vec<_>>(),
+                            })
+                        })
+                        .collect();
+
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&summary)
+                            .map_err(|_| fmt::Error)
+                            .into_diagnostic()?
+                    );
+                }
             }
             Err(err) => {
                 eprintln!(
-                    "{} {}",
-                    "        Error"
+                    "{:>13} {}",
+                    "Error"
                         .if_supports_color(Stderr, |s| s.red())
                         .if_supports_color(Stderr, |s| s.bold()),
                     err.red()
