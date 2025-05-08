@@ -66,7 +66,7 @@ github-build-setup = "../musl-build-setup.yml"
 # Cargo-dist uses ubuntu-20.04 by default, causing issues in various cases
 # because it links with openssl-1.1 whereas recent distro ships with 3.x
 [workspace.metadata.dist.github-custom-runners]
-x86_64-unknown-linux-musl = "ubuntu-22.04"
+x86_64-unknown-linux-musl = "ubuntu-24.04"
 
 [workspace.dependencies]
 walkdir = "2.3.2"
