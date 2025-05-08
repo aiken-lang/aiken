@@ -7,10 +7,7 @@ use aiken_lang::{
 };
 use aiken_project::watch::with_project;
 use rand::prelude::*;
-use std::{
-    path::PathBuf,
-    process,
-};
+use std::{path::PathBuf, process};
 
 #[derive(clap::Args)]
 #[clap(disable_version_flag(true))]

@@ -237,9 +237,10 @@ impl Blueprint {
     }
 }
 
-impl Into<HashMap<ScriptHash, PlutusScript>> for Blueprint {
-    fn into(self) -> HashMap<ScriptHash, PlutusScript> {
-        self.validators
+impl From<Blueprint> for HashMap<ScriptHash, PlutusScript> {
+    fn from(blueprint: Blueprint) -> Self {
+        blueprint
+            .validators
             .iter()
             .map(|validator| validator.program.compiled_code_and_hash())
             .collect()

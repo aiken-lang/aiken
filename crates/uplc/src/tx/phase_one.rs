@@ -31,7 +31,7 @@ pub fn eval_phase_one(
     Ok(())
 }
 
-pub fn validate_missing_scripts<'a>(
+pub fn validate_missing_scripts(
     needed: &ScriptsNeeded,
     received_hashes: Vec<ScriptHash>,
 ) -> Result<(), Error> {

@@ -15,7 +15,7 @@ use pallas_traverse::{Era, MultiEraTx};
 use serde_json::json;
 use std::{collections::HashMap, fmt, fs, path::PathBuf, process};
 use uplc::{
-    machine::{Trace, cost_model::ExBudget},
+    machine::Trace,
     tx::{
         self, redeemer_tag_to_string,
         script_context::{PlutusScript, ResolvedInput, SlotConfig},
