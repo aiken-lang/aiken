@@ -12,6 +12,8 @@ use itertools::Itertools;
 use owo_colors::{OwoColorize, Stream, Stream::Stderr};
 use pallas_primitives::alonzo::{Constr, PlutusData};
 use patricia_tree::PatriciaMap;
+#[cfg(not(target_family = "wasm"))]
+use std::time::Duration;
 use std::{
     borrow::Borrow,
     collections::BTreeMap,
@@ -20,7 +22,6 @@ use std::{
     ops::Deref,
     path::PathBuf,
     rc::Rc,
-    time::Duration,
 };
 use uplc::{
     ast::{Constant, Data, Name, NamedDeBruijn, Program, Term},
@@ -282,8 +283,16 @@ pub struct FuzzerError {
 
 #[derive(Debug, Clone)]
 pub enum Event {
-    Simplifying { choices: usize },
-    Simplified { duration: Duration, steps: usize },
+    Simplifying {
+        choices: usize,
+    },
+    Simplified {
+        #[cfg(not(target_family = "wasm"))]
+        duration: Duration,
+        #[cfg(target_family = "wasm")]
+        duration: (),
+        steps: usize,
+    },
 }
 
 impl Display for Event {
@@ -297,6 +306,16 @@ impl Display for Event {
                 format!("counterexample from {choices} choices")
                     .if_supports_color(Stderr, |s| s.bold()),
             )),
+            #[cfg(target_family = "wasm")]
+            Event::Simplified { steps, .. } => f.write_str(&format!(
+                "{} {}",
+                "   Simplified"
+                    .if_supports_color(Stderr, |s| s.bold())
+                    .if_supports_color(Stderr, |s| s.purple()),
+                format!("counterexample after {steps} steps",)
+                    .if_supports_color(Stderr, |s| s.bold()),
+            )),
+            #[cfg(not(target_family = "wasm"))]
             Event::Simplified { duration, steps } => f.write_str(&format!(
                 "{} {}",
                 "   Simplified"
@@ -807,6 +826,8 @@ impl Counterexample<'_> {
         let mut prev;
 
         let mut steps = 0;
+
+        #[cfg(not(target_family = "wasm"))]
         let now = std::time::Instant::now();
 
         eprintln!(
@@ -953,7 +974,10 @@ impl Counterexample<'_> {
         eprintln!(
             "{}",
             Event::Simplified {
+                #[cfg(not(target_family = "wasm"))]
                 duration: now.elapsed(),
+                #[cfg(target_family = "wasm")]
+                duration: (),
                 steps,
             }
         );
