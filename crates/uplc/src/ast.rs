@@ -8,6 +8,7 @@ use crate::{
         eval_result::EvalResult,
     },
     optimize::interner::CodeGenInterner,
+    tx::script_context::PlutusScript,
 };
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
@@ -23,6 +24,7 @@ use serde::{
     ser::{Serialize, SerializeStruct, Serializer},
 };
 use std::{
+    convert::AsRef,
     fmt::{self, Display},
     hash::{self, Hash},
     rc::Rc,
@@ -142,29 +144,29 @@ impl SerializableProgram {
         }
     }
 
-    pub fn compiled_code_and_hash(&self) -> (String, pallas_crypto::hash::Hash<28>) {
+    pub fn compiled_code_and_hash(&self) -> (pallas_crypto::hash::Hash<28>, PlutusScript) {
         use SerializableProgram::*;
 
         match self {
             PlutusV1Program(pgrm) => {
                 let cbor = pgrm.to_cbor().unwrap();
-                let compiled_code = hex::encode(&cbor);
-                let hash = conway::PlutusScript::<1>(cbor.into()).compute_hash();
-                (compiled_code, hash)
+                let script = conway::PlutusScript::<1>(cbor.into());
+                let hash = script.compute_hash();
+                (hash, PlutusScript::V1(script))
             }
 
             PlutusV2Program(pgrm) => {
                 let cbor = pgrm.to_cbor().unwrap();
-                let compiled_code = hex::encode(&cbor);
-                let hash = conway::PlutusScript::<2>(cbor.into()).compute_hash();
-                (compiled_code, hash)
+                let script = conway::PlutusScript::<2>(cbor.into());
+                let hash = script.compute_hash();
+                (hash, PlutusScript::V2(script))
             }
 
             PlutusV3Program(pgrm) => {
                 let cbor = pgrm.to_cbor().unwrap();
-                let compiled_code = hex::encode(&cbor);
-                let hash = conway::PlutusScript::<3>(cbor.into()).compute_hash();
-                (compiled_code, hash)
+                let script = conway::PlutusScript::<3>(cbor.into());
+                let hash = script.compute_hash();
+                (hash, PlutusScript::V3(script))
             }
         }
     }
@@ -172,9 +174,9 @@ impl SerializableProgram {
 
 impl Serialize for SerializableProgram {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let (compiled_code, hash) = self.compiled_code_and_hash();
+        let (hash, compiled_code) = self.compiled_code_and_hash();
         let mut s = serializer.serialize_struct("Program<DeBruijn>", 2)?;
-        s.serialize_field("compiledCode", &compiled_code)?;
+        s.serialize_field("compiledCode", &hex::encode(compiled_code.as_ref()))?;
         s.serialize_field("hash", &hash)?;
         s.end()
     }

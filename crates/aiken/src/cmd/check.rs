@@ -10,11 +10,7 @@ use aiken_project::{
     watch::{self, watch_project, with_project},
 };
 use rand::prelude::*;
-use std::{
-    io::{self, IsTerminal},
-    path::PathBuf,
-    process,
-};
+use std::{path::PathBuf, process};
 
 #[derive(clap::Args)]
 #[clap(disable_version_flag(true))]
@@ -176,28 +172,22 @@ pub fn exec(
             )
         })
     } else {
-        with_project(
-            directory.as_deref(),
-            deny,
-            silent,
-            !io::stdout().is_terminal(),
-            |p| {
-                p.check(
-                    skip_tests,
-                    match_tests.clone(),
-                    debug,
-                    exact_match,
-                    seed,
-                    max_success,
-                    property_coverage,
-                    match trace_filter {
-                        Some(trace_filter) => trace_filter(trace_level),
-                        None => Tracing::All(trace_level),
-                    },
-                    env.clone(),
-                )
-            },
-        )
+        with_project(directory.as_deref(), deny, silent, true, |p| {
+            p.check(
+                skip_tests,
+                match_tests.clone(),
+                debug,
+                exact_match,
+                seed,
+                max_success,
+                property_coverage,
+                match trace_filter {
+                    Some(trace_filter) => trace_filter(trace_level),
+                    None => Tracing::All(trace_level),
+                },
+                env.clone(),
+            )
+        })
     };
 
     result.map_err(|_| process::exit(1))

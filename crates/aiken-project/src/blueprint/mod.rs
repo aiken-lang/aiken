@@ -12,9 +12,13 @@ use crate::{
 use aiken_lang::gen_uplc::CodeGenerator;
 use definitions::Definitions;
 pub use error::Error;
+use pallas_addresses::ScriptHash;
 use schema::{Annotated, Schema};
-use std::{collections::BTreeSet, fmt::Debug};
-use uplc::PlutusData;
+use std::{
+    collections::{BTreeSet, HashMap},
+    fmt::Debug,
+};
+use uplc::{PlutusData, tx::script_context::PlutusScript};
 use validator::Validator;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
@@ -233,6 +237,15 @@ impl Blueprint {
     }
 }
 
+impl From<Blueprint> for HashMap<ScriptHash, PlutusScript> {
+    fn from(blueprint: Blueprint) -> Self {
+        blueprint
+            .validators
+            .iter()
+            .map(|validator| validator.program.compiled_code_and_hash())
+            .collect()
+    }
+}
 impl From<&ProjectConfig> for Preamble {
     fn from(config: &ProjectConfig) -> Self {
         Preamble {

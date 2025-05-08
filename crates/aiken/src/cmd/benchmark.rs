@@ -7,11 +7,7 @@ use aiken_lang::{
 };
 use aiken_project::watch::with_project;
 use rand::prelude::*;
-use std::{
-    io::{self, IsTerminal},
-    path::PathBuf,
-    process,
-};
+use std::{path::PathBuf, process};
 
 #[derive(clap::Args)]
 #[clap(disable_version_flag(true))]
@@ -89,24 +85,19 @@ pub fn exec(
 
     let seed = seed.unwrap_or_else(|| rng.r#gen());
 
-    let result = with_project(
-        directory.as_deref(),
-        false,
-        false,
-        !io::stdout().is_terminal(),
-        |p| {
-            p.benchmark(
-                match_benchmarks.clone(),
-                exact_match,
-                seed,
-                max_size,
-                match trace_filter {
-                    Some(trace_filter) => trace_filter(trace_level),
-                    None => Tracing::All(trace_level),
-                },
-                env.clone(),
-            )
-        },
-    );
+    let result = with_project(directory.as_deref(), false, false, true, |p| {
+        p.benchmark(
+            match_benchmarks.clone(),
+            exact_match,
+            seed,
+            max_size,
+            match trace_filter {
+                Some(trace_filter) => trace_filter(trace_level),
+                None => Tracing::All(trace_level),
+            },
+            env.clone(),
+        )
+    });
+
     result.map_err(|_| process::exit(1))
 }

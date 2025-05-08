@@ -64,7 +64,7 @@ pub fn exec(
         trace_level,
     }: Args,
 ) -> miette::Result<()> {
-    with_project(directory.as_deref(), false, false, false, |p| {
+    with_project(directory.as_deref(), false, false, true, |p| {
         p.compile(Options::default())?;
 
         let export = p.export(

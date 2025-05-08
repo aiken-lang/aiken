@@ -106,6 +106,7 @@ impl Display for CoverageMode {
     }
 }
 
+#[derive(Clone)]
 pub enum EventTarget {
     Json(Json),
     Terminal(Terminal),

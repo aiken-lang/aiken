@@ -116,8 +116,8 @@ where
 pub fn with_project<A>(
     directory: Option<&Path>,
     deny: bool,
-    silent: bool,
-    json: bool,
+    suppress_warnings: bool,
+    show_summary: bool,
     mut action: A,
 ) -> miette::Result<()>
 where
@@ -137,11 +137,17 @@ where
     let mut errs: Vec<crate::error::Error> = Vec::new();
     let mut check_count = None;
 
+    let mut is_terminal = true;
+
     if let Ok(workspace) = WorkspaceConfig::load(&project_path) {
         let res_projects = workspace
             .members
             .into_iter()
-            .map(|member| Project::new(member, EventTarget::default()))
+            .map(|member| {
+                let event_target = EventTarget::default();
+                is_terminal = matches!(event_target, EventTarget::Terminal(_));
+                Project::new(member, event_target)
+            })
             .collect::<Result<Vec<Project<_>>, crate::error::Error>>();
 
         let projects = match res_projects {
@@ -165,7 +171,9 @@ where
             }
         }
     } else {
-        let mut project = match Project::new(project_path, EventTarget::default()) {
+        let event_target = EventTarget::default();
+        is_terminal = matches!(event_target, EventTarget::Terminal(_));
+        let mut project = match Project::new(project_path, event_target) {
             Ok(p) => Ok(p),
             Err(e) => {
                 e.report();
@@ -187,15 +195,15 @@ where
 
     let warning_count = warnings.len();
 
-    if !json {
-        if !silent {
-            for warning in &warnings {
-                eprintln!();
-                warning.report()
-            }
+    if is_terminal && !suppress_warnings {
+        for warning in &warnings {
+            eprintln!();
+            warning.report()
         }
+    }
 
-        if !errs.is_empty() {
+    if !errs.is_empty() {
+        if is_terminal {
             for err in &errs {
                 err.report()
             }
@@ -208,10 +216,12 @@ where
                     error_count: errs.len(),
                 }
             );
-
-            return Err(ExitFailure::into_report());
         }
 
+        return Err(ExitFailure::into_report());
+    }
+
+    if is_terminal && show_summary {
         eprintln!(
             "{}",
             Summary {
