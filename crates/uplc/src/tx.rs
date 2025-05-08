@@ -54,6 +54,7 @@ pub fn eval_phase_two(
 }
 
 /// Like eval_phase_two, but allows replacing scripts dynamically for simulations
+#[allow(clippy::too_many_arguments)]
 pub fn eval_phase_two_with_override(
     tx: &MintedTx,
     utxos: &[ResolvedInput],
