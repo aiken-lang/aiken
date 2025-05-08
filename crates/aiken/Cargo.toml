@@ -17,9 +17,9 @@ license = false
 eula = false
 
 [dependencies]
-aiken-lang = { path = "../aiken-lang", version = "1.1.16" }
-aiken-lsp = { path = "../aiken-lsp", version = "1.1.16" }
-aiken-project = { path = '../aiken-project', version = "1.1.16" }
+aiken-lang = { path = "../aiken-lang", version = "1.1.17" }
+aiken-lsp = { path = "../aiken-lsp", version = "1.1.17" }
+aiken-project = { path = '../aiken-project', version = "1.1.17" }
 clap = { version = "4.1.8", features = [
     "derive",
     "wrap_help",
@@ -45,7 +45,7 @@ regex = "1.7.1"
 serde_json = "1.0.94"
 strum = { version = "0.26.3", features = ["derive"] }
 thiserror = "1.0.39"
-uplc = { path = '../uplc', version = "1.1.16" }
+uplc = { path = '../uplc', version = "1.1.17" }
 
 [target.'cfg(not(windows))'.dependencies]
 xdg = "2.5.2"
