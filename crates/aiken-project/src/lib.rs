@@ -21,8 +21,8 @@ mod tests;
 
 use crate::{
     blueprint::{
-        Blueprint,
         schema::{Annotated, Schema},
+        Blueprint,
     },
     config::ProjectConfig,
     error::{Error, Warning},
@@ -30,7 +30,6 @@ use crate::{
     telemetry::{CoverageMode, Event},
 };
 use aiken_lang::{
-    IdGenerator,
     ast::{
         self, DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Tracing, TypedDataType,
         TypedFunction, UntypedDefinition,
@@ -42,7 +41,7 @@ use aiken_lang::{
     line_numbers::LineNumbers,
     test_framework::{RunnableKind, Test, TestResult},
     tipo::{Type, TypeInfo},
-    utils,
+    utils, IdGenerator,
 };
 use export::Export;
 use indexmap::IndexMap;
@@ -60,8 +59,8 @@ use std::{
 };
 use telemetry::EventListener;
 use uplc::{
-    PlutusData,
     ast::{Constant, Name, Program},
+    PlutusData,
 };
 
 #[derive(Debug)]
@@ -1109,6 +1108,7 @@ where
             .into_iter()
             .filter_map(Result::ok)
             .filter(|e| e.file_type().is_file())
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "ak"))
             .try_for_each(|d| {
                 if has_default.is_none() {
                     has_default = Some(false);
