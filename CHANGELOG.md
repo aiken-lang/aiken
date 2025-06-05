@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.1.18 - UNRELEASED
+
+### Added
+
+- **aiken-project**: Pretty print execution units. Added `--plain-numbers`
+  flag to `check` command, to switch between the two formats.
+
+### Changed
+
+### Removed
+
+
 ## v1.1.17 - 2025-05-08
 
 ### Added

@@ -277,6 +277,7 @@ where
         coverage_mode: CoverageMode,
         tracing: Tracing,
         env: Option<String>,
+        plain_numbers: bool,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
             tracing,
@@ -291,6 +292,7 @@ where
                     seed,
                     property_max_success,
                     coverage_mode,
+                    plain_numbers,
                 }
             },
             blueprint_path: self.blueprint_path(None),
@@ -428,6 +430,7 @@ where
                 seed,
                 property_max_success,
                 coverage_mode,
+                plain_numbers,
             } => {
                 let tests =
                     self.collect_tests(verbose, match_tests, exact_match, options.tracing)?;
@@ -464,6 +467,7 @@ where
                     seed,
                     coverage_mode,
                     tests,
+                    plain_numbers,
                 });
 
                 if !errors.is_empty() {
