@@ -5,7 +5,7 @@
 ### Added
 
 - **aiken-project**: Pretty print execution units. Added `--plain-numbers`
-  flag to `check` command, to switch between the two formats.
+  flag to `check` command, to switch between the two formats. @nikhils9
 
 ### Changed
 
