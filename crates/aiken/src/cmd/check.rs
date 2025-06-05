@@ -124,6 +124,10 @@ pub struct Args {
     /// [optional]
     #[clap(short, long, value_parser=trace_level_parser(), default_value_t=TraceLevel::Verbose, verbatim_doc_comment)]
     trace_level: TraceLevel,
+
+    /// When enabled, print execution units as plain numbers
+    #[clap(long)]
+    plain_numbers: bool,
 }
 
 pub fn exec(
@@ -143,6 +147,7 @@ pub fn exec(
         seed,
         max_success,
         env,
+        plain_numbers,
     }: Args,
 ) -> miette::Result<()> {
     if show_json_schema {
@@ -169,6 +174,7 @@ pub fn exec(
                     None => Tracing::All(trace_level),
                 },
                 env.clone(),
+                plain_numbers,
             )
         })
     } else {
@@ -186,6 +192,7 @@ pub fn exec(
                     None => Tracing::All(trace_level),
                 },
                 env.clone(),
+                plain_numbers,
             )
         })
     };

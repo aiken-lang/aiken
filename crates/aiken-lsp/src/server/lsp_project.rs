@@ -42,6 +42,7 @@ impl LspProject {
             CoverageMode::default(),
             Tracing::verbose(),
             None,
+            false,
         );
 
         self.project.restore(checkpoint);

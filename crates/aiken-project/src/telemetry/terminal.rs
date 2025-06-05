@@ -8,6 +8,7 @@ use aiken_lang::{
         AssertionStyleOptions, BenchmarkResult, PropertyTestResult, TestResult, UnitTestResult,
     },
 };
+use numfmt::{Precision, Scales};
 use owo_colors::{OwoColorize, Stream::Stderr};
 use rgb::RGB8;
 use std::sync::LazyLock;
@@ -177,8 +178,12 @@ impl EventListener for Terminal {
                 seed,
                 tests,
                 coverage_mode,
+                plain_numbers,
             } => {
                 let (max_mem, max_cpu, max_iter) = find_max_execution_units(&tests);
+
+                let (mut formatter, max_mem, max_cpu) =
+                    derive_execution_units_format(plain_numbers, max_mem, max_cpu);
 
                 for (module, results) in &group_by_module(&tests) {
                     let title = module
@@ -188,7 +193,17 @@ impl EventListener for Terminal {
 
                     let tests = results
                         .iter()
-                        .map(|r| fmt_test(r, max_mem, max_cpu, max_iter, true, coverage_mode))
+                        .map(|r| {
+                            fmt_test(
+                                r,
+                                max_mem,
+                                max_cpu,
+                                max_iter,
+                                true,
+                                coverage_mode,
+                                &mut formatter,
+                            )
+                        })
                         .collect::<Vec<String>>()
                         .join("\n");
 
@@ -294,10 +309,20 @@ impl EventListener for Terminal {
                         .if_supports_color(Stderr, |s| s.blue())
                         .to_string();
 
+                    let mut formatter = numfmt::Formatter::new();
+
                     let benchmarks = results
                         .iter()
                         .map(|r| {
-                            fmt_test(r, max_mem, max_cpu, max_iter, true, CoverageMode::default())
+                            fmt_test(
+                                r,
+                                max_mem,
+                                max_cpu,
+                                max_iter,
+                                true,
+                                CoverageMode::default(),
+                                &mut formatter,
+                            )
                         })
                         .collect::<Vec<String>>()
                         .join("\n")
@@ -341,6 +366,7 @@ fn fmt_test(
     max_iter: usize,
     styled: bool,
     coverage_mode: CoverageMode,
+    formatter: &mut numfmt::Formatter,
 ) -> String {
     // Status
     let mut test = if matches!(result, TestResult::BenchmarkResult { .. }) {
@@ -377,8 +403,9 @@ fn fmt_test(
     match result {
         TestResult::UnitTestResult(UnitTestResult { spent_budget, .. }) => {
             let ExBudget { mem, cpu } = spent_budget;
-            let mem_pad = pretty::pad_left(mem.to_string(), max_mem, " ");
-            let cpu_pad = pretty::pad_left(cpu.to_string(), max_cpu, " ");
+
+            let mem_pad = pretty::pad_left(formatter.fmt2(*mem).to_owned(), max_mem, " ");
+            let cpu_pad = pretty::pad_left(formatter.fmt2(*cpu).to_owned(), max_cpu, " ");
 
             test = format!(
                 "{test} [mem: {mem_unit}, cpu: {cpu_unit}]",
@@ -651,4 +678,35 @@ fn plot(color: &RGB8, points: Vec<(f32, f32)>, max_size: usize) -> String {
     chart.axis();
     chart.figures();
     chart.to_string()
+}
+
+fn derive_execution_units_format(
+    plain_numbers: bool,
+    max_mem: usize,
+    max_cpu: usize,
+) -> (numfmt::Formatter, usize, usize) {
+    // Update max size of the execution units to account for underscores
+    // after three decimal place e.g. 1_000_000
+    let update_max_size = |x: usize| {
+        if x % 3 == 0 { x + x / 3 - 1 } else { x + x / 3 }
+    };
+
+    if plain_numbers {
+        let formatter = numfmt::Formatter::new()
+            .separator('_')
+            .unwrap()
+            .precision(Precision::Decimals(0));
+        (
+            formatter,
+            update_max_size(max_mem),
+            update_max_size(max_cpu),
+        )
+    } else {
+        let formatter = numfmt::Formatter::new()
+            .scales(Scales::short())
+            .precision(Precision::Decimals(2));
+        // For units denoted in scales, max unit value
+        // does not give max unit size (e.g. 123.4 K vs 12.3 M )
+        (formatter, 8, 8)
+    }
 }

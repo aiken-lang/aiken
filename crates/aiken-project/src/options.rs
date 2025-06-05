@@ -28,6 +28,7 @@ pub enum CodeGenMode {
         seed: u32,
         property_max_success: usize,
         coverage_mode: CoverageMode,
+        plain_numbers: bool,
     },
     Build(bool),
     Benchmark {
