@@ -156,4 +156,15 @@ mod tests {
             "#
         );
     }
+
+    #[test]
+    fn grouping() {
+        assert_definition!(
+            r#"
+            pub fn a0p(pair: Pair<ByteArray, Dict<ByteArray, Int>>) {
+              (pair.2nd |> unsingleton).2nd
+            }
+            "#
+        );
+    }
 }

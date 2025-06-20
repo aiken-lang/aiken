@@ -1164,7 +1164,16 @@ impl<'comments> Formatter<'comments> {
 
             UntypedExpr::TupleIndex { index, tuple, .. } => {
                 let suffix = Ordinal(*index + 1).suffix().to_doc();
-                self.expr(tuple, false)
+
+                let expr_doc = self.expr(tuple, false);
+
+                let maybe_wrapped_expr = if matches!(&**tuple, UntypedExpr::PipeLine { .. }) {
+                    wrap_args(vec![(expr_doc, false)]).group()
+                } else {
+                    expr_doc
+                };
+
+                maybe_wrapped_expr
                     .append(".".to_doc())
                     .append((index + 1).to_doc())
                     .append(suffix)

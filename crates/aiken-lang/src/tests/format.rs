@@ -1466,6 +1466,17 @@ fn capture_right_hand_side_assign() {
 }
 
 #[test]
+fn should_preserve_grouping() {
+    assert_format!(
+        r#"
+        pub fn a0p(pair: Pair<ByteArray, Dict<ByteArray, Int>>) {
+          (pair.2nd |> unsingleton).2nd
+        }
+        "#
+    );
+}
+
+#[test]
 fn types_as_namespace() {
     assert_format!(
         r#"

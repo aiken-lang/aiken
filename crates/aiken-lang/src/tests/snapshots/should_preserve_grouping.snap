@@ -1,0 +1,7 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\npub fn a0p(pair: Pair<ByteArray, Dict<ByteArray, Int>>) {\n  (pair.2nd |> unsingleton).2nd\n}\n"
+---
+pub fn a0p(pair: Pair<ByteArray, Dict<ByteArray, Int>>) {
+  (pair.2nd |> unsingleton).2nd
+}

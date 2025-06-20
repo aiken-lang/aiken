@@ -9,8 +9,11 @@
 
 ### Changed
 
-### Removed
+- **aiken-project**: Reintroduce filtering by files with the extension `.ak` like in the past. This was how it was at first anyways. @keyan-m
 
+### Fixed
+
+- **aiken-lang**: Fix formatting issue with grouped pipeline followed by tuple index. @rvcas
 
 ## v1.1.17 - 2025-05-08
 
@@ -30,6 +33,8 @@
                 Better when labels are occasional and non-exclusive per test.
 
           [default: relative-to-labels]
+  ```
+
 - **aiken**: New `--script-override` flag added to the `tx simulate` command, to override script hashes with another script without modifying the transaction CBOR. @yHSJ
 
   ```
