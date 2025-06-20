@@ -25,6 +25,7 @@ pub struct Manifest {
 }
 
 impl Manifest {
+    #[allow(clippy::result_large_err)]
     pub fn load<T>(
         event_listener: &T,
         config: &ProjectConfig,
@@ -69,6 +70,7 @@ impl Manifest {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn save(&self, root_path: &Path) -> Result<(), Error> {
         let manifest_path = root_path.join(paths::manifest());
 
@@ -121,6 +123,7 @@ pub struct Package {
     pub source: Platform,
 }
 
+#[allow(clippy::result_large_err)]
 fn resolve_versions<T>(config: &ProjectConfig, event_listener: &T) -> Result<Manifest, Error>
 where
     T: EventListener,

@@ -1388,6 +1388,7 @@ mod tester {
         ast
     }
 
+    #[allow(clippy::result_large_err)]
     fn check_module(
         ast: UntypedModule,
         extra: Vec<(String, UntypedModule)>,
@@ -1433,6 +1434,7 @@ mod tester {
             .map_err(|e| (warnings, e))
     }
 
+    #[allow(clippy::result_large_err)]
     fn check(ast: UntypedModule) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
         check_module(ast, Vec::new(), ModuleKind::Lib, Tracing::verbose())
     }

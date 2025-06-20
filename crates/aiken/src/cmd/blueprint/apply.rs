@@ -79,7 +79,8 @@ pub fn exec(
         // Read blueprint
         let blueprint = File::open(&blueprint_input_path)
             .map_err(|_| blueprint::error::Error::InvalidOrMissingFile)
-            .map_err(Error::from)?;
+            .map_err(|err| Error::Blueprint(err.into()))?;
+
         let mut blueprint: Blueprint =
             serde_json::from_reader(BufReader::new(blueprint)).map_err(Error::from)?;
 
@@ -96,7 +97,7 @@ pub fn exec(
                     .map_err(|e| blueprint::error::Error::MalformedParameter {
                         hint: format!("Invalid hex-encoded string: {e}"),
                     })
-                    .map_err(Error::from)?;
+                    .map_err(|err| Error::Blueprint(err.into()))?;
 
                 uplc::plutus_data(&bytes).map_err(|e| blueprint::error::Error::MalformedParameter {
                     hint: format!("Invalid Plutus data; malformed CBOR encoding: {e}"),
@@ -109,7 +110,7 @@ pub fn exec(
                 ask_schema,
             ),
         }
-        .map_err(Error::from)?;
+        .map_err(|err| Error::Blueprint(err.into()))?;
 
         eprintln!(
             "{} {}",
@@ -124,7 +125,7 @@ pub fn exec(
 
         blueprint
             .apply_parameter(module.as_deref(), validator.as_deref(), &data)
-            .map_err(Error::from)?;
+            .map_err(|err| Error::Blueprint(err.into()))?;
 
         let json = serde_json::to_string_pretty(&blueprint).unwrap();
 
@@ -160,6 +161,7 @@ pub fn exec(
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn ask_schema(
     schema: &Annotated<Schema>,
     definitions: &Definitions<Annotated<Schema>>,
@@ -309,6 +311,7 @@ fn asking(schema: &Annotated<Schema>, verb: &str, type_name: &str) -> String {
     )
 }
 
+#[allow(clippy::result_large_err)]
 fn prompt_primitive(
     type_name: &str,
     schema: &Annotated<Schema>,
@@ -321,6 +324,7 @@ fn prompt_primitive(
         })
 }
 
+#[allow(clippy::result_large_err)]
 fn prompt_iterable(
     schema: &Annotated<Schema>,
     elem_name: &str,
@@ -339,6 +343,7 @@ fn prompt_iterable(
     })
 }
 
+#[allow(clippy::result_large_err)]
 fn prompt_constructor(
     constructors: &[Annotated<Constructor>],
     schema: &Annotated<Schema>,

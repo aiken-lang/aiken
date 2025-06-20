@@ -25,6 +25,7 @@ fn parse_as(source_code: &str, name: &str) -> UntypedModule {
     ast
 }
 
+#[allow(clippy::result_large_err)]
 fn check_module(
     ast: UntypedModule,
     extra: Vec<UntypedModule>,
@@ -78,10 +79,12 @@ fn check_module(
         .map_err(|e| (warnings, e))
 }
 
+#[allow(clippy::result_large_err)]
 fn check(ast: UntypedModule) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {
     check_module(ast, Vec::new(), ModuleKind::Lib, Tracing::verbose())
 }
 
+#[allow(clippy::result_large_err)]
 fn check_with_verbosity(
     ast: UntypedModule,
     level: TraceLevel,
@@ -89,6 +92,7 @@ fn check_with_verbosity(
     check_module(ast, Vec::new(), ModuleKind::Lib, Tracing::All(level))
 }
 
+#[allow(clippy::result_large_err)]
 fn check_with_deps(
     ast: UntypedModule,
     extra: Vec<UntypedModule>,
@@ -96,6 +100,7 @@ fn check_with_deps(
     check_module(ast, extra, ModuleKind::Lib, Tracing::verbose())
 }
 
+#[allow(clippy::result_large_err)]
 fn check_validator(
     ast: UntypedModule,
 ) -> Result<(Vec<Warning>, TypedModule), (Vec<Warning>, Error)> {

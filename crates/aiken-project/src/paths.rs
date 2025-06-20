@@ -122,6 +122,7 @@ async fn new_etag_from_network(http: &Client, package: &Package) -> Result<Strin
     Ok(etag.to_str().unwrap().replace('"', ""))
 }
 
+#[allow(clippy::result_large_err)]
 fn new_cache_key_from_cache(target: &Package) -> Result<String, Error> {
     let packages = fs::read_dir(packages_cache())?;
 

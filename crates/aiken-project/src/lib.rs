@@ -107,6 +107,7 @@ impl<T> Project<T>
 where
     T: EventListener,
 {
+    #[allow(clippy::result_large_err)]
     pub fn new(root: PathBuf, event_listener: T) -> Result<Project<T>, Error> {
         let config = ProjectConfig::load(&root)?;
 
@@ -325,6 +326,7 @@ where
         self.compile(options)
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn dump_uplc(&self, blueprint: &Blueprint) -> Result<(), Error> {
         let dir = self.root.join("artifacts");
 
@@ -403,7 +405,7 @@ where
                 let mut generator = self.new_generator(options.tracing);
 
                 let blueprint = Blueprint::new(&self.config, &self.checked_modules, &mut generator)
-                    .map_err(Error::Blueprint)?;
+                    .map_err(|err| Error::Blueprint(err.into()))?;
 
                 if blueprint.validators.is_empty() {
                     self.warnings.push(Warning::NoValidators);
@@ -521,6 +523,7 @@ where
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn address(
         &self,
         module_name: Option<&str>,
@@ -551,12 +554,14 @@ where
 
         // Calculate the address
         let when_too_many = |known_validators| {
-            Error::Blueprint(blueprint::error::Error::MoreThanOneValidatorFound {
-                known_validators,
-            })
+            Error::Blueprint(
+                blueprint::error::Error::MoreThanOneValidatorFound { known_validators }.into(),
+            )
         };
         let when_missing = |known_validators| {
-            Error::Blueprint(blueprint::error::Error::NoValidatorNotFound { known_validators })
+            Error::Blueprint(
+                blueprint::error::Error::NoValidatorNotFound { known_validators }.into(),
+            )
         };
 
         blueprint.with_validator(
@@ -568,7 +573,9 @@ where
                 let n = validator.parameters.len();
 
                 if n > 0 {
-                    Err(blueprint::error::Error::ParameterizedValidator { n }.into())
+                    Err(Error::Blueprint(
+                        blueprint::error::Error::ParameterizedValidator { n }.into(),
+                    ))
                 } else {
                     let network = if mainnet {
                         Network::Mainnet
@@ -586,6 +593,7 @@ where
         )
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn policy(
         &self,
         module_name: Option<&str>,
@@ -596,12 +604,14 @@ where
 
         // Error handlers for ambiguous / missing validators
         let when_too_many = |known_validators| {
-            Error::Blueprint(blueprint::error::Error::MoreThanOneValidatorFound {
-                known_validators,
-            })
+            Error::Blueprint(
+                blueprint::error::Error::MoreThanOneValidatorFound { known_validators }.into(),
+            )
         };
         let when_missing = |known_validators| {
-            Error::Blueprint(blueprint::error::Error::NoValidatorNotFound { known_validators })
+            Error::Blueprint(
+                blueprint::error::Error::NoValidatorNotFound { known_validators }.into(),
+            )
         };
 
         blueprint.with_validator(
@@ -612,7 +622,9 @@ where
             |validator| {
                 let n = validator.parameters.len();
                 if n > 0 {
-                    Err(blueprint::error::Error::ParameterizedValidator { n }.into())
+                    Err(Error::Blueprint(
+                        blueprint::error::Error::ParameterizedValidator { n }.into(),
+                    ))
                 } else {
                     Ok(validator.program.compiled_code_and_hash().0)
                 }
@@ -620,6 +632,7 @@ where
         )
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn export(&self, module: &str, name: &str, tracing: Tracing) -> Result<Export, Error> {
         let checked_module =
             self.checked_modules
@@ -646,6 +659,7 @@ where
                     &self.checked_modules,
                     &self.config.plutus,
                 )
+                .map_err(|err| Error::Blueprint(err.into()))
             })
             .transpose()?
             .ok_or_else(|| Error::ExportNotFound {
@@ -654,9 +668,10 @@ where
             })
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn blueprint(&self, path: &Path) -> Result<Blueprint, Error> {
-        let blueprint =
-            File::open(path).map_err(|_| blueprint::error::Error::InvalidOrMissingFile)?;
+        let blueprint = File::open(path)
+            .map_err(|_| Error::Blueprint(blueprint::error::Error::InvalidOrMissingFile.into()))?;
         Ok(serde_json::from_reader(BufReader::new(blueprint))?)
     }
 
@@ -694,6 +709,7 @@ where
         Ok(())
     }
 
+    #[allow(clippy::result_large_err)]
     fn read_source_files(&mut self, config: Option<Vec<UntypedDefinition>>) -> Result<(), Error> {
         let env = self.root.join("env");
         let lib = self.root.join("lib");
@@ -720,6 +736,7 @@ where
         Ok(())
     }
 
+    #[allow(clippy::result_large_err)]
     fn read_package_source_files(&mut self, lib: &Path) -> Result<(), Error> {
         self.aiken_files(lib, ModuleKind::Lib)?;
 
@@ -893,6 +910,7 @@ where
         Ok(())
     }
 
+    #[allow(clippy::result_large_err)]
     fn collect_test_items(
         &mut self,
         kind: RunnableKind,
@@ -1052,6 +1070,7 @@ where
         Ok(tests)
     }
 
+    #[allow(clippy::result_large_err)]
     fn collect_tests(
         &mut self,
         verbose: bool,
@@ -1068,6 +1087,7 @@ where
         )
     }
 
+    #[allow(clippy::result_large_err)]
     fn collect_benchmarks(
         &mut self,
         verbose: bool,
@@ -1105,6 +1125,7 @@ where
             .collect()
     }
 
+    #[allow(clippy::result_large_err)]
     fn aiken_files(&mut self, dir: &Path, kind: ModuleKind) -> Result<(), Error> {
         let mut has_default = None;
 
@@ -1143,6 +1164,7 @@ where
         Ok(())
     }
 
+    #[allow(clippy::result_large_err)]
     fn add_module(
         &mut self,
         add_by: AddModuleBy,

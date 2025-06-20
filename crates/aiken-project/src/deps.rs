@@ -32,6 +32,7 @@ pub struct LocalPackages {
 }
 
 impl LocalPackages {
+    #[allow(clippy::result_large_err)]
     pub fn load(root_path: &Path) -> Result<Self, Error> {
         let path = root_path.join(paths::packages_toml());
 
@@ -59,6 +60,7 @@ impl LocalPackages {
         Ok(result)
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn save(&self, root_path: &Path) -> Result<(), Error> {
         let packages_path = root_path.join(paths::packages());
         let path = root_path.join(paths::packages_toml());
@@ -74,6 +76,7 @@ impl LocalPackages {
         Ok(())
     }
 
+    #[allow(clippy::result_large_err)]
     fn remove_extra_packages(&self, manifest: &Manifest, root_path: &Path) -> Result<(), Error> {
         for (package, _version) in self.extra_local_packages(manifest) {
             let path = root_path.join(paths::build_deps_package(&package));
@@ -133,6 +136,7 @@ impl From<&Manifest> for LocalPackages {
     }
 }
 
+#[allow(clippy::result_large_err)]
 pub fn download<T>(
     event_listener: &T,
     root_path: &Path,
