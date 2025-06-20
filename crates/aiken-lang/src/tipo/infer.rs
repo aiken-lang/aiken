@@ -21,6 +21,7 @@ use crate::{
 use std::{
     borrow::Borrow,
     collections::{BTreeSet, HashMap},
+    fmt,
     ops::Deref,
     rc::Rc,
 };
@@ -1023,6 +1024,7 @@ impl fmt::Display for DecoratorContext {
 }
 
 impl TypedDataType {
+    #[allow(clippy::result_large_err)]
     fn check_decorators(&self) -> Result<(), Error> {
         // First determine if this is a record or enum type
         let is_enum = self.constructors.len() > 1;
@@ -1058,11 +1060,13 @@ impl TypedDataType {
 }
 
 impl TypedTypeAlias {
+    #[allow(clippy::result_large_err)]
     fn check_decorators(&self) -> Result<(), Error> {
         validate_decorators_in_context(&self.decorators, DecoratorContext::Alias, Some(&self.tipo))
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn validate_decorators_in_context(
     decorators: &[Decorator],
     context: DecoratorContext,
@@ -1106,6 +1110,7 @@ impl DecoratorKind {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     fn validate_type(
         &self,
         context: &DecoratorContext,
