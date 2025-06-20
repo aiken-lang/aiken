@@ -1005,12 +1005,6 @@ pub enum DecoratorContext {
     Alias,
 }
 
-impl DecoratorContext {
-    pub fn is_alias(&self) -> bool {
-        matches!(self, DecoratorContext::Alias)
-    }
-}
-
 impl fmt::Display for DecoratorContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -1105,7 +1099,6 @@ impl DecoratorKind {
     fn allowed_contexts(&self) -> &[DecoratorContext] {
         match self {
             DecoratorKind::Tag { .. } => &[DecoratorContext::Record, DecoratorContext::Constructor],
-            DecoratorKind::Len { .. } => &[DecoratorContext::Field, DecoratorContext::Alias],
             DecoratorKind::Encoding(_) => &[DecoratorContext::Record],
         }
     }
@@ -1113,23 +1106,12 @@ impl DecoratorKind {
     #[allow(clippy::result_large_err)]
     fn validate_type(
         &self,
-        context: &DecoratorContext,
-        tipo: &Type,
-        loc: Span,
+        _context: &DecoratorContext,
+        _tipo: &Type,
+        _loc: Span,
     ) -> Result<(), Error> {
         match self {
             DecoratorKind::Tag { .. } => Ok(()),
-            DecoratorKind::Len { .. } => {
-                if tipo.is_bytearray() && (tipo.alias().is_none() || context.is_alias()) {
-                    Ok(())
-                } else {
-                    Err(Error::DecoratorValidation {
-                        location: loc,
-                        message: "@len decorator can only be used with unaliased ByteArray fields"
-                            .to_string(),
-                    })
-                }
-            }
             DecoratorKind::Encoding(_) => Ok(()),
         }
     }
@@ -1138,12 +1120,7 @@ impl DecoratorKind {
         match (self, other) {
             (DecoratorKind::Tag { .. }, DecoratorKind::Encoding(_)) => true,
             (DecoratorKind::Tag { .. }, DecoratorKind::Tag { .. }) => true,
-            (DecoratorKind::Tag { .. }, DecoratorKind::Len { .. }) => true,
-            (DecoratorKind::Len { .. }, DecoratorKind::Tag { .. }) => true,
-            (DecoratorKind::Len { .. }, DecoratorKind::Len { .. }) => true,
-            (DecoratorKind::Len { .. }, DecoratorKind::Encoding(_)) => true,
             (DecoratorKind::Encoding(_), DecoratorKind::Tag { .. }) => true,
-            (DecoratorKind::Encoding(_), DecoratorKind::Len { .. }) => true,
             (DecoratorKind::Encoding(_), DecoratorKind::Encoding(_)) => true,
         }
     }

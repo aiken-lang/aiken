@@ -7,8 +7,6 @@ use chumsky::prelude::*;
 pub fn decorators() -> impl Parser<Token, Vec<ast::Decorator>, Error = ParseError> {
     let tag_value =
         select! { Token::Int { value, base } => ast::DecoratorKind::Tag { value, base } };
-    let len_value =
-        select! { Token::Int { value, base } => ast::DecoratorKind::Len { value, base } };
     let encoding_value = select! {
         Token::Name { name } if name == "list" => ast::DecoratorEncoding::List,
         Token::Name { name } if name == "constr" => ast::DecoratorEncoding::Constr
@@ -19,9 +17,6 @@ pub fn decorators() -> impl Parser<Token, Vec<ast::Decorator>, Error = ParseErro
         .ignore_then(choice((
             select! { Token::Name { name } if name == "tag" => name }.ignore_then(
                 tag_value.delimited_by(just(Token::LeftParen), just(Token::RightParen)),
-            ),
-            select! { Token::Name { name } if name == "len" => name }.ignore_then(
-                len_value.delimited_by(just(Token::LeftParen), just(Token::RightParen)),
             ),
             select! { Token::Name { name } if name == "encoding" => name }.ignore_then(
                 encoding_value.delimited_by(just(Token::LeftParen), just(Token::RightParen)),
