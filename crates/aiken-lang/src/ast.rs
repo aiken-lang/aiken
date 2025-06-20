@@ -765,8 +765,6 @@ impl TypedValidator {
             let fallback = &self.fallback;
             let arg = fallback.arguments.first().unwrap();
 
-            
-
             match arg.get_variable_name() {
                 Some(arg_name) => TypedExpr::sequence(&[
                     TypedExpr::let_(
