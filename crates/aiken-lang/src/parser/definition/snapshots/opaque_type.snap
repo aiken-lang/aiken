@@ -4,12 +4,15 @@ description: "Code:\n\npub opaque type User {\n  name: _w\n}\n"
 ---
 DataType(
     DataType {
+        decorators: [],
         constructors: [
             RecordConstructor {
+                decorators: [],
                 location: 21..35,
                 name: "User",
                 arguments: [
                     RecordConstructorArg {
+                        decorators: [],
                         label: Some(
                             "name",
                         ),

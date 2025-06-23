@@ -4,12 +4,15 @@ description: "Code:\n\ntype Option<a> {\n  Some(a, Int)\n  None\n  Wow { name: I
 ---
 DataType(
     DataType {
+        decorators: [],
         constructors: [
             RecordConstructor {
+                decorators: [],
                 location: 19..31,
                 name: "Some",
                 arguments: [
                     RecordConstructorArg {
+                        decorators: [],
                         label: None,
                         annotation: Var {
                             location: 24..25,
@@ -20,6 +23,7 @@ DataType(
                         doc: None,
                     },
                     RecordConstructorArg {
+                        decorators: [],
                         label: None,
                         annotation: Constructor {
                             location: 27..30,
@@ -36,6 +40,7 @@ DataType(
                 sugar: false,
             },
             RecordConstructor {
+                decorators: [],
                 location: 34..38,
                 name: "None",
                 arguments: [],
@@ -43,10 +48,12 @@ DataType(
                 sugar: false,
             },
             RecordConstructor {
+                decorators: [],
                 location: 41..68,
                 name: "Wow",
                 arguments: [
                     RecordConstructorArg {
+                        decorators: [],
                         label: Some(
                             "name",
                         ),
@@ -61,6 +68,7 @@ DataType(
                         doc: None,
                     },
                     RecordConstructorArg {
+                        decorators: [],
                         label: Some(
                             "age",
                         ),

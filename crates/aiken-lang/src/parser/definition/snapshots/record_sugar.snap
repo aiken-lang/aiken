@@ -4,12 +4,15 @@ description: "Code:\n\npub type Foo {\n  wow: Int,\n}\n"
 ---
 DataType(
     DataType {
+        decorators: [],
         constructors: [
             RecordConstructor {
+                decorators: [],
                 location: 13..28,
                 name: "Foo",
                 arguments: [
                     RecordConstructorArg {
+                        decorators: [],
                         label: Some(
                             "wow",
                         ),

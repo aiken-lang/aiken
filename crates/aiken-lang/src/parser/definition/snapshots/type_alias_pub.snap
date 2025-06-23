@@ -4,6 +4,7 @@ description: "Code:\n\npub type Me = String"
 ---
 TypeAlias(
     TypeAlias {
+        decorators: [],
         alias: "Me",
         annotation: Constructor {
             location: 14..20,
