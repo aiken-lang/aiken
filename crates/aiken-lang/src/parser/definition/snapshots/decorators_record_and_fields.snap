@@ -1,6 +1,6 @@
 ---
 source: crates/aiken-lang/src/parser/definition/data_type.rs
-description: "Code:\n\n@tag(12)\npub type User {\n  @len(32)\n  name: ByteArray\n}\n"
+description: "Code:\n\n@tag(12)\npub type User {\n  name: ByteArray\n}\n"
 ---
 DataType(
     DataType {
@@ -28,31 +28,21 @@ DataType(
                         location: 0..8,
                     },
                 ],
-                location: 23..55,
+                location: 23..44,
                 name: "User",
                 arguments: [
                     RecordConstructorArg {
-                        decorators: [
-                            Decorator {
-                                kind: Len {
-                                    value: "32",
-                                    base: Decimal {
-                                        numeric_underscore: false,
-                                    },
-                                },
-                                location: 27..35,
-                            },
-                        ],
+                        decorators: [],
                         label: Some(
                             "name",
                         ),
                         annotation: Constructor {
-                            location: 44..53,
+                            location: 33..42,
                             module: None,
                             name: "ByteArray",
                             arguments: [],
                         },
-                        location: 27..53,
+                        location: 27..42,
                         tipo: (),
                         doc: None,
                     },
@@ -62,7 +52,7 @@ DataType(
             },
         ],
         doc: None,
-        location: 0..55,
+        location: 0..44,
         name: "User",
         opaque: false,
         parameters: [],

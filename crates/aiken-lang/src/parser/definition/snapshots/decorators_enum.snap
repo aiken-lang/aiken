@@ -1,6 +1,6 @@
 ---
 source: crates/aiken-lang/src/parser/definition/data_type.rs
-description: "Code:\n\npub type L2Datum {\n  @tag(117)\n  Inactive\n\n  @tag(118)\n  BatchTxs(List<ByteArray>)\n\n  @tag(1170)\n  Committed(Bool, List<ByteArray>)\n\n  @tag(1171)\n  Withdrawn(Bool, @len(32) ByteArray)\n}\n"
+description: "Code:\n\npub type L2Datum {\n  @tag(117)\n  Inactive\n\n  @tag(118)\n  BatchTxs(List<ByteArray>)\n\n  @tag(1170)\n  Committed(Bool, List<ByteArray>)\n\n  @tag(1171)\n  Withdrawn(Bool, ByteArray)\n}\n"
 ---
 DataType(
     DataType {
@@ -127,7 +127,7 @@ DataType(
                         location: 135..145,
                     },
                 ],
-                location: 135..183,
+                location: 135..174,
                 name: "Withdrawn",
                 arguments: [
                     RecordConstructorArg {
@@ -144,25 +144,15 @@ DataType(
                         doc: None,
                     },
                     RecordConstructorArg {
-                        decorators: [
-                            Decorator {
-                                kind: Len {
-                                    value: "32",
-                                    base: Decimal {
-                                        numeric_underscore: false,
-                                    },
-                                },
-                                location: 164..172,
-                            },
-                        ],
+                        decorators: [],
                         label: None,
                         annotation: Constructor {
-                            location: 173..182,
+                            location: 164..173,
                             module: None,
                             name: "ByteArray",
                             arguments: [],
                         },
-                        location: 164..182,
+                        location: 164..173,
                         tipo: (),
                         doc: None,
                     },
@@ -172,7 +162,7 @@ DataType(
             },
         ],
         doc: None,
-        location: 0..185,
+        location: 0..176,
         name: "L2Datum",
         opaque: false,
         parameters: [],

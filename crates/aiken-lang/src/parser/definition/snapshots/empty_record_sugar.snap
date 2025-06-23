@@ -4,8 +4,10 @@ description: "Code:\n\npub type Foo {\n}\n"
 ---
 DataType(
     DataType {
+        decorators: [],
         constructors: [
             RecordConstructor {
+                decorators: [],
                 location: 0..16,
                 name: "Foo",
                 arguments: [],

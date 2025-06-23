@@ -187,7 +187,6 @@ mod tests {
             r#"
             @tag(12)
             pub type User {
-              @len(32)
               name: ByteArray
             }
             "#
@@ -221,7 +220,7 @@ mod tests {
               Committed(Bool, List<ByteArray>)
 
               @tag(1171)
-              Withdrawn(Bool, @len(32) ByteArray)
+              Withdrawn(Bool, ByteArray)
             }
             "#
         );
