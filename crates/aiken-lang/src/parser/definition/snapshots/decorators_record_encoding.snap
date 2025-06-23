@@ -1,28 +1,33 @@
 ---
 source: crates/aiken-lang/src/parser/definition/data_type.rs
-description: "Code:\n\npub type Foo {\n  wow: Int,\n}\n"
+description: "Code:\n\n@list\npub type Thing {\n  name: ByteArray\n}\n"
 ---
 DataType(
     DataType {
-        decorators: [],
+        decorators: [
+            Decorator {
+                kind: List,
+                location: 0..5,
+            },
+        ],
         constructors: [
             RecordConstructor {
                 decorators: [],
-                location: 13..28,
-                name: "Foo",
+                location: 21..42,
+                name: "Thing",
                 arguments: [
                     RecordConstructorArg {
                         decorators: [],
                         label: Some(
-                            "wow",
+                            "name",
                         ),
                         annotation: Constructor {
-                            location: 22..25,
+                            location: 31..40,
                             module: None,
-                            name: "Int",
+                            name: "ByteArray",
                             arguments: [],
                         },
-                        location: 17..25,
+                        location: 25..40,
                         tipo: (),
                         doc: None,
                     },
@@ -32,8 +37,8 @@ DataType(
             },
         ],
         doc: None,
-        location: 0..28,
-        name: "Foo",
+        location: 0..42,
+        name: "Thing",
         opaque: false,
         parameters: [],
         public: true,

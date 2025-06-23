@@ -4,6 +4,7 @@ description: "Code:\n\ntype Thing = Int"
 ---
 TypeAlias(
     TypeAlias {
+        decorators: [],
         alias: "Thing",
         annotation: Constructor {
             location: 13..16,

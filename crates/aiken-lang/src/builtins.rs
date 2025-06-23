@@ -1932,6 +1932,7 @@ impl TypedDataType {
 
     pub fn prng() -> Self {
         let bytearray_arg = |label: &str| RecordConstructorArg {
+            decorators: vec![],
             label: Some(label.to_string()),
             doc: None,
             annotation: Annotation::bytearray(Span::empty()),
@@ -1940,6 +1941,7 @@ impl TypedDataType {
         };
 
         let int_arg = |label: &str| RecordConstructorArg {
+            decorators: vec![],
             label: Some(label.to_string()),
             doc: None,
             annotation: Annotation::int(Span::empty()),
@@ -1968,11 +1970,14 @@ impl TypedDataType {
 
     pub fn option(tipo: Rc<Type>) -> Self {
         DataType {
+            decorators: vec![],
             constructors: vec![
                 RecordConstructor {
+                    decorators: vec![],
                     location: Span::empty(),
                     name: well_known::OPTION_CONSTRUCTORS[0].to_string(),
                     arguments: vec![RecordConstructorArg {
+                        decorators: vec![],
                         label: None,
                         annotation: Annotation::Var {
                             location: Span::empty(),
@@ -1986,6 +1991,7 @@ impl TypedDataType {
                     sugar: false,
                 },
                 RecordConstructor {
+                    decorators: vec![],
                     location: Span::empty(),
                     name: well_known::OPTION_CONSTRUCTORS[1].to_string(),
                     arguments: vec![],
