@@ -4405,3 +4405,135 @@ fn unused_constructors() {
         "{warnings:#?}"
     );
 }
+
+#[test]
+fn decorator_validation_encoding_on_field() {
+    let source_code = r#"
+        pub type Datum {
+          @list
+          thing: Int,
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::DecoratorValidation { .. }))
+    ))
+}
+
+#[test]
+fn decorator_validation_tag_on_field() {
+    let source_code = r#"
+        pub type Datum {
+          @tag(100)
+          thing: Int,
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::DecoratorValidation { .. }))
+    ))
+}
+
+#[test]
+fn decorator_validation_encoding_on_enum() {
+    let source_code = r#"
+        @list
+        pub type Redeemer {
+          Buy
+          Cancel
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::DecoratorValidation { .. }))
+    ))
+}
+
+#[test]
+fn decorator_validation_encoding_on_enum_member() {
+    let source_code = r#"
+        pub type Redeemer {
+          @list
+          Buy
+          Cancel
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::DecoratorValidation { .. }))
+    ))
+}
+
+#[test]
+fn decorator_validation_tag_on_enum() {
+    let source_code = r#"
+        @tag(12)
+        pub type Redeemer {
+          Buy
+          Cancel
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::DecoratorValidation { .. }))
+    ))
+}
+
+#[test]
+fn decorator_validation_conflict() {
+    let source_code = r#"
+        @list
+        @tag(100)
+        pub type Datum {
+          thing: Int,
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::ConflictingDecorators { .. }))
+    ))
+}
+
+#[test]
+fn decorator_validation_legit_record_tag() {
+    let source_code = r#"
+        @tag(100)
+        pub type Datum {
+          thing: Int,
+        }
+    "#;
+
+    assert!(dbg!(check(parse(source_code))).is_ok())
+}
+
+#[test]
+fn decorator_validation_legit_record_list() {
+    let source_code = r#"
+        @list
+        pub type Datum {
+          thing: Int,
+        }
+    "#;
+
+    assert!(dbg!(check(parse(source_code))).is_ok())
+}
+
+#[test]
+fn decorator_validation_legit_enum() {
+    let source_code = r#"
+        pub type Redeemer {
+          @tag(4)
+          Buy
+          @tag(10)
+          Cancel
+        }
+    "#;
+
+    assert!(dbg!(check(parse(source_code))).is_ok())
+}
