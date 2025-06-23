@@ -1099,7 +1099,7 @@ impl DecoratorKind {
     fn allowed_contexts(&self) -> &[DecoratorContext] {
         match self {
             DecoratorKind::Tag { .. } => &[DecoratorContext::Record, DecoratorContext::Constructor],
-            DecoratorKind::Encoding(_) => &[DecoratorContext::Record],
+            DecoratorKind::List => &[DecoratorContext::Record],
         }
     }
 
@@ -1112,16 +1112,16 @@ impl DecoratorKind {
     ) -> Result<(), Error> {
         match self {
             DecoratorKind::Tag { .. } => Ok(()),
-            DecoratorKind::Encoding(_) => Ok(()),
+            DecoratorKind::List => Ok(()),
         }
     }
 
     fn conflicts_with(&self, other: &DecoratorKind) -> bool {
         match (self, other) {
-            (DecoratorKind::Tag { .. }, DecoratorKind::Encoding(_)) => true,
+            (DecoratorKind::Tag { .. }, DecoratorKind::List) => true,
             (DecoratorKind::Tag { .. }, DecoratorKind::Tag { .. }) => true,
-            (DecoratorKind::Encoding(_), DecoratorKind::Tag { .. }) => true,
-            (DecoratorKind::Encoding(_), DecoratorKind::Encoding(_)) => true,
+            (DecoratorKind::List, DecoratorKind::Tag { .. }) => true,
+            (DecoratorKind::List, DecoratorKind::List) => true,
         }
     }
 }

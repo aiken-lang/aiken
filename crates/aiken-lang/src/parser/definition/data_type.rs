@@ -7,20 +7,13 @@ use chumsky::prelude::*;
 pub fn decorators() -> impl Parser<Token, Vec<ast::Decorator>, Error = ParseError> {
     let tag_value =
         select! { Token::Int { value, base } => ast::DecoratorKind::Tag { value, base } };
-    let encoding_value = select! {
-        Token::Name { name } if name == "list" => ast::DecoratorEncoding::List,
-        Token::Name { name } if name == "constr" => ast::DecoratorEncoding::Constr
-    }
-    .map(ast::DecoratorKind::Encoding);
 
     just(Token::At)
         .ignore_then(choice((
             select! { Token::Name { name } if name == "tag" => name }.ignore_then(
                 tag_value.delimited_by(just(Token::LeftParen), just(Token::RightParen)),
             ),
-            select! { Token::Name { name } if name == "encoding" => name }.ignore_then(
-                encoding_value.delimited_by(just(Token::LeftParen), just(Token::RightParen)),
-            ),
+            select! { Token::Name { name } if name == "list" => ast::DecoratorKind::List },
         )))
         .map_with_span(|kind, span| ast::Decorator {
             kind,
@@ -79,11 +72,11 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
         .map_with_span(
             |((((d, public), opaque), (name, parameters)), constructors), span| {
                 ast::UntypedDefinition::DataType(ast::DataType {
-                    decorators: d.clone(),
+                    decorators: d,
                     location: span,
                     constructors: if constructors.is_empty() {
                         vec![ast::RecordConstructor {
-                            decorators: d,
+                            decorators: vec![],
                             location: span,
                             arguments: vec![],
                             doc: None,
@@ -96,7 +89,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                             .map(|mut constructor| {
                                 if constructor.sugar {
                                     constructor.name.clone_from(&name);
-                                    constructor.decorators = d.clone();
+                                    constructor.decorators = vec![];
                                 }
 
                                 constructor
@@ -197,7 +190,7 @@ mod tests {
     fn decorators_record_encoding() {
         assert_definition!(
             r#"
-            @encoding(list)
+            @list
             pub type Thing {
               name: ByteArray
             }
