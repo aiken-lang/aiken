@@ -56,6 +56,17 @@ fn format_preserve_punning() {
 }
 
 #[test]
+fn format_preserve_auto_pun() {
+    assert_format!(
+        r#"
+        fn label() -> Void {
+          let thing = Input { ..base, output_reference: output_reference }
+          let thing = Input { output_reference: something_else }
+        }"#
+    );
+}
+
+#[test]
 fn format_allow_comments_in_byte_array() {
     assert_format!(
         r#"

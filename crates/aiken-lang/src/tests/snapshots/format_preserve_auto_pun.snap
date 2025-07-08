@@ -1,0 +1,8 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn label() -> Void {\n  let thing = Input { ..base, output_reference: output_reference }\n  let thing = Input { output_reference: something_else }\n}"
+---
+fn label() -> Void {
+  let thing = Input { ..base, output_reference }
+  let thing = Input { output_reference: something_else }
+}
