@@ -1984,10 +1984,15 @@ impl<'comments> Formatter<'comments> {
     }
 
     fn record_update_arg<'a>(&mut self, arg: &'a UntypedRecordUpdateArg) -> Document<'a> {
-        arg.label
-            .to_doc()
-            .append(": ")
-            .append(self.wrap_expr(&arg.value))
+        if matches!(&arg.value, UntypedExpr::Var {  name, .. } if name == &arg.label) {
+            nil()
+        } else {
+            commented(
+                arg.label.to_doc().append(": "),
+                self.pop_comments(arg.location.start),
+            )
+        }
+        .append(self.wrap_expr(&arg.value))
     }
 
     fn case_clause_value<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
