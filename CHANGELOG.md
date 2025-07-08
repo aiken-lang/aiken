@@ -14,6 +14,7 @@
 ### Fixed
 
 - **aiken-lang**: Fix formatting issue with grouped pipeline followed by tuple index. @rvcas
+- **aiken-lang**: Fix formatting issue with record updates and punning syntax. @rvcas
 
 ## v1.1.17 - 2025-05-08
 
@@ -179,7 +180,6 @@
   - [Bitwise operations](https://aiken-lang.github.io/prelude/aiken/builtin.html#Bitwise)
   - [Ripemd-160 hashing](https://aiken-lang.github.io/prelude/aiken/builtin.html#ripemd_160)
 - **aiken-projects**: The generated documentation may now include maths typesetting rendered using [KaTex](https://katex.org/). See [#1070](https://github.com/aiken-lang/aiken/pull/1070) @adrian052.
-
   - (Linux & MacOS only) Both inline (delimited by single `$` symbols) and blocks (delimited by doubled `$$` symbols) are now parsed and rendered as SVG upon generating documentation. For example:
 
     ```
@@ -390,7 +390,6 @@
 - **aiken-lang**: rework traces to be (1) variadic, (2) generic in its arguments and (3) structured. @KtorZ
 
   In more details:
-
   1. Enables the `trace` keyword to take one, two or any argument really separated by comma after the first. For example:
 
      ```ak
@@ -418,7 +417,6 @@
      ```
 
   3. Changes the behavior of the `--trace-level compact` mode to now:
-
   - remove trace-if-false (`?` operator) traces entirely in this mode;
   - only keep the label (first trace argument) and error when it isn't a string.
 
