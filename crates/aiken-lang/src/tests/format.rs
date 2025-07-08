@@ -45,6 +45,17 @@ fn format_nul_byte() {
 }
 
 #[test]
+fn format_preserve_punning() {
+    assert_format!(
+        r#"
+        fn label() -> Void {
+          let thing = Input { ..base, output_reference }
+          let thing = Input { output_reference }
+        }"#
+    );
+}
+
+#[test]
 fn format_allow_comments_in_byte_array() {
     assert_format!(
         r#"
