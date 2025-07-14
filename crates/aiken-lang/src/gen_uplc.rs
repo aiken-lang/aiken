@@ -1091,7 +1091,7 @@ impl<'a> CodeGenerator<'a> {
 
             Pattern::Discard { name, .. } => {
                 if props.full_check {
-                    let name = format!("__discard_expect_{}", name);
+                    let name = format!("__discard_expect_{name}");
 
                     let name_interned = introduce_name(&mut self.interner, &name);
 
@@ -1156,10 +1156,10 @@ impl<'a> CodeGenerator<'a> {
                             Pattern::Discard { name, .. } => {
                                 if props.full_check {
                                     (
-                                        Some(format!("__discard_{}_tail", name)),
+                                        Some(format!("__discard_{name}_tail")),
                                         introduce_name(
                                             &mut self.interner,
-                                            &format!("__discard_{}_tail", name),
+                                            &format!("__discard_{name}_tail"),
                                         ),
                                     )
                                 } else {
@@ -1216,10 +1216,10 @@ impl<'a> CodeGenerator<'a> {
                             Pattern::Discard { name, .. } => {
                                 if props.full_check {
                                     (
-                                        Some(format!("__discard_{}_{}", name, index)),
+                                        Some(format!("__discard_{name}_{index}")),
                                         introduce_name(
                                             &mut self.interner,
-                                            &format!("__discard_{}_{}", name, index),
+                                            &format!("__discard_{name}_{index}"),
                                         ),
                                     )
                                 } else {
@@ -1341,10 +1341,10 @@ impl<'a> CodeGenerator<'a> {
                             Pattern::Discard { name, .. } => {
                                 if props.full_check {
                                     (
-                                        Some(format!("__discard_{}_{}", name, field_index)),
+                                        Some(format!("__discard_{name}_{field_index}")),
                                         introduce_name(
                                             &mut self.interner,
-                                            &format!("__discard_{}_{}", name, field_index),
+                                            &format!("__discard_{name}_{field_index}"),
                                         ),
                                     )
                                 } else {
@@ -1528,10 +1528,10 @@ impl<'a> CodeGenerator<'a> {
                             Pattern::Discard { name, .. } => {
                                 if props.full_check {
                                     (
-                                        Some(format!("__discard_{}_{}", name, index)),
+                                        Some(format!("__discard_{name}_{index}")),
                                         introduce_name(
                                             &mut self.interner,
-                                            &format!("__discard_{}_{}", name, index),
+                                            &format!("__discard_{name}_{index}"),
                                         ),
                                     )
                                 } else {
@@ -1638,7 +1638,7 @@ impl<'a> CodeGenerator<'a> {
                         .enumerate()
                         .find(|(_, constr)| constr.name == *name)
                         .unwrap_or_else(|| {
-                            panic!("Found constructor type {} with 0 constructors", name)
+                            panic!("Found constructor type {name} with 0 constructors")
                         });
 
                     AirTree::when(
@@ -1695,10 +1695,10 @@ impl<'a> CodeGenerator<'a> {
                         Pattern::Discard { name, .. } => {
                             if props.full_check {
                                 (
-                                    Some(format!("__discard_{}_{}", name, index)),
+                                    Some(format!("__discard_{name}_{index}")),
                                     introduce_name(
                                         &mut self.interner,
-                                        &format!("__discard_{}_{}", name, index),
+                                        &format!("__discard_{name}_{index}"),
                                     ),
                                 )
                             } else {
@@ -2425,7 +2425,7 @@ impl<'a> CodeGenerator<'a> {
                 let current_subject_name = if builtins_path.is_empty() {
                     subject_name.clone()
                 } else {
-                    format!("{}_{}", subject_name, builtins_path)
+                    format!("{subject_name}_{builtins_path}")
                 };
 
                 // Transition process from previous to current
@@ -2440,7 +2440,7 @@ impl<'a> CodeGenerator<'a> {
                 let prev_subject_name = if prev_builtins.is_empty() {
                     subject_name.clone()
                 } else {
-                    format!("{}_{}", subject_name, prev_builtins)
+                    format!("{subject_name}_{prev_builtins}")
                 };
                 let prev_tipo = prev_builtins
                     .vec
@@ -2514,7 +2514,7 @@ impl<'a> CodeGenerator<'a> {
                 let current_subject_name = if builtins_path.is_empty() {
                     subject_name.clone()
                 } else {
-                    format!("{}_{}", subject_name, builtins_path)
+                    format!("{subject_name}_{builtins_path}")
                 };
 
                 // Transition process from previous to current
@@ -2529,7 +2529,7 @@ impl<'a> CodeGenerator<'a> {
                 let prev_subject_name = if prev_builtins.is_empty() {
                     subject_name.clone()
                 } else {
-                    format!("{}_{}", subject_name, prev_builtins)
+                    format!("{subject_name}_{prev_builtins}")
                 };
                 let prev_tipo = prev_builtins
                     .vec
@@ -2600,7 +2600,7 @@ impl<'a> CodeGenerator<'a> {
                             let tail_name = if builtins_for_pattern.is_empty() {
                                 subject_name.clone()
                             } else {
-                                format!("{}_{}", subject_name, builtins_for_pattern)
+                                format!("{subject_name}_{builtins_for_pattern}")
                             };
 
                             let then = self.handle_decision_tree(
@@ -2642,12 +2642,12 @@ impl<'a> CodeGenerator<'a> {
                             let tail_name = if builtins_for_pattern.is_empty() {
                                 subject_name.clone()
                             } else {
-                                format!("{}_{}", subject_name, builtins_for_pattern)
+                                format!("{subject_name}_{builtins_for_pattern}")
                             };
 
                             // TODO: change this in the future to use the Builtins to_string method
                             // to ensure future changes don't break things
-                            let next_tail_name = Some(format!("{}_tail", tail_name));
+                            let next_tail_name = Some(format!("{tail_name}_tail"));
 
                             let then = self.handle_decision_tree(
                                 subject_name,
@@ -2879,7 +2879,7 @@ impl<'a> CodeGenerator<'a> {
 
             // TODO: Maybe I could come up with a name based off the functions involved?
             let function_key = FunctionAccessKey {
-                function_name: format!("__cyclic_function_{}", index),
+                function_name: format!("__cyclic_function_{index}"),
                 module_name: "".to_string(),
             };
 
@@ -2897,7 +2897,7 @@ impl<'a> CodeGenerator<'a> {
                         if variant.is_empty() {
                             "".to_string()
                         } else {
-                            format!("_{}", variant)
+                            format!("_{variant}")
                         }
                     )
                 })
@@ -4963,10 +4963,7 @@ impl<'a> CodeGenerator<'a> {
 
                 let data_type =
                     lookup_data_type_by_tipo(&self.data_types, &tipo).unwrap_or_else(|| {
-                        panic!(
-                            "Attempted record update on an unknown type!\ntype: {:#?}",
-                            tipo
-                        )
+                        panic!("Attempted record update on an unknown type!\ntype: {tipo:#?}")
                     });
 
                 assert!(
@@ -5240,7 +5237,7 @@ fn handle_assigns(
             let current_subject_name = if builtins_path.is_empty() {
                 subject_name.clone()
             } else {
-                format!("{}_{}", subject_name, builtins_path)
+                format!("{subject_name}_{builtins_path}")
             };
 
             // Transition process from previous to current
@@ -5254,7 +5251,7 @@ fn handle_assigns(
             let prev_subject_name = if prev_builtins.is_empty() {
                 subject_name.clone()
             } else {
-                format!("{}_{}", subject_name, prev_builtins)
+                format!("{subject_name}_{prev_builtins}")
             };
             let prev_tipo = prev_builtins
                 .vec

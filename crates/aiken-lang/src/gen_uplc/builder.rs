@@ -794,7 +794,7 @@ pub fn list_access_to_uplc(
     // If we cut off at least one element then that was tail and possibly some heads
     let tail_wasnt_cutoff = tail_present && no_tailing_discards.len() == names_len;
 
-    let tail_name = |id| format!("tail_id_{}", id);
+    let tail_name = |id| format!("tail_id_{id}");
 
     let head_item = |name, tipo: &Rc<Type>, tail_name: &str, then: Term<Name>| {
         if name == "_" {
@@ -984,7 +984,7 @@ pub fn to_data_builtin(
         assert!(args.is_empty());
 
         for arg_index in 0..func.arity() {
-            let temp_var = format!("__item_index_{}", arg_index);
+            let temp_var = format!("__item_index_{arg_index}");
 
             args.push(Term::var(temp_var))
         }
@@ -1000,7 +1000,7 @@ pub fn to_data_builtin(
 
     if count == 0 {
         for arg_index in (0..func.arity()).rev() {
-            let temp_var = format!("__item_index_{}", arg_index);
+            let temp_var = format!("__item_index_{arg_index}");
             term = term.lambda(temp_var);
         }
     }
@@ -1054,7 +1054,7 @@ pub fn special_case_builtin(
                 assert!(args.is_empty());
 
                 for arg_index in 0..func.arity() {
-                    let temp_var = format!("__item_index_{}", arg_index);
+                    let temp_var = format!("__item_index_{arg_index}");
 
                     args.push(Term::var(temp_var))
                 }
@@ -1072,7 +1072,7 @@ pub fn special_case_builtin(
 
             if count == 0 {
                 for arg_index in (0..func.arity()).rev() {
-                    let temp_var = format!("__item_index_{}", arg_index);
+                    let temp_var = format!("__item_index_{arg_index}");
                     term = term.lambda(temp_var);
                 }
             }

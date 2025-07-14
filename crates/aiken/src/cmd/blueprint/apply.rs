@@ -131,7 +131,7 @@ pub fn exec(
 
         match output {
             None => {
-                println!("\n{}\n", json);
+                println!("\n{json}\n");
             }
             Some(ref path) => {
                 fs::write(path, json).map_err(|error| Error::FileIo {

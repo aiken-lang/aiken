@@ -165,7 +165,7 @@ fn hint_validators(known_validators: &BTreeSet<(String, String, bool)>, hint: &s
             known_validators
                 .iter()
                 .map(|(module, validator, has_params)| {
-                    let title = format!("{:>pad_module$} . {:<pad_validator$}", module, validator,);
+                    let title = format!("{module:>pad_module$} . {validator:<pad_validator$}",);
                     if *has_params {
                         title
                             .if_supports_color(Stderr, |s| s.bold())

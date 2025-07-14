@@ -210,7 +210,7 @@ impl Builtins {
         let (_, _, name_builtins) = self.vec.into_iter().fold(
             (prev_name, subject_tipo, vec![]),
             |(prev_name, prev_tipo, mut acc), item| {
-                let next_name = format!("{}_{}", prev_name, item);
+                let next_name = format!("{prev_name}_{item}");
                 let next_tipo = item.tipo();
 
                 acc.push((prev_name, prev_tipo, next_name.clone(), item));

@@ -37,7 +37,7 @@ impl Display for Summary {
                 .if_supports_color(Stderr, |s| s.purple())
                 .if_supports_color(Stderr, |s| s.bold()),
             if let Some(c) = self.check_count {
-                format!("{} ", c)
+                format!("{c} ")
             } else {
                 "".to_string()
             },
@@ -284,10 +284,7 @@ where
                 .push_back(event.clone()),
             Err(e) => {
                 // TODO: miette diagnostic?
-                println!(
-                    "Encountered an error while monitoring for file changes: {:?}",
-                    e
-                )
+                println!("Encountered an error while monitoring for file changes: {e:?}")
             }
         };
     })

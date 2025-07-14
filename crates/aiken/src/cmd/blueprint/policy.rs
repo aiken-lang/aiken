@@ -44,7 +44,7 @@ pub fn exec(
             p.blueprint_path(input.as_deref()).as_path(),
         )?;
 
-        println!("{}", policy);
+        println!("{policy}");
 
         Ok(())
     })

@@ -447,7 +447,7 @@ fn fill_type_hole(diagnostic: &lsp_types::Diagnostic) -> Vec<AnnotatedEdit> {
 
     if let Some(serde_json::Value::String(inferred_type)) = diagnostic.data.as_ref() {
         edits.push(AnnotatedEdit::SimpleEdit(
-            format!("Pluck '{}'", inferred_type),
+            format!("Pluck '{inferred_type}'"),
             lsp_types::TextEdit {
                 range: diagnostic.range,
                 new_text: inferred_type.to_string(),
@@ -463,7 +463,7 @@ fn make_value_public(diagnostic: &lsp_types::Diagnostic) -> Vec<AnnotatedEdit> {
 
     if let Some(serde_json::Value::String(name)) = diagnostic.data.as_ref() {
         edits.push(AnnotatedEdit::SimpleEdit(
-            format!("Make '{}' public", name),
+            format!("Make '{name}' public"),
             lsp_types::TextEdit {
                 range: lsp_types::Range {
                     start: diagnostic.range.start,
@@ -494,7 +494,7 @@ fn make_type_public(
                 );
 
                 edits.push(AnnotatedEdit::SimpleEdit(
-                    format!("Make '{}' public", name),
+                    format!("Make '{name}' public"),
                     lsp_types::TextEdit {
                         range: lsp_types::Range { start, end: start },
                         new_text: "pub ".to_string(),

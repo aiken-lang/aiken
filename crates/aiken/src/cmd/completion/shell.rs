@@ -77,16 +77,16 @@ fn zsh() -> miette::Result<()> {
     let mut zshrc = OpenOptions::new()
         .write(true)
         .append(true)
-        .open(format!("{}/.zshrc", home))
+        .open(format!("{home}/.zshrc"))
         .expect(".zshrc file not found");
 
     pretty::say(Log::Adjusting(".zshrc"));
 
     if let Some(home) = data_home.to_str() {
-        let fpath: String = format!(r#"fpath=($fpath "{}")"#, home);
+        let fpath: String = format!(r#"fpath=($fpath "{home}")"#);
 
-        if let Err(e) = writeln!(zshrc, "{}", fpath) {
-            eprintln!("Couldn't write to file: {}", e);
+        if let Err(e) = writeln!(zshrc, "{fpath}",) {
+            eprintln!("Couldn't write to file: {e}");
         }
     }
 
@@ -136,7 +136,7 @@ fn bash() -> miette::Result<()> {
     let mut bashrc = OpenOptions::new()
         .write(true)
         .append(true)
-        .open(format!("{}/.bashrc", home))
+        .open(format!("{home}/.bashrc"))
         .expect(".bashrc file not found in {home} directory");
 
     if let Some(config) = config_home.to_str() {
@@ -144,8 +144,8 @@ fn bash() -> miette::Result<()> {
 
         pretty::say(Log::Adjusting(".bashrc"));
 
-        if let Err(e) = writeln!(bashrc, "{}", path) {
-            eprintln!("Couldn't write to file: {}", e);
+        if let Err(e) = writeln!(bashrc, "{path}") {
+            eprintln!("Couldn't write to file: {e}");
         }
     }
 
@@ -199,7 +199,7 @@ impl Display for Log<'_> {
             Log::Installing(path) => pretty::fmt_step(f, "Creating", &path.display()),
             Log::Adjusting(what) => pretty::fmt_step(f, "Adjusting", what),
             Log::Done(shell) => {
-                pretty::fmt_step(f, "Done", &format!("installing {} auto-completion", shell))
+                pretty::fmt_step(f, "Done", &format!("installing {shell} auto-completion"))
             }
         }
     }

@@ -327,7 +327,7 @@ fn serialize_version<S>(version: &Version, serializer: S) -> Result<S::Ok, S::Er
 where
     S: serde::Serializer,
 {
-    let version = format!("v{}", version);
+    let version = format!("v{version}");
 
     serializer.serialize_str(&version)
 }

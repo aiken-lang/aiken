@@ -526,7 +526,7 @@ pub struct Validator<T, Arg, Expr> {
 
 impl<T, Arg, Expr> Validator<T, Arg, Expr> {
     pub fn handler_name(validator: &str, handler: &str) -> String {
-        format!("{}.{}", validator, handler)
+        format!("{validator}.{handler}")
     }
 }
 

@@ -247,7 +247,7 @@ impl ParsedDocument {
             insert_text(
                 location.start,
                 &self.line_numbers,
-                format!("{}, ", unqualified),
+                format!("{unqualified}, "),
             ),
         )
     }
@@ -266,11 +266,7 @@ impl ParsedDocument {
         );
         AnnotatedEdit::SimpleEdit(
             title,
-            insert_text(
-                location.end,
-                &self.line_numbers,
-                format!(", {}", unqualified),
-            ),
+            insert_text(location.end, &self.line_numbers, format!(", {unqualified}")),
         )
     }
 
@@ -288,11 +284,7 @@ impl ParsedDocument {
         );
         AnnotatedEdit::SimpleEdit(
             title,
-            insert_text(
-                position,
-                &self.line_numbers,
-                format!(".{{{}}}", unqualified),
-            ),
+            insert_text(position, &self.line_numbers, format!(".{{{unqualified}}}")),
         )
     }
 
@@ -306,7 +298,7 @@ impl ParsedDocument {
             "use {}{}",
             import.name,
             match unqualified {
-                Some(unqualified) => format!(".{{{}}}", unqualified),
+                Some(unqualified) => format!(".{{{unqualified}}}"),
                 None => String::new(),
             }
         );

@@ -5,7 +5,7 @@ pub fn say<A>(what: A)
 where
     A: Display,
 {
-    eprintln!("{}", what)
+    eprintln!("{what}")
 }
 
 pub fn fmt_step<A>(
