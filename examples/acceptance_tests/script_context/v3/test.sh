@@ -26,7 +26,7 @@ then
     exit 1
 fi
 
-$AIKEN build -f all -t verbose
+$AIKEN build -S -f all -t verbose
 if [ $? -ne 0 ]; then
   exit $?
 fi

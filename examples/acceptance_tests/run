@@ -16,13 +16,13 @@ TARGET="$WORKDIR/$(basename $1)"
 
 TMP=$(mktemp)
 VALIDATORS=$(find $TARGET -type f -path "*validators/*.ak")
-cargo run -r --quiet -- check $TARGET 1>$TMP 2>/dev/null
+cargo run -r --quiet -- check -S $TARGET 1>$TMP 2>/dev/null
 if [ "$?" -eq "0" ]; then
   if [ -z "$VALIDATORS" ]; then
     echo "✅ $(basename $TARGET)"
   else
     if [ ! -f "$TARGET/assert.sh" ]; then
-      cargo run -r --quiet -- build $TARGET 1>$TMP 2>/dev/null
+      cargo run -r --quiet -- build -S $TARGET 1>$TMP 2>/dev/null
     else
       $TARGET/assert.sh 1>$TMP 2>/dev/null
     fi

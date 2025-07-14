@@ -24,19 +24,24 @@ pub enum Fields {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TreePath {
     path: Vec<(usize, Fields)>,
+    set_flag: bool,
 }
 
 impl TreePath {
     pub fn new() -> Self {
-        TreePath { path: vec![] }
+        TreePath {
+            path: vec![],
+            set_flag: false,
+        }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.path.is_empty()
+    pub fn was_set(&self) -> bool {
+        self.set_flag
     }
 
     pub fn push(&mut self, depth: usize, index: Fields) {
         self.path.push((depth, index));
+        self.set_flag = true;
     }
 
     pub fn pop(&mut self) -> Option<(usize, Fields)> {

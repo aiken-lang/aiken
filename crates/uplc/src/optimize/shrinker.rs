@@ -55,14 +55,6 @@ impl Scope {
     pub fn is_common_ancestor(&self, other: &Scope) -> bool {
         self == &self.common_ancestor(other)
     }
-
-    pub fn len(&self) -> usize {
-        self.scope.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
 }
 
 pub struct IdGen {
@@ -2283,7 +2275,7 @@ impl Program<Name> {
         with: &mut impl FnMut(Option<usize>, &mut Term<Name>, Vec<Args>, &Scope, &mut Context),
     ) -> (Self, Context) {
         let mut term = self.term;
-        let scope = Scope { scope: vec![] };
+        let scope = Scope::new();
         let arg_stack = vec![];
         let mut id_gen = IdGen::new();
 
