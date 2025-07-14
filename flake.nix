@@ -26,9 +26,18 @@
         ];
 
       cargoTomlContents = builtins.readFile ./Cargo.toml;
-      version = (builtins.fromTOML cargoTomlContents).workspace.package.version;
 
-      aiken = pkgs.rustPlatform.buildRustPackage {
+      version = (builtins.fromTOML cargoTomlContents).workspace.package.version;
+      rustVersion = (builtins.fromTOML cargoTomlContents).workspace.package."rust-version";
+
+      rustToolchain = pkgs.rust-bin.stable.${rustVersion}.default;
+
+      rustPlatform = pkgs.makeRustPlatform {
+        cargo = rustToolchain;
+        rustc = rustToolchain;
+      };
+
+      aiken = rustPlatform.buildRustPackage {
         inherit version;
 
         name = "aiken";
@@ -37,6 +46,8 @@
         nativeBuildInputs = with pkgs; [pkg-config openssl.dev];
 
         src = pkgs.lib.cleanSourceWith {src = self;};
+        doCheck = false; # don’t run cargo test
+        CARGO_BUILD_TESTS = "false"; # don’t even compile test binaries
 
         cargoLock.lockFile = ./Cargo.lock;
 
@@ -86,7 +97,7 @@
             pkg-config
             openssl
             cargo-insta
-            (pkgs.rust-bin.stable.latest.default.override {
+            (rustToolchain.override {
               extensions = ["rust-src" "clippy" "rustfmt" "rust-analyzer"];
             })
           ]
