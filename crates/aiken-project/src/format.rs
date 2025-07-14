@@ -125,6 +125,7 @@ fn format_file(problem_files: &mut Vec<Unformatted>, path: PathBuf) -> Result<()
     Ok(())
 }
 
+#[allow(clippy::result_large_err)]
 pub fn read_stdin() -> Result<String, Error> {
     let mut src = String::new();
 

@@ -45,6 +45,28 @@ fn format_nul_byte() {
 }
 
 #[test]
+fn format_preserve_punning() {
+    assert_format!(
+        r#"
+        fn label() -> Void {
+          let thing = Input { ..base, output_reference }
+          let thing = Input { output_reference }
+        }"#
+    );
+}
+
+#[test]
+fn format_preserve_auto_pun() {
+    assert_format!(
+        r#"
+        fn label() -> Void {
+          let thing = Input { ..base, output_reference: output_reference }
+          let thing = Input { output_reference: something_else }
+        }"#
+    );
+}
+
+#[test]
 fn format_allow_comments_in_byte_array() {
     assert_format!(
         r#"
@@ -1460,6 +1482,17 @@ fn capture_right_hand_side_assign() {
             let (_aa, bb, _cc) = bar(foo: _a, _b, _)
             let _ = baz(_d, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23])
             bb
+        }
+        "#
+    );
+}
+
+#[test]
+fn should_preserve_grouping() {
+    assert_format!(
+        r#"
+        pub fn a0p(pair: Pair<ByteArray, Dict<ByteArray, Int>>) {
+          (pair.2nd |> unsingleton).2nd
         }
         "#
     );

@@ -40,12 +40,14 @@ pub const CONSTR_INDEX_MISMATCH: &str = "__CONSTR_INDEX_MISMATCH";
 pub const DISCARDED: &str = "_";
 
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum CodeGenFunction {
     Function { body: AirTree, params: Params },
     Link(Variant),
 }
 
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum HoistableFunction {
     Function {
         body: AirTree,
@@ -397,12 +399,11 @@ pub fn modify_self_calls(
 
     // In the case of equal calls to usage we can reduce the static params
     if calls_and_var_usage.0 == calls_and_var_usage.1 {
-        let recursive_nonstatics = func_params
+        func_params
             .iter()
             .filter(|p| !potential_recursive_statics.contains(p))
             .cloned()
-            .collect();
-        recursive_nonstatics
+            .collect()
     } else {
         func_params.to_vec()
     }

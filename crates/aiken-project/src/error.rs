@@ -61,7 +61,7 @@ pub enum Error {
     Format { problem_files: Vec<Unformatted> },
 
     #[error(transparent)]
-    Blueprint(#[from] blueprint::Error),
+    Blueprint(#[from] Box<blueprint::Error>),
 
     #[error(transparent)]
     StandardIo(#[from] io::Error),
@@ -112,7 +112,7 @@ pub enum Error {
         src: String,
         named: NamedSource<String>,
         #[source]
-        error: tipo::error::Error,
+        error: Box<tipo::error::Error>,
     },
 
     #[error("{name} failed{}", if *verbose { format!("\n{src}") } else { String::new() } )]
@@ -680,6 +680,7 @@ impl Diagnostic for Error {
 }
 
 #[derive(thiserror::Error)]
+#[allow(clippy::large_enum_variant)]
 pub enum Warning {
     #[error("You do not have any validators to build!")]
     NoValidators,

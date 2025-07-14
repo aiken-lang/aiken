@@ -765,7 +765,7 @@ impl TypedValidator {
             let fallback = &self.fallback;
             let arg = fallback.arguments.first().unwrap();
 
-            let then = match arg.get_variable_name() {
+            match arg.get_variable_name() {
                 Some(arg_name) => TypedExpr::sequence(&[
                     TypedExpr::let_(
                         TypedExpr::local_var(var_context, arg.tipo.clone(), arg.location),
@@ -776,9 +776,7 @@ impl TypedValidator {
                     fallback.body.clone(),
                 ]),
                 None => fallback.body.clone(),
-            };
-
-            then
+            }
         } else {
             context_handler
         }
@@ -874,7 +872,7 @@ impl<A, B, C, D> Definition<A, B, C, D> {
             | Definition::Validator(Validator { doc, .. })
             | Definition::Benchmark(Function { doc, .. })
             | Definition::Test(Function { doc, .. }) => {
-                let _ = std::mem::replace(doc, Some(new_doc));
+                let _ = doc.replace(new_doc);
             }
         }
     }

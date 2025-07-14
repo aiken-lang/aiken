@@ -317,10 +317,12 @@ pub enum Term<T> {
     Error,
     // tag: 7
     Builtin(DefaultFunction),
+    // tag: 8
     Constr {
         tag: usize,
         fields: Vec<Term<T>>,
     },
+    // tag: 9
     Case {
         constr: Rc<Term<T>>,
         branches: Vec<Term<T>>,

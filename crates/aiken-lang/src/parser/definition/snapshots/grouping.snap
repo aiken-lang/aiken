@@ -1,0 +1,81 @@
+---
+source: crates/aiken-lang/src/parser/definition/function.rs
+description: "Code:\n\npub fn a0p(pair: Pair<ByteArray, Dict<ByteArray, Int>>) {\n  (pair.2nd |> unsingleton).2nd\n}\n"
+---
+Fn(
+    Function {
+        arguments: [
+            UntypedArg {
+                by: ByName(
+                    Named {
+                        name: "pair",
+                        label: "pair",
+                        location: 11..15,
+                    },
+                ),
+                location: 11..54,
+                annotation: Some(
+                    Pair {
+                        location: 17..54,
+                        fst: Constructor {
+                            location: 22..31,
+                            module: None,
+                            name: "ByteArray",
+                            arguments: [],
+                        },
+                        snd: Constructor {
+                            location: 33..53,
+                            module: None,
+                            name: "Dict",
+                            arguments: [
+                                Constructor {
+                                    location: 38..47,
+                                    module: None,
+                                    name: "ByteArray",
+                                    arguments: [],
+                                },
+                                Constructor {
+                                    location: 49..52,
+                                    module: None,
+                                    name: "Int",
+                                    arguments: [],
+                                },
+                            ],
+                        },
+                    },
+                ),
+                doc: None,
+                is_validator_param: false,
+            },
+        ],
+        body: TupleIndex {
+            location: 73..89,
+            index: 1,
+            tuple: PipeLine {
+                expressions: [
+                    TupleIndex {
+                        location: 61..69,
+                        index: 1,
+                        tuple: Var {
+                            location: 61..65,
+                            name: "pair",
+                        },
+                    },
+                    Var {
+                        location: 73..84,
+                        name: "unsingleton",
+                    },
+                ],
+                one_liner: true,
+            },
+        },
+        doc: None,
+        location: 0..55,
+        name: "a0p",
+        public: true,
+        return_annotation: None,
+        return_type: (),
+        end_position: 90,
+        on_test_failure: FailImmediately,
+    },
+)

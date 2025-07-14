@@ -40,6 +40,7 @@ impl ParsedModule {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::result_large_err)]
     pub fn infer(
         self,
         id_gen: &IdGenerator,
@@ -70,7 +71,7 @@ impl ParsedModule {
                 path: self.path.clone(),
                 src: self.code.clone(),
                 named: NamedSource::new(self.path.display().to_string(), self.code.clone()),
-                error,
+                error: error.into(),
             })?;
 
         let warnings = warnings
@@ -118,6 +119,7 @@ impl ParsedModules {
         Self(HashMap::new())
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn sequence(&self, our_modules: &BTreeSet<String>) -> Result<Vec<String>, Error> {
         let env_modules = self
             .0

@@ -53,6 +53,7 @@ pub enum Event {
         seed: u32,
         coverage_mode: CoverageMode,
         tests: Vec<TestResult<UntypedExpr, UntypedExpr>>,
+        plain_numbers: bool,
     },
     FinishedBenchmarks {
         seed: u32,

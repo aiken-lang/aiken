@@ -86,6 +86,7 @@ pub struct WorkspaceConfig {
 }
 
 impl WorkspaceConfig {
+    #[allow(clippy::result_large_err)]
     pub fn load(dir: &Path) -> Result<WorkspaceConfig, Error> {
         let config_path = dir.join(paths::project_config());
         let raw_config = fs::read_to_string(&config_path).map_err(|_| Error::MissingManifest {
@@ -402,6 +403,7 @@ impl ProjectConfig {
         fs::write(aiken_toml_path, aiken_toml)
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn load(dir: &Path) -> Result<ProjectConfig, Error> {
         let config_path = dir.join(paths::project_config());
         let raw_config = fs::read_to_string(&config_path).map_err(|_| Error::MissingManifest {

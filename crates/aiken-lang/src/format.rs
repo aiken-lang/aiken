@@ -1164,7 +1164,16 @@ impl<'comments> Formatter<'comments> {
 
             UntypedExpr::TupleIndex { index, tuple, .. } => {
                 let suffix = Ordinal(*index + 1).suffix().to_doc();
-                self.expr(tuple, false)
+
+                let expr_doc = self.expr(tuple, false);
+
+                let maybe_wrapped_expr = if matches!(&**tuple, UntypedExpr::PipeLine { .. }) {
+                    wrap_args(vec![(expr_doc, false)]).group()
+                } else {
+                    expr_doc
+                };
+
+                maybe_wrapped_expr
                     .append(".".to_doc())
                     .append((index + 1).to_doc())
                     .append(suffix)
@@ -1975,10 +1984,15 @@ impl<'comments> Formatter<'comments> {
     }
 
     fn record_update_arg<'a>(&mut self, arg: &'a UntypedRecordUpdateArg) -> Document<'a> {
-        arg.label
-            .to_doc()
-            .append(": ")
-            .append(self.wrap_expr(&arg.value))
+        if matches!(&arg.value, UntypedExpr::Var {  name, .. } if name == &arg.label) {
+            nil()
+        } else {
+            commented(
+                arg.label.to_doc().append(": "),
+                self.pop_comments(arg.location.start),
+            )
+        }
+        .append(self.wrap_expr(&arg.value))
     }
 
     fn case_clause_value<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
