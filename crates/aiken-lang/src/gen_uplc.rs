@@ -2926,7 +2926,7 @@ impl<'a> CodeGenerator<'a> {
                     _ => unreachable!(),
                 }
 
-                if path.is_empty() {
+                if !path.was_set() {
                     path = tree_path.clone();
                 } else {
                     path = path.common_ancestor(tree_path);
