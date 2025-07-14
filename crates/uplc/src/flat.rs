@@ -672,9 +672,8 @@ impl Decode<'_> for Constant {
             [9] => {
                 let p1 = Vec::<u8>::decode(d)?;
 
-                let _p1 = blst::blst_p1::uncompress(&p1).map_err(|err| {
-                    de::Error::Message(format!("Failed to uncompress p1: {}", err))
-                })?;
+                let _p1 = blst::blst_p1::uncompress(&p1)
+                    .map_err(|err| de::Error::Message(format!("Failed to uncompress p1: {err}")))?;
 
                 Err(de::Error::Message(
                     "BLS12-381 G1 points are not supported for flat decoding.".to_string(),
@@ -684,9 +683,8 @@ impl Decode<'_> for Constant {
             [10] => {
                 let p2 = Vec::<u8>::decode(d)?;
 
-                let _p2 = blst::blst_p2::uncompress(&p2).map_err(|err| {
-                    de::Error::Message(format!("Failed to uncompress p2: {}", err))
-                })?;
+                let _p2 = blst::blst_p2::uncompress(&p2)
+                    .map_err(|err| de::Error::Message(format!("Failed to uncompress p2: {err}")))?;
 
                 Err(de::Error::Message(
                     "BLS12-381 G2 points are not supported for flat decoding.".to_string(),
@@ -738,7 +736,7 @@ fn decode_constant_value(typ: Rc<Type>, d: &mut Decoder) -> Result<Constant, de:
             let p1 = Vec::<u8>::decode(d)?;
 
             let _p1 = blst::blst_p1::uncompress(&p1)
-                .map_err(|err| de::Error::Message(format!("Failed to uncompress p1: {}", err)))?;
+                .map_err(|err| de::Error::Message(format!("Failed to uncompress p1: {err}")))?;
 
             Err(de::Error::Message(
                 "BLS12-381 G1 points are not supported for flat decoding.".to_string(),
@@ -748,7 +746,7 @@ fn decode_constant_value(typ: Rc<Type>, d: &mut Decoder) -> Result<Constant, de:
             let p2 = Vec::<u8>::decode(d)?;
 
             let _p2 = blst::blst_p2::uncompress(&p2)
-                .map_err(|err| de::Error::Message(format!("Failed to uncompress p2: {}", err)))?;
+                .map_err(|err| de::Error::Message(format!("Failed to uncompress p2: {err}")))?;
 
             Err(de::Error::Message(
                 "BLS12-381 G2 points are not supported for flat decoding.".to_string(),
@@ -908,7 +906,7 @@ impl Binder<'_> for DeBruijn {
     }
 
     fn text(&self) -> String {
-        format!("i_{}", self)
+        format!("i_{self}")
     }
 }
 

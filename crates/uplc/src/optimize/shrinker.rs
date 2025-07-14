@@ -1391,7 +1391,7 @@ impl Term<Name> {
                         .iter()
                         .position(|item| item == blst_p1.as_ref())
                     {
-                        *self = Term::var(format!("blst_p1_index_{}", index));
+                        *self = Term::var(format!("blst_p1_index_{index}"));
                     } else {
                         context.blst_p1_list.push(*blst_p1.as_ref());
                         *self =
@@ -1404,7 +1404,7 @@ impl Term<Name> {
                         .iter()
                         .position(|item| item == blst_p2.as_ref())
                     {
-                        *self = Term::var(format!("blst_p2_index_{}", index));
+                        *self = Term::var(format!("blst_p2_index_{index}"));
                     } else {
                         context.blst_p2_list.push(*blst_p2.as_ref());
                         *self =
@@ -2335,7 +2335,7 @@ impl Program<Name> {
             let compressed = blst_p1.compress();
 
             term = term
-                .lambda(format!("blst_p1_index_{}", index))
+                .lambda(format!("blst_p1_index_{index}"))
                 .apply(Term::bls12_381_g1_uncompress().apply(Term::byte_string(compressed)));
         }
 
@@ -2343,7 +2343,7 @@ impl Program<Name> {
             let compressed = blst_p2.compress();
 
             term = term
-                .lambda(format!("blst_p2_index_{}", index))
+                .lambda(format!("blst_p2_index_{index}"))
                 .apply(Term::bls12_381_g2_uncompress().apply(Term::byte_string(compressed)));
         }
 

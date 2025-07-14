@@ -73,9 +73,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool, verbo
 
             assert!(
                 debruijn_program.to_pretty() == expected.to_pretty(),
-                "=============== generated:\n{}\n\n=============== expected:\n{}",
-                pretty_program,
-                pretty_expected,
+                "=============== generated:\n{pretty_program}\n\n=============== expected:\n{pretty_expected}",
             );
 
             let eval = debruijn_program.eval(ExBudget::default());
@@ -113,9 +111,7 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool, verbo
 
             assert!(
                 debruijn_program.to_pretty() == expected.to_pretty(),
-                "=============== generated:\n{}\n\n=============== expected:\n{}",
-                pretty_program,
-                pretty_expected,
+                "=============== generated:\n{pretty_program}\n\n=============== expected:\n{pretty_expected}",
             );
         }
     }

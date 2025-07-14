@@ -32,20 +32,20 @@ impl Display for Path {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Path::Pair(i) => {
-                write!(f, "pair_{}", i)
+                write!(f, "pair_{i}")
             }
             Path::Tuple(i) => {
-                write!(f, "tuple_{}", i)
+                write!(f, "tuple_{i}")
             }
             Path::Constr(_, i) => {
-                write!(f, "constr_{}", i)
+                write!(f, "constr_{i}")
             }
             Path::OpaqueConstr(_) => write!(f, "opaqueconstr"),
             Path::List(i) => {
-                write!(f, "list_{}", i)
+                write!(f, "list_{i}")
             }
             Path::ListTail(i) => {
-                write!(f, "listtail_{}", i)
+                write!(f, "listtail_{i}")
             }
         }
     }
@@ -143,11 +143,11 @@ impl CaseTest {
 impl Display for CaseTest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CaseTest::Constr(i) => write!(f, "Constr({})", i),
-            CaseTest::Int(i) => write!(f, "Int({})", i),
-            CaseTest::Bytes(vec) => write!(f, "Bytes({:?})", vec),
-            CaseTest::List(i) => write!(f, "List({})", i),
-            CaseTest::ListWithTail(i) => write!(f, "ListWithTail({})", i),
+            CaseTest::Constr(i) => write!(f, "Constr({i})"),
+            CaseTest::Int(i) => write!(f, "Int({i})"),
+            CaseTest::Bytes(vec) => write!(f, "Bytes({vec:?})"),
+            CaseTest::List(i) => write!(f, "List({i})"),
+            CaseTest::ListWithTail(i) => write!(f, "ListWithTail({i})"),
             CaseTest::Wild => write!(f, "Wild"),
         }
     }
@@ -201,15 +201,20 @@ impl Ord for ScopePath {
 #[derive(Eq, Hash, PartialEq, Clone, Debug, Default, PartialOrd, Ord)]
 pub struct Scope {
     scope: Vec<ScopePath>,
+    set_flag: bool,
 }
 
 impl Scope {
     pub fn new() -> Self {
-        Self { scope: vec![] }
+        Self {
+            scope: vec![],
+            set_flag: false,
+        }
     }
 
     pub fn push(&mut self, path: ScopePath) {
         self.scope.push(path);
+        self.set_flag = true;
     }
 
     pub fn pop(&mut self) {
@@ -232,6 +237,10 @@ impl Scope {
 
     pub fn is_empty(&self) -> bool {
         self.scope.is_empty()
+    }
+
+    pub fn was_set(&self) -> bool {
+        self.set_flag
     }
 }
 
@@ -290,7 +299,7 @@ impl<'a> DecisionTree<'a> {
                             RcDoc::line().append(RcDoc::text("cases(")),
                             |acc, (con, tree)| {
                                 acc.append(RcDoc::line())
-                                    .append(RcDoc::text(format!("({}): ", con)))
+                                    .append(RcDoc::text(format!("({con}): ")))
                                     .append(RcDoc::line())
                                     .append(tree.to_doc().nest(4))
                             },
@@ -336,7 +345,7 @@ impl<'a> DecisionTree<'a> {
                             RcDoc::line().append(RcDoc::text("cases(")),
                             |acc, (con, tree)| {
                                 acc.append(RcDoc::line())
-                                    .append(RcDoc::text(format!("({}): ", con)))
+                                    .append(RcDoc::text(format!("({con}): ")))
                                     .append(RcDoc::line())
                                     .append(tree.to_doc().nest(4))
                             },
@@ -352,7 +361,7 @@ impl<'a> DecisionTree<'a> {
                             RcDoc::line().append(RcDoc::text("tail_cases(")),
                             |acc, (con, tree)| {
                                 acc.append(RcDoc::line())
-                                    .append(RcDoc::text(format!("({}): ", con)))
+                                    .append(RcDoc::text(format!("({con}): ")))
                                     .append(RcDoc::line())
                                     .append(tree.to_doc().nest(4))
                             },
@@ -375,11 +384,11 @@ impl<'a> DecisionTree<'a> {
                         .nest(4),
                 )
                 .append(RcDoc::text(")")),
-            DecisionTree::HoistedLeaf(name, _) => RcDoc::text(format!("Leaf({})", name)),
+            DecisionTree::HoistedLeaf(name, _) => RcDoc::text(format!("Leaf({name})")),
             DecisionTree::HoistThen { name, pattern, .. } => RcDoc::text("HoistThen(")
                 .append(
                     RcDoc::line()
-                        .append(RcDoc::text(format!("name : {}", name)))
+                        .append(RcDoc::text(format!("name : {name}")))
                         .append(RcDoc::line())
                         .nest(4),
                 )
@@ -474,7 +483,7 @@ impl<'a> DecisionTree<'a> {
                         .get_mut(leaf_name)
                         .expect("Impossible, Leaf is based off of given names");
 
-                    if scope_for_name.is_empty() {
+                    if !scope_for_name.was_set() {
                         *scope_for_name = current_path.clone();
                     } else {
                         scope_for_name.common_ancestor(&current_path);
@@ -631,10 +640,10 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                     let (assign, row_items) =
                         self.map_pattern_to_row(&clause.pattern, subject_tipo, vec![]);
 
-                    self.interner.intern(format!("__clause_then_{}", index));
+                    self.interner.intern(format!("__clause_then_{index}"));
                     let clause_then_name = self
                         .interner
-                        .lookup_interned(&format!("__clause_then_{}", index));
+                        .lookup_interned(&format!("__clause_then_{index}"));
 
                     hoistables.insert(clause_then_name.clone(), (vec![], &clause.then));
 
@@ -653,7 +662,7 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                         then: clause_then_name,
                     };
 
-                    self.interner.pop_text(format!("__clause_then_{}", index));
+                    self.interner.pop_text(format!("__clause_then_{index}"));
 
                     row
                 })
@@ -1477,7 +1486,7 @@ mod tester {
 
         let tree = tree_gen.build_tree(&subject.tipo(), clauses);
 
-        println!("{}", tree);
+        println!("{tree}");
     }
 
     #[test]
@@ -1518,7 +1527,7 @@ mod tester {
 
         let tree = tree_gen.build_tree(&subject.tipo(), clauses);
 
-        println!("{}", tree);
+        println!("{tree}");
     }
 
     #[test]
@@ -1561,7 +1570,7 @@ mod tester {
 
         let tree = tree_gen.build_tree(&subject.tipo(), clauses);
 
-        println!("{}", tree);
+        println!("{tree}");
     }
 
     #[test]
@@ -1605,7 +1614,7 @@ mod tester {
 
         let tree = tree_gen.build_tree(&subject.tipo(), clauses);
 
-        println!("{}", tree);
+        println!("{tree}");
     }
 
     #[test]
@@ -1653,7 +1662,7 @@ mod tester {
 
         let tree = tree_gen.build_tree(&subject.tipo(), clauses);
 
-        println!("{}", tree);
+        println!("{tree}");
     }
 
     #[test]
@@ -1695,6 +1704,6 @@ mod tester {
 
         let tree = tree_gen.build_tree(&subject.tipo(), clauses);
 
-        println!("{}", tree);
+        println!("{tree}");
     }
 }
