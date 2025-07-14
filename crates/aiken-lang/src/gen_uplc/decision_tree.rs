@@ -8,6 +8,7 @@ use itertools::{Either, Itertools, Position};
 use crate::{
     ast::{DataTypeKey, Pattern, TypedClause, TypedDataType, TypedPattern},
     expr::{Type, TypeVar, TypedExpr, lookup_data_type_by_tipo},
+    tipo::PatternConstructor,
 };
 
 use super::{interner::AirInterner, tree::AirTree};
@@ -877,7 +878,7 @@ impl<'a, 'b> TreeGen<'a, 'b> {
                     ),
 
                     Pattern::Constructor {
-                        name,
+                        constructor: PatternConstructor::Record { name, .. },
                         arguments,
                         tipo,
                         ..
