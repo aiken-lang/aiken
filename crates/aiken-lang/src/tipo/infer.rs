@@ -1072,7 +1072,7 @@ fn validate_decorators_in_context(
         if !d1.kind.allowed_contexts().contains(&context) {
             return Err(Error::DecoratorValidation {
                 location: d1.location,
-                message: format!("this decorator not allowed in a {} context", context),
+                message: format!("this decorator not allowed in a {context} context"),
             });
         }
 

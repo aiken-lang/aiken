@@ -17,9 +17,9 @@ use self::{
 use crate::{
     IdGenerator,
     ast::{
-        AssignmentKind, BinOp, Bls12_381Point, Curve, DataTypeKey, FunctionAccessKey, Pattern,
-        Span, TraceLevel, Tracing, TypedArg, TypedDataType, TypedFunction, TypedPattern,
-        TypedValidator, UnOp,
+        AssignmentKind, BinOp, Bls12_381Point, Curve, DataTypeKey, DecoratorKind,
+        FunctionAccessKey, Pattern, Span, TraceLevel, Tracing, TypedArg, TypedDataType,
+        TypedFunction, TypedPattern, TypedValidator, UnOp,
     },
     builtins::PRELUDE,
     expr::TypedExpr,
@@ -41,8 +41,8 @@ use crate::{
     },
 };
 use builder::{
-    DISCARDED, introduce_name, introduce_pattern, pop_pattern, softcast_data_to_type_otherwise,
-    unknown_data_to_type,
+    DISCARDED, get_constr_index_variant, introduce_name, introduce_pattern, pop_pattern,
+    softcast_data_to_type_otherwise, unknown_data_to_type,
 };
 use decision_tree::{Assigned, CaseTest, DecisionTree, TreeGen, get_tipo_by_path};
 use indexmap::IndexMap;
@@ -407,12 +407,9 @@ impl<'a> CodeGenerator<'a> {
                                 )
                             );
 
-                        let (constr_index, _) = data_type
-                            .constructors
-                            .iter()
-                            .enumerate()
-                            .find(|(_, dt)| &dt.name == constr_name)
-                            .unwrap();
+                        let err = &format!("Missing constr variant {constr_name}");
+                        let (constr_index, _) =
+                            get_constr_index_variant(&data_type, constr_name).expect(err);
 
                         let constr_args = args
                             .iter()
@@ -429,7 +426,18 @@ impl<'a> CodeGenerator<'a> {
                             })
                             .collect_vec();
 
-                        AirTree::create_constr(constr_index, constr_tipo.clone(), constr_args)
+                        if data_type
+                            .decorators
+                            .iter()
+                            .any(|dec| matches!(dec.kind, DecoratorKind::List))
+                        {
+                            AirTree::Tuple {
+                                tipo: constr_tipo.clone(),
+                                items: constr_args,
+                            }
+                        } else {
+                            AirTree::create_constr(constr_index, constr_tipo.clone(), constr_args)
+                        }
                     }
 
                     TypedExpr::Var {
@@ -711,7 +719,7 @@ impl<'a> CodeGenerator<'a> {
                 } => {
                     assert!(
                         !record.tipo().is_pair(),
-                        "illegal record access on a Pair. This should have been a tuple-index access."
+                        "illegal record access on a Pair. This should have been a pair-index access."
                     );
 
                     if check_replaceable_opaque_type(&record.tipo(), &self.data_types) {
@@ -745,12 +753,27 @@ impl<'a> CodeGenerator<'a> {
                             );
                         }
 
-                        let list_of_fields = AirTree::call(
-                            self.special_functions
-                                .use_function_tree(CONSTR_FIELDS_EXPOSER.to_string()),
-                            Type::list(Type::data()),
-                            vec![self.build(record, module_build_name, &[])],
-                        );
+                        let err =
+                            format!("Missing record data type for type: {:#?}", record.tipo());
+
+                        let record_data_type =
+                            lookup_data_type_by_tipo(self.data_types(), &record.tipo())
+                                .expect(&err);
+
+                        let list_of_fields = if record_data_type
+                            .decorators
+                            .iter()
+                            .any(|dec| matches!(dec.kind, DecoratorKind::List))
+                        {
+                            self.build(record, module_build_name, &[])
+                        } else {
+                            AirTree::call(
+                                self.special_functions
+                                    .use_function_tree(CONSTR_FIELDS_EXPOSER.to_string()),
+                                Type::list(Type::data()),
+                                vec![self.build(record, module_build_name, &[])],
+                            )
+                        };
 
                         AirTree::index_access(function_name, tipo.clone(), list_of_fields)
                     }
@@ -1612,6 +1635,14 @@ impl<'a> CodeGenerator<'a> {
 
                 let local_value = AirTree::local_var(&constructor_name_interned, tipo.clone());
 
+                let data_type = lookup_data_type_by_tipo(&self.data_types, tipo)
+                    .unwrap_or_else(|| unreachable!("Failed to find definition for {}", name));
+
+                let list_decorator = data_type
+                    .decorators
+                    .iter()
+                    .any(|dec| matches!(dec.kind, DecoratorKind::List));
+
                 let then = if check_replaceable_opaque_type(tipo, &self.data_types) {
                     AirTree::let_assignment(&fields[0].1, local_value, then)
                 } else {
@@ -1624,21 +1655,16 @@ impl<'a> CodeGenerator<'a> {
                     )
                 };
 
-                let data_type = lookup_data_type_by_tipo(&self.data_types, tipo)
-                    .unwrap_or_else(|| unreachable!("Failed to find definition for {}", name));
-
                 let then = if props.kind.is_expect()
+                    && !list_decorator
                     && (data_type.constructors.len() > 1
                         || props.full_check
+                        // Never check is not needed in theory since never has 2 constr variants
                         || data_type.is_never())
                 {
-                    let (index, _) = data_type
-                        .constructors
-                        .iter()
-                        .enumerate()
-                        .find(|(_, constr)| constr.name == *name)
-                        .unwrap_or_else(|| {
-                            panic!("Found constructor type {name} with 0 constructors")
+                    let (index, _) =
+                        get_constr_index_variant(&data_type, name).unwrap_or_else(|| {
+                            panic!("Found constructor type {name} with 0 matching constructors")
                         });
 
                     AirTree::when(
@@ -1806,6 +1832,15 @@ impl<'a> CodeGenerator<'a> {
         // Shouldn't be needed but still here just in case
         // this function is called from anywhere else besides assignment
         let tipo = &convert_opaque_type(tipo, &self.data_types, true);
+
+        let list_decorator = lookup_data_type_by_tipo(&self.data_types, tipo)
+            .map(|dt| {
+                dt.decorators
+                    .iter()
+                    .any(|d| matches!(&d.kind, DecoratorKind::List))
+            })
+            .unwrap_or(false);
+
         let uplc_type = tipo.get_uplc_type();
 
         match uplc_type {
@@ -2236,9 +2271,6 @@ impl<'a> CodeGenerator<'a> {
                 if function.is_none() && defined_data_types.get(&data_type_name).is_none() {
                     defined_data_types.insert(data_type_name.clone(), 1);
 
-                    let current_defined = defined_data_types.clone();
-                    let mut diff_defined_types = vec![];
-
                     let var_then = AirTree::call(
                         AirTree::local_var("then_delayed", Type::void()),
                         Type::void(),
@@ -2262,6 +2294,16 @@ impl<'a> CodeGenerator<'a> {
                             if is_never && index == 0 {
                                 return acc;
                             }
+
+                            let index = if let Some(tag) =
+                                constr.decorators.iter().find_map(|d| match &d.kind {
+                                    DecoratorKind::Tag { value, .. } => Some(value),
+                                    _ => None,
+                                }) {
+                                tag.parse().unwrap()
+                            } else {
+                                index
+                            };
 
                             let mut constr_args = vec![];
 
@@ -2330,32 +2372,33 @@ impl<'a> CodeGenerator<'a> {
                         },
                     );
 
-                    let when_expr = AirTree::when(
-                        format!("__subject_span_{}_{}", location.start, location.end),
-                        Type::void(),
-                        tipo.clone(),
-                        AirTree::local_var(
-                            format!("__constr_var_span_{}_{}", location.start, location.end),
+                    let when_expr = if list_decorator {
+                        AirTree::let_assignment(
+                            format!("__subject_span_{}_{}", location.start, location.end),
+                            AirTree::local_var(
+                                format!("__constr_var_span_{}_{}", location.start, location.end),
+                                tipo.clone(),
+                            ),
+                            AirTree::call(constr_clauses, Type::void(), vec![]),
+                        )
+                    } else {
+                        AirTree::when(
+                            format!("__subject_span_{}_{}", location.start, location.end),
+                            Type::void(),
                             tipo.clone(),
-                        ),
-                        AirTree::call(constr_clauses, Type::void(), vec![]),
-                    );
+                            AirTree::local_var(
+                                format!("__constr_var_span_{}_{}", location.start, location.end),
+                                tipo.clone(),
+                            ),
+                            AirTree::call(constr_clauses, Type::void(), vec![]),
+                        )
+                    };
 
                     let func_body = AirTree::let_assignment(
                         format!("__constr_var_span_{}_{}", location.start, location.end),
                         AirTree::local_var("__param_0", tipo.clone()),
                         when_expr,
                     );
-
-                    for (inner_data_type, inner_count) in defined_data_types.iter() {
-                        if let Some(prev_count) = current_defined.get(inner_data_type) {
-                            if inner_count - prev_count > 0 {
-                                diff_defined_types.push(inner_data_type.to_string());
-                            }
-                        } else {
-                            diff_defined_types.push(inner_data_type.to_string());
-                        }
-                    }
 
                     let code_gen_func = CodeGenFunction::Function {
                         body: func_body,
@@ -2372,9 +2415,7 @@ impl<'a> CodeGenerator<'a> {
 
                     self.code_gen_functions
                         .insert(data_type_name.clone(), code_gen_func);
-                } else if let Some(counter) = defined_data_types.get_mut(&data_type_name) {
-                    *counter += 1;
-                } else {
+                } else if defined_data_types.get(&data_type_name).is_none() {
                     defined_data_types.insert(data_type_name.to_string(), 1);
                 }
 
@@ -3801,12 +3842,8 @@ impl<'a> CodeGenerator<'a> {
                             )
                         });
 
-                        let (constr_index, constr_type) = data_type
-                            .constructors
-                            .iter()
-                            .enumerate()
-                            .find(|(_, x)| x.name == *constr_name)
-                            .unwrap();
+                        let (constr_index, constr_type) =
+                            get_constr_index_variant(&data_type, constr_name).unwrap();
 
                         let mut term = Term::empty_list();
 
