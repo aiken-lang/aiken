@@ -2,7 +2,6 @@ use crate::{
     ast::{BinOp, Curve, UnOp},
     tipo::{Type, ValueConstructor},
 };
-use indexmap::IndexSet;
 use std::rc::Rc;
 use uplc::builtins::DefaultFunction;
 
@@ -102,6 +101,8 @@ pub enum Air {
     Let {
         name: String,
     },
+    // These 3 will need to look up the
+    // decorators
     SoftCastLet {
         name: String,
         tipo: Rc<Type>,
@@ -117,6 +118,7 @@ pub enum Air {
         is_true: bool,
     },
     // When
+    // If using list decorator this does nothing
     When {
         tipo: Rc<Type>,
         subject_name: String,
@@ -131,50 +133,13 @@ pub enum Air {
         tail_name: String,
         next_tail_name: Option<(String, String)>,
     },
-    WrapClause,
-    TupleClause {
-        subject_tipo: Rc<Type>,
-        indices: IndexSet<(usize, String)>,
-        predefined_indices: IndexSet<(usize, String)>,
-        subject_name: String,
-        complex_clause: bool,
-    },
-    PairClause {
-        subject_tipo: Rc<Type>,
-        subject_name: String,
-        fst_name: Option<String>,
-        snd_name: Option<String>,
-        complex_clause: bool,
-    },
-    ClauseGuard {
-        subject_name: String,
-        subject_tipo: Rc<Type>,
-    },
-    ListClauseGuard {
-        subject_tipo: Rc<Type>,
-        tail_name: String,
-        next_tail_name: Option<String>,
-        inverse: bool,
-    },
-    TupleGuard {
-        subject_tipo: Rc<Type>,
-        indices: IndexSet<(usize, String)>,
-        subject_name: String,
-    },
-    PairGuard {
-        subject_tipo: Rc<Type>,
-        subject_name: String,
-        fst_name: Option<String>,
-        snd_name: Option<String>,
-    },
-    Finally,
     // If
     If {
         tipo: Rc<Type>,
     },
     // Record Creation
     Constr {
-        tag: usize,
+        tag: Option<usize>,
         tipo: Rc<Type>,
         count: usize,
     },
@@ -185,6 +150,7 @@ pub enum Air {
     },
     // Field Access
     FieldsExpose {
+        list_decorator: bool,
         indices: Vec<(usize, String, Rc<Type>)>,
         is_expect: bool,
     },
@@ -220,6 +186,8 @@ pub enum Air {
         tipo: Rc<Type>,
     },
     NoOp,
-    FieldsEmpty,
+    FieldsEmpty {
+        list_decorator: bool,
+    },
     ListEmpty,
 }

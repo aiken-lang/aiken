@@ -5,9 +5,10 @@ use super::{
 };
 use crate::{
     ast::{
-        DataType, DataTypeKey, DecoratorKind, FunctionAccessKey, Pattern, RecordConstructor, Span,
+        DataTypeKey, DecoratorKind, FunctionAccessKey, Pattern, RecordConstructor, Span,
         TraceLevel, TypedArg, TypedAssignmentKind, TypedDataType, TypedPattern,
     },
+    expr::lookup_data_type_by_tipo,
     line_numbers::{LineColumn, LineNumbers},
     tipo::{
         Type, ValueConstructor, ValueConstructorVariant, check_replaceable_opaque_type,
@@ -481,7 +482,11 @@ pub fn modify_cyclic_calls(
     });
 }
 
-pub fn known_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
+pub fn known_data_to_type(
+    term: Term<Name>,
+    field_type: &Type,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+) -> Term<Name> {
     let uplc_type = field_type.get_uplc_type();
 
     match uplc_type {
@@ -507,11 +512,29 @@ pub fn known_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
             Term::bls12_381_g2_uncompress().apply(Term::un_b_data().apply(term))
         }
         Some(UplcType::Bls12_381MlResult) => panic!("ML Result not supported"),
-        Some(UplcType::Data) | None => term,
+        Some(UplcType::Data) | None => {
+            let list_decorator = lookup_data_type_by_tipo(data_types, field_type)
+                .map(|dt| {
+                    dt.decorators
+                        .iter()
+                        .any(|dec| matches!(dec.kind, DecoratorKind::List))
+                })
+                .unwrap_or(false);
+
+            if list_decorator {
+                Term::unlist_data().apply(term)
+            } else {
+                term
+            }
+        }
     }
 }
 
-pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
+pub fn unknown_data_to_type(
+    term: Term<Name>,
+    field_type: &Type,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+) -> Term<Name> {
     let uplc_type = field_type.get_uplc_type();
 
     match uplc_type {
@@ -546,7 +569,21 @@ pub fn unknown_data_to_type(term: Term<Name>, field_type: &Type) -> Term<Name> {
             Term::Var(val).unwrap_void_or(|result| result, &Term::Error.delay())
         }),
 
-        Some(UplcType::Data) | None => term,
+        Some(UplcType::Data) | None => {
+            let list_decorator = lookup_data_type_by_tipo(data_types, field_type)
+                .map(|dt| {
+                    dt.decorators
+                        .iter()
+                        .any(|dec| matches!(dec.kind, DecoratorKind::List))
+                })
+                .unwrap_or(false);
+
+            if list_decorator {
+                Term::unlist_data().apply(term)
+            } else {
+                term
+            }
+        }
     }
 }
 
@@ -559,6 +596,7 @@ pub fn softcast_data_to_type_otherwise(
     field_type: &Type,
     then: Term<Name>,
     otherwise_delayed: Term<Name>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> Term<Name> {
     assert!(matches!(otherwise_delayed, Term::Var(_)));
 
@@ -567,7 +605,21 @@ pub fn softcast_data_to_type_otherwise(
     let callback = |v| then.lambda(name).apply(v);
 
     value.as_var("__val", |val| match uplc_type {
-        None => Term::choose_data_constr(val, callback, &otherwise_delayed),
+        None => {
+            let list_decorator = lookup_data_type_by_tipo(data_types, field_type)
+                .map(|dt| {
+                    dt.decorators
+                        .iter()
+                        .any(|dec| matches!(dec.kind, DecoratorKind::List))
+                })
+                .unwrap_or(false);
+
+            if list_decorator {
+                Term::choose_data_list(val, callback, &otherwise_delayed)
+            } else {
+                Term::choose_data_constr(val, callback, &otherwise_delayed)
+            }
+        }
 
         Some(UplcType::Data) => callback(Term::Var(val)),
 
@@ -706,7 +758,11 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
     new_constants
 }
 
-pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Name> {
+pub fn convert_type_to_data(
+    term: Term<Name>,
+    field_type: &Rc<Type>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
+) -> Term<Name> {
     let uplc_type = field_type.get_uplc_type();
 
     match uplc_type {
@@ -743,7 +799,21 @@ pub fn convert_type_to_data(term: Term<Name>, field_type: &Rc<Type>) -> Term<Nam
             Term::Constant(UplcConstant::Data(Data::constr(0, vec![])).into()),
         ),
 
-        Some(UplcType::Data) | None => term,
+        Some(UplcType::Data) | None => {
+            let list_decorator = lookup_data_type_by_tipo(data_types, field_type)
+                .map(|dt| {
+                    dt.decorators
+                        .iter()
+                        .any(|dec| matches!(dec.kind, DecoratorKind::List))
+                })
+                .unwrap_or(false);
+
+            if list_decorator {
+                Term::list_data().apply(term)
+            } else {
+                term
+            }
+        }
     }
 }
 
@@ -754,6 +824,7 @@ pub fn list_access_to_uplc(
     is_list_accessor: bool,
     expect_level: ExpectLevel,
     otherwise_delayed: Term<Name>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> Term<Name> {
     let names_len = names_types_ids.len();
 
@@ -808,6 +879,7 @@ pub fn list_access_to_uplc(
                 then.lambda(name).apply(unknown_data_to_type(
                     Term::head_list().apply(Term::var(tail_name.to_string())),
                     &tipo.to_owned(),
+                    data_types,
                 ))
             } else {
                 softcast_data_to_type_otherwise(
@@ -816,12 +888,14 @@ pub fn list_access_to_uplc(
                     &tipo.to_owned(),
                     then,
                     otherwise_delayed.clone(),
+                    data_types,
                 )
             }
         } else {
             then.lambda(name).apply(known_data_to_type(
                 Term::head_list().apply(Term::var(tail_name.to_string())),
                 &tipo.to_owned(),
+                data_types,
             ))
         }
     };
@@ -947,6 +1021,7 @@ pub fn undata_builtin(
     count: usize,
     tipo: &Rc<Type>,
     args: Vec<Term<Name>>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> Term<Name> {
     let mut term: Term<Name> = (*func).into();
 
@@ -962,7 +1037,7 @@ pub fn undata_builtin(
         term = term.apply(Term::var(temp_var));
     }
 
-    term = known_data_to_type(term, tipo);
+    term = known_data_to_type(term, tipo, data_types);
 
     if count == 0 {
         term = term.lambda(temp_var);
@@ -975,6 +1050,7 @@ pub fn to_data_builtin(
     count: usize,
     tipo: &Rc<Type>,
     mut args: Vec<Term<Name>>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> Term<Name> {
     let mut term: Term<Name> = (*func).into();
 
@@ -992,7 +1068,7 @@ pub fn to_data_builtin(
 
     for (index, arg) in args.into_iter().enumerate() {
         if index == 0 || matches!(func, DefaultFunction::MkPairData) {
-            term = term.apply(convert_type_to_data(arg, tipo));
+            term = term.apply(convert_type_to_data(arg, tipo, data_types));
         } else {
             term = term.apply(arg);
         }
@@ -1013,6 +1089,7 @@ pub fn special_case_builtin(
     tipo: Rc<Type>,
     count: usize,
     mut args: Vec<Term<Name>>,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> Term<Name> {
     match func {
         DefaultFunction::ChooseUnit if count > 0 => {
@@ -1033,7 +1110,7 @@ pub fn special_case_builtin(
                     .apply(if arg_type.is_pair() {
                         head.clone()
                     } else {
-                        convert_type_to_data(head.clone(), &arg_type)
+                        convert_type_to_data(head.clone(), &arg_type, data_types)
                     })
                     .apply(tail.clone())
             } else {
@@ -1114,6 +1191,7 @@ pub fn cast_validator_args(
     term: Term<Name>,
     arguments: &[TypedArg],
     interner: &AirInterner,
+    data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> Term<Name> {
     let mut term = term;
     for arg in arguments.iter().rev() {
@@ -1124,9 +1202,11 @@ pub fn cast_validator_args(
             .unwrap_or_else(|| "_".to_string());
 
         if !matches!(arg.tipo.get_uplc_type(), Some(UplcType::Data) | None) {
-            term = term
-                .lambda(&name)
-                .apply(known_data_to_type(Term::var(&name), &arg.tipo));
+            term = term.lambda(&name).apply(known_data_to_type(
+                Term::var(&name),
+                &arg.tipo,
+                data_types,
+            ));
         }
 
         term = term.lambda(name)
@@ -1295,7 +1375,7 @@ pub fn introduce_name(interner: &mut AirInterner, name: &String) -> String {
 }
 
 pub fn get_constr_index_variant<'a>(
-    data_type: &'a DataType<Rc<Type>>,
+    data_type: &'a TypedDataType,
     name: &str,
 ) -> Option<(usize, &'a RecordConstructor<Rc<Type>>)> {
     data_type

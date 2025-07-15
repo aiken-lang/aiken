@@ -825,6 +825,7 @@ impl<'a, 'b> TreeGen<'a, 'b> {
             |(mut default_matrix, mut case_matrices): (Vec<Row>, Vec<(CaseTest, Vec<Row>)>),
              mut row| {
                 // For example in the case of matching on []
+                // and then the expansion of [] is empty
                 if row.columns.is_empty() {
                     default_matrix.push(row);
                     return (default_matrix, case_matrices);

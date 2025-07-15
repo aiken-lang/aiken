@@ -480,7 +480,7 @@ impl Type {
         }
     }
 
-    pub fn get_generic(&self) -> Option<u64> {
+    pub fn get_generic_id(&self) -> Option<u64> {
         match self {
             Self::Var { tipo, .. } => tipo.borrow().get_generic(),
             _ => None,
@@ -698,7 +698,7 @@ pub fn lookup_data_type_by_tipo(
 pub fn get_generic_id_and_type(tipo: &Type, param: &Type) -> Vec<(u64, Rc<Type>)> {
     let mut generics_ids = vec![];
 
-    if let Some(id) = tipo.get_generic() {
+    if let Some(id) = tipo.get_generic_id() {
         generics_ids.push((id, param.clone().into()));
         return generics_ids;
     }
@@ -862,7 +862,7 @@ pub fn find_and_replace_generics(
     tipo: &Rc<Type>,
     mono_types: &IndexMap<u64, Rc<Type>>,
 ) -> Rc<Type> {
-    if let Some(id) = tipo.get_generic() {
+    if let Some(id) = tipo.get_generic_id() {
         mono_types
             .get(&id)
             .unwrap_or_else(|| {
@@ -1104,7 +1104,7 @@ impl TypeVar {
     pub fn get_generic(&self) -> Option<u64> {
         match self {
             TypeVar::Generic { id } => Some(*id),
-            TypeVar::Link { tipo } => tipo.get_generic(),
+            TypeVar::Link { tipo } => tipo.get_generic_id(),
             _ => None,
         }
     }
