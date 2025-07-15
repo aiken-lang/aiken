@@ -846,7 +846,12 @@ pub fn check_replaceable_opaque_type(
 
     if let Some(data_type) = data_type {
         if let [constructor] = &data_type.constructors[..] {
-            return constructor.arguments.len() == 1 && data_type.opaque;
+            return constructor.arguments.len() == 1
+                && data_type.opaque
+                // BIG WARNING: Adding any kind decorator
+                // will make the opaque type not replaceable
+                && data_type
+                    .decorators.is_empty();
         }
     }
 

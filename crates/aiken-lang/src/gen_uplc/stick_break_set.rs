@@ -160,8 +160,10 @@ impl Builtins {
 
                             (builtins, rebuilt_path)
                         }
-                        Path::Constr(_rc, i) => {
-                            builtins.push(Builtin::UnConstrFields);
+                        Path::Constr(_rc, i, list_decorator) => {
+                            if !list_decorator {
+                                builtins.push(Builtin::UnConstrFields);
+                            }
 
                             for _ in 0..i {
                                 builtins.push(Builtin::TailList);

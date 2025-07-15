@@ -5,8 +5,8 @@ use super::{
 };
 use crate::{
     ast::{
-        DataTypeKey, FunctionAccessKey, Pattern, Span, TraceLevel, TypedArg, TypedAssignmentKind,
-        TypedDataType, TypedPattern,
+        DataType, DataTypeKey, DecoratorKind, FunctionAccessKey, Pattern, RecordConstructor, Span,
+        TraceLevel, TypedArg, TypedAssignmentKind, TypedDataType, TypedPattern,
     },
     line_numbers::{LineColumn, LineNumbers},
     tipo::{
@@ -1292,4 +1292,25 @@ pub fn introduce_name(interner: &mut AirInterner, name: &String) -> String {
     interner.intern(name.clone());
 
     interner.lookup_interned(name)
+}
+
+pub fn get_constr_index_variant<'a>(
+    data_type: &'a DataType<Rc<Type>>,
+    name: &str,
+) -> Option<(usize, &'a RecordConstructor<Rc<Type>>)> {
+    data_type
+        .constructors
+        .iter()
+        .enumerate()
+        .find(|(_, dt)| dt.name == name)
+        .map(|(index, dt)| {
+            if let Some(tag) = dt.decorators.iter().find_map(|d| match &d.kind {
+                DecoratorKind::Tag { value, .. } => Some(value),
+                _ => None,
+            }) {
+                (tag.parse().unwrap(), dt)
+            } else {
+                (index, dt)
+            }
+        })
 }
