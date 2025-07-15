@@ -162,6 +162,7 @@ pub enum AirTree {
     },
     // Field Access
     FieldsExpose {
+        list_decorator: bool,
         indices: Vec<(usize, String, Rc<Type>)>,
         record: Box<AirTree>,
         is_expect: bool,
@@ -206,6 +207,7 @@ pub enum AirTree {
         constr: Box<AirTree>,
         then: Box<AirTree>,
         otherwise: Box<AirTree>,
+        list_decorator: bool,
     },
     ListEmpty {
         list: Box<AirTree>,
@@ -325,7 +327,7 @@ pub enum AirTree {
     },
     // Record Creation
     Constr {
-        tag: usize,
+        tag: Option<usize>,
         tipo: Rc<Type>,
         args: Vec<AirTree>,
     },
@@ -634,7 +636,7 @@ impl AirTree {
         }
     }
 
-    pub fn create_constr(tag: usize, tipo: Rc<Type>, args: Vec<AirTree>) -> AirTree {
+    pub fn create_constr(tag: Option<usize>, tipo: Rc<Type>, args: Vec<AirTree>) -> AirTree {
         AirTree::Constr { tag, tipo, args }
     }
 
@@ -691,6 +693,7 @@ impl AirTree {
         is_expect: bool,
         then: AirTree,
         otherwise: AirTree,
+        list_decorator: bool,
     ) -> AirTree {
         AirTree::FieldsExpose {
             indices,
@@ -698,6 +701,7 @@ impl AirTree {
             is_expect,
             then: then.into(),
             otherwise: otherwise.into(),
+            list_decorator,
         }
     }
 
@@ -798,11 +802,17 @@ impl AirTree {
         AirTree::NoOp { then: then.into() }
     }
 
-    pub fn fields_empty(constr: AirTree, then: AirTree, otherwise: AirTree) -> AirTree {
+    pub fn fields_empty(
+        constr: AirTree,
+        then: AirTree,
+        otherwise: AirTree,
+        list_decorator: bool,
+    ) -> AirTree {
         AirTree::FieldsEmpty {
             constr: constr.into(),
             then: then.into(),
             otherwise: otherwise.into(),
+            list_decorator,
         }
     }
 
@@ -950,10 +960,12 @@ impl AirTree {
                 is_expect,
                 then,
                 otherwise,
+                list_decorator,
             } => {
                 air_vec.push(Air::FieldsExpose {
                     indices: indices.clone(),
                     is_expect: *is_expect,
+                    list_decorator: *list_decorator,
                 });
 
                 record.create_air_vec(air_vec);
@@ -1030,8 +1042,11 @@ impl AirTree {
                 constr,
                 then,
                 otherwise,
+                list_decorator,
             } => {
-                air_vec.push(Air::FieldsEmpty);
+                air_vec.push(Air::FieldsEmpty {
+                    list_decorator: *list_decorator,
+                });
 
                 constr.create_air_vec(air_vec);
                 then.create_air_vec(air_vec);
@@ -1466,6 +1481,7 @@ impl AirTree {
                 is_expect: _,
                 then: _,
                 otherwise,
+                list_decorator: _,
             } => {
                 record.do_traverse_tree_with(
                     tree_path,
@@ -1534,6 +1550,7 @@ impl AirTree {
                 constr,
                 then: _,
                 otherwise,
+                list_decorator: _,
             } => {
                 constr.do_traverse_tree_with(
                     tree_path,
@@ -1913,6 +1930,7 @@ impl AirTree {
                 is_expect: _,
                 then,
                 otherwise: _,
+                list_decorator: _,
             } => {
                 then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::FourthField, with);
             }
@@ -1952,6 +1970,7 @@ impl AirTree {
                 constr: _,
                 then,
                 otherwise: _,
+                list_decorator: _,
             } => {
                 then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::SecondField, with);
             }
@@ -2023,6 +2042,7 @@ impl AirTree {
                     is_expect: _,
                     then,
                     otherwise,
+                    list_decorator: _,
                 } => match field {
                     Fields::SecondField => record.as_mut().do_find_air_tree_node(tree_path_iter),
                     Fields::FourthField => then.as_mut().do_find_air_tree_node(tree_path_iter),
@@ -2083,6 +2103,7 @@ impl AirTree {
                     constr,
                     then,
                     otherwise,
+                    list_decorator: _,
                 } => match field {
                     Fields::FirstField => constr.as_mut().do_find_air_tree_node(tree_path_iter),
                     Fields::SecondField => then.as_mut().do_find_air_tree_node(tree_path_iter),

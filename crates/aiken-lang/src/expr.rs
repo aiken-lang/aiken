@@ -1236,7 +1236,7 @@ impl UntypedExpr {
                                 .iter()
                                 .zip(args)
                                 .for_each(|(generic, arg)| {
-                                    if let Some(ix) = generic.get_generic() {
+                                    if let Some(ix) = generic.get_generic_id() {
                                         if !generics.contains_key(&ix) {
                                             generics.insert(ix, arg.clone());
                                         }
