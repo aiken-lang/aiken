@@ -92,7 +92,8 @@ pub enum Air {
     BinOp {
         name: BinOp,
         tipo: Rc<Type>,
-        argument_tipo: Rc<Type>,
+        left_tipo: Rc<Type>,
+        right_tipo: Rc<Type>,
     },
     UnOp {
         op: UnOp,

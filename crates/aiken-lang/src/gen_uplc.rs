@@ -561,6 +561,7 @@ impl<'a> CodeGenerator<'a> {
                     self.build(left, module_build_name, &[]),
                     self.build(right, module_build_name, &[]),
                     left.tipo(),
+                    right.tipo(),
                 ),
 
                 TypedExpr::Trace {
@@ -1035,6 +1036,7 @@ impl<'a> CodeGenerator<'a> {
                     AirTree::int(expected_int),
                     AirTree::local_var(&name, Type::int()),
                     Type::int(),
+                    Type::int(),
                 );
 
                 assign_casted_value(
@@ -1056,6 +1058,7 @@ impl<'a> CodeGenerator<'a> {
                     Type::bool(),
                     AirTree::byte_array(expected_bytes.clone()),
                     AirTree::local_var(&name, Type::byte_array()),
+                    Type::byte_array(),
                     Type::byte_array(),
                 );
 
@@ -4130,13 +4133,14 @@ impl<'a> CodeGenerator<'a> {
             Air::BinOp {
                 name,
                 // changed this to argument tipo
-                argument_tipo: tipo,
+                left_tipo,
+                right_tipo,
                 ..
             } => {
                 let left = arg_stack.pop().unwrap();
                 let right = arg_stack.pop().unwrap();
 
-                let uplc_type = tipo.get_uplc_type();
+                let uplc_type = left_tipo.get_uplc_type();
 
                 let term = match name {
                     BinOp::And => left.delayed_if_then_else(right, Term::bool(false)),
@@ -4156,52 +4160,81 @@ impl<'a> CodeGenerator<'a> {
                             }
                         };
 
-                        let binop_eq =
-                            match uplc_type {
-                                Some(UplcType::Bool) => {
-                                    if matches!(name, BinOp::Eq) {
-                                        left.delayed_if_then_else(
-                                            right.clone(),
-                                            right.if_then_else(Term::bool(false), Term::bool(true)),
-                                        )
-                                    } else {
-                                        left.delayed_if_then_else(
-                                            right
-                                                .clone()
-                                                .if_then_else(Term::bool(false), Term::bool(true)),
-                                            right,
-                                        )
-                                    }
+                        let binop_eq = match uplc_type {
+                            Some(UplcType::Bool) => {
+                                if matches!(name, BinOp::Eq) {
+                                    left.delayed_if_then_else(
+                                        right.clone(),
+                                        right.if_then_else(Term::bool(false), Term::bool(true)),
+                                    )
+                                } else {
+                                    left.delayed_if_then_else(
+                                        right
+                                            .clone()
+                                            .if_then_else(Term::bool(false), Term::bool(true)),
+                                        right,
+                                    )
                                 }
-                                Some(UplcType::List(_)) if tipo.is_map() => builtin
-                                    .apply(Term::map_data().apply(left))
-                                    .apply(Term::map_data().apply(right)),
-                                Some(UplcType::List(_)) => builtin
-                                    .apply(Term::list_data().apply(left))
-                                    .apply(Term::list_data().apply(right)),
-                                Some(UplcType::Pair(_, _)) => builtin
+                            }
+                            Some(UplcType::List(_)) if left_tipo.is_map() => builtin
+                                .apply(Term::map_data().apply(left))
+                                .apply(Term::map_data().apply(right)),
+                            Some(UplcType::List(_)) => builtin
+                                .apply(Term::list_data().apply(left))
+                                .apply(Term::list_data().apply(right)),
+                            Some(UplcType::Pair(_, _)) => {
+                                builtin
                                     .apply(Term::map_data().apply(
                                         Term::mk_cons().apply(left).apply(Term::empty_map()),
                                     ))
                                     .apply(Term::map_data().apply(
                                         Term::mk_cons().apply(right).apply(Term::empty_map()),
-                                    )),
-                                Some(
-                                    UplcType::Data
-                                    | UplcType::Bls12_381G1Element
-                                    | UplcType::Bls12_381G2Element
-                                    | UplcType::Bls12_381MlResult
-                                    | UplcType::Integer
-                                    | UplcType::String
-                                    | UplcType::ByteString,
-                                )
-                                | None => builtin.apply(left).apply(right),
-                                Some(UplcType::Unit) => {
-                                    left.choose_unit(right.choose_unit(Term::bool(true)))
-                                }
-                            };
+                                    ))
+                            }
+                            Some(
+                                UplcType::Data
+                                | UplcType::Bls12_381G1Element
+                                | UplcType::Bls12_381G2Element
+                                | UplcType::Bls12_381MlResult
+                                | UplcType::Integer
+                                | UplcType::String
+                                | UplcType::ByteString,
+                            ) => builtin.apply(left).apply(right),
 
-                        if !tipo.is_bool() && matches!(name, BinOp::NotEq) {
+                            None => {
+                                let mut left = left;
+                                let mut right = right;
+
+                                let left_data_type =
+                                    lookup_data_type_by_tipo(&self.data_types, &left_tipo).unwrap();
+
+                                let right_data_type =
+                                    lookup_data_type_by_tipo(&self.data_types, &right_tipo)
+                                        .unwrap();
+                                if left_data_type
+                                    .decorators
+                                    .iter()
+                                    .any(|dec| matches!(dec.kind, DecoratorKind::List))
+                                {
+                                    left = Term::list_data().apply(left)
+                                }
+
+                                if right_data_type
+                                    .decorators
+                                    .iter()
+                                    .any(|dec| matches!(dec.kind, DecoratorKind::List))
+                                {
+                                    right = Term::list_data().apply(right)
+                                }
+
+                                builtin.apply(left).apply(right)
+                            }
+                            Some(UplcType::Unit) => {
+                                left.choose_unit(right.choose_unit(Term::bool(true)))
+                            }
+                        };
+
+                        if !left_tipo.is_bool() && matches!(name, BinOp::NotEq) {
                             binop_eq.if_then_else(Term::bool(false), Term::bool(true))
                         } else {
                             binop_eq
