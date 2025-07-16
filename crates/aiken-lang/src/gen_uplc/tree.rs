@@ -279,7 +279,8 @@ pub enum AirTree {
         tipo: Rc<Type>,
         left: Box<AirTree>,
         right: Box<AirTree>,
-        argument_tipo: Rc<Type>,
+        left_tipo: Rc<Type>,
+        right_tipo: Rc<Type>,
     },
     UnOp {
         op: UnOp,
@@ -503,14 +504,16 @@ impl AirTree {
         tipo: Rc<Type>,
         left: AirTree,
         right: AirTree,
-        argument_tipo: Rc<Type>,
+        left_tipo: Rc<Type>,
+        right_tipo: Rc<Type>,
     ) -> AirTree {
         AirTree::BinOp {
             name: op,
             tipo,
             left: left.into(),
             right: right.into(),
-            argument_tipo,
+            left_tipo,
+            right_tipo,
         }
     }
 
@@ -1150,12 +1153,14 @@ impl AirTree {
                 tipo,
                 left,
                 right,
-                argument_tipo,
+                left_tipo,
+                right_tipo,
             } => {
                 air_vec.push(Air::BinOp {
                     name: *name,
                     tipo: tipo.clone(),
-                    argument_tipo: argument_tipo.clone(),
+                    left_tipo: left_tipo.clone(),
+                    right_tipo: right_tipo.clone(),
                 });
                 left.create_air_vec(air_vec);
                 right.create_air_vec(air_vec);
@@ -1365,10 +1370,11 @@ impl AirTree {
             }
             AirTree::BinOp {
                 tipo,
-                argument_tipo,
+                left_tipo,
+                right_tipo,
                 ..
             } => {
-                vec![tipo, argument_tipo]
+                vec![tipo, left_tipo, right_tipo]
             }
             AirTree::When {
                 tipo, subject_tipo, ..
@@ -1719,7 +1725,8 @@ impl AirTree {
                 tipo: _,
                 left,
                 right,
-                argument_tipo: _,
+                left_tipo: _,
+                right_tipo: _,
             } => {
                 left.do_traverse_tree_with(tree_path, current_depth + 1, Fields::ThirdField, with);
 
@@ -2164,7 +2171,8 @@ impl AirTree {
                     tipo: _,
                     left,
                     right,
-                    argument_tipo: _,
+                    left_tipo: _,
+                    right_tipo: _,
                 } => match field {
                     Fields::ThirdField => left.as_mut().do_find_air_tree_node(tree_path_iter),
                     Fields::FourthField => right.as_mut().do_find_air_tree_node(tree_path_iter),
