@@ -70,11 +70,11 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
         .map_with_span(
             |((((d, public), opaque), (name, parameters)), constructors), span| {
                 ast::UntypedDefinition::DataType(ast::DataType {
-                    decorators: d.clone(),
+                    decorators: d,
                     location: span,
                     constructors: if constructors.is_empty() {
                         vec![ast::RecordConstructor {
-                            decorators: d,
+                            decorators: vec![],
                             location: span,
                             arguments: vec![],
                             doc: None,
@@ -87,7 +87,7 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
                             .map(|mut constructor| {
                                 if constructor.sugar {
                                     constructor.name.clone_from(&name);
-                                    constructor.decorators = d.clone();
+                                    constructor.decorators = vec![];
                                 }
 
                                 constructor

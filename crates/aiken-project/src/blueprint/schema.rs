@@ -526,8 +526,13 @@ impl Data {
                 });
             }
 
-            let index = constructor
-                .decorators
+            let decorators = if constructor.sugar {
+                &data_type.decorators
+            } else {
+                &constructor.decorators
+            };
+
+            let index = decorators
                 .iter()
                 .find_map(|decorator| {
                     if let DecoratorKind::Tag { value, .. } = &decorator.kind {
