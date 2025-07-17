@@ -1812,7 +1812,9 @@ impl<'comments> Formatter<'comments> {
     pub fn decorator<'a>(&mut self, decorators: &'a [Decorator]) -> Document<'a> {
         join(
             decorators.iter().map(|d| match &d.kind {
-                crate::ast::DecoratorKind::Tag { value, base } => self.uint(value, base),
+                crate::ast::DecoratorKind::Tag { value, base } => {
+                    docvec!["@tag(", self.uint(value, base), ")"]
+                }
                 crate::ast::DecoratorKind::List => "@list".to_doc(),
             }),
             line(),
