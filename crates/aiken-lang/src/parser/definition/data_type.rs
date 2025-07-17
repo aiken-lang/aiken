@@ -25,10 +25,8 @@ pub fn decorators() -> impl Parser<Token, Vec<ast::Decorator>, Error = ParseErro
 }
 
 pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError> {
-    let unlabeled_constructor_type_args = decorators()
-        .then(annotation())
-        .map_with_span(|(d, annotation), span| ast::RecordConstructorArg {
-            decorators: d,
+    let unlabeled_constructor_type_args = annotation()
+        .map_with_span(|annotation, span| ast::RecordConstructorArg {
             label: None,
             annotation,
             tipo: (),
@@ -108,12 +106,10 @@ pub fn parser() -> impl Parser<Token, ast::UntypedDefinition, Error = ParseError
 }
 
 fn labeled_args() -> impl Parser<Token, Vec<ast::RecordConstructorArg<()>>, Error = ParseError> {
-    decorators()
-        .then(select! {Token::Name {name} => name})
+    select! {Token::Name {name} => name}
         .then_ignore(just(Token::Colon))
         .then(annotation())
-        .map_with_span(|((d, name), annotation), span| ast::RecordConstructorArg {
-            decorators: d,
+        .map_with_span(|(name, annotation), span| ast::RecordConstructorArg {
             label: Some(name),
             annotation,
             tipo: (),

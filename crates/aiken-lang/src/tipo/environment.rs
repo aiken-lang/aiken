@@ -1627,7 +1627,6 @@ impl<'a> Environment<'a> {
                             location,
                             tipo: _,
                             doc: _,
-                            decorators: _,
                         },
                     ) in constructor.arguments.iter().enumerate()
                     {

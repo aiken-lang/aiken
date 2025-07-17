@@ -1039,7 +1039,6 @@ where
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RecordConstructorArg<T> {
-    pub decorators: Vec<Decorator>,
     pub label: Option<String>,
     // ast
     pub annotation: Annotation,
