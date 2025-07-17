@@ -40,7 +40,6 @@ DataType(
                 name: "BatchTxs",
                 arguments: [
                     RecordConstructorArg {
-                        decorators: [],
                         label: None,
                         annotation: Constructor {
                             location: 66..81,
@@ -79,7 +78,6 @@ DataType(
                 name: "Committed",
                 arguments: [
                     RecordConstructorArg {
-                        decorators: [],
                         label: None,
                         annotation: Constructor {
                             location: 109..113,
@@ -92,7 +90,6 @@ DataType(
                         doc: None,
                     },
                     RecordConstructorArg {
-                        decorators: [],
                         label: None,
                         annotation: Constructor {
                             location: 115..130,
@@ -131,7 +128,6 @@ DataType(
                 name: "Withdrawn",
                 arguments: [
                     RecordConstructorArg {
-                        decorators: [],
                         label: None,
                         annotation: Constructor {
                             location: 158..162,
@@ -144,7 +140,6 @@ DataType(
                         doc: None,
                     },
                     RecordConstructorArg {
-                        decorators: [],
                         label: None,
                         annotation: Constructor {
                             location: 164..173,

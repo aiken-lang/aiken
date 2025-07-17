@@ -4407,36 +4407,6 @@ fn unused_constructors() {
 }
 
 #[test]
-fn decorator_validation_encoding_on_field() {
-    let source_code = r#"
-        pub type Datum {
-          @list
-          thing: Int,
-        }
-    "#;
-
-    assert!(matches!(
-        check(parse(source_code)),
-        Err((_, Error::DecoratorValidation { .. }))
-    ))
-}
-
-#[test]
-fn decorator_validation_tag_on_field() {
-    let source_code = r#"
-        pub type Datum {
-          @tag(100)
-          thing: Int,
-        }
-    "#;
-
-    assert!(matches!(
-        check(parse(source_code)),
-        Err((_, Error::DecoratorValidation { .. }))
-    ))
-}
-
-#[test]
 fn decorator_validation_encoding_on_enum() {
     let source_code = r#"
         @list
