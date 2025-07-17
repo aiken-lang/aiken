@@ -1,6 +1,8 @@
 use super::{
     RecordAccessor, Type, ValueConstructor, ValueConstructorVariant,
-    environment::{EntityKind, Environment, assert_no_labeled_arguments, generalise},
+    environment::{
+        EntityKind, Environment, ScopeResetData, assert_no_labeled_arguments, generalise,
+    },
     error::{Error, Warning},
     hydrator::Hydrator,
     pattern::PatternTyper,
@@ -39,6 +41,7 @@ pub(crate) fn infer_function(
     hydrators: &mut HashMap<String, Hydrator>,
     environment: &mut Environment<'_>,
     tracing: Tracing,
+    top_level_scope: &ScopeResetData,
 ) -> Result<Function<Rc<Type>, TypedExpr, TypedArg>, Error> {
     if let Some(typed_fun) = environment.inferred_functions.get(&fun.name) {
         return Ok(typed_fun.clone());
@@ -139,6 +142,7 @@ pub(crate) fn infer_function(
     // Note that we need to close the scope before backtracking to not mess with the scope of the
     // callee. Otherwise, identifiers present in the caller's scope may become available to the
     // callee.
+
     if let Err(Error::MustInferFirst { function, .. }) = inferred {
         // Reset the environment & scope.
         hydrators.insert(name.to_string(), expr_typer.hydrator);
@@ -146,16 +150,29 @@ pub(crate) fn infer_function(
         *environment.warnings = warnings;
 
         // Backtrack and infer callee first.
+        let temp_scope = environment.open_new_scope();
+        environment.close_scope(top_level_scope.clone());
         infer_function(
             &function,
             environment.current_module,
             hydrators,
             environment,
             tracing,
+            top_level_scope,
         )?;
 
+        environment.open_new_scope();
+        environment.close_scope(temp_scope);
+
         // Then, try again the entire function definition.
-        return infer_function(fun, module_name, hydrators, environment, tracing);
+        return infer_function(
+            fun,
+            module_name,
+            hydrators,
+            environment,
+            tracing,
+            top_level_scope,
+        );
     }
 
     let (arguments, body, return_type) = inferred?;

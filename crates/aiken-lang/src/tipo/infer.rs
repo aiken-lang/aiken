@@ -189,13 +189,19 @@ fn infer_definition(
     tracing: Tracing,
 ) -> Result<TypedDefinition, Error> {
     match def {
-        Definition::Fn(f) => Ok(Definition::Fn(infer_function(
-            &f,
-            module_name,
-            hydrators,
-            environment,
-            tracing,
-        )?)),
+        Definition::Fn(f) => {
+            let top_level_scope = environment.open_new_scope();
+            let ret = Definition::Fn(infer_function(
+                &f,
+                module_name,
+                hydrators,
+                environment,
+                tracing,
+                &top_level_scope,
+            )?);
+            environment.close_scope(top_level_scope);
+            Ok(ret)
+        }
 
         Definition::Validator(Validator {
             doc,
@@ -208,7 +214,9 @@ fn infer_definition(
         }) => {
             let params_length = params.len();
 
-            environment.in_new_scope(|environment| {
+            let top_level_scope = environment.open_new_scope();
+
+            let def = environment.in_new_scope(|environment| {
                 let fallback_name = TypedValidator::handler_name(&name, &fallback.name);
 
                 put_params_in_scope(&fallback_name, environment, &params);
@@ -225,8 +233,14 @@ fn infer_definition(
                         let old_name = handler.name;
                         handler.name = handler_name;
 
-                        let mut typed_fun =
-                            infer_function(&handler, module_name, hydrators, environment, tracing)?;
+                        let mut typed_fun = infer_function(
+                            &handler,
+                            module_name,
+                            hydrators,
+                            environment,
+                            tracing,
+                            &top_level_scope,
+                        )?;
 
                         typed_fun.name = old_name;
 
@@ -299,8 +313,14 @@ fn infer_definition(
                     let old_name = fallback.name;
                     fallback.name = fallback_name;
 
-                    let mut typed_fallback =
-                        infer_function(&fallback, module_name, hydrators, environment, tracing)?;
+                    let mut typed_fallback = infer_function(
+                        &fallback,
+                        module_name,
+                        hydrators,
+                        environment,
+                        tracing,
+                        &top_level_scope,
+                    )?;
 
                     typed_fallback.name = old_name;
 
@@ -349,10 +369,15 @@ fn infer_definition(
                     location,
                     params: typed_params,
                 }))
-            })
+            })?;
+
+            environment.close_scope(top_level_scope);
+
+            Ok(def)
         }
 
         Definition::Test(f) => {
+            let top_level_scope = environment.open_new_scope();
             let (typed_via, annotation) = match f.arguments.first() {
                 Some(arg) => {
                     if f.arguments.len() > 1 {
@@ -373,7 +398,14 @@ fn infer_definition(
                 None => Ok((None, None)),
             }?;
 
-            let typed_f = infer_function(&f.into(), module_name, hydrators, environment, tracing)?;
+            let typed_f = infer_function(
+                &f.into(),
+                module_name,
+                hydrators,
+                environment,
+                tracing,
+                &top_level_scope,
+            )?;
 
             let is_bool = environment.unify(
                 typed_f.return_type.clone(),
@@ -388,6 +420,8 @@ fn infer_definition(
                 typed_f.location,
                 false,
             );
+
+            environment.close_scope(top_level_scope);
 
             if is_bool.or(is_void).is_err() {
                 return Err(Error::IllegalTestType {
@@ -427,6 +461,7 @@ fn infer_definition(
         }
 
         Definition::Benchmark(f) => {
+            let top_level_scope = environment.open_new_scope();
             let err_incorrect_arity = || {
                 Err(Error::IncorrectBenchmarkArity {
                     location: f
@@ -446,7 +481,14 @@ fn infer_definition(
                 }
             }?;
 
-            let typed_f = infer_function(&f.into(), module_name, hydrators, environment, tracing)?;
+            let typed_f = infer_function(
+                &f.into(),
+                module_name,
+                hydrators,
+                environment,
+                tracing,
+                &top_level_scope,
+            )?;
 
             let arguments = {
                 let arg = typed_f
@@ -464,6 +506,8 @@ fn infer_definition(
                     via: typed_via.0,
                 }]
             };
+
+            environment.close_scope(top_level_scope);
 
             Ok(Definition::Benchmark(Function {
                 doc: typed_f.doc,

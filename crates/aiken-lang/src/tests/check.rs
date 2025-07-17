@@ -4540,3 +4540,27 @@ fn decorator_validation_overlaping_tags() {
         Err((_, Error::DecoratorTagOverlap { .. }))
     ))
 }
+
+#[test]
+fn validator_parameter_scope_escape() {
+    let source_code = r#"
+        validator placeholder(foo: Option<Int>) {
+          withdraw(_redeemer: Data, _credential: Data, self: Data) {
+            bar(self)
+          }
+        }
+
+        fn bar(_self: Data) {
+          // foo shouldn't be in scope here!
+          when foo is {
+            None -> True
+            Some(_) -> False
+          }
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check_validator(parse(source_code))),
+        Err((_, Error::UnknownVariable { name, .. })) if name == "foo"
+    ))
+}

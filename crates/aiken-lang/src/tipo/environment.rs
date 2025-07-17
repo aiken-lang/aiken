@@ -21,7 +21,7 @@ use std::{
     rc::Rc,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ScopeResetData {
     local_values: HashMap<String, ValueConstructor>,
 }
