@@ -1544,3 +1544,16 @@ fn tag_decorator() {
         "#
     );
 }
+
+#[test]
+fn more_than_one_decorator() {
+    assert_format!(
+        r#"
+        @tag(420)
+        @list
+        type Datum {
+          wow: Int
+        }
+        "#
+    );
+}
