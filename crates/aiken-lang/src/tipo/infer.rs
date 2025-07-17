@@ -556,7 +556,6 @@ fn infer_definition(
                                     }
 
                                     Ok(RecordConstructorArg {
-                                        decorators: arg.decorators,
                                         label: arg.label,
                                         annotation: arg.annotation,
                                         location: arg.location,
@@ -604,7 +603,6 @@ fn infer_definition(
                     doc: _,
                     label: _,
                     annotation: _,
-                    decorators: _,
                 } in &constr.arguments
                 {
                     if tipo.is_function() {
@@ -996,7 +994,6 @@ fn put_params_in_scope<'a>(
 pub enum DecoratorContext {
     Record,
     Enum,
-    Field,
     Constructor,
 }
 
@@ -1005,7 +1002,6 @@ impl fmt::Display for DecoratorContext {
         match self {
             DecoratorContext::Record => write!(f, "record"),
             DecoratorContext::Enum => write!(f, "enum"),
-            DecoratorContext::Field => write!(f, "field"),
             DecoratorContext::Constructor => write!(f, "constructor"),
         }
     }
@@ -1032,15 +1028,6 @@ impl TypedDataType {
                 DecoratorContext::Constructor,
                 None,
             )?;
-
-            // Validate field decorators
-            for arg in &constructor.arguments {
-                validate_decorators_in_context(
-                    &arg.decorators,
-                    DecoratorContext::Field,
-                    Some(&arg.tipo),
-                )?;
-            }
         }
 
         Ok(())
