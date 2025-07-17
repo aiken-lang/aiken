@@ -4507,3 +4507,36 @@ fn decorator_validation_legit_enum() {
 
     assert!(dbg!(check(parse(source_code))).is_ok())
 }
+
+#[test]
+fn decorator_validation_overlaping_tags_explicit() {
+    let source_code = r#"
+        pub type Redeemer {
+          @tag(4)
+          Buy
+          @tag(4)
+          Cancel
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::DecoratorTagOverlap { .. }))
+    ))
+}
+
+#[test]
+fn decorator_validation_overlaping_tags() {
+    let source_code = r#"
+        pub type Redeemer {
+          @tag(1)
+          Buy
+          Cancel
+        }
+    "#;
+
+    assert!(matches!(
+        check(parse(source_code)),
+        Err((_, Error::DecoratorTagOverlap { .. }))
+    ))
+}

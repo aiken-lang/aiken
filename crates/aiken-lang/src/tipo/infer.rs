@@ -20,7 +20,7 @@ use crate::{
 };
 use std::{
     borrow::Borrow,
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fmt,
     ops::Deref,
     rc::Rc,
@@ -1021,13 +1021,35 @@ impl TypedDataType {
 
         validate_decorators_in_context(&self.decorators, context, None)?;
 
+        let mut seen = BTreeMap::new();
+
         // Validate constructor decorators
-        for constructor in &self.constructors {
+        for (index, constructor) in self.constructors.iter().enumerate() {
             validate_decorators_in_context(
                 &constructor.decorators,
                 DecoratorContext::Constructor,
                 None,
             )?;
+
+            let (tag, location) = constructor
+                .decorators
+                .iter()
+                .find_map(|decorator| {
+                    if let DecoratorKind::Tag { value, .. } = &decorator.kind {
+                        Some((value.parse().unwrap(), &decorator.location))
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or((index, &constructor.location));
+
+            if let Some(first) = seen.insert(tag, location) {
+                return Err(Error::DecoratorTagOverlap {
+                    tag,
+                    first: *first,
+                    second: *location,
+                });
+            }
         }
 
         Ok(())

@@ -112,6 +112,19 @@ pub enum Error {
     },
 
     #[error("I found an incorrect usage of decorators.\n")]
+    #[diagnostic(code("decorators::validation"))]
+    #[diagnostic(help(
+        "All tags for a type must be unique. Pay attention to the order of the constructors.\nBy default a constructor's tag is it's order of appearance at the definition site, starting at 0."
+    ))]
+    DecoratorTagOverlap {
+        tag: usize,
+        #[label("found \"{tag}\" here")]
+        first: Span,
+        #[label("conflicts here")]
+        second: Span,
+    },
+
+    #[error("I found an incorrect usage of decorators.\n")]
     #[diagnostic(code("decorators::conflict"))]
     #[diagnostic(help("You cannot use these two decorators together"))]
     ConflictingDecorators {
@@ -1207,6 +1220,7 @@ impl ExtraData for Error {
             | Error::MustInferFirst { .. }
             | Error::DecoratorValidation { .. }
             | Error::ConflictingDecorators { .. }
+            | Error::DecoratorTagOverlap { .. }
             | Error::InvalidFieldAccess { .. } => None,
 
             Error::PrivateTypeLeak {
