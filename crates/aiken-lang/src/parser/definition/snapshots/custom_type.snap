@@ -12,7 +12,6 @@ DataType(
                 name: "Some",
                 arguments: [
                     RecordConstructorArg {
-                        decorators: [],
                         label: None,
                         annotation: Var {
                             location: 24..25,
@@ -23,7 +22,6 @@ DataType(
                         doc: None,
                     },
                     RecordConstructorArg {
-                        decorators: [],
                         label: None,
                         annotation: Constructor {
                             location: 27..30,
@@ -53,7 +51,6 @@ DataType(
                 name: "Wow",
                 arguments: [
                     RecordConstructorArg {
-                        decorators: [],
                         label: Some(
                             "name",
                         ),
@@ -68,7 +65,6 @@ DataType(
                         doc: None,
                     },
                     RecordConstructorArg {
-                        decorators: [],
                         label: Some(
                             "age",
                         ),

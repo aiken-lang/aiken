@@ -17,7 +17,6 @@ DataType(
                 name: "Thing",
                 arguments: [
                     RecordConstructorArg {
-                        decorators: [],
                         label: Some(
                             "name",
                         ),

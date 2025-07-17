@@ -1707,7 +1707,11 @@ impl<'comments> Formatter<'comments> {
 
         let doc = if constructor.arguments.is_empty() {
             self.decorator(&constructor.decorators)
-                .append(line())
+                .append(if constructor.decorators.is_empty() {
+                    nil()
+                } else {
+                    line()
+                })
                 .append(constructor.name.as_str())
         } else if constructor.sugar {
             wrap_fields(constructor.arguments.iter().map(
@@ -1733,7 +1737,11 @@ impl<'comments> Formatter<'comments> {
             .group()
         } else {
             self.decorator(&constructor.decorators)
-                .append(line())
+                .append(if constructor.decorators.is_empty() {
+                    nil()
+                } else {
+                    line()
+                })
                 .append(constructor.name.as_str())
                 .append(wrap_args(constructor.arguments.iter().map(
                     |RecordConstructorArg {
@@ -1780,7 +1788,7 @@ impl<'comments> Formatter<'comments> {
         let mut is_sugar = false;
 
         self.decorator(decorators)
-            .append(line())
+            .append(if decorators.is_empty() { nil() } else { line() })
             .append(pub_(public))
             .append(if opaque { "opaque type " } else { "type " })
             .append(if args.is_empty() {

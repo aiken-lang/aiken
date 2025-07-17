@@ -12,7 +12,6 @@ DataType(
                 name: "User",
                 arguments: [
                     RecordConstructorArg {
-                        decorators: [],
                         label: Some(
                             "name",
                         ),
