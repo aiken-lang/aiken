@@ -1520,3 +1520,15 @@ fn types_as_namespace() {
         "#
     );
 }
+
+#[test]
+fn list_decorator() {
+    assert_format!(
+        r#"
+        @list
+        type Datum {
+          wow: Int
+        }
+        "#
+    );
+}
