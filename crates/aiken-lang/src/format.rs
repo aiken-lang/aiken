@@ -1706,7 +1706,9 @@ impl<'comments> Formatter<'comments> {
         let doc_comments = self.doc_comments(constructor.location.start);
 
         let doc = if constructor.arguments.is_empty() {
-            constructor.name.to_doc()
+            self.decorator(&constructor.decorators)
+                .append(line())
+                .append(constructor.name.as_str())
         } else if constructor.sugar {
             wrap_fields(constructor.arguments.iter().map(
                 |RecordConstructorArg {
@@ -1730,9 +1732,9 @@ impl<'comments> Formatter<'comments> {
             ))
             .group()
         } else {
-            constructor
-                .name
-                .to_doc()
+            self.decorator(&constructor.decorators)
+                .append(line())
+                .append(constructor.name.as_str())
                 .append(wrap_args(constructor.arguments.iter().map(
                     |RecordConstructorArg {
                          label,

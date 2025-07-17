@@ -1557,3 +1557,17 @@ fn more_than_one_decorator() {
         "#
     );
 }
+
+#[test]
+fn decorators_on_constructor() {
+    assert_format!(
+        r#"
+        type Datum {
+          @tag(420)
+          Yes
+          @tag(69)
+          No
+        }
+        "#
+    );
+}

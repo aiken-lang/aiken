@@ -1,0 +1,10 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\ntype Datum {\n  @tag(420)\n  Yes\n  @tag(69)\n  No\n}\n"
+---
+type Datum {
+  @tag(420)
+  Yes
+  @tag(69)
+  No
+}
