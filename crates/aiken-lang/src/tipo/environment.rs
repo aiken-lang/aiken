@@ -1283,7 +1283,6 @@ impl<'a> Environment<'a> {
             Definition::TypeAlias(TypeAlias {
                 location,
                 public,
-                decorators: _,
                 parameters: args,
                 alias: name,
                 annotation: resolved_type,

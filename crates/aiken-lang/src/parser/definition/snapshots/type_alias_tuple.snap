@@ -4,7 +4,6 @@ description: "Code:\n\ntype RoyaltyToken = (PolicyId, AssetName)"
 ---
 TypeAlias(
     TypeAlias {
-        decorators: [],
         alias: "RoyaltyToken",
         annotation: Tuple {
             location: 20..41,
