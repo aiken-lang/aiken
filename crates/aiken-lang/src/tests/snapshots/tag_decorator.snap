@@ -1,0 +1,8 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\n@tag(420)\ntype Datum {\n  wow: Int\n}\n"
+---
+@tag(420)
+type Datum {
+  wow: Int,
+}

@@ -1532,3 +1532,15 @@ fn list_decorator() {
         "#
     );
 }
+
+#[test]
+fn tag_decorator() {
+    assert_format!(
+        r#"
+        @tag(420)
+        type Datum {
+          wow: Int
+        }
+        "#
+    );
+}
