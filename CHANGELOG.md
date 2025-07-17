@@ -6,6 +6,7 @@
 
 - **aiken-project**: Pretty print execution units. Added `--plain-numbers`
   flag to `check` command, to switch between the two formats. @nikhils9
+- **aiken-lang**: New type decorators that allow control over the encoding of types. @rvcas @MicroProofs
 
 ### Changed
 
