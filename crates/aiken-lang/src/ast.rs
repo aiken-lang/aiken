@@ -407,7 +407,6 @@ impl From<TypedTest> for TypedFunction {
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TypeAlias<T> {
-    pub decorators: Vec<Decorator>,
     pub alias: String,
     pub annotation: Annotation,
     pub doc: Option<String>,

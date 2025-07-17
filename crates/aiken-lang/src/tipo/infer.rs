@@ -10,9 +10,9 @@ use crate::{
     ast::{
         Annotation, ArgBy, ArgName, ArgVia, DataType, Decorator, DecoratorKind, Definition,
         Function, ModuleConstant, ModuleKind, RecordConstructor, RecordConstructorArg, Tracing,
-        TypeAlias, TypedArg, TypedDataType, TypedDefinition, TypedModule, TypedTypeAlias,
-        TypedValidator, UntypedArg, UntypedDefinition, UntypedModule, UntypedPattern,
-        UntypedValidator, Use, Validator,
+        TypeAlias, TypedArg, TypedDataType, TypedDefinition, TypedModule, TypedValidator,
+        UntypedArg, UntypedDefinition, UntypedModule, UntypedPattern, UntypedValidator, Use,
+        Validator,
     },
     expr::{TypedExpr, UntypedAssignmentKind, UntypedExpr},
     parser::token::Token,
@@ -486,7 +486,6 @@ fn infer_definition(
             alias,
             parameters,
             annotation,
-            decorators,
             tipo: _,
         }) => {
             let tipo = environment
@@ -502,11 +501,8 @@ fn infer_definition(
                 alias,
                 parameters,
                 annotation,
-                decorators,
                 tipo,
             };
-
-            typed_type_alias.check_decorators()?;
 
             Ok(Definition::TypeAlias(typed_type_alias))
         }
@@ -1002,7 +998,6 @@ pub enum DecoratorContext {
     Enum,
     Field,
     Constructor,
-    Alias,
 }
 
 impl fmt::Display for DecoratorContext {
@@ -1012,7 +1007,6 @@ impl fmt::Display for DecoratorContext {
             DecoratorContext::Enum => write!(f, "enum"),
             DecoratorContext::Field => write!(f, "field"),
             DecoratorContext::Constructor => write!(f, "constructor"),
-            DecoratorContext::Alias => write!(f, "type alias"),
         }
     }
 }
@@ -1050,13 +1044,6 @@ impl TypedDataType {
         }
 
         Ok(())
-    }
-}
-
-impl TypedTypeAlias {
-    #[allow(clippy::result_large_err)]
-    fn check_decorators(&self) -> Result<(), Error> {
-        validate_decorators_in_context(&self.decorators, DecoratorContext::Alias, Some(&self.tipo))
     }
 }
 

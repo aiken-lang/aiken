@@ -1,10 +1,10 @@
 use crate::{
     ast::{
         Annotation, ArgBy, ArgName, ArgVia, AssignmentKind, AssignmentPattern, BinOp,
-        ByteArrayFormatPreference, CAPTURE_VARIABLE, CallArg, CurveType, DataType, Definition,
-        Function, LogicalOpChainKind, ModuleConstant, Namespace, OnTestFailure, Pattern,
-        RecordConstructor, RecordConstructorArg, RecordUpdateSpread, Span, TraceKind, TypeAlias,
-        TypedArg, TypedValidator, UnOp, UnqualifiedImport, UntypedArg, UntypedArgVia,
+        ByteArrayFormatPreference, CAPTURE_VARIABLE, CallArg, CurveType, DataType, Decorator,
+        Definition, Function, LogicalOpChainKind, ModuleConstant, Namespace, OnTestFailure,
+        Pattern, RecordConstructor, RecordConstructorArg, RecordUpdateSpread, Span, TraceKind,
+        TypeAlias, TypedArg, TypedValidator, UnOp, UnqualifiedImport, UntypedArg, UntypedArgVia,
         UntypedAssignmentKind, UntypedClause, UntypedDefinition, UntypedFunction, UntypedIfBranch,
         UntypedModule, UntypedPattern, UntypedRecordUpdateArg, Use, Validator,
     },
@@ -285,8 +285,17 @@ impl<'comments> Formatter<'comments> {
                 constructors,
                 location,
                 opaque,
+                decorators,
                 ..
-            }) => self.data_type(*public, *opaque, name, parameters, constructors, location),
+            }) => self.data_type(
+                *public,
+                *opaque,
+                name,
+                parameters,
+                constructors,
+                decorators,
+                location,
+            ),
 
             Definition::Use(import) => self.import(import),
 
@@ -1753,6 +1762,7 @@ impl<'comments> Formatter<'comments> {
         commented(doc_comments.append(doc).group(), comments)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn data_type<'a, A>(
         &mut self,
         public: bool,
@@ -1760,14 +1770,16 @@ impl<'comments> Formatter<'comments> {
         name: &'a str,
         args: &'a [String],
         constructors: &'a [RecordConstructor<A>],
+        decorators: &'a [Decorator],
         location: &'a Span,
     ) -> Document<'a> {
         self.pop_empty_lines(location.start);
 
         let mut is_sugar = false;
 
-        pub_(public)
-            .to_doc()
+        self.decorator(decorators)
+            .append(line())
+            .append(pub_(public))
             .append(if opaque { "opaque type " } else { "type " })
             .append(if args.is_empty() {
                 name.to_doc()
@@ -1795,6 +1807,16 @@ impl<'comments> Formatter<'comments> {
             })
             .append(if is_sugar { nil() } else { line() })
             .append("}")
+    }
+
+    pub fn decorator<'a>(&mut self, decorators: &'a [Decorator]) -> Document<'a> {
+        join(
+            decorators.iter().map(|d| match &d.kind {
+                crate::ast::DecoratorKind::Tag { value, base } => self.uint(value, base),
+                crate::ast::DecoratorKind::List => "@list".to_doc(),
+            }),
+            line(),
+        )
     }
 
     pub fn docs_data_type<'a, A>(
