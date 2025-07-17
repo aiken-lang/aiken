@@ -17,7 +17,17 @@ DataType(
         ],
         constructors: [
             RecordConstructor {
-                decorators: [],
+                decorators: [
+                    Decorator {
+                        kind: Tag {
+                            value: "12",
+                            base: Decimal {
+                                numeric_underscore: false,
+                            },
+                        },
+                        location: 0..8,
+                    },
+                ],
                 location: 23..44,
                 name: "User",
                 arguments: [

@@ -12,7 +12,12 @@ DataType(
         ],
         constructors: [
             RecordConstructor {
-                decorators: [],
+                decorators: [
+                    Decorator {
+                        kind: List,
+                        location: 0..5,
+                    },
+                ],
                 location: 21..42,
                 name: "Thing",
                 arguments: [

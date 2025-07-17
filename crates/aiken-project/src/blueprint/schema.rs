@@ -3,7 +3,7 @@ use crate::{
     blueprint::definitions::{Definitions, Reference},
 };
 use aiken_lang::{
-    ast::{Definition, TypedDataType, TypedDefinition},
+    ast::{DecoratorKind, Definition, TypedDataType, TypedDefinition},
     tipo::{Type, TypeVar, pretty},
 };
 use owo_colors::{OwoColorize, Stream::Stdout};
@@ -493,6 +493,25 @@ impl Data {
 
         let mut variants = vec![];
 
+        if data_type.constructors.len() == 1
+            && data_type.constructors[0].sugar
+            && data_type
+                .decorators
+                .iter()
+                .any(|d| matches!(d.kind, DecoratorKind::List))
+        {
+            let items = data_type.constructors[0]
+                .arguments
+                .iter()
+                .map(|elem| {
+                    Annotated::do_from_type(&elem.tipo, modules, type_parameters, definitions)
+                        .map(Declaration::Referenced)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            return Ok(Data::List(Items::Many(items)));
+        }
+
         for (index, constructor) in data_type.constructors.iter().enumerate() {
             let mut fields = vec![];
 
@@ -506,6 +525,18 @@ impl Data {
                     annotated: Declaration::Referenced(reference),
                 });
             }
+
+            let index = constructor
+                .decorators
+                .iter()
+                .find_map(|decorator| {
+                    if let DecoratorKind::Tag { value, .. } = &decorator.kind {
+                        Some(value.parse().unwrap())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(index);
 
             let variant = Annotated {
                 title: Some(constructor.name.clone()),
