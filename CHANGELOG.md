@@ -17,7 +17,7 @@
 - **aiken-lang**: Fix formatting issue with grouped pipeline followed by tuple index. @rvcas
 - **aiken-lang**: Fix formatting issue with record updates and punning syntax. @rvcas
 - **aiken-lang**: Prevent validator params being in the top level scope for functions. @microproofs
-
+- **aiken-lang**: Formatting for long import lines @rvcas
 
 ## v1.1.17 - 2025-05-08
 
