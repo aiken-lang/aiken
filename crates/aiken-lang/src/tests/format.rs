@@ -1571,3 +1571,23 @@ fn decorators_on_constructor() {
         "#
     );
 }
+
+#[test]
+fn long_import_line() {
+    assert_format!(
+        r#"
+        use cardano/transaction.{Input,
+          Output, OutputReference, Transaction, find_input}
+        "#
+    );
+}
+
+#[test]
+fn long_import_line_2() {
+    assert_format!(
+        r#"
+        use cardano/transaction.{Input,
+          Output, OutputReference, Transaction, find_input, stuff, thing, wow, yea}
+        "#
+    );
+}

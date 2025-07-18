@@ -1,0 +1,7 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nuse cardano/transaction.{Input,\n  Output, OutputReference, Transaction, find_input}\n"
+---
+use cardano/transaction.{
+  Input, Output, OutputReference, Transaction, find_input,
+}
