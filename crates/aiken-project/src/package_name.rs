@@ -25,13 +25,10 @@ impl PackageName {
 
         Ok(())
     }
-}
 
-impl FromStr for PackageName {
-    type Err = Error;
-
-    fn from_str(name: &str) -> Result<Self, Error> {
+    pub fn from_str_unchecked(name: &str) -> Result<Self, Error> {
         let mut name_split = name.split('/');
+
         let owner = name_split
             .next()
             .ok_or_else(|| Error::InvalidProjectName {
@@ -39,6 +36,7 @@ impl FromStr for PackageName {
                 reason: InvalidProjectNameReason::Format,
             })?
             .to_string();
+
         let repo = name_split
             .next()
             .ok_or_else(|| Error::InvalidProjectName {
@@ -46,8 +44,19 @@ impl FromStr for PackageName {
                 reason: InvalidProjectNameReason::Format,
             })?
             .to_string();
-        let package_name = PackageName { owner, repo };
+
+        Ok(PackageName { owner, repo })
+    }
+}
+
+impl FromStr for PackageName {
+    type Err = Error;
+
+    fn from_str(name: &str) -> Result<Self, Error> {
+        let package_name = Self::from_str_unchecked(name)?;
+
         package_name.validate()?;
+
         Ok(package_name)
     }
 }
