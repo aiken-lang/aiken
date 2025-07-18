@@ -19,6 +19,7 @@
 - **aiken-lang**: Prevent validator params being in the top level scope for functions. @microproofs
 - **aiken-lang**: Formatting for long import lines @rvcas
 - **aiken-lang**: `aiken add` wrongly rejects valid org/project pairs. @rvcas
+- **uplc**: PlutusData comparison in the UPLC VM shouldn't rely on CBOR encoding. @rvcas @KtorZ
 
 ## v1.1.17 - 2025-05-08
 
