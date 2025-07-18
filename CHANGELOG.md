@@ -18,6 +18,7 @@
 - **aiken-lang**: Fix formatting issue with record updates and punning syntax. @rvcas
 - **aiken-lang**: Prevent validator params being in the top level scope for functions. @microproofs
 - **aiken-lang**: Formatting for long import lines @rvcas
+- **aiken-lang**: `aiken add` wrongly rejects valid org/project pairs. @rvcas
 
 ## v1.1.17 - 2025-05-08
 
