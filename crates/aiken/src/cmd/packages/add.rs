@@ -6,7 +6,7 @@ use aiken_project::{
 };
 use miette::IntoDiagnostic;
 use owo_colors::{OwoColorize, Stream::Stderr};
-use std::{path::PathBuf, process, str::FromStr};
+use std::{path::PathBuf, process};
 
 #[derive(clap::Args)]
 #[clap(disable_version_flag(true))]
@@ -31,7 +31,7 @@ pub fn exec(args: Args) -> miette::Result<()> {
     let root = PathBuf::from(".");
 
     let dependency = Dependency {
-        name: PackageName::from_str(&args.package)?,
+        name: PackageName::from_str_unchecked(&args.package)?,
         version: args.version,
         source: Platform::Github,
     };
