@@ -336,19 +336,20 @@ impl<'comments> Formatter<'comments> {
             .append(if unqualified.is_empty() {
                 nil()
             } else {
-                let unqualified = Itertools::intersperse(
+                let unqualified = join(
                     unqualified
                         .iter()
                         .sorted_by(|a, b| a.name.cmp(&b.name))
                         .map(|e| e.to_doc()),
                     flex_break(",", ", "),
                 );
-                let unqualified = break_("", "")
-                    .append(concat(unqualified))
+
+                break_(".{", ".{")
+                    .append(unqualified)
                     .nest(INDENT)
                     .append(break_(",", ""))
-                    .group();
-                ".{".to_doc().append(unqualified).append("}")
+                    .append("}")
+                    .group()
             })
             .append(if let Some(name) = as_name {
                 docvec![" as ", name]
