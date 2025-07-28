@@ -11,15 +11,38 @@ type Wow {
   Toro(Int)
 }
 
+type Wowzer {
+  first: Dino,
+  second: (Int, ByteArray),
+}
+
+@tag(2)
+type CanWork {
+  first: Dino,
+  second: (Int, ByteArray),
+}
+
+fn yes(
+  food: Int,
+  weight: Int,
+  name: ByteArray,
+  combiner: fn(Int, Int, ByteArray) -> a,
+) -> a {
+  combiner(food, weight, name)
+}
+
 test foo() {
   let x = Dino(1, 2, "t-rex")
+  let gg = yes(1, 4, "triceratops", Dino)
 
   let y: Data = x
 
   expect (a, b, c): (Int, Int, ByteArray) = y
   expect z: Dino = y
   expect Dino { food, weight, name } = y
-  let xx = Dino { ..z, name: "stegosaurus" }
+  let xx = Dino { ..z, name: "stegosaurus", food: 9 }
+
+  let n = Dino { food: x.food, weight: x.weight, name: x.name }
 
   let yy = x |> as_data
 
@@ -31,16 +54,22 @@ test foo() {
     x == z,
     food == 1,
     weight == 2,
-    xx.food == z.food,
+    xx.food == 9,
     xx.name == "stegosaurus",
     xx.weight == z.weight,
     yy == y,
+    gg.food == x.food,
+    gg.weight == 4,
+    gg.name == "triceratops",
+    gg != x,
+    n == x,
   }
 }
 
 test bar() {
   let x = Dino(1, 2, "t-rex")
   let y = Het(x, (4, "no"))
+  let z = CanWork(x, (4, "no")) |> as_data
 
   expect Het { first: Dino(1, b, "t-rex"), second: (4, "no") } = y |> as_data
 
@@ -52,11 +81,26 @@ test bar() {
     Toro(_) -> fail @"No way"
     Het { first: Dino(1, 1, "t-rex"), second: (4, "no") } -> False
     Het { first: Dino(1, 2, "t-rex"), second: (5, "no") } -> False
-    Het { first: Dino(1, 2, "t-rex"), second } -> and {
+    Het { first: Dino(1, 2, "t-rex"), second } -> {
+      trace "Z": z
+      expect d: Wow = z
+
+      and {
         b == 2,
         c == 2,
         second == (4, "no"),
+        d == y,
       }
+    }
     Het { .. } -> fail @"Impossible"
   }
+}
+
+test baz() fail {
+  let x = Dino(1, 2, "t-rex")
+  let y = Wowzer(x, (4, "no"))
+
+  let d = as_data(y)
+
+  expect Het { .. } = d
 }

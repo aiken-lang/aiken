@@ -1384,10 +1384,15 @@ pub fn get_constr_index_variant<'a>(
         .enumerate()
         .find(|(_, dt)| dt.name == name)
         .map(|(index, dt)| {
-            if let Some(tag) = dt.decorators.iter().find_map(|d| match &d.kind {
-                DecoratorKind::Tag { value, .. } => Some(value),
-                _ => None,
-            }) {
+            if let Some(tag) = dt
+                .decorators
+                .iter()
+                .chain(data_type.decorators.iter())
+                .find_map(|d| match &d.kind {
+                    DecoratorKind::Tag { value, .. } => Some(value),
+                    _ => None,
+                })
+            {
                 (tag.parse().unwrap(), dt)
             } else {
                 (index, dt)
