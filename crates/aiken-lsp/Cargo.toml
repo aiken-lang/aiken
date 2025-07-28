@@ -25,5 +25,5 @@ tracing = "0.1.37"
 url = "2.3.1"
 urlencoding = "2.1.2"
 
-aiken-lang = { path = '../aiken-lang', version = "1.1.17" }
-aiken-project = { path = '../aiken-project', version = "1.1.17" }
+aiken-lang = { path = '../aiken-lang', version = "1.1.18" }
+aiken-project = { path = '../aiken-project', version = "1.1.18" }
