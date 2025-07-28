@@ -67,6 +67,7 @@ github-build-setup = "../musl-build-setup.yml"
 # because it links with openssl-1.1 whereas recent distro ships with 3.x
 [workspace.metadata.dist.github-custom-runners]
 x86_64-unknown-linux-musl = "ubuntu-24.04"
+x86_64-pc-windows-msvc = "windows-2022"
 
 [workspace.dependencies]
 walkdir = "2.3.2"
