@@ -14,6 +14,12 @@ pub type Wow {
   MaybeNo
 }
 
+@tag(698)
+pub type Finally {
+  yes: Int,
+  no: ByteArray,
+}
+
 validator happy(thing: Dino) {
   else(other_thing: Dino) {
     thing == other_thing
@@ -22,6 +28,12 @@ validator happy(thing: Dino) {
 
 validator other(thing: Wow) {
   else(other_thing: Wow) {
+    thing == other_thing
+  }
+}
+
+validator cool_thing(thing: Finally) {
+  else(other_thing: Finally) {
     thing == other_thing
   }
 }
