@@ -851,6 +851,25 @@ mod tests {
     }
 
     #[test]
+    fn list_decorator_field_names() {
+        assert_validator!(
+            r#"
+            @list
+            pub type Product {
+                x: Int,
+                y: Int,
+            }
+
+            validator list_decorator_field_names {
+              spend(_datum: Option<Product>, _redeemer: Int, _utxo: Data, _self: Data,) {
+                True
+              }
+            }
+            "#
+        );
+    }
+
+    #[test]
     fn validate_arguments_integer() {
         let definitions = fixture_definitions();
 
@@ -952,8 +971,8 @@ mod tests {
         definitions.insert(
             &schema,
             Schema::Data(Data::List(Items::Many(vec![
-                Declaration::Referenced(Reference::new("Int")),
-                Declaration::Referenced(Reference::new("ByteArray")),
+                Annotated::from(Declaration::Referenced(Reference::new("Int"))),
+                Annotated::from(Declaration::Referenced(Reference::new("ByteArray"))),
             ])))
             .into(),
         );

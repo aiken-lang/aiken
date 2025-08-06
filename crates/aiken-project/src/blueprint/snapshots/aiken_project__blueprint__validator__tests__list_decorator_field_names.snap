@@ -1,0 +1,40 @@
+---
+source: crates/aiken-project/src/blueprint/validator.rs
+description: "Code:\n\n@list\npub type Product {\n    x: Int,\n    y: Int,\n}\n\nvalidator list_decorator_field_names {\n  spend(_datum: Option<Product>, _redeemer: Int, _utxo: Data, _self: Data,) {\n    True\n  }\n}\n"
+---
+{
+  "title": "test_module.list_decorator_field_names.spend",
+  "datum": {
+    "title": "_datum",
+    "schema": {
+      "$ref": "#/definitions/test_module~1Product"
+    }
+  },
+  "redeemer": {
+    "title": "_redeemer",
+    "schema": {
+      "$ref": "#/definitions/Int"
+    }
+  },
+  "compiledCode": "<redacted>",
+  "hash": "<redacted>",
+  "definitions": {
+    "Int": {
+      "dataType": "integer"
+    },
+    "test_module/Product": {
+      "title": "Product",
+      "dataType": "list",
+      "items": [
+        {
+          "title": "x",
+          "$ref": "#/definitions/Int"
+        },
+        {
+          "title": "y",
+          "$ref": "#/definitions/Int"
+        }
+      ]
+    }
+  }
+}

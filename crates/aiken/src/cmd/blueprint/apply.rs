@@ -207,7 +207,7 @@ fn ask_schema(
                     ix + 1,
                     Ordinal::<usize>(ix + 1).suffix()
                 );
-                let inner_schema = lookup_declaration(&decl.clone().into(), definitions);
+                let inner_schema = lookup_declaration(&decl.clone(), definitions);
                 elems.push(ask_schema(&inner_schema, definitions)?);
             }
 
