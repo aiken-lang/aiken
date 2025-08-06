@@ -28,6 +28,16 @@ pub struct Annotated<T> {
     pub annotated: T,
 }
 
+impl<T> Annotated<T> {
+    fn with_title(title: Option<String>, to_annotate: T) -> Annotated<T> {
+        Annotated {
+            title,
+            description: None,
+            annotated: to_annotate,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum Declaration<T> {
@@ -155,7 +165,7 @@ pub enum Data {
 #[serde(untagged)]
 pub enum Items<T> {
     One(Declaration<T>),
-    Many(Vec<Declaration<T>>),
+    Many(Vec<Annotated<Declaration<T>>>),
 }
 
 /// Captures a single UPLC constructor with its
@@ -441,7 +451,7 @@ impl Annotated<Schema> {
                         .iter()
                         .map(|elem| {
                             Annotated::do_from_type(elem, modules, type_parameters, definitions)
-                                .map(Declaration::Referenced)
+                                .map(|refr| Annotated::from(Declaration::Referenced(refr)))
                         })
                         .collect::<Result<Vec<_>, _>>()
                         .map_err(|e| e.backtrack(type_info))?;
@@ -504,8 +514,10 @@ impl Data {
                 .arguments
                 .iter()
                 .map(|elem| {
-                    Annotated::do_from_type(&elem.tipo, modules, type_parameters, definitions)
-                        .map(Declaration::Referenced)
+                    let title_override = elem.label.clone();
+                    Annotated::do_from_type(&elem.tipo, modules, type_parameters, definitions).map(
+                        |refr| Annotated::with_title(title_override, Declaration::Referenced(refr)),
+                    )
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
@@ -1368,8 +1380,8 @@ pub mod tests {
     fn deserialize_data_list_many() {
         assert_eq!(
             Data::List(Items::Many(vec![
-                Declaration::Referenced(Reference::new("foo")),
-                Declaration::Referenced(Reference::new("bar"))
+                Annotated::from(Declaration::Referenced(Reference::new("foo"))),
+                Annotated::from(Declaration::Referenced(Reference::new("bar")))
             ])),
             serde_json::from_value(json!({
                 "dataType": "list",
@@ -1479,7 +1491,13 @@ pub mod tests {
             prop_oneof![
                 (r.clone(), r.clone()).prop_map(|(k, v)| Data::Map(k, v)),
                 r.clone().prop_map(|x| Data::List(Items::One(x))),
-                prop::collection::vec(r, 1..3).prop_map(|xs| Data::List(Items::Many(xs))),
+                prop::collection::vec(r, 1..3).prop_map(|xs| Data::List(Items::Many(
+                    xs.iter()
+                        .map(|decl| -> Annotated<Declaration<Data>> {
+                            Annotated::from(decl.clone())
+                        })
+                        .collect()
+                ))),
                 prop::collection::vec(constructor, 1..3).prop_map(Data::AnyOf)
             ]
         })
@@ -1510,7 +1528,11 @@ pub mod tests {
             prop_oneof![
                 (r.clone(), r.clone()).prop_map(|(l, r)| Schema::Pair(l, r)),
                 r.clone().prop_map(|x| Schema::List(Items::One(x))),
-                prop::collection::vec(r, 1..3).prop_map(|xs| Schema::List(Items::Many(xs))),
+                prop::collection::vec(r, 1..3).prop_map(|xs| Schema::List(Items::Many(
+                    xs.iter()
+                        .map(|decl| Annotated::from(decl.clone()))
+                        .collect()
+                ))),
             ]
         })
     }

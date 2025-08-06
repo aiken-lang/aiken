@@ -124,7 +124,7 @@ impl Definitions<Annotated<Schema>> {
                 }
                 Schema::List(Items::Many(items)) => {
                     items.iter().for_each(|item| {
-                        mark(src.clone(), item, usage, traverse_schema);
+                        mark(src.clone(), &item.annotated, usage, traverse_schema);
                     });
                 }
                 Schema::Data(data) => traverse_data(src, data, usage),
@@ -143,7 +143,7 @@ impl Definitions<Annotated<Schema>> {
                 }
                 Data::List(Items::Many(items)) => {
                     items.iter().for_each(|item| {
-                        mark(src.clone(), item, usage, traverse_data);
+                        mark(src.clone(), &item.annotated, usage, traverse_data);
                     });
                 }
                 Data::Map(keys, values) => {
@@ -263,14 +263,17 @@ impl Definitions<Annotated<Schema>> {
                 Schema::Pair(left, right) => {
                     let left = swap_declaration(left);
                     let right = swap_declaration(right);
-                    Some(Items::Many(vec![left, right]))
+                    Some(Items::Many(vec![left.into(), right.into()]))
                 }
                 Schema::List(Items::One(item)) => {
                     let item = swap_declaration(item);
                     Some(Items::One(item))
                 }
                 Schema::List(Items::Many(items)) => Some(Items::Many(
-                    items.iter_mut().map(swap_declaration).collect(),
+                    items
+                        .iter_mut()
+                        .map(|annot| swap_declaration(&mut annot.annotated).into())
+                        .collect(),
                 )),
                 Schema::Integer => {
                     *schema = Schema::Data(Data::Integer);

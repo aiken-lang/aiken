@@ -1,5 +1,11 @@
 # Changelog
 
+## [next] - 2025-08-06
+
+### Fixed
+
+- `aiken-project`: Properly support field names in lists when encoding into blueprint. @emiflake
+
 ## v1.1.19 - 2025-07-28
 
 ### Added

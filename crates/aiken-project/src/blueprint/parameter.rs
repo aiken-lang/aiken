@@ -119,10 +119,11 @@ fn validate_schema(
             let items = items
                 .iter()
                 .map(|item| {
-                    item.schema(definitions)
-                        .ok_or_else(|| Error::UnresolvedSchemaReference {
-                            reference: item.reference().unwrap().clone(),
-                        })
+                    item.annotated.schema(definitions).ok_or_else(|| {
+                        Error::UnresolvedSchemaReference {
+                            reference: item.annotated.reference().unwrap().clone(),
+                        }
+                    })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
@@ -176,10 +177,11 @@ fn validate_data(
             let items = items
                 .iter()
                 .map(|item| {
-                    item.schema(definitions)
-                        .ok_or_else(|| Error::UnresolvedSchemaReference {
-                            reference: item.reference().unwrap().clone(),
-                        })
+                    item.annotated.schema(definitions).ok_or_else(|| {
+                        Error::UnresolvedSchemaReference {
+                            reference: item.annotated.reference().unwrap().clone(),
+                        }
+                    })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
