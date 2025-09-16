@@ -123,6 +123,7 @@ dependencies = [
  "lsp-server",
  "lsp-types",
  "miette 7.6.0",
+ "num_cpus",
  "owo-colors 3.5.0",
  "serde",
  "serde_json",
