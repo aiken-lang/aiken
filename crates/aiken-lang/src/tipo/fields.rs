@@ -66,21 +66,30 @@ impl FieldMap {
             });
         }
 
+        let mut positional_args_after_labeled = Vec::new();
+
         for arg in args.iter() {
             match &arg.label {
                 Some(_) => {
                     last_labeled_arguments_given = Some(arg);
                 }
-
                 None => {
                     if let Some(label) = last_labeled_arguments_given {
-                        return Err(Error::PositionalArgumentAfterLabeled {
-                            location: arg.location,
-                            labeled_arg_location: label.location,
-                        });
+                        positional_args_after_labeled.push((arg.location, label.location))
                     }
                 }
             }
+        }
+
+        if positional_args_after_labeled.len() > 1 {
+            let (location, labeled_arg_location) = positional_args_after_labeled
+                .first()
+                .expect("more than one positional args");
+
+            return Err(Error::PositionalArgumentAfterLabeled {
+                location: *location,
+                labeled_arg_location: *labeled_arg_location,
+            });
         }
 
         let mut i = 0;
@@ -154,5 +163,63 @@ impl FieldMap {
             .sorted()
             .cloned()
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FieldMap;
+    use crate::tipo::{Span, fields::CallArg};
+    use proptest::prelude::*;
+    use std::collections::HashMap;
+
+    fn any_field() -> impl Strategy<Value = String> {
+        proptest::string::string_regex("[a-zA-Z]+").unwrap()
+    }
+
+    prop_compose! {
+        fn any_field_map()(
+            fields in proptest::collection::vec(any_field(), 2..5),
+            is_function in any::<bool>(),
+        ) -> FieldMap {
+            let fields = fields
+                .into_iter()
+                .enumerate()
+                .map(|(ix, field)| (field, (ix, Span::empty())))
+                .collect::<HashMap<_, _>>();
+
+            FieldMap {
+                arity: fields.len(),
+                fields,
+                is_function,
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn reorder_never_fails_with_only_one_positional(
+            field_map in any_field_map(),
+            positional_arg_index in any::<usize>(),
+        ) {
+            let positional_arg_index = positional_arg_index % field_map.fields.len();
+
+            let mut call_args = field_map.fields.keys().cloned().enumerate().map(|(index, label)| {
+                CallArg {
+                    label: if index == positional_arg_index { None } else { Some(label) },
+                    location: Span::empty(),
+                    value: (),
+                }
+            }).collect::<Vec<_>>();
+
+            assert!(field_map.reorder(&mut call_args[..], Span::empty()).is_ok());
+
+            for (actual_index, arg) in call_args.iter().enumerate() {
+                if let Some(label) = &arg.label {
+                    let (expected_index, _) = field_map.fields.get(label).unwrap();
+                    assert_eq!(&actual_index, expected_index);
+                }
+            }
+        }
     }
 }

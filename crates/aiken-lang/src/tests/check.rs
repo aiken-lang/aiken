@@ -4564,3 +4564,19 @@ fn validator_parameter_scope_escape() {
         Err((_, Error::UnknownVariable { name, .. })) if name == "foo"
     ))
 }
+
+#[test]
+fn backpassing_with_labels() {
+    let source_code = r#"
+        fn foo(n: Int, return: fn(Int) -> a) -> a {
+          return(n)
+        }
+
+        test using_foo() {
+          let n <- foo(n: 42)
+          n == 42
+        }
+    "#;
+
+    assert!(dbg!(check_validator(parse(source_code))).is_ok())
+}
