@@ -21,7 +21,7 @@ use uplc::{
 };
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Validator {
+pub struct Validator<T> {
     pub title: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -38,14 +38,14 @@ pub struct Validator {
     pub parameters: Vec<Parameter>,
 
     #[serde(flatten)]
-    pub program: SerializableProgram,
+    pub program: T,
 
     #[serde(skip_serializing_if = "Definitions::is_empty")]
     #[serde(default)]
     pub definitions: Definitions<Annotated<Schema>>,
 }
 
-impl Validator {
+impl<T> Validator<T> {
     pub fn get_module_and_name(&self) -> (&str, &str) {
         let mut split = self.title.split('.');
 
@@ -59,59 +59,39 @@ impl Validator {
 
         (known_module_name, known_validator_name)
     }
+}
 
-    pub fn from_checked_module(
-        modules: &CheckedModules,
-        generator: &mut CodeGenerator,
-        module: &CheckedModule,
-        def: &TypedValidator,
-        plutus_version: &PlutusVersion,
-    ) -> Vec<Result<Validator, Error>> {
-        let mut program = MemoProgram::new();
-
-        let mut validators = vec![];
-
-        for handler in &def.handlers {
-            validators.push(Validator::create_validator_blueprint(
-                generator,
-                modules,
-                module,
-                def,
-                handler,
-                &mut program,
-                plutus_version,
-            ));
-        }
-
-        // NOTE: Only push the fallback if all other validators have been successfully
-        // generated. Otherwise, we may fall into scenarios where we cannot generate validators
-        // (e.g. due to the presence of generics in datum/redeemer), which won't be caught by
-        // the else branch since it lacks arguments.
-        if validators.iter().all(|v| v.is_ok()) {
-            validators.push(Validator::create_validator_blueprint(
-                generator,
-                modules,
-                module,
-                def,
-                &def.fallback,
-                &mut program,
-                plutus_version,
-            ));
-        }
-
-        validators
+pub fn tipo_or_annotation<'a>(module: &'a CheckedModule, arg: &'a TypedArg) -> &'a Type {
+    match Type::collapse_links(arg.tipo.clone()).borrow() {
+        Type::App {
+            module: module_name,
+            name: type_name,
+            ..
+        } if module_name.is_empty() && &type_name[..] == "Data" => match arg.annotation {
+            Some(Annotation::Constructor { ref arguments, .. }) if !arguments.is_empty() => module
+                .ast
+                .type_info
+                .annotations
+                .get(
+                    arguments
+                        .first()
+                        .expect("guard ensures at least one element"),
+                )
+                .unwrap_or(&arg.tipo),
+            _ => &arg.tipo,
+        },
+        _ => &arg.tipo,
     }
+}
 
+impl Validator<()> {
     #[allow(clippy::too_many_arguments)]
     fn create_validator_blueprint(
-        generator: &mut CodeGenerator,
         modules: &CheckedModules,
         module: &CheckedModule,
         def: &TypedValidator,
         func: &TypedFunction,
-        program: &mut MemoProgram,
-        plutus_version: &PlutusVersion,
-    ) -> Result<Validator, Error> {
+    ) -> Result<Self, Error> {
         let mut definitions = Definitions::new();
 
         let parameters = def
@@ -232,40 +212,79 @@ impl Validator {
             parameters,
             datum,
             redeemer,
+            program: (),
+            definitions,
+        })
+    }
+
+    pub fn attach_program(
+        self,
+        program: &mut MemoProgram,
+        plutus_version: &PlutusVersion,
+        generator: &mut CodeGenerator,
+        def: &TypedValidator,
+        module_name: &str,
+    ) -> Validator<SerializableProgram> {
+        Validator {
+            title: self.title,
+            description: self.description,
+            parameters: self.parameters,
+            datum: self.datum,
+            redeemer: self.redeemer,
             program: match plutus_version {
                 PlutusVersion::V1 => SerializableProgram::PlutusV1Program,
                 PlutusVersion::V2 => SerializableProgram::PlutusV2Program,
                 PlutusVersion::V3 => SerializableProgram::PlutusV3Program,
-            }(program.get(generator, def, &module.name)),
-            definitions,
-        })
+            }(program.get(generator, def, module_name)),
+            definitions: self.definitions,
+        }
     }
 }
 
-pub fn tipo_or_annotation<'a>(module: &'a CheckedModule, arg: &'a TypedArg) -> &'a Type {
-    match Type::collapse_links(arg.tipo.clone()).borrow() {
-        Type::App {
-            module: module_name,
-            name: type_name,
-            ..
-        } if module_name.is_empty() && &type_name[..] == "Data" => match arg.annotation {
-            Some(Annotation::Constructor { ref arguments, .. }) if !arguments.is_empty() => module
-                .ast
-                .type_info
-                .annotations
-                .get(
-                    arguments
-                        .first()
-                        .expect("guard ensures at least one element"),
-                )
-                .unwrap_or(&arg.tipo),
-            _ => &arg.tipo,
-        },
-        _ => &arg.tipo,
-    }
-}
+impl Validator<SerializableProgram> {
+    pub fn from_checked_module(
+        modules: &CheckedModules,
+        generator: &mut CodeGenerator,
+        module: &CheckedModule,
+        def: &TypedValidator,
+        plutus_version: &PlutusVersion,
+    ) -> Result<Vec<Self>, Error> {
+        let mut program = MemoProgram::default();
 
-impl Validator {
+        let mut validators = vec![];
+
+        for handler in &def.handlers {
+            validators.push(Validator::create_validator_blueprint(
+                modules, module, def, handler,
+            )?);
+        }
+
+        // NOTE: Only push the fallback if all other validators have been successfully
+        // generated. Otherwise, we may fall into scenarios where we cannot generate validators
+        // (e.g. due to the presence of generics in datum/redeemer), which won't be caught by
+        // the else branch since it lacks arguments.
+        validators.push(Validator::create_validator_blueprint(
+            modules,
+            module,
+            def,
+            &def.fallback,
+        )?);
+
+        // IMPORTANT: Programs must be generated and attached only AFTER all handlers have been
+        // checked and their blueprint generated. This is because we check for rogue generics in
+        // handler signatures only when attempting to generate their blueprint.
+        //
+        // And, having generics in the handler signature is not possible/supported by the UPLC
+        // generation so we shouldn't attempt to generate any of the handler programs until we have
+        // fully check their signature.
+        Ok(validators
+            .into_iter()
+            .map(|validator| {
+                validator.attach_program(&mut program, plutus_version, generator, def, &module.name)
+            })
+            .collect())
+    }
+
     pub fn apply(
         self,
         definitions: &Definitions<Annotated<Schema>>,
@@ -361,16 +380,7 @@ mod tests {
 
             let validators = Validator::from_checked_module(&modules, &mut generator, validator, def, &PlutusVersion::default());
 
-            if validators.len() > 2 {
-                panic!("Multi-validator given to test bench. Don't do that.")
-            }
-
-            let validator = validators
-                .get(0)
-                .unwrap()
-                .as_ref();
-
-            match validator {
+            match validators.as_deref() {
                 Err(e) => insta::with_settings!({
                     description => concat!("Code:\n\n", indoc::indoc! { $code }),
                     omit_expression => true
@@ -378,12 +388,16 @@ mod tests {
                     insta::assert_debug_snapshot!(e);
                 }),
 
-                Ok(validator) => insta::with_settings!({
+                Ok(validators) => insta::with_settings!({
                     description => concat!("Code:\n\n", indoc::indoc! { $code }),
                     omit_expression => true
                 }, {
+                    if validators.len() > 2 {
+                        panic!("Multi-validator given to test bench. Don't do that.")
+                    }
+
                     insta::assert_json_snapshot!(
-                        validator,
+                        validators.get(0).unwrap(),
                         {
                             ".compiledCode" => "<redacted>",
                             ".hash" => "<redacted>"
@@ -863,6 +877,27 @@ mod tests {
             validator list_decorator_field_names {
               spend(_datum: Option<Product>, _redeemer: Int, _utxo: Data, _self: Data,) {
                 True
+              }
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn rogue_generic() {
+        assert_validator!(
+            r#"
+            validator placeholder {
+              mint(_redeemer: Data, _policy_id: ByteArray, _self: Data) {
+                True
+              }
+
+              spend(_datum: Option<Data>, _redeemer: a, _out_ref: Data, _self: Data) {
+                True
+              }
+
+              else(_) {
+                fail
               }
             }
             "#
