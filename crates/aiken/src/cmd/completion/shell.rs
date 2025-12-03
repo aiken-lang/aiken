@@ -75,7 +75,6 @@ fn zsh() -> miette::Result<()> {
     }
 
     let mut zshrc = OpenOptions::new()
-        .write(true)
         .append(true)
         .open(format!("{home}/.zshrc"))
         .expect(".zshrc file not found");
@@ -134,7 +133,6 @@ fn bash() -> miette::Result<()> {
     pretty::say(Log::Installing(&completion_path));
 
     let mut bashrc = OpenOptions::new()
-        .write(true)
         .append(true)
         .open(format!("{home}/.bashrc"))
         .expect(".bashrc file not found in {home} directory");

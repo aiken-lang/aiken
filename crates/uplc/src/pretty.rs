@@ -36,7 +36,7 @@ where
             .join("\n")
     }
 
-    fn to_doc(&self) -> RcDoc<()> {
+    fn to_doc(&self) -> RcDoc<'_, ()> {
         let version = format!("{}.{}.{}", self.version.0, self.version.1, self.version.2);
 
         RcDoc::text("(")
@@ -77,7 +77,7 @@ where
             .join("\n")
     }
 
-    fn to_doc(&self) -> RcDoc<()> {
+    fn to_doc(&self) -> RcDoc<'_, ()> {
         match self {
             Term::Var(name) => RcDoc::text(name.text()),
             Term::Delay(term) => RcDoc::text("(")
@@ -203,7 +203,7 @@ impl Constant {
             .join("\n")
     }
 
-    fn to_doc(&self) -> RcDoc<()> {
+    fn to_doc(&self) -> RcDoc<'_, ()> {
         match self {
             Constant::Integer(i) => RcDoc::text("integer")
                 .append(RcDoc::line())
@@ -272,7 +272,7 @@ impl Constant {
         }
     }
 
-    fn to_doc_list(&self) -> RcDoc<()> {
+    fn to_doc_list(&self) -> RcDoc<'_, ()> {
         match self {
             Constant::Integer(i) => RcDoc::as_string(i),
             Constant::ByteString(bs) => RcDoc::text("#").append(RcDoc::text(hex::encode(bs))),
@@ -313,7 +313,7 @@ impl Constant {
     }
 
     // This feels a little awkward here; not sure if it should be upstreamed to pallas
-    fn to_doc_list_plutus_data(data: &PlutusData) -> RcDoc<()> {
+    fn to_doc_list_plutus_data(data: &PlutusData) -> RcDoc<'_, ()> {
         match data {
             PlutusData::Constr(Constr {
                 tag,
@@ -365,7 +365,7 @@ impl Constant {
 }
 
 impl Type {
-    fn to_doc(&self) -> RcDoc<()> {
+    fn to_doc(&self) -> RcDoc<'_, ()> {
         match self {
             Type::Bool => RcDoc::text("bool"),
             Type::Integer => RcDoc::text("integer"),

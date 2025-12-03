@@ -277,7 +277,7 @@ impl<'a> DecisionTree<'a> {
 
     // Please help me with this the way nesting works
     // has me baffled
-    fn to_doc(&self) -> RcDoc<()> {
+    fn to_doc(&self) -> RcDoc<'_, ()> {
         match self {
             DecisionTree::Switch {
                 path,
