@@ -427,6 +427,10 @@ impl<'comments> Formatter<'comments> {
                 )
             }
             TypedExpr::Var { name, .. } => name.to_doc(),
+            TypedExpr::UnOp { value, op, .. } => match op {
+                UnOp::Not => docvec!["!", self.const_expr(value)],
+                UnOp::Negate => docvec!["-", self.const_expr(value)],
+            },
             _ => Document::Str(""),
         }
     }
