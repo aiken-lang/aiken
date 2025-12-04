@@ -3824,11 +3824,30 @@ impl<'a> CodeGenerator<'a> {
                 ValueConstructorVariant::Record {
                     name: constr_name, ..
                 } => {
-                    // TODO handle pair
                     if constructor.tipo.is_bool() {
                         Some(Term::bool(constr_name == "True"))
                     } else if constructor.tipo.is_void() {
                         Some(Term::Constant(UplcConstant::Unit.into()))
+                    } else if constructor.is_pair() {
+                        let args = constructor.tipo.arg_types().unwrap();
+                        let mut args = args.iter();
+                        let arg_left = args.next().unwrap();
+                        let arg_right = args.next().unwrap();
+                        Some(
+                            Term::mk_pair_data()
+                                .apply(convert_type_to_data(
+                                    Term::var("left".to_string()),
+                                    arg_left,
+                                    &self.data_types,
+                                ))
+                                .apply(convert_type_to_data(
+                                    Term::var("right".to_string()),
+                                    arg_right,
+                                    &self.data_types,
+                                ))
+                                .lambda("right".to_string())
+                                .lambda("left".to_string()),
+                        )
                     } else {
                         let data_type = crate::tipo::lookup_data_type_by_tipo(
                             &self.data_types,
