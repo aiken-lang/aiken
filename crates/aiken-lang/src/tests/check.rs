@@ -4580,3 +4580,14 @@ fn backpassing_with_labels() {
 
     assert!(dbg!(check_validator(parse(source_code))).is_ok())
 }
+
+#[test]
+fn dangling_assignment_in_trace_arg() {
+    let source_code = r#"
+        test foo() {
+          trace @"what's going on?": expect 1 + 1 == 2
+        }
+    "#;
+
+    assert!(dbg!(check(parse(source_code))).is_ok())
+}

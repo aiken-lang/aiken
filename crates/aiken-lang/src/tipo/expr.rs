@@ -2526,7 +2526,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
     #[allow(clippy::result_large_err)]
     fn infer_trace_arg(&mut self, arg: UntypedExpr) -> Result<TypedExpr, Error> {
         let location = arg.location();
-        let typed_arg = self.infer(arg)?;
+
+        let typed_arg = self.in_new_scope(|scope| {
+            if let Some(filler) =
+                recover_from_no_assignment(assert_no_assignment(&arg), arg.location())?
+            {
+                Ok(scope.infer(arg)?.and_then(filler))
+            } else {
+                scope.infer(arg)
+            }
+        })?;
+
         match self.unify(
             Type::string(),
             typed_arg.tipo(),
