@@ -391,7 +391,7 @@ mod tests {
                     "Int": {
                         "dataType": "integer"
                     },
-                    "List$ByteArray": {
+                    "List<ByteArray>": {
                         "dataType": "list",
                         "items": {
                             "$ref": "#/definitions/ByteArray"

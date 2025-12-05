@@ -43,7 +43,7 @@ description: "Code:\n\npub type MyPair =\n  Pair<List<Int>, Bool>\n\nvalidator p
     "Int": {
       "dataType": "integer"
     },
-    "List$Int": {
+    "List<Int>": {
       "dataType": "list",
       "items": {
         "$ref": "#/definitions/Int"
@@ -54,7 +54,7 @@ description: "Code:\n\npub type MyPair =\n  Pair<List<Int>, Bool>\n\nvalidator p
       "dataType": "list",
       "items": [
         {
-          "$ref": "#/definitions/List$Int"
+          "$ref": "#/definitions/List<Int>"
         },
         {
           "$ref": "#/definitions/Bool"

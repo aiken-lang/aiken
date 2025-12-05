@@ -7,13 +7,13 @@ description: "Code:\n\nvalidator tuples {\n  spend(datum: Option<(Int, ByteArray
   "datum": {
     "title": "datum",
     "schema": {
-      "$ref": "#/definitions/Tuple$Int_ByteArray"
+      "$ref": "#/definitions/Tuple<<Int,ByteArray>>"
     }
   },
   "redeemer": {
     "title": "redeemer",
     "schema": {
-      "$ref": "#/definitions/Tuple$Int_Int_Int"
+      "$ref": "#/definitions/Tuple<<Int,Int,Int>>"
     }
   },
   "compiledCode": "<redacted>",
@@ -25,7 +25,7 @@ description: "Code:\n\nvalidator tuples {\n  spend(datum: Option<(Int, ByteArray
     "Int": {
       "dataType": "integer"
     },
-    "Tuple$Int_ByteArray": {
+    "Tuple<<Int,ByteArray>>": {
       "title": "Tuple",
       "dataType": "list",
       "items": [
@@ -37,7 +37,7 @@ description: "Code:\n\nvalidator tuples {\n  spend(datum: Option<(Int, ByteArray
         }
       ]
     },
-    "Tuple$Int_Int_Int": {
+    "Tuple<<Int,Int,Int>>": {
       "title": "Tuple",
       "dataType": "list",
       "items": [

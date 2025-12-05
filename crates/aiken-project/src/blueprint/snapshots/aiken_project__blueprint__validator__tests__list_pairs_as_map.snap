@@ -13,7 +13,7 @@ description: "Code:\n\npub type Dict<key, value> {\n    inner: List<Pair<ByteArr
   "redeemer": {
     "title": "redeemer",
     "schema": {
-      "$ref": "#/definitions/test_module~1Dict$test_module~1UUID_Int"
+      "$ref": "#/definitions/test_module~1Dict<test_module~1UUID,Int>"
     }
   },
   "compiledCode": "<redacted>",
@@ -29,7 +29,7 @@ description: "Code:\n\npub type Dict<key, value> {\n    inner: List<Pair<ByteArr
     "Int": {
       "dataType": "integer"
     },
-    "List$Pair$ByteArray_Int": {
+    "List<Pair<ByteArray,Int>>": {
       "dataType": "map",
       "keys": {
         "$ref": "#/definitions/ByteArray"
@@ -38,7 +38,7 @@ description: "Code:\n\npub type Dict<key, value> {\n    inner: List<Pair<ByteArr
         "$ref": "#/definitions/Int"
       }
     },
-    "test_module/Dict$test_module/UUID_Int": {
+    "test_module/Dict<test_module/UUID,Int>": {
       "title": "Dict",
       "anyOf": [
         {
@@ -48,7 +48,7 @@ description: "Code:\n\npub type Dict<key, value> {\n    inner: List<Pair<ByteArr
           "fields": [
             {
               "title": "inner",
-              "$ref": "#/definitions/List$Pair$ByteArray_Int"
+              "$ref": "#/definitions/List<Pair<ByteArray,Int>>"
             }
           ]
         }
