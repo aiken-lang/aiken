@@ -72,6 +72,7 @@ pub enum Token {
     Comment,
     DocComment,
     ModuleComment,
+    ExpectComment(String),
     EmptyLine,
     NewLine,
     // Keywords (alphabetically):
@@ -105,6 +106,9 @@ impl fmt::Display for Token {
             Token::Error(c) => {
                 write!(f, "\"{c}\"")?;
                 return Ok(());
+            }
+            Token::ExpectComment(comment) => {
+                return write!(f, "/// {comment}");
             }
             Token::Name { name } => name,
             Token::Ordinal { index } => {

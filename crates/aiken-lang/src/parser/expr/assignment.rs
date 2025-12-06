@@ -53,14 +53,18 @@ pub fn assignment_pattern() -> impl Parser<Token, ast::AssignmentPattern, Error 
 pub fn expect(
     r: Recursive<'_, Token, UntypedExpr, ParseError>,
 ) -> impl Parser<Token, UntypedExpr, Error = ParseError> + '_ {
-    just(Token::Expect)
-        .ignore_then(
-            assignment_patterns()
-                .then(choice((just(Token::Equal), just(Token::LArrow))))
-                .or_not(),
+    select! {Token::ExpectComment(comment) => comment}
+        .or_not()
+        .then(
+            just(Token::Expect)
+                .ignore_then(
+                    assignment_patterns()
+                        .then(choice((just(Token::Equal), just(Token::LArrow))))
+                        .or_not(),
+                )
+                .then(r.clone()),
         )
-        .then(r.clone())
-        .validate(move |(opt_pattern, value), span, emit| {
+        .validate(move |(comment, (opt_pattern, value)), span, emit| {
             if matches!(value, UntypedExpr::Assignment { .. }) {
                 emit(ParseError::invalid_assignment_right_hand_side(span))
             }
@@ -86,7 +90,7 @@ pub fn expect(
                 kind: ast::AssignmentKind::Expect {
                     backpassing: kind == Token::LArrow,
                 },
-                comment: None,
+                comment,
             }
         })
 }
@@ -113,6 +117,16 @@ mod tests {
     #[test]
     fn expect_trace_if_false() {
         assert_expr!("expect foo?");
+    }
+
+    #[test]
+    fn expect_comment() {
+        assert_expr!(
+            r#"
+            /// Some user-defined custom comment
+            expect Some(x) = something.field
+            "#
+        );
     }
 
     #[test]

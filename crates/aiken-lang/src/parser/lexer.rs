@@ -264,6 +264,21 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         }
     });
 
+    fn comment_line(n: usize, token: Token) -> Box<dyn Parser<char, Token, Error = ParseError>> {
+        if n == 3 {
+            Box::new(choice((
+                take_until(text::keyword("expect").rewind())
+                    .map(|(xs, _)| xs)
+                    .collect::<String>()
+                    .map(|s| Token::ExpectComment(s.trim().to_string())),
+                take_until(choice((text::newline().rewind(), end()))).to(token),
+            ))) as Box<dyn Parser<char, Token, Error = ParseError>>
+        } else {
+            Box::new(take_until(choice((text::newline().rewind(), end()))).to(token))
+                as Box<dyn Parser<char, Token, Error = ParseError>>
+        }
+    }
+
     fn comment_parser(token: Token) -> impl Parser<char, (Token, Span), Error = ParseError> {
         let n = match token {
             Token::ModuleComment => 4,
@@ -281,11 +296,8 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
                 .map_with_span(move |token, span: Span| {
                     (token, Span::new((), span.start + n..span.end))
                 }),
-            just("/".repeat(n)).ignore_then(
-                take_until(choice((text::newline().rewind(), end())))
-                    .to(token)
-                    .map_with_span(|token, span| (token, span)),
-            ),
+            just("/".repeat(n))
+                .ignore_then(comment_line(n, token).map_with_span(|token, span| (token, span))),
         ))
     }
 
