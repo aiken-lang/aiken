@@ -29,6 +29,7 @@ Assignment {
                 kind: Let {
                     backpassing: false,
                 },
+                comment: None,
             },
             Var {
                 location: 25..26,
@@ -49,4 +50,5 @@ Assignment {
     kind: Let {
         backpassing: false,
     },
+    comment: None,
 }

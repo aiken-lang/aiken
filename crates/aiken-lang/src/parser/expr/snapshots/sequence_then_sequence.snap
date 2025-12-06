@@ -30,6 +30,7 @@ Test(
                             kind: Let {
                                 backpassing: false,
                             },
+                            comment: None,
                         },
                         Var {
                             location: 38..39,
@@ -59,6 +60,7 @@ Test(
                             kind: Let {
                                 backpassing: false,
                             },
+                            comment: None,
                         },
                         Var {
                             location: 61..65,

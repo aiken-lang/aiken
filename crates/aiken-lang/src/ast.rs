@@ -1080,6 +1080,7 @@ impl ArgBy {
                     annotation: annotation.cloned(),
                 }],
                 kind: AssignmentKind::Let { backpassing: false },
+                comment: None,
             }),
         }
     }

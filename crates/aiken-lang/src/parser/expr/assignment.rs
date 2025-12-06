@@ -28,6 +28,7 @@ pub fn let_(
                 kind: ast::AssignmentKind::Let {
                     backpassing: kind == Token::LArrow,
                 },
+                comment: None,
             }
         })
 }
@@ -85,6 +86,7 @@ pub fn expect(
                 kind: ast::AssignmentKind::Expect {
                     backpassing: kind == Token::LArrow,
                 },
+                comment: None,
             }
         })
 }

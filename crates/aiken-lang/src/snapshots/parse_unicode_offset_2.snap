@@ -38,6 +38,7 @@ Module {
                             kind: Let {
                                 backpassing: false,
                             },
+                            comment: None,
                         },
                         Var {
                             location: 27..28,

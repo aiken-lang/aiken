@@ -29,6 +29,7 @@ Assignment {
                 kind: Let {
                     backpassing: false,
                 },
+                comment: None,
             },
             BinOp {
                 location: 24..29,
@@ -60,4 +61,5 @@ Assignment {
     kind: Let {
         backpassing: false,
     },
+    comment: None,
 }

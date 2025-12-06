@@ -53,6 +53,7 @@ Sequence {
             kind: Let {
                 backpassing: false,
             },
+            comment: None,
         },
         BinOp {
             location: 25..70,

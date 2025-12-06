@@ -32,6 +32,7 @@ Module {
                             kind: Let {
                                 backpassing: false,
                             },
+                            comment: None,
                         },
                         UInt {
                             location: 30..32,
@@ -77,6 +78,7 @@ Module {
                             kind: Let {
                                 backpassing: false,
                             },
+                            comment: None,
                         },
                         UInt {
                             location: 67..69,
@@ -133,6 +135,7 @@ Module {
                     kind: Let {
                         backpassing: false,
                     },
+                    comment: None,
                 },
                 doc: None,
                 location: 74..84,
@@ -185,6 +188,7 @@ Module {
                             kind: Let {
                                 backpassing: false,
                             },
+                            comment: None,
                         },
                         BinOp {
                             location: 141..153,

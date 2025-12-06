@@ -40,4 +40,5 @@ Assignment {
     kind: Expect {
         backpassing: false,
     },
+    comment: None,
 }

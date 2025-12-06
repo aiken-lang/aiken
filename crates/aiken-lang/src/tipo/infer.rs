@@ -703,6 +703,7 @@ fn infer_definition(
                 value,
                 UntypedAssignmentKind::Let { backpassing: false },
                 &annotation,
+                None,
                 location,
             )?;
 

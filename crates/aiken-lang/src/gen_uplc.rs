@@ -247,6 +247,7 @@ impl<'a> CodeGenerator<'a> {
                 value,
                 pattern,
                 kind,
+                comment,
             } = body
             else {
                 panic!("Dangling expressions without an assignment")

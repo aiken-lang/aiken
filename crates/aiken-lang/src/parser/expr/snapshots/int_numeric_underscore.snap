@@ -27,6 +27,7 @@ Sequence {
             kind: Let {
                 backpassing: false,
             },
+            comment: None,
         },
         Assignment {
             location: 24..41,
@@ -50,6 +51,7 @@ Sequence {
             kind: Let {
                 backpassing: false,
             },
+            comment: None,
         },
         Assignment {
             location: 44..59,
@@ -77,6 +79,7 @@ Sequence {
             kind: Let {
                 backpassing: false,
             },
+            comment: None,
         },
     ],
 }

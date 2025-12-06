@@ -29,6 +29,7 @@ Assignment {
                 kind: Let {
                     backpassing: false,
                 },
+                comment: None,
             },
         ],
     },
@@ -51,4 +52,5 @@ Assignment {
     kind: Expect {
         backpassing: false,
     },
+    comment: None,
 }
