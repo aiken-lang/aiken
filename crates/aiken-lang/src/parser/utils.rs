@@ -23,25 +23,36 @@ macro_rules! assert_expr {
     ($code:expr) => {
         use chumsky::Parser;
 
-        let $crate::parser::lexer::LexInfo { tokens, .. } = $crate::parser::lexer::run(indoc::indoc! { $code }).unwrap();
+        match $crate::parser::lexer::run(indoc::indoc! { $code }) {
+            Ok($crate::parser::lexer::LexInfo { tokens, .. }) => {
+                let stream = chumsky::Stream::from_iter($crate::ast::Span::create(tokens.len(), 1), tokens.into_iter());
 
-        let stream = chumsky::Stream::from_iter($crate::ast::Span::create(tokens.len(), 1), tokens.into_iter());
+                let result = $crate::parser::expr::sequence().parse(stream);
 
-        let result = $crate::parser::expr::sequence().parse(stream);
-
-        match result {
-            Ok(expr) => {
-                insta::with_settings!({
-                    description => concat!("Code:\n\n", indoc::indoc! { $code }),
-                    prepend_module_to_snapshot => false,
-                    omit_expression => true
-                }, {
-                    insta::assert_debug_snapshot!(expr);
-                })
-            },
+                match result {
+                    Ok(expr) => {
+                        insta::with_settings!({
+                            description => concat!("Code:\n\n", indoc::indoc! { $code }),
+                            prepend_module_to_snapshot => false,
+                            omit_expression => true
+                        }, {
+                            insta::assert_debug_snapshot!(expr);
+                        })
+                    },
+                    Err(err) => {
+                        insta::with_settings!({
+                            description => concat!("Invalid code (parse error):\n\n", indoc::indoc! { $code }),
+                            prepend_module_to_snapshot => false,
+                            omit_expression => true
+                        }, {
+                            insta::assert_snapshot!(err.into_iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n"));
+                        })
+                    }
+                }
+            }
             Err(err) => {
                 insta::with_settings!({
-                    description => concat!("Invalid code (parse error):\n\n", indoc::indoc! { $code }),
+                    description => concat!("Invalid code (lexer error):\n\n", indoc::indoc! { $code }),
                     prepend_module_to_snapshot => false,
                     omit_expression => true
                 }, {

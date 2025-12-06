@@ -1,0 +1,5 @@
+---
+source: crates/aiken-lang/src/parser/expr/assignment.rs
+description: "Invalid code (lexer error):\n\n/// Some user-defined custom comment\n/// over multiple lines\nexpect Some(x) = something.field\n"
+---
+I noticed you've been overly enthusiastic about expect comments.

@@ -57,42 +57,47 @@ pub fn expect(
         .or_not()
         .then(
             just(Token::Expect)
-                .ignore_then(
+                .map_with_span(|_, span| span)
+                .then(
                     assignment_patterns()
                         .then(choice((just(Token::Equal), just(Token::LArrow))))
                         .or_not(),
                 )
                 .then(r.clone()),
         )
-        .validate(move |(comment, (opt_pattern, value)), span, emit| {
-            if matches!(value, UntypedExpr::Assignment { .. }) {
-                emit(ParseError::invalid_assignment_right_hand_side(span))
-            }
+        .validate(
+            move |(comment, ((expect_span, opt_pattern), value)), span, emit| {
+                let location = span.map(|_, end| (expect_span.start, end));
 
-            let (patterns, kind) = opt_pattern.unwrap_or_else(|| {
-                let filler_true = ast::AssignmentPattern::new(
-                    ast::UntypedPattern::true_(span),
-                    None,
-                    Span::empty(),
-                );
+                if matches!(value, UntypedExpr::Assignment { .. }) {
+                    emit(ParseError::invalid_assignment_right_hand_side(location))
+                }
 
-                (vec![filler_true], Token::Equal)
-            });
+                let (patterns, kind) = opt_pattern.unwrap_or_else(|| {
+                    let filler_true = ast::AssignmentPattern::new(
+                        ast::UntypedPattern::true_(location),
+                        None,
+                        Span::empty(),
+                    );
 
-            let patterns = patterns
-                .try_into()
-                .expect("We use at_least(1) so this should never be empty");
+                    (vec![filler_true], Token::Equal)
+                });
 
-            UntypedExpr::Assignment {
-                location: span,
-                patterns,
-                value: Box::new(value),
-                kind: ast::AssignmentKind::Expect {
-                    backpassing: kind == Token::LArrow,
-                },
-                comment,
-            }
-        })
+                let patterns = patterns
+                    .try_into()
+                    .expect("We use at_least(1) so this should never be empty");
+
+                UntypedExpr::Assignment {
+                    location,
+                    patterns,
+                    value: Box::new(value),
+                    kind: ast::AssignmentKind::Expect {
+                        backpassing: kind == Token::LArrow,
+                    },
+                    comment,
+                }
+            },
+        )
 }
 
 #[cfg(test)]
@@ -124,6 +129,17 @@ mod tests {
         assert_expr!(
             r#"
             /// Some user-defined custom comment
+            expect Some(x) = something.field
+            "#
+        );
+    }
+
+    #[test]
+    fn expect_multiline_comment() {
+        assert_expr!(
+            r#"
+            /// Some user-defined custom comment
+            /// over multiple lines
             expect Some(x) = something.field
             "#
         );

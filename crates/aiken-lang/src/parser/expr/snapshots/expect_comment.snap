@@ -3,7 +3,7 @@ source: crates/aiken-lang/src/parser/expr/assignment.rs
 description: "Code:\n\n/// Some user-defined custom comment\nexpect Some(x) = something.field\n"
 ---
 Assignment {
-    location: 3..69,
+    location: 37..69,
     value: FieldAccess {
         location: 54..69,
         label: "field",
