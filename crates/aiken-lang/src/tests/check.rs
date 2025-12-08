@@ -4615,3 +4615,32 @@ fn illegal_tracing_argument() {
         Err((_, Error::IllegalTraceArgument { .. }))
     ))
 }
+
+#[test]
+fn pointfree_pair() {
+    let source_code = r#"
+        fn mk_pair(constructor: fn(a, b) -> Pair<a, b>, a: a, b: b) -> Pair<a, b> {
+          constructor(a, b)
+        }
+
+        test foo() {
+          mk_pair(Pair, 14, "42") == Pair(14, "42")
+        }
+    "#;
+
+    assert!(dbg!(check_validator(parse(source_code))).is_ok())
+}
+
+#[test]
+fn incomplete_pair() {
+    let source_code = r#"
+        test foo() {
+          Pair(14, "42") == Pair(14)
+        }
+    "#;
+
+    assert!(matches!(
+        dbg!(check_validator(parse(source_code))),
+        Err((_, Error::IncorrectFunctionCallArity { expected, .. })) if expected == 2
+    ))
+}

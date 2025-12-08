@@ -1149,6 +1149,26 @@ impl ValueConstructor {
         }
     }
 
+    pub fn is_pair(&self) -> bool {
+        match self.tipo.as_ref() {
+            Type::Fn { args, ret, .. } => {
+                let mut args = args.iter();
+
+                let left = args.next().map(|t| Type::collapse_links(t.clone()));
+
+                let right = args.next().map(|t| Type::collapse_links(t.clone()));
+
+                match Type::collapse_links(ret.clone()).as_ref() {
+                    Type::Pair { fst, snd, .. } => {
+                        Some(fst) == left.as_ref() && Some(snd) == right.as_ref()
+                    }
+                    _ => false,
+                }
+            }
+            _ => false,
+        }
+    }
+
     pub fn known_enum(
         values: &mut HashMap<String, Self>,
         tipo: Rc<Type>,
