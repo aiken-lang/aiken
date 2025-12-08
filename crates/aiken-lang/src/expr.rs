@@ -214,6 +214,7 @@ impl TypedExpr {
             Self::List { elements, .. } if elements.len() <= 3 => {
                 elements.iter().all(|e| e.is_simple_expr_to_format())
             }
+            Self::UnOp { value, .. } => value.is_simple_expr_to_format(),
             _ => false,
         }
     }
