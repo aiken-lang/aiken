@@ -1,0 +1,25 @@
+---
+source: crates/aiken-project/src/blueprint/validator.rs
+description: "Code:\n\nvalidator placeholder {\n  mint(_redeemer: Data, _policy_id: ByteArray, _self: Data) {\n    True\n  }\n\n  spend(_datum: Option<Data>, _redeemer: a, _out_ref: Data, _self: Data) {\n    True\n  }\n\n  else(_) {\n    fail\n  }\n}\n"
+---
+Schema {
+    error: Error {
+        context: FreeTypeVariable,
+        breadcrumbs: [
+            Var {
+                tipo: RefCell {
+                    value: Generic {
+                        id: 66,
+                    },
+                },
+                alias: None,
+            },
+        ],
+    },
+    location: 130..142,
+    source_code: NamedSource {
+        name: "",
+        source: "<redacted>",
+        language: None,
+    ,
+}

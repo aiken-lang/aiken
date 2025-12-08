@@ -18,13 +18,13 @@ use std::{
     collections::{BTreeSet, HashMap},
     fmt::Debug,
 };
-use uplc::{PlutusData, tx::script_context::PlutusScript};
+use uplc::{PlutusData, ast::SerializableProgram, tx::script_context::PlutusScript};
 use validator::Validator;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Blueprint {
     pub preamble: Preamble,
-    pub validators: Vec<Validator>,
+    pub validators: Vec<Validator<SerializableProgram>>,
     #[serde(skip_serializing_if = "Definitions::is_empty", default)]
     pub definitions: Definitions<Annotated<Schema>>,
 }
@@ -73,23 +73,27 @@ impl Blueprint {
 
         let validators: Result<Vec<_>, Error> = modules
             .validators()
-            .flat_map(|(validator, def)| {
-                Validator::from_checked_module(modules, generator, validator, def, &config.plutus)
-                    .into_iter()
-                    .map(|result| {
-                        result.map(|mut schema| {
-                            definitions.merge(&mut schema.definitions);
-                            schema.definitions = Definitions::new();
-                            schema
-                        })
-                    })
-                    .collect::<Vec<_>>()
+            .map(|(validator, def)| {
+                Ok(Validator::from_checked_module(
+                    modules,
+                    generator,
+                    validator,
+                    def,
+                    &config.plutus,
+                )?
+                .into_iter()
+                .map(|mut schema| {
+                    definitions.merge(&mut schema.definitions);
+                    schema.definitions = Definitions::new();
+                    schema
+                })
+                .collect::<Vec<_>>())
             })
             .collect();
 
         Ok(Blueprint {
             preamble,
-            validators: validators?,
+            validators: validators?.into_iter().flatten().collect(),
             definitions,
         })
     }
@@ -100,7 +104,7 @@ impl Blueprint {
         &self,
         want_module_name: Option<&str>,
         want_validator_name: Option<&str>,
-    ) -> Option<LookupResult<'_, Validator>> {
+    ) -> Option<LookupResult<'_, Validator<SerializableProgram>>> {
         let mut validator = None;
 
         for v in self.validators.iter() {
@@ -198,7 +202,7 @@ impl Blueprint {
         action: F,
     ) -> Result<A, E>
     where
-        F: Fn(&Validator) -> Result<A, E>,
+        F: Fn(&Validator<SerializableProgram>) -> Result<A, E>,
     {
         match self.lookup(module_name, validator_name) {
             Some(LookupResult::One(_, validator)) => action(validator),

@@ -1,15 +1,12 @@
 use aiken_lang::{ast::TypedValidator, gen_uplc::CodeGenerator};
 use uplc::ast::{DeBruijn, Program};
 
+#[derive(Default)]
 pub struct MemoProgram {
     program: Option<Program<DeBruijn>>,
 }
 
 impl MemoProgram {
-    pub fn new() -> Self {
-        Self { program: None }
-    }
-
     pub fn get(
         &mut self,
         generator: &mut CodeGenerator,
