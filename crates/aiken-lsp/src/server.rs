@@ -684,52 +684,71 @@ impl Server {
             None => error.to_string(),
         };
 
-        if let (Some(mut labels), Some(path), Some(src)) =
-            (error.labels(), error.path(), error.src())
-        {
-            if let Some(labeled_span) = labels.next() {
-                let line_numbers = LineNumbers::new(&src);
+        if let (Some(path), Some(src)) = (error.path(), error.src()) {
+            let line_numbers = LineNumbers::new(&src);
 
-                let lsp_diagnostic = lsp_types::Diagnostic {
-                    range: span_to_lsp_range(
-                        Span {
-                            start: labeled_span.inner().offset(),
-                            end: labeled_span.inner().offset() + labeled_span.inner().len(),
-                        },
-                        &line_numbers,
-                    ),
-                    severity: Some(severity),
-                    code: error.code().map(|c| {
-                        lsp_types::NumberOrString::String(
-                            c.to_string()
-                                .trim()
-                                .replace("Warning ", "")
-                                .replace("Error ", ""),
-                        )
-                    }),
-                    code_description: None,
-                    source: None,
-                    message,
-                    related_information: None,
-                    tags: None,
-                    data: error.extra_data().map(serde_json::Value::String),
-                };
+            let related_labels = || {
+                error
+                    .related()
+                    .and_then(|mut iter| iter.find(|diag| diag.labels().is_some()))
+                    .and_then(|diag| diag.labels())
+            };
 
-                #[cfg(not(target_os = "windows"))]
-                let path = path.canonicalize()?;
+            let lsp_range = if let Some(span) = error
+                .labels()
+                .or_else(related_labels)
+                .and_then(|mut labels| labels.next())
+            {
+                span_to_lsp_range(
+                    Span {
+                        start: span.inner().offset(),
+                        end: span.inner().offset() + span.inner().len(),
+                    },
+                    &line_numbers,
+                )
+            } else {
+                self.stored_messages
+                    .push(lsp_types::ShowMessageParams { typ, message });
+                return Ok(());
+            };
 
-                self.push_diagnostic(path.clone(), lsp_diagnostic.clone());
+            let lsp_diagnostic = lsp_types::Diagnostic {
+                range: lsp_range,
+                severity: Some(severity),
+                code: error.code().map(|c| {
+                    lsp_types::NumberOrString::String(
+                        c.to_string()
+                            .trim()
+                            .replace("Warning ", "")
+                            .replace("Error ", ""),
+                    )
+                }),
+                code_description: None,
+                source: None,
+                message,
+                related_information: None,
+                tags: None,
+                data: error.extra_data().map(serde_json::Value::String),
+            };
 
-                if let Some(hint) = error.help() {
-                    let lsp_hint = lsp_types::Diagnostic {
-                        severity: Some(lsp_types::DiagnosticSeverity::HINT),
-                        message: hint.to_string(),
-                        ..lsp_diagnostic
-                    };
+            #[cfg(not(target_os = "windows"))]
+            let path = path.canonicalize()?;
 
-                    self.push_diagnostic(path, lsp_hint);
-                }
-            }
+            self.push_diagnostic(path.clone(), lsp_diagnostic.clone());
+
+            let lsp_message = if let Some(hint) = error.help() {
+                hint.to_string()
+            } else {
+                "something is off".to_string()
+            };
+
+            let lsp_hint = lsp_types::Diagnostic {
+                severity: Some(lsp_types::DiagnosticSeverity::HINT),
+                message: lsp_message,
+                ..lsp_diagnostic
+            };
+
+            self.push_diagnostic(path, lsp_hint);
         } else {
             self.stored_messages
                 .push(lsp_types::ShowMessageParams { typ, message })
