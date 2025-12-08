@@ -1156,6 +1156,14 @@ The best thing to do from here is to remove it."#))]
         #[label("invalid field access")]
         location: Span,
     },
+
+    #[error("I couldn't get passed an illegal tracing argument.\n")]
+    #[diagnostic(code("illegal::trace_arg"))]
+    #[diagnostic(help("It isn't possible to inspect certain values like Miller-Loop results."))]
+    IllegalTraceArgument {
+        #[label("cannot be inspected")]
+        location: Span,
+    },
 }
 
 impl ExtraData for Error {
@@ -1221,7 +1229,8 @@ impl ExtraData for Error {
             | Error::DecoratorValidation { .. }
             | Error::ConflictingDecorators { .. }
             | Error::DecoratorTagOverlap { .. }
-            | Error::InvalidFieldAccess { .. } => None,
+            | Error::InvalidFieldAccess { .. }
+            | Error::IllegalTraceArgument { .. } => None,
 
             Error::PrivateTypeLeak {
                 leaked,

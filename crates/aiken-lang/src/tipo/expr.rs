@@ -2561,7 +2561,8 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 }
 
                 self.unify(Type::data(), typed_arg.tipo(), typed_arg.location(), true)?;
-                Ok(diagnose_expr(typed_arg))
+
+                diagnose_expr(typed_arg)
             }
             Ok(()) => Ok(typed_arg),
         }
@@ -3016,7 +3017,8 @@ pub fn ensure_serialisable(is_top_level: bool, t: Rc<Type>, location: Span) -> R
     }
 }
 
-fn diagnose_expr(expr: TypedExpr) -> TypedExpr {
+#[allow(clippy::result_large_err)]
+fn diagnose_expr(expr: TypedExpr) -> Result<TypedExpr, Error> {
     // NOTE: The IdGenerator is unused. See similar note in 'append_string_expr'
     let decode_utf8_constructor =
         from_default_function(DefaultFunction::DecodeUtf8, &IdGenerator::new());
@@ -3053,7 +3055,11 @@ fn diagnose_expr(expr: TypedExpr) -> TypedExpr {
 
     let location = expr.location();
 
-    TypedExpr::Call {
+    if expr.tipo().is_ml_result() {
+        return Err(Error::IllegalTraceArgument { location });
+    }
+
+    Ok(TypedExpr::Call {
         tipo: Type::string(),
         fun: Box::new(decode_utf8.clone()),
         args: vec![CallArg {
@@ -3083,7 +3089,7 @@ fn diagnose_expr(expr: TypedExpr) -> TypedExpr {
             },
         }],
         location,
-    }
+    })
 }
 
 fn append_string_expr(left: TypedExpr, right: TypedExpr) -> TypedExpr {
