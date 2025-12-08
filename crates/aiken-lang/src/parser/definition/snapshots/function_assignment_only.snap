@@ -38,6 +38,7 @@ Fn(
             kind: Let {
                 backpassing: false,
             },
+            comment: None,
         },
         doc: None,
         location: 0..8,

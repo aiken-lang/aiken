@@ -846,6 +846,7 @@ impl<'comments> Formatter<'comments> {
         patterns: &'a Vec1<AssignmentPattern>,
         value: &'a UntypedExpr,
         kind: UntypedAssignmentKind,
+        comment: Option<&'_ str>,
     ) -> Document<'a> {
         let keyword = match kind {
             AssignmentKind::Is => unreachable!(),
@@ -854,6 +855,14 @@ impl<'comments> Formatter<'comments> {
         };
 
         let symbol = if kind.is_backpassing() { "<-" } else { "=" };
+
+        let header = comment
+            .map(|comment| {
+                Document::String(format!("/// {comment}"))
+                    .append(Document::Line(1))
+                    .append(keyword.to_doc())
+            })
+            .unwrap_or_else(|| keyword.to_doc());
 
         match patterns.first() {
             AssignmentPattern {
@@ -868,7 +877,7 @@ impl<'comments> Formatter<'comments> {
                 && kind.is_expect()
                 && patterns.len() == 1 =>
             {
-                keyword.to_doc().append(self.case_clause_value(value))
+                header.append(self.case_clause_value(value))
             }
             _ => {
                 let patterns = patterns.into_iter().map(
@@ -891,8 +900,7 @@ impl<'comments> Formatter<'comments> {
 
                 let pattern_len = patterns.len();
 
-                let assignment = keyword
-                    .to_doc()
+                let assignment = header
                     .append(if pattern_len == 1 {
                         " ".to_doc()
                     } else {
@@ -1136,8 +1144,9 @@ impl<'comments> Formatter<'comments> {
                 value,
                 patterns,
                 kind,
+                comment,
                 ..
-            } => self.assignment(patterns, value, *kind),
+            } => self.assignment(patterns, value, *kind, comment.as_deref()),
 
             UntypedExpr::Trace {
                 kind,

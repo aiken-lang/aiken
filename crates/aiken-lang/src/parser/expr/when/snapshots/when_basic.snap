@@ -59,6 +59,7 @@ When {
                         kind: Let {
                             backpassing: false,
                         },
+                        comment: None,
                     },
                     Var {
                         location: 53..60,

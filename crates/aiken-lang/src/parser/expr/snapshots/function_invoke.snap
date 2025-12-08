@@ -40,6 +40,7 @@ Sequence {
             kind: Let {
                 backpassing: false,
             },
+            comment: None,
         },
         Assignment {
             location: 20..65,
@@ -133,6 +134,7 @@ Sequence {
             kind: Let {
                 backpassing: false,
             },
+            comment: None,
         },
         Call {
             arguments: [

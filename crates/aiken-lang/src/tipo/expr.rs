@@ -507,6 +507,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                 patterns,
                 value,
                 kind,
+                comment,
             } => {
                 // at this point due to backpassing rewrites,
                 // patterns is guaranteed to have one item
@@ -516,7 +517,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     location: _,
                 } = patterns.into_vec().swap_remove(0);
 
-                self.infer_assignment(pattern, *value, kind, &annotation, location)
+                self.infer_assignment(pattern, *value, kind, &annotation, comment, location)
             }
 
             UntypedExpr::Trace {
@@ -1442,6 +1443,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         untyped_value: UntypedExpr,
         kind: UntypedAssignmentKind,
         annotation: &Option<Annotation>,
+        comment: Option<String>,
         location: Span,
     ) -> Result<TypedExpr, Error> {
         let typed_value = self.infer(untyped_value.clone())?;
@@ -1492,6 +1494,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                             Span::empty(),
                         )
                         .into(),
+                        comment: comment.clone(),
                         kind,
                     },
                 })
@@ -1601,6 +1604,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                                             Span::empty(),
                                         )
                                         .into(),
+                                        comment: None,
                                         kind: AssignmentKind::Let { backpassing: true },
                                     }
                                 }
@@ -1613,6 +1617,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                                         Span::empty(),
                                     )
                                     .into(),
+                                    comment: None,
                                     kind: AssignmentKind::let_(),
                                 },
                             },
@@ -1627,6 +1632,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             kind: kind.into(),
             pattern,
             value: Box::new(typed_value),
+            comment,
         })
     }
 
@@ -1828,6 +1834,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     branch.condition.clone(),
                     AssignmentKind::is(),
                     &annotation,
+                    None,
                     location,
                 )?
                 else {
@@ -2108,6 +2115,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
             value,
             kind,
             patterns,
+            comment,
         } = breakpoint
         else {
             unreachable!("backpass misuse: breakpoint isn't an Assignment ?!");
@@ -2216,6 +2224,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                                 }
                                 AssignmentKind::Expect { .. } => AssignmentKind::expect(),
                             },
+                            comment: comment.clone(),
                         },
                     );
 
@@ -2320,6 +2329,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         location,
                         value: _,
                         kind: _,
+                        comment: _,
                     } if patterns.len() > 1 => {
                         return Err(Error::UnexpectedMultiPatternAssignment {
                             arrow: patterns
@@ -2760,6 +2770,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     )
                     .into(),
                     kind: AssignmentKind::let_(),
+                    comment: None,
                 },
             });
         }
@@ -2913,6 +2924,7 @@ fn assert_assignment(expr: TypedExpr) -> Result<TypedExpr, Error> {
                     tipo: Type::void(),
                 },
                 kind: AssignmentKind::let_(),
+                comment: None,
             });
         }
 

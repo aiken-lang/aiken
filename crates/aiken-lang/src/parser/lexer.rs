@@ -264,6 +264,57 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
         }
     });
 
+    fn comment_line(
+        n: usize,
+        token: Token,
+    ) -> Box<dyn Parser<char, (Token, Span), Error = ParseError>> {
+        // Expect comment, which may span over multiple lines.
+        let expect_comment = || {
+            (just("/".repeat(3))
+                .padded_by(one_of(" \t").ignored().repeated())
+                .ignore_then(
+                    take_until(text::newline())
+                        .map(|(xs, _)| xs)
+                        .collect::<String>(),
+                ))
+            .repeated()
+            .at_least(1)
+            .then_ignore(
+                text::keyword("expect")
+                    // NOTE: It may be tempting to 'refactor' this .padded_by with the one above,
+                    // but doing so will mess up the end of the span and affect error reporting.
+                    //
+                    // Here, we do want the span to end exactly at the end of the last comment
+                    // line; which means that the 'expect' keyword may still indented.
+                    .padded_by(one_of(" \t").ignored().repeated())
+                    .rewind(),
+            )
+            .validate(|lines, span: Span, emit| {
+                if lines.len() > 1 {
+                    emit(ParseError::illegal_multiline_expect_comment(span))
+                }
+
+                Token::ExpectComment(lines.first().unwrap().trim().to_string())
+            })
+            .map_with_span(|token, span: Span| (token, span))
+        };
+
+        // Normal comment
+        let normal_comment = |n: usize| {
+            just("/".repeat(n))
+                .ignore_then(take_until(choice((text::newline().rewind(), end()))).to(token))
+                .map_with_span(move |token, span: Span| {
+                    (token, span.map(|start, end| (start + n, end)))
+                })
+        };
+
+        if n == 3 {
+            Box::new(choice((expect_comment(), normal_comment(n))))
+        } else {
+            Box::new(normal_comment(n))
+        }
+    }
+
     fn comment_parser(token: Token) -> impl Parser<char, (Token, Span), Error = ParseError> {
         let n = match token {
             Token::ModuleComment => 4,
@@ -281,11 +332,7 @@ pub fn lexer() -> impl Parser<char, Vec<(Token, Span)>, Error = ParseError> {
                 .map_with_span(move |token, span: Span| {
                     (token, Span::new((), span.start + n..span.end))
                 }),
-            just("/".repeat(n)).ignore_then(
-                take_until(choice((text::newline().rewind(), end())))
-                    .to(token)
-                    .map_with_span(|token, span| (token, span)),
-            ),
+            comment_line(n, token),
         ))
     }
 

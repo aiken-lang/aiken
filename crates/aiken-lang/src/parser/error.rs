@@ -54,6 +54,16 @@ impl ParseError {
         self
     }
 
+    pub fn illegal_multiline_expect_comment(span: Span) -> Self {
+        Self {
+            kind: ErrorKind::IllegalMultilineExpectComment,
+            expected: HashSet::new(),
+            span,
+            while_parsing: None,
+            label: Some("too many lines"),
+        }
+    }
+
     pub fn expected_but_got(expected: Pattern, got: Pattern, span: Span) -> Self {
         Self {
             kind: ErrorKind::Unexpected(got),
@@ -294,6 +304,12 @@ pub enum ErrorKind {
         "You can pattern-match on bytearrays but not on strings. Note that I can parse utf-8 encoded bytearrays just fine, so you probably want to drop the extra '@' and only manipulate bytearrays wherever you need to. On-chain, strings shall be avoided as much as possible."
     ))]
     PatternMatchOnString,
+
+    #[error("I noticed you've been overly enthusiastic about expect comments.")]
+    #[diagnostic(help(
+        "Expect doc-comments are turned into traces and must remain short.\nHence, I will only allow a single line of doc-comment above an 'expect'. And yet, you've put many."
+    ))]
+    IllegalMultilineExpectComment,
 }
 
 fn fmt_curve_type(curve: &CurveType) -> String {

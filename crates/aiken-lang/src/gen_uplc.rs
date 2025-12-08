@@ -27,8 +27,7 @@ use crate::{
         air::ExpectLevel,
         builder::{
             CodeGenFunction, erase_opaque_type_operations, get_generic_variant_name,
-            get_line_columns_by_span, get_src_code_by_span, known_data_to_type, monomorphize,
-            wrap_validator_condition,
+            get_src_code_by_span, known_data_to_type, monomorphize, wrap_validator_condition,
         },
     },
     line_numbers::LineNumbers,
@@ -247,6 +246,7 @@ impl<'a> CodeGenerator<'a> {
                 value,
                 pattern,
                 kind,
+                comment,
             } = body
             else {
                 panic!("Dangling expressions without an assignment")
@@ -258,12 +258,15 @@ impl<'a> CodeGenerator<'a> {
                 let msg = match (self.tracing, kind) {
                     (TraceLevel::Silent, _) | (_, AssignmentKind::Let { .. }) => "".to_string(),
                     (TraceLevel::Compact, _) => {
-                        get_line_columns_by_span(module_build_name, location, &self.module_src)
-                            .to_string()
+                        match comment.as_ref().and_then(|s| s.split(":").next()) {
+                            None => "".to_string(),
+                            Some(label) => format!("<expected> {label}"),
+                        }
                     }
-                    (TraceLevel::Verbose, _) => {
-                        get_src_code_by_span(module_build_name, location, &self.module_src)
-                    }
+                    (TraceLevel::Verbose, _) => match comment.as_ref() {
+                        None => get_src_code_by_span(module_build_name, location, &self.module_src),
+                        Some(comment) => format!("<expected> {comment}"),
+                    },
                 };
 
                 let msg_func_name = msg.split_whitespace().join("");

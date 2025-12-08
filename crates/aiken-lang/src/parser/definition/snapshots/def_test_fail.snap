@@ -33,6 +33,7 @@ Test(
                     kind: Expect {
                         backpassing: false,
                     },
+                    comment: None,
                 },
                 Var {
                     location: 54..59,

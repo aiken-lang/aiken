@@ -1,0 +1,8 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\ntest foo() {\n  /// Prevent silly mistake\n  expect 1 + 1 == 3\n}\n"
+---
+test foo() {
+  /// Prevent silly mistake
+  expect 1 + 1 == 3
+}

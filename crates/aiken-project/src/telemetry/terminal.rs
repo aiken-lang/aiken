@@ -636,7 +636,19 @@ fn fmt_test(
             traces = result
                 .logs()
                 .iter()
-                .map(|line| { format!("| {line}",) })
+                .map(|line| {
+                    match line
+                        .strip_prefix("expect")
+                        .or_else(|| line.strip_prefix("<expected>"))
+                    {
+                        None => format!("| {line}"),
+                        Some(rest) => format!(
+                            "{}{rest}",
+                            "x <expected>"
+                                .if_supports_color(Stderr, |s| s.red().bold().to_string())
+                        ),
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join("\n")
         );

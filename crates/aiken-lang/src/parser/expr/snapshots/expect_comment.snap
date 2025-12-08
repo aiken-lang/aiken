@@ -1,14 +1,14 @@
 ---
 source: crates/aiken-lang/src/parser/expr/assignment.rs
-description: "Code:\n\nexpect Some(x) = something.field"
+description: "Code:\n\n/// Some user-defined custom comment\nexpect Some(x) = something.field\n"
 ---
 Assignment {
-    location: 0..32,
+    location: 37..69,
     value: FieldAccess {
-        location: 17..32,
+        location: 54..69,
         label: "field",
         container: Var {
-            location: 17..26,
+            location: 54..63,
             name: "something",
         },
     },
@@ -16,14 +16,14 @@ Assignment {
         AssignmentPattern {
             pattern: Constructor {
                 is_record: false,
-                location: 7..14,
+                location: 44..51,
                 name: "Some",
                 arguments: [
                     CallArg {
                         label: None,
-                        location: 12..13,
+                        location: 49..50,
                         value: Var {
-                            location: 12..13,
+                            location: 49..50,
                             name: "x",
                         },
                     },
@@ -34,11 +34,13 @@ Assignment {
                 tipo: (),
             },
             annotation: None,
-            location: 7..14,
+            location: 44..51,
         },
     ],
     kind: Expect {
         backpassing: false,
     },
-    comment: None,
+    comment: Some(
+        "Some user-defined custom comment",
+    ),
 }

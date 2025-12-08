@@ -1591,3 +1591,15 @@ fn long_import_line_2() {
         "#
     );
 }
+
+#[test]
+fn expect_comment() {
+    assert_format!(
+        r#"
+        test foo() {
+          /// Prevent silly mistake
+          expect 1 + 1 == 3
+        }
+        "#
+    );
+}

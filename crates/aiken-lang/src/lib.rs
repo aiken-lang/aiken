@@ -61,7 +61,7 @@ macro_rules! aiken_fn {
         {
             typed_fn
         } else {
-            unreachable!()
+            unreachable!("unable to parse built-in function")
         }
     }};
 }

@@ -189,6 +189,7 @@ impl<'a, 'b, 'c> PipeTyper<'a, 'b, 'c> {
                 location,
                 name: PIPE_VARIABLE.to_string(),
             },
+            comment: None,
         };
 
         self.expressions.push(assignment);

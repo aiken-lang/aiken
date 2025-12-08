@@ -110,6 +110,7 @@ pub enum TypedExpr {
         value: Box<Self>,
         pattern: TypedPattern,
         kind: TypedAssignmentKind,
+        comment: Option<String>,
     },
 
     Trace {
@@ -254,6 +255,7 @@ impl TypedExpr {
             value: value.into(),
             pattern,
             kind: AssignmentKind::let_(),
+            comment: None,
             location,
         }
     }
@@ -274,6 +276,7 @@ impl TypedExpr {
             } else {
                 AssignmentKind::expect()
             },
+            comment: None,
             location,
         }
     }
@@ -670,6 +673,7 @@ pub enum UntypedExpr {
         value: Box<Self>,
         patterns: Vec1<AssignmentPattern>,
         kind: UntypedAssignmentKind,
+        comment: Option<String>,
     },
 
     Trace {
