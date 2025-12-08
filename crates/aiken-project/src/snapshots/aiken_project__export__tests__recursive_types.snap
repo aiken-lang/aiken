@@ -8,13 +8,13 @@ description: "Code:\n\npub type Foo<a> {\n  Empty\n  Bar(a, Foo<a>)\n}\n\npub fn
     {
       "title": "a",
       "schema": {
-        "$ref": "#/definitions/test_module~1Foo$Int"
+        "$ref": "#/definitions/test_module~1Foo<Int>"
       }
     },
     {
       "title": "b",
       "schema": {
-        "$ref": "#/definitions/test_module~1Foo$Int"
+        "$ref": "#/definitions/test_module~1Foo<Int>"
       }
     }
   ],
@@ -30,7 +30,7 @@ description: "Code:\n\npub type Foo<a> {\n  Empty\n  Bar(a, Foo<a>)\n}\n\npub fn
     "Int": {
       "dataType": "integer"
     },
-    "test_module/Foo$Int": {
+    "test_module/Foo<Int>": {
       "title": "Foo",
       "anyOf": [
         {
@@ -48,7 +48,7 @@ description: "Code:\n\npub type Foo<a> {\n  Empty\n  Bar(a, Foo<a>)\n}\n\npub fn
               "$ref": "#/definitions/Int"
             },
             {
-              "$ref": "#/definitions/test_module~1Foo$Int"
+              "$ref": "#/definitions/test_module~1Foo<Int>"
             }
           ]
         }

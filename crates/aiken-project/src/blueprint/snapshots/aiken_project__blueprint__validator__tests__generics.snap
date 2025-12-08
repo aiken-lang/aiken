@@ -13,7 +13,7 @@ description: "Code:\n\npub type Either<left, right> {\n    Left(left)\n    Right
   "redeemer": {
     "title": "redeemer",
     "schema": {
-      "$ref": "#/definitions/test_module~1Either$ByteArray_test_module~1Interval$Int"
+      "$ref": "#/definitions/test_module~1Either<ByteArray,test_module~1Interval<Int>>"
     }
   },
   "compiledCode": "<redacted>",
@@ -29,7 +29,7 @@ description: "Code:\n\npub type Either<left, right> {\n    Left(left)\n    Right
     "Int": {
       "dataType": "integer"
     },
-    "test_module/Either$ByteArray_test_module/Interval$Int": {
+    "test_module/Either<ByteArray,test_module/Interval<Int>>": {
       "title": "Either",
       "anyOf": [
         {
@@ -48,13 +48,13 @@ description: "Code:\n\npub type Either<left, right> {\n    Left(left)\n    Right
           "index": 1,
           "fields": [
             {
-              "$ref": "#/definitions/test_module~1Interval$Int"
+              "$ref": "#/definitions/test_module~1Interval<Int>"
             }
           ]
         }
       ]
     },
-    "test_module/Interval$Int": {
+    "test_module/Interval<Int>": {
       "title": "Interval",
       "anyOf": [
         {

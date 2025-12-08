@@ -382,13 +382,13 @@ impl Reference {
 
             Type::Tuple { elems, .. } => Self {
                 inner: format!(
-                    "Tuple{elems}",
+                    "Tuple<{elems}>",
                     elems = Self::from_types(elems, type_parameters)
                 ),
             },
             Type::Pair { fst, snd, .. } => Self {
                 inner: format!(
-                    "Pair${fst}_{snd}",
+                    "Pair<{fst},{snd}>",
                     fst = Self::from_type(fst, type_parameters),
                     snd = Self::from_type(snd, type_parameters)
                 ),
@@ -408,7 +408,7 @@ impl Reference {
 
             Type::Fn { args, ret, .. } => Self {
                 inner: format!(
-                    "Fn{args}_{ret}",
+                    "Fn({args})->{ret}",
                     args = Self::from_types(args, type_parameters),
                     ret = Self::from_type(ret, type_parameters)
                 ),
@@ -422,11 +422,11 @@ impl Reference {
         } else {
             Reference {
                 inner: format!(
-                    "${}",
+                    "<{}>",
                     args.iter()
                         .map(|s| Self::from_type(s.as_ref(), type_parameters).inner)
                         .collect::<Vec<_>>()
-                        .join("_")
+                        .join(",")
                 ),
             }
         }
@@ -447,7 +447,7 @@ impl Reference {
         if !parameters.is_empty() {
             Reference {
                 inner: format!(
-                    "{prefix}${}",
+                    "{prefix}<{}>",
                     parameters
                         .iter()
                         .map(|param| {
@@ -463,7 +463,7 @@ impl Reference {
                                 Self::from_type(param, type_parameters).inner
                             }
                         })
-                        .join("_"),
+                        .join(","),
                 ),
             }
         } else {

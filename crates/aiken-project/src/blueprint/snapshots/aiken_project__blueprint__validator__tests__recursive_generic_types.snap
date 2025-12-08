@@ -13,7 +13,7 @@ description: "Code:\n\npub type LinkedList<a> {\n  Cons(a, LinkedList<a>)\n  Nil
   "redeemer": {
     "title": "redeemer",
     "schema": {
-      "$ref": "#/definitions/test_module~1LinkedList$Int"
+      "$ref": "#/definitions/test_module~1LinkedList<Int>"
     }
   },
   "compiledCode": "<redacted>",
@@ -42,13 +42,13 @@ description: "Code:\n\npub type LinkedList<a> {\n  Cons(a, LinkedList<a>)\n  Nil
     "Int": {
       "dataType": "integer"
     },
-    "List$test_module/LinkedList$Int": {
+    "List<test_module/LinkedList<Int>>": {
       "dataType": "list",
       "items": {
-        "$ref": "#/definitions/test_module~1LinkedList$Int"
+        "$ref": "#/definitions/test_module~1LinkedList<Int>"
       }
     },
-    "Tuple$ByteArray_List$test_module/LinkedList$Int": {
+    "Tuple<<ByteArray,List<test_module/LinkedList<Int>>>>": {
       "title": "Tuple",
       "dataType": "list",
       "items": [
@@ -56,7 +56,7 @@ description: "Code:\n\npub type LinkedList<a> {\n  Cons(a, LinkedList<a>)\n  Nil
           "$ref": "#/definitions/ByteArray"
         },
         {
-          "$ref": "#/definitions/List$test_module~1LinkedList$Int"
+          "$ref": "#/definitions/List<test_module~1LinkedList<Int>>"
         }
       ]
     },
@@ -70,7 +70,7 @@ description: "Code:\n\npub type LinkedList<a> {\n  Cons(a, LinkedList<a>)\n  Nil
           "fields": [
             {
               "title": "foo",
-              "$ref": "#/definitions/test_module~1LinkedList$Bool"
+              "$ref": "#/definitions/test_module~1LinkedList<Bool>"
             }
           ]
         },
@@ -85,13 +85,13 @@ description: "Code:\n\npub type LinkedList<a> {\n  Cons(a, LinkedList<a>)\n  Nil
             },
             {
               "title": "baz",
-              "$ref": "#/definitions/Tuple$ByteArray_List$test_module~1LinkedList$Int"
+              "$ref": "#/definitions/Tuple<<ByteArray,List<test_module~1LinkedList<Int>>>>"
             }
           ]
         }
       ]
     },
-    "test_module/LinkedList$Bool": {
+    "test_module/LinkedList<Bool>": {
       "title": "LinkedList",
       "anyOf": [
         {
@@ -103,7 +103,7 @@ description: "Code:\n\npub type LinkedList<a> {\n  Cons(a, LinkedList<a>)\n  Nil
               "$ref": "#/definitions/Bool"
             },
             {
-              "$ref": "#/definitions/test_module~1LinkedList$Bool"
+              "$ref": "#/definitions/test_module~1LinkedList<Bool>"
             }
           ]
         },
@@ -115,7 +115,7 @@ description: "Code:\n\npub type LinkedList<a> {\n  Cons(a, LinkedList<a>)\n  Nil
         }
       ]
     },
-    "test_module/LinkedList$Int": {
+    "test_module/LinkedList<Int>": {
       "title": "LinkedList",
       "anyOf": [
         {
@@ -127,7 +127,7 @@ description: "Code:\n\npub type LinkedList<a> {\n  Cons(a, LinkedList<a>)\n  Nil
               "$ref": "#/definitions/Int"
             },
             {
-              "$ref": "#/definitions/test_module~1LinkedList$Int"
+              "$ref": "#/definitions/test_module~1LinkedList<Int>"
             }
           ]
         },
