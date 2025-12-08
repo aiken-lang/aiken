@@ -1,10 +1,28 @@
 # Changelog
 
-## [next] - 2025-08-06
+## v1.1.20 - UNRELEASED
+
+### Added
+
+- **aiken-project**: Format and display simple unary-op expressions constants in generated docs. @KtorZ
+- **aiken-lang**: Custom error traces for expect keyword. See [documentation](https://aiken-lang.org/language-tour/troubleshooting#expect-traces). @KtorZ
 
 ### Fixed
 
-- `aiken-project`: Properly support field names in lists when encoding into blueprint. @emiflake
+- **aiken-project**: Properly support field names in lists when encoding into blueprint. @emiflake
+- **aiken-project**: Use less ambiguous separators for generic params in blueprint's JSON references. @KtorZ
+- **aiken-project**: Do not require a full project when simulating passing an explicit `--blueprint` file. @KtorZ
+- **aiken-lsp**: More flexible and robust lsp diagnostic hints. @KtorZ
+    - return a generic error message when no help is available on the error (still showing the location of the problem)
+    - use related errors to find labels on where to report errors for those with no immediate location (e.g. UnknownLabels).
+- **aiken-lang**: Recover from assignment as last expression in trace args. @KtorZ
+- **aiken-lang**: Reify generics in-place and avoid crashing when trying to reify values with conflicting generic instantiations. @KtorZ
+- **aiken-lang**: Do not fail when only one positional argument is after labeled ones (in particular, allows for labelled arguments with backpassing). @KtorZ
+- **aiken-lang**: Only generate handler programs after evaluating all handler signatures (prevent crashes in UPLC generation due to a type-check violation). @KtorZ
+- **aiken-lang**: Forbid inspection of MillerLoopResults via tracing. @KtorZ
+- **aiken-lang**: Handle pointfree pairs constructor calls & improve error reporting on arity mismatch when using Pairs. @KtorZ
+- **aiken-lang**: Do not (immediately) panic when unresolved generics are found during monomorphisation. @KtorZ
+- **uplc**: Correctly handle credentials in certificates for Plutus V1 & Plutus V2 script executions. @yHSJ
 
 ## v1.1.19 - 2025-07-28
 
