@@ -863,12 +863,7 @@ pub fn find_and_replace_generics(
     mono_types: &IndexMap<u64, Rc<Type>>,
 ) -> Rc<Type> {
     if let Some(id) = tipo.get_generic_id() {
-        mono_types
-            .get(&id)
-            .unwrap_or_else(|| {
-                panic!("Unknown generic id {id:?} for type {tipo:?} in mono_types {mono_types:#?}");
-            })
-            .clone()
+        mono_types.get(&id).unwrap_or(tipo).clone()
     } else if tipo.is_generic() {
         match &**tipo {
             Type::App {
