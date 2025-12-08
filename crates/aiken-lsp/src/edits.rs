@@ -224,7 +224,16 @@ impl ParsedDocument {
         Some(AnnotatedEdit::SimpleEdit(
             title,
             lsp_types::TextEdit {
-                range: *range,
+                range: lsp_types::Range {
+                    start: range.start,
+                    // NOTE:
+                    // Only replace the constructor name, so that we preserve any generic
+                    // already present.
+                    end: lsp_types::Position::new(
+                        range.start.line,
+                        range.start.character + unqualified.len() as u32,
+                    ),
+                },
                 new_text: format!("{suffix}.{unqualified}"),
             },
         ))
