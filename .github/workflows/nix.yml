@@ -16,7 +16,7 @@ jobs:
         uses: DeterminateSystems/nix-installer-action@v4
 
       - name: Run the Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@v1
+        uses: DeterminateSystems/magic-nix-cache-action@v13
 
       - name: Build Aiken
         shell: bash
