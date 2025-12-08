@@ -110,7 +110,7 @@ pub fn fuzzer<'a>() -> impl Parser<Token, UntypedExpr, Error = ParseError> + 'a 
         ));
 
         let int = || {
-            just(Token::Minus)
+            choice((just(Token::Minus), just(Token::NewLineMinus)))
                 .to(ast::UnOp::Negate)
                 .map_with_span(|op, span| (op, span))
                 .or_not()
@@ -153,6 +153,33 @@ mod tests {
             r#"
             test foo(x via some_generator(Pair(14, 42))) {
               x == 56
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn test_parse_via_negative_int() {
+        assert_definition!(
+            r#"
+            test foo(n via int_between(-10, 10)) {
+              x * x <= 100
+            }
+            "#
+        );
+    }
+
+    #[test]
+    fn test_parse_via_negative_int_newline() {
+        assert_definition!(
+            r#"
+            test foo(
+              n via int_between(
+                -10,
+                10,
+              )
+            ) {
+              x * x <= 100
             }
             "#
         );

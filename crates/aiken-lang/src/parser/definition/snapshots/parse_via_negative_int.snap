@@ -1,0 +1,91 @@
+---
+source: crates/aiken-lang/src/parser/definition/test_like.rs
+description: "Code:\n\ntest foo(n via int_between(-10, 10)) {\n  x * x <= 100\n}\n"
+---
+Test(
+    Function {
+        arguments: [
+            ArgVia {
+                arg: UntypedArg {
+                    by: ByName(
+                        Named {
+                            name: "n",
+                            label: "n",
+                            location: 9..10,
+                        },
+                    ),
+                    location: 9..10,
+                    annotation: None,
+                    doc: None,
+                    is_validator_param: false,
+                },
+                via: Call {
+                    arguments: [
+                        CallArg {
+                            label: None,
+                            location: 27..30,
+                            value: UnOp {
+                                op: Negate,
+                                location: 27..28,
+                                value: UInt {
+                                    location: 28..30,
+                                    value: "10",
+                                    base: Decimal {
+                                        numeric_underscore: false,
+                                    },
+                                },
+                            },
+                        },
+                        CallArg {
+                            label: None,
+                            location: 32..34,
+                            value: UInt {
+                                location: 32..34,
+                                value: "10",
+                                base: Decimal {
+                                    numeric_underscore: false,
+                                },
+                            },
+                        },
+                    ],
+                    fun: Var {
+                        location: 15..26,
+                        name: "int_between",
+                    },
+                    location: 15..35,
+                },
+            },
+        ],
+        body: BinOp {
+            location: 41..53,
+            name: LtEqInt,
+            left: BinOp {
+                location: 41..46,
+                name: MultInt,
+                left: Var {
+                    location: 41..42,
+                    name: "x",
+                },
+                right: Var {
+                    location: 45..46,
+                    name: "x",
+                },
+            },
+            right: UInt {
+                location: 50..53,
+                value: "100",
+                base: Decimal {
+                    numeric_underscore: false,
+                },
+            },
+        },
+        doc: None,
+        location: 0..36,
+        name: "foo",
+        public: false,
+        return_annotation: None,
+        return_type: (),
+        end_position: 54,
+        on_test_failure: FailImmediately,
+    },
+)
