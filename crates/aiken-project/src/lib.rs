@@ -550,7 +550,7 @@ where
             Some(StakePayload::Script(script)) => ShelleyDelegationPart::Script(script),
         };
 
-        let blueprint = self.blueprint(blueprint_path)?;
+        let blueprint = Self::blueprint(blueprint_path)?;
 
         // Calculate the address
         let when_too_many = |known_validators| {
@@ -600,7 +600,7 @@ where
         validator_name: Option<&str>,
         blueprint_path: &Path,
     ) -> Result<PolicyId, Error> {
-        let blueprint = self.blueprint(blueprint_path)?;
+        let blueprint = Self::blueprint(blueprint_path)?;
 
         // Error handlers for ambiguous / missing validators
         let when_too_many = |known_validators| {
@@ -669,7 +669,7 @@ where
     }
 
     #[allow(clippy::result_large_err)]
-    pub fn blueprint(&self, path: &Path) -> Result<Blueprint, Error> {
+    pub fn blueprint(path: &Path) -> Result<Blueprint, Error> {
         let blueprint = File::open(path)
             .map_err(|_| Error::Blueprint(blueprint::error::Error::InvalidOrMissingFile.into()))?;
         Ok(serde_json::from_reader(BufReader::new(blueprint))?)

@@ -1,7 +1,9 @@
 use aiken_project::{
+    Project,
     error::{Error, ScriptOverrideArgumentError},
-    telemetry::EventTarget,
-    watch::with_project,
+    options::Options,
+    telemetry::{EventTarget, Terminal},
+    watch::{ExitFailure, workspace_root},
 };
 use hex::FromHexError;
 use miette::IntoDiagnostic;
@@ -106,71 +108,78 @@ pub fn exec(
 
     let mut overrides: HashMap<ScriptHash, PlutusScript> = HashMap::new();
 
+    let blueprint_path = blueprint.map(Ok::<_, miette::Error>).unwrap_or_else(|| {
+        let root = workspace_root(None)?;
+        Ok(root.join(Options::default().blueprint_path))
+    })?;
+
     if !script_overrides.is_empty() {
-        with_project(None, false, true, false, |p| {
-            eprintln!(
-                "{:>13} scripts",
-                "Overriding"
-                    .if_supports_color(Stderr, |s| s.purple())
-                    .if_supports_color(Stderr, |s| s.bold()),
-            );
+        eprintln!(
+            "{:>13} scripts",
+            "Overriding"
+                .if_supports_color(Stderr, |s| s.purple())
+                .if_supports_color(Stderr, |s| s.bold()),
+        );
 
-            let blueprint_path = p.blueprint_path(blueprint.as_deref());
-            let blueprint = p.blueprint(&blueprint_path)?;
-            let blueprint_validators: HashMap<ScriptHash, PlutusScript> = blueprint.into();
-
-            script_overrides
-                .iter()
-                .enumerate()
-                .try_for_each::<_, Result<_, aiken_project::error::Error>>(
-                    |(index, script_override)| {
-                        let mut parts = script_override.split(":");
-
-                        let from =
-                            get_override_part(&mut parts, ScriptOverrideArgumentError::MissingFrom)
-                                .and_then(|part| {
-                                    decode_script_hash(
-                                        part,
-                                        ScriptOverrideArgumentError::InvalidFromHash,
-                                        ScriptOverrideArgumentError::InvalidFromSize,
-                                    )
-                                })
-                                .map_err(|error| Error::ScriptOverrideArgumentParseError {
-                                    index,
-                                    error,
-                                })?;
-
-                        let to =
-                            get_override_part(&mut parts, ScriptOverrideArgumentError::MissingTo)
-                                .and_then(|part| {
-                                    decode_script_hash(
-                                        part,
-                                        ScriptOverrideArgumentError::InvalidToHash,
-                                        ScriptOverrideArgumentError::InvalidToSize,
-                                    )
-                                })
-                                .map_err(|error| Error::ScriptOverrideArgumentParseError {
-                                    index,
-                                    error,
-                                })?;
-
-                        overrides.insert(
-                            from,
-                            blueprint_validators
-                                .get(&to)
-                                .ok_or_else(|| Error::ScriptOverrideNotFound {
-                                    script_hash: to,
-                                    known_scripts: blueprint_validators.keys().cloned().collect(),
-                                })?
-                                .clone(),
-                        );
-
-                        Ok(())
-                    },
-                )?;
-
-            Ok(())
+        let blueprint = Project::<Terminal>::blueprint(&blueprint_path).map_err(|e| {
+            e.report();
+            ExitFailure::into_report()
         })?;
+
+        let blueprint_validators: HashMap<ScriptHash, PlutusScript> = blueprint.into();
+
+        script_overrides
+            .iter()
+            .enumerate()
+            .try_for_each::<_, Result<_, aiken_project::error::Error>>(
+                |(index, script_override)| {
+                    let mut parts = script_override.split(":");
+
+                    let from =
+                        get_override_part(&mut parts, ScriptOverrideArgumentError::MissingFrom)
+                            .and_then(|part| {
+                                decode_script_hash(
+                                    part,
+                                    ScriptOverrideArgumentError::InvalidFromHash,
+                                    ScriptOverrideArgumentError::InvalidFromSize,
+                                )
+                            })
+                            .map_err(|error| Error::ScriptOverrideArgumentParseError {
+                                index,
+                                error,
+                            })?;
+
+                    let to = get_override_part(&mut parts, ScriptOverrideArgumentError::MissingTo)
+                        .and_then(|part| {
+                            decode_script_hash(
+                                part,
+                                ScriptOverrideArgumentError::InvalidToHash,
+                                ScriptOverrideArgumentError::InvalidToSize,
+                            )
+                        })
+                        .map_err(|error| Error::ScriptOverrideArgumentParseError {
+                            index,
+                            error,
+                        })?;
+
+                    overrides.insert(
+                        from,
+                        blueprint_validators
+                            .get(&to)
+                            .ok_or_else(|| Error::ScriptOverrideNotFound {
+                                script_hash: to,
+                                known_scripts: blueprint_validators.keys().cloned().collect(),
+                            })?
+                            .clone(),
+                    );
+
+                    Ok(())
+                },
+            )
+            .map_err(|e| {
+                e.report();
+                ExitFailure::into_report()
+            })?;
     }
 
     eprintln!(

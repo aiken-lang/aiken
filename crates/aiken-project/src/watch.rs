@@ -7,18 +7,18 @@ use std::{
     env,
     ffi::OsStr,
     fmt::{self, Display},
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
 #[derive(Debug, Diagnostic, thiserror::Error)]
-enum ExitFailure {
+pub enum ExitFailure {
     #[error("")]
     ExitFailure,
 }
 
 impl ExitFailure {
-    fn into_report() -> miette::Report {
+    pub fn into_report() -> miette::Report {
         ExitFailure::ExitFailure.into()
     }
 }
@@ -113,6 +113,18 @@ where
     }
 }
 
+pub fn workspace_root(directory: Option<&Path>) -> miette::Result<PathBuf> {
+    if let Some(d) = directory {
+        Ok(d.to_path_buf())
+    } else if std::env::consts::OS == "windows" {
+        env::current_dir().into_diagnostic()
+    } else {
+        let mut current_dir = std::path::PathBuf::new();
+        current_dir.push(".");
+        Ok(current_dir)
+    }
+}
+
 pub fn with_project<A>(
     directory: Option<&Path>,
     deny: bool,
@@ -123,15 +135,7 @@ pub fn with_project<A>(
 where
     A: FnMut(&mut Project<EventTarget>) -> Result<(), Vec<crate::error::Error>>,
 {
-    let project_path = if let Some(d) = directory {
-        d.to_path_buf()
-    } else if std::env::consts::OS == "windows" {
-        env::current_dir().into_diagnostic()?
-    } else {
-        let mut current_dir = std::path::PathBuf::new();
-        current_dir.push(".");
-        current_dir
-    };
+    let workspace_root = workspace_root(directory)?;
 
     let mut warnings = Vec::new();
     let mut errs: Vec<crate::error::Error> = Vec::new();
@@ -139,7 +143,7 @@ where
 
     let mut is_terminal = true;
 
-    if let Ok(workspace) = WorkspaceConfig::load(&project_path) {
+    if let Ok(workspace) = WorkspaceConfig::load(&workspace_root) {
         let res_projects = workspace
             .members
             .into_iter()
@@ -173,7 +177,7 @@ where
     } else {
         let event_target = EventTarget::default();
         is_terminal = matches!(event_target, EventTarget::Terminal(_));
-        let mut project = match Project::new(project_path, event_target) {
+        let mut project = match Project::new(workspace_root, event_target) {
             Ok(p) => Ok(p),
             Err(e) => {
                 e.report();
