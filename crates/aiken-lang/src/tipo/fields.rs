@@ -171,7 +171,7 @@ mod tests {
     use super::FieldMap;
     use crate::tipo::{Span, fields::CallArg};
     use proptest::prelude::*;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     fn any_field() -> impl Strategy<Value = String> {
         proptest::string::string_regex("[a-zA-Z]+").unwrap()
@@ -183,6 +183,8 @@ mod tests {
             is_function in any::<bool>(),
         ) -> FieldMap {
             let fields = fields
+                .into_iter()
+                .collect::<HashSet<_>>()
                 .into_iter()
                 .enumerate()
                 .map(|(ix, field)| (field, (ix, Span::empty())))
