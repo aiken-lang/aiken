@@ -1,4 +1,9 @@
-Cargo.lock linguist-generated=true merge=binary linguist-vendored
-Cargo.nix  linguist-generated=true merge=binary linguist-vendored
-flake.lock linguist-generated=true merge=binary linguist-vendored
-**/*.snap merge=binary linguist-vendored
+Cargo.lock      linguist-generated merge=binary
+Cargo.nix       linguist-generated merge=binary
+flake.lock      linguist-generated merge=binary
+**/*.flat       linguist-vendored merge=binary
+**/*.uplc       linguist-vendored
+**/*.expected   linguist-vendored
+**/*.snap       linguist-vendored
+example/**/*    linguist-vendored
+benchmarks/**/* linguist-vendored
