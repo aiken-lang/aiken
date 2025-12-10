@@ -22,6 +22,7 @@
 - **aiken-lang**: Forbid inspection of MillerLoopResults via tracing. @KtorZ
 - **aiken-lang**: Handle pointfree pairs constructor calls & improve error reporting on arity mismatch when using Pairs. @KtorZ
 - **aiken-lang**: Do not (immediately) panic when unresolved generics are found during monomorphisation. @KtorZ
+- **aiken-lang**: Using "as" with list decorator no longer generates code with an list data error. @Microproofs
 - **uplc**: Correctly handle credentials in certificates for Plutus V1 & Plutus V2 script executions. @yHSJ
 
 ## v1.1.19 - 2025-07-28
