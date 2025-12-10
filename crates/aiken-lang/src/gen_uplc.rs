@@ -1105,15 +1105,22 @@ impl<'a> CodeGenerator<'a> {
 
             Pattern::Assign { name, pattern, .. } => {
                 let name = self.interner.lookup_interned(name);
-                // Don't need any data casting for Assign
+
                 let inner_pattern = self.assignment(
                     pattern,
                     AirTree::local_var(&name, tipo.clone()),
                     then,
                     tipo,
-                    props,
+                    AssignmentProperties {
+                        value_type: tipo.clone(),
+                        kind: props.kind,
+                        remove_unused: props.remove_unused,
+                        full_check: props.full_check,
+                        otherwise: props.otherwise.clone(),
+                    },
                 );
-                AirTree::let_assignment(name, value, inner_pattern)
+
+                assign_casted_value(name, value, inner_pattern)
             }
 
             Pattern::Discard { name, .. } => {

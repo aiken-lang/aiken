@@ -39,12 +39,15 @@ test foo() {
 
   expect (a, b, c): (Int, Int, ByteArray) = y
   expect z: Dino = y
-  expect Dino { food, weight, name } = y
+  expect Dino { food, weight, name } as ff = y
+
   let xx = Dino { ..z, name: "stegosaurus", food: 9 }
 
   let n = Dino { food: x.food, weight: x.weight, name: x.name }
 
   let yy = x |> as_data
+
+  let Dino { food: food1, weight: weight1, .. } = ff
 
   and {
     x.food == 1,
@@ -63,6 +66,8 @@ test foo() {
     gg.name == "triceratops",
     gg != x,
     n == x,
+    ff.weight == 2,
+    food1 == x.food,
   }
 }
 
@@ -82,7 +87,7 @@ test bar() {
     Het { first: Dino(1, 1, "t-rex"), second: (4, "no") } -> False
     Het { first: Dino(1, 2, "t-rex"), second: (5, "no") } -> False
     Het { first: Dino(1, 2, "t-rex"), second } -> {
-      trace "Z": z
+      trace @"Z": z
       expect d: Wow = z
 
       and {
