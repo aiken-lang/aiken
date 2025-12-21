@@ -33,15 +33,17 @@ use std::{
 /// This represents a program in Untyped Plutus Core.
 /// A program contains a version tuple and a term.
 /// It is generic because Term requires a generic type.
+/// The `C` parameter is for context information (defaults to `()`).
 #[derive(Debug, Clone, PartialEq)]
-pub struct Program<T> {
+pub struct Program<T, C = ()> {
     pub version: (usize, usize, usize),
-    pub term: Term<T>,
+    pub term: Term<T, C>,
 }
 
-impl<T> Program<T>
+impl<T, C> Program<T, C>
 where
     T: Clone,
+    C: Clone + Default,
 {
     /// We use this to apply the validator to Datum,
     /// then redeemer, then ScriptContext. If datum is
@@ -50,6 +52,7 @@ where
         let applied_term = Term::Apply {
             function: Rc::new(self.term.clone()),
             argument: Rc::new(program.term.clone()),
+            context: C::default(),
         };
 
         Program {
@@ -63,7 +66,11 @@ where
     pub fn apply_data(&self, plutus_data: PlutusData) -> Self {
         let applied_term = Term::Apply {
             function: Rc::new(self.term.clone()),
-            argument: Rc::new(Term::Constant(Constant::Data(plutus_data).into())),
+            argument: Rc::new(Term::Constant {
+                value: Constant::Data(plutus_data).into(),
+                context: C::default(),
+            }),
+            context: C::default(),
         };
 
         Program {
@@ -81,6 +88,7 @@ impl Program<Name> {
         let applied_term = Term::Apply {
             function: Rc::new(self.term.clone()),
             argument: Rc::new(term.clone()),
+            context: (),
         };
 
         let mut program = Program {
@@ -104,7 +112,7 @@ impl Program<Name> {
     }
 }
 
-impl<'a, T> Display for Program<T>
+impl<'a, T, C> Display for Program<T, C>
 where
     T: Binder<'a>,
 {
@@ -293,58 +301,82 @@ impl Program<DeBruijn> {
 /// Specifically, `Var` and `parameter_name` in `Lambda` can be a `Name`,
 /// `NamedDebruijn`, or `DeBruijn`. When encoded to flat for on chain usage
 /// we must encode using the `DeBruijn` form.
+///
+/// The `C` parameter is used to attach context information (e.g., source spans)
+/// to terms. It defaults to `()` for cases where no context is needed.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Term<T> {
+pub enum Term<T, C = ()> {
     // tag: 0
-    Var(Rc<T>),
+    Var {
+        name: Rc<T>,
+        context: C,
+    },
     // tag: 1
-    Delay(Rc<Term<T>>),
+    Delay {
+        term: Rc<Term<T, C>>,
+        context: C,
+    },
     // tag: 2
     Lambda {
         parameter_name: Rc<T>,
-        body: Rc<Term<T>>,
+        body: Rc<Term<T, C>>,
+        context: C,
     },
     // tag: 3
     Apply {
-        function: Rc<Term<T>>,
-        argument: Rc<Term<T>>,
+        function: Rc<Term<T, C>>,
+        argument: Rc<Term<T, C>>,
+        context: C,
     },
     // tag: 4
-    Constant(Rc<Constant>),
+    Constant {
+        value: Rc<Constant>,
+        context: C,
+    },
     // tag: 5
-    Force(Rc<Term<T>>),
+    Force {
+        term: Rc<Term<T, C>>,
+        context: C,
+    },
     // tag: 6
-    Error,
+    Error {
+        context: C,
+    },
     // tag: 7
-    Builtin(DefaultFunction),
+    Builtin {
+        func: DefaultFunction,
+        context: C,
+    },
     // tag: 8
     Constr {
         tag: usize,
-        fields: Vec<Term<T>>,
+        fields: Vec<Term<T, C>>,
+        context: C,
     },
     // tag: 9
     Case {
-        constr: Rc<Term<T>>,
-        branches: Vec<Term<T>>,
+        constr: Rc<Term<T, C>>,
+        branches: Vec<Term<T, C>>,
+        context: C,
     },
 }
 
-impl<T> Term<T> {
+impl<T, C> Term<T, C> {
     pub fn is_unit(&self) -> bool {
-        matches!(self, Term::Constant(c) if c.as_ref() == &Constant::Unit)
+        matches!(self, Term::Constant { value, .. } if value.as_ref() == &Constant::Unit)
     }
 
     pub fn is_int(&self) -> bool {
-        matches!(self, Term::Constant(c) if matches!(c.as_ref(), &Constant::Integer(_)))
+        matches!(self, Term::Constant { value, .. } if matches!(value.as_ref(), &Constant::Integer(_)))
     }
 }
 
-impl<T> TryInto<PlutusData> for Term<T> {
+impl<T, C> TryInto<PlutusData> for Term<T, C> {
     type Error = String;
 
     fn try_into(self) -> Result<PlutusData, String> {
         match self {
-            Term::Constant(rc) => match &*rc {
+            Term::Constant { value, .. } => match &*value {
                 Constant::Data(data) => Ok(data.to_owned()),
                 _ => Err("not a data".to_string()),
             },
@@ -353,7 +385,7 @@ impl<T> TryInto<PlutusData> for Term<T> {
     }
 }
 
-impl<'a, T> Display for Term<T>
+impl<'a, T, C> Display for Term<T, C>
 where
     T: Binder<'a>,
 {
@@ -940,6 +972,6 @@ impl Program<DeBruijn> {
 
 impl Term<NamedDeBruijn> {
     pub fn is_valid_script_result(&self) -> bool {
-        !matches!(self, Term::Error)
+        !matches!(self, Term::Error { .. })
     }
 }

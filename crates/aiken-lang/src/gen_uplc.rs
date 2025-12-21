@@ -276,7 +276,7 @@ impl<'a> CodeGenerator<'a> {
                 } else {
                     self.special_functions.insert_new_function(
                         msg_func_name.clone(),
-                        Term::Error.delayed_trace(Term::string(msg)).delay(),
+                        (Term::Error { context: () }).delayed_trace(Term::string(msg)).delay(),
                         Type::void(),
                     );
 
@@ -3723,13 +3723,14 @@ impl<'a> CodeGenerator<'a> {
                 constructor,
                 variant_name,
             } => match &constructor.variant {
-                ValueConstructorVariant::LocalVariable { .. } => Some(Term::Var(
-                    Name {
+                ValueConstructorVariant::LocalVariable { .. } => Some(Term::Var {
+                    name: Name {
                         text: name,
                         unique: 0.into(),
                     }
                     .into(),
-                )),
+                    context: (),
+                }),
                 ValueConstructorVariant::ModuleConstant { module, name, .. } => {
                     let access_key = FunctionAccessKey {
                         module_name: module.clone(),
@@ -3819,13 +3820,14 @@ impl<'a> CodeGenerator<'a> {
                             format!("{func_name}{variant_name}")
                         };
 
-                        Some(Term::Var(
-                            Name {
+                        Some(Term::Var {
+                            name: Name {
                                 text: name,
                                 unique: 0.into(),
                             }
                             .into(),
-                        ))
+                            context: (),
+                        })
                     }
                 }
                 ValueConstructorVariant::Record {
@@ -3834,7 +3836,10 @@ impl<'a> CodeGenerator<'a> {
                     if constructor.tipo.is_bool() {
                         Some(Term::bool(constr_name == "True"))
                     } else if constructor.tipo.is_void() {
-                        Some(Term::Constant(UplcConstant::Unit.into()))
+                        Some(Term::Constant {
+                            value: UplcConstant::Unit.into(),
+                            context: (),
+                        })
                     } else if constructor.is_pair() {
                         let args = constructor.tipo.arg_types().unwrap();
                         let mut args = args.iter();
@@ -3931,7 +3936,10 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
             },
-            Air::Void => Some(Term::Constant(UplcConstant::Unit.into())),
+            Air::Void => Some(Term::Constant {
+                value: UplcConstant::Unit.into(),
+                context: (),
+            }),
             Air::List { count, tipo, tail } => {
                 let mut args = vec![];
 
@@ -3964,8 +3972,8 @@ impl<'a> CodeGenerator<'a> {
                         let convert_keys = builder::convert_constants_to_data(convert_keys);
                         let convert_values = builder::convert_constants_to_data(convert_values);
 
-                        Term::Constant(
-                            UplcConstant::ProtoList(
+                        Term::Constant {
+                            value: UplcConstant::ProtoList(
                                 UplcType::Pair(UplcType::Data.into(), UplcType::Data.into()),
                                 convert_keys
                                     .into_iter()
@@ -3981,15 +3989,17 @@ impl<'a> CodeGenerator<'a> {
                                     .collect_vec(),
                             )
                             .into(),
-                        )
+                            context: (),
+                        }
                     } else {
-                        Term::Constant(
-                            UplcConstant::ProtoList(
+                        Term::Constant {
+                            value: UplcConstant::ProtoList(
                                 UplcType::Data,
                                 builder::convert_constants_to_data(constants),
                             )
                             .into(),
-                        )
+                            context: (),
+                        }
                     };
 
                     Some(list)
@@ -4032,7 +4042,7 @@ impl<'a> CodeGenerator<'a> {
                 let otherwise = if matches!(expect_level, ExpectLevel::Full | ExpectLevel::Items) {
                     arg_stack.pop().unwrap()
                 } else {
-                    Term::Error.delay()
+                    (Term::Error { context: () }).delay()
                 };
 
                 let list_id = self.id_gen.next();
@@ -4102,8 +4112,8 @@ impl<'a> CodeGenerator<'a> {
                     let term = arg_stack.pop().unwrap();
 
                     match term.pierce_no_inlines_ref() {
-                        Term::Var(_) => Some(term.force()),
-                        Term::Delay(inner_term) => Some(inner_term.as_ref().clone()),
+                        Term::Var { .. } => Some(term.force()),
+                        Term::Delay { term: inner_term, .. } => Some(inner_term.as_ref().clone()),
                         Term::Apply { .. } => Some(term.force()),
                         _ => unreachable!(
                             "Shouldn't call anything other than var or apply\n{:#?}",
@@ -4274,31 +4284,55 @@ impl<'a> CodeGenerator<'a> {
                             binop_eq
                         }
                     }
-                    BinOp::LtInt => Term::Builtin(DefaultFunction::LessThanInteger)
-                        .apply(left)
-                        .apply(right),
-                    BinOp::LtEqInt => Term::Builtin(DefaultFunction::LessThanEqualsInteger)
-                        .apply(left)
-                        .apply(right),
-                    BinOp::GtEqInt => Term::Builtin(DefaultFunction::LessThanEqualsInteger)
-                        .apply(right)
-                        .apply(left),
-                    BinOp::GtInt => Term::Builtin(DefaultFunction::LessThanInteger)
-                        .apply(right)
-                        .apply(left),
+                    BinOp::LtInt => Term::Builtin {
+                        func: DefaultFunction::LessThanInteger,
+                        context: (),
+                    }
+                    .apply(left)
+                    .apply(right),
+                    BinOp::LtEqInt => Term::Builtin {
+                        func: DefaultFunction::LessThanEqualsInteger,
+                        context: (),
+                    }
+                    .apply(left)
+                    .apply(right),
+                    BinOp::GtEqInt => Term::Builtin {
+                        func: DefaultFunction::LessThanEqualsInteger,
+                        context: (),
+                    }
+                    .apply(right)
+                    .apply(left),
+                    BinOp::GtInt => Term::Builtin {
+                        func: DefaultFunction::LessThanInteger,
+                        context: (),
+                    }
+                    .apply(right)
+                    .apply(left),
                     BinOp::AddInt => Term::add_integer().apply(left).apply(right),
-                    BinOp::SubInt => Term::Builtin(DefaultFunction::SubtractInteger)
-                        .apply(left)
-                        .apply(right),
-                    BinOp::MultInt => Term::Builtin(DefaultFunction::MultiplyInteger)
-                        .apply(left)
-                        .apply(right),
-                    BinOp::DivInt => Term::Builtin(DefaultFunction::DivideInteger)
-                        .apply(left)
-                        .apply(right),
-                    BinOp::ModInt => Term::Builtin(DefaultFunction::ModInteger)
-                        .apply(left)
-                        .apply(right),
+                    BinOp::SubInt => Term::Builtin {
+                        func: DefaultFunction::SubtractInteger,
+                        context: (),
+                    }
+                    .apply(left)
+                    .apply(right),
+                    BinOp::MultInt => Term::Builtin {
+                        func: DefaultFunction::MultiplyInteger,
+                        context: (),
+                    }
+                    .apply(left)
+                    .apply(right),
+                    BinOp::DivInt => Term::Builtin {
+                        func: DefaultFunction::DivideInteger,
+                        context: (),
+                    }
+                    .apply(left)
+                    .apply(right),
+                    BinOp::ModInt => Term::Builtin {
+                        func: DefaultFunction::ModInteger,
+                        context: (),
+                    }
+                    .apply(left)
+                    .apply(right),
                 };
                 Some(term)
             }
@@ -4587,12 +4621,12 @@ impl<'a> CodeGenerator<'a> {
                 // Expected to be delayed
                 let term = arg_stack.pop().unwrap();
 
-                assert!(matches!(term, Term::Delay(_) | Term::Var(_)));
+                assert!(matches!(term, Term::Delay { .. } | Term::Var { .. }));
 
                 let other_clauses = term.clone();
 
                 let body = if tipo.is_bool() {
-                    if matches!(clause, Term::Constant(boolean) if matches!(boolean.as_ref(), UplcConstant::Bool(true)))
+                    if matches!(clause, Term::Constant { value: boolean, .. } if matches!(boolean.as_ref(), UplcConstant::Bool(true)))
                     {
                         Term::var(subject_name)
                             .if_then_else(body.delay(), other_clauses)
@@ -4648,7 +4682,7 @@ impl<'a> CodeGenerator<'a> {
                 let body = arg_stack.pop().unwrap();
                 let mut term = arg_stack.pop().unwrap();
 
-                assert!(matches!(term, Term::Delay(_)));
+                assert!(matches!(term, Term::Delay { .. }));
 
                 term = if let Some((current_tail, next_tail_name)) = next_tail_name {
                     term.force()
@@ -4733,7 +4767,7 @@ impl<'a> CodeGenerator<'a> {
                 let otherwise = if is_expect {
                     arg_stack.pop().unwrap()
                 } else {
-                    Term::Error.delay()
+                    (Term::Error { context: () }).delay()
                 };
 
                 let list_id = self.id_gen.next();
@@ -4822,9 +4856,10 @@ impl<'a> CodeGenerator<'a> {
                 if constants.len() == args.len() {
                     let data_constants = builder::convert_constants_to_data(constants);
 
-                    let term = Term::Constant(
-                        UplcConstant::ProtoList(UplcType::Data, data_constants).into(),
-                    );
+                    let term = Term::Constant {
+                        value: UplcConstant::ProtoList(UplcType::Data, data_constants).into(),
+                        context: (),
+                    };
                     Some(term)
                 } else {
                     let mut term = Term::empty_list();
@@ -4843,15 +4878,16 @@ impl<'a> CodeGenerator<'a> {
                 match (extract_constant(&fst), extract_constant(&snd)) {
                     (Some(fst), Some(snd)) => {
                         let mut pair_fields = builder::convert_constants_to_data(vec![fst, snd]);
-                        let term = Term::Constant(
-                            UplcConstant::ProtoPair(
+                        let term = Term::Constant {
+                            value: UplcConstant::ProtoPair(
                                 UplcType::Data,
                                 UplcType::Data,
                                 pair_fields.remove(0).into(),
                                 pair_fields.remove(0).into(),
                             )
                             .into(),
-                        );
+                            context: (),
+                        };
                         Some(term)
                     }
                     _ => {
@@ -4986,7 +5022,7 @@ impl<'a> CodeGenerator<'a> {
                 let term = match op {
                     UnOp::Not => value.if_then_else(Term::bool(false), Term::bool(true)),
                     UnOp::Negate => {
-                        if let Term::Constant(c) = &value {
+                        if let Term::Constant { value: c, .. } = &value {
                             if let UplcConstant::Integer(i) = c.as_ref() {
                                 Term::integer(-i)
                             } else {
@@ -5016,7 +5052,7 @@ impl<'a> CodeGenerator<'a> {
                 let otherwise = if is_expect {
                     arg_stack.pop().unwrap()
                 } else {
-                    Term::Error.delay()
+                    (Term::Error { context: () }).delay()
                 };
                 let list_id = self.id_gen.next();
 
@@ -5060,7 +5096,7 @@ impl<'a> CodeGenerator<'a> {
                 let otherwise = if is_expect {
                     arg_stack.pop().unwrap()
                 } else {
-                    Term::Error.delay()
+                    (Term::Error { context: () }).delay()
                 };
 
                 let list_id = self.id_gen.next();
@@ -5068,7 +5104,7 @@ impl<'a> CodeGenerator<'a> {
                 if let Some(name) = snd {
                     let value = Term::snd_pair().apply(Term::var(format!("__pair_{list_id}")));
                     term = if is_expect {
-                        if otherwise == Term::Error.delay() {
+                        if otherwise == (Term::Error { context: () }).delay() {
                             term.lambda(name).apply(unknown_data_to_type(
                                 value,
                                 &inner_types[1],
@@ -5096,7 +5132,7 @@ impl<'a> CodeGenerator<'a> {
                 if let Some(name) = fst {
                     let value = Term::fst_pair().apply(Term::var(format!("__pair_{list_id}")));
                     term = if is_expect {
-                        if otherwise == Term::Error.delay() {
+                        if otherwise == (Term::Error { context: () }).delay() {
                             term.lambda(name).apply(unknown_data_to_type(
                                 value,
                                 &inner_types[0],
@@ -5136,9 +5172,9 @@ impl<'a> CodeGenerator<'a> {
             }
             Air::ErrorTerm { validator, .. } => {
                 if validator {
-                    Some(Term::Error.apply(Term::Error.force()))
+                    Some((Term::Error { context: () }).apply((Term::Error { context: () }).force()))
                 } else {
-                    Some(Term::Error)
+                    Some(Term::Error { context: () })
                 }
             }
 
@@ -5148,7 +5184,7 @@ impl<'a> CodeGenerator<'a> {
                 let then = arg_stack.pop().unwrap();
                 let otherwise = arg_stack.pop().unwrap();
 
-                if otherwise == Term::Error.delay() {
+                if otherwise == (Term::Error { context: () }).delay() {
                     Some(then.lambda(name).apply(unknown_data_to_type(
                         value,
                         &tipo,

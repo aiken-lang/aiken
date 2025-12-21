@@ -35,34 +35,35 @@ impl CodeGenInterner {
 
     pub fn term(&mut self, term: &mut Term<Name>) {
         match term {
-            Term::Var(name) => {
+            Term::Var { name, .. } => {
                 let name = Rc::make_mut(name);
                 name.unique = self.intern(name.text.clone(), name.unique);
             }
-            Term::Delay(term) => self.term(Rc::make_mut(term)),
+            Term::Delay { term, .. } => self.term(Rc::make_mut(term)),
             Term::Lambda {
                 parameter_name,
                 body,
+                ..
             } => {
                 let parameter_name = Rc::make_mut(parameter_name);
                 parameter_name.unique =
                     self.intern(parameter_name.text.clone(), parameter_name.unique);
                 self.term(Rc::make_mut(body));
             }
-            Term::Apply { function, argument } => {
+            Term::Apply { function, argument, .. } => {
                 self.term(Rc::make_mut(function));
                 self.term(Rc::make_mut(argument));
             }
-            Term::Constant(_) => (),
-            Term::Force(term) => self.term(Rc::make_mut(term)),
-            Term::Error => (),
-            Term::Builtin(_) => (),
+            Term::Constant { .. } => (),
+            Term::Force { term, .. } => self.term(Rc::make_mut(term)),
+            Term::Error { .. } => (),
+            Term::Builtin { .. } => (),
             Term::Constr { fields, .. } => {
                 for field in fields {
                     self.term(field);
                 }
             }
-            Term::Case { constr, branches } => {
+            Term::Case { constr, branches, .. } => {
                 self.term(Rc::make_mut(constr));
 
                 for branch in branches {
