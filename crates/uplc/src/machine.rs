@@ -148,14 +148,14 @@ impl Machine {
         term: Term<NamedDeBruijn>,
     ) -> Result<MachineState, Error> {
         match term {
-            Term::Var(name) => {
+            Term::Var { name, .. } => {
                 self.step_and_maybe_spend(StepKind::Var)?;
 
                 let val = self.lookup_var(name.as_ref(), &env)?;
 
                 Ok(MachineState::Return(context, val))
             }
-            Term::Delay(body) => {
+            Term::Delay { term: body, .. } => {
                 self.step_and_maybe_spend(StepKind::Delay)?;
 
                 Ok(MachineState::Return(context, Value::Delay(body, env)))
@@ -163,6 +163,7 @@ impl Machine {
             Term::Lambda {
                 parameter_name,
                 body,
+                ..
             } => {
                 self.step_and_maybe_spend(StepKind::Lambda)?;
 
@@ -175,7 +176,7 @@ impl Machine {
                     },
                 ))
             }
-            Term::Apply { function, argument } => {
+            Term::Apply { function, argument, .. } => {
                 self.step_and_maybe_spend(StepKind::Apply)?;
 
                 Ok(MachineState::Compute(
@@ -188,12 +189,12 @@ impl Machine {
                     function.as_ref().clone(),
                 ))
             }
-            Term::Constant(x) => {
+            Term::Constant { value: x, .. } => {
                 self.step_and_maybe_spend(StepKind::Constant)?;
 
                 Ok(MachineState::Return(context, Value::Con(x)))
             }
-            Term::Force(body) => {
+            Term::Force { term: body, .. } => {
                 self.step_and_maybe_spend(StepKind::Force)?;
 
                 Ok(MachineState::Compute(
@@ -202,8 +203,8 @@ impl Machine {
                     body.as_ref().clone(),
                 ))
             }
-            Term::Error => Err(Error::EvaluationFailure),
-            Term::Builtin(fun) => {
+            Term::Error { .. } => Err(Error::EvaluationFailure),
+            Term::Builtin { func: fun, .. } => {
                 self.step_and_maybe_spend(StepKind::Builtin)?;
 
                 let runtime: BuiltinRuntime = fun.into();
@@ -213,7 +214,7 @@ impl Machine {
                     Value::Builtin { fun, runtime },
                 ))
             }
-            Term::Constr { tag, mut fields } => {
+            Term::Constr { tag, mut fields, .. } => {
                 self.step_and_maybe_spend(StepKind::Constr)?;
 
                 fields.reverse();
@@ -236,7 +237,7 @@ impl Machine {
                     ))
                 }
             }
-            Term::Case { constr, branches } => {
+            Term::Case { constr, branches, .. } => {
                 self.step_and_maybe_spend(StepKind::Case)?;
 
                 Ok(MachineState::Compute(
@@ -390,7 +391,12 @@ impl Machine {
     fn lookup_var(&mut self, name: &NamedDeBruijn, env: &[Value]) -> Result<Value, Error> {
         env.get::<usize>(env.len() - usize::from(name.index))
             .cloned()
-            .ok_or_else(|| Error::OpenTermEvaluated(Term::Var(name.clone().into())))
+            .ok_or_else(|| {
+                Error::OpenTermEvaluated(Term::Var {
+                    name: name.clone().into(),
+                    context: (),
+                })
+            })
     }
 
     fn step_and_maybe_spend(&mut self, step: StepKind) -> Result<(), Error> {
@@ -485,11 +491,25 @@ mod tests {
             version: (0, 0, 0),
             term: Term::Apply {
                 function: Term::Apply {
-                    function: Term::Builtin(DefaultFunction::AddInteger).into(),
-                    argument: Term::Constant(Constant::Integer(i128::MAX.into()).into()).into(),
+                    function: Term::Builtin {
+                        func: DefaultFunction::AddInteger,
+                        context: (),
+                    }
+                    .into(),
+                    argument: Term::Constant {
+                        value: Constant::Integer(i128::MAX.into()).into(),
+                        context: (),
+                    }
+                    .into(),
+                    context: (),
                 }
                 .into(),
-                argument: Term::Constant(Constant::Integer(i128::MAX.into()).into()).into(),
+                argument: Term::Constant {
+                    value: Constant::Integer(i128::MAX.into()).into(),
+                    context: (),
+                }
+                .into(),
+                context: (),
             },
         };
 
@@ -499,12 +519,13 @@ mod tests {
 
         assert_eq!(
             term,
-            Term::Constant(
-                Constant::Integer(
+            Term::Constant {
+                value: Constant::Integer(
                     Into::<BigInt>::into(i128::MAX) + Into::<BigInt>::into(i128::MAX)
                 )
-                .into()
-            )
+                .into(),
+                context: (),
+            }
         );
     }
 
@@ -514,11 +535,21 @@ mod tests {
             version: (0, 0, 0),
             term: Term::Apply {
                 function: Term::Apply {
-                    function: Term::Builtin(fun).into(),
-                    argument: Term::Constant(Constant::Integer(n.into()).into()).into(),
+                    function: Term::Builtin { func: fun, context: () }.into(),
+                    argument: Term::Constant {
+                        value: Constant::Integer(n.into()).into(),
+                        context: (),
+                    }
+                    .into(),
+                    context: (),
                 }
                 .into(),
-                argument: Term::Constant(Constant::Integer(m.into()).into()).into(),
+                argument: Term::Constant {
+                    value: Constant::Integer(m.into()).into(),
+                    context: (),
+                }
+                .into(),
+                context: (),
             },
         };
 
@@ -546,7 +577,10 @@ mod tests {
 
             assert_eq!(
                 eval_result.result().unwrap(),
-                Term::Constant(Constant::Integer(result.into()).into())
+                Term::Constant {
+                    value: Constant::Integer(result.into()).into(),
+                    context: (),
+                }
             );
         }
     }
@@ -560,12 +594,20 @@ mod tests {
                     constr: Term::Constr {
                         tag,
                         fields: vec![
-                            Term::Constant(Constant::Integer(n.into()).into()),
-                            Term::Constant(Constant::Integer(m.into()).into()),
+                            Term::Constant {
+                                value: Constant::Integer(n.into()).into(),
+                                context: (),
+                            },
+                            Term::Constant {
+                                value: Constant::Integer(m.into()).into(),
+                                context: (),
+                            },
                         ],
+                        context: (),
                     }
                     .into(),
-                    branches: vec![Term::Builtin(fun), Term::subtract_integer()],
+                    branches: vec![Term::Builtin { func: fun, context: () }, Term::subtract_integer()],
+                    context: (),
                 },
             };
 
@@ -579,7 +621,10 @@ mod tests {
 
             assert_eq!(
                 eval_result.result().unwrap(),
-                Term::Constant(Constant::Integer(result.into()).into())
+                Term::Constant {
+                    value: Constant::Integer(result.into()).into(),
+                    context: (),
+                }
             );
         }
     }
@@ -592,6 +637,7 @@ mod tests {
                 constr: Term::Constr {
                     tag,
                     fields: vec![],
+                    context: (),
                 }
                 .into(),
                 branches: vec![
@@ -599,6 +645,7 @@ mod tests {
                     Term::integer(10.into()),
                     Term::integer(15.into()),
                 ],
+                context: (),
             },
         };
 
@@ -609,7 +656,10 @@ mod tests {
 
             assert_eq!(
                 eval_result.result().unwrap(),
-                Term::Constant(Constant::Integer(result.into()).into())
+                Term::Constant {
+                    value: Constant::Integer(result.into()).into(),
+                    context: (),
+                }
             );
         }
     }

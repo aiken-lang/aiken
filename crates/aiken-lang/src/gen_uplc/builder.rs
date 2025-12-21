@@ -560,13 +560,15 @@ pub fn unknown_data_to_type(
                     .apply(
                         Term::head_list().apply(Term::tail_list().apply(Term::var("__list_data"))),
                     ),
-                Term::Error,
+                Term::Error { context: () },
             )
             .lambda("__list_data")
             .apply(Term::unlist_data().apply(term)),
-        Some(UplcType::Bool) => Term::unwrap_bool_or(term, |result| result, &Term::Error.delay()),
+        Some(UplcType::Bool) => {
+            Term::unwrap_bool_or(term, |result| result, &(Term::Error { context: () }).delay())
+        }
         Some(UplcType::Unit) => term.as_var("val", |val| {
-            Term::Var(val).unwrap_void_or(|result| result, &Term::Error.delay())
+            Term::Var { name: val, context: () }.unwrap_void_or(|result| result, &(Term::Error { context: () }).delay())
         }),
 
         Some(UplcType::Data) | None => {
@@ -598,7 +600,7 @@ pub fn softcast_data_to_type_otherwise(
     otherwise_delayed: Term<Name>,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
 ) -> Term<Name> {
-    assert!(matches!(otherwise_delayed, Term::Var(_)));
+    assert!(matches!(otherwise_delayed, Term::Var { .. }));
 
     let uplc_type = field_type.get_uplc_type();
 
@@ -621,7 +623,7 @@ pub fn softcast_data_to_type_otherwise(
             }
         }
 
-        Some(UplcType::Data) => callback(Term::Var(val)),
+        Some(UplcType::Data) => callback(Term::Var { name: val, context: () }),
 
         Some(UplcType::Bls12_381MlResult) => {
             unreachable!("attempted to cast Data into Bls12_381MlResult?!")
@@ -791,12 +793,21 @@ pub fn convert_type_to_data(
             )
             .lambda("__pair")
             .apply(term),
-        Some(UplcType::Unit) => Term::Constant(UplcConstant::Data(Data::constr(0, vec![])).into())
-            .lambda("_")
-            .apply(term),
+        Some(UplcType::Unit) => Term::Constant {
+            value: UplcConstant::Data(Data::constr(0, vec![])).into(),
+            context: (),
+        }
+        .lambda("_")
+        .apply(term),
         Some(UplcType::Bool) => term.if_then_else(
-            Term::Constant(UplcConstant::Data(Data::constr(1, vec![])).into()),
-            Term::Constant(UplcConstant::Data(Data::constr(0, vec![])).into()),
+            Term::Constant {
+                value: UplcConstant::Data(Data::constr(1, vec![])).into(),
+                context: (),
+            },
+            Term::Constant {
+                value: UplcConstant::Data(Data::constr(0, vec![])).into(),
+                context: (),
+            },
         ),
 
         Some(UplcType::Data) | None => {
@@ -875,7 +886,7 @@ pub fn list_access_to_uplc(
                 .apply(Term::head_list().apply(Term::var(tail_name.to_string())))
         } else if matches!(expect_level, ExpectLevel::Full) {
             // Expect level is full so we have an unknown piece of data to cast
-            if otherwise_delayed == Term::Error.delay() {
+            if otherwise_delayed == (Term::Error { context: () }).delay() {
                 then.lambda(name).apply(unknown_data_to_type(
                     Term::head_list().apply(Term::var(tail_name.to_string())),
                     &tipo.to_owned(),
@@ -926,7 +937,7 @@ pub fn list_access_to_uplc(
                         }
 
                         ExpectLevel::Full | ExpectLevel::Items => {
-                            if otherwise_delayed == Term::Error.delay() && tail_present {
+                            if otherwise_delayed == (Term::Error { context: () }).delay() && tail_present {
                                 // No need to check last item if tail was present
                                 head_item(name, tipo, &tail_name, acc).lambda(tail_name)
                             } else if tail_present {
@@ -937,7 +948,7 @@ pub fn list_access_to_uplc(
                                         head_item(name, tipo, &tail_name, acc),
                                     )
                                     .lambda(tail_name)
-                            } else if otherwise_delayed == Term::Error.delay() {
+                            } else if otherwise_delayed == (Term::Error { context: () }).delay() {
                                 // Check head is last item in this list
                                 head_item(
                                     name,
@@ -945,7 +956,7 @@ pub fn list_access_to_uplc(
                                     &tail_name,
                                     Term::tail_list()
                                         .apply(Term::var(tail_name.to_string()))
-                                        .delayed_choose_list(acc, Term::Error),
+                                        .delayed_choose_list(acc, Term::Error { context: () }),
                                 )
                                 .lambda(tail_name)
                             } else {
@@ -978,7 +989,7 @@ pub fn list_access_to_uplc(
                     // let head_item = head_item(name, tipo, &tail_name);
 
                     if matches!(expect_level, ExpectLevel::None)
-                        || otherwise_delayed == Term::Error.delay()
+                        || otherwise_delayed == (Term::Error { context: () }).delay()
                     {
                         head_item(
                             name,
@@ -1230,11 +1241,11 @@ pub fn wrap_validator_condition(air_tree: AirTree, trace: TraceLevel) -> AirTree
 pub fn extract_constant(term: &Term<Name>) -> Option<Rc<UplcConstant>> {
     let mut constant = None;
 
-    if let Term::Constant(c) = term {
+    if let Term::Constant { value: c, .. } = term {
         constant = Some(c.clone());
-    } else if let Term::Apply { function, argument } = term {
-        if let Term::Constant(c) = argument.as_ref() {
-            if let Term::Builtin(b) = function.as_ref() {
+    } else if let Term::Apply { function, argument, .. } = term {
+        if let Term::Constant { value: c, .. } = argument.as_ref() {
+            if let Term::Builtin { func: b, .. } = function.as_ref() {
                 if matches!(
                     b,
                     DefaultFunction::BData
