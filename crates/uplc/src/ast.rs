@@ -80,6 +80,21 @@ where
     }
 }
 
+impl<T, C> Program<T, C> {
+    /// Transform the context of all nodes in the program's term tree.
+    /// Use `program.map_context(|_| ())` to strip source locations.
+    pub fn map_context<D>(self, f: impl Fn(C) -> D + Clone) -> Program<T, D>
+    where
+        T: Clone,
+        C: Clone,
+    {
+        Program {
+            version: self.version,
+            term: self.term.map_context(f),
+        }
+    }
+}
+
 impl Program<Name> {
     /// We use this to apply the validator to Datum,
     /// then redeemer, then ScriptContext. If datum is
@@ -368,6 +383,104 @@ impl<T, C> Term<T, C> {
 
     pub fn is_int(&self) -> bool {
         matches!(self, Term::Constant { value, .. } if matches!(value.as_ref(), &Constant::Integer(_)))
+    }
+
+    /// Transform the context of all nodes in the term tree.
+    /// Use `term.map_context(|_| ())` to strip source locations.
+    pub fn map_context<D>(self, f: impl Fn(C) -> D + Clone) -> Term<T, D>
+    where
+        T: Clone,
+        C: Clone,
+    {
+        match self {
+            Term::Var { name, context } => Term::Var {
+                name,
+                context: f(context),
+            },
+            Term::Delay { term, context } => Term::Delay {
+                term: Rc::new(
+                    Rc::try_unwrap(term)
+                        .unwrap_or_else(|rc| (*rc).clone())
+                        .map_context(f.clone()),
+                ),
+                context: f(context),
+            },
+            Term::Lambda {
+                parameter_name,
+                body,
+                context,
+            } => Term::Lambda {
+                parameter_name,
+                body: Rc::new(
+                    Rc::try_unwrap(body)
+                        .unwrap_or_else(|rc| (*rc).clone())
+                        .map_context(f.clone()),
+                ),
+                context: f(context),
+            },
+            Term::Apply {
+                function,
+                argument,
+                context,
+            } => Term::Apply {
+                function: Rc::new(
+                    Rc::try_unwrap(function)
+                        .unwrap_or_else(|rc| (*rc).clone())
+                        .map_context(f.clone()),
+                ),
+                argument: Rc::new(
+                    Rc::try_unwrap(argument)
+                        .unwrap_or_else(|rc| (*rc).clone())
+                        .map_context(f.clone()),
+                ),
+                context: f(context),
+            },
+            Term::Constant { value, context } => Term::Constant {
+                value,
+                context: f(context),
+            },
+            Term::Force { term, context } => Term::Force {
+                term: Rc::new(
+                    Rc::try_unwrap(term)
+                        .unwrap_or_else(|rc| (*rc).clone())
+                        .map_context(f.clone()),
+                ),
+                context: f(context),
+            },
+            Term::Error { context } => Term::Error { context: f(context) },
+            Term::Builtin { func, context } => Term::Builtin {
+                func,
+                context: f(context),
+            },
+            Term::Constr {
+                tag,
+                fields,
+                context,
+            } => Term::Constr {
+                tag,
+                fields: fields
+                    .into_iter()
+                    .map(|field| field.map_context(f.clone()))
+                    .collect(),
+                context: f(context),
+            },
+            Term::Case {
+                constr,
+                branches,
+                context,
+            } => Term::Case {
+                constr: Rc::new(
+                    Rc::try_unwrap(constr)
+                        .unwrap_or_else(|rc| (*rc).clone())
+                        .map_context(f.clone()),
+                ),
+                branches: branches
+                    .into_iter()
+                    .map(|branch| branch.map_context(f.clone()))
+                    .collect(),
+                context: f(context),
+            },
+        }
     }
 }
 
