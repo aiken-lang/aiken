@@ -47,7 +47,7 @@ use aiken_lang::{
 use export::Export;
 use indexmap::IndexMap;
 use miette::NamedSource;
-use options::{CodeGenMode, Options};
+use options::{CodeGenMode, Options, SourceMapMode};
 use package_name::PackageName;
 use pallas_addresses::{Address, Network, ShelleyAddress, ShelleyDelegationPart, StakePayload};
 use pallas_primitives::conway::PolicyId;
@@ -206,12 +206,14 @@ where
         tracing: Tracing,
         blueprint_path: PathBuf,
         env: Option<String>,
+        source_map_mode: SourceMapMode,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
             code_gen_mode: CodeGenMode::Build(uplc),
             tracing,
             env,
             blueprint_path,
+            source_map_mode,
         };
 
         self.compile(options)
@@ -297,6 +299,7 @@ where
                 }
             },
             blueprint_path: self.blueprint_path(None),
+            source_map_mode: SourceMapMode::None,
         };
 
         self.compile(options)
@@ -321,6 +324,7 @@ where
                 max_size,
             },
             blueprint_path: self.blueprint_path(None),
+            source_map_mode: SourceMapMode::None,
         };
 
         self.compile(options)
@@ -404,8 +408,15 @@ where
 
                 let mut generator = self.new_generator(options.tracing);
 
-                let blueprint = Blueprint::new(&self.config, &self.checked_modules, &mut generator)
-                    .map_err(|err| Error::Blueprint(err.into()))?;
+                let module_sources = utils::indexmap::as_str_ref_values(&self.module_sources);
+                let mut blueprint = Blueprint::new(
+                    &self.config,
+                    &self.checked_modules,
+                    &mut generator,
+                    &options.source_map_mode,
+                    &module_sources,
+                )
+                .map_err(|err| Error::Blueprint(err.into()))?;
 
                 if blueprint.validators.is_empty() {
                     self.warnings.push(Warning::NoValidators);
@@ -413,6 +424,37 @@ where
 
                 if uplc_dump {
                     self.dump_uplc(&blueprint)?;
+                }
+
+                // Handle external source map files
+                if let SourceMapMode::External(ref dir) = options.source_map_mode {
+                    // Create the directory if it doesn't exist
+                    fs::create_dir_all(dir).map_err(|error| {
+                        Error::FileIo {
+                            error,
+                            path: dir.clone(),
+                        }
+                    })?;
+
+                    // Write each validator's source map to a file
+                    for validator in &mut blueprint.validators {
+                        if let Some(source_map) = validator.source_map.take() {
+                            let filename = format!("{}.sourcemap.json", validator.title);
+                            let file_path = dir.join(&filename);
+
+                            let source_map_json = serde_json::to_string_pretty(&source_map)
+                                .expect("source map should serialize");
+
+                            fs::write(&file_path, source_map_json).map_err(|error| {
+                                Error::FileIo {
+                                    error,
+                                    path: file_path.clone(),
+                                }
+                            })?;
+
+                            validator.source_map_file = Some(filename);
+                        }
+                    }
                 }
 
                 let json = serde_json::to_string_pretty(&blueprint).unwrap();
@@ -633,7 +675,13 @@ where
     }
 
     #[allow(clippy::result_large_err)]
-    pub fn export(&self, module: &str, name: &str, tracing: Tracing) -> Result<Export, Error> {
+    pub fn export(
+        &self,
+        module: &str,
+        name: &str,
+        tracing: Tracing,
+        source_map_mode: options::SourceMapMode,
+    ) -> Result<Export, Error> {
         let checked_module =
             self.checked_modules
                 .get(module)
@@ -641,6 +689,9 @@ where
                     module: module.to_string(),
                     known_modules: self.checked_modules.keys().cloned().collect(),
                 })?;
+
+        // Get module sources for source map generation
+        let module_sources = utils::indexmap::as_str_ref_values(&self.module_sources);
 
         checked_module
             .ast
@@ -658,6 +709,8 @@ where
                     &mut generator,
                     &self.checked_modules,
                     &self.config.plutus,
+                    &source_map_mode,
+                    &module_sources,
                 )
                 .map_err(|err| Error::Blueprint(err.into()))
             })

@@ -1,7 +1,10 @@
 #![allow(clippy::doc_overindented_list_items)]
 
 use aiken_lang::ast::{TraceLevel, Tracing};
-use aiken_project::watch::{self, watch_project, with_project};
+use aiken_project::{
+    options::SourceMapMode,
+    watch::{self, watch_project, with_project},
+};
 use clap::builder::{MapValueParser, PossibleValuesParser, TypedValueParser};
 use std::{path::PathBuf, process};
 
@@ -76,6 +79,26 @@ pub struct Args {
     /// [optional]
     #[clap(short, long, value_parser=trace_level_parser(), default_value_t=TraceLevel::Silent, verbatim_doc_comment)]
     trace_level: TraceLevel,
+
+    /// Include source maps in the generated blueprint.
+    ///
+    /// Source maps allow debugging tools to map compiled UPLC code
+    /// back to the original Aiken source code locations.
+    #[clap(long, verbatim_doc_comment)]
+    source_map: bool,
+
+    /// Write source maps to external files instead of embedding them in the blueprint.
+    ///
+    /// When specified, each validator's source map will be written to a separate
+    /// JSON file in the specified directory, and the blueprint will reference
+    /// these files instead of including the source map data inline.
+    #[clap(
+        long,
+        value_name = "DIRECTORY",
+        conflicts_with = "source_map",
+        verbatim_doc_comment
+    )]
+    source_map_dir: Option<PathBuf>,
 }
 
 pub fn exec(
@@ -89,8 +112,18 @@ pub fn exec(
         trace_level,
         output,
         env,
+        source_map,
+        source_map_dir,
     }: Args,
 ) -> miette::Result<()> {
+    let source_map_mode = if source_map {
+        SourceMapMode::Inline
+    } else if let Some(dir) = source_map_dir {
+        SourceMapMode::External(dir)
+    } else {
+        SourceMapMode::None
+    };
+
     let result = if watch {
         watch_project(directory.as_deref(), watch::default_filter, 500, |p| {
             p.build(
@@ -101,6 +134,7 @@ pub fn exec(
                 },
                 p.blueprint_path(output.as_deref()),
                 env.clone(),
+                source_map_mode.clone(),
             )
         })
     } else {
@@ -113,6 +147,7 @@ pub fn exec(
                 },
                 p.blueprint_path(output.as_deref()),
                 env.clone(),
+                source_map_mode.clone(),
             )
         })
     };

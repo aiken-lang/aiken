@@ -2,7 +2,10 @@
 
 use super::build::{trace_filter_parser, trace_level_parser};
 use aiken_lang::ast::{TraceLevel, Tracing};
-use aiken_project::{options::Options, watch::with_project};
+use aiken_project::{
+    options::{Options, SourceMapMode},
+    watch::with_project,
+};
 use std::path::PathBuf;
 
 #[derive(clap::Args)]
@@ -53,6 +56,12 @@ pub struct Args {
     /// [optional]
     #[clap(short, long, value_parser=trace_level_parser(), default_value_t=TraceLevel::Verbose, verbatim_doc_comment)]
     trace_level: TraceLevel,
+
+    /// Include source map in the exported JSON for debugging support.
+    ///
+    /// [optional] [default: enabled]
+    #[clap(long = "source-map", default_value_t = true, action = clap::ArgAction::Set)]
+    source_map: bool,
 }
 
 pub fn exec(
@@ -62,18 +71,31 @@ pub fn exec(
         name,
         trace_filter,
         trace_level,
+        source_map,
     }: Args,
 ) -> miette::Result<()> {
     with_project(directory.as_deref(), false, false, true, |p| {
-        p.compile(Options::default())?;
+        let tracing = match trace_filter {
+            Some(trace_filter) => trace_filter(trace_level),
+            None => Tracing::All(trace_level),
+        };
+
+        p.compile(Options {
+            tracing,
+            ..Options::default()
+        })?;
+
+        let source_map_mode = if source_map {
+            SourceMapMode::Inline
+        } else {
+            SourceMapMode::None
+        };
 
         let export = p.export(
             &module,
             &name,
-            match trace_filter {
-                Some(trace_filter) => trace_filter(trace_level),
-                None => Tracing::All(trace_level),
-            },
+            tracing,
+            source_map_mode,
         )?;
 
         let json = serde_json::to_string_pretty(&export).unwrap();
