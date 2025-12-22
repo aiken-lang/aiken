@@ -164,7 +164,7 @@ impl<'a> CodeGenerator<'a> {
                 .for_each(|arg_name| self.interner.pop_text(arg_name.to_string()))
         });
 
-        self.finalize(term)
+        self.finalize(term.map_context(|_| ()))
     }
 
     pub fn generate_raw(
@@ -202,7 +202,46 @@ impl<'a> CodeGenerator<'a> {
                 .for_each(|arg_name| self.interner.pop_text(arg_name.to_string()))
         });
 
-        self.finalize(term)
+        self.finalize(term.map_context(|_| ()))
+    }
+
+    /// Debug method that returns the raw Term with Span context preserved
+    /// This is useful for inspecting source location information
+    pub fn generate_raw_with_spans(
+        &mut self,
+        body: &TypedExpr,
+        args: &[TypedArg],
+        module_name: &str,
+    ) -> Term<Name, Span> {
+        args.iter().for_each(|arg| {
+            arg.get_variable_name()
+                .iter()
+                .for_each(|arg_name| self.interner.intern(arg_name.to_string()))
+        });
+
+        let mut air_tree = self.build(body, module_name, &[]);
+
+        air_tree = AirTree::no_op(air_tree, Span::empty());
+
+        let full_tree = self.hoist_functions_to_validator(air_tree);
+
+        let full_vec = full_tree.to_vec();
+
+        let mut term = self.uplc_code_gen(full_vec);
+
+        term = if args.is_empty() {
+            term
+        } else {
+            cast_validator_args(term, args, &self.interner, &self.data_types)
+        };
+
+        args.iter().for_each(|arg| {
+            arg.get_variable_name()
+                .iter()
+                .for_each(|arg_name| self.interner.pop_text(arg_name.to_string()))
+        });
+
+        term
     }
 
     fn new_program<T>(&self, term: Term<T>) -> Program<T> {
@@ -3786,8 +3825,8 @@ impl<'a> CodeGenerator<'a> {
         );
     }
 
-    fn uplc_code_gen(&mut self, mut ir_stack: Vec<Air>) -> Term<Name> {
-        let mut arg_stack: Vec<Term<Name>> = vec![];
+    fn uplc_code_gen(&mut self, mut ir_stack: Vec<Air>) -> Term<Name, Span> {
+        let mut arg_stack: Vec<Term<Name, Span>> = vec![];
 
         while let Some(air_element) = ir_stack.pop() {
             let arg = self.gen_uplc(air_element, &mut arg_stack);
@@ -3799,7 +3838,7 @@ impl<'a> CodeGenerator<'a> {
         arg_stack.pop().unwrap()
     }
 
-    fn gen_uplc(&mut self, ir: Air, arg_stack: &mut Vec<Term<Name>>) -> Option<Term<Name>> {
+    fn gen_uplc(&mut self, ir: Air, arg_stack: &mut Vec<Term<Name, Span>>) -> Option<Term<Name, Span>> {
         match ir {
             Air::Int { value, .. } => Some(Term::integer(value.parse().unwrap())),
             Air::String { value, .. } => Some(Term::string(value)),
@@ -3821,7 +3860,7 @@ impl<'a> CodeGenerator<'a> {
                         unique: 0.into(),
                     }
                     .into(),
-                    context: (),
+                    context: location,
                 }),
                 ValueConstructorVariant::ModuleConstant { module, name, .. } => {
                     let access_key = FunctionAccessKey {
@@ -3846,7 +3885,7 @@ impl<'a> CodeGenerator<'a> {
                     let term = self.uplc_code_gen(value.to_vec());
 
                     let mut program =
-                        self.new_program(self.special_functions.apply_used_functions(term));
+                        self.new_program(self.special_functions.apply_used_functions(term.map_context(|_| ())));
 
                     let mut interner = CodeGenInterner::new();
 
@@ -3855,14 +3894,13 @@ impl<'a> CodeGenerator<'a> {
                     let eval_program: Program<NamedDeBruijn> =
                         program.clean_up_no_inlines().try_into().unwrap();
 
-                    Some(
-                        eval_program
-                            .eval(ExBudget::max())
-                            .result()
-                            .unwrap_or_else(|e| panic!("Failed to evaluate constant: {e:#?}"))
-                            .try_into()
-                            .unwrap(),
-                    )
+                    let result: Term<Name> = eval_program
+                        .eval(ExBudget::max())
+                        .result()
+                        .unwrap_or_else(|e| panic!("Failed to evaluate constant: {e:#?}"))
+                        .try_into()
+                        .unwrap();
+                    Some(result.map_context(|_| location))
                 }
                 ValueConstructorVariant::ModuleFn {
                     name: func_name,
@@ -3919,7 +3957,7 @@ impl<'a> CodeGenerator<'a> {
                                 unique: 0.into(),
                             }
                             .into(),
-                            context: (),
+                            context: location,
                         })
                     }
                 }
@@ -3931,7 +3969,7 @@ impl<'a> CodeGenerator<'a> {
                     } else if constructor.tipo.is_void() {
                         Some(Term::Constant {
                             value: UplcConstant::Unit.into(),
-                            context: (),
+                            context: location,
                         })
                     } else if constructor.is_pair() {
                         let args = constructor.tipo.arg_types().unwrap();
@@ -3974,7 +4012,7 @@ impl<'a> CodeGenerator<'a> {
                             .iter()
                             .any(|dec| matches!(dec.kind, DecoratorKind::List));
 
-                        let mut term = Term::empty_list();
+                        let mut term: Term<Name> = Term::empty_list();
 
                         if constr_type.arguments.is_empty() {
                             if !list_decorator {
@@ -4025,15 +4063,15 @@ impl<'a> CodeGenerator<'a> {
                                 term = term.lambda(format!("arg_{index}"))
                             }
                         }
-                        Some(term)
+                        Some(term.map_context(|_| location))
                     }
                 }
             },
-            Air::Void { .. } => Some(Term::Constant {
+            Air::Void { location } => Some(Term::Constant {
                 value: UplcConstant::Unit.into(),
-                context: (),
+                context: location,
             }),
-            Air::List { count, tipo, tail, .. } => {
+            Air::List { count, tipo, tail, location } => {
                 let mut args = vec![];
 
                 for _ in 0..count {
@@ -4082,7 +4120,7 @@ impl<'a> CodeGenerator<'a> {
                                     .collect_vec(),
                             )
                             .into(),
-                            context: (),
+                            context: location,
                         }
                     } else {
                         Term::Constant {
@@ -4091,7 +4129,7 @@ impl<'a> CodeGenerator<'a> {
                                 builder::convert_constants_to_data(constants),
                             )
                             .into(),
-                            context: (),
+                            context: location,
                         }
                     };
 
@@ -4127,7 +4165,7 @@ impl<'a> CodeGenerator<'a> {
                 // type is nothing since this is an assignment over some expression
                 tipo,
                 expect_level,
-                ..
+                location,
             } => {
                 let value = arg_stack.pop().unwrap();
 
@@ -4136,7 +4174,7 @@ impl<'a> CodeGenerator<'a> {
                 let otherwise = if matches!(expect_level, ExpectLevel::Full | ExpectLevel::Items) {
                     arg_stack.pop().unwrap()
                 } else {
-                    (Term::Error { context: () }).delay()
+                    (Term::Error { context: location }).delay()
                 };
 
                 let list_id = self.id_gen.next();
@@ -4217,7 +4255,7 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
             }
-            Air::Builtin { func, tipo, count, .. } => {
+            Air::Builtin { func, tipo, count, location } => {
                 let mut arg_vec = vec![];
                 for _ in 0..count {
                     arg_vec.push(arg_stack.pop().unwrap());
@@ -4246,7 +4284,7 @@ impl<'a> CodeGenerator<'a> {
                         builder::undata_builtin(&func, count, ret_tipo, arg_vec, &self.data_types)
                     }
                     _ => {
-                        let mut term: Term<Name> = func.into();
+                        let mut term: Term<Name, Span> = Term::Builtin { func, context: location };
 
                         term = builder::apply_builtin_forces(term, func.force_count());
 
@@ -4269,6 +4307,7 @@ impl<'a> CodeGenerator<'a> {
                 // changed this to argument tipo
                 left_tipo,
                 right_tipo,
+                location,
                 ..
             } => {
                 let left = arg_stack.pop().unwrap();
@@ -4381,50 +4420,50 @@ impl<'a> CodeGenerator<'a> {
                     }
                     BinOp::LtInt => Term::Builtin {
                         func: DefaultFunction::LessThanInteger,
-                        context: (),
+                        context: location,
                     }
                     .apply(left)
                     .apply(right),
                     BinOp::LtEqInt => Term::Builtin {
                         func: DefaultFunction::LessThanEqualsInteger,
-                        context: (),
+                        context: location,
                     }
                     .apply(left)
                     .apply(right),
                     BinOp::GtEqInt => Term::Builtin {
                         func: DefaultFunction::LessThanEqualsInteger,
-                        context: (),
+                        context: location,
                     }
                     .apply(right)
                     .apply(left),
                     BinOp::GtInt => Term::Builtin {
                         func: DefaultFunction::LessThanInteger,
-                        context: (),
+                        context: location,
                     }
                     .apply(right)
                     .apply(left),
                     BinOp::AddInt => Term::add_integer().apply(left).apply(right),
                     BinOp::SubInt => Term::Builtin {
                         func: DefaultFunction::SubtractInteger,
-                        context: (),
+                        context: location,
                     }
                     .apply(left)
                     .apply(right),
                     BinOp::MultInt => Term::Builtin {
                         func: DefaultFunction::MultiplyInteger,
-                        context: (),
+                        context: location,
                     }
                     .apply(left)
                     .apply(right),
                     BinOp::DivInt => Term::Builtin {
                         func: DefaultFunction::DivideInteger,
-                        context: (),
+                        context: location,
                     }
                     .apply(left)
                     .apply(right),
                     BinOp::ModInt => Term::Builtin {
                         func: DefaultFunction::ModInteger,
-                        context: (),
+                        context: location,
                     }
                     .apply(left)
                     .apply(right),
@@ -4585,7 +4624,7 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(term)
             }
-            Air::CastFromData { tipo, full_cast, .. } => {
+            Air::CastFromData { tipo, full_cast, location } => {
                 let mut term = arg_stack.pop().unwrap();
 
                 term = if full_cast {
@@ -4595,7 +4634,7 @@ impl<'a> CodeGenerator<'a> {
                 };
 
                 if extract_constant(term.pierce_no_inlines_ref()).is_some() {
-                    let mut program = self.new_program(term);
+                    let mut program = self.new_program(term.clone().map_context(|_| ()));
 
                     let mut interner = CodeGenInterner::new();
 
@@ -4609,18 +4648,19 @@ impl<'a> CodeGenerator<'a> {
                         .result()
                         .expect("Evaluated on unwrapping a data constant and got an error");
 
-                    term = evaluated_term.try_into().unwrap();
+                    let result: Term<Name> = evaluated_term.try_into().unwrap();
+                    term = result.map_context(|_| location);
                 }
 
                 Some(term)
             }
-            Air::CastToData { tipo, .. } => {
+            Air::CastToData { tipo, location } => {
                 let mut term = arg_stack.pop().unwrap();
 
                 if extract_constant(term.pierce_no_inlines_ref()).is_some() {
                     term = builder::convert_type_to_data(term, &tipo, &self.data_types);
 
-                    let mut program = self.new_program(term);
+                    let mut program = self.new_program(term.clone().map_context(|_| ()));
 
                     let mut interner = CodeGenInterner::new();
 
@@ -4634,7 +4674,8 @@ impl<'a> CodeGenerator<'a> {
                         .result()
                         .expect("Evaluated on wrapping a constant into data and got an error");
 
-                    term = evaluated_term.try_into().unwrap();
+                    let result: Term<Name> = evaluated_term.try_into().unwrap();
+                    term = result.map_context(|_| location);
                 } else {
                     term = builder::convert_type_to_data(term, &tipo, &self.data_types);
                 }
@@ -4803,7 +4844,7 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(term)
             }
-            Air::Constr { tag, count, tipo, .. } => {
+            Air::Constr { tag, count, tipo, location } => {
                 let mut arg_vec = vec![];
                 for _ in 0..count {
                     arg_vec.push(arg_stack.pop().unwrap());
@@ -4831,7 +4872,7 @@ impl<'a> CodeGenerator<'a> {
                     let maybe_const = extract_constant(item.pierce_no_inlines_ref());
                     maybe_const.is_some()
                 }) {
-                    let mut program = self.new_program(term);
+                    let mut program = self.new_program(term.clone().map_context(|_| ()));
 
                     let mut interner = CodeGenInterner::new();
 
@@ -4845,7 +4886,8 @@ impl<'a> CodeGenerator<'a> {
                         .result()
                         .expect("Evaluated a constant record with args and got an error");
 
-                    term = evaluated_term.try_into().unwrap();
+                    let result: Term<Name> = evaluated_term.try_into().unwrap();
+                    term = result.map_context(|_| location);
                 }
 
                 Some(term)
@@ -4854,7 +4896,7 @@ impl<'a> CodeGenerator<'a> {
                 indices,
                 is_expect,
                 list_decorator,
-                ..
+                location,
             } => {
                 let mut id_list = vec![];
 
@@ -4865,7 +4907,7 @@ impl<'a> CodeGenerator<'a> {
                 let otherwise = if is_expect {
                     arg_stack.pop().unwrap()
                 } else {
-                    (Term::Error { context: () }).delay()
+                    (Term::Error { context: location }).delay()
                 };
 
                 let list_id = self.id_gen.next();
@@ -4934,7 +4976,7 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(term)
             }
-            Air::Tuple { count, tipo, .. } => {
+            Air::Tuple { count, tipo, location } => {
                 let mut args = vec![];
 
                 let tuple_sub_types = tipo.get_inner_types();
@@ -4956,7 +4998,7 @@ impl<'a> CodeGenerator<'a> {
 
                     let term = Term::Constant {
                         value: UplcConstant::ProtoList(UplcType::Data, data_constants).into(),
-                        context: (),
+                        context: location,
                     };
                     Some(term)
                 } else {
@@ -4969,7 +5011,7 @@ impl<'a> CodeGenerator<'a> {
                     Some(term)
                 }
             }
-            Air::Pair { tipo, .. } => {
+            Air::Pair { tipo, location } => {
                 let fst = arg_stack.pop().unwrap();
                 let snd = arg_stack.pop().unwrap();
 
@@ -4984,7 +5026,7 @@ impl<'a> CodeGenerator<'a> {
                                 pair_fields.remove(0).into(),
                             )
                             .into(),
-                            context: (),
+                            context: location,
                         };
                         Some(term)
                     }
@@ -5143,7 +5185,7 @@ impl<'a> CodeGenerator<'a> {
                 tipo,
                 names,
                 is_expect,
-                ..
+                location,
             } => {
                 let inner_types = tipo.get_inner_types();
                 let value = arg_stack.pop().unwrap();
@@ -5152,7 +5194,7 @@ impl<'a> CodeGenerator<'a> {
                 let otherwise = if is_expect {
                     arg_stack.pop().unwrap()
                 } else {
-                    (Term::Error { context: () }).delay()
+                    (Term::Error { context: location }).delay()
                 };
                 let list_id = self.id_gen.next();
 
@@ -5188,7 +5230,7 @@ impl<'a> CodeGenerator<'a> {
                 snd,
                 tipo,
                 is_expect,
-                ..
+                location,
             } => {
                 let inner_types = tipo.get_inner_types();
                 let value = arg_stack.pop().unwrap();
@@ -5197,7 +5239,7 @@ impl<'a> CodeGenerator<'a> {
                 let otherwise = if is_expect {
                     arg_stack.pop().unwrap()
                 } else {
-                    (Term::Error { context: () }).delay()
+                    (Term::Error { context: Span::default() }).delay()
                 };
 
                 let list_id = self.id_gen.next();
@@ -5205,7 +5247,7 @@ impl<'a> CodeGenerator<'a> {
                 if let Some(name) = snd {
                     let value = Term::snd_pair().apply(Term::var(format!("__pair_{list_id}")));
                     term = if is_expect {
-                        if otherwise == (Term::Error { context: () }).delay() {
+                        if otherwise == (Term::Error { context: Span::default() }).delay() {
                             term.lambda(name).apply(unknown_data_to_type(
                                 value,
                                 &inner_types[1],
@@ -5233,7 +5275,7 @@ impl<'a> CodeGenerator<'a> {
                 if let Some(name) = fst {
                     let value = Term::fst_pair().apply(Term::var(format!("__pair_{list_id}")));
                     term = if is_expect {
-                        if otherwise == (Term::Error { context: () }).delay() {
+                        if otherwise == (Term::Error { context: Span::default() }).delay() {
                             term.lambda(name).apply(unknown_data_to_type(
                                 value,
                                 &inner_types[0],
@@ -5271,11 +5313,11 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(term)
             }
-            Air::ErrorTerm { validator, .. } => {
+            Air::ErrorTerm { validator, location, .. } => {
                 if validator {
-                    Some((Term::Error { context: () }).apply((Term::Error { context: () }).force()))
+                    Some((Term::Error { context: location }).apply((Term::Error { context: location }).force()))
                 } else {
-                    Some(Term::Error { context: () })
+                    Some(Term::Error { context: location })
                 }
             }
 
@@ -5285,7 +5327,7 @@ impl<'a> CodeGenerator<'a> {
                 let then = arg_stack.pop().unwrap();
                 let otherwise = arg_stack.pop().unwrap();
 
-                if otherwise == (Term::Error { context: () }).delay() {
+                if otherwise == (Term::Error { context: Span::default() }).delay() {
                     Some(then.lambda(name).apply(unknown_data_to_type(
                         value,
                         &tipo,

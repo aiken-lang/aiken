@@ -606,12 +606,12 @@ where
     }
 }
 
-impl Term<Name> {
+impl<C: Default> Term<Name, C> {
     pub fn lambda(self, parameter_name: impl ToString) -> Self {
         Term::Lambda {
             parameter_name: Name::text(parameter_name).into(),
             body: self.into(),
-            context: (),
+            context: Default::default(),
         }
     }
 
@@ -619,9 +619,12 @@ impl Term<Name> {
     pub fn var(name: impl ToString) -> Self {
         Term::Var {
             name: Name::text(name).into(),
-            context: (),
+            context: Default::default(),
         }
     }
+}
+
+impl<C: Default + Clone> Term<Name, C> {
 
     // Misc.
     pub fn constr_fields_exposer(self) -> Self {
@@ -683,9 +686,9 @@ impl Term<Name> {
     ///      .do_another_thing()
     /// })
     ///
-    pub fn as_var<F>(self, var_name: &str, callback: F) -> Term<Name>
+    pub fn as_var<F>(self, var_name: &str, callback: F) -> Term<Name, C>
     where
-        F: FnOnce(Rc<Name>) -> Term<Name>,
+        F: FnOnce(Rc<Name>) -> Term<Name, C>,
     {
         callback(Name::text(var_name).into())
             .lambda(var_name)
@@ -694,16 +697,16 @@ impl Term<Name> {
 
     /// Continue a computation provided that the current term is a Data-wrapped integer.
     /// The 'callback' receives an integer constant Term as argument.
-    pub fn choose_data_integer<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name>) -> Self
+    pub fn choose_data_integer<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name, C>) -> Self
     where
-        F: FnOnce(Term<Name>) -> Term<Name>,
+        F: FnOnce(Term<Name, C>) -> Term<Name, C>,
     {
-        Term::Var { name: var.clone(), context: () }
+        Term::Var { name: var.clone(), context: C::default() }
             .choose_data(
                 otherwise.clone(),
                 otherwise.clone(),
                 otherwise.clone(),
-                callback(Term::un_i_data().apply(Term::Var { name: var, context: () })).delay(),
+                callback(Term::un_i_data().apply(Term::Var { name: var, context: C::default() })).delay(),
                 otherwise.clone(),
             )
             .force()
@@ -711,32 +714,32 @@ impl Term<Name> {
 
     /// Continue a computation provided that the current term is a Data-wrapped
     /// bytearray. The 'callback' receives a bytearray constant Term as argument.
-    pub fn choose_data_bytearray<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name>) -> Self
+    pub fn choose_data_bytearray<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name, C>) -> Self
     where
-        F: FnOnce(Term<Name>) -> Term<Name>,
+        F: FnOnce(Term<Name, C>) -> Term<Name, C>,
     {
-        Term::Var { name: var.clone(), context: () }
+        Term::Var { name: var.clone(), context: C::default() }
             .choose_data(
                 otherwise.clone(),
                 otherwise.clone(),
                 otherwise.clone(),
                 otherwise.clone(),
-                callback(Term::un_b_data().apply(Term::Var { name: var, context: () })).delay(),
+                callback(Term::un_b_data().apply(Term::Var { name: var, context: C::default() })).delay(),
             )
             .force()
     }
 
     /// Continue a computation provided that the current term is a Data-wrapped
     /// list. The 'callback' receives a ProtoList Term as argument.
-    pub fn choose_data_list<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name>) -> Self
+    pub fn choose_data_list<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name, C>) -> Self
     where
-        F: FnOnce(Term<Name>) -> Term<Name>,
+        F: FnOnce(Term<Name, C>) -> Term<Name, C>,
     {
-        Term::Var { name: var.clone(), context: () }
+        Term::Var { name: var.clone(), context: C::default() }
             .choose_data(
                 otherwise.clone(),
                 otherwise.clone(),
-                callback(Term::unlist_data().apply(Term::Var { name: var, context: () })).delay(),
+                callback(Term::unlist_data().apply(Term::Var { name: var, context: C::default() })).delay(),
                 otherwise.clone(),
                 otherwise.clone(),
             )
@@ -745,14 +748,14 @@ impl Term<Name> {
 
     /// Continue a computation provided that the current term is a Data-wrapped
     /// list. The 'callback' receives a ProtoMap Term as argument.
-    pub fn choose_data_map<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name>) -> Self
+    pub fn choose_data_map<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name, C>) -> Self
     where
-        F: FnOnce(Term<Name>) -> Term<Name>,
+        F: FnOnce(Term<Name, C>) -> Term<Name, C>,
     {
-        Term::Var { name: var.clone(), context: () }
+        Term::Var { name: var.clone(), context: C::default() }
             .choose_data(
                 otherwise.clone(),
-                callback(Term::unmap_data().apply(Term::Var { name: var, context: () })).delay(),
+                callback(Term::unmap_data().apply(Term::Var { name: var, context: C::default() })).delay(),
                 otherwise.clone(),
                 otherwise.clone(),
                 otherwise.clone(),
@@ -762,13 +765,13 @@ impl Term<Name> {
 
     /// Continue a computation provided that the current term is a Data-wrapped
     /// constr. The 'callback' receives a Data as argument.
-    pub fn choose_data_constr<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name>) -> Self
+    pub fn choose_data_constr<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name, C>) -> Self
     where
-        F: FnOnce(Term<Name>) -> Term<Name>,
+        F: FnOnce(Term<Name, C>) -> Term<Name, C>,
     {
-        Term::Var { name: var.clone(), context: () }
+        Term::Var { name: var.clone(), context: C::default() }
             .choose_data(
-                callback(Term::Var { name: var, context: () }).delay(),
+                callback(Term::Var { name: var, context: C::default() }).delay(),
                 otherwise.clone(),
                 otherwise.clone(),
                 otherwise.clone(),
@@ -782,25 +785,25 @@ impl Term<Name> {
     ///
     /// Note that the 'otherwise' term is expected
     /// to be a delayed term.
-    pub fn unwrap_bool_or<F>(self, callback: F, otherwise: &Term<Name>) -> Term<Name>
+    pub fn unwrap_bool_or<F>(self, callback: F, otherwise: &Term<Name, C>) -> Term<Name, C>
     where
-        F: FnOnce(Term<Name>) -> Term<Name>,
+        F: FnOnce(Term<Name, C>) -> Term<Name, C>,
     {
         Term::unconstr_data()
             .apply(self)
             .as_var("__pair__", |pair| {
                 Term::snd_pair()
-                    .apply(Term::Var { name: pair.clone(), context: () })
+                    .apply(Term::Var { name: pair.clone(), context: C::default() })
                     .delay_empty_choose_list(
                         Term::less_than_equals_integer()
                             .apply(Term::integer(2.into()))
-                            .apply(Term::fst_pair().apply(Term::Var { name: pair.clone(), context: () }))
+                            .apply(Term::fst_pair().apply(Term::Var { name: pair.clone(), context: C::default() }))
                             .delay_false_if_then_else(
                                 otherwise.clone(),
                                 callback(
                                     Term::equals_integer()
                                         .apply(Term::integer(1.into()))
-                                        .apply(Term::fst_pair().apply(Term::Var { name: pair, context: () })),
+                                        .apply(Term::fst_pair().apply(Term::Var { name: pair, context: C::default() })),
                                 ),
                             ),
                         otherwise.clone(),
@@ -813,9 +816,9 @@ impl Term<Name> {
     ///
     /// Note that the 'otherwise' term is expected
     /// to be a delayed term.
-    pub fn unwrap_void_or<F>(self, callback: F, otherwise: &Term<Name>) -> Term<Name>
+    pub fn unwrap_void_or<F>(self, callback: F, otherwise: &Term<Name, C>) -> Term<Name, C>
     where
-        F: FnOnce(Term<Name>) -> Term<Name>,
+        F: FnOnce(Term<Name, C>) -> Term<Name, C>,
     {
         assert!(matches!(self, Term::Var { .. }));
         Term::equals_integer()
@@ -834,18 +837,18 @@ impl Term<Name> {
     ///
     /// Note that the 'otherwise' term is expected
     /// to be a delayed term.
-    pub fn unwrap_pair_or<F>(self, callback: F, otherwise: &Term<Name>) -> Term<Name>
+    pub fn unwrap_pair_or<F>(self, callback: F, otherwise: &Term<Name, C>) -> Term<Name, C>
     where
-        F: FnOnce(Term<Name>) -> Term<Name>,
+        F: FnOnce(Term<Name, C>) -> Term<Name, C>,
     {
         self.as_var("__list_data", |list| {
-            let left = Term::head_list().apply(Term::Var { name: list.clone(), context: () });
+            let left = Term::head_list().apply(Term::Var { name: list.clone(), context: C::default() });
 
             Term::unwrap_tail_or(
                 list,
                 |tail| {
                     tail.as_var("__tail", |tail| {
-                        let right = Term::head_list().apply(Term::Var { name: tail.clone(), context: () });
+                        let right = Term::head_list().apply(Term::Var { name: tail.clone(), context: C::default() });
 
                         Term::unwrap_tail_or(
                             tail,
@@ -868,13 +871,13 @@ impl Term<Name> {
     ///
     /// Note that the 'otherwise' term is expected
     /// to be a delayed term.
-    pub fn unwrap_tail_or<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name>) -> Term<Name>
+    pub fn unwrap_tail_or<F>(var: Rc<Name>, callback: F, otherwise: &Term<Name, C>) -> Term<Name, C>
     where
-        F: FnOnce(Term<Name>) -> Term<Name>,
+        F: FnOnce(Term<Name, C>) -> Term<Name, C>,
     {
-        Term::Var { name: var.clone(), context: () }.delay_filled_choose_list(
+        Term::Var { name: var.clone(), context: C::default() }.delay_filled_choose_list(
             otherwise.clone(),
-            callback(Term::tail_list().apply(Term::Var { name: var, context: () })),
+            callback(Term::tail_list().apply(Term::Var { name: var, context: C::default() })),
         )
     }
 }
