@@ -2366,6 +2366,12 @@ pub struct Span {
     pub end: usize,
 }
 
+impl Default for Span {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
 impl From<Span> for miette::SourceSpan {
     fn from(span: Span) -> Self {
         Self::new(span.start.into(), span.end - span.start)

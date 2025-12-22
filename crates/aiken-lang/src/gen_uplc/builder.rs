@@ -486,11 +486,11 @@ pub fn modify_cyclic_calls(
     });
 }
 
-pub fn known_data_to_type(
-    term: Term<Name>,
+pub fn known_data_to_type<C: Default + Clone>(
+    term: Term<Name, C>,
     field_type: &Type,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
-) -> Term<Name> {
+) -> Term<Name, C> {
     let uplc_type = field_type.get_uplc_type();
 
     match uplc_type {
@@ -534,11 +534,11 @@ pub fn known_data_to_type(
     }
 }
 
-pub fn unknown_data_to_type(
-    term: Term<Name>,
+pub fn unknown_data_to_type<C: Default + Clone>(
+    term: Term<Name, C>,
     field_type: &Type,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
-) -> Term<Name> {
+) -> Term<Name, C> {
     let uplc_type = field_type.get_uplc_type();
 
     match uplc_type {
@@ -564,15 +564,15 @@ pub fn unknown_data_to_type(
                     .apply(
                         Term::head_list().apply(Term::tail_list().apply(Term::var("__list_data"))),
                     ),
-                Term::Error { context: () },
+                Term::Error { context: C::default() },
             )
             .lambda("__list_data")
             .apply(Term::unlist_data().apply(term)),
         Some(UplcType::Bool) => {
-            Term::unwrap_bool_or(term, |result| result, &(Term::Error { context: () }).delay())
+            Term::unwrap_bool_or(term, |result| result, &(Term::Error { context: C::default() }).delay())
         }
         Some(UplcType::Unit) => term.as_var("val", |val| {
-            Term::Var { name: val, context: () }.unwrap_void_or(|result| result, &(Term::Error { context: () }).delay())
+            Term::Var { name: val, context: C::default() }.unwrap_void_or(|result| result, &(Term::Error { context: C::default() }).delay())
         }),
 
         Some(UplcType::Data) | None => {
@@ -596,14 +596,14 @@ pub fn unknown_data_to_type(
 /// Due to the nature of the types BLS12_381_G1Element and BLS12_381_G2Element and String coming from bytearray
 /// We don't have error handling if the bytearray is not properly aligned to the type. Oh well lol
 /// For BLS12_381_G1Element and BLS12_381_G2Element, hash to group exists so just adopt that.
-pub fn softcast_data_to_type_otherwise(
-    value: Term<Name>,
+pub fn softcast_data_to_type_otherwise<C: Default + Clone>(
+    value: Term<Name, C>,
     name: &String,
     field_type: &Type,
-    then: Term<Name>,
-    otherwise_delayed: Term<Name>,
+    then: Term<Name, C>,
+    otherwise_delayed: Term<Name, C>,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
-) -> Term<Name> {
+) -> Term<Name, C> {
     assert!(matches!(otherwise_delayed, Term::Var { .. }));
 
     let uplc_type = field_type.get_uplc_type();
@@ -627,7 +627,7 @@ pub fn softcast_data_to_type_otherwise(
             }
         }
 
-        Some(UplcType::Data) => callback(Term::Var { name: val, context: () }),
+        Some(UplcType::Data) => callback(Term::Var { name: val, context: C::default() }),
 
         Some(UplcType::Bls12_381MlResult) => {
             unreachable!("attempted to cast Data into Bls12_381MlResult?!")
@@ -764,11 +764,11 @@ pub fn convert_constants_to_data(constants: Vec<Rc<UplcConstant>>) -> Vec<UplcCo
     new_constants
 }
 
-pub fn convert_type_to_data(
-    term: Term<Name>,
+pub fn convert_type_to_data<C: Default + Clone>(
+    term: Term<Name, C>,
     field_type: &Rc<Type>,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
-) -> Term<Name> {
+) -> Term<Name, C> {
     let uplc_type = field_type.get_uplc_type();
 
     match uplc_type {
@@ -799,18 +799,18 @@ pub fn convert_type_to_data(
             .apply(term),
         Some(UplcType::Unit) => Term::Constant {
             value: UplcConstant::Data(Data::constr(0, vec![])).into(),
-            context: (),
+            context: C::default(),
         }
         .lambda("_")
         .apply(term),
         Some(UplcType::Bool) => term.if_then_else(
             Term::Constant {
                 value: UplcConstant::Data(Data::constr(1, vec![])).into(),
-                context: (),
+                context: C::default(),
             },
             Term::Constant {
                 value: UplcConstant::Data(Data::constr(0, vec![])).into(),
-                context: (),
+                context: C::default(),
             },
         ),
 
@@ -832,15 +832,15 @@ pub fn convert_type_to_data(
     }
 }
 
-pub fn list_access_to_uplc(
+pub fn list_access_to_uplc<C: Default + Clone + PartialEq>(
     names_types_ids: &[(String, Rc<Type>, u64)],
     tail_present: bool,
-    term: Term<Name>,
+    term: Term<Name, C>,
     is_list_accessor: bool,
     expect_level: ExpectLevel,
-    otherwise_delayed: Term<Name>,
+    otherwise_delayed: Term<Name, C>,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
-) -> Term<Name> {
+) -> Term<Name, C> {
     let names_len = names_types_ids.len();
 
     // assert!(!(matches!(expect_level, ExpectLevel::None) && is_list_accessor && !tail_present));
@@ -882,7 +882,7 @@ pub fn list_access_to_uplc(
 
     let tail_name = |id| format!("tail_id_{id}");
 
-    let head_item = |name, tipo: &Rc<Type>, tail_name: &str, then: Term<Name>| {
+    let head_item = |name, tipo: &Rc<Type>, tail_name: &str, then: Term<Name, C>| {
         if name == "_" {
             then
         } else if tipo.is_pair() && is_list_accessor {
@@ -890,7 +890,7 @@ pub fn list_access_to_uplc(
                 .apply(Term::head_list().apply(Term::var(tail_name.to_string())))
         } else if matches!(expect_level, ExpectLevel::Full) {
             // Expect level is full so we have an unknown piece of data to cast
-            if otherwise_delayed == (Term::Error { context: () }).delay() {
+            if otherwise_delayed == (Term::Error { context: C::default() }).delay() {
                 then.lambda(name).apply(unknown_data_to_type(
                     Term::head_list().apply(Term::var(tail_name.to_string())),
                     &tipo.to_owned(),
@@ -941,7 +941,7 @@ pub fn list_access_to_uplc(
                         }
 
                         ExpectLevel::Full | ExpectLevel::Items => {
-                            if otherwise_delayed == (Term::Error { context: () }).delay() && tail_present {
+                            if otherwise_delayed == (Term::Error { context: C::default() }).delay() && tail_present {
                                 // No need to check last item if tail was present
                                 head_item(name, tipo, &tail_name, acc).lambda(tail_name)
                             } else if tail_present {
@@ -952,7 +952,7 @@ pub fn list_access_to_uplc(
                                         head_item(name, tipo, &tail_name, acc),
                                     )
                                     .lambda(tail_name)
-                            } else if otherwise_delayed == (Term::Error { context: () }).delay() {
+                            } else if otherwise_delayed == (Term::Error { context: C::default() }).delay() {
                                 // Check head is last item in this list
                                 head_item(
                                     name,
@@ -960,7 +960,7 @@ pub fn list_access_to_uplc(
                                     &tail_name,
                                     Term::tail_list()
                                         .apply(Term::var(tail_name.to_string()))
-                                        .delayed_choose_list(acc, Term::Error { context: () }),
+                                        .delayed_choose_list(acc, Term::Error { context: C::default() }),
                                 )
                                 .lambda(tail_name)
                             } else {
@@ -993,7 +993,7 @@ pub fn list_access_to_uplc(
                     // let head_item = head_item(name, tipo, &tail_name);
 
                     if matches!(expect_level, ExpectLevel::None)
-                        || otherwise_delayed == (Term::Error { context: () }).delay()
+                        || otherwise_delayed == (Term::Error { context: C::default() }).delay()
                     {
                         head_item(
                             name,
@@ -1024,21 +1024,21 @@ pub fn list_access_to_uplc(
         })
 }
 
-pub fn apply_builtin_forces(mut term: Term<Name>, force_count: u32) -> Term<Name> {
+pub fn apply_builtin_forces<C: Default + Clone>(mut term: Term<Name, C>, force_count: u32) -> Term<Name, C> {
     for _ in 0..force_count {
         term = term.force();
     }
     term
 }
 
-pub fn undata_builtin(
+pub fn undata_builtin<C: Default + Clone>(
     func: &DefaultFunction,
     count: usize,
     tipo: &Rc<Type>,
-    args: Vec<Term<Name>>,
+    args: Vec<Term<Name, C>>,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
-) -> Term<Name> {
-    let mut term: Term<Name> = (*func).into();
+) -> Term<Name, C> {
+    let mut term: Term<Name, C> = (*func).into();
 
     term = apply_builtin_forces(term, func.force_count());
 
@@ -1060,14 +1060,14 @@ pub fn undata_builtin(
     term
 }
 
-pub fn to_data_builtin(
+pub fn to_data_builtin<C: Default + Clone>(
     func: &DefaultFunction,
     count: usize,
     tipo: &Rc<Type>,
-    mut args: Vec<Term<Name>>,
+    mut args: Vec<Term<Name, C>>,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
-) -> Term<Name> {
-    let mut term: Term<Name> = (*func).into();
+) -> Term<Name, C> {
+    let mut term: Term<Name, C> = (*func).into();
 
     term = apply_builtin_forces(term, func.force_count());
 
@@ -1099,13 +1099,13 @@ pub fn to_data_builtin(
     term
 }
 
-pub fn special_case_builtin(
+pub fn special_case_builtin<C: Default + Clone>(
     func: &DefaultFunction,
     tipo: Rc<Type>,
     count: usize,
-    mut args: Vec<Term<Name>>,
+    mut args: Vec<Term<Name, C>>,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
-) -> Term<Name> {
+) -> Term<Name, C> {
     match func {
         DefaultFunction::ChooseUnit if count > 0 => {
             let term = args.pop().unwrap();
@@ -1138,7 +1138,7 @@ pub fn special_case_builtin(
         | DefaultFunction::ChooseList
         | DefaultFunction::ChooseData
         | DefaultFunction::Trace => {
-            let mut term: Term<Name> = (*func).into();
+            let mut term: Term<Name, C> = (*func).into();
 
             term = apply_builtin_forces(term, func.force_count());
 
@@ -1172,7 +1172,7 @@ pub fn special_case_builtin(
             term
         }
         DefaultFunction::UnConstrData => {
-            let mut term: Term<Name> = (*func).into();
+            let mut term: Term<Name, C> = (*func).into();
 
             let temp_tuple = "__unconstr_tuple";
 
@@ -1202,12 +1202,12 @@ pub fn special_case_builtin(
     }
 }
 
-pub fn cast_validator_args(
-    term: Term<Name>,
+pub fn cast_validator_args<C: Default + Clone>(
+    term: Term<Name, C>,
     arguments: &[TypedArg],
     interner: &AirInterner,
     data_types: &IndexMap<&DataTypeKey, &TypedDataType>,
-) -> Term<Name> {
+) -> Term<Name, C> {
     let mut term = term;
     for arg in arguments.iter().rev() {
         let name = arg
@@ -1243,7 +1243,7 @@ pub fn wrap_validator_condition(air_tree: AirTree, trace: TraceLevel) -> AirTree
     AirTree::if_branch(Type::void(), air_tree, AirTree::void(Span::empty()), otherwise, Span::empty())
 }
 
-pub fn extract_constant(term: &Term<Name>) -> Option<Rc<UplcConstant>> {
+pub fn extract_constant<C>(term: &Term<Name, C>) -> Option<Rc<UplcConstant>> {
     let mut constant = None;
 
     if let Term::Constant { value: c, .. } = term {

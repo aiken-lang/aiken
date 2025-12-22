@@ -4921,7 +4921,7 @@ fn expect_head3_no_tail() {
                 Constant::Data(Data::integer(2.into())),
                 Constant::Data(Data::integer(3.into())),
             ]))
-            .lambda(Term::var("expect[h,i,j]=a"))
+            .lambda("expect[h,i,j]=a")
             .apply(
                 (Term::Error { context: () })
                     .delayed_trace(Term::string("expect [h, i, j] = a"))
@@ -6414,4 +6414,199 @@ fn as_data() {
         .if_then_else(Term::bool(false), Term::bool(true));
 
     assert_uplc(src, program, false, true)
+}
+
+/// Debug test to verify source locations are threaded through to Terms
+#[test]
+fn debug_source_locations_fibonacci() {
+    use aiken_lang::ast::Span;
+    use uplc::ast::Term as UplcTerm;
+
+    let src = r#"
+      fn fib(n: Int) -> Int {
+        if n < 2 {
+          n
+        } else {
+          fib(n - 1) + fib(n - 2)
+        }
+      }
+
+      test fib_test() {
+        fib(10) == 55
+      }
+    "#;
+
+    let mut project = TestProject::new();
+    let modules = CheckedModules::singleton(project.check(project.parse(src)));
+
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Silent));
+
+    let Some(checked_module) = modules.values().next() else {
+        unreachable!("There's got to be one right?")
+    };
+
+    for def in checked_module.ast.definitions() {
+        if let Definition::Test(func) = def {
+            // Get the term WITH Span context preserved
+            let term_with_spans = generator.generate_raw_with_spans(&func.body, &[], &checked_module.name);
+
+            println!("\n=== Source code ===");
+            println!("{}", src);
+
+            // Helper to extract source snippet for a span
+            fn get_source_snippet(src: &str, span: &Span) -> String {
+                if span.start == 0 && span.end == 0 {
+                    return "(empty span)".to_string();
+                }
+                let bytes = src.as_bytes();
+                let start = span.start.min(bytes.len());
+                let end = span.end.min(bytes.len());
+                if start >= end {
+                    return format!("(invalid span {}..{})", span.start, span.end);
+                }
+                let snippet = String::from_utf8_lossy(&bytes[start..end]);
+                // Truncate long snippets
+                if snippet.len() > 40 {
+                    format!("{}...", &snippet[..40])
+                } else {
+                    snippet.to_string()
+                }
+            }
+
+            // Print terms with their spans
+            fn print_terms_with_spans(
+                term: &UplcTerm<Name, Span>,
+                src: &str,
+                indent: usize,
+                count: &mut usize,
+                non_empty_count: &mut usize,
+            ) {
+                let prefix = "  ".repeat(indent);
+                *count += 1;
+
+                match term {
+                    UplcTerm::Var { name, context } => {
+                        let snippet = if *context != Span::empty() {
+                            *non_empty_count += 1;
+                            format!(" @ {:?} = \"{}\"", context, get_source_snippet(src, context))
+                        } else {
+                            " (no span)".to_string()
+                        };
+                        println!("{}Var({}){}", prefix, name.text, snippet);
+                    }
+                    UplcTerm::Lambda { parameter_name, body, context } => {
+                        let snippet = if *context != Span::empty() {
+                            *non_empty_count += 1;
+                            format!(" @ {:?}", context)
+                        } else {
+                            " (no span)".to_string()
+                        };
+                        println!("{}Lambda({}){}", prefix, parameter_name.text, snippet);
+                        print_terms_with_spans(body, src, indent + 1, count, non_empty_count);
+                    }
+                    UplcTerm::Apply { function, argument, context } => {
+                        let snippet = if *context != Span::empty() {
+                            *non_empty_count += 1;
+                            format!(" @ {:?}", context)
+                        } else {
+                            " (no span)".to_string()
+                        };
+                        println!("{}Apply{}", prefix, snippet);
+                        print_terms_with_spans(function, src, indent + 1, count, non_empty_count);
+                        print_terms_with_spans(argument, src, indent + 1, count, non_empty_count);
+                    }
+                    UplcTerm::Builtin { func, context } => {
+                        let snippet = if *context != Span::empty() {
+                            *non_empty_count += 1;
+                            format!(" @ {:?} = \"{}\"", context, get_source_snippet(src, context))
+                        } else {
+                            " (no span)".to_string()
+                        };
+                        println!("{}Builtin({:?}){}", prefix, func, snippet);
+                    }
+                    UplcTerm::Constant { value, context } => {
+                        let snippet = if *context != Span::empty() {
+                            *non_empty_count += 1;
+                            format!(" @ {:?}", context)
+                        } else {
+                            " (no span)".to_string()
+                        };
+                        println!("{}Constant({:?}){}", prefix, value, snippet);
+                    }
+                    UplcTerm::Force { term: inner, context } => {
+                        let snippet = if *context != Span::empty() {
+                            *non_empty_count += 1;
+                            format!(" @ {:?}", context)
+                        } else {
+                            " (no span)".to_string()
+                        };
+                        println!("{}Force{}", prefix, snippet);
+                        print_terms_with_spans(inner, src, indent + 1, count, non_empty_count);
+                    }
+                    UplcTerm::Delay { term: inner, context } => {
+                        let snippet = if *context != Span::empty() {
+                            *non_empty_count += 1;
+                            format!(" @ {:?}", context)
+                        } else {
+                            " (no span)".to_string()
+                        };
+                        println!("{}Delay{}", prefix, snippet);
+                        print_terms_with_spans(inner, src, indent + 1, count, non_empty_count);
+                    }
+                    UplcTerm::Error { context } => {
+                        let snippet = if *context != Span::empty() {
+                            *non_empty_count += 1;
+                            format!(" @ {:?}", context)
+                        } else {
+                            " (no span)".to_string()
+                        };
+                        println!("{}Error{}", prefix, snippet);
+                    }
+                    UplcTerm::Constr { tag, fields, context } => {
+                        let snippet = if *context != Span::empty() {
+                            *non_empty_count += 1;
+                            format!(" @ {:?}", context)
+                        } else {
+                            " (no span)".to_string()
+                        };
+                        println!("{}Constr(tag={}){}", prefix, tag, snippet);
+                        for f in fields {
+                            print_terms_with_spans(f, src, indent + 1, count, non_empty_count);
+                        }
+                    }
+                    UplcTerm::Case { constr, branches, context } => {
+                        let snippet = if *context != Span::empty() {
+                            *non_empty_count += 1;
+                            format!(" @ {:?}", context)
+                        } else {
+                            " (no span)".to_string()
+                        };
+                        println!("{}Case{}", prefix, snippet);
+                        print_terms_with_spans(constr, src, indent + 1, count, non_empty_count);
+                        for b in branches {
+                            print_terms_with_spans(b, src, indent + 1, count, non_empty_count);
+                        }
+                    }
+                }
+            }
+
+            println!("\n=== Term tree with source locations ===");
+            let mut total_count = 0;
+            let mut non_empty_count = 0;
+            print_terms_with_spans(&term_with_spans, src, 0, &mut total_count, &mut non_empty_count);
+
+            println!("\n=== Summary ===");
+            println!("Total terms: {}", total_count);
+            println!("Terms with non-empty spans: {}", non_empty_count);
+            println!("Coverage: {:.1}%", (non_empty_count as f64 / total_count as f64) * 100.0);
+
+            // Also run the program to verify correctness
+            let program = generator.generate_raw(&func.body, &[], &checked_module.name);
+            let debruijn_program: Program<DeBruijn> = program.try_into().unwrap();
+            let result = debruijn_program.eval(ExBudget::max());
+            println!("\n=== Evaluation result: {:?} ===", result.result());
+
+            break;
+        }
+    }
 }

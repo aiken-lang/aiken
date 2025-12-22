@@ -894,6 +894,28 @@ pub enum Args {
     Apply(usize, Term<Name>),
 }
 
+/// Generic impl block for methods that work with any context type
+impl<C> Term<Name, C> {
+    pub fn pierce_no_inlines_ref(&self) -> &Self {
+        let mut term = self;
+
+        while let Term::Lambda {
+            parameter_name,
+            body,
+            ..
+        } = term
+        {
+            if parameter_name.as_ref().text == NO_INLINE {
+                term = body;
+            } else {
+                break;
+            }
+        }
+
+        term
+    }
+}
+
 impl Term<Name> {
     fn traverse_uplc_with_helper(
         &mut self,
@@ -2204,25 +2226,6 @@ impl Term<Name> {
                 *c = Constant::Integer(i.neg()).into();
             }
         }
-    }
-
-    pub fn pierce_no_inlines_ref(&self) -> &Self {
-        let mut term = self;
-
-        while let Term::Lambda {
-            parameter_name,
-            body,
-            ..
-        } = term
-        {
-            if parameter_name.as_ref().text == NO_INLINE {
-                term = body;
-            } else {
-                break;
-            }
-        }
-
-        term
     }
 
     fn pierce_no_inlines(mut self) -> Self {
