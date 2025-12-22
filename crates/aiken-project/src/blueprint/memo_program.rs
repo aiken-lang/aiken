@@ -1,9 +1,10 @@
-use aiken_lang::{ast::TypedValidator, gen_uplc::CodeGenerator};
-use uplc::ast::{DeBruijn, Program};
+use aiken_lang::{ast::Span, ast::TypedValidator, gen_uplc::CodeGenerator};
+use uplc::ast::{DeBruijn, Name, Program, Term};
 
 #[derive(Default)]
 pub struct MemoProgram {
     program: Option<Program<DeBruijn>>,
+    term_with_spans: Option<Term<Name, Span>>,
 }
 
 impl MemoProgram {
@@ -15,13 +16,22 @@ impl MemoProgram {
     ) -> Program<DeBruijn> {
         match self.program.take() {
             None => {
-                let new_program = generator.generate(def, module_name).to_debruijn().unwrap();
+                let (program, term_with_spans) =
+                    generator.generate_with_term(def, module_name);
+                let new_program = program.to_debruijn().unwrap();
 
                 self.program.replace(new_program.clone());
+                self.term_with_spans.replace(term_with_spans);
 
                 new_program
             }
             Some(program) => program,
         }
+    }
+
+    /// Get the term with spans, if available.
+    /// This is only available after `get()` has been called.
+    pub fn get_term_with_spans(&self) -> Option<&Term<Name, Span>> {
+        self.term_with_spans.as_ref()
     }
 }

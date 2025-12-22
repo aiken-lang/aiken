@@ -4,14 +4,18 @@ use crate::{
         definitions::Definitions,
         parameter::Parameter,
         schema::{Annotated, Declaration, Schema},
+        source_map::SourceMap,
     },
     module::{CheckedModule, CheckedModules},
+    options::SourceMapMode,
 };
 use aiken_lang::{
     ast::{ArgName, Span, TypedArg, TypedFunction},
     gen_uplc::CodeGenerator,
+    line_numbers::LineNumbers,
     plutus_version::PlutusVersion,
 };
+use indexmap::IndexMap;
 use miette::NamedSource;
 use uplc::ast::SerializableProgram;
 
@@ -34,6 +38,10 @@ pub struct Export {
     #[serde(skip_serializing_if = "Definitions::is_empty")]
     #[serde(default)]
     pub definitions: Definitions<Annotated<Schema>>,
+
+    /// Inline source map (when embedded in export)
+    #[serde(rename = "sourceMap", skip_serializing_if = "Option::is_none")]
+    pub source_map: Option<SourceMap>,
 }
 
 impl Export {
@@ -43,6 +51,8 @@ impl Export {
         generator: &mut CodeGenerator,
         modules: &CheckedModules,
         plutus_version: &PlutusVersion,
+        source_map_mode: &SourceMapMode,
+        module_sources: &IndexMap<&str, &(String, LineNumbers)>,
     ) -> Result<Export, blueprint::Error> {
         let mut definitions = Definitions::new();
 
@@ -102,10 +112,41 @@ impl Export {
             ),
         })?;
 
-        let program = generator
-            .generate_raw(&func.body, &func.arguments, &module.name)
-            .to_debruijn()
-            .unwrap();
+        // Generate the term with spans if source maps are requested
+        let (program, source_map) = match source_map_mode {
+            SourceMapMode::None => {
+                let program = generator
+                    .generate_raw(&func.body, &func.arguments, &module.name)
+                    .to_debruijn()
+                    .unwrap();
+                (program, None)
+            }
+            SourceMapMode::Inline | SourceMapMode::External(_) => {
+                // Generate with spans to build source map
+                let term_with_spans =
+                    generator.generate_raw_with_spans(&func.body, &func.arguments, &module.name);
+
+                // Build source map from the term
+                let source_map =
+                    SourceMap::from_term(&term_with_spans, &module.name, module_sources);
+
+                // Convert to program and then to DeBruijn
+                // Strip the Span context from the term
+                let term = term_with_spans.map_context(|_| ());
+
+                // Create version tuple based on plutus version
+                let version = match plutus_version {
+                    PlutusVersion::V1 | PlutusVersion::V2 => (1, 0, 0),
+                    PlutusVersion::V3 => (1, 1, 0),
+                };
+
+                let program = uplc::ast::Program { version, term }
+                    .to_debruijn()
+                    .unwrap();
+
+                (program, Some(source_map))
+            }
+        };
 
         let program = match plutus_version {
             PlutusVersion::V1 => SerializableProgram::PlutusV1Program(program),
@@ -120,6 +161,7 @@ impl Export {
             return_type,
             program,
             definitions,
+            source_map,
         })
     }
 }
@@ -127,12 +169,13 @@ impl Export {
 #[cfg(test)]
 mod tests {
     use super::{CheckedModules, Export};
-    use crate::tests::TestProject;
+    use crate::{options::SourceMapMode, tests::TestProject};
     use aiken_lang::{
         self,
         ast::{TraceLevel, Tracing},
         plutus_version::PlutusVersion,
     };
+    use indexmap::IndexMap;
 
     macro_rules! assert_export {
         ($code:expr) => {
@@ -149,7 +192,17 @@ mod tests {
                 .next()
                 .expect("source code did no yield any exports");
 
-            let export = Export::from_function(func, module, &mut generator, &modules, &PlutusVersion::default());
+            let module_sources: IndexMap<&str, &(String, aiken_lang::line_numbers::LineNumbers)> = IndexMap::new();
+
+            let export = Export::from_function(
+                func,
+                module,
+                &mut generator,
+                &modules,
+                &PlutusVersion::default(),
+                &SourceMapMode::None,
+                &module_sources,
+            );
 
             match export {
                 Err(e) => insta::with_settings!({

@@ -130,6 +130,17 @@ impl<'a> CodeGenerator<'a> {
     }
 
     pub fn generate(&mut self, validator: &TypedValidator, module_name: &str) -> Program<Name> {
+        let (program, _term_with_spans) = self.generate_with_term(validator, module_name);
+        program
+    }
+
+    /// Generate a validator program and return both the finalized program and the term with spans.
+    /// The term with spans is useful for generating source maps.
+    pub fn generate_with_term(
+        &mut self,
+        validator: &TypedValidator,
+        module_name: &str,
+    ) -> (Program<Name>, Term<Name, Span>) {
         let context_name = "__context__".to_string();
         let context_name_interned = introduce_name(&mut self.interner, &context_name);
         validator.params.iter().for_each(|arg| {
@@ -164,7 +175,8 @@ impl<'a> CodeGenerator<'a> {
                 .for_each(|arg_name| self.interner.pop_text(arg_name.to_string()))
         });
 
-        self.finalize(term.map_context(|_| ()))
+        let program = self.finalize(term.clone().map_context(|_| ()));
+        (program, term)
     }
 
     pub fn generate_raw(
