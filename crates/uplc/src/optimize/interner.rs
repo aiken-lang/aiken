@@ -29,11 +29,11 @@ impl CodeGenInterner {
         }
     }
 
-    pub fn program(&mut self, program: &mut Program<Name>) {
+    pub fn program<C: Clone>(&mut self, program: &mut Program<Name, C>) {
         self.term(&mut program.term);
     }
 
-    pub fn term(&mut self, term: &mut Term<Name>) {
+    pub fn term<C: Clone>(&mut self, term: &mut Term<Name, C>) {
         match term {
             Term::Var { name, .. } => {
                 let name = Rc::make_mut(name);
