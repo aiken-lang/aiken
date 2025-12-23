@@ -1,4 +1,4 @@
-use super::{ExBudget, Value};
+use super::{ExBudget, value::Value};
 use crate::ast::{NamedDeBruijn, Term, Type};
 use num_bigint::BigInt;
 use std::string::FromUtf8Error;
@@ -14,7 +14,7 @@ pub enum Error {
         "Term",
         indent(redacted(.0.to_pretty(), 10)),
     )]
-    OpenTermEvaluated(Term<NamedDeBruijn>),
+    OpenTermEvaluated(Term<NamedDeBruijn, ()>),
     #[error("the validator crashed / exited prematurely")]
     EvaluationFailure,
     #[error(
@@ -22,7 +22,7 @@ pub enum Error {
         "Term",
         indent(redacted(format!("{:#?}", .0), 10)),
     )]
-    NonPolymorphicInstantiation(Value),
+    NonPolymorphicInstantiation(Value<()>),
     #[error(
       "attempted to apply an argument to a non-function\n{:>13} {}\n{:>13} {}",
       "Thing",
@@ -30,15 +30,15 @@ pub enum Error {
       "Argument",
       indent(redacted(format!("{:#?}", .1), 5)),
     )]
-    NonFunctionalApplication(Value, Value),
+    NonFunctionalApplication(Value<()>, Value<()>),
     #[error(
         "attempted to case a non-const\n{:>13} {}",
         "Value",
         indent(redacted(format!("{:#?}", .0), 10)),
     )]
-    NonConstrScrutinized(Value),
+    NonConstrScrutinized(Value<()>),
     #[error("Cases: {0:#?}\n\n are missing branch for constr:\n\n{1:#?}")]
-    MissingCaseBranch(Vec<Term<NamedDeBruijn>>, Value),
+    MissingCaseBranch(Vec<Term<NamedDeBruijn, ()>>, Value<()>),
     #[error("type mismatch\n{:>13} {0}\n{:>13} {1}", "Expected", "Got")]
     TypeMismatch(Type, Type),
     #[error("type mismatch\n{:>13} (list a)\n{:>13} {0}", "Expected", "Got")]
@@ -50,27 +50,27 @@ pub enum Error {
         "List",
         indent(redacted(format!("{:#?}", .0), 10)),
     )]
-    EmptyList(Value),
+    EmptyList(Value<()>),
     #[error(
         "a builtin received a term argument when something else was expected\n{:>13} {}\n{:>13} You probably forgot to wrap the builtin with a force.",
         "Term",
         indent(redacted(format!("{:#?}", .0), 10)),
         "Hint"
     )]
-    UnexpectedBuiltinTermArgument(Term<NamedDeBruijn>),
+    UnexpectedBuiltinTermArgument(Term<NamedDeBruijn, ()>),
     #[error(
         "a builtin expected a term argument, but something else was received:\n{:>13} {}\n{:>13} You probably have an extra force wrapped around a builtin",
         "Term",
         indent(redacted(format!("{:#?}", .0), 10)),
         "Hint"
     )]
-    BuiltinTermArgumentExpected(Term<NamedDeBruijn>),
+    BuiltinTermArgumentExpected(Term<NamedDeBruijn, ()>),
     #[error(
         "Unable to unlift value because it is not a constant\n{:>13} {}",
         "Value",
         indent(redacted(format!("{:#?}", .0), 10)),
     )]
-    NotAConstant(Value),
+    NotAConstant(Value<()>),
     #[error("The evaluation never reached a final state")]
     MachineNeverReachedDone,
     #[error("integerToByteString encountered negative size\n{:>13} {0}", "Size")]
@@ -125,7 +125,7 @@ pub enum Error {
       "Value",
       indent(redacted(format!("{:#?}", .1), 10)),
     )]
-    DeserialisationError(String, Value),
+    DeserialisationError(String, Value<()>),
     #[error("integer overflow")]
     OverflowError,
     #[error("{0} is not within the bounds of a Natural")]

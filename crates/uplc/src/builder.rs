@@ -178,6 +178,42 @@ where
         }
     }
 
+    // Context-aware primitives (for source map support)
+    pub fn integer_with_ctx(i: num_bigint::BigInt, context: C) -> Self {
+        Term::Constant {
+            value: Constant::Integer(i).into(),
+            context,
+        }
+    }
+
+    pub fn string_with_ctx(s: impl ToString, context: C) -> Self {
+        Term::Constant {
+            value: Constant::String(s.to_string()).into(),
+            context,
+        }
+    }
+
+    pub fn byte_string_with_ctx(b: Vec<u8>, context: C) -> Self {
+        Term::Constant {
+            value: Constant::ByteString(b).into(),
+            context,
+        }
+    }
+
+    pub fn bool_with_ctx(b: bool, context: C) -> Self {
+        Term::Constant {
+            value: Constant::Bool(b).into(),
+            context,
+        }
+    }
+
+    pub fn unit_with_ctx(context: C) -> Self {
+        Term::Constant {
+            value: Constant::Unit.into(),
+            context,
+        }
+    }
+
     // This section contains builders for builtins from default functions
     // Theses are in _alphabetical order_
     // The naming convention almost follows PascalCase -> snake_case

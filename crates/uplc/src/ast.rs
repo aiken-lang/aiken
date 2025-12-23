@@ -385,6 +385,26 @@ impl<T, C> Term<T, C> {
         matches!(self, Term::Constant { value, .. } if matches!(value.as_ref(), &Constant::Integer(_)))
     }
 
+    /// Get the context value for this term node.
+    /// This can be used to look up source locations when C is a source map index.
+    pub fn context(&self) -> C
+    where
+        C: Clone,
+    {
+        match self {
+            Term::Var { context, .. }
+            | Term::Delay { context, .. }
+            | Term::Lambda { context, .. }
+            | Term::Apply { context, .. }
+            | Term::Constant { context, .. }
+            | Term::Force { context, .. }
+            | Term::Error { context }
+            | Term::Builtin { context, .. }
+            | Term::Constr { context, .. }
+            | Term::Case { context, .. } => context.clone(),
+        }
+    }
+
     /// Transform the context of all nodes in the term tree.
     /// Use `term.map_context(|_| ())` to strip source locations.
     pub fn map_context<D>(self, f: impl Fn(C) -> D + Clone) -> Term<T, D>
