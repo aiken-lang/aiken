@@ -10,7 +10,7 @@ use crate::{
     options::SourceMapMode,
 };
 use aiken_lang::{
-    ast::{ArgName, Span, TypedArg, TypedFunction},
+    ast::{ArgName, Span, TypedArg, TypedFunction, TypedTest},
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
     plutus_version::PlutusVersion,
@@ -112,41 +112,28 @@ impl Export {
             ),
         })?;
 
-        // Generate the term with spans if source maps are requested
-        let (program, source_map) = match source_map_mode {
-            SourceMapMode::None => {
-                let program = generator
-                    .generate_raw(&func.body, &func.arguments, &module.name)
-                    .to_debruijn()
-                    .unwrap();
-                (program, None)
-            }
+        // Always generate with spans - both paths use the same code generation
+        let term_with_spans =
+            generator.generate_raw_with_spans(&func.body, &func.arguments, &module.name);
+
+        // Finalize and optimize (this applies used functions, which is critical for recursive functions)
+        let optimized = generator.finalize_with_spans(term_with_spans);
+
+        // Build source map if requested, otherwise discard spans
+        let source_map = match source_map_mode {
+            SourceMapMode::None => None,
             SourceMapMode::Inline | SourceMapMode::External(_) => {
-                // Generate with spans to build source map
-                let term_with_spans =
-                    generator.generate_raw_with_spans(&func.body, &func.arguments, &module.name);
-
-                // Build source map from the term
-                let source_map =
-                    SourceMap::from_term(&term_with_spans, &module.name, module_sources);
-
-                // Convert to program and then to DeBruijn
-                // Strip the Span context from the term
-                let term = term_with_spans.map_context(|_| ());
-
-                // Create version tuple based on plutus version
-                let version = match plutus_version {
-                    PlutusVersion::V1 | PlutusVersion::V2 => (1, 0, 0),
-                    PlutusVersion::V3 => (1, 1, 0),
-                };
-
-                let program = uplc::ast::Program { version, term }
-                    .to_debruijn()
-                    .unwrap();
-
-                (program, Some(source_map))
+                Some(SourceMap::from_term(&optimized.term, &module.name, module_sources))
             }
         };
+
+        // Convert to DeBruijn for final output (strips spans)
+        let program = uplc::ast::Program {
+            version: optimized.version,
+            term: optimized.term.map_context(|_| ()),
+        }
+        .to_debruijn()
+        .unwrap();
 
         let program = match plutus_version {
             PlutusVersion::V1 => SerializableProgram::PlutusV1Program(program),
@@ -157,6 +144,117 @@ impl Export {
         Ok(Export {
             name: format!("{}.{}", &module.name, &func.name),
             doc: func.doc.clone(),
+            parameters,
+            return_type,
+            program,
+            definitions,
+            source_map,
+        })
+    }
+
+    pub fn from_test(
+        test: &TypedTest,
+        module: &CheckedModule,
+        generator: &mut CodeGenerator,
+        modules: &CheckedModules,
+        plutus_version: &PlutusVersion,
+        source_map_mode: &SourceMapMode,
+        module_sources: &IndexMap<&str, &(String, LineNumbers)>,
+    ) -> Result<Export, blueprint::Error> {
+        let mut definitions = Definitions::new();
+
+        // Extract the inner TypedArg from each ArgVia for property tests
+        let args: Vec<TypedArg> = test.arguments.iter().map(|arg_via| arg_via.arg.clone()).collect();
+
+        // Build parameter schemas for property test arguments
+        let parameters = args
+            .iter()
+            .map(|param| {
+                Annotated::from_type(
+                    modules.into(),
+                    blueprint::validator::tipo_or_annotation(module, param),
+                    &mut definitions,
+                )
+                .map(|schema| Parameter {
+                    title: Some(param.arg_name.get_label()),
+                    schema: Declaration::Referenced(schema),
+                })
+                .map_err(|error| blueprint::Error::Schema {
+                    error,
+                    location: param.location,
+                    source_code: NamedSource::new(
+                        module.input_path.display().to_string(),
+                        module.code.clone(),
+                    ),
+                })
+            })
+            .collect::<Result<_, _>>()?;
+
+        // Tests return Bool
+        let return_type = Annotated::from_type(
+            modules.into(),
+            blueprint::validator::tipo_or_annotation(
+                module,
+                &TypedArg {
+                    arg_name: ArgName::Discarded {
+                        name: "".to_string(),
+                        label: "".to_string(),
+                        location: Span::empty(),
+                    },
+                    location: Span::empty(),
+                    annotation: test.return_annotation.clone(),
+                    doc: None,
+                    is_validator_param: false,
+                    tipo: test.return_type.clone(),
+                },
+            ),
+            &mut definitions,
+        )
+        .map(|schema| Parameter {
+            title: Some("return_type".to_string()),
+            schema: Declaration::Referenced(schema),
+        })
+        .map_err(|error| blueprint::Error::Schema {
+            error,
+            location: test.location,
+            source_code: NamedSource::new(
+                module.input_path.display().to_string(),
+                module.code.clone(),
+            ),
+        })?;
+
+        // Always generate with spans - both paths use the same code generation
+        let term_with_spans =
+            generator.generate_raw_with_spans(&test.body, &args, &module.name);
+
+        // Finalize and optimize (this applies used functions, which is critical for recursive functions)
+        let optimized = generator.finalize_with_spans(term_with_spans);
+
+        // Build source map if requested, otherwise discard spans
+        let source_map = match source_map_mode {
+            SourceMapMode::None => None,
+            SourceMapMode::Inline | SourceMapMode::External(_) => {
+                Some(SourceMap::from_term(&optimized.term, &module.name, module_sources))
+            }
+        };
+
+        // Convert to DeBruijn for final output (strips spans)
+        let program = uplc::ast::Program {
+            version: optimized.version,
+            term: optimized.term.map_context(|_| ()),
+        }
+        .to_debruijn()
+        .unwrap();
+
+        let program = match plutus_version {
+            PlutusVersion::V1 => SerializableProgram::PlutusV1Program(program),
+            PlutusVersion::V2 => SerializableProgram::PlutusV2Program(program),
+            PlutusVersion::V3 => SerializableProgram::PlutusV3Program(program),
+        };
+
+        Ok(Export {
+            name: format!("{}.{}", &module.name, &test.name),
+            doc: test.doc.clone(),
             parameters,
             return_type,
             program,
