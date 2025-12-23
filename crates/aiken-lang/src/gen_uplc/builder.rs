@@ -143,9 +143,14 @@ impl CodeGenSpecialFuncs {
         self.key_to_func[func_name].0.clone()
     }
 
-    pub fn apply_used_functions(&self, mut term: Term<Name>) -> Term<Name> {
+    pub fn apply_used_functions<C: Clone + Default>(
+        &self,
+        mut term: Term<Name, C>,
+    ) -> Term<Name, C> {
         for func_name in self.used_funcs.iter() {
-            term = term.lambda(func_name).apply(self.get_function(func_name));
+            // Convert the stored function (Term<Name>) to Term<Name, C>
+            let func = self.get_function(func_name).map_context(|_| C::default());
+            term = term.lambda(func_name).apply(func);
         }
         term
     }

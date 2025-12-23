@@ -693,32 +693,79 @@ where
         // Get module sources for source map generation
         let module_sources = utils::indexmap::as_str_ref_values(&self.module_sources);
 
-        checked_module
+        // First try to find a function with the given name
+        let func_result = checked_module
             .ast
             .definitions()
             .find_map(|def| match def {
-                Definition::Fn(func) if func.name == name => Some((checked_module, func)),
+                Definition::Fn(func) if func.name == name => Some(func),
                 _ => None,
-            })
-            .map(|(checked_module, func)| {
-                let mut generator = self.new_generator(tracing);
+            });
 
-                Export::from_function(
-                    func,
-                    checked_module,
-                    &mut generator,
-                    &self.checked_modules,
-                    &self.config.plutus,
-                    &source_map_mode,
-                    &module_sources,
-                )
-                .map_err(|err| Error::Blueprint(err.into()))
-            })
-            .transpose()?
-            .ok_or_else(|| Error::ExportNotFound {
-                module: module.to_string(),
-                name: name.to_string(),
-            })
+        if let Some(func) = func_result {
+            let mut generator = self.new_generator(tracing);
+            return Export::from_function(
+                func,
+                checked_module,
+                &mut generator,
+                &self.checked_modules,
+                &self.config.plutus,
+                &source_map_mode,
+                &module_sources,
+            )
+            .map_err(|err| Error::Blueprint(err.into()));
+        }
+
+        // Then try to find a test with the given name
+        let test_result = checked_module
+            .ast
+            .definitions()
+            .find_map(|def| match def {
+                Definition::Test(test) if test.name == name => Some(test),
+                _ => None,
+            });
+
+        if let Some(test) = test_result {
+            let mut generator = self.new_generator(tracing);
+            return Export::from_test(
+                test,
+                checked_module,
+                &mut generator,
+                &self.checked_modules,
+                &self.config.plutus,
+                &source_map_mode,
+                &module_sources,
+            )
+            .map_err(|err| Error::Blueprint(err.into()));
+        }
+
+        Err(Error::ExportNotFound {
+            module: module.to_string(),
+            name: name.to_string(),
+        })
+    }
+
+    /// List all exportable items (public functions and tests) in the project.
+    /// Returns a vector of (module_name, item_name, kind) tuples.
+    pub fn exportable_items(&self) -> Vec<(String, String, &'static str)> {
+        let mut items = Vec::new();
+
+        for (module_name, module) in self.checked_modules.iter() {
+            for def in module.ast.definitions() {
+                match def {
+                    Definition::Fn(func) if func.public => {
+                        items.push((module_name.clone(), func.name.clone(), "function"));
+                    }
+                    Definition::Test(test) => {
+                        items.push((module_name.clone(), test.name.clone(), "test"));
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        items.sort();
+        items
     }
 
     #[allow(clippy::result_large_err)]

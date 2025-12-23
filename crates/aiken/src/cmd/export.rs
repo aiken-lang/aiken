@@ -10,19 +10,23 @@ use std::path::PathBuf;
 
 #[derive(clap::Args)]
 #[clap(disable_version_flag(true))]
-/// Export a function as a standalone UPLC program. Arguments to the function can be applied using
+/// Export a function or test as a standalone UPLC program. Arguments to the function can be applied using
 /// `aiken apply`.
 pub struct Args {
     /// Path to project
     directory: Option<PathBuf>,
 
-    /// Name of the function's module within the project
+    /// List all exportable items (functions and tests)
     #[clap(short, long)]
-    module: String,
+    list: bool,
 
-    /// Name of the function within the module
-    #[clap(short, long)]
-    name: String,
+    /// Name of the function's module within the project
+    #[clap(short, long, required_unless_present = "list")]
+    module: Option<String>,
+
+    /// Name of the function or test within the module
+    #[clap(short, long, required_unless_present = "list")]
+    name: Option<String>,
 
     /// Filter traces to be included in the generated program(s).
     ///
@@ -67,6 +71,7 @@ pub struct Args {
 pub fn exec(
     Args {
         directory,
+        list,
         module,
         name,
         trace_filter,
@@ -84,6 +89,17 @@ pub fn exec(
             tracing,
             ..Options::default()
         })?;
+
+        if list {
+            let items = p.exportable_items();
+            for (module_name, item_name, kind) in items {
+                println!("{module_name}.{item_name} ({kind})");
+            }
+            return Ok(());
+        }
+
+        let module = module.as_ref().expect("module is required when not using --list");
+        let name = name.as_ref().expect("name is required when not using --list");
 
         let source_map_mode = if source_map {
             SourceMapMode::Inline
