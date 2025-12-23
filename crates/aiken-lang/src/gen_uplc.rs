@@ -56,7 +56,10 @@ use uplc::{
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
     builtins::DefaultFunction,
     machine::cost_model::ExBudget,
-    optimize::{aiken_optimize_and_intern, interner::CodeGenInterner, shrinker::NO_INLINE},
+    optimize::{
+        aiken_optimize_and_intern, aiken_optimize_with_context, interner::CodeGenInterner,
+        shrinker::NO_INLINE,
+    },
 };
 
 type Otherwise = Option<AirTree>;
@@ -175,8 +178,13 @@ impl<'a> CodeGenerator<'a> {
                 .for_each(|arg_name| self.interner.pop_text(arg_name.to_string()))
         });
 
-        let program = self.finalize(term.clone().map_context(|_| ()));
-        (program, term)
+        // Finalize with spans preserved for source map generation
+        let program_with_spans = self.finalize_with_spans(term);
+
+        // Strip spans for the program (compiled code doesn't need them)
+        let program = program_with_spans.clone().map_context(|_| ());
+
+        (program, program_with_spans.term)
     }
 
     pub fn generate_raw(
@@ -217,8 +225,9 @@ impl<'a> CodeGenerator<'a> {
         self.finalize(term.map_context(|_| ()))
     }
 
-    /// Debug method that returns the raw Term with Span context preserved
-    /// This is useful for inspecting source location information
+    /// Returns the raw Term with Span context preserved.
+    /// This applies used functions (critical for recursive functions to work)
+    /// and is useful for source map generation.
     pub fn generate_raw_with_spans(
         &mut self,
         body: &TypedExpr,
@@ -253,10 +262,13 @@ impl<'a> CodeGenerator<'a> {
                 .for_each(|arg_name| self.interner.pop_text(arg_name.to_string()))
         });
 
+        // Apply used functions (critical for recursive functions to work)
+        term = self.special_functions.apply_used_functions(term);
+
         term
     }
 
-    fn new_program<T>(&self, term: Term<T>) -> Program<T> {
+    fn new_program<T, C>(&self, term: Term<T, C>) -> Program<T, C> {
         let version = match self.plutus_version {
             PlutusVersion::V1 | PlutusVersion::V2 => (1, 0, 0),
             PlutusVersion::V3 => (1, 1, 0),
@@ -277,6 +289,20 @@ impl<'a> CodeGenerator<'a> {
         // switching to a shared code generator caused some
         // instability issues and we fixed it by placing this
         // method here.
+        self.reset(true);
+
+        program
+    }
+
+    /// Finalize and optimize a program while preserving span context.
+    /// Uses the subset of optimizations that are generic over context type.
+    pub fn finalize_with_spans(&mut self, mut term: Term<Name, Span>) -> Program<Name, Span> {
+        // Apply used functions (critical for recursive functions to work)
+        term = self.special_functions.apply_used_functions(term);
+
+        let program = aiken_optimize_with_context(self.new_program(term));
+
+        // Reset is important for reusing the generator instance
         self.reset(true);
 
         program
@@ -3852,10 +3878,10 @@ impl<'a> CodeGenerator<'a> {
 
     fn gen_uplc(&mut self, ir: Air, arg_stack: &mut Vec<Term<Name, Span>>) -> Option<Term<Name, Span>> {
         match ir {
-            Air::Int { value, .. } => Some(Term::integer(value.parse().unwrap())),
-            Air::String { value, .. } => Some(Term::string(value)),
-            Air::ByteArray { bytes, .. } => Some(Term::byte_string(bytes)),
-            Air::Bool { value, .. } => Some(Term::bool(value)),
+            Air::Int { value, location } => Some(Term::integer_with_ctx(value.parse().unwrap(), location)),
+            Air::String { value, location } => Some(Term::string_with_ctx(value, location)),
+            Air::ByteArray { bytes, location } => Some(Term::byte_string_with_ctx(bytes, location)),
+            Air::Bool { value, location } => Some(Term::bool_with_ctx(value, location)),
             Air::CurvePoint { point, .. } => match point {
                 Curve::Bls12_381(Bls12_381Point::G1(g1)) => Some(Term::bls12_381_g1(g1)),
                 Curve::Bls12_381(Bls12_381Point::G2(g2)) => Some(Term::bls12_381_g2(g2)),
@@ -3977,7 +4003,7 @@ impl<'a> CodeGenerator<'a> {
                     name: constr_name, ..
                 } => {
                     if constructor.tipo.is_bool() {
-                        Some(Term::bool(constr_name == "True"))
+                        Some(Term::bool_with_ctx(constr_name == "True", location))
                     } else if constructor.tipo.is_void() {
                         Some(Term::Constant {
                             value: UplcConstant::Unit.into(),
@@ -4301,7 +4327,7 @@ impl<'a> CodeGenerator<'a> {
                         term = builder::apply_builtin_forces(term, func.force_count());
 
                         if func.arg_is_unit() {
-                            term = term.apply(Term::unit())
+                            term = term.apply(Term::unit_with_ctx(location))
                         } else {
                             for arg in arg_vec {
                                 term = term.apply(arg.clone());
@@ -4328,8 +4354,8 @@ impl<'a> CodeGenerator<'a> {
                 let uplc_type = left_tipo.get_uplc_type();
 
                 let term = match name {
-                    BinOp::And => left.delayed_if_then_else(right, Term::bool(false)),
-                    BinOp::Or => left.delayed_if_then_else(Term::bool(true), right),
+                    BinOp::And => left.delayed_if_then_else(right, Term::bool_with_ctx(false, location)),
+                    BinOp::Or => left.delayed_if_then_else(Term::bool_with_ctx(true, location), right),
                     BinOp::Eq | BinOp::NotEq => {
                         let builtin = match &uplc_type {
                             Some(UplcType::Integer) => Term::equals_integer(),
@@ -4351,13 +4377,13 @@ impl<'a> CodeGenerator<'a> {
                                     if matches!(name, BinOp::Eq) {
                                         left.delayed_if_then_else(
                                             right.clone(),
-                                            right.if_then_else(Term::bool(false), Term::bool(true)),
+                                            right.if_then_else(Term::bool_with_ctx(false, location), Term::bool_with_ctx(true, location)),
                                         )
                                     } else {
                                         left.delayed_if_then_else(
                                             right
                                                 .clone()
-                                                .if_then_else(Term::bool(false), Term::bool(true)),
+                                                .if_then_else(Term::bool_with_ctx(false, location), Term::bool_with_ctx(true, location)),
                                             right,
                                         )
                                     }
@@ -4420,12 +4446,12 @@ impl<'a> CodeGenerator<'a> {
                                     builtin.apply(left).apply(right)
                                 }
                                 Some(UplcType::Unit) => {
-                                    left.choose_unit(right.choose_unit(Term::bool(true)))
+                                    left.choose_unit(right.choose_unit(Term::bool_with_ctx(true, location)))
                                 }
                             };
 
                         if !left_tipo.is_bool() && matches!(name, BinOp::NotEq) {
-                            binop_eq.if_then_else(Term::bool(false), Term::bool(true))
+                            binop_eq.if_then_else(Term::bool_with_ctx(false, location), Term::bool_with_ctx(true, location))
                         } else {
                             binop_eq
                         }
@@ -4454,7 +4480,12 @@ impl<'a> CodeGenerator<'a> {
                     }
                     .apply(right)
                     .apply(left),
-                    BinOp::AddInt => Term::add_integer().apply(left).apply(right),
+                    BinOp::AddInt => Term::Builtin {
+                        func: DefaultFunction::AddInteger,
+                        context: location,
+                    }
+                    .apply(left)
+                    .apply(right),
                     BinOp::SubInt => Term::Builtin {
                         func: DefaultFunction::SubtractInteger,
                         context: location,
@@ -4876,7 +4907,7 @@ impl<'a> CodeGenerator<'a> {
 
                 if let Some(constr_index) = tag {
                     term = Term::constr_data()
-                        .apply(Term::integer(constr_index.into()))
+                        .apply(Term::integer_with_ctx(constr_index.into(), location))
                         .apply(term);
                 }
 
@@ -5063,7 +5094,7 @@ impl<'a> CodeGenerator<'a> {
                 highest_index,
                 indices,
                 tipo,
-                ..
+                location,
             } => {
                 let tail_name_prefix = "__tail_index";
 
@@ -5130,7 +5161,7 @@ impl<'a> CodeGenerator<'a> {
 
                 if !list_decorator {
                     term = Term::constr_data()
-                        .apply(Term::integer(0.into()))
+                        .apply(Term::integer_with_ctx(0.into(), location))
                         .apply(term);
                 }
 
@@ -5169,23 +5200,23 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(term)
             }
-            Air::UnOp { op, .. } => {
+            Air::UnOp { op, location } => {
                 let value = arg_stack.pop().unwrap();
 
                 let term = match op {
-                    UnOp::Not => value.if_then_else(Term::bool(false), Term::bool(true)),
+                    UnOp::Not => value.if_then_else(Term::bool_with_ctx(false, location), Term::bool_with_ctx(true, location)),
                     UnOp::Negate => {
                         if let Term::Constant { value: c, .. } = &value {
                             if let UplcConstant::Integer(i) = c.as_ref() {
-                                Term::integer(-i)
+                                Term::integer_with_ctx(-i, location)
                             } else {
                                 Term::subtract_integer()
-                                    .apply(Term::integer(0.into()))
+                                    .apply(Term::integer_with_ctx(0.into(), location))
                                     .apply(value)
                             }
                         } else {
                             Term::subtract_integer()
-                                .apply(Term::integer(0.into()))
+                                .apply(Term::integer_with_ctx(0.into(), location))
                                 .apply(value)
                         }
                     }
@@ -5242,7 +5273,7 @@ impl<'a> CodeGenerator<'a> {
                 snd,
                 tipo,
                 is_expect,
-                location,
+                location: _,
             } => {
                 let inner_types = tipo.get_inner_types();
                 let value = arg_stack.pop().unwrap();
