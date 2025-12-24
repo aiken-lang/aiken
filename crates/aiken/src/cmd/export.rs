@@ -66,6 +66,13 @@ pub struct Args {
     /// [optional] [default: enabled]
     #[clap(long = "source-map", default_value_t = true, action = clap::ArgAction::Set)]
     source_map: bool,
+
+    /// Skip performance optimizations (inlining, lambda reduction, etc).
+    /// Produces larger code that maps more directly to source for debugging.
+    ///
+    /// [optional] [default: false]
+    #[clap(long = "no-optimize", default_value_t = false)]
+    no_optimize: bool,
 }
 
 pub fn exec(
@@ -77,6 +84,7 @@ pub fn exec(
         trace_filter,
         trace_level,
         source_map,
+        no_optimize,
     }: Args,
 ) -> miette::Result<()> {
     with_project(directory.as_deref(), false, false, true, |p| {
@@ -112,6 +120,7 @@ pub fn exec(
             &name,
             tracing,
             source_map_mode,
+            no_optimize,
         )?;
 
         let json = serde_json::to_string_pretty(&export).unwrap();
