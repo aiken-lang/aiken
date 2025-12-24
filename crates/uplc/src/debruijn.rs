@@ -628,3 +628,65 @@ impl Converter {
         self.levels.pop();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::{Name, NamedDeBruijn, Term};
+    use std::rc::Rc;
+
+    #[test]
+    fn test_roundtrip_preserves_context() {
+        // Create a simple term with non-default spans
+        let term: Term<Name, u64> = Term::Lambda {
+            parameter_name: Rc::new(Name {
+                text: "x".to_string(),
+                unique: 0.into(),
+            }),
+            body: Rc::new(Term::Var {
+                name: Rc::new(Name {
+                    text: "x".to_string(),
+                    unique: 0.into(),
+                }),
+                context: 42,
+            }),
+            context: 100,
+        };
+
+        // Convert to NamedDeBruijn and back
+        let mut converter = Converter::new();
+        let debruijn: Term<NamedDeBruijn, u64> = converter.name_to_named_debruijn(&term).unwrap();
+        
+        // Check context is preserved in debruijn
+        match &debruijn {
+            Term::Lambda { context, body, .. } => {
+                assert_eq!(*context, 100, "Lambda context should be preserved");
+                match body.as_ref() {
+                    Term::Var { context, .. } => {
+                        assert_eq!(*context, 42, "Var context should be preserved");
+                    }
+                    _ => panic!("Expected Var"),
+                }
+            }
+            _ => panic!("Expected Lambda"),
+        }
+
+        // Convert back to Name
+        let mut converter = Converter::new();
+        let back: Term<Name, u64> = converter.named_debruijn_to_name(&debruijn).unwrap();
+
+        // Check context is still preserved
+        match &back {
+            Term::Lambda { context, body, .. } => {
+                assert_eq!(*context, 100, "Lambda context should be preserved after roundtrip");
+                match body.as_ref() {
+                    Term::Var { context, .. } => {
+                        assert_eq!(*context, 42, "Var context should be preserved after roundtrip");
+                    }
+                    _ => panic!("Expected Var"),
+                }
+            }
+            _ => panic!("Expected Lambda"),
+        }
+    }
+}
