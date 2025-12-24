@@ -53,6 +53,7 @@ impl Export {
         plutus_version: &PlutusVersion,
         source_map_mode: &SourceMapMode,
         module_sources: &IndexMap<&str, &(String, LineNumbers)>,
+        no_optimize: bool,
     ) -> Result<Export, blueprint::Error> {
         let mut definitions = Definitions::new();
 
@@ -116,8 +117,12 @@ impl Export {
         let term_with_spans =
             generator.generate_raw_with_spans(&func.body, &func.arguments, &module.name);
 
-        // Finalize and optimize (this applies used functions, which is critical for recursive functions)
-        let optimized = generator.finalize_with_spans(term_with_spans);
+        // Finalize and optimize (or use minimal optimization if no_optimize is set)
+        let optimized = if no_optimize {
+            generator.finalize_minimal_with_spans(term_with_spans)
+        } else {
+            generator.finalize_with_spans(term_with_spans)
+        };
 
         // Build source map if requested, otherwise discard spans
         let source_map = match source_map_mode {
@@ -160,6 +165,7 @@ impl Export {
         plutus_version: &PlutusVersion,
         source_map_mode: &SourceMapMode,
         module_sources: &IndexMap<&str, &(String, LineNumbers)>,
+        no_optimize: bool,
     ) -> Result<Export, blueprint::Error> {
         let mut definitions = Definitions::new();
 
@@ -227,8 +233,12 @@ impl Export {
         let term_with_spans =
             generator.generate_raw_with_spans(&test.body, &args, &module.name);
 
-        // Finalize and optimize (this applies used functions, which is critical for recursive functions)
-        let optimized = generator.finalize_with_spans(term_with_spans);
+        // Finalize and optimize (or use minimal optimization if no_optimize is set)
+        let optimized = if no_optimize {
+            generator.finalize_minimal_with_spans(term_with_spans)
+        } else {
+            generator.finalize_with_spans(term_with_spans)
+        };
 
         // Build source map if requested, otherwise discard spans
         let source_map = match source_map_mode {
@@ -300,6 +310,7 @@ mod tests {
                 &PlutusVersion::default(),
                 &SourceMapMode::None,
                 &module_sources,
+                false, // no_optimize
             );
 
             match export {

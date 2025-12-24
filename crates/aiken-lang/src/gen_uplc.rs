@@ -57,7 +57,7 @@ use uplc::{
     builtins::DefaultFunction,
     machine::cost_model::ExBudget,
     optimize::{
-        aiken_optimize_and_intern, aiken_optimize_with_context, interner::CodeGenInterner,
+        aiken_optimize_and_intern, aiken_optimize_minimal_with_context, aiken_optimize_with_context, interner::CodeGenInterner,
         shrinker::NO_INLINE,
     },
 };
@@ -301,6 +301,21 @@ impl<'a> CodeGenerator<'a> {
         term = self.special_functions.apply_used_functions(term);
 
         let program = aiken_optimize_with_context(self.new_program(term));
+
+        // Reset is important for reusing the generator instance
+        self.reset(true);
+
+        program
+    }
+
+    /// Finalize with minimal optimization, preserving source location context.
+    /// Skips performance optimizations like inlining and lambda reduction.
+    /// Produces larger but more readable code that maps directly to source.
+    pub fn finalize_minimal_with_spans(&mut self, mut term: Term<Name, SourceLocation>) -> Program<Name, SourceLocation> {
+        // Apply used functions (critical for recursive functions to work)
+        term = self.special_functions.apply_used_functions(term);
+
+        let program = aiken_optimize_minimal_with_context(self.new_program(term));
 
         // Reset is important for reusing the generator instance
         self.reset(true);

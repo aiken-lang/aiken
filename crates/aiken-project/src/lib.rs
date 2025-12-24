@@ -681,6 +681,7 @@ where
         name: &str,
         tracing: Tracing,
         source_map_mode: options::SourceMapMode,
+        no_optimize: bool,
     ) -> Result<Export, Error> {
         let checked_module =
             self.checked_modules
@@ -712,6 +713,7 @@ where
                 &self.config.plutus,
                 &source_map_mode,
                 &module_sources,
+                no_optimize,
             )
             .map_err(|err| Error::Blueprint(err.into()));
         }
@@ -735,6 +737,7 @@ where
                 &self.config.plutus,
                 &source_map_mode,
                 &module_sources,
+                no_optimize,
             )
             .map_err(|err| Error::Blueprint(err.into()));
         }
