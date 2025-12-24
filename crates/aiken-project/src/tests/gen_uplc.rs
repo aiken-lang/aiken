@@ -1,6 +1,6 @@
 use super::TestProject;
 use crate::module::CheckedModules;
-use aiken_lang::ast::{Definition, Function, TraceLevel, Tracing, TypedTest, TypedValidator};
+use aiken_lang::ast::{Definition, Function, SourceLocation, TraceLevel, Tracing, TypedTest, TypedValidator};
 use pretty_assertions::assert_eq;
 use std::rc::Rc;
 use uplc::{
@@ -6453,16 +6453,16 @@ fn debug_source_locations_fibonacci() {
             println!("\n=== Source code ===");
             println!("{}", src);
 
-            // Helper to extract source snippet for a span
-            fn get_source_snippet(src: &str, span: &Span) -> String {
-                if span.start == 0 && span.end == 0 {
+            // Helper to extract source snippet for a source location
+            fn get_source_snippet(src: &str, loc: &SourceLocation) -> String {
+                if loc.is_empty() {
                     return "(empty span)".to_string();
                 }
                 let bytes = src.as_bytes();
-                let start = span.start.min(bytes.len());
-                let end = span.end.min(bytes.len());
+                let start = loc.span.start.min(bytes.len());
+                let end = loc.span.end.min(bytes.len());
                 if start >= end {
-                    return format!("(invalid span {}..{})", span.start, span.end);
+                    return format!("(invalid span {}..{})", loc.span.start, loc.span.end);
                 }
                 let snippet = String::from_utf8_lossy(&bytes[start..end]);
                 // Truncate long snippets
@@ -6473,9 +6473,9 @@ fn debug_source_locations_fibonacci() {
                 }
             }
 
-            // Print terms with their spans
+            // Print terms with their source locations
             fn print_terms_with_spans(
-                term: &UplcTerm<Name, Span>,
+                term: &UplcTerm<Name, SourceLocation>,
                 src: &str,
                 indent: usize,
                 count: &mut usize,
@@ -6486,7 +6486,7 @@ fn debug_source_locations_fibonacci() {
 
                 match term {
                     UplcTerm::Var { name, context } => {
-                        let snippet = if *context != Span::empty() {
+                        let snippet = if !context.is_empty() {
                             *non_empty_count += 1;
                             format!(" @ {:?} = \"{}\"", context, get_source_snippet(src, context))
                         } else {
@@ -6495,7 +6495,7 @@ fn debug_source_locations_fibonacci() {
                         println!("{}Var({}){}", prefix, name.text, snippet);
                     }
                     UplcTerm::Lambda { parameter_name, body, context } => {
-                        let snippet = if *context != Span::empty() {
+                        let snippet = if !context.is_empty() {
                             *non_empty_count += 1;
                             format!(" @ {:?}", context)
                         } else {
@@ -6505,7 +6505,7 @@ fn debug_source_locations_fibonacci() {
                         print_terms_with_spans(body, src, indent + 1, count, non_empty_count);
                     }
                     UplcTerm::Apply { function, argument, context } => {
-                        let snippet = if *context != Span::empty() {
+                        let snippet = if !context.is_empty() {
                             *non_empty_count += 1;
                             format!(" @ {:?}", context)
                         } else {
@@ -6516,7 +6516,7 @@ fn debug_source_locations_fibonacci() {
                         print_terms_with_spans(argument, src, indent + 1, count, non_empty_count);
                     }
                     UplcTerm::Builtin { func, context } => {
-                        let snippet = if *context != Span::empty() {
+                        let snippet = if !context.is_empty() {
                             *non_empty_count += 1;
                             format!(" @ {:?} = \"{}\"", context, get_source_snippet(src, context))
                         } else {
@@ -6525,7 +6525,7 @@ fn debug_source_locations_fibonacci() {
                         println!("{}Builtin({:?}){}", prefix, func, snippet);
                     }
                     UplcTerm::Constant { value, context } => {
-                        let snippet = if *context != Span::empty() {
+                        let snippet = if !context.is_empty() {
                             *non_empty_count += 1;
                             format!(" @ {:?}", context)
                         } else {
@@ -6534,7 +6534,7 @@ fn debug_source_locations_fibonacci() {
                         println!("{}Constant({:?}){}", prefix, value, snippet);
                     }
                     UplcTerm::Force { term: inner, context } => {
-                        let snippet = if *context != Span::empty() {
+                        let snippet = if !context.is_empty() {
                             *non_empty_count += 1;
                             format!(" @ {:?}", context)
                         } else {
@@ -6544,7 +6544,7 @@ fn debug_source_locations_fibonacci() {
                         print_terms_with_spans(inner, src, indent + 1, count, non_empty_count);
                     }
                     UplcTerm::Delay { term: inner, context } => {
-                        let snippet = if *context != Span::empty() {
+                        let snippet = if !context.is_empty() {
                             *non_empty_count += 1;
                             format!(" @ {:?}", context)
                         } else {
@@ -6554,7 +6554,7 @@ fn debug_source_locations_fibonacci() {
                         print_terms_with_spans(inner, src, indent + 1, count, non_empty_count);
                     }
                     UplcTerm::Error { context } => {
-                        let snippet = if *context != Span::empty() {
+                        let snippet = if !context.is_empty() {
                             *non_empty_count += 1;
                             format!(" @ {:?}", context)
                         } else {
@@ -6563,7 +6563,7 @@ fn debug_source_locations_fibonacci() {
                         println!("{}Error{}", prefix, snippet);
                     }
                     UplcTerm::Constr { tag, fields, context } => {
-                        let snippet = if *context != Span::empty() {
+                        let snippet = if !context.is_empty() {
                             *non_empty_count += 1;
                             format!(" @ {:?}", context)
                         } else {
@@ -6575,7 +6575,7 @@ fn debug_source_locations_fibonacci() {
                         }
                     }
                     UplcTerm::Case { constr, branches, context } => {
-                        let snippet = if *context != Span::empty() {
+                        let snippet = if !context.is_empty() {
                             *non_empty_count += 1;
                             format!(" @ {:?}", context)
                         } else {

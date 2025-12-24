@@ -5,8 +5,8 @@ use super::{
 };
 use crate::{
     ast::{
-        DataTypeKey, DecoratorKind, FunctionAccessKey, Pattern, RecordConstructor, Span,
-        TraceLevel, TypedArg, TypedAssignmentKind, TypedDataType, TypedPattern,
+        DataTypeKey, DecoratorKind, FunctionAccessKey, Pattern, RecordConstructor, SourceLocation,
+        Span, TraceLevel, TypedArg, TypedAssignmentKind, TypedDataType, TypedPattern,
     },
     expr::lookup_data_type_by_tipo,
     line_numbers::{LineColumn, LineNumbers},
@@ -70,6 +70,7 @@ pub struct AssignmentProperties {
     pub remove_unused: bool,
     pub full_check: bool,
     pub otherwise: Option<AirTree>,
+    pub location: SourceLocation,
 }
 
 #[derive(Clone, Debug)]
@@ -120,7 +121,7 @@ impl CodeGenSpecialFuncs {
 
         let tipo = self.key_to_func.get(&func_name).unwrap().1.clone();
 
-        AirTree::local_var(func_name, tipo, Span::empty())
+        AirTree::local_var(func_name, tipo, SourceLocation::empty())
     }
 
     pub fn use_function_msg(&mut self, func_name: String) -> AirMsg {
@@ -396,7 +397,7 @@ pub fn modify_self_calls(
                     air_tree.clone(),
                     air_tree.return_type(),
                     vec![air_tree.clone()],
-                    Span::empty(),
+                    SourceLocation::empty(),
                 );
 
                 *air_tree = self_call;
@@ -468,7 +469,7 @@ pub fn modify_cyclic_calls(
                         ),
                         cyclic_var_name,
                         "".to_string(),
-                        Span::empty(),
+                        SourceLocation::empty(),
                     );
 
                     *air_tree = AirTree::call(
@@ -478,12 +479,12 @@ pub fn modify_cyclic_calls(
                             var,
                             AirTree::anon_func(
                                 names.clone(),
-                                AirTree::local_var(index_name, tipo, Span::empty()),
+                                AirTree::local_var(index_name, tipo, SourceLocation::empty()),
                                 false,
-                                Span::empty(),
+                                SourceLocation::empty(),
                             ),
                         ],
-                        Span::empty(),
+                        SourceLocation::empty(),
                     );
                 }
             }
@@ -1236,16 +1237,16 @@ pub fn cast_validator_args<C: Default + Clone>(
 
 pub fn wrap_validator_condition(air_tree: AirTree, trace: TraceLevel) -> AirTree {
     let otherwise = match trace {
-        TraceLevel::Silent | TraceLevel::Compact => AirTree::error(Type::void(), true, Span::empty()),
+        TraceLevel::Silent | TraceLevel::Compact => AirTree::error(Type::void(), true, SourceLocation::empty()),
         TraceLevel::Verbose => AirTree::trace(
-            AirTree::string("Validator returned false", Span::empty()),
+            AirTree::string("Validator returned false", SourceLocation::empty()),
             Type::void(),
-            AirTree::error(Type::void(), true, Span::empty()),
-            Span::empty(),
+            AirTree::error(Type::void(), true, SourceLocation::empty()),
+            SourceLocation::empty(),
         ),
     };
 
-    AirTree::if_branch(Type::void(), air_tree, AirTree::void(Span::empty()), otherwise, Span::empty())
+    AirTree::if_branch(Type::void(), air_tree, AirTree::void(SourceLocation::empty()), otherwise, SourceLocation::empty())
 }
 
 pub fn extract_constant<C>(term: &Term<Name, C>) -> Option<Rc<UplcConstant>> {

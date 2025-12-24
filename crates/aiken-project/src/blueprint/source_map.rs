@@ -1,4 +1,4 @@
-use aiken_lang::{ast::Span, line_numbers::LineNumbers};
+use aiken_lang::{ast::SourceLocation as AstSourceLocation, line_numbers::LineNumbers};
 use indexmap::IndexMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::BTreeMap;
@@ -104,9 +104,10 @@ impl SourceMap {
 
     /// Build a source map from a Term tree with Span context.
     /// Uses post-order traversal so parameter application doesn't shift indices.
+    /// Searches all module sources to find the correct source for each span.
     pub fn from_term(
-        term: &Term<Name, Span>,
-        module_name: &str,
+        term: &Term<Name, AstSourceLocation>,
+        _module_name: &str,
         module_sources: &IndexMap<&str, &(String, LineNumbers)>,
     ) -> Self {
         let mut source_map = SourceMap::new();
@@ -116,7 +117,6 @@ impl SourceMap {
             term,
             &mut counter,
             &mut source_map,
-            module_name,
             module_sources,
         );
 
@@ -133,10 +133,9 @@ impl Default for SourceMap {
 /// Visit a term tree in post-order and assign indices.
 /// Post-order means we visit children first, then assign index to current node.
 fn visit_post_order(
-    term: &Term<Name, Span>,
+    term: &Term<Name, AstSourceLocation>,
     counter: &mut u64,
     source_map: &mut SourceMap,
-    module_name: &str,
     module_sources: &IndexMap<&str, &(String, LineNumbers)>,
 ) {
     // Visit children first (post-order)
@@ -145,29 +144,29 @@ fn visit_post_order(
             function, argument, ..
         } => {
             // Visit argument first, then function (right-to-left for consistency)
-            visit_post_order(argument, counter, source_map, module_name, module_sources);
-            visit_post_order(function, counter, source_map, module_name, module_sources);
+            visit_post_order(argument, counter, source_map, module_sources);
+            visit_post_order(function, counter, source_map, module_sources);
         }
         Term::Lambda { body, .. } => {
-            visit_post_order(body, counter, source_map, module_name, module_sources);
+            visit_post_order(body, counter, source_map, module_sources);
         }
         Term::Delay { term: inner, .. } => {
-            visit_post_order(inner, counter, source_map, module_name, module_sources);
+            visit_post_order(inner, counter, source_map, module_sources);
         }
         Term::Force { term: inner, .. } => {
-            visit_post_order(inner, counter, source_map, module_name, module_sources);
+            visit_post_order(inner, counter, source_map, module_sources);
         }
         Term::Case {
             constr, branches, ..
         } => {
-            visit_post_order(constr, counter, source_map, module_name, module_sources);
+            visit_post_order(constr, counter, source_map, module_sources);
             for branch in branches {
-                visit_post_order(branch, counter, source_map, module_name, module_sources);
+                visit_post_order(branch, counter, source_map, module_sources);
             }
         }
         Term::Constr { fields, .. } => {
             for field in fields {
-                visit_post_order(field, counter, source_map, module_name, module_sources);
+                visit_post_order(field, counter, source_map, module_sources);
             }
         }
         // Leaf nodes: Var, Constant, Builtin, Error
@@ -181,17 +180,20 @@ fn visit_post_order(
     let index = *counter;
     *counter += 1;
 
-    // Extract span from the term's context
-    let span = get_span(term);
+    // Extract source location from the term's context
+    let source_loc = get_source_location(term);
 
     // Skip empty spans
-    if span.start == 0 && span.end == 0 {
+    if source_loc.is_empty() {
         return;
     }
 
-    // Convert span to line/column
-    if let Some((src, line_numbers)) = module_sources.get(module_name) {
-        // Check if span is within bounds
+    // Use the module name from the source location to look up the correct source
+    let module_name = &source_loc.module;
+    let span = &source_loc.span;
+
+    if let Some((src, line_numbers)) = module_sources.get(module_name.as_str()) {
+        // Check if span is within bounds of this module's source
         if span.start < src.len() && span.end <= src.len() {
             if let Some(start_loc) = line_numbers.line_and_column_number(span.start) {
                 let source_index = source_map.get_or_insert_source(module_name);
@@ -221,19 +223,19 @@ fn visit_post_order(
     }
 }
 
-/// Extract the span from a term's context field
-fn get_span(term: &Term<Name, Span>) -> Span {
+/// Extract the source location from a term's context field
+fn get_source_location(term: &Term<Name, AstSourceLocation>) -> &AstSourceLocation {
     match term {
-        Term::Var { context, .. } => *context,
-        Term::Delay { context, .. } => *context,
-        Term::Lambda { context, .. } => *context,
-        Term::Apply { context, .. } => *context,
-        Term::Constant { context, .. } => *context,
-        Term::Force { context, .. } => *context,
-        Term::Error { context } => *context,
-        Term::Builtin { context, .. } => *context,
-        Term::Constr { context, .. } => *context,
-        Term::Case { context, .. } => *context,
+        Term::Var { context, .. } => context,
+        Term::Delay { context, .. } => context,
+        Term::Lambda { context, .. } => context,
+        Term::Apply { context, .. } => context,
+        Term::Constant { context, .. } => context,
+        Term::Force { context, .. } => context,
+        Term::Error { context } => context,
+        Term::Builtin { context, .. } => context,
+        Term::Constr { context, .. } => context,
+        Term::Case { context, .. } => context,
     }
 }
 
@@ -363,7 +365,7 @@ mod tests {
 
     #[test]
     fn from_term_post_order_numbering() {
-        use aiken_lang::line_numbers::LineNumbers;
+        use aiken_lang::{ast::Span, line_numbers::LineNumbers};
 
         // Source code with known positions:
         // Line 1, col 1-3: "foo"  (bytes 0-3)
@@ -383,16 +385,16 @@ mod tests {
         //   2. function next (Var "f") -> index 1
         //   3. Apply last -> index 2
         let term = Term::Apply {
-            context: Span { start: 8, end: 14 }, // "result" on line 3
+            context: AstSourceLocation::new(module_name, Span { start: 8, end: 14 }), // "result" on line 3
             function: Rc::new(Term::Var {
-                context: Span { start: 0, end: 3 }, // "foo" on line 1
+                context: AstSourceLocation::new(module_name, Span { start: 0, end: 3 }), // "foo" on line 1
                 name: Rc::new(Name {
                     text: "f".to_string(),
                     unique: 0.into(),
                 }),
             }),
             argument: Rc::new(Term::Var {
-                context: Span { start: 4, end: 7 }, // "bar" on line 2
+                context: AstSourceLocation::new(module_name, Span { start: 4, end: 7 }), // "bar" on line 2
                 name: Rc::new(Name {
                     text: "x".to_string(),
                     unique: 1.into(),
@@ -427,7 +429,7 @@ mod tests {
 
     #[test]
     fn from_term_skips_empty_spans() {
-        use aiken_lang::line_numbers::LineNumbers;
+        use aiken_lang::{ast::Span, line_numbers::LineNumbers};
 
         let src = "foo\nbar";
         let module_name = "test";
@@ -437,16 +439,16 @@ mod tests {
 
         // Term with empty span (start=0, end=0) should be skipped
         let term = Term::Apply {
-            context: Span { start: 0, end: 0 }, // Empty span - should be skipped
+            context: AstSourceLocation::empty(), // Empty span - should be skipped
             function: Rc::new(Term::Var {
-                context: Span { start: 0, end: 3 }, // Valid span
+                context: AstSourceLocation::new(module_name, Span { start: 0, end: 3 }), // Valid span
                 name: Rc::new(Name {
                     text: "f".to_string(),
                     unique: 0.into(),
                 }),
             }),
             argument: Rc::new(Term::Var {
-                context: Span { start: 0, end: 0 }, // Empty span - should be skipped
+                context: AstSourceLocation::empty(), // Empty span - should be skipped
                 name: Rc::new(Name {
                     text: "x".to_string(),
                     unique: 1.into(),
@@ -463,7 +465,7 @@ mod tests {
 
     #[test]
     fn from_term_nested_lambdas() {
-        use aiken_lang::line_numbers::LineNumbers;
+        use aiken_lang::{ast::Span, line_numbers::LineNumbers};
 
         let src = "line1\nline2\nline3\nline4";
         let module_name = "test";
@@ -477,19 +479,19 @@ mod tests {
         //   1: inner Lambda
         //   2: outer Lambda
         let term = Term::Lambda {
-            context: Span { start: 0, end: 5 }, // line 1
+            context: AstSourceLocation::new(module_name, Span { start: 0, end: 5 }), // line 1
             parameter_name: Rc::new(Name {
                 text: "x".to_string(),
                 unique: 0.into(),
             }),
             body: Rc::new(Term::Lambda {
-                context: Span { start: 6, end: 11 }, // line 2
+                context: AstSourceLocation::new(module_name, Span { start: 6, end: 11 }), // line 2
                 parameter_name: Rc::new(Name {
                     text: "y".to_string(),
                     unique: 1.into(),
                 }),
                 body: Rc::new(Term::Var {
-                    context: Span { start: 12, end: 17 }, // line 3
+                    context: AstSourceLocation::new(module_name, Span { start: 12, end: 17 }), // line 3
                     name: Rc::new(Name {
                         text: "x".to_string(),
                         unique: 0.into(),

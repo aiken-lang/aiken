@@ -2087,12 +2087,17 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         let chain = typed_expressions
             .into_iter()
             .rev()
-            .reduce(|acc, typed_expression| TypedExpr::BinOp {
-                location,
-                tipo: Type::bool(),
-                name,
-                left: typed_expression.into(),
-                right: acc.into(),
+            .reduce(|acc, typed_expression| {
+                // Use the union of left and right locations for each BinOp
+                // This gives each operation a distinct trackable location
+                let binop_location = typed_expression.location().union(acc.location());
+                TypedExpr::BinOp {
+                    location: binop_location,
+                    tipo: Type::bool(),
+                    name,
+                    left: typed_expression.into(),
+                    right: acc.into(),
+                }
             })
             .expect("should have at least two");
 

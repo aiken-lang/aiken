@@ -1,5 +1,5 @@
 use crate::{
-    ast::{BinOp, Curve, Span, UnOp},
+    ast::{BinOp, Curve, SourceLocation, UnOp},
     tipo::{Type, ValueConstructor},
 };
 use std::rc::Rc;
@@ -37,71 +37,71 @@ pub enum Air {
     // Primitives
     Int {
         value: String,
-        location: Span,
+        location: SourceLocation,
     },
     String {
         value: String,
-        location: Span,
+        location: SourceLocation,
     },
     ByteArray {
         bytes: Vec<u8>,
-        location: Span,
+        location: SourceLocation,
     },
     CurvePoint {
         point: Curve,
-        location: Span,
+        location: SourceLocation,
     },
     Bool {
         value: bool,
-        location: Span,
+        location: SourceLocation,
     },
     List {
         count: usize,
         tipo: Rc<Type>,
         tail: bool,
-        location: Span,
+        location: SourceLocation,
     },
     Tuple {
         tipo: Rc<Type>,
         count: usize,
-        location: Span,
+        location: SourceLocation,
     },
     Pair {
         tipo: Rc<Type>,
-        location: Span,
+        location: SourceLocation,
     },
     Void {
-        location: Span,
+        location: SourceLocation,
     },
     Var {
         constructor: ValueConstructor,
         name: String,
         variant_name: String,
-        location: Span,
+        location: SourceLocation,
     },
     // Functions
     Call {
         count: usize,
         tipo: Rc<Type>,
-        location: Span,
+        location: SourceLocation,
     },
     DefineFunc {
         func_name: String,
         module_name: String,
         variant_name: String,
         variant: FunctionVariants,
-        location: Span,
+        location: SourceLocation,
     },
     Fn {
         params: Vec<String>,
         allow_inline: bool,
-        location: Span,
+        location: SourceLocation,
     },
     Builtin {
         count: usize,
         func: DefaultFunction,
         tipo: Rc<Type>,
-        location: Span,
+        location: SourceLocation,
     },
     // Operators
     BinOp {
@@ -109,36 +109,36 @@ pub enum Air {
         tipo: Rc<Type>,
         left_tipo: Rc<Type>,
         right_tipo: Rc<Type>,
-        location: Span,
+        location: SourceLocation,
     },
     UnOp {
         op: UnOp,
-        location: Span,
+        location: SourceLocation,
     },
     // Assignment
     Let {
         name: String,
-        location: Span,
+        location: SourceLocation,
     },
     // These 3 will need to look up the
     // decorators
     SoftCastLet {
         name: String,
         tipo: Rc<Type>,
-        location: Span,
+        location: SourceLocation,
     },
     CastFromData {
         tipo: Rc<Type>,
         full_cast: bool,
-        location: Span,
+        location: SourceLocation,
     },
     CastToData {
         tipo: Rc<Type>,
-        location: Span,
+        location: SourceLocation,
     },
     AssertBool {
         is_true: bool,
-        location: Span,
+        location: SourceLocation,
     },
     // When
     // If using list decorator this does nothing
@@ -146,43 +146,43 @@ pub enum Air {
         tipo: Rc<Type>,
         subject_name: String,
         subject_tipo: Rc<Type>,
-        location: Span,
+        location: SourceLocation,
     },
     Clause {
         subject_tipo: Rc<Type>,
         subject_name: String,
-        location: Span,
+        location: SourceLocation,
     },
     ListClause {
         subject_tipo: Rc<Type>,
         tail_name: String,
         next_tail_name: Option<(String, String)>,
-        location: Span,
+        location: SourceLocation,
     },
     // If
     If {
         tipo: Rc<Type>,
-        location: Span,
+        location: SourceLocation,
     },
     // Record Creation
     Constr {
         tag: Option<usize>,
         tipo: Rc<Type>,
         count: usize,
-        location: Span,
+        location: SourceLocation,
     },
     RecordUpdate {
         highest_index: usize,
         indices: Vec<(usize, Rc<Type>)>,
         tipo: Rc<Type>,
-        location: Span,
+        location: SourceLocation,
     },
     // Field Access
     FieldsExpose {
         list_decorator: bool,
         indices: Vec<(usize, String, Rc<Type>)>,
         is_expect: bool,
-        location: Span,
+        location: SourceLocation,
     },
     // ListAccess
     ListAccessor {
@@ -190,14 +190,14 @@ pub enum Air {
         names: Vec<String>,
         tail: bool,
         expect_level: ExpectLevel,
-        location: Span,
+        location: SourceLocation,
     },
     // Tuple Access
     TupleAccessor {
         names: Vec<String>,
         tipo: Rc<Type>,
         is_expect: bool,
-        location: Span,
+        location: SourceLocation,
     },
     // Pair Access
     PairAccessor {
@@ -205,30 +205,30 @@ pub enum Air {
         snd: Option<String>,
         tipo: Rc<Type>,
         is_expect: bool,
-        location: Span,
+        location: SourceLocation,
     },
     ExtractField {
         tipo: Rc<Type>,
-        location: Span,
+        location: SourceLocation,
     },
     // Misc.
     ErrorTerm {
         tipo: Rc<Type>,
         validator: bool,
-        location: Span,
+        location: SourceLocation,
     },
     Trace {
         tipo: Rc<Type>,
-        location: Span,
+        location: SourceLocation,
     },
     NoOp {
-        location: Span,
+        location: SourceLocation,
     },
     FieldsEmpty {
         list_decorator: bool,
-        location: Span,
+        location: SourceLocation,
     },
     ListEmpty {
-        location: Span,
+        location: SourceLocation,
     },
 }
