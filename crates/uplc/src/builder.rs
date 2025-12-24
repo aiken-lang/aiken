@@ -53,6 +53,14 @@ where
         }
     }
 
+    /// Like `force()` but preserves source location context.
+    pub fn force_with_ctx(self, context: C) -> Self {
+        Term::Force {
+            term: self.into(),
+            context,
+        }
+    }
+
     pub fn delay(self) -> Self {
         Term::Delay {
             term: self.into(),
@@ -595,11 +603,26 @@ where
 
     pub fn delayed_if_then_else(self, then_term: Self, else_term: Self) -> Self {
         Term::builtin(DefaultFunction::IfThenElse)
-        .force()
-        .apply(self)
-        .apply(then_term.delay())
-        .apply(else_term.delay())
-        .force()
+            .force()
+            .apply(self)
+            .apply(then_term.delay())
+            .apply(else_term.delay())
+            .force()
+    }
+
+    /// Like `delayed_if_then_else` but attaches source location context to the overall expression.
+    pub fn delayed_if_then_else_with_ctx(
+        self,
+        then_term: Self,
+        else_term: Self,
+        context: C,
+    ) -> Self {
+        Term::builtin(DefaultFunction::IfThenElse)
+            .force()
+            .apply(self)
+            .apply(then_term.delay())
+            .apply(else_term.delay())
+            .force_with_ctx(context)
     }
 
     /// Note the otherwise is expected to be a delayed term cast to a Var

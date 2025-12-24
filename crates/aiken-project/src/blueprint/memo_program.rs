@@ -1,10 +1,10 @@
-use aiken_lang::{ast::Span, ast::TypedValidator, gen_uplc::CodeGenerator};
+use aiken_lang::{ast::SourceLocation, ast::TypedValidator, gen_uplc::CodeGenerator};
 use uplc::ast::{DeBruijn, Name, Program, Term};
 
 #[derive(Default)]
 pub struct MemoProgram {
     program: Option<Program<DeBruijn>>,
-    term_with_spans: Option<Term<Name, Span>>,
+    term_with_spans: Option<Term<Name, SourceLocation>>,
 }
 
 impl MemoProgram {
@@ -29,9 +29,9 @@ impl MemoProgram {
         }
     }
 
-    /// Get the term with spans, if available.
+    /// Get the term with source locations, if available.
     /// This is only available after `get()` has been called.
-    pub fn get_term_with_spans(&self) -> Option<&Term<Name, Span>> {
+    pub fn get_term_with_spans(&self) -> Option<&Term<Name, SourceLocation>> {
         self.term_with_spans.as_ref()
     }
 }

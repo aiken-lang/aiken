@@ -6,7 +6,7 @@ use indexmap::IndexMap;
 use itertools::{Either, Itertools, Position};
 
 use crate::{
-    ast::{DataTypeKey, DecoratorKind, Pattern, Span, TypedClause, TypedDataType, TypedPattern},
+    ast::{DataTypeKey, DecoratorKind, Pattern, SourceLocation, Span, TypedClause, TypedDataType, TypedPattern},
     expr::{Type, TypeVar, TypedExpr, lookup_data_type_by_tipo},
     gen_uplc::builder::get_constr_index_variant,
     tipo::PatternConstructor,
@@ -128,13 +128,13 @@ impl CaseTest {
         match self {
             CaseTest::Constr(i) => {
                 if current_type.is_bool() {
-                    AirTree::bool(1 == *i, Span::empty())
+                    AirTree::bool(1 == *i, SourceLocation::empty())
                 } else {
-                    AirTree::int(i, Span::empty())
+                    AirTree::int(i, SourceLocation::empty())
                 }
             }
-            CaseTest::Int(i) => AirTree::int(i, Span::empty()),
-            CaseTest::Bytes(vec) => AirTree::byte_array(vec.clone(), Span::empty()),
+            CaseTest::Int(i) => AirTree::int(i, SourceLocation::empty()),
+            CaseTest::Bytes(vec) => AirTree::byte_array(vec.clone(), SourceLocation::empty()),
             CaseTest::List(_) => unreachable!(),
             CaseTest::ListWithTail(_) => unreachable!(),
             CaseTest::Wild => unreachable!(),
