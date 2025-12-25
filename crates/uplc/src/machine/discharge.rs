@@ -80,7 +80,7 @@ fn with_env<C: Clone + Default>(
             } else {
                 env.get::<usize>(env.len() - (index - lam_cnt))
                     .cloned()
-                    .map_or(Term::Var { name, context }, value_as_term)
+                    .map_or(Term::Var { name, context }, |(_, v)| value_as_term(v))
             }
         }
         Term::Lambda {

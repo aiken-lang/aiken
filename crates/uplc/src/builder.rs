@@ -683,6 +683,18 @@ impl<C: Default> Term<Name, C> {
     }
 }
 
+impl<C> Term<Name, C> {
+    /// Create a Lambda term with explicit context (source location).
+    /// Unlike `lambda()` which uses Default::default(), this preserves source info.
+    pub fn lambda_with_ctx(self, parameter_name: impl ToString, context: C) -> Self {
+        Term::Lambda {
+            parameter_name: Name::text(parameter_name).into(),
+            body: self.into(),
+            context,
+        }
+    }
+}
+
 impl<C: Default + Clone> Term<Name, C> {
 
     // Misc.
