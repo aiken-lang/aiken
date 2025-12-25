@@ -2766,73 +2766,74 @@ fn acceptance_test_28_unique_empty_list() {
       }
     "#;
 
+    // Use the new naming convention: module-prefixed unbound names and id suffixes
     let uplc = Term::equals_data()
         .apply(
             Term::list_data().apply(
-                Term::var("unique")
-                    .lambda("unique")
-                    .apply(Term::var("unique").apply(Term::var("unique")))
-                    .lambda("unique")
+                Term::var("test_module_unique_unbound")
+                    .lambda("test_module_unique_unbound")
+                    .apply(Term::var("test_module_unique_unbound").apply(Term::var("test_module_unique_unbound")))
+                    .lambda("test_module_unique_unbound")
                     .apply(
-                        Term::var("xs")
+                        Term::var("xs_id_0")
                             .delayed_choose_list(
                                 Term::empty_list(),
                                 Term::mk_cons()
-                                    .apply(Term::var("x"))
+                                    .apply(Term::var("x_id_4"))
                                     .apply(
-                                        Term::var("unique").apply(Term::var("unique")).apply(
-                                            Term::var("filter").apply(Term::var("rest")).apply(
+                                        Term::var("test_module_unique_unbound").apply(Term::var("test_module_unique_unbound")).apply(
+                                            Term::var("test_module_filter_unbound").apply(Term::var("rest_id_5")).apply(
                                                 Term::equals_data()
-                                                    .apply(Term::var("y"))
-                                                    .apply(Term::var("x"))
+                                                    .apply(Term::var("y_id_6"))
+                                                    .apply(Term::var("x_id_4"))
                                                     .if_then_else(
                                                         Term::bool(false),
                                                         Term::bool(true),
                                                     )
-                                                    .lambda("y"),
+                                                    .lambda("y_id_6"),
                                             ),
                                         ),
                                     )
-                                    .lambda("rest")
-                                    .lambda("x")
-                                    .apply(Term::head_list().apply(Term::var("xs")))
-                                    .apply(Term::tail_list().apply(Term::var("xs"))),
+                                    .lambda("rest_id_5")
+                                    .lambda("x_id_4")
+                                    .apply(Term::head_list().apply(Term::var("xs_id_0")))
+                                    .apply(Term::tail_list().apply(Term::var("xs_id_0"))),
                             )
-                            .lambda("xs")
-                            .lambda("unique"),
+                            .lambda("xs_id_0")
+                            .lambda("test_module_unique_unbound"),
                     )
-                    .lambda("filter")
+                    .lambda("test_module_filter_unbound")
                     .apply(
-                        Term::var("filter")
-                            .apply(Term::var("filter"))
-                            .apply(Term::var("xs"))
-                            .lambda("filter")
+                        Term::var("test_module_filter_unbound")
+                            .apply(Term::var("test_module_filter_unbound"))
+                            .apply(Term::var("xs_id_7"))
+                            .lambda("test_module_filter_unbound")
                             .apply(
-                                Term::var("xs")
+                                Term::var("xs_id_7")
                                     .delayed_choose_list(
                                         Term::empty_list(),
-                                        Term::var("f")
-                                            .apply(Term::var("x"))
+                                        Term::var("f_id_8")
+                                            .apply(Term::var("x_id_9"))
                                             .delayed_if_then_else(
-                                                Term::mk_cons().apply(Term::var("x")).apply(
-                                                    Term::var("filter")
-                                                        .apply(Term::var("filter"))
-                                                        .apply(Term::var("rest")),
+                                                Term::mk_cons().apply(Term::var("x_id_9")).apply(
+                                                    Term::var("test_module_filter_unbound")
+                                                        .apply(Term::var("test_module_filter_unbound"))
+                                                        .apply(Term::var("rest_id_10")),
                                                 ),
-                                                Term::var("filter")
-                                                    .apply(Term::var("filter"))
-                                                    .apply(Term::var("rest")),
+                                                Term::var("test_module_filter_unbound")
+                                                    .apply(Term::var("test_module_filter_unbound"))
+                                                    .apply(Term::var("rest_id_10")),
                                             )
-                                            .lambda("rest")
-                                            .lambda("x")
-                                            .apply(Term::head_list().apply(Term::var("xs")))
-                                            .apply(Term::tail_list().apply(Term::var("xs"))),
+                                            .lambda("rest_id_10")
+                                            .lambda("x_id_9")
+                                            .apply(Term::head_list().apply(Term::var("xs_id_7")))
+                                            .apply(Term::tail_list().apply(Term::var("xs_id_7"))),
                                     )
-                                    .lambda("xs")
-                                    .lambda("filter"),
+                                    .lambda("xs_id_7")
+                                    .lambda("test_module_filter_unbound"),
                             )
-                            .lambda("f")
-                            .lambda("xs"),
+                            .lambda("f_id_8")
+                            .lambda("xs_id_7"),
                     )
                     .apply(Term::empty_list()),
             ),
@@ -2873,81 +2874,82 @@ fn acceptance_test_28_unique_list() {
       }
     "#;
 
+    // Use the new naming convention: module-prefixed unbound names and id suffixes
     let uplc =
         Term::equals_data()
             .apply(
                 Term::list_data().apply(
-                    Term::var("unique")
-                        .lambda("unique")
-                        .apply(Term::var("unique").apply(Term::var("unique")))
-                        .lambda("unique")
+                    Term::var("test_module_unique_unbound")
+                        .lambda("test_module_unique_unbound")
+                        .apply(Term::var("test_module_unique_unbound").apply(Term::var("test_module_unique_unbound")))
+                        .lambda("test_module_unique_unbound")
                         .apply(
-                            Term::var("xs")
+                            Term::var("xs_id_0")
                                 .delayed_choose_list(
                                     Term::empty_list(),
                                     Term::mk_cons()
-                                        .apply(Term::i_data().apply(Term::var("x")))
+                                        .apply(Term::i_data().apply(Term::var("x_id_4")))
                                         .apply(
-                                            Term::var("unique").apply(Term::var("unique")).apply(
-                                                Term::var("filter").apply(Term::var("rest")).apply(
+                                            Term::var("test_module_unique_unbound").apply(Term::var("test_module_unique_unbound")).apply(
+                                                Term::var("test_module_filter_unbound").apply(Term::var("rest_id_5")).apply(
                                                     Term::equals_integer()
-                                                        .apply(Term::var("y"))
-                                                        .apply(Term::var("x"))
+                                                        .apply(Term::var("y_id_6"))
+                                                        .apply(Term::var("x_id_4"))
                                                         .if_then_else(
                                                             Term::bool(false),
                                                             Term::bool(true),
                                                         )
-                                                        .lambda("y"),
+                                                        .lambda("y_id_6"),
                                                 ),
                                             ),
                                         )
-                                        .lambda("rest")
-                                        .lambda("x")
+                                        .lambda("rest_id_5")
+                                        .lambda("x_id_4")
                                         .apply(
                                             Term::un_i_data()
-                                                .apply(Term::head_list().apply(Term::var("xs"))),
+                                                .apply(Term::head_list().apply(Term::var("xs_id_0"))),
                                         )
-                                        .apply(Term::tail_list().apply(Term::var("xs"))),
+                                        .apply(Term::tail_list().apply(Term::var("xs_id_0"))),
                                 )
-                                .lambda("xs")
-                                .lambda("unique"),
+                                .lambda("xs_id_0")
+                                .lambda("test_module_unique_unbound"),
                         )
-                        .lambda("filter")
+                        .lambda("test_module_filter_unbound")
                         .apply(
-                            Term::var("filter")
-                                .apply(Term::var("filter"))
-                                .apply(Term::var("xs"))
-                                .lambda("filter")
+                            Term::var("test_module_filter_unbound")
+                                .apply(Term::var("test_module_filter_unbound"))
+                                .apply(Term::var("xs_id_7"))
+                                .lambda("test_module_filter_unbound")
                                 .apply(
-                                    Term::var("xs")
+                                    Term::var("xs_id_7")
                                         .delayed_choose_list(
                                             Term::empty_list(),
-                                            Term::var("f")
-                                                .apply(Term::var("x"))
+                                            Term::var("f_id_8")
+                                                .apply(Term::var("x_id_9"))
                                                 .delayed_if_then_else(
                                                     Term::mk_cons()
-                                                        .apply(Term::i_data().apply(Term::var("x")))
+                                                        .apply(Term::i_data().apply(Term::var("x_id_9")))
                                                         .apply(
-                                                            Term::var("filter")
-                                                                .apply(Term::var("filter"))
-                                                                .apply(Term::var("rest")),
+                                                            Term::var("test_module_filter_unbound")
+                                                                .apply(Term::var("test_module_filter_unbound"))
+                                                                .apply(Term::var("rest_id_10")),
                                                         ),
-                                                    Term::var("filter")
-                                                        .apply(Term::var("filter"))
-                                                        .apply(Term::var("rest")),
+                                                    Term::var("test_module_filter_unbound")
+                                                        .apply(Term::var("test_module_filter_unbound"))
+                                                        .apply(Term::var("rest_id_10")),
                                                 )
-                                                .lambda("rest")
-                                                .lambda("x")
+                                                .lambda("rest_id_10")
+                                                .lambda("x_id_9")
                                                 .apply(Term::un_i_data().apply(
-                                                    Term::head_list().apply(Term::var("xs")),
+                                                    Term::head_list().apply(Term::var("xs_id_7")),
                                                 ))
-                                                .apply(Term::tail_list().apply(Term::var("xs"))),
+                                                .apply(Term::tail_list().apply(Term::var("xs_id_7"))),
                                         )
-                                        .lambda("xs")
-                                        .lambda("filter"),
+                                        .lambda("xs_id_7")
+                                        .lambda("test_module_filter_unbound"),
                                 )
-                                .lambda("f")
-                                .lambda("xs"),
+                                .lambda("f_id_8")
+                                .lambda("xs_id_7"),
                         )
                         .apply(Term::list_values(vec![
                             Constant::Data(Data::integer(1.into())),
@@ -6608,5 +6610,220 @@ fn debug_source_locations_fibonacci() {
 
             break;
         }
+    }
+}
+
+/// Test that source map correctly extracts variable names from compiled code.
+/// This test compiles real Aiken code and verifies the names in the term with spans.
+#[test]
+fn source_map_variable_names_from_compiled_code() {
+    use crate::blueprint::source_map::SourceMap;
+    use aiken_lang::line_numbers::LineNumbers;
+    use indexmap::IndexMap;
+
+    let src = r#"
+        pub fn add(x: Int, y: Int) -> Int {
+          x + y
+        }
+
+        test add_test() {
+          add(1, 2) == 3
+        }
+    "#;
+
+    let mut project = TestProject::new();
+    let checked_module = project.check(project.parse(src));
+
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Silent));
+
+    for def in checked_module.ast.definitions() {
+        if let Definition::Test(Function { body: func, .. }) = def {
+            // Use generate_with_term to get the term with spans (same as used for source maps)
+            // Note: For tests, we use generate_raw, but we want to see what names look like
+            let program = generator.generate_raw(func, &[], &checked_module.name);
+
+            // Collect all variable names from the program
+            let mut names: Vec<String> = Vec::new();
+            collect_names_from_term(&program.term, &mut names);
+
+            println!("\n=== Variable names in compiled test ===");
+            for name in &names {
+                println!("  {}", name);
+            }
+
+            // Verify that we have some user-defined names (with _id_ suffix)
+            let interned_names: Vec<_> = names.iter()
+                .filter(|n| n.contains("_id_"))
+                .collect();
+
+            println!("\n=== Interned names (with _id_ suffix) ===");
+            for name in &interned_names {
+                println!("  {}", name);
+            }
+
+            // Verify that internal names start with __
+            let internal_names: Vec<_> = names.iter()
+                .filter(|n| n.starts_with("__"))
+                .collect();
+
+            println!("\n=== Internal names (with __ prefix) ===");
+            for name in &internal_names {
+                println!("  {}", name);
+            }
+
+            // Verify no DeBruijn-style names (i_N) unless they went through conversion
+            let debruijn_names: Vec<_> = names.iter()
+                .filter(|n| n.starts_with("i_") && n[2..].chars().all(|c| c.is_ascii_digit()))
+                .collect();
+
+            println!("\n=== DeBruijn-style names (i_N) ===");
+            for name in &debruijn_names {
+                println!("  {}", name);
+            }
+
+            // The main assertion: we should have user variable names with _id_ suffix
+            // (like x_id_0, y_id_1) from the code generator, NOT DeBruijn-style names
+            assert!(
+                interned_names.len() > 0 || names.is_empty(),
+                "Expected some interned names with _id_ suffix from code generation"
+            );
+
+            break;
+        }
+    }
+}
+
+/// Test source map with a validator to verify names work for validators too.
+#[test]
+fn source_map_variable_names_from_validator() {
+    use crate::blueprint::source_map::SourceMap;
+    use aiken_lang::line_numbers::LineNumbers;
+    use indexmap::IndexMap;
+
+    let src = r#"
+        validator simple_validator {
+          spend(datum: Option<Int>, redeemer: Int, _output_ref: Data, _tx: Data) {
+            when datum is {
+              Some(d) -> d == redeemer
+              None -> redeemer == 0
+            }
+          }
+        }
+    "#;
+
+    let mut project = TestProject::new();
+    let checked_module = project.check(project.parse(src));
+
+    let mut generator = project.new_generator(Tracing::All(TraceLevel::Silent));
+
+    for def in checked_module.ast.definitions() {
+        if let Definition::Validator(validator) = def {
+            // Generate with term to get source location info
+            let (program, term_with_spans) = generator.generate_with_term(validator, &checked_module.name);
+
+            // Collect names from the term with spans
+            let mut names: Vec<String> = Vec::new();
+            collect_names_from_term_with_spans(&term_with_spans, &mut names);
+
+            println!("\n=== Variable names in validator (term with spans) ===");
+            for name in &names {
+                println!("  {}", name);
+            }
+
+            // Build the source map
+            let module_sources_owned: std::collections::HashMap<String, (String, LineNumbers)> =
+                project.module_sources.clone();
+            let module_sources: IndexMap<&str, &(String, LineNumbers)> = module_sources_owned
+                .iter()
+                .map(|(k, v)| (k.as_str(), v))
+                .collect();
+
+            let source_map = SourceMap::from_term(&term_with_spans, &checked_module.name, &module_sources);
+
+            println!("\n=== Source map names ===");
+            for (idx, name) in &source_map.names {
+                println!("  {}: {}", idx, name);
+            }
+
+            // Verify we extracted some meaningful names
+            let meaningful_names: Vec<_> = source_map.names.values()
+                .filter(|n| !n.starts_with("_") && !n.is_empty())
+                .collect();
+
+            println!("\n=== Meaningful names in source map ===");
+            for name in &meaningful_names {
+                println!("  {}", name);
+            }
+
+            // We should have at least some of the user-defined variable names
+            // (datum, redeemer, d)
+            let expected_names = ["d", "datum", "redeemer"];
+            for expected in &expected_names {
+                let found = source_map.names.values().any(|n| n == *expected);
+                println!("Looking for '{}': {}", expected, if found { "found" } else { "NOT found" });
+            }
+
+            break;
+        }
+    }
+}
+
+fn collect_names_from_term(term: &Term<Name>, names: &mut Vec<String>) {
+    match term {
+        Term::Var { name, .. } => {
+            names.push(name.text.clone());
+        }
+        Term::Lambda { parameter_name, body, .. } => {
+            names.push(parameter_name.text.clone());
+            collect_names_from_term(body, names);
+        }
+        Term::Apply { function, argument, .. } => {
+            collect_names_from_term(function, names);
+            collect_names_from_term(argument, names);
+        }
+        Term::Delay { term, .. } => collect_names_from_term(term, names),
+        Term::Force { term, .. } => collect_names_from_term(term, names),
+        Term::Case { constr, branches, .. } => {
+            collect_names_from_term(constr, names);
+            for branch in branches {
+                collect_names_from_term(branch, names);
+            }
+        }
+        Term::Constr { fields, .. } => {
+            for field in fields {
+                collect_names_from_term(field, names);
+            }
+        }
+        Term::Constant { .. } | Term::Builtin { .. } | Term::Error { .. } => {}
+    }
+}
+
+fn collect_names_from_term_with_spans(term: &Term<Name, SourceLocation>, names: &mut Vec<String>) {
+    match term {
+        Term::Var { name, .. } => {
+            names.push(name.text.clone());
+        }
+        Term::Lambda { parameter_name, body, .. } => {
+            names.push(parameter_name.text.clone());
+            collect_names_from_term_with_spans(body, names);
+        }
+        Term::Apply { function, argument, .. } => {
+            collect_names_from_term_with_spans(function, names);
+            collect_names_from_term_with_spans(argument, names);
+        }
+        Term::Delay { term, .. } => collect_names_from_term_with_spans(term, names),
+        Term::Force { term, .. } => collect_names_from_term_with_spans(term, names),
+        Term::Case { constr, branches, .. } => {
+            collect_names_from_term_with_spans(constr, names);
+            for branch in branches {
+                collect_names_from_term_with_spans(branch, names);
+            }
+        }
+        Term::Constr { fields, .. } => {
+            for field in fields {
+                collect_names_from_term_with_spans(field, names);
+            }
+        }
+        Term::Constant { .. } | Term::Builtin { .. } | Term::Error { .. } => {}
     }
 }

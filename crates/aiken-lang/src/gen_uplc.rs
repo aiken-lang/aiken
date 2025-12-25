@@ -4276,17 +4276,17 @@ impl<'a> CodeGenerator<'a> {
             Air::Fn {
                 params,
                 allow_inline,
-                ..
+                location,
             } => {
                 let mut term = arg_stack.pop().unwrap();
 
                 for param in params.iter().rev() {
-                    term = term.lambda(param);
+                    term = term.lambda_with_ctx(param, location.clone());
                 }
                 term = if allow_inline {
                     term
                 } else {
-                    term.lambda(NO_INLINE)
+                    term.lambda_with_ctx(NO_INLINE, location)
                 };
 
                 if params.is_empty() {

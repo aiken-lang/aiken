@@ -666,9 +666,9 @@ impl Machine {
         argument: Value<()>,
     ) -> Result<InternalState, Error> {
         match function {
-            Value::Lambda { body, mut env, .. } => {
+            Value::Lambda { parameter_name, body, mut env } => {
                 let e = Rc::make_mut(&mut env);
-                e.push(argument);
+                e.push((parameter_name, argument));
                 Ok(InternalState::Compute(context, Rc::new(e.clone()), body.as_ref().clone()))
             }
             Value::Builtin { fun, runtime } => {
@@ -710,9 +710,10 @@ impl Machine {
         runtime.call(&self.version, &mut self.traces)
     }
 
-    fn lookup_var(&mut self, name: &NamedDeBruijn, env: &[Value<()>]) -> Result<Value<()>, Error> {
-        env.get::<usize>(env.len() - usize::from(name.index))
-            .cloned()
+    fn lookup_var(&mut self, name: &NamedDeBruijn, env: &value::Env<()>) -> Result<Value<()>, Error> {
+        let index = env.len() - usize::from(name.index);
+        env.get(index)
+            .map(|(_, v)| v.clone())
             .ok_or_else(|| {
                 Error::OpenTermEvaluated(Term::Var {
                     name: name.clone().into(),
@@ -804,23 +805,19 @@ fn step_transfer_arg_stack<C>(mut args: Vec<Value<C>>, ctx: Context<C>) -> Conte
     }
 }
 
-/// Convert value::Env<C> (Rc<Vec<Value<C>>>) to the named Env<C> type.
+/// Convert value::Env<C> to the named Env<C> type.
+/// Now that value::Env stores names, we can preserve them.
 fn value_env_to_env<C: Clone>(value_env: &value::Env<C>) -> Env<C> {
-    // Since the old env doesn't store names, we create placeholder names
     let mut env = Env::new();
-    for (i, val) in value_env.iter().enumerate() {
-        let placeholder = NamedDeBruijn {
-            text: format!("_{}", i),
-            index: (i + 1).into(),
-        };
-        env.push(placeholder, val.clone());
+    for (name, val) in value_env.iter() {
+        env.push((**name).clone(), val.clone());
     }
     env
 }
 
-/// Convert the named Env<C> type back to value::Env<C>.
+/// Convert the named Env<C> type to value::Env<C>, preserving names.
 fn env_to_value_env<C: Clone>(env: &Env<C>) -> value::Env<C> {
-    Rc::new(env.values.iter().map(|(_, v)| v.clone()).collect())
+    Rc::new(env.values.iter().map(|(name, v)| (Rc::new(name.clone()), v.clone())).collect())
 }
 
 impl From<&Constant> for Type {
@@ -1142,5 +1139,97 @@ mod tests {
         let final_term = eval_result.result().unwrap();
 
         assert_eq!(final_term, Term::bool(true))
+    }
+
+    #[test]
+    fn stepping_preserves_variable_names_in_env() {
+        use super::{Machine, MachineState};
+        use crate::ast::DeBruijn;
+        use std::rc::Rc;
+
+        // Create a simple program: (\x -> \y -> x) 1 2
+        // This should result in env containing [("x", 1), ("y", 2)] at some point
+        let term: Term<NamedDeBruijn, u64> = Term::Lambda {
+            parameter_name: Rc::new(NamedDeBruijn {
+                text: "my_x_var".to_string(),
+                index: DeBruijn::from(0),
+            }),
+            body: Rc::new(Term::Lambda {
+                parameter_name: Rc::new(NamedDeBruijn {
+                    text: "my_y_var".to_string(),
+                    index: DeBruijn::from(0),
+                }),
+                body: Rc::new(Term::Var {
+                    name: Rc::new(NamedDeBruijn {
+                        text: "my_x_var".to_string(),
+                        index: DeBruijn::from(2),
+                    }),
+                    context: 100,
+                }),
+                context: 200,
+            }),
+            context: 300,
+        };
+
+        // Apply to 1 and then 2
+        let term = Term::Apply {
+            function: Rc::new(Term::Apply {
+                function: Rc::new(term),
+                argument: Rc::new(Term::Constant {
+                    value: Rc::new(Constant::Integer(1.into())),
+                    context: 400,
+                }),
+                context: 500,
+            }),
+            argument: Rc::new(Term::Constant {
+                value: Rc::new(Constant::Integer(2.into())),
+                context: 600,
+            }),
+            context: 700,
+        };
+
+        let mut machine = Machine::new(
+            pallas_primitives::conway::Language::PlutusV3,
+            crate::machine::cost_model::CostModel::default(),
+            ExBudget::default(),
+            200,
+        );
+
+        let mut state = machine.get_initial_machine_state(term).unwrap();
+
+        // Track the env names we see
+        let mut found_x = false;
+        let mut found_y = false;
+        let mut found_both = false;
+
+        for _ in 0..100 {
+            match &state {
+                MachineState::Compute(_, env, _) => {
+                    // Check if we have the expected variable names in the env
+                    for (name, _) in env.values.iter() {
+                        if name.text == "my_x_var" {
+                            found_x = true;
+                        }
+                        if name.text == "my_y_var" {
+                            found_y = true;
+                        }
+                    }
+                    // Check if both are present at the same time
+                    if env.values.len() >= 2 {
+                        let names: Vec<_> = env.values.iter().map(|(n, _)| n.text.as_str()).collect();
+                        if names.contains(&"my_x_var") && names.contains(&"my_y_var") {
+                            found_both = true;
+                        }
+                    }
+                }
+                MachineState::Done(_) => break,
+                MachineState::Return(_, _) => {}
+            }
+            state = machine.step(state).unwrap();
+        }
+
+        assert!(found_x, "Should have seen 'my_x_var' in env at some point");
+        assert!(found_y, "Should have seen 'my_y_var' in env at some point");
+        assert!(found_both, "Should have seen both 'my_x_var' and 'my_y_var' in env together");
     }
 }

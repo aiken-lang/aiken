@@ -11,7 +11,9 @@ use num_traits::{Signed, ToPrimitive, Zero};
 use pallas_primitives::conway::{self, PlutusData};
 use std::{collections::VecDeque, mem::size_of, ops::Deref, rc::Rc};
 
-pub type Env<C> = Rc<Vec<Value<C>>>;
+/// Environment type that preserves variable names for debugging.
+/// Each entry is a (name, value) pair where the name comes from the Lambda parameter.
+pub type Env<C> = Rc<Vec<(Rc<NamedDeBruijn>, Value<C>)>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value<C> {
@@ -79,7 +81,7 @@ impl<C> Value<C> {
             Value::Con(c) => Value::Con(c.clone()),
             Value::Delay(term, env) => Value::Delay(
                 Rc::new(term.as_ref().clone().map_context(|_| ())),
-                Rc::new(env.iter().map(|v| v.erase_context()).collect()),
+                Rc::new(env.iter().map(|(name, v)| (name.clone(), v.erase_context())).collect()),
             ),
             Value::Lambda {
                 parameter_name,
@@ -88,7 +90,7 @@ impl<C> Value<C> {
             } => Value::Lambda {
                 parameter_name: parameter_name.clone(),
                 body: Rc::new(body.as_ref().clone().map_context(|_| ())),
-                env: Rc::new(env.iter().map(|v| v.erase_context()).collect()),
+                env: Rc::new(env.iter().map(|(name, v)| (name.clone(), v.erase_context())).collect()),
             },
             Value::Builtin { fun, runtime } => Value::Builtin {
                 fun: *fun,
@@ -487,8 +489,7 @@ impl Value<()> {
                 Rc::new(term.as_ref().clone().map_context(|_| C::default())),
                 Rc::new(
                     env.iter()
-                        .cloned()
-                        .map(|v| v.with_default_context())
+                        .map(|(name, v)| (name.clone(), v.clone().with_default_context()))
                         .collect(),
                 ),
             ),
@@ -501,8 +502,7 @@ impl Value<()> {
                 body: Rc::new(body.as_ref().clone().map_context(|_| C::default())),
                 env: Rc::new(
                     env.iter()
-                        .cloned()
-                        .map(|v| v.with_default_context())
+                        .map(|(name, v)| (name.clone(), v.clone().with_default_context()))
                         .collect(),
                 ),
             },
