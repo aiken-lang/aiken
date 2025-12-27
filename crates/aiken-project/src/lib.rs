@@ -1,5 +1,6 @@
 pub mod blueprint;
 pub mod config;
+pub mod coverage;
 pub mod deps;
 pub mod docs;
 pub mod error;
@@ -32,16 +33,16 @@ use crate::{
 use aiken_lang::{
     IdGenerator,
     ast::{
-        self, DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Tracing, TypedDataType,
-        TypedFunction, UntypedDefinition,
+        self, DataTypeKey, Definition, FunctionAccessKey, ModuleKind, OnTestFailure, Tracing,
+        TypedArg, TypedDataType, TypedFunction, UntypedDefinition,
     },
     builtins,
     expr::{TypedExpr, UntypedExpr},
     format::{Formatter, MAX_COLUMNS},
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
-    test_framework::{RunnableKind, Test, TestResult},
-    tipo::{Type, TypeInfo},
+    test_framework::{Prng, RunnableKind, Test, TestResult},
+    tipo::{Type, TypeInfo, convert_opaque_type},
     utils,
 };
 use export::Export;
@@ -61,7 +62,8 @@ use std::{
 use telemetry::EventListener;
 use uplc::{
     PlutusData,
-    ast::{Constant, Name, Program},
+    ast::{Constant, Name, NamedDeBruijn, Program},
+    machine::cost_model::ExBudget,
 };
 
 #[derive(Debug)]
@@ -328,6 +330,330 @@ where
         };
 
         self.compile(options)
+    }
+
+    /// Run tests with code coverage tracking and generate an LCOV report.
+    #[allow(clippy::too_many_arguments)]
+    pub fn coverage(
+        &mut self,
+        match_tests: Option<Vec<String>>,
+        exact_match: bool,
+        seed: u32,
+        property_max_success: usize,
+        tracing: Tracing,
+        env: Option<String>,
+        output_path: PathBuf,
+    ) -> Result<(), Vec<Error>> {
+        use coverage::{CoverageData, LcovReport};
+
+        self.event_listener
+            .handle_event(Event::StartingCompilation {
+                root: self.root.clone(),
+                name: self.config.name.to_string(),
+                version: self.config.version.clone(),
+            });
+
+        let config = self.config_definitions(env.as_deref());
+
+        self.read_source_files(config)?;
+
+        let mut modules = self.parse_sources(self.config.name.clone())?;
+
+        self.type_check(&mut modules, tracing, env.as_deref(), true)?;
+
+        // Collect tests to run
+        let tests_to_run = self.collect_tests_for_coverage(match_tests, exact_match, seed, tracing)?;
+
+        if tests_to_run.is_empty() {
+            // No tests to run, just write empty coverage file
+            let report = LcovReport::new();
+            report.write_to_file(&output_path).map_err(|error| {
+                vec![Error::FileIo {
+                    error,
+                    path: output_path,
+                }]
+            })?;
+            return Ok(());
+        }
+
+        self.event_listener.handle_event(Event::RunningTests);
+
+        let plutus_version = self.config.plutus;
+        let language: pallas_primitives::conway::Language = (&plutus_version).into();
+
+        // First, collect all coverable locations from:
+        // 1. All test programs
+        // 2. All validators in the project
+        let mut all_coverable_locations = std::collections::HashSet::new();
+
+        // Collect from test programs
+        for (_, _, program) in &tests_to_run {
+            let locations = coverage::collect_all_program_locations(program);
+            all_coverable_locations.extend(locations);
+        }
+
+        // Compile all validators and collect their source locations
+        {
+            let mut generator = self.new_generator(tracing);
+            for (module, def) in self.checked_modules.validators() {
+                let (_, term_with_spans) = generator.generate_with_term(def, &module.name);
+                let locations = coverage::collect_all_locations(&term_with_spans);
+                all_coverable_locations.extend(locations);
+            }
+        }
+
+        // Run tests with coverage tracking (serial to avoid Rc Send issues)
+        let results: Vec<_> = tests_to_run
+            .into_iter()
+            .map(|(name, on_test_failure, program)| {
+                let result = coverage::run_program_with_coverage(
+                    program,
+                    &language,
+                    ExBudget::max(),
+                );
+                (name, on_test_failure, result)
+            })
+            .collect();
+
+        // Aggregate coverage data
+        let mut aggregated_coverage = CoverageData::new();
+        let mut failed_tests = Vec::new();
+
+        for (name, on_test_failure, cov_result) in results {
+            // Always merge coverage, even for failing tests
+            aggregated_coverage.merge(&cov_result.coverage);
+
+            // Determine test success based on on_test_failure and result
+            // This mirrors the logic in EvalResult::failed()
+            let test_passed = match on_test_failure {
+                OnTestFailure::SucceedEventually | OnTestFailure::SucceedImmediately => {
+                    // "fail" tests pass if they error (Term::Error, machine error) or return Bool(false)
+                    cov_result.errored || cov_result.returned_false
+                }
+                OnTestFailure::FailImmediately => {
+                    // Normal tests pass if they return Bool(true) or Unit
+                    cov_result.success
+                }
+            };
+            if !test_passed {
+                failed_tests.push(name);
+            }
+        }
+
+        // Build module info map for filtering and file path resolution
+        let project_name = self.config.name.to_string();
+        let module_info: HashMap<String, coverage::ModuleInfo> = self
+            .checked_modules
+            .values()
+            .map(|m| {
+                (
+                    m.name.clone(),
+                    coverage::ModuleInfo {
+                        // Canonicalize path to absolute for genhtml compatibility
+                        file_path: m
+                            .input_path
+                            .canonicalize()
+                            .unwrap_or_else(|_| m.input_path.clone()),
+                        is_project_module: m.package == project_name,
+                    },
+                )
+            })
+            .collect();
+
+        // Generate LCOV report
+        let module_sources = utils::indexmap::as_str_ref_values(&self.module_sources);
+        let mut report = LcovReport::new();
+        // First initialize all coverable lines with count=0
+        report.init_coverable_locations(&all_coverable_locations, &module_sources, &module_info);
+        // Then add the executed locations (incrementing their counts)
+        report.add_coverage(
+            &aggregated_coverage.executed_locations,
+            &module_sources,
+            &module_info,
+        );
+
+        report.write_to_file(&output_path).map_err(|error| {
+            vec![Error::FileIo {
+                error,
+                path: output_path.clone(),
+            }]
+        })?;
+
+        // Report coverage stats
+        let (hit, total) = report.overall_stats();
+        self.event_listener.handle_event(Event::FinishedCoverage {
+            output_path: output_path.clone(),
+            lines_hit: hit,
+            lines_total: total,
+        });
+
+        if !failed_tests.is_empty() {
+            // Coverage report is still written, but we report test failures
+            Err(failed_tests
+                .into_iter()
+                .map(|name| Error::CoverageTestFailure { name })
+                .collect())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Collect tests for coverage, generating programs with source locations preserved.
+    fn collect_tests_for_coverage(
+        &mut self,
+        match_tests: Option<Vec<String>>,
+        exact_match: bool,
+        seed: u32,
+        tracing: Tracing,
+    ) -> Result<Vec<(String, OnTestFailure, Program<NamedDeBruijn, ast::SourceLocation>)>, Error> {
+        let mut scripts = Vec::new();
+
+        let match_tests = match_tests.map(|mt| {
+            mt.into_iter()
+                .map(|match_test| {
+                    let mut match_split_dot = match_test.split('.');
+
+                    let match_module = if match_test.contains('.') || match_test.contains('/') {
+                        match_split_dot.next().unwrap_or("")
+                    } else {
+                        ""
+                    };
+
+                    let match_names = match_split_dot.next().and_then(|names| {
+                        let names = names.replace(&['{', '}'][..], "");
+                        let names_split_comma = names.split(',');
+
+                        let result = names_split_comma
+                            .filter_map(|s| {
+                                let s = s.trim();
+                                if s.is_empty() {
+                                    None
+                                } else {
+                                    Some(s.to_string())
+                                }
+                            })
+                            .collect::<Vec<_>>();
+
+                        if result.is_empty() {
+                            None
+                        } else {
+                            Some(result)
+                        }
+                    });
+
+                    (match_module.to_string(), match_names)
+                })
+                .collect::<Vec<(String, Option<Vec<String>>)>>()
+        });
+
+        for checked_module in self.checked_modules.values() {
+            if checked_module.package != self.config.name.to_string() {
+                continue;
+            }
+
+            for def in checked_module.ast.definitions() {
+                let func = match def {
+                    Definition::Test(func) => Some(func),
+                    _ => None,
+                };
+
+                if let Some(func) = func {
+                    if let Some(match_tests) = &match_tests {
+                        let is_match = match_tests.iter().any(|(module, names)| {
+                            let matched_module =
+                                module.is_empty() || checked_module.name.contains(module);
+
+                            let matched_name = match names {
+                                None => true,
+                                Some(names) => names.iter().any(|name| {
+                                    if exact_match {
+                                        name == &func.name
+                                    } else {
+                                        func.name.contains(name)
+                                    }
+                                }),
+                            };
+
+                            matched_module && matched_name
+                        });
+
+                        if is_match {
+                            scripts.push((checked_module.name.clone(), func));
+                        }
+                    } else {
+                        scripts.push((checked_module.name.clone(), func));
+                    }
+                }
+            }
+        }
+
+        let mut generator = self.new_generator(tracing);
+
+        let mut tests = Vec::new();
+
+        for (module_name, test) in scripts.into_iter() {
+            let test_name = format!("{}.{}", module_name, test.name);
+
+            // Check if this is a property test (has fuzzer parameters)
+            let is_property_test = !test.arguments.is_empty();
+
+            if is_property_test {
+                // For property tests, we need to:
+                // 1. Generate the fuzzer program (without spans)
+                // 2. Sample from it to get a test value
+                // 3. Generate the test body with spans
+                // 4. Apply the sampled value to the test body
+
+                let parameter = test.arguments.first().unwrap();
+                let type_info = parameter.arg.tipo.clone();
+                let stripped_type_info =
+                    convert_opaque_type(&type_info, generator.data_types(), true);
+
+                // Generate the fuzzer program (without source locations - we don't need coverage for the fuzzer)
+                let fuzzer_program = generator.clone().generate_raw(&parameter.via, &[], &module_name);
+
+                // Sample a value from the fuzzer using the provided seed
+                let prng = Prng::from_seed(seed);
+                let sampled_value = match prng.sample(&fuzzer_program) {
+                    Ok(Some((_, value))) => value,
+                    Ok(None) => {
+                        // Fuzzer returned None - skip this test for coverage
+                        continue;
+                    }
+                    Err(_) => {
+                        // Fuzzer failed - skip this test for coverage
+                        continue;
+                    }
+                };
+
+                // Generate test body with source locations
+                let args = vec![TypedArg {
+                    tipo: stripped_type_info,
+                    ..parameter.clone().into()
+                }];
+                let term = generator.generate_raw_with_spans(&test.body, &args, &module_name);
+                let program_with_spans = generator.finalize_minimal_with_spans(term);
+                let program = program_with_spans
+                    .try_into_named_debruijn()
+                    .map_err(|e| Error::DeBruijnConversion { error: e.to_string() })?;
+
+                // Apply the sampled value to the test program
+                let program = program.apply_data(sampled_value);
+
+                tests.push((test_name, test.on_test_failure.clone(), program));
+            } else {
+                // Unit test - generate directly without fuzzer
+                let term = generator.generate_raw_with_spans(&test.body, &[], &module_name);
+                let program_with_spans = generator.finalize_minimal_with_spans(term);
+                let program = program_with_spans
+                    .try_into_named_debruijn()
+                    .map_err(|e| Error::DeBruijnConversion { error: e.to_string() })?;
+
+                tests.push((test_name, test.on_test_failure.clone(), program));
+            }
+        }
+
+        Ok(tests)
     }
 
     #[allow(clippy::result_large_err)]
