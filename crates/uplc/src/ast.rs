@@ -832,6 +832,18 @@ impl TryFrom<Program<Name>> for Program<NamedDeBruijn> {
     }
 }
 
+impl<C: Clone> Program<Name, C> {
+    /// Convert a `Program<Name, C>` to `Program<NamedDeBruijn, C>`, preserving the context type.
+    /// This is useful for coverage tracking where we want to preserve source locations.
+    pub fn try_into_named_debruijn(self) -> Result<Program<NamedDeBruijn, C>, debruijn::Error> {
+        let mut converter = Converter::new();
+        Ok(Program {
+            version: self.version,
+            term: converter.name_to_named_debruijn(&self.term)?,
+        })
+    }
+}
+
 /// Convert a Parsed `Term` to a `Term` in `NamedDebruijn` form.
 /// This checks for any Free Uniques in the `Term` and returns an error if found.
 impl TryFrom<Term<Name>> for Term<NamedDeBruijn> {
