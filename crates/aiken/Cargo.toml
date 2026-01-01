@@ -41,7 +41,7 @@ pallas-primitives.workspace = true
 pallas-addresses.workspace = true
 pallas-traverse.workspace = true
 rand = "0.8.5"
-regex = "1.7.1"
+regex = "1.12.2"
 serde_json = "1.0.94"
 strum = { version = "0.26.3", features = ["derive"] }
 thiserror = "1.0.39"
