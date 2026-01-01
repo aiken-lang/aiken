@@ -13,7 +13,7 @@ jobs:
           ssh-key: ${{ secrets.WORKFLOW_SSH_KEY }}
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v4
+        uses: DeterminateSystems/nix-installer-action@v21
 
       - name: Run the Magic Nix Cache
         uses: DeterminateSystems/magic-nix-cache-action@v13
