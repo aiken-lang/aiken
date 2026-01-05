@@ -1,0 +1,15 @@
+{
+  "entryPoints": [
+    "./aiken-wasm-browser/aiken_wasm.d.ts"
+  ],
+  "tsconfig": "./tsconfig.typedoc.json",
+  "out": "./docs",
+  "plugin": [
+    "typedoc-theme-oxide"
+  ],
+  "theme": "oxide",
+  "name": "Aiken WASM (browser)",
+  "readme": "none",
+  "includeVersion": true,
+  "typePrintWidth": 100
+}

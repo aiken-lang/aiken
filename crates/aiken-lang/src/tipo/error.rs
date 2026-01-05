@@ -1166,6 +1166,86 @@ The best thing to do from here is to remove it."#))]
     },
 }
 
+impl Error {
+    pub fn location(&self) -> Span {
+        match self {
+            Error::CastDataNoAnn { location, .. }
+            | Error::CouldNotUnify { location, .. }
+            | Error::DuplicateArgument { location, .. }
+            | Error::DuplicateConstName { location, .. }
+            | Error::DuplicateField { location, .. }
+            | Error::DuplicateImport { location, .. }
+            | Error::DuplicateName { location, .. }
+            | Error::DuplicateTypeName { location, .. }
+            | Error::DuplicateVarInPattern { location, .. }
+            | Error::ExtraVarInAlternativePattern { location, .. }
+            | Error::FunctionTypeInData { location, .. }
+            | Error::IllegalTypeInData { location, .. }
+            | Error::IllegalComparison { location, .. }
+            | Error::ImplicitlyDiscardedExpression { location, .. }
+            | Error::IncorrectFieldsArity { location, .. }
+            | Error::IncorrectFunctionCallArity { location, .. }
+            | Error::IncorrectPatternArity { location, .. }
+            | Error::IncorrectTupleArity { location, .. }
+            | Error::IncorrectTypeArity { location, .. }
+            | Error::IncorrectValidatorArity { location, .. }
+            | Error::LastExpressionIsAssignment { location, .. }
+            | Error::LogicalOpChainMissingExpr { location, .. }
+            | Error::MissingVarInAlternativePattern { location, .. }
+            | Error::NotIndexable { location, .. }
+            | Error::NotExhaustivePatternMatch { location, .. }
+            | Error::NotFn { location, .. }
+            | Error::PositionalArgumentAfterLabeled { location, .. }
+            | Error::RecordAccessUnknownType { location, .. }
+            | Error::RecordUpdateInvalidConstructor { location, .. }
+            | Error::RecursiveType { location, .. }
+            | Error::TupleIndexOutOfBound { location, .. }
+            | Error::PairIndexOutOfBound { location, .. }
+            | Error::UnexpectedLabeledArg { location, .. }
+            | Error::UnexpectedLabeledArgInPattern { location, .. }
+            | Error::UnknownModuleField { location, .. }
+            | Error::UnknownModuleType { location, .. }
+            | Error::UnknownModuleValue { location, .. }
+            | Error::UnknownRecordField { location, .. }
+            | Error::UnnecessarySpreadOperator { location, .. }
+            | Error::UpdateMultiConstructorType { location, .. }
+            | Error::ValidatorImported { location, .. }
+            | Error::IncorrectTestArity { location, .. }
+            | Error::IllegalTestType { location, .. }
+            | Error::GenericLeftAtBoundary { location, .. }
+            | Error::UnexpectedMultiPatternAssignment { location, .. }
+            | Error::ExpectOnOpaqueType { location, .. }
+            | Error::ValidatorMustReturnBool { location, .. }
+            | Error::UnknownPurpose { location, .. }
+            | Error::UnknownValidatorHandler { location, .. }
+            | Error::IncorrectBenchmarkArity { location, .. }
+            | Error::MustInferFirst { location, .. }
+            | Error::DecoratorValidation { location, .. }
+            | Error::ConflictingDecorators { location, .. }
+            | Error::InvalidFieldAccess { location, .. }
+            | Error::DecoratorTagOverlap {
+                first: location, ..
+            }
+            | Error::RedundantMatchClause {
+                redundant: location,
+                ..
+            }
+            | Error::UnexpectedValidatorFallback {
+                fallback: location, ..
+            }
+            | Error::PrivateTypeLeak { location, .. }
+            | Error::UnknownType { location, .. }
+            | Error::UnknownTypeConstructor { location, .. }
+            | Error::UnknownVariable { location, .. }
+            | Error::UnknownModule { location, .. }
+            | Error::IllegalTraceArgument { location, .. } => *location,
+            Error::CyclicTypeDefinitions { cycle, .. } => *cycle.first().unwrap(),
+            Error::UnknownLabels(errs) => *errs.first().unwrap().unknown.first().unwrap(),
+            Error::KeywordInModuleName { .. } | Error::UnknownEnvironment { .. } => Span::empty(),
+        }
+    }
+}
+
 impl ExtraData for Error {
     fn extra_data(&self) -> Option<String> {
         match self {

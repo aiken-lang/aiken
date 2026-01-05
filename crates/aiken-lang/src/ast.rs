@@ -38,6 +38,7 @@ pub type TypedModule = Module<TypeInfo, TypedDefinition>;
 pub type UntypedModule = Module<(), UntypedDefinition>;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
 pub enum ModuleKind {
     Lib,
     Validator,
@@ -2324,6 +2325,10 @@ impl Tracing {
         Tracing::All(TraceLevel::Verbose)
     }
 
+    pub fn compact() -> Self {
+        Tracing::All(TraceLevel::Compact)
+    }
+
     pub fn silent() -> Self {
         Tracing::All(TraceLevel::Silent)
     }
@@ -2361,6 +2366,7 @@ impl Display for TraceLevel {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
@@ -2372,10 +2378,22 @@ impl From<Span> for miette::SourceSpan {
     }
 }
 
+#[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
+impl Span {
+    #[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
+    pub fn start(&self) -> usize {
+        self.start
+    }
+
+    #[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
+    pub fn end(&self) -> usize {
+        self.end
+    }
+}
+
 impl Span {
     pub fn empty() -> Self {
         use chumsky::Span;
-
         Self::new((), 0..0)
     }
 
@@ -2386,14 +2404,10 @@ impl Span {
     }
 
     pub fn range(&self) -> Range<usize> {
-        use chumsky::Span;
-
         self.start()..self.end()
     }
 
     pub fn union(self, other: Self) -> Self {
-        use chumsky::Span;
-
         Self {
             start: self.start().min(other.start()),
             end: self.end().max(other.end()),

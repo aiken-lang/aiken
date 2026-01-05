@@ -110,6 +110,7 @@ dependencies = [
  "thiserror 1.0.69",
  "uplc",
  "vec1",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -185,6 +186,18 @@ dependencies = [
  "vec1",
  "walkdir",
  "zip",
+]
+
+[[package]]
+name = "aiken-wasm"
+version = "1.1.21"
+dependencies = [
+ "aiken-lang",
+ "built",
+ "console_error_panic_hook",
+ "getrandom 0.2.16",
+ "miette 7.6.0",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -665,6 +678,16 @@ dependencies = [
  "libc",
  "once_cell",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "console_error_panic_hook"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
+dependencies = [
+ "cfg-if",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1262,8 +1285,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "335ff9f135e4384c8150d6f27c6daed433577f86b4750418338c01a1a2528592"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "wasi 0.11.0+wasi-snapshot-preview1",
+ "wasm-bindgen",
 ]
 
 [[package]]
