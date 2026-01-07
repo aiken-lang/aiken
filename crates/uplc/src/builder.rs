@@ -378,14 +378,11 @@ where
     }
 
     pub fn fst_pair() -> Self {
-        Term::builtin(DefaultFunction::FstPair)
-            .force()
-            .force()
+        Term::builtin(DefaultFunction::FstPair).force().force()
     }
 
     pub fn head_list() -> Self {
-        Term::builtin(DefaultFunction::HeadList)
-            .force()
+        Term::builtin(DefaultFunction::HeadList).force()
     }
 
     pub fn i_data() -> Self {
@@ -437,8 +434,7 @@ where
     }
 
     pub fn mk_cons() -> Self {
-        Term::builtin(DefaultFunction::MkCons)
-            .force()
+        Term::builtin(DefaultFunction::MkCons).force()
     }
 
     pub fn mk_pair_data() -> Self {
@@ -474,9 +470,7 @@ where
     }
 
     pub fn snd_pair() -> Self {
-        Term::builtin(DefaultFunction::SndPair)
-            .force()
-            .force()
+        Term::builtin(DefaultFunction::SndPair).force().force()
     }
 
     pub fn subtract_integer() -> Self {
@@ -484,8 +478,7 @@ where
     }
 
     pub fn tail_list() -> Self {
-        Term::builtin(DefaultFunction::TailList)
-            .force()
+        Term::builtin(DefaultFunction::TailList).force()
     }
 
     pub fn un_b_data() -> Self {
@@ -696,7 +689,6 @@ impl<C> Term<Name, C> {
 }
 
 impl<C: Default + Clone> Term<Name, C> {
-
     // Misc.
     pub fn constr_fields_exposer(self) -> Self {
         self.lambda(CONSTR_FIELDS_EXPOSER).apply(
@@ -772,15 +764,22 @@ impl<C: Default + Clone> Term<Name, C> {
     where
         F: FnOnce(Term<Name, C>) -> Term<Name, C>,
     {
-        Term::Var { name: var.clone(), context: C::default() }
-            .choose_data(
-                otherwise.clone(),
-                otherwise.clone(),
-                otherwise.clone(),
-                callback(Term::un_i_data().apply(Term::Var { name: var, context: C::default() })).delay(),
-                otherwise.clone(),
-            )
-            .force()
+        Term::Var {
+            name: var.clone(),
+            context: C::default(),
+        }
+        .choose_data(
+            otherwise.clone(),
+            otherwise.clone(),
+            otherwise.clone(),
+            callback(Term::un_i_data().apply(Term::Var {
+                name: var,
+                context: C::default(),
+            }))
+            .delay(),
+            otherwise.clone(),
+        )
+        .force()
     }
 
     /// Continue a computation provided that the current term is a Data-wrapped
@@ -789,15 +788,22 @@ impl<C: Default + Clone> Term<Name, C> {
     where
         F: FnOnce(Term<Name, C>) -> Term<Name, C>,
     {
-        Term::Var { name: var.clone(), context: C::default() }
-            .choose_data(
-                otherwise.clone(),
-                otherwise.clone(),
-                otherwise.clone(),
-                otherwise.clone(),
-                callback(Term::un_b_data().apply(Term::Var { name: var, context: C::default() })).delay(),
-            )
-            .force()
+        Term::Var {
+            name: var.clone(),
+            context: C::default(),
+        }
+        .choose_data(
+            otherwise.clone(),
+            otherwise.clone(),
+            otherwise.clone(),
+            otherwise.clone(),
+            callback(Term::un_b_data().apply(Term::Var {
+                name: var,
+                context: C::default(),
+            }))
+            .delay(),
+        )
+        .force()
     }
 
     /// Continue a computation provided that the current term is a Data-wrapped
@@ -806,15 +812,22 @@ impl<C: Default + Clone> Term<Name, C> {
     where
         F: FnOnce(Term<Name, C>) -> Term<Name, C>,
     {
-        Term::Var { name: var.clone(), context: C::default() }
-            .choose_data(
-                otherwise.clone(),
-                otherwise.clone(),
-                callback(Term::unlist_data().apply(Term::Var { name: var, context: C::default() })).delay(),
-                otherwise.clone(),
-                otherwise.clone(),
-            )
-            .force()
+        Term::Var {
+            name: var.clone(),
+            context: C::default(),
+        }
+        .choose_data(
+            otherwise.clone(),
+            otherwise.clone(),
+            callback(Term::unlist_data().apply(Term::Var {
+                name: var,
+                context: C::default(),
+            }))
+            .delay(),
+            otherwise.clone(),
+            otherwise.clone(),
+        )
+        .force()
     }
 
     /// Continue a computation provided that the current term is a Data-wrapped
@@ -823,15 +836,22 @@ impl<C: Default + Clone> Term<Name, C> {
     where
         F: FnOnce(Term<Name, C>) -> Term<Name, C>,
     {
-        Term::Var { name: var.clone(), context: C::default() }
-            .choose_data(
-                otherwise.clone(),
-                callback(Term::unmap_data().apply(Term::Var { name: var, context: C::default() })).delay(),
-                otherwise.clone(),
-                otherwise.clone(),
-                otherwise.clone(),
-            )
-            .force()
+        Term::Var {
+            name: var.clone(),
+            context: C::default(),
+        }
+        .choose_data(
+            otherwise.clone(),
+            callback(Term::unmap_data().apply(Term::Var {
+                name: var,
+                context: C::default(),
+            }))
+            .delay(),
+            otherwise.clone(),
+            otherwise.clone(),
+            otherwise.clone(),
+        )
+        .force()
     }
 
     /// Continue a computation provided that the current term is a Data-wrapped
@@ -840,15 +860,22 @@ impl<C: Default + Clone> Term<Name, C> {
     where
         F: FnOnce(Term<Name, C>) -> Term<Name, C>,
     {
-        Term::Var { name: var.clone(), context: C::default() }
-            .choose_data(
-                callback(Term::Var { name: var, context: C::default() }).delay(),
-                otherwise.clone(),
-                otherwise.clone(),
-                otherwise.clone(),
-                otherwise.clone(),
-            )
-            .force()
+        Term::Var {
+            name: var.clone(),
+            context: C::default(),
+        }
+        .choose_data(
+            callback(Term::Var {
+                name: var,
+                context: C::default(),
+            })
+            .delay(),
+            otherwise.clone(),
+            otherwise.clone(),
+            otherwise.clone(),
+            otherwise.clone(),
+        )
+        .force()
     }
 
     /// Convert an arbitrary 'term' into a bool term and pass it into a 'callback'.
@@ -864,17 +891,26 @@ impl<C: Default + Clone> Term<Name, C> {
             .apply(self)
             .as_var("__pair__", |pair| {
                 Term::snd_pair()
-                    .apply(Term::Var { name: pair.clone(), context: C::default() })
+                    .apply(Term::Var {
+                        name: pair.clone(),
+                        context: C::default(),
+                    })
                     .delay_empty_choose_list(
                         Term::less_than_equals_integer()
                             .apply(Term::integer(2.into()))
-                            .apply(Term::fst_pair().apply(Term::Var { name: pair.clone(), context: C::default() }))
+                            .apply(Term::fst_pair().apply(Term::Var {
+                                name: pair.clone(),
+                                context: C::default(),
+                            }))
                             .delay_false_if_then_else(
                                 otherwise.clone(),
                                 callback(
-                                    Term::equals_integer()
-                                        .apply(Term::integer(1.into()))
-                                        .apply(Term::fst_pair().apply(Term::Var { name: pair, context: C::default() })),
+                                    Term::equals_integer().apply(Term::integer(1.into())).apply(
+                                        Term::fst_pair().apply(Term::Var {
+                                            name: pair,
+                                            context: C::default(),
+                                        }),
+                                    ),
                                 ),
                             ),
                         otherwise.clone(),
@@ -913,13 +949,19 @@ impl<C: Default + Clone> Term<Name, C> {
         F: FnOnce(Term<Name, C>) -> Term<Name, C>,
     {
         self.as_var("__list_data", |list| {
-            let left = Term::head_list().apply(Term::Var { name: list.clone(), context: C::default() });
+            let left = Term::head_list().apply(Term::Var {
+                name: list.clone(),
+                context: C::default(),
+            });
 
             Term::unwrap_tail_or(
                 list,
                 |tail| {
                     tail.as_var("__tail", |tail| {
-                        let right = Term::head_list().apply(Term::Var { name: tail.clone(), context: C::default() });
+                        let right = Term::head_list().apply(Term::Var {
+                            name: tail.clone(),
+                            context: C::default(),
+                        });
 
                         Term::unwrap_tail_or(
                             tail,
@@ -946,9 +988,16 @@ impl<C: Default + Clone> Term<Name, C> {
     where
         F: FnOnce(Term<Name, C>) -> Term<Name, C>,
     {
-        Term::Var { name: var.clone(), context: C::default() }.delay_filled_choose_list(
+        Term::Var {
+            name: var.clone(),
+            context: C::default(),
+        }
+        .delay_filled_choose_list(
             otherwise.clone(),
-            callback(Term::tail_list().apply(Term::Var { name: var, context: C::default() })),
+            callback(Term::tail_list().apply(Term::Var {
+                name: var,
+                context: C::default(),
+            })),
         )
     }
 }
@@ -1106,7 +1155,11 @@ mod tests {
     fn unwrap_void_or_happy() {
         let result = quick_eval(
             Term::data(Data::constr(0, vec![])).as_var("__unit", |unit| {
-                Term::Var { name: unit, context: () }.unwrap_void_or(|u| u, &Term::error().delay())
+                Term::Var {
+                    name: unit,
+                    context: (),
+                }
+                .unwrap_void_or(|u| u, &Term::error().delay())
             }),
         );
 
@@ -1117,7 +1170,11 @@ mod tests {
     fn unwrap_void_or_wrong_constr() {
         let result = quick_eval(
             Term::data(Data::constr(14, vec![])).as_var("__unit", |unit| {
-                Term::Var { name: unit, context: () }.unwrap_void_or(|u| u, &Term::error().delay())
+                Term::Var {
+                    name: unit,
+                    context: (),
+                }
+                .unwrap_void_or(|u| u, &Term::error().delay())
             }),
         );
 
@@ -1128,7 +1185,11 @@ mod tests {
     fn unwrap_void_or_too_many_args() {
         let result = quick_eval(
             Term::data(Data::constr(0, vec![Data::integer(0.into())])).as_var("__unit", |unit| {
-                Term::Var { name: unit, context: () }.unwrap_void_or(|u| u, &Term::error().delay())
+                Term::Var {
+                    name: unit,
+                    context: (),
+                }
+                .unwrap_void_or(|u| u, &Term::error().delay())
             }),
         );
 

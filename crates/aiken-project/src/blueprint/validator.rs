@@ -249,11 +249,9 @@ impl Validator<()> {
         // Build source map if requested
         let source_map = match source_map_mode {
             SourceMapMode::None => None,
-            SourceMapMode::Inline | SourceMapMode::External(_) => {
-                program.get_term_with_spans().map(|term| {
-                    SourceMap::from_term(term, module_name, module_sources)
-                })
-            }
+            SourceMapMode::Inline | SourceMapMode::External(_) => program
+                .get_term_with_spans()
+                .map(|term| SourceMap::from_term(term, module_name, module_sources)),
         };
 
         Validator {

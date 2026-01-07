@@ -95,7 +95,11 @@ enum InternalState {
 #[derive(Clone)]
 enum InternalContext {
     FrameAwaitArg(Value<()>, Box<InternalContext>),
-    FrameAwaitFunTerm(value::Env<()>, Term<NamedDeBruijn, ()>, Box<InternalContext>),
+    FrameAwaitFunTerm(
+        value::Env<()>,
+        Term<NamedDeBruijn, ()>,
+        Box<InternalContext>,
+    ),
     FrameAwaitFunValue(Value<()>, Box<InternalContext>),
     FrameForce(Box<InternalContext>),
     FrameConstr(
@@ -105,7 +109,11 @@ enum InternalContext {
         Vec<Value<()>>,
         Box<InternalContext>,
     ),
-    FrameCases(value::Env<()>, Vec<Term<NamedDeBruijn, ()>>, Box<InternalContext>),
+    FrameCases(
+        value::Env<()>,
+        Vec<Term<NamedDeBruijn, ()>>,
+        Box<InternalContext>,
+    ),
     NoFrame,
 }
 
@@ -198,7 +206,9 @@ impl Machine {
 
         loop {
             state = match state {
-                InternalState::Compute(context, env, t) => self.internal_compute(context, env, t)?,
+                InternalState::Compute(context, env, t) => {
+                    self.internal_compute(context, env, t)?
+                }
                 InternalState::Return(context, env, value) => {
                     self.internal_return(context, env, value)?
                 }
@@ -328,7 +338,10 @@ impl Machine {
                 } else {
                     Ok(MachineState::Return(
                         context,
-                        Value::Constr { tag, fields: vec![] },
+                        Value::Constr {
+                            tag,
+                            fields: vec![],
+                        },
                     ))
                 }
             }
@@ -430,7 +443,8 @@ impl Machine {
                     };
                     Ok(MachineState::Return(context, res))
                 } else {
-                    let term = discharge::value_as_term(Value::Builtin { fun, runtime }.erase_context());
+                    let term =
+                        discharge::value_as_term(Value::Builtin { fun, runtime }.erase_context());
                     Err(Error::BuiltinTermArgumentExpected(term))
                 }
             }
@@ -465,7 +479,8 @@ impl Machine {
                     };
                     Ok(MachineState::Return(context, res))
                 } else {
-                    let term = discharge::value_as_term(Value::Builtin { fun, runtime }.erase_context());
+                    let term =
+                        discharge::value_as_term(Value::Builtin { fun, runtime }.erase_context());
                     Err(Error::UnexpectedBuiltinTermArgument(term))
                 }
             }
@@ -492,7 +507,11 @@ impl Machine {
             }
             Term::Delay { term: body, .. } => {
                 self.step_and_maybe_spend(StepKind::Delay)?;
-                Ok(InternalState::Return(context, env.clone(), Value::Delay(body, env)))
+                Ok(InternalState::Return(
+                    context,
+                    env.clone(),
+                    Value::Delay(body, env),
+                ))
             }
             Term::Lambda {
                 parameter_name,
@@ -540,15 +559,27 @@ impl Machine {
             Term::Builtin { func: fun, .. } => {
                 self.step_and_maybe_spend(StepKind::Builtin)?;
                 let runtime: BuiltinRuntime<()> = fun.into();
-                Ok(InternalState::Return(context, env, Value::Builtin { fun, runtime }))
+                Ok(InternalState::Return(
+                    context,
+                    env,
+                    Value::Builtin { fun, runtime },
+                ))
             }
-            Term::Constr { tag, mut fields, .. } => {
+            Term::Constr {
+                tag, mut fields, ..
+            } => {
                 self.step_and_maybe_spend(StepKind::Constr)?;
                 fields.reverse();
                 if !fields.is_empty() {
                     let popped_field = fields.pop().unwrap();
                     Ok(InternalState::Compute(
-                        InternalContext::FrameConstr(env.clone(), tag, fields, vec![], context.into()),
+                        InternalContext::FrameConstr(
+                            env.clone(),
+                            tag,
+                            fields,
+                            vec![],
+                            context.into(),
+                        ),
                         env,
                         popped_field,
                     ))
@@ -556,11 +587,16 @@ impl Machine {
                     Ok(InternalState::Return(
                         context,
                         env,
-                        Value::Constr { tag, fields: vec![] },
+                        Value::Constr {
+                            tag,
+                            fields: vec![],
+                        },
                     ))
                 }
             }
-            Term::Case { constr, branches, .. } => {
+            Term::Case {
+                constr, branches, ..
+            } => {
                 self.step_and_maybe_spend(StepKind::Case)?;
                 Ok(InternalState::Compute(
                     InternalContext::FrameCases(env.clone(), branches, context.into()),
@@ -592,13 +628,21 @@ impl Machine {
                 arg,
             )),
             InternalContext::FrameAwaitArg(fun, ctx) => self.internal_apply(*ctx, env, fun, value),
-            InternalContext::FrameAwaitFunValue(arg, ctx) => self.internal_apply(*ctx, env, value, arg),
+            InternalContext::FrameAwaitFunValue(arg, ctx) => {
+                self.internal_apply(*ctx, env, value, arg)
+            }
             InternalContext::FrameConstr(frame_env, tag, mut fields, mut resolved_fields, ctx) => {
                 resolved_fields.push(value);
                 if !fields.is_empty() {
                     let popped_field = fields.pop().unwrap();
                     Ok(InternalState::Compute(
-                        InternalContext::FrameConstr(frame_env.clone(), tag, fields, resolved_fields, ctx),
+                        InternalContext::FrameConstr(
+                            frame_env.clone(),
+                            tag,
+                            fields,
+                            resolved_fields,
+                            ctx,
+                        ),
                         frame_env,
                         popped_field,
                     ))
@@ -637,9 +681,11 @@ impl Machine {
         value: Value<()>,
     ) -> Result<InternalState, Error> {
         match value {
-            Value::Delay(body, delay_env) => {
-                Ok(InternalState::Compute(context, delay_env, body.as_ref().clone()))
-            }
+            Value::Delay(body, delay_env) => Ok(InternalState::Compute(
+                context,
+                delay_env,
+                body.as_ref().clone(),
+            )),
             Value::Builtin { fun, mut runtime } => {
                 if runtime.needs_force() {
                     runtime.consume_force();
@@ -666,10 +712,18 @@ impl Machine {
         argument: Value<()>,
     ) -> Result<InternalState, Error> {
         match function {
-            Value::Lambda { parameter_name, body, mut env } => {
+            Value::Lambda {
+                parameter_name,
+                body,
+                mut env,
+            } => {
                 let e = Rc::make_mut(&mut env);
                 e.push((parameter_name, argument));
-                Ok(InternalState::Compute(context, Rc::new(e.clone()), body.as_ref().clone()))
+                Ok(InternalState::Compute(
+                    context,
+                    Rc::new(e.clone()),
+                    body.as_ref().clone(),
+                ))
             }
             Value::Builtin { fun, runtime } => {
                 if runtime.is_arrow() && !runtime.needs_force() {
@@ -710,16 +764,18 @@ impl Machine {
         runtime.call(&self.version, &mut self.traces)
     }
 
-    fn lookup_var(&mut self, name: &NamedDeBruijn, env: &value::Env<()>) -> Result<Value<()>, Error> {
+    fn lookup_var(
+        &mut self,
+        name: &NamedDeBruijn,
+        env: &value::Env<()>,
+    ) -> Result<Value<()>, Error> {
         let index = env.len() - usize::from(name.index);
-        env.get(index)
-            .map(|(_, v)| v.clone())
-            .ok_or_else(|| {
-                Error::OpenTermEvaluated(Term::Var {
-                    name: name.clone().into(),
-                    context: (),
-                })
+        env.get(index).map(|(_, v)| v.clone()).ok_or_else(|| {
+            Error::OpenTermEvaluated(Term::Var {
+                name: name.clone().into(),
+                context: (),
             })
+        })
     }
 
     fn lookup_var_env<C: Clone>(
@@ -727,14 +783,12 @@ impl Machine {
         name: &NamedDeBruijn,
         env: &Env<C>,
     ) -> Result<Value<C>, Error> {
-        env.get(usize::from(name.index))
-            .cloned()
-            .ok_or_else(|| {
-                Error::OpenTermEvaluated(Term::Var {
-                    name: name.clone().into(),
-                    context: (),
-                })
+        env.get(usize::from(name.index)).cloned().ok_or_else(|| {
+            Error::OpenTermEvaluated(Term::Var {
+                name: name.clone().into(),
+                context: (),
             })
+        })
     }
 
     fn step_and_maybe_spend(&mut self, step: StepKind) -> Result<(), Error> {
@@ -781,10 +835,7 @@ impl Machine {
 
 // ===== Helper functions =====
 
-fn internal_transfer_arg_stack(
-    mut args: Vec<Value<()>>,
-    ctx: InternalContext,
-) -> InternalContext {
+fn internal_transfer_arg_stack(mut args: Vec<Value<()>>, ctx: InternalContext) -> InternalContext {
     if args.is_empty() {
         ctx
     } else {
@@ -817,7 +868,12 @@ fn value_env_to_env<C: Clone>(value_env: &value::Env<C>) -> Env<C> {
 
 /// Convert the named Env<C> type to value::Env<C>, preserving names.
 fn env_to_value_env<C: Clone>(env: &Env<C>) -> value::Env<C> {
-    Rc::new(env.values.iter().map(|(name, v)| (Rc::new(name.clone()), v.clone())).collect())
+    Rc::new(
+        env.values
+            .iter()
+            .map(|(name, v)| (Rc::new(name.clone()), v.clone()))
+            .collect(),
+    )
 }
 
 impl From<&Constant> for Type {
@@ -900,7 +956,11 @@ mod tests {
             version: (0, 0, 0),
             term: Term::Apply {
                 function: Term::Apply {
-                    function: Term::Builtin { func: fun, context: () }.into(),
+                    function: Term::Builtin {
+                        func: fun,
+                        context: (),
+                    }
+                    .into(),
                     argument: Term::Constant {
                         value: Constant::Integer(n.into()).into(),
                         context: (),
@@ -971,7 +1031,13 @@ mod tests {
                         context: (),
                     }
                     .into(),
-                    branches: vec![Term::Builtin { func: fun, context: () }, Term::subtract_integer()],
+                    branches: vec![
+                        Term::Builtin {
+                            func: fun,
+                            context: (),
+                        },
+                        Term::subtract_integer(),
+                    ],
                     context: (),
                 },
             };
@@ -1216,7 +1282,8 @@ mod tests {
                     }
                     // Check if both are present at the same time
                     if env.values.len() >= 2 {
-                        let names: Vec<_> = env.values.iter().map(|(n, _)| n.text.as_str()).collect();
+                        let names: Vec<_> =
+                            env.values.iter().map(|(n, _)| n.text.as_str()).collect();
                         if names.contains(&"my_x_var") && names.contains(&"my_y_var") {
                             found_both = true;
                         }
@@ -1230,6 +1297,9 @@ mod tests {
 
         assert!(found_x, "Should have seen 'my_x_var' in env at some point");
         assert!(found_y, "Should have seen 'my_y_var' in env at some point");
-        assert!(found_both, "Should have seen both 'my_x_var' and 'my_y_var' in env together");
+        assert!(
+            found_both,
+            "Should have seen both 'my_x_var' and 'my_y_var' in env together"
+        );
     }
 }

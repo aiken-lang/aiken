@@ -8,6 +8,6 @@ mod tracking;
 
 pub use lcov::{LcovReport, ModuleInfo};
 pub use tracking::{
-    collect_all_locations, collect_all_program_locations, run_program_with_coverage,
-    run_with_coverage, CoverageData, CoverageResult,
+    CoverageData, CoverageResult, collect_all_locations, collect_all_program_locations,
+    run_program_with_coverage, run_with_coverage,
 };

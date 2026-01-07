@@ -106,8 +106,12 @@ pub fn exec(
             return Ok(());
         }
 
-        let module = module.as_ref().expect("module is required when not using --list");
-        let name = name.as_ref().expect("name is required when not using --list");
+        let module = module
+            .as_ref()
+            .expect("module is required when not using --list");
+        let name = name
+            .as_ref()
+            .expect("name is required when not using --list");
 
         let source_map_mode = if source_map {
             SourceMapMode::Inline
@@ -115,13 +119,7 @@ pub fn exec(
             SourceMapMode::None
         };
 
-        let export = p.export(
-            &module,
-            &name,
-            tracing,
-            source_map_mode,
-            no_optimize,
-        )?;
+        let export = p.export(&module, &name, tracing, source_map_mode, no_optimize)?;
 
         let json = serde_json::to_string_pretty(&export).unwrap();
 

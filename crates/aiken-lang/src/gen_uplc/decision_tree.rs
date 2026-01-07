@@ -6,7 +6,10 @@ use indexmap::IndexMap;
 use itertools::{Either, Itertools, Position};
 
 use crate::{
-    ast::{DataTypeKey, DecoratorKind, Pattern, SourceLocation, TypedClause, TypedDataType, TypedPattern},
+    ast::{
+        DataTypeKey, DecoratorKind, Pattern, SourceLocation, TypedClause, TypedDataType,
+        TypedPattern,
+    },
     expr::{Type, TypeVar, TypedExpr, lookup_data_type_by_tipo},
     gen_uplc::builder::get_constr_index_variant,
     tipo::PatternConstructor,

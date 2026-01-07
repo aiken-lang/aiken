@@ -395,7 +395,10 @@ mod tests {
                 term: Term::Apply {
                     function: Rc::new(Term::Lambda {
                         parameter_name: x.clone().into(),
-                        body: Rc::new(Term::Var { name: x.into(), context: () }),
+                        body: Rc::new(Term::Var {
+                            name: x.into(),
+                            context: ()
+                        }),
                         context: (),
                     }),
                     argument: Rc::new(Term::Constant {
@@ -421,7 +424,10 @@ mod tests {
                 version: (1, 0, 0),
                 term: Term::Lambda {
                     parameter_name: x.clone().into(),
-                    body: Rc::new(Term::Var { name: x.into(), context: () }),
+                    body: Rc::new(Term::Var {
+                        name: x.into(),
+                        context: ()
+                    }),
                     context: (),
                 }
             }
@@ -442,7 +448,10 @@ mod tests {
                 term: Term::Lambda {
                     parameter_name: x.clone().into(),
                     body: Rc::new(Term::Delay {
-                        term: Rc::new(Term::Var { name: x.into(), context: () }),
+                        term: Rc::new(Term::Var {
+                            name: x.into(),
+                            context: ()
+                        }),
                         context: (),
                     }),
                     context: (),

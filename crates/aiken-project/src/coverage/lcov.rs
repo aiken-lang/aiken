@@ -178,7 +178,8 @@ impl LcovReport {
     /// Render the report as a string.
     pub fn to_string(&self) -> String {
         let mut buffer = Vec::new();
-        self.write(&mut buffer).expect("writing to Vec should not fail");
+        self.write(&mut buffer)
+            .expect("writing to Vec should not fail");
         String::from_utf8(buffer).expect("LCOV output should be valid UTF-8")
     }
 }
@@ -229,8 +230,8 @@ mod tests {
         assert!(output.contains("SF:test.ak"));
         assert!(output.contains("DA:1,2")); // line 1 hit twice
         assert!(output.contains("DA:3,1")); // line 3 hit once
-        assert!(output.contains("LF:2"));   // 2 lines with data
-        assert!(output.contains("LH:2"));   // 2 lines hit
+        assert!(output.contains("LF:2")); // 2 lines with data
+        assert!(output.contains("LH:2")); // 2 lines hit
         assert!(output.contains("end_of_record"));
     }
 

@@ -205,13 +205,17 @@ where
                 parameter_name.binder_encode(e)?;
                 body.encode(e)?;
             }
-            Term::Apply { function, argument, .. } => {
+            Term::Apply {
+                function, argument, ..
+            } => {
                 encode_term_tag(3, e)?;
                 function.encode(e)?;
                 argument.encode(e)?;
             }
 
-            Term::Constant { value: constant, .. } => {
+            Term::Constant {
+                value: constant, ..
+            } => {
                 encode_term_tag(4, e)?;
                 constant.encode(e)?;
             }
@@ -236,7 +240,9 @@ where
 
                 e.encode_list_with(fields, |term, e| (*term).encode(e))?;
             }
-            Term::Case { constr, branches, .. } => {
+            Term::Case {
+                constr, branches, ..
+            } => {
                 encode_term_tag(9, e)?;
 
                 constr.encode(e)?;
@@ -282,7 +288,9 @@ where
                 term: Rc::new(Term::decode(d)?),
                 context: C::default(),
             }),
-            6 => Ok(Term::Error { context: C::default() }),
+            6 => Ok(Term::Error {
+                context: C::default(),
+            }),
             7 => Ok(Term::Builtin {
                 func: DefaultFunction::decode(d)?,
                 context: C::default(),
@@ -291,14 +299,22 @@ where
                 let tag = usize::decode(d)?;
                 let fields = d.decode_list_with(Term::<T, C>::decode)?;
 
-                Ok(Term::Constr { tag, fields, context: C::default() })
+                Ok(Term::Constr {
+                    tag,
+                    fields,
+                    context: C::default(),
+                })
             }
             9 => {
                 let constr = (Term::<T, C>::decode(d)?).into();
 
                 let branches = d.decode_list_with(Term::<T, C>::decode)?;
 
-                Ok(Term::Case { constr, branches, context: C::default() })
+                Ok(Term::Case {
+                    constr,
+                    branches,
+                    context: C::default(),
+                })
             }
             x => {
                 let buffer_slice: Vec<u8> = d
@@ -334,7 +350,10 @@ where
                 match var_option {
                     Ok(var) => {
                         state_log.push(format!("{})", var.text()));
-                        Ok(Term::Var { name: var.into(), context: C::default() })
+                        Ok(Term::Var {
+                            name: var.into(),
+                            context: C::default(),
+                        })
                     }
                     Err(error) => {
                         state_log.push("parse error)".to_string());
@@ -456,7 +475,9 @@ where
             }
             6 => {
                 state_log.push("(error)".to_string());
-                Ok(Term::Error { context: C::default() })
+                Ok(Term::Error {
+                    context: C::default(),
+                })
             }
             7 => {
                 state_log.push("(builtin ".to_string());
@@ -465,7 +486,10 @@ where
                 match builtin_option {
                     Ok(builtin) => {
                         state_log.push(format!("{builtin})"));
-                        Ok(Term::Builtin { func: builtin, context: C::default() })
+                        Ok(Term::Builtin {
+                            func: builtin,
+                            context: C::default(),
+                        })
                     }
                     Err(error) => {
                         state_log.push("parse error)".to_string());
@@ -483,7 +507,11 @@ where
                     state_log,
                 )?;
 
-                Ok(Term::Constr { tag, fields, context: C::default() })
+                Ok(Term::Constr {
+                    tag,
+                    fields,
+                    context: C::default(),
+                })
             }
             9 => {
                 state_log.push("(case ".to_string());
@@ -494,7 +522,11 @@ where
                     state_log,
                 )?;
 
-                Ok(Term::Case { constr, branches, context: C::default() })
+                Ok(Term::Case {
+                    constr,
+                    branches,
+                    context: C::default(),
+                })
             }
             x => {
                 state_log.push("parse error".to_string());

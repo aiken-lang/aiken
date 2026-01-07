@@ -362,7 +362,8 @@ where
         self.type_check(&mut modules, tracing, env.as_deref(), true)?;
 
         // Collect tests to run
-        let tests_to_run = self.collect_tests_for_coverage(match_tests, exact_match, seed, tracing)?;
+        let tests_to_run =
+            self.collect_tests_for_coverage(match_tests, exact_match, seed, tracing)?;
 
         if tests_to_run.is_empty() {
             // No tests to run, just write empty coverage file
@@ -406,11 +407,8 @@ where
         let results: Vec<_> = tests_to_run
             .into_iter()
             .map(|(name, on_test_failure, program)| {
-                let result = coverage::run_program_with_coverage(
-                    program,
-                    &language,
-                    ExBudget::max(),
-                );
+                let result =
+                    coverage::run_program_with_coverage(program, &language, ExBudget::max());
                 (name, on_test_failure, result)
             })
             .collect();
@@ -505,7 +503,14 @@ where
         exact_match: bool,
         seed: u32,
         tracing: Tracing,
-    ) -> Result<Vec<(String, OnTestFailure, Program<NamedDeBruijn, ast::SourceLocation>)>, Error> {
+    ) -> Result<
+        Vec<(
+            String,
+            OnTestFailure,
+            Program<NamedDeBruijn, ast::SourceLocation>,
+        )>,
+        Error,
+    > {
         let mut scripts = Vec::new();
 
         let match_tests = match_tests.map(|mt| {
@@ -610,7 +615,10 @@ where
                     convert_opaque_type(&type_info, generator.data_types(), true);
 
                 // Generate the fuzzer program (without source locations - we don't need coverage for the fuzzer)
-                let fuzzer_program = generator.clone().generate_raw(&parameter.via, &[], &module_name);
+                let fuzzer_program =
+                    generator
+                        .clone()
+                        .generate_raw(&parameter.via, &[], &module_name);
 
                 // Sample a value from the fuzzer using the provided seed
                 let prng = Prng::from_seed(seed);
@@ -633,9 +641,11 @@ where
                 }];
                 let term = generator.generate_raw_with_spans(&test.body, &args, &module_name);
                 let program_with_spans = generator.finalize_minimal_with_spans(term);
-                let program = program_with_spans
-                    .try_into_named_debruijn()
-                    .map_err(|e| Error::DeBruijnConversion { error: e.to_string() })?;
+                let program = program_with_spans.try_into_named_debruijn().map_err(|e| {
+                    Error::DeBruijnConversion {
+                        error: e.to_string(),
+                    }
+                })?;
 
                 // Apply the sampled value to the test program
                 let program = program.apply_data(sampled_value);
@@ -645,9 +655,11 @@ where
                 // Unit test - generate directly without fuzzer
                 let term = generator.generate_raw_with_spans(&test.body, &[], &module_name);
                 let program_with_spans = generator.finalize_minimal_with_spans(term);
-                let program = program_with_spans
-                    .try_into_named_debruijn()
-                    .map_err(|e| Error::DeBruijnConversion { error: e.to_string() })?;
+                let program = program_with_spans.try_into_named_debruijn().map_err(|e| {
+                    Error::DeBruijnConversion {
+                        error: e.to_string(),
+                    }
+                })?;
 
                 tests.push((test_name, test.on_test_failure.clone(), program));
             }
@@ -755,11 +767,9 @@ where
                 // Handle external source map files
                 if let SourceMapMode::External(ref dir) = options.source_map_mode {
                     // Create the directory if it doesn't exist
-                    fs::create_dir_all(dir).map_err(|error| {
-                        Error::FileIo {
-                            error,
-                            path: dir.clone(),
-                        }
+                    fs::create_dir_all(dir).map_err(|error| Error::FileIo {
+                        error,
+                        path: dir.clone(),
                     })?;
 
                     // Write each validator's source map to a file
@@ -1021,13 +1031,10 @@ where
         let module_sources = utils::indexmap::as_str_ref_values(&self.module_sources);
 
         // First try to find a function with the given name
-        let func_result = checked_module
-            .ast
-            .definitions()
-            .find_map(|def| match def {
-                Definition::Fn(func) if func.name == name => Some(func),
-                _ => None,
-            });
+        let func_result = checked_module.ast.definitions().find_map(|def| match def {
+            Definition::Fn(func) if func.name == name => Some(func),
+            _ => None,
+        });
 
         if let Some(func) = func_result {
             let mut generator = self.new_generator(tracing);
@@ -1045,13 +1052,10 @@ where
         }
 
         // Then try to find a test with the given name
-        let test_result = checked_module
-            .ast
-            .definitions()
-            .find_map(|def| match def {
-                Definition::Test(test) if test.name == name => Some(test),
-                _ => None,
-            });
+        let test_result = checked_module.ast.definitions().find_map(|def| match def {
+            Definition::Test(test) if test.name == name => Some(test),
+            _ => None,
+        });
 
         if let Some(test) = test_result {
             let mut generator = self.new_generator(tracing);

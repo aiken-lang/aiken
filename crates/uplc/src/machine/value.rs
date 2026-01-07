@@ -81,7 +81,11 @@ impl<C> Value<C> {
             Value::Con(c) => Value::Con(c.clone()),
             Value::Delay(term, env) => Value::Delay(
                 Rc::new(term.as_ref().clone().map_context(|_| ())),
-                Rc::new(env.iter().map(|(name, v)| (name.clone(), v.erase_context())).collect()),
+                Rc::new(
+                    env.iter()
+                        .map(|(name, v)| (name.clone(), v.erase_context()))
+                        .collect(),
+                ),
             ),
             Value::Lambda {
                 parameter_name,
@@ -90,7 +94,11 @@ impl<C> Value<C> {
             } => Value::Lambda {
                 parameter_name: parameter_name.clone(),
                 body: Rc::new(body.as_ref().clone().map_context(|_| ())),
-                env: Rc::new(env.iter().map(|(name, v)| (name.clone(), v.erase_context())).collect()),
+                env: Rc::new(
+                    env.iter()
+                        .map(|(name, v)| (name.clone(), v.erase_context()))
+                        .collect(),
+                ),
             },
             Value::Builtin { fun, runtime } => Value::Builtin {
                 fun: *fun,
@@ -366,7 +374,8 @@ impl<C> Value<C> {
                     acc + Value::<()>::Con(constant.clone().into()).to_ex_mem()
                 }),
                 Constant::ProtoPair(_, _, l, r) => {
-                    Value::<()>::Con(l.clone()).to_ex_mem() + Value::<()>::Con(r.clone()).to_ex_mem()
+                    Value::<()>::Con(l.clone()).to_ex_mem()
+                        + Value::<()>::Con(r.clone()).to_ex_mem()
                 }
                 Constant::Data(item) => self.data_to_ex_mem(item),
                 Constant::Bls12_381G1Element(_) => size_of::<blst::blst_p1>() as i64 / 8,
