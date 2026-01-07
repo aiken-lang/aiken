@@ -113,12 +113,7 @@ impl SourceMap {
         let mut source_map = SourceMap::new();
         let mut counter: u64 = 0;
 
-        visit_post_order(
-            term,
-            &mut counter,
-            &mut source_map,
-            module_sources,
-        );
+        visit_post_order(term, &mut counter, &mut source_map, module_sources);
 
         source_map
     }
@@ -207,11 +202,17 @@ fn inject_names_recursive(
                 context: *context,
             }
         }
-        Term::Delay { term: inner, context } => Term::Delay {
+        Term::Delay {
+            term: inner,
+            context,
+        } => Term::Delay {
             term: Rc::new(inject_names_recursive(inner, names)),
             context: *context,
         },
-        Term::Force { term: inner, context } => Term::Force {
+        Term::Force {
+            term: inner,
+            context,
+        } => Term::Force {
             term: Rc::new(inject_names_recursive(inner, names)),
             context: *context,
         },
@@ -233,7 +234,11 @@ fn inject_names_recursive(
             func: *func,
             context: *context,
         },
-        Term::Constr { tag, fields, context } => Term::Constr {
+        Term::Constr {
+            tag,
+            fields,
+            context,
+        } => Term::Constr {
             tag: *tag,
             fields: fields
                 .iter()
@@ -296,10 +301,7 @@ fn visit_post_order(
             }
         }
         // Leaf nodes: Var, Constant, Builtin, Error
-        Term::Var { .. }
-        | Term::Constant { .. }
-        | Term::Builtin { .. }
-        | Term::Error { .. } => {}
+        Term::Var { .. } | Term::Constant { .. } | Term::Builtin { .. } | Term::Error { .. } => {}
     }
 
     // Assign index to this node (after children)
@@ -969,7 +971,10 @@ mod tests {
         // All names are now included for debugging
         assert_eq!(source_map.names.len(), 3);
         assert_eq!(source_map.names.get(&0), Some(&"__pair".to_string())); // Var reference
-        assert_eq!(source_map.names.get(&1), Some(&"blst_p1_index_0".to_string())); // Lambda param
+        assert_eq!(
+            source_map.names.get(&1),
+            Some(&"blst_p1_index_0".to_string())
+        ); // Lambda param
         assert_eq!(source_map.names.get(&2), Some(&"__pair".to_string())); // Outer Lambda param
     }
 
@@ -985,17 +990,25 @@ mod tests {
             Term::Var { name, .. } => {
                 names.push(format!("Var({})", name.text));
             }
-            Term::Lambda { parameter_name, body, .. } => {
+            Term::Lambda {
+                parameter_name,
+                body,
+                ..
+            } => {
                 names.push(format!("Lambda({})", parameter_name.text));
                 collect_names_recursive(body, names);
             }
-            Term::Apply { function, argument, .. } => {
+            Term::Apply {
+                function, argument, ..
+            } => {
                 collect_names_recursive(argument, names);
                 collect_names_recursive(function, names);
             }
             Term::Delay { term, .. } => collect_names_recursive(term, names),
             Term::Force { term, .. } => collect_names_recursive(term, names),
-            Term::Case { constr, branches, .. } => {
+            Term::Case {
+                constr, branches, ..
+            } => {
                 collect_names_recursive(constr, names);
                 for branch in branches {
                     collect_names_recursive(branch, names);
@@ -1040,11 +1053,7 @@ mod tests {
         };
 
         let names = collect_term_names(&term);
-        assert_eq!(names, vec![
-            "Lambda(x_id_0)",
-            "Var(x_id_0)",
-            "Var(f_id_1)",
-        ]);
+        assert_eq!(names, vec!["Lambda(x_id_0)", "Var(x_id_0)", "Var(f_id_1)",]);
     }
 
     #[test]

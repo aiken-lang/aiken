@@ -467,7 +467,9 @@ impl<T, C> Term<T, C> {
                 ),
                 context: f(context),
             },
-            Term::Error { context } => Term::Error { context: f(context) },
+            Term::Error { context } => Term::Error {
+                context: f(context),
+            },
             Term::Builtin { func, context } => Term::Builtin {
                 func,
                 context: f(context),

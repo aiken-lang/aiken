@@ -16,8 +16,7 @@ impl MemoProgram {
     ) -> Program<DeBruijn> {
         match self.program.take() {
             None => {
-                let (program, term_with_spans) =
-                    generator.generate_with_term(def, module_name);
+                let (program, term_with_spans) = generator.generate_with_term(def, module_name);
                 let new_program = program.to_debruijn().unwrap();
 
                 self.program.replace(new_program.clone());

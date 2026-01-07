@@ -495,7 +495,12 @@ impl AirTree {
         }
     }
 
-    pub fn call(func: AirTree, tipo: Rc<Type>, args: Vec<AirTree>, location: SourceLocation) -> AirTree {
+    pub fn call(
+        func: AirTree,
+        tipo: Rc<Type>,
+        args: Vec<AirTree>,
+        location: SourceLocation,
+    ) -> AirTree {
         AirTree::Call {
             tipo,
             func: func.into(),
@@ -907,7 +912,12 @@ impl AirTree {
         }
     }
 
-    pub fn pair_index(index: usize, tipo: Rc<Type>, tuple: AirTree, location: SourceLocation) -> AirTree {
+    pub fn pair_index(
+        index: usize,
+        tipo: Rc<Type>,
+        tuple: AirTree,
+        location: SourceLocation,
+    ) -> AirTree {
         AirTree::cast_from_data(
             AirTree::builtin(
                 if index == 0 {
@@ -984,7 +994,11 @@ impl AirTree {
         let inner_expect_on_list =
             AirTree::local_var(INNER_EXPECT_ON_LIST, Type::void(), location.clone());
 
-        let list_var = AirTree::local_var("__list_to_check", Type::list(Type::data()), location.clone());
+        let list_var = AirTree::local_var(
+            "__list_to_check",
+            Type::list(Type::data()),
+            location.clone(),
+        );
 
         AirTree::let_assignment(
             INNER_EXPECT_ON_LIST,
@@ -1967,7 +1981,9 @@ impl AirTree {
                     );
                 }
             }
-            AirTree::Pair { tipo: _, fst, snd, .. } => {
+            AirTree::Pair {
+                tipo: _, fst, snd, ..
+            } => {
                 fst.do_traverse_tree_with(tree_path, current_depth + 1, Fields::SecondField, with);
 
                 snd.do_traverse_tree_with(tree_path, current_depth + 1, Fields::ThirdField, with);
@@ -2166,7 +2182,9 @@ impl AirTree {
                     );
                 }
             }
-            AirTree::Trace { tipo: _, msg, then, .. } => {
+            AirTree::Trace {
+                tipo: _, msg, then, ..
+            } => {
                 msg.do_traverse_tree_with(tree_path, current_depth + 1, Fields::SecondField, with);
 
                 then.do_traverse_tree_with(tree_path, current_depth + 1, Fields::ThirdField, with);
@@ -2468,7 +2486,9 @@ impl AirTree {
                     Fields::SecondField => arg.as_mut().do_find_air_tree_node(tree_path_iter),
                     _ => panic!("Tree Path index outside tree children nodes"),
                 },
-                AirTree::Pair { tipo: _, fst, snd, .. } => match field {
+                AirTree::Pair {
+                    tipo: _, fst, snd, ..
+                } => match field {
                     Fields::SecondField => fst.as_mut().do_find_air_tree_node(tree_path_iter),
                     Fields::ThirdField => snd.as_mut().do_find_air_tree_node(tree_path_iter),
                     _ => panic!("Tree Path index outside tree children nodes"),
@@ -2589,7 +2609,9 @@ impl AirTree {
                         .do_find_air_tree_node(tree_path_iter),
                     _ => panic!("Tree Path index outside tree children nodes"),
                 },
-                AirTree::Trace { tipo: _, msg, then, .. } => match field {
+                AirTree::Trace {
+                    tipo: _, msg, then, ..
+                } => match field {
                     Fields::SecondField => msg.as_mut().do_find_air_tree_node(tree_path_iter),
                     Fields::ThirdField => then.as_mut().do_find_air_tree_node(tree_path_iter),
                     _ => panic!("Tree Path index outside tree children nodes"),

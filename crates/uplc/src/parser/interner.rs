@@ -41,7 +41,9 @@ impl Interner {
                 parameter_name.unique = self.intern(&parameter_name.text);
                 self.term(Rc::make_mut(body));
             }
-            Term::Apply { function, argument, .. } => {
+            Term::Apply {
+                function, argument, ..
+            } => {
                 self.term(Rc::make_mut(function));
                 self.term(Rc::make_mut(argument));
             }
@@ -54,7 +56,9 @@ impl Interner {
                     self.term(field);
                 }
             }
-            Term::Case { constr, branches, .. } => {
+            Term::Case {
+                constr, branches, ..
+            } => {
                 self.term(Rc::make_mut(constr));
 
                 for branch in branches {

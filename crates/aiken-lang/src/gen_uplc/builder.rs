@@ -570,15 +570,32 @@ pub fn unknown_data_to_type<C: Default + Clone>(
                     .apply(
                         Term::head_list().apply(Term::tail_list().apply(Term::var("__list_data"))),
                     ),
-                Term::Error { context: C::default() },
+                Term::Error {
+                    context: C::default(),
+                },
             )
             .lambda("__list_data")
             .apply(Term::unlist_data().apply(term)),
-        Some(UplcType::Bool) => {
-            Term::unwrap_bool_or(term, |result| result, &(Term::Error { context: C::default() }).delay())
-        }
+        Some(UplcType::Bool) => Term::unwrap_bool_or(
+            term,
+            |result| result,
+            &(Term::Error {
+                context: C::default(),
+            })
+            .delay(),
+        ),
         Some(UplcType::Unit) => term.as_var("val", |val| {
-            Term::Var { name: val, context: C::default() }.unwrap_void_or(|result| result, &(Term::Error { context: C::default() }).delay())
+            Term::Var {
+                name: val,
+                context: C::default(),
+            }
+            .unwrap_void_or(
+                |result| result,
+                &(Term::Error {
+                    context: C::default(),
+                })
+                .delay(),
+            )
         }),
 
         Some(UplcType::Data) | None => {
@@ -633,7 +650,10 @@ pub fn softcast_data_to_type_otherwise<C: Default + Clone>(
             }
         }
 
-        Some(UplcType::Data) => callback(Term::Var { name: val, context: C::default() }),
+        Some(UplcType::Data) => callback(Term::Var {
+            name: val,
+            context: C::default(),
+        }),
 
         Some(UplcType::Bls12_381MlResult) => {
             unreachable!("attempted to cast Data into Bls12_381MlResult?!")
@@ -896,7 +916,12 @@ pub fn list_access_to_uplc<C: Default + Clone + PartialEq>(
                 .apply(Term::head_list().apply(Term::var(tail_name.to_string())))
         } else if matches!(expect_level, ExpectLevel::Full) {
             // Expect level is full so we have an unknown piece of data to cast
-            if otherwise_delayed == (Term::Error { context: C::default() }).delay() {
+            if otherwise_delayed
+                == (Term::Error {
+                    context: C::default(),
+                })
+                .delay()
+            {
                 then.lambda(name).apply(unknown_data_to_type(
                     Term::head_list().apply(Term::var(tail_name.to_string())),
                     &tipo.to_owned(),
@@ -947,7 +972,13 @@ pub fn list_access_to_uplc<C: Default + Clone + PartialEq>(
                         }
 
                         ExpectLevel::Full | ExpectLevel::Items => {
-                            if otherwise_delayed == (Term::Error { context: C::default() }).delay() && tail_present {
+                            if otherwise_delayed
+                                == (Term::Error {
+                                    context: C::default(),
+                                })
+                                .delay()
+                                && tail_present
+                            {
                                 // No need to check last item if tail was present
                                 head_item(name, tipo, &tail_name, acc).lambda(tail_name)
                             } else if tail_present {
@@ -958,7 +989,12 @@ pub fn list_access_to_uplc<C: Default + Clone + PartialEq>(
                                         head_item(name, tipo, &tail_name, acc),
                                     )
                                     .lambda(tail_name)
-                            } else if otherwise_delayed == (Term::Error { context: C::default() }).delay() {
+                            } else if otherwise_delayed
+                                == (Term::Error {
+                                    context: C::default(),
+                                })
+                                .delay()
+                            {
                                 // Check head is last item in this list
                                 head_item(
                                     name,
@@ -966,7 +1002,12 @@ pub fn list_access_to_uplc<C: Default + Clone + PartialEq>(
                                     &tail_name,
                                     Term::tail_list()
                                         .apply(Term::var(tail_name.to_string()))
-                                        .delayed_choose_list(acc, Term::Error { context: C::default() }),
+                                        .delayed_choose_list(
+                                            acc,
+                                            Term::Error {
+                                                context: C::default(),
+                                            },
+                                        ),
                                 )
                                 .lambda(tail_name)
                             } else {
@@ -999,7 +1040,11 @@ pub fn list_access_to_uplc<C: Default + Clone + PartialEq>(
                     // let head_item = head_item(name, tipo, &tail_name);
 
                     if matches!(expect_level, ExpectLevel::None)
-                        || otherwise_delayed == (Term::Error { context: C::default() }).delay()
+                        || otherwise_delayed
+                            == (Term::Error {
+                                context: C::default(),
+                            })
+                            .delay()
                     {
                         head_item(
                             name,
@@ -1030,7 +1075,10 @@ pub fn list_access_to_uplc<C: Default + Clone + PartialEq>(
         })
 }
 
-pub fn apply_builtin_forces<C: Default + Clone>(mut term: Term<Name, C>, force_count: u32) -> Term<Name, C> {
+pub fn apply_builtin_forces<C: Default + Clone>(
+    mut term: Term<Name, C>,
+    force_count: u32,
+) -> Term<Name, C> {
     for _ in 0..force_count {
         term = term.force();
     }
@@ -1237,7 +1285,9 @@ pub fn cast_validator_args<C: Default + Clone>(
 
 pub fn wrap_validator_condition(air_tree: AirTree, trace: TraceLevel) -> AirTree {
     let otherwise = match trace {
-        TraceLevel::Silent | TraceLevel::Compact => AirTree::error(Type::void(), true, SourceLocation::empty()),
+        TraceLevel::Silent | TraceLevel::Compact => {
+            AirTree::error(Type::void(), true, SourceLocation::empty())
+        }
         TraceLevel::Verbose => AirTree::trace(
             AirTree::string("Validator returned false", SourceLocation::empty()),
             Type::void(),
@@ -1246,7 +1296,13 @@ pub fn wrap_validator_condition(air_tree: AirTree, trace: TraceLevel) -> AirTree
         ),
     };
 
-    AirTree::if_branch(Type::void(), air_tree, AirTree::void(SourceLocation::empty()), otherwise, SourceLocation::empty())
+    AirTree::if_branch(
+        Type::void(),
+        air_tree,
+        AirTree::void(SourceLocation::empty()),
+        otherwise,
+        SourceLocation::empty(),
+    )
 }
 
 pub fn extract_constant<C>(term: &Term<Name, C>) -> Option<Rc<UplcConstant>> {
@@ -1254,7 +1310,10 @@ pub fn extract_constant<C>(term: &Term<Name, C>) -> Option<Rc<UplcConstant>> {
 
     if let Term::Constant { value: c, .. } = term {
         constant = Some(c.clone());
-    } else if let Term::Apply { function, argument, .. } = term {
+    } else if let Term::Apply {
+        function, argument, ..
+    } = term
+    {
         if let Term::Constant { value: c, .. } = argument.as_ref() {
             if let Term::Builtin { func: b, .. } = function.as_ref() {
                 if matches!(

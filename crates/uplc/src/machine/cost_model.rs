@@ -1974,7 +1974,11 @@ impl Default for BuiltinCosts {
 }
 
 impl BuiltinCosts {
-    pub fn to_ex_budget<C: Clone>(&self, fun: DefaultFunction, args: &[Value<C>]) -> Result<ExBudget, Error> {
+    pub fn to_ex_budget<C: Clone>(
+        &self,
+        fun: DefaultFunction,
+        args: &[Value<C>],
+    ) -> Result<ExBudget, Error> {
         Ok(match fun {
             DefaultFunction::AddInteger => ExBudget {
                 mem: self

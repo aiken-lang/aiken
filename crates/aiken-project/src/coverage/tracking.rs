@@ -9,8 +9,8 @@ use std::collections::HashSet;
 use uplc::{
     ast::{Constant, NamedDeBruijn, Program, Term},
     machine::{
-        cost_model::{CostModel, ExBudget},
         Machine, MachineState,
+        cost_model::{CostModel, ExBudget},
     },
 };
 
@@ -56,14 +56,20 @@ fn collect_locations_recursive<N: Clone>(
     // Recursively collect from subterms
     match term {
         Term::Var { .. } | Term::Constant { .. } | Term::Error { .. } | Term::Builtin { .. } => {}
-        Term::Lambda { body, .. } | Term::Delay { term: body, .. } | Term::Force { term: body, .. } => {
+        Term::Lambda { body, .. }
+        | Term::Delay { term: body, .. }
+        | Term::Force { term: body, .. } => {
             collect_locations_recursive(body, locations);
         }
-        Term::Apply { function, argument, .. } => {
+        Term::Apply {
+            function, argument, ..
+        } => {
             collect_locations_recursive(function, locations);
             collect_locations_recursive(argument, locations);
         }
-        Term::Case { constr, branches, .. } => {
+        Term::Case {
+            constr, branches, ..
+        } => {
             collect_locations_recursive(constr, locations);
             for branch in branches {
                 collect_locations_recursive(branch, locations);
@@ -237,7 +243,12 @@ mod tests {
 
         assert!(result.success);
         assert!(!result.machine_error);
-        assert!(result.coverage.executed_locations.contains(&make_loc("test", 0, 4)));
+        assert!(
+            result
+                .coverage
+                .executed_locations
+                .contains(&make_loc("test", 0, 4))
+        );
     }
 
     #[test]
@@ -276,10 +287,30 @@ mod tests {
         assert!(result.success);
         assert!(!result.machine_error);
         // Should have executed: Apply, Lambda, Constant (arg), Var (body)
-        assert!(result.coverage.executed_locations.contains(&make_loc("test", 0, 25))); // Apply
-        assert!(result.coverage.executed_locations.contains(&make_loc("test", 5, 15))); // Lambda
-        assert!(result.coverage.executed_locations.contains(&make_loc("test", 20, 24))); // Constant
-        assert!(result.coverage.executed_locations.contains(&make_loc("test", 10, 11))); // Var
+        assert!(
+            result
+                .coverage
+                .executed_locations
+                .contains(&make_loc("test", 0, 25))
+        ); // Apply
+        assert!(
+            result
+                .coverage
+                .executed_locations
+                .contains(&make_loc("test", 5, 15))
+        ); // Lambda
+        assert!(
+            result
+                .coverage
+                .executed_locations
+                .contains(&make_loc("test", 20, 24))
+        ); // Constant
+        assert!(
+            result
+                .coverage
+                .executed_locations
+                .contains(&make_loc("test", 10, 11))
+        ); // Var
     }
 
     #[test]

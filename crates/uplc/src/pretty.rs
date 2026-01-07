@@ -104,7 +104,9 @@ where
                 )
                 .append(RcDoc::line_())
                 .append(RcDoc::text(")")),
-            Term::Apply { function, argument, .. } => RcDoc::text("[")
+            Term::Apply {
+                function, argument, ..
+            } => RcDoc::text("[")
                 .append(
                     RcDoc::line()
                         .append(
@@ -118,7 +120,9 @@ where
                 )
                 .append(RcDoc::line())
                 .append(RcDoc::text("]")),
-            Term::Constant { value: constant, .. } => RcDoc::text("(")
+            Term::Constant {
+                value: constant, ..
+            } => RcDoc::text("(")
                 .append(
                     RcDoc::text("con")
                         .append(RcDoc::line())
@@ -163,7 +167,9 @@ where
                     RcDoc::line_(),
                 ))
                 .append(RcDoc::text(")")),
-            Term::Case { constr, branches, .. } => RcDoc::text("(")
+            Term::Case {
+                constr, branches, ..
+            } => RcDoc::text("(")
                 .append(
                     RcDoc::text("case")
                         .append(RcDoc::line())

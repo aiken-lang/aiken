@@ -106,4 +106,3 @@ pub fn aiken_optimize_minimal_with_context<C: Clone + Default + PartialEq>(
     let prog = program.run_once_pass();
     prog.clean_up_no_inlines().afterwards()
 }
-

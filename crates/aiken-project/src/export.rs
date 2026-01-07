@@ -127,9 +127,11 @@ impl Export {
         // Build source map if requested, otherwise discard spans
         let source_map = match source_map_mode {
             SourceMapMode::None => None,
-            SourceMapMode::Inline | SourceMapMode::External(_) => {
-                Some(SourceMap::from_term(&optimized.term, &module.name, module_sources))
-            }
+            SourceMapMode::Inline | SourceMapMode::External(_) => Some(SourceMap::from_term(
+                &optimized.term,
+                &module.name,
+                module_sources,
+            )),
         };
 
         // Convert to DeBruijn for final output (strips spans)
@@ -170,7 +172,11 @@ impl Export {
         let mut definitions = Definitions::new();
 
         // Extract the inner TypedArg from each ArgVia for property tests
-        let args: Vec<TypedArg> = test.arguments.iter().map(|arg_via| arg_via.arg.clone()).collect();
+        let args: Vec<TypedArg> = test
+            .arguments
+            .iter()
+            .map(|arg_via| arg_via.arg.clone())
+            .collect();
 
         // Build parameter schemas for property test arguments
         let parameters = args
@@ -230,8 +236,7 @@ impl Export {
         })?;
 
         // Always generate with spans - both paths use the same code generation
-        let term_with_spans =
-            generator.generate_raw_with_spans(&test.body, &args, &module.name);
+        let term_with_spans = generator.generate_raw_with_spans(&test.body, &args, &module.name);
 
         // Finalize and optimize (or use minimal optimization if no_optimize is set)
         let optimized = if no_optimize {
@@ -243,9 +248,11 @@ impl Export {
         // Build source map if requested, otherwise discard spans
         let source_map = match source_map_mode {
             SourceMapMode::None => None,
-            SourceMapMode::Inline | SourceMapMode::External(_) => {
-                Some(SourceMap::from_term(&optimized.term, &module.name, module_sources))
-            }
+            SourceMapMode::Inline | SourceMapMode::External(_) => Some(SourceMap::from_term(
+                &optimized.term,
+                &module.name,
+                module_sources,
+            )),
         };
 
         // Convert to DeBruijn for final output (strips spans)

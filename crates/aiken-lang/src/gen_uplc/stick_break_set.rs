@@ -39,7 +39,12 @@ impl Eq for Builtin {}
 impl Builtin {
     fn produce_air(self, arg: AirTree) -> AirTree {
         match self {
-            Builtin::HeadList(t) => AirTree::builtin(DefaultFunction::HeadList, t, vec![arg], SourceLocation::empty()),
+            Builtin::HeadList(t) => AirTree::builtin(
+                DefaultFunction::HeadList,
+                t,
+                vec![arg],
+                SourceLocation::empty(),
+            ),
             Builtin::ExtractField(t) => AirTree::extract_field(t, arg, SourceLocation::empty()),
             Builtin::TailList => AirTree::builtin(
                 DefaultFunction::TailList,
@@ -58,8 +63,18 @@ impl Builtin {
                 SourceLocation::empty(),
             ),
 
-            Builtin::FstPair(t) => AirTree::builtin(DefaultFunction::FstPair, t, vec![arg], SourceLocation::empty()),
-            Builtin::SndPair(t) => AirTree::builtin(DefaultFunction::SndPair, t, vec![arg], SourceLocation::empty()),
+            Builtin::FstPair(t) => AirTree::builtin(
+                DefaultFunction::FstPair,
+                t,
+                vec![arg],
+                SourceLocation::empty(),
+            ),
+            Builtin::SndPair(t) => AirTree::builtin(
+                DefaultFunction::SndPair,
+                t,
+                vec![arg],
+                SourceLocation::empty(),
+            ),
         }
     }
 
@@ -229,7 +244,11 @@ impl Builtins {
             .rfold(then, |then, (prev_name, prev_tipo, next_name, builtin)| {
                 AirTree::let_assignment(
                     next_name,
-                    builtin.produce_air(AirTree::local_var(prev_name, prev_tipo, SourceLocation::empty())),
+                    builtin.produce_air(AirTree::local_var(
+                        prev_name,
+                        prev_tipo,
+                        SourceLocation::empty(),
+                    )),
                     then,
                     SourceLocation::empty(),
                 )

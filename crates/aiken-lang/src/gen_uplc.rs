@@ -18,8 +18,8 @@ use crate::{
     IdGenerator,
     ast::{
         AssignmentKind, BinOp, Bls12_381Point, Curve, DataTypeKey, DecoratorKind,
-        FunctionAccessKey, Pattern, SourceLocation, Span, TraceLevel, Tracing, TypedArg, TypedDataType,
-        TypedFunction, TypedPattern, TypedValidator, UnOp,
+        FunctionAccessKey, Pattern, SourceLocation, Span, TraceLevel, Tracing, TypedArg,
+        TypedDataType, TypedFunction, TypedPattern, TypedValidator, UnOp,
     },
     builtins::PRELUDE,
     expr::TypedExpr,
@@ -57,15 +57,21 @@ use uplc::{
     builtins::DefaultFunction,
     machine::cost_model::ExBudget,
     optimize::{
-        aiken_optimize_and_intern, aiken_optimize_minimal_with_context, aiken_optimize_with_context, interner::CodeGenInterner,
-        shrinker::NO_INLINE,
+        aiken_optimize_and_intern, aiken_optimize_minimal_with_context,
+        aiken_optimize_with_context, interner::CodeGenInterner, shrinker::NO_INLINE,
     },
 };
 
 type Otherwise = Option<AirTree>;
 
-const DELAY_ERROR: fn() -> AirTree =
-    || AirTree::anon_func(vec![], AirTree::error(Type::void(), false, SourceLocation::empty()), true, SourceLocation::empty());
+const DELAY_ERROR: fn() -> AirTree = || {
+    AirTree::anon_func(
+        vec![],
+        AirTree::error(Type::void(), false, SourceLocation::empty()),
+        true,
+        SourceLocation::empty(),
+    )
+};
 
 #[derive(Clone)]
 pub struct CodeGenerator<'a> {
@@ -157,7 +163,12 @@ impl<'a> CodeGenerator<'a> {
             self.tracing,
         );
 
-        let air_tree_fun = AirTree::anon_func(vec![context_name_interned], air_tree_fun, true, SourceLocation::empty());
+        let air_tree_fun = AirTree::anon_func(
+            vec![context_name_interned],
+            air_tree_fun,
+            true,
+            SourceLocation::empty(),
+        );
 
         let validator_args_tree = AirTree::no_op(air_tree_fun, SourceLocation::empty());
 
@@ -296,7 +307,10 @@ impl<'a> CodeGenerator<'a> {
 
     /// Finalize and optimize a program while preserving source location context.
     /// Uses the subset of optimizations that are generic over context type.
-    pub fn finalize_with_spans(&mut self, mut term: Term<Name, SourceLocation>) -> Program<Name, SourceLocation> {
+    pub fn finalize_with_spans(
+        &mut self,
+        mut term: Term<Name, SourceLocation>,
+    ) -> Program<Name, SourceLocation> {
         // Apply used functions (critical for recursive functions to work)
         term = self.special_functions.apply_used_functions(term);
 
@@ -311,7 +325,10 @@ impl<'a> CodeGenerator<'a> {
     /// Finalize with minimal optimization, preserving source location context.
     /// Skips performance optimizations like inlining and lambda reduction.
     /// Produces larger but more readable code that maps directly to source.
-    pub fn finalize_minimal_with_spans(&mut self, mut term: Term<Name, SourceLocation>) -> Program<Name, SourceLocation> {
+    pub fn finalize_minimal_with_spans(
+        &mut self,
+        mut term: Term<Name, SourceLocation>,
+    ) -> Program<Name, SourceLocation> {
         // Apply used functions (critical for recursive functions to work)
         term = self.special_functions.apply_used_functions(term);
 
@@ -368,7 +385,9 @@ impl<'a> CodeGenerator<'a> {
                 } else {
                     self.special_functions.insert_new_function(
                         msg_func_name.clone(),
-                        (Term::Error { context: () }).delayed_trace(Term::string(msg)).delay(),
+                        (Term::Error { context: () })
+                            .delayed_trace(Term::string(msg))
+                            .delay(),
                         Type::void(),
                     );
 
@@ -407,9 +426,18 @@ impl<'a> CodeGenerator<'a> {
                 TypedExpr::Assignment { .. } => {
                     panic!("Reached assignment with no dangling expressions")
                 }
-                TypedExpr::UInt { value, location, .. } => AirTree::int(value, SourceLocation::new(module_build_name, *location)),
-                TypedExpr::String { value, location, .. } => AirTree::string(value, SourceLocation::new(module_build_name, *location)),
-                TypedExpr::ByteArray { bytes, location, .. } => AirTree::byte_array(bytes.clone(), SourceLocation::new(module_build_name, *location)),
+                TypedExpr::UInt {
+                    value, location, ..
+                } => AirTree::int(value, SourceLocation::new(module_build_name, *location)),
+                TypedExpr::String {
+                    value, location, ..
+                } => AirTree::string(value, SourceLocation::new(module_build_name, *location)),
+                TypedExpr::ByteArray {
+                    bytes, location, ..
+                } => AirTree::byte_array(
+                    bytes.clone(),
+                    SourceLocation::new(module_build_name, *location),
+                ),
                 TypedExpr::Sequence { expressions, .. }
                 | TypedExpr::Pipeline { expressions, .. } => {
                     let (expr, dangling_expressions) = expressions
@@ -419,7 +447,10 @@ impl<'a> CodeGenerator<'a> {
                 }
 
                 TypedExpr::Var {
-                    constructor, name, location, ..
+                    constructor,
+                    name,
+                    location,
+                    ..
                 } => match constructor.variant {
                     ValueConstructorVariant::LocalVariable { .. } => {
                         if name != CONSTR_INDEX_EXPOSER && name != CONSTR_FIELDS_EXPOSER {
@@ -430,13 +461,28 @@ impl<'a> CodeGenerator<'a> {
                                 SourceLocation::new(module_build_name, *location),
                             )
                         } else {
-                            AirTree::var(constructor.clone(), name, "", SourceLocation::new(module_build_name, *location))
+                            AirTree::var(
+                                constructor.clone(),
+                                name,
+                                "",
+                                SourceLocation::new(module_build_name, *location),
+                            )
                         }
                     }
-                    _ => AirTree::var(constructor.clone(), name, "", SourceLocation::new(module_build_name, *location)),
+                    _ => AirTree::var(
+                        constructor.clone(),
+                        name,
+                        "",
+                        SourceLocation::new(module_build_name, *location),
+                    ),
                 },
 
-                TypedExpr::Fn { args, body, location, .. } => {
+                TypedExpr::Fn {
+                    args,
+                    body,
+                    location,
+                    ..
+                } => {
                     let params = args
                         .iter()
                         .map(|arg| {
@@ -446,8 +492,12 @@ impl<'a> CodeGenerator<'a> {
                         })
                         .collect_vec();
 
-                    let anon =
-                        AirTree::anon_func(params, self.build(body, module_build_name, &[]), false, SourceLocation::new(module_build_name, *location));
+                    let anon = AirTree::anon_func(
+                        params,
+                        self.build(body, module_build_name, &[]),
+                        false,
+                        SourceLocation::new(module_build_name, *location),
+                    );
 
                     args.iter()
                         .filter_map(|arg| arg.get_variable_name())
@@ -476,7 +526,11 @@ impl<'a> CodeGenerator<'a> {
                 ),
 
                 TypedExpr::Call {
-                    tipo, fun, args, location, ..
+                    tipo,
+                    fun,
+                    args,
+                    location,
+                    ..
                 } => match fun.as_ref() {
                     TypedExpr::Var {
                         constructor:
@@ -538,7 +592,12 @@ impl<'a> CodeGenerator<'a> {
                             Some(constr_index)
                         };
 
-                        AirTree::create_constr(index, constr_tipo.clone(), constr_args, SourceLocation::new(module_build_name, *location))
+                        AirTree::create_constr(
+                            index,
+                            constr_tipo.clone(),
+                            constr_args,
+                            SourceLocation::new(module_build_name, *location),
+                        )
                     }
 
                     TypedExpr::Var {
@@ -562,14 +621,23 @@ impl<'a> CodeGenerator<'a> {
                             .map(|(arg, arg_tipo)| {
                                 let mut arg_val = self.build(&arg.value, module_build_name, &[]);
                                 if arg_tipo.is_data() && !arg.value.tipo().is_data() {
-                                    arg_val = AirTree::cast_to_data(arg_val, arg.value.tipo(), SourceLocation::empty())
+                                    arg_val = AirTree::cast_to_data(
+                                        arg_val,
+                                        arg.value.tipo(),
+                                        SourceLocation::empty(),
+                                    )
                                 }
                                 arg_val
                             })
                             .collect_vec();
 
                         if let Some(func) = builtin {
-                            AirTree::builtin(*func, tipo.clone(), func_args, SourceLocation::new(module_build_name, *location))
+                            AirTree::builtin(
+                                *func,
+                                tipo.clone(),
+                                func_args,
+                                SourceLocation::new(module_build_name, *location),
+                            )
                         } else {
                             AirTree::call(
                                 self.build(fun.as_ref(), module_build_name, &[]),
@@ -607,14 +675,23 @@ impl<'a> CodeGenerator<'a> {
                                 let mut arg_val = self.build(&arg.value, module_build_name, &[]);
 
                                 if arg_tipo.is_data() && !arg.value.tipo().is_data() {
-                                    arg_val = AirTree::cast_to_data(arg_val, arg.value.tipo(), SourceLocation::empty())
+                                    arg_val = AirTree::cast_to_data(
+                                        arg_val,
+                                        arg.value.tipo(),
+                                        SourceLocation::empty(),
+                                    )
                                 }
                                 arg_val
                             })
                             .collect_vec();
 
                         if let Some(func) = builtin {
-                            AirTree::builtin(*func, tipo.clone(), func_args, SourceLocation::new(module_build_name, *location))
+                            AirTree::builtin(
+                                *func,
+                                tipo.clone(),
+                                func_args,
+                                SourceLocation::new(module_build_name, *location),
+                            )
                         } else {
                             AirTree::call(
                                 self.build(fun.as_ref(), module_build_name, &[]),
@@ -638,7 +715,11 @@ impl<'a> CodeGenerator<'a> {
                             .map(|(arg, arg_tipo)| {
                                 let mut arg_val = self.build(&arg.value, module_build_name, &[]);
                                 if arg_tipo.is_data() && !arg.value.tipo().is_data() {
-                                    arg_val = AirTree::cast_to_data(arg_val, arg.value.tipo(), SourceLocation::empty())
+                                    arg_val = AirTree::cast_to_data(
+                                        arg_val,
+                                        arg.value.tipo(),
+                                        SourceLocation::empty(),
+                                    )
                                 }
                                 arg_val
                             })
@@ -670,7 +751,11 @@ impl<'a> CodeGenerator<'a> {
                 ),
 
                 TypedExpr::Trace {
-                    tipo, then, text, location, ..
+                    tipo,
+                    then,
+                    text,
+                    location,
+                    ..
                 } => AirTree::trace(
                     self.build(text, module_build_name, &[]),
                     tipo.clone(),
@@ -710,7 +795,10 @@ impl<'a> CodeGenerator<'a> {
                                 remove_unused: false,
                                 full_check: false,
                                 otherwise: None,
-                                location: SourceLocation::new(module_build_name, last_clause.pattern.location()),
+                                location: SourceLocation::new(
+                                    module_build_name,
+                                    last_clause.pattern.location(),
+                                ),
                             },
                         );
 
@@ -783,12 +871,18 @@ impl<'a> CodeGenerator<'a> {
                                     let acc_var =
                                         self.interner.lookup_interned(&"acc_var".to_string());
 
-                                    let pattern_location = SourceLocation::new(module_build_name, pattern.location());
+                                    let pattern_location =
+                                        SourceLocation::new(module_build_name, pattern.location());
 
                                     let tree = AirTree::let_assignment(
                                         &acc_var,
                                         // use anon function as a delay to avoid evaluating the acc
-                                        AirTree::anon_func(vec![], acc, true, SourceLocation::empty()),
+                                        AirTree::anon_func(
+                                            vec![],
+                                            acc,
+                                            true,
+                                            SourceLocation::empty(),
+                                        ),
                                         self.assignment(
                                             pattern,
                                             condition,
@@ -844,7 +938,11 @@ impl<'a> CodeGenerator<'a> {
                         let function_name = format!("__access_index_{}", *index);
 
                         if self.code_gen_functions.get(&function_name).is_none() {
-                            let mut body = AirTree::local_var("__fields", Type::list(Type::data()), SourceLocation::empty());
+                            let mut body = AirTree::local_var(
+                                "__fields",
+                                Type::list(Type::data()),
+                                SourceLocation::empty(),
+                            );
 
                             for _ in 0..*index {
                                 body = AirTree::builtin(
@@ -894,7 +992,12 @@ impl<'a> CodeGenerator<'a> {
                             )
                         };
 
-                        AirTree::index_access(function_name, tipo.clone(), list_of_fields, SourceLocation::new(module_build_name, *location))
+                        AirTree::index_access(
+                            function_name,
+                            tipo.clone(),
+                            list_of_fields,
+                            SourceLocation::new(module_build_name, *location),
+                        )
                     }
                 }
 
@@ -932,7 +1035,12 @@ impl<'a> CodeGenerator<'a> {
                             )
                         };
 
-                        AirTree::var(val_constructor, name, "", SourceLocation::new(module_build_name, *location))
+                        AirTree::var(
+                            val_constructor,
+                            name,
+                            "",
+                            SourceLocation::new(module_build_name, *location),
+                        )
                     }
                     ModuleValueConstructor::Fn { name, module, .. } => {
                         let func = self.functions.get(&FunctionAccessKey {
@@ -972,7 +1080,12 @@ impl<'a> CodeGenerator<'a> {
                                 unreachable!("Didn't find the function definition.")
                             };
 
-                            AirTree::builtin(*builtin, tipo.clone(), vec![], SourceLocation::new(module_build_name, *location))
+                            AirTree::builtin(
+                                *builtin,
+                                tipo.clone(),
+                                vec![],
+                                SourceLocation::new(module_build_name, *location),
+                            )
                         }
                     }
                     ModuleValueConstructor::Constant { module, name, .. } => {
@@ -989,14 +1102,25 @@ impl<'a> CodeGenerator<'a> {
                     }
                 },
 
-                TypedExpr::Pair { tipo, fst, snd, location, .. } => AirTree::pair(
+                TypedExpr::Pair {
+                    tipo,
+                    fst,
+                    snd,
+                    location,
+                    ..
+                } => AirTree::pair(
                     self.build(fst, module_build_name, &[]),
                     self.build(snd, module_build_name, &[]),
                     tipo.clone(),
                     SourceLocation::new(module_build_name, *location),
                 ),
 
-                TypedExpr::Tuple { tipo, elems, location, .. } => AirTree::tuple(
+                TypedExpr::Tuple {
+                    tipo,
+                    elems,
+                    location,
+                    ..
+                } => AirTree::tuple(
                     elems
                         .iter()
                         .map(|elem| self.build(elem, module_build_name, &[]))
@@ -1006,7 +1130,11 @@ impl<'a> CodeGenerator<'a> {
                 ),
 
                 TypedExpr::TupleIndex {
-                    index, tuple, tipo, location, ..
+                    index,
+                    tuple,
+                    tipo,
+                    location,
+                    ..
                 } => {
                     if tuple.tipo().is_pair() {
                         AirTree::pair_index(
@@ -1019,7 +1147,11 @@ impl<'a> CodeGenerator<'a> {
                         let function_name = format!("__access_index_{}", *index);
 
                         if self.code_gen_functions.get(&function_name).is_none() {
-                            let mut body = AirTree::local_var("__fields", Type::list(Type::data()), SourceLocation::empty());
+                            let mut body = AirTree::local_var(
+                                "__fields",
+                                Type::list(Type::data()),
+                                SourceLocation::empty(),
+                            );
 
                             for _ in 0..*index {
                                 body = AirTree::builtin(
@@ -1055,10 +1187,18 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
 
-                TypedExpr::ErrorTerm { tipo, location, .. } => AirTree::error(tipo.clone(), false, SourceLocation::new(module_build_name, *location)),
+                TypedExpr::ErrorTerm { tipo, location, .. } => AirTree::error(
+                    tipo.clone(),
+                    false,
+                    SourceLocation::new(module_build_name, *location),
+                ),
 
                 TypedExpr::RecordUpdate {
-                    tipo, spread, args, location, ..
+                    tipo,
+                    spread,
+                    args,
+                    location,
+                    ..
                 } => {
                     let mut index_types = vec![];
                     let mut update_args = vec![];
@@ -1088,10 +1228,22 @@ impl<'a> CodeGenerator<'a> {
                         SourceLocation::new(module_build_name, *location),
                     )
                 }
-                TypedExpr::UnOp { value, op, location, .. } => {
-                    AirTree::unop(*op, self.build(value, module_build_name, &[]), SourceLocation::new(module_build_name, *location))
-                }
-                TypedExpr::CurvePoint { point, location, .. } => AirTree::curve(*point.as_ref(), SourceLocation::new(module_build_name, *location)),
+                TypedExpr::UnOp {
+                    value,
+                    op,
+                    location,
+                    ..
+                } => AirTree::unop(
+                    *op,
+                    self.build(value, module_build_name, &[]),
+                    SourceLocation::new(module_build_name, *location),
+                ),
+                TypedExpr::CurvePoint {
+                    point, location, ..
+                } => AirTree::curve(
+                    *point.as_ref(),
+                    SourceLocation::new(module_build_name, *location),
+                ),
             }
         }
     }
@@ -1266,7 +1418,8 @@ impl<'a> CodeGenerator<'a> {
 
                     let non_opaque_tipo = convert_opaque_type(tipo, &self.data_types, true);
 
-                    let val = AirTree::local_var(&name_interned, tipo.clone(), props.location.clone());
+                    let val =
+                        AirTree::local_var(&name_interned, tipo.clone(), props.location.clone());
 
                     let tree = if non_opaque_tipo.is_primitive() {
                         assign_casted_value(name_interned, value, then)
@@ -1336,7 +1489,11 @@ impl<'a> CodeGenerator<'a> {
                             _ => unreachable!(),
                         };
 
-                        let val = AirTree::local_var(&tail_name_interned, tipo.clone(), props.location.clone());
+                        let val = AirTree::local_var(
+                            &tail_name_interned,
+                            tipo.clone(),
+                            props.location.clone(),
+                        );
 
                         let then = if tail_name_interned != DISCARDED {
                             self.assignment(
@@ -1407,7 +1564,11 @@ impl<'a> CodeGenerator<'a> {
                             }
                         };
 
-                        let val = AirTree::local_var(&elem_name_interned, list_elem_type.clone(), props.location.clone());
+                        let val = AirTree::local_var(
+                            &elem_name_interned,
+                            list_elem_type.clone(),
+                            props.location.clone(),
+                        );
 
                         let then = if elem_name_interned != DISCARDED {
                             self.assignment(
@@ -1447,7 +1608,8 @@ impl<'a> CodeGenerator<'a> {
 
                 let name_interned = introduce_name(&mut self.interner, &name);
 
-                let casted_var = AirTree::local_var(&name_interned, tipo.clone(), SourceLocation::empty());
+                let casted_var =
+                    AirTree::local_var(&name_interned, tipo.clone(), SourceLocation::empty());
 
                 let tree = if elements.is_empty() {
                     assign_casted_value(
@@ -1538,7 +1700,11 @@ impl<'a> CodeGenerator<'a> {
                             unreachable!("Missing type for field {} of Pair", field_index,)
                         });
 
-                        let val = AirTree::local_var(&field_name_interned, arg_type.clone(), props.location.clone());
+                        let val = AirTree::local_var(
+                            &field_name_interned,
+                            arg_type.clone(),
+                            props.location.clone(),
+                        );
 
                         let then = if field_name_interned != DISCARDED {
                             self.assignment(
@@ -1581,7 +1747,11 @@ impl<'a> CodeGenerator<'a> {
                 let constructor_name_interned =
                     introduce_name(&mut self.interner, &constructor_name);
 
-                let local_value = AirTree::local_var(&constructor_name_interned, tipo.clone(), SourceLocation::empty());
+                let local_value = AirTree::local_var(
+                    &constructor_name_interned,
+                    tipo.clone(),
+                    SourceLocation::empty(),
+                );
 
                 let then = AirTree::pair_access(
                     fields
@@ -1631,12 +1801,19 @@ impl<'a> CodeGenerator<'a> {
                     pattern.location().end
                 );
 
-                let local_var = AirTree::local_var(&name_var, tipo.clone(), SourceLocation::empty());
+                let local_var =
+                    AirTree::local_var(&name_var, tipo.clone(), SourceLocation::empty());
 
                 assign_casted_value(
                     name_var,
                     value,
-                    AirTree::assert_bool(name == "True", local_var, then, otherwise, SourceLocation::empty()),
+                    AirTree::assert_bool(
+                        name == "True",
+                        local_var,
+                        then,
+                        otherwise,
+                        SourceLocation::empty(),
+                    ),
                 )
             }
 
@@ -1730,7 +1907,11 @@ impl<'a> CodeGenerator<'a> {
                             )
                         });
 
-                        let val = AirTree::local_var(&field_name_interned, arg_type.clone(), props.location.clone());
+                        let val = AirTree::local_var(
+                            &field_name_interned,
+                            arg_type.clone(),
+                            props.location.clone(),
+                        );
 
                         let then = if field_name_interned != DISCARDED {
                             self.assignment(
@@ -1783,7 +1964,11 @@ impl<'a> CodeGenerator<'a> {
 
                 let subject_name_interned = introduce_name(&mut self.interner, &subject_name);
 
-                let local_value = AirTree::local_var(&constructor_name_interned, tipo.clone(), SourceLocation::empty());
+                let local_value = AirTree::local_var(
+                    &constructor_name_interned,
+                    tipo.clone(),
+                    SourceLocation::empty(),
+                );
 
                 let data_type = lookup_data_type_by_tipo(&self.data_types, tipo)
                     .unwrap_or_else(|| unreachable!("Failed to find definition for {}", name));
@@ -1794,7 +1979,12 @@ impl<'a> CodeGenerator<'a> {
                     .any(|dec| matches!(dec.kind, DecoratorKind::List));
 
                 let then = if check_replaceable_opaque_type(tipo, &self.data_types) {
-                    AirTree::let_assignment(&fields[0].1, local_value.clone(), then, SourceLocation::empty())
+                    AirTree::let_assignment(
+                        &fields[0].1,
+                        local_value.clone(),
+                        then,
+                        SourceLocation::empty(),
+                    )
                 } else {
                     AirTree::fields_expose(
                         fields,
@@ -1906,7 +2096,11 @@ impl<'a> CodeGenerator<'a> {
                         )
                     });
 
-                    let val = AirTree::local_var(&tuple_name_interned, arg_type.clone(), props.location.clone());
+                    let val = AirTree::local_var(
+                        &tuple_name_interned,
+                        arg_type.clone(),
+                        props.location.clone(),
+                    );
 
                     let then = if DISCARDED != tuple_name_interned {
                         self.assignment(
@@ -1948,7 +2142,8 @@ impl<'a> CodeGenerator<'a> {
 
                 let name_interned = introduce_name(&mut self.interner, &name);
 
-                let local_var = AirTree::local_var(&name_interned, tipo.clone(), SourceLocation::empty());
+                let local_var =
+                    AirTree::local_var(&name_interned, tipo.clone(), SourceLocation::empty());
 
                 let tree = assign_casted_value(
                     name_interned,
@@ -2032,16 +2227,28 @@ impl<'a> CodeGenerator<'a> {
 
                 let expect_snd = self.expect_type_assign(
                     &inner_pair_types[1],
-                    AirTree::local_var(snd_name_interned.clone(), inner_pair_types[1].clone(), SourceLocation::empty()),
+                    AirTree::local_var(
+                        snd_name_interned.clone(),
+                        inner_pair_types[1].clone(),
+                        SourceLocation::empty(),
+                    ),
                     defined_data_types,
                     location,
                     AirTree::call(
-                        AirTree::local_var(&curried_expect_on_list_interned, Type::void(), SourceLocation::empty()),
+                        AirTree::local_var(
+                            &curried_expect_on_list_interned,
+                            Type::void(),
+                            SourceLocation::empty(),
+                        ),
                         Type::void(),
                         vec![AirTree::builtin(
                             DefaultFunction::TailList,
                             Type::list(Type::data()),
-                            vec![AirTree::local_var(&list_interned, tipo.clone(), SourceLocation::empty())],
+                            vec![AirTree::local_var(
+                                &list_interned,
+                                tipo.clone(),
+                                SourceLocation::empty(),
+                            )],
                             SourceLocation::empty(),
                         )],
                         SourceLocation::empty(),
@@ -2051,7 +2258,11 @@ impl<'a> CodeGenerator<'a> {
 
                 let expect_fst = self.expect_type_assign(
                     &inner_pair_types[0],
-                    AirTree::local_var(fst_name_interned.clone(), inner_pair_types[0].clone(), SourceLocation::empty()),
+                    AirTree::local_var(
+                        fst_name_interned.clone(),
+                        inner_pair_types[0].clone(),
+                        SourceLocation::empty(),
+                    ),
                     defined_data_types,
                     location,
                     expect_snd,
@@ -2070,7 +2281,11 @@ impl<'a> CodeGenerator<'a> {
                                 AirTree::builtin(
                                     DefaultFunction::HeadList,
                                     Type::pair(Type::data(), Type::data()),
-                                    vec![AirTree::local_var(list_interned, tipo.clone(), SourceLocation::empty())],
+                                    vec![AirTree::local_var(
+                                        list_interned,
+                                        tipo.clone(),
+                                        SourceLocation::empty(),
+                                    )],
                                     SourceLocation::empty(),
                                 ),
                                 AirTree::pair_access(
@@ -2137,13 +2352,22 @@ impl<'a> CodeGenerator<'a> {
                     ),
                     Type::void(),
                     vec![
-                        AirTree::local_var(&map_name_interned, tipo.clone(), SourceLocation::empty()),
+                        AirTree::local_var(
+                            &map_name_interned,
+                            tipo.clone(),
+                            SourceLocation::empty(),
+                        ),
                         unwrap_function,
                     ],
                     SourceLocation::empty(),
                 );
 
-                let tree = AirTree::let_assignment(map_name_interned, value, func_call, SourceLocation::empty());
+                let tree = AirTree::let_assignment(
+                    map_name_interned,
+                    value,
+                    func_call,
+                    SourceLocation::empty(),
+                );
 
                 self.interner.pop_text(map_name);
                 self.interner.pop_text(pair_name);
@@ -2181,7 +2405,11 @@ impl<'a> CodeGenerator<'a> {
 
                             let expect_tuple_item = self.expect_type_assign(
                                 arg,
-                                AirTree::local_var(&tuple_index_name_interned, arg.clone(), SourceLocation::empty()),
+                                AirTree::local_var(
+                                    &tuple_index_name_interned,
+                                    arg.clone(),
+                                    SourceLocation::empty(),
+                                ),
                                 defined_data_types,
                                 location,
                                 then,
@@ -2207,7 +2435,12 @@ impl<'a> CodeGenerator<'a> {
                     SourceLocation::empty(),
                 );
 
-                let tree = AirTree::let_assignment(tuple_name_interned, value, tuple_access, SourceLocation::empty());
+                let tree = AirTree::let_assignment(
+                    tuple_name_interned,
+                    value,
+                    tuple_access,
+                    SourceLocation::empty(),
+                );
 
                 self.interner.pop_text(tuple_name);
 
@@ -2235,7 +2468,11 @@ impl<'a> CodeGenerator<'a> {
                     let unwrap_function = AirTree::anon_func(
                         vec![list_interned.clone(), curried_func_interned.clone()],
                         AirTree::list_empty(
-                            AirTree::local_var(&list_interned, tipo.clone(), SourceLocation::empty()),
+                            AirTree::local_var(
+                                &list_interned,
+                                tipo.clone(),
+                                SourceLocation::empty(),
+                            ),
                             then,
                             AirTree::anon_func(
                                 vec![],
@@ -2244,13 +2481,21 @@ impl<'a> CodeGenerator<'a> {
                                     AirTree::builtin(
                                         DefaultFunction::HeadList,
                                         Type::data(),
-                                        vec![AirTree::local_var(&list_interned, tipo.clone(), SourceLocation::empty())],
+                                        vec![AirTree::local_var(
+                                            &list_interned,
+                                            tipo.clone(),
+                                            SourceLocation::empty(),
+                                        )],
                                         SourceLocation::empty(),
                                     ),
                                     AirTree::soft_cast_assignment(
                                         &item_name_interned,
                                         inner_list_type.clone(),
-                                        AirTree::local_var(&item_name_interned, Type::data(), SourceLocation::empty()),
+                                        AirTree::local_var(
+                                            &item_name_interned,
+                                            Type::data(),
+                                            SourceLocation::empty(),
+                                        ),
                                         self.expect_type_assign(
                                             inner_list_type,
                                             AirTree::local_var(
@@ -2336,13 +2581,22 @@ impl<'a> CodeGenerator<'a> {
                         ),
                         Type::void(),
                         vec![
-                            AirTree::local_var(&list_name_interned, tipo.clone(), SourceLocation::empty()),
+                            AirTree::local_var(
+                                &list_name_interned,
+                                tipo.clone(),
+                                SourceLocation::empty(),
+                            ),
                             unwrap_function,
                         ],
                         SourceLocation::empty(),
                     );
 
-                    let tree = AirTree::let_assignment(list_name_interned, value, func_call, SourceLocation::empty());
+                    let tree = AirTree::let_assignment(
+                        list_name_interned,
+                        value,
+                        func_call,
+                        SourceLocation::empty(),
+                    );
 
                     self.interner.pop_text(list_name);
                     self.interner.pop_text(item_name);
@@ -2368,7 +2622,11 @@ impl<'a> CodeGenerator<'a> {
 
                 let expect_snd = self.expect_type_assign(
                     &tuple_inner_types[1],
-                    AirTree::local_var(snd_name_interned.clone(), tuple_inner_types[1].clone(), SourceLocation::empty()),
+                    AirTree::local_var(
+                        snd_name_interned.clone(),
+                        tuple_inner_types[1].clone(),
+                        SourceLocation::empty(),
+                    ),
                     defined_data_types,
                     location,
                     then,
@@ -2377,7 +2635,11 @@ impl<'a> CodeGenerator<'a> {
 
                 let expect_fst = self.expect_type_assign(
                     &tuple_inner_types[0],
-                    AirTree::local_var(fst_name_interned.clone(), tuple_inner_types[0].clone(), SourceLocation::empty()),
+                    AirTree::local_var(
+                        fst_name_interned.clone(),
+                        tuple_inner_types[0].clone(),
+                        SourceLocation::empty(),
+                    ),
                     defined_data_types,
                     location,
                     expect_snd,
@@ -2395,7 +2657,12 @@ impl<'a> CodeGenerator<'a> {
                     SourceLocation::empty(),
                 );
 
-                let tree = AirTree::let_assignment(pair_name_interned, value, pair_access, SourceLocation::empty());
+                let tree = AirTree::let_assignment(
+                    pair_name_interned,
+                    value,
+                    pair_access,
+                    SourceLocation::empty(),
+                );
 
                 self.interner.pop_text(pair_name);
                 self.interner.pop_text(fst_name);
@@ -2452,9 +2719,13 @@ impl<'a> CodeGenerator<'a> {
                         SourceLocation::empty(),
                     );
 
-                    let otherwise_delayed = otherwise
-                        .as_ref()
-                        .map(|_| AirTree::local_var("otherwise_delayed", Type::void(), SourceLocation::empty()));
+                    let otherwise_delayed = otherwise.as_ref().map(|_| {
+                        AirTree::local_var(
+                            "otherwise_delayed",
+                            Type::void(),
+                            SourceLocation::empty(),
+                        )
+                    });
 
                     let is_never = data_type.is_never();
 
@@ -2500,7 +2771,11 @@ impl<'a> CodeGenerator<'a> {
 
                                     self.expect_type_assign(
                                         &arg_tipo.clone(),
-                                        AirTree::local_var(arg_name, arg_tipo, SourceLocation::empty()),
+                                        AirTree::local_var(
+                                            arg_name,
+                                            arg_tipo,
+                                            SourceLocation::empty(),
+                                        ),
                                         defined_data_types,
                                         location,
                                         then,
@@ -2576,7 +2851,12 @@ impl<'a> CodeGenerator<'a> {
                             tipo.clone(),
                             SourceLocation::empty(),
                         ),
-                        AirTree::call(constr_clauses, Type::void(), vec![], SourceLocation::empty()),
+                        AirTree::call(
+                            constr_clauses,
+                            Type::void(),
+                            vec![],
+                            SourceLocation::empty(),
+                        ),
                         SourceLocation::empty(),
                     );
 
@@ -2607,9 +2887,16 @@ impl<'a> CodeGenerator<'a> {
                 }
 
                 let args = if let Some(otherwise) = otherwise {
-                    vec![value, AirTree::anon_func(vec![], then, true, SourceLocation::empty()), otherwise]
+                    vec![
+                        value,
+                        AirTree::anon_func(vec![], then, true, SourceLocation::empty()),
+                        otherwise,
+                    ]
                 } else {
-                    vec![value, AirTree::anon_func(vec![], then, true, SourceLocation::empty())]
+                    vec![
+                        value,
+                        AirTree::anon_func(vec![], then, true, SourceLocation::empty()),
+                    ]
                 };
 
                 let module_fn = ValueConstructorVariant::ModuleFn {
@@ -2726,7 +3013,11 @@ impl<'a> CodeGenerator<'a> {
                     test_subject_name,
                     return_tipo.clone(),
                     current_tipo.clone(),
-                    AirTree::local_var(current_subject_name, current_tipo.clone(), SourceLocation::empty()),
+                    AirTree::local_var(
+                        current_subject_name,
+                        current_tipo.clone(),
+                        SourceLocation::empty(),
+                    ),
                     clauses,
                     SourceLocation::empty(),
                 );
@@ -2913,7 +3204,11 @@ impl<'a> CodeGenerator<'a> {
                     current_subject_name.clone(),
                     return_tipo.clone(),
                     current_tipo.clone(),
-                    AirTree::local_var(current_subject_name, current_tipo.clone(), SourceLocation::empty()),
+                    AirTree::local_var(
+                        current_subject_name,
+                        current_tipo.clone(),
+                        SourceLocation::empty(),
+                    ),
                     list_clauses.1,
                     SourceLocation::empty(),
                 );
@@ -2928,7 +3223,11 @@ impl<'a> CodeGenerator<'a> {
 
                         (
                             current_tipo.clone(),
-                            AirTree::local_var(item.assigned.clone(), current_tipo, SourceLocation::empty()),
+                            AirTree::local_var(
+                                item.assigned.clone(),
+                                current_tipo,
+                                SourceLocation::empty(),
+                            ),
                         )
                     })
                     .collect_vec();
@@ -3808,11 +4107,14 @@ impl<'a> CodeGenerator<'a> {
                                 })
                                 .collect_vec();
 
-                            let mut function_air_tree_body = AirTree::no_op(self.build(
-                                &function_def.body,
-                                &generic_function_key.module_name,
-                                &[],
-                            ), SourceLocation::empty());
+                            let mut function_air_tree_body = AirTree::no_op(
+                                self.build(
+                                    &function_def.body,
+                                    &generic_function_key.module_name,
+                                    &[],
+                                ),
+                                SourceLocation::empty(),
+                            );
 
                             function_air_tree_body.traverse_tree_with(&mut |air_tree, _| {
                                 erase_opaque_type_operations(air_tree, &self.data_types);
@@ -3850,11 +4152,10 @@ impl<'a> CodeGenerator<'a> {
                             })
                             .collect_vec();
 
-                        let mut function_air_tree_body = AirTree::no_op(self.build(
-                            &function_def.body,
-                            &generic_function_key.module_name,
-                            &[],
-                        ), SourceLocation::empty());
+                        let mut function_air_tree_body = AirTree::no_op(
+                            self.build(&function_def.body, &generic_function_key.module_name, &[]),
+                            SourceLocation::empty(),
+                        );
 
                         function_air_tree_body.traverse_tree_with(&mut |air_tree, _| {
                             erase_opaque_type_operations(air_tree, &self.data_types);
@@ -3902,9 +4203,15 @@ impl<'a> CodeGenerator<'a> {
         arg_stack.pop().unwrap()
     }
 
-    fn gen_uplc(&mut self, ir: Air, arg_stack: &mut Vec<Term<Name, SourceLocation>>) -> Option<Term<Name, SourceLocation>> {
+    fn gen_uplc(
+        &mut self,
+        ir: Air,
+        arg_stack: &mut Vec<Term<Name, SourceLocation>>,
+    ) -> Option<Term<Name, SourceLocation>> {
         match ir {
-            Air::Int { value, location } => Some(Term::integer_with_ctx(value.parse().unwrap(), location)),
+            Air::Int { value, location } => {
+                Some(Term::integer_with_ctx(value.parse().unwrap(), location))
+            }
             Air::String { value, location } => Some(Term::string_with_ctx(value, location)),
             Air::ByteArray { bytes, location } => Some(Term::byte_string_with_ctx(bytes, location)),
             Air::Bool { value, location } => Some(Term::bool_with_ctx(value, location)),
@@ -3937,8 +4244,10 @@ impl<'a> CodeGenerator<'a> {
                         .get(&access_key)
                         .unwrap_or_else(|| panic!("unknown constant {module}.{name}"));
 
-                    let mut value =
-                        AirTree::no_op(self.build(definition, &access_key.module_name, &[]), SourceLocation::empty());
+                    let mut value = AirTree::no_op(
+                        self.build(definition, &access_key.module_name, &[]),
+                        SourceLocation::empty(),
+                    );
 
                     value.traverse_tree_with(&mut |air_tree, _| {
                         erase_opaque_type_operations(air_tree, &self.data_types);
@@ -3948,8 +4257,10 @@ impl<'a> CodeGenerator<'a> {
 
                     let term = self.uplc_code_gen(value.to_vec());
 
-                    let mut program =
-                        self.new_program(self.special_functions.apply_used_functions(term.map_context(|_| ())));
+                    let mut program = self.new_program(
+                        self.special_functions
+                            .apply_used_functions(term.map_context(|_| ())),
+                    );
 
                     let mut interner = CodeGenInterner::new();
 
@@ -4135,7 +4446,12 @@ impl<'a> CodeGenerator<'a> {
                 value: UplcConstant::Unit.into(),
                 context: location,
             }),
-            Air::List { count, tipo, tail, location } => {
+            Air::List {
+                count,
+                tipo,
+                tail,
+                location,
+            } => {
                 let mut args = vec![];
 
                 for _ in 0..count {
@@ -4310,7 +4626,9 @@ impl<'a> CodeGenerator<'a> {
 
                     match term.pierce_no_inlines_ref() {
                         Term::Var { .. } => Some(term.force()),
-                        Term::Delay { term: inner_term, .. } => Some(inner_term.as_ref().clone()),
+                        Term::Delay {
+                            term: inner_term, ..
+                        } => Some(inner_term.as_ref().clone()),
                         Term::Apply { .. } => Some(term.force()),
                         _ => unreachable!(
                             "Shouldn't call anything other than var or apply\n{:#?}",
@@ -4319,7 +4637,12 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
             }
-            Air::Builtin { func, tipo, count, location } => {
+            Air::Builtin {
+                func,
+                tipo,
+                count,
+                location,
+            } => {
                 let mut arg_vec = vec![];
                 for _ in 0..count {
                     arg_vec.push(arg_stack.pop().unwrap());
@@ -4348,7 +4671,10 @@ impl<'a> CodeGenerator<'a> {
                         builder::undata_builtin(&func, count, ret_tipo, arg_vec, &self.data_types)
                     }
                     _ => {
-                        let mut term: Term<Name, SourceLocation> = Term::Builtin { func, context: location.clone() };
+                        let mut term: Term<Name, SourceLocation> = Term::Builtin {
+                            func,
+                            context: location.clone(),
+                        };
 
                         term = builder::apply_builtin_forces(term, func.force_count());
 
@@ -4411,13 +4737,17 @@ impl<'a> CodeGenerator<'a> {
                                     if matches!(name, BinOp::Eq) {
                                         left.delayed_if_then_else(
                                             right.clone(),
-                                            right.if_then_else(Term::bool_with_ctx(false, location.clone()), Term::bool_with_ctx(true, location.clone())),
+                                            right.if_then_else(
+                                                Term::bool_with_ctx(false, location.clone()),
+                                                Term::bool_with_ctx(true, location.clone()),
+                                            ),
                                         )
                                     } else {
                                         left.delayed_if_then_else(
-                                            right
-                                                .clone()
-                                                .if_then_else(Term::bool_with_ctx(false, location.clone()), Term::bool_with_ctx(true, location.clone())),
+                                            right.clone().if_then_else(
+                                                Term::bool_with_ctx(false, location.clone()),
+                                                Term::bool_with_ctx(true, location.clone()),
+                                            ),
                                             right,
                                         )
                                     }
@@ -4479,13 +4809,16 @@ impl<'a> CodeGenerator<'a> {
 
                                     builtin.apply(left).apply(right)
                                 }
-                                Some(UplcType::Unit) => {
-                                    left.choose_unit(right.choose_unit(Term::bool_with_ctx(true, location.clone())))
-                                }
+                                Some(UplcType::Unit) => left.choose_unit(
+                                    right.choose_unit(Term::bool_with_ctx(true, location.clone())),
+                                ),
                             };
 
                         if !left_tipo.is_bool() && matches!(name, BinOp::NotEq) {
-                            binop_eq.if_then_else(Term::bool_with_ctx(false, location.clone()), Term::bool_with_ctx(true, location.clone()))
+                            binop_eq.if_then_else(
+                                Term::bool_with_ctx(false, location.clone()),
+                                Term::bool_with_ctx(true, location.clone()),
+                            )
                         } else {
                             binop_eq
                         }
@@ -4701,7 +5034,11 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(term)
             }
-            Air::CastFromData { tipo, full_cast, location } => {
+            Air::CastFromData {
+                tipo,
+                full_cast,
+                location,
+            } => {
                 let mut term = arg_stack.pop().unwrap();
 
                 term = if full_cast {
@@ -4921,7 +5258,12 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(term)
             }
-            Air::Constr { tag, count, tipo, location } => {
+            Air::Constr {
+                tag,
+                count,
+                tipo,
+                location,
+            } => {
                 let mut arg_vec = vec![];
                 for _ in 0..count {
                     arg_vec.push(arg_stack.pop().unwrap());
@@ -4941,7 +5283,10 @@ impl<'a> CodeGenerator<'a> {
 
                 if let Some(constr_index) = tag {
                     term = Term::constr_data()
-                        .apply(Term::integer_with_ctx(constr_index.into(), location.clone()))
+                        .apply(Term::integer_with_ctx(
+                            constr_index.into(),
+                            location.clone(),
+                        ))
                         .apply(term);
                 }
 
@@ -5053,7 +5398,11 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(term)
             }
-            Air::Tuple { count, tipo, location } => {
+            Air::Tuple {
+                count,
+                tipo,
+                location,
+            } => {
                 let mut args = vec![];
 
                 let tuple_sub_types = tipo.get_inner_types();
@@ -5238,7 +5587,10 @@ impl<'a> CodeGenerator<'a> {
                 let value = arg_stack.pop().unwrap();
 
                 let term = match op {
-                    UnOp::Not => value.if_then_else(Term::bool_with_ctx(false, location.clone()), Term::bool_with_ctx(true, location)),
+                    UnOp::Not => value.if_then_else(
+                        Term::bool_with_ctx(false, location.clone()),
+                        Term::bool_with_ctx(true, location),
+                    ),
                     UnOp::Negate => {
                         if let Term::Constant { value: c, .. } = &value {
                             if let UplcConstant::Integer(i) = c.as_ref() {
@@ -5316,7 +5668,10 @@ impl<'a> CodeGenerator<'a> {
                 let otherwise = if is_expect {
                     arg_stack.pop().unwrap()
                 } else {
-                    (Term::Error { context: SourceLocation::default() }).delay()
+                    (Term::Error {
+                        context: SourceLocation::default(),
+                    })
+                    .delay()
                 };
 
                 let list_id = self.id_gen.next();
@@ -5324,7 +5679,12 @@ impl<'a> CodeGenerator<'a> {
                 if let Some(name) = snd {
                     let value = Term::snd_pair().apply(Term::var(format!("__pair_{list_id}")));
                     term = if is_expect {
-                        if otherwise == (Term::Error { context: SourceLocation::default() }).delay() {
+                        if otherwise
+                            == (Term::Error {
+                                context: SourceLocation::default(),
+                            })
+                            .delay()
+                        {
                             term.lambda(name).apply(unknown_data_to_type(
                                 value,
                                 &inner_types[1],
@@ -5352,7 +5712,12 @@ impl<'a> CodeGenerator<'a> {
                 if let Some(name) = fst {
                     let value = Term::fst_pair().apply(Term::var(format!("__pair_{list_id}")));
                     term = if is_expect {
-                        if otherwise == (Term::Error { context: SourceLocation::default() }).delay() {
+                        if otherwise
+                            == (Term::Error {
+                                context: SourceLocation::default(),
+                            })
+                            .delay()
+                        {
                             term.lambda(name).apply(unknown_data_to_type(
                                 value,
                                 &inner_types[0],
@@ -5390,9 +5755,18 @@ impl<'a> CodeGenerator<'a> {
 
                 Some(term)
             }
-            Air::ErrorTerm { validator, location, .. } => {
+            Air::ErrorTerm {
+                validator,
+                location,
+                ..
+            } => {
                 if validator {
-                    Some((Term::Error { context: location.clone() }).apply((Term::Error { context: location }).force()))
+                    Some(
+                        (Term::Error {
+                            context: location.clone(),
+                        })
+                        .apply((Term::Error { context: location }).force()),
+                    )
                 } else {
                     Some(Term::Error { context: location })
                 }
@@ -5404,7 +5778,12 @@ impl<'a> CodeGenerator<'a> {
                 let then = arg_stack.pop().unwrap();
                 let otherwise = arg_stack.pop().unwrap();
 
-                if otherwise == (Term::Error { context: SourceLocation::default() }).delay() {
+                if otherwise
+                    == (Term::Error {
+                        context: SourceLocation::default(),
+                    })
+                    .delay()
+                {
                     Some(then.lambda(name).apply(unknown_data_to_type(
                         value,
                         &tipo,
