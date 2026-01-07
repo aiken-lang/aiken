@@ -46,6 +46,10 @@ impl<C: Clone> Env<C> {
     pub fn len(&self) -> usize {
         self.values.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
 }
 
 impl<C: Clone> Default for Env<C> {
