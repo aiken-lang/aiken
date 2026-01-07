@@ -2521,6 +2521,7 @@ impl<C: Clone + Default> Program<Name, C> {
         let mut id_mapped_curry_terms: IndexMap<CurriedName, (Scope, Term<Name, C>, usize)> =
             IndexMap::new();
         let mut curry_applied_ids = vec![];
+        #[allow(clippy::type_complexity)]
         let mut scope_mapped_to_term: IndexMap<Scope, Vec<(CurriedName, Term<Name, C>)>> =
             IndexMap::new();
 
