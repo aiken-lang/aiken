@@ -59,6 +59,11 @@ pub enum Event {
         seed: u32,
         benchmarks: Vec<TestResult<UntypedExpr, UntypedExpr>>,
     },
+    FinishedCoverage {
+        output_path: PathBuf,
+        lines_hit: usize,
+        lines_total: usize,
+    },
     WaitingForBuildDirLock,
     ResolvingPackages {
         name: String,

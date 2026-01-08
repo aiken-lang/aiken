@@ -1,0 +1,1196 @@
+use aiken_lang::{ast::SourceLocation as AstSourceLocation, line_numbers::LineNumbers};
+use indexmap::IndexMap;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::collections::BTreeMap;
+use uplc::ast::{Name, Term};
+
+/// Source map for a compiled UPLC program.
+/// Maps post-order term indices to source locations.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SourceMap {
+    /// Format version
+    pub version: u32,
+
+    /// List of source file paths referenced
+    pub sources: Vec<String>,
+
+    /// Map from post-order node index to source location
+    pub locations: BTreeMap<u64, SourceLocation>,
+
+    /// Map from node index to variable name (Phase 2)
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub names: BTreeMap<u64, String>,
+
+    /// Map from node index to type reference (Phase 3)
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub types: BTreeMap<u64, TypeRef>,
+}
+
+/// A source location within a file.
+/// Serializes as [source_index, line, col] or [source_index, line, col, end_line, end_col]
+#[derive(Debug, Clone, PartialEq)]
+pub struct SourceLocation {
+    pub source_index: usize,
+    pub line: usize,
+    pub column: usize,
+    pub end_line: Option<usize>,
+    pub end_column: Option<usize>,
+}
+
+/// Reference to a type in the blueprint definitions
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TypeRef {
+    #[serde(rename = "$ref")]
+    pub reference: String,
+}
+
+impl Serialize for SourceLocation {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match (self.end_line, self.end_column) {
+            (Some(el), Some(ec)) => {
+                (self.source_index, self.line, self.column, el, ec).serialize(serializer)
+            }
+            _ => (self.source_index, self.line, self.column).serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for SourceLocation {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let arr: Vec<usize> = Vec::deserialize(deserializer)?;
+        match arr.as_slice() {
+            [source_index, line, column] => Ok(SourceLocation {
+                source_index: *source_index,
+                line: *line,
+                column: *column,
+                end_line: None,
+                end_column: None,
+            }),
+            [source_index, line, column, end_line, end_column] => Ok(SourceLocation {
+                source_index: *source_index,
+                line: *line,
+                column: *column,
+                end_line: Some(*end_line),
+                end_column: Some(*end_column),
+            }),
+            _ => Err(serde::de::Error::custom(
+                "expected array of 3 or 5 elements",
+            )),
+        }
+    }
+}
+
+impl SourceMap {
+    pub fn new() -> Self {
+        SourceMap {
+            version: 1,
+            sources: Vec::new(),
+            locations: BTreeMap::new(),
+            names: BTreeMap::new(),
+            types: BTreeMap::new(),
+        }
+    }
+
+    /// Get or insert a source file, returning its index
+    fn get_or_insert_source(&mut self, path: &str) -> usize {
+        if let Some(idx) = self.sources.iter().position(|s| s == path) {
+            idx
+        } else {
+            let idx = self.sources.len();
+            self.sources.push(path.to_string());
+            idx
+        }
+    }
+
+    /// Build a source map from a Term tree with Span context.
+    /// Uses post-order traversal so parameter application doesn't shift indices.
+    /// Searches all module sources to find the correct source for each span.
+    pub fn from_term(
+        term: &Term<Name, AstSourceLocation>,
+        _module_name: &str,
+        module_sources: &IndexMap<&str, &(String, LineNumbers)>,
+    ) -> Self {
+        let mut source_map = SourceMap::new();
+        let mut counter: u64 = 0;
+
+        visit_post_order(term, &mut counter, &mut source_map, module_sources);
+
+        source_map
+    }
+}
+
+impl Default for SourceMap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SourceMap {
+    /// Restore variable names from the source map into a program's NamedDeBruijn terms.
+    ///
+    /// When UPLC programs are serialized to flat/CBOR format, variable names are lost
+    /// and replaced with placeholder names (like "i_0"). This method restores the original
+    /// names by matching the `context` field of each term against indices in the source map.
+    ///
+    /// # Use Case
+    ///
+    /// This is primarily used by external tools (e.g., Gastronomy debugger) that load
+    /// compiled programs and need human-readable variable names for debugging/stepping.
+    ///
+    /// # Requirements
+    ///
+    /// The input term must have `u64` context values that correspond to the post-order
+    /// indices stored in this source map (as generated by [`SourceMap::from_term`]).
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Load a compiled program and its source map
+    /// let program = load_program_from_cbor(...);
+    /// let source_map = load_source_map(...);
+    ///
+    /// // Restore variable names for debugging
+    /// let named_program = source_map.inject_names(&program.term);
+    /// ```
+    pub fn inject_names(
+        &self,
+        term: &uplc::ast::Term<uplc::ast::NamedDeBruijn, u64>,
+    ) -> uplc::ast::Term<uplc::ast::NamedDeBruijn, u64> {
+        inject_names_recursive(term, &self.names)
+    }
+}
+
+/// Recursively inject names into a term tree using the names map.
+fn inject_names_recursive(
+    term: &uplc::ast::Term<uplc::ast::NamedDeBruijn, u64>,
+    names: &BTreeMap<u64, String>,
+) -> uplc::ast::Term<uplc::ast::NamedDeBruijn, u64> {
+    use std::rc::Rc;
+    use uplc::ast::{NamedDeBruijn, Term};
+
+    match term {
+        Term::Var { name, context } => {
+            let new_name = if let Some(real_name) = names.get(context) {
+                NamedDeBruijn {
+                    text: real_name.clone(),
+                    index: name.index,
+                }
+            } else {
+                name.as_ref().clone()
+            };
+            Term::Var {
+                name: Rc::new(new_name),
+                context: *context,
+            }
+        }
+        Term::Lambda {
+            parameter_name,
+            body,
+            context,
+        } => {
+            let new_name = if let Some(real_name) = names.get(context) {
+                NamedDeBruijn {
+                    text: real_name.clone(),
+                    index: parameter_name.index,
+                }
+            } else {
+                parameter_name.as_ref().clone()
+            };
+            Term::Lambda {
+                parameter_name: Rc::new(new_name),
+                body: Rc::new(inject_names_recursive(body, names)),
+                context: *context,
+            }
+        }
+        Term::Delay {
+            term: inner,
+            context,
+        } => Term::Delay {
+            term: Rc::new(inject_names_recursive(inner, names)),
+            context: *context,
+        },
+        Term::Force {
+            term: inner,
+            context,
+        } => Term::Force {
+            term: Rc::new(inject_names_recursive(inner, names)),
+            context: *context,
+        },
+        Term::Apply {
+            function,
+            argument,
+            context,
+        } => Term::Apply {
+            function: Rc::new(inject_names_recursive(function, names)),
+            argument: Rc::new(inject_names_recursive(argument, names)),
+            context: *context,
+        },
+        Term::Constant { value, context } => Term::Constant {
+            value: value.clone(),
+            context: *context,
+        },
+        Term::Error { context } => Term::Error { context: *context },
+        Term::Builtin { func, context } => Term::Builtin {
+            func: *func,
+            context: *context,
+        },
+        Term::Constr {
+            tag,
+            fields,
+            context,
+        } => Term::Constr {
+            tag: *tag,
+            fields: fields
+                .iter()
+                .map(|f| inject_names_recursive(f, names))
+                .collect(),
+            context: *context,
+        },
+        Term::Case {
+            constr,
+            branches,
+            context,
+        } => Term::Case {
+            constr: Rc::new(inject_names_recursive(constr, names)),
+            branches: branches
+                .iter()
+                .map(|b| inject_names_recursive(b, names))
+                .collect(),
+            context: *context,
+        },
+    }
+}
+
+/// Visit a term tree in post-order and assign indices.
+/// Post-order means we visit children first, then assign index to current node.
+fn visit_post_order(
+    term: &Term<Name, AstSourceLocation>,
+    counter: &mut u64,
+    source_map: &mut SourceMap,
+    module_sources: &IndexMap<&str, &(String, LineNumbers)>,
+) {
+    // Visit children first (post-order)
+    match term {
+        Term::Apply {
+            function, argument, ..
+        } => {
+            // Visit argument first, then function (right-to-left for consistency)
+            visit_post_order(argument, counter, source_map, module_sources);
+            visit_post_order(function, counter, source_map, module_sources);
+        }
+        Term::Lambda { body, .. } => {
+            visit_post_order(body, counter, source_map, module_sources);
+        }
+        Term::Delay { term: inner, .. } => {
+            visit_post_order(inner, counter, source_map, module_sources);
+        }
+        Term::Force { term: inner, .. } => {
+            visit_post_order(inner, counter, source_map, module_sources);
+        }
+        Term::Case {
+            constr, branches, ..
+        } => {
+            visit_post_order(constr, counter, source_map, module_sources);
+            for branch in branches {
+                visit_post_order(branch, counter, source_map, module_sources);
+            }
+        }
+        Term::Constr { fields, .. } => {
+            for field in fields {
+                visit_post_order(field, counter, source_map, module_sources);
+            }
+        }
+        // Leaf nodes: Var, Constant, Builtin, Error
+        Term::Var { .. } | Term::Constant { .. } | Term::Builtin { .. } | Term::Error { .. } => {}
+    }
+
+    // Assign index to this node (after children)
+    let index = *counter;
+    *counter += 1;
+
+    // Extract variable names from Lambda parameters and Var references
+    match term {
+        Term::Lambda { parameter_name, .. } => {
+            let interned_name = &parameter_name.text;
+            let original_name = strip_interned_suffix(interned_name);
+            if should_include_name(original_name) {
+                source_map.names.insert(index, original_name.to_string());
+            }
+        }
+        Term::Var { name, .. } => {
+            let interned_name = &name.text;
+            let original_name = strip_interned_suffix(interned_name);
+            if should_include_name(original_name) {
+                source_map.names.insert(index, original_name.to_string());
+            }
+        }
+        _ => {}
+    }
+
+    // Extract source location from the term's context
+    let source_loc = get_source_location(term);
+
+    // Skip empty spans
+    if source_loc.is_empty() {
+        return;
+    }
+
+    // Use the module name from the source location to look up the correct source
+    let module_name = &source_loc.module;
+    let span = &source_loc.span;
+
+    if let Some((src, line_numbers)) = module_sources.get(module_name.as_str()) {
+        // Check if span is within bounds of this module's source
+        if span.start < src.len() && span.end <= src.len() {
+            if let Some(start_loc) = line_numbers.line_and_column_number(span.start) {
+                let source_index = source_map.get_or_insert_source(module_name);
+
+                let (end_line, end_column) = if span.end > span.start {
+                    // Get end position (end is exclusive, so use end-1 for the last character)
+                    line_numbers
+                        .line_and_column_number(span.end.saturating_sub(1))
+                        .map(|loc| (Some(loc.line), Some(loc.column)))
+                        .unwrap_or((None, None))
+                } else {
+                    (None, None)
+                };
+
+                source_map.locations.insert(
+                    index,
+                    SourceLocation {
+                        source_index,
+                        line: start_loc.line,
+                        column: start_loc.column,
+                        end_line,
+                        end_column,
+                    },
+                );
+            }
+        }
+    }
+}
+
+/// Extract the source location from a term's context field
+fn get_source_location(term: &Term<Name, AstSourceLocation>) -> &AstSourceLocation {
+    match term {
+        Term::Var { context, .. } => context,
+        Term::Delay { context, .. } => context,
+        Term::Lambda { context, .. } => context,
+        Term::Apply { context, .. } => context,
+        Term::Constant { context, .. } => context,
+        Term::Force { context, .. } => context,
+        Term::Error { context } => context,
+        Term::Builtin { context, .. } => context,
+        Term::Constr { context, .. } => context,
+        Term::Case { context, .. } => context,
+    }
+}
+
+/// Strip the interned suffix from a variable name.
+/// Converts "x_id_0" -> "x", "foo_id_42" -> "foo", etc.
+/// If the name doesn't match the pattern, returns it unchanged.
+fn strip_interned_suffix(name: &str) -> &str {
+    // Pattern: "{name}_id_{N}" where N is a non-negative integer
+    // We need to find the last "_id_" and verify what follows is all digits
+    if let Some(idx) = name.rfind("_id_") {
+        let suffix = &name[idx + 4..]; // Skip "_id_"
+        if !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit()) {
+            return &name[..idx];
+        }
+    }
+    name
+}
+
+/// Determine if a variable name should be included in the source map.
+/// We include most names, including internal ones (like __context__) since they
+/// can be useful for debugging. We only filter out empty names.
+fn should_include_name(name: &str) -> bool {
+    !name.is_empty()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{self, json};
+    use std::rc::Rc;
+
+    #[test]
+    fn serialize_source_location_3_elements() {
+        let loc = SourceLocation {
+            source_index: 0,
+            line: 10,
+            column: 5,
+            end_line: None,
+            end_column: None,
+        };
+        assert_eq!(serde_json::to_value(&loc).unwrap(), json!([0, 10, 5]));
+    }
+
+    #[test]
+    fn serialize_source_location_5_elements() {
+        let loc = SourceLocation {
+            source_index: 0,
+            line: 10,
+            column: 5,
+            end_line: Some(10),
+            end_column: Some(25),
+        };
+        assert_eq!(
+            serde_json::to_value(&loc).unwrap(),
+            json!([0, 10, 5, 10, 25])
+        );
+    }
+
+    #[test]
+    fn deserialize_source_location_3_elements() {
+        let loc: SourceLocation = serde_json::from_value(json!([1, 42, 3])).unwrap();
+        assert_eq!(loc.source_index, 1);
+        assert_eq!(loc.line, 42);
+        assert_eq!(loc.column, 3);
+        assert_eq!(loc.end_line, None);
+        assert_eq!(loc.end_column, None);
+    }
+
+    #[test]
+    fn deserialize_source_location_5_elements() {
+        let loc: SourceLocation = serde_json::from_value(json!([0, 10, 12, 10, 25])).unwrap();
+        assert_eq!(loc.source_index, 0);
+        assert_eq!(loc.line, 10);
+        assert_eq!(loc.column, 12);
+        assert_eq!(loc.end_line, Some(10));
+        assert_eq!(loc.end_column, Some(25));
+    }
+
+    #[test]
+    fn serialize_source_map() {
+        let mut source_map = SourceMap::new();
+        source_map.sources.push("validators/spend.ak".to_string());
+        source_map.sources.push("lib/utils.ak".to_string());
+        source_map.locations.insert(
+            0,
+            SourceLocation {
+                source_index: 0,
+                line: 10,
+                column: 5,
+                end_line: None,
+                end_column: None,
+            },
+        );
+        source_map.locations.insert(
+            1,
+            SourceLocation {
+                source_index: 0,
+                line: 10,
+                column: 12,
+                end_line: Some(10),
+                end_column: Some(25),
+            },
+        );
+        source_map.locations.insert(
+            5,
+            SourceLocation {
+                source_index: 1,
+                line: 42,
+                column: 3,
+                end_line: None,
+                end_column: None,
+            },
+        );
+
+        let expected = json!({
+            "version": 1,
+            "sources": ["validators/spend.ak", "lib/utils.ak"],
+            "locations": {
+                "0": [0, 10, 5],
+                "1": [0, 10, 12, 10, 25],
+                "5": [1, 42, 3]
+            }
+        });
+
+        assert_eq!(serde_json::to_value(&source_map).unwrap(), expected);
+    }
+
+    #[test]
+    fn roundtrip_source_map() {
+        let json_str = r#"{
+            "version": 1,
+            "sources": ["validators/spend.ak"],
+            "locations": {
+                "0": [0, 10, 5],
+                "1": [0, 10, 12, 10, 25]
+            }
+        }"#;
+
+        let source_map: SourceMap = serde_json::from_str(json_str).unwrap();
+        assert_eq!(source_map.version, 1);
+        assert_eq!(source_map.sources, vec!["validators/spend.ak"]);
+        assert_eq!(source_map.locations.len(), 2);
+
+        // Verify roundtrip
+        let serialized = serde_json::to_string(&source_map).unwrap();
+        let deserialized: SourceMap = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(source_map, deserialized);
+    }
+
+    #[test]
+    fn from_term_post_order_numbering() {
+        use aiken_lang::{ast::Span, line_numbers::LineNumbers};
+
+        // Source code with known positions:
+        // Line 1, col 1-3: "foo"  (bytes 0-3)
+        // Line 2, col 1-3: "bar"  (bytes 4-7)
+        // Line 3, col 1-6: "result" (bytes 8-14)
+        let src = "foo\nbar\nresult";
+        let module_name = "test";
+        let data = (src.to_string(), LineNumbers::new(src));
+        let mut module_sources: IndexMap<&str, &(String, LineNumbers)> = IndexMap::new();
+        module_sources.insert(module_name, &data);
+
+        // Build a simple term tree:
+        //   Apply(function=Var("f"), argument=Var("x"))
+        //
+        // Post-order traversal visits:
+        //   1. argument first (Var "x") -> index 0
+        //   2. function next (Var "f") -> index 1
+        //   3. Apply last -> index 2
+        let term = Term::Apply {
+            context: AstSourceLocation::new(module_name, Span { start: 8, end: 14 }), // "result" on line 3
+            function: Rc::new(Term::Var {
+                context: AstSourceLocation::new(module_name, Span { start: 0, end: 3 }), // "foo" on line 1
+                name: Rc::new(Name {
+                    text: "f".to_string(),
+                    unique: 0.into(),
+                }),
+            }),
+            argument: Rc::new(Term::Var {
+                context: AstSourceLocation::new(module_name, Span { start: 4, end: 7 }), // "bar" on line 2
+                name: Rc::new(Name {
+                    text: "x".to_string(),
+                    unique: 1.into(),
+                }),
+            }),
+        };
+
+        let source_map = SourceMap::from_term(&term, module_name, &module_sources);
+
+        // Verify structure
+        assert_eq!(source_map.version, 1);
+        assert_eq!(source_map.sources, vec!["test"]);
+
+        // Verify post-order numbering:
+        // index 0: argument (Var "x") at line 2, col 1
+        // index 1: function (Var "f") at line 1, col 1
+        // index 2: Apply at line 3, col 1
+        assert_eq!(source_map.locations.len(), 3);
+
+        let loc0 = source_map.locations.get(&0).expect("should have index 0");
+        assert_eq!(loc0.source_index, 0);
+        assert_eq!(loc0.line, 2); // "bar" is on line 2
+
+        let loc1 = source_map.locations.get(&1).expect("should have index 1");
+        assert_eq!(loc1.source_index, 0);
+        assert_eq!(loc1.line, 1); // "foo" is on line 1
+
+        let loc2 = source_map.locations.get(&2).expect("should have index 2");
+        assert_eq!(loc2.source_index, 0);
+        assert_eq!(loc2.line, 3); // "result" is on line 3
+    }
+
+    #[test]
+    fn from_term_skips_empty_spans() {
+        use aiken_lang::{ast::Span, line_numbers::LineNumbers};
+
+        let src = "foo\nbar";
+        let module_name = "test";
+        let data = (src.to_string(), LineNumbers::new(src));
+        let mut module_sources: IndexMap<&str, &(String, LineNumbers)> = IndexMap::new();
+        module_sources.insert(module_name, &data);
+
+        // Term with empty span (start=0, end=0) should be skipped
+        let term = Term::Apply {
+            context: AstSourceLocation::empty(), // Empty span - should be skipped
+            function: Rc::new(Term::Var {
+                context: AstSourceLocation::new(module_name, Span { start: 0, end: 3 }), // Valid span
+                name: Rc::new(Name {
+                    text: "f".to_string(),
+                    unique: 0.into(),
+                }),
+            }),
+            argument: Rc::new(Term::Var {
+                context: AstSourceLocation::empty(), // Empty span - should be skipped
+                name: Rc::new(Name {
+                    text: "x".to_string(),
+                    unique: 1.into(),
+                }),
+            }),
+        };
+
+        let source_map = SourceMap::from_term(&term, module_name, &module_sources);
+
+        // Only index 1 (the function Var with valid span) should be present
+        assert_eq!(source_map.locations.len(), 1);
+        assert!(source_map.locations.contains_key(&1));
+    }
+
+    #[test]
+    fn from_term_nested_lambdas() {
+        use aiken_lang::{ast::Span, line_numbers::LineNumbers};
+
+        let src = "line1\nline2\nline3\nline4";
+        let module_name = "test";
+        let data = (src.to_string(), LineNumbers::new(src));
+        let mut module_sources: IndexMap<&str, &(String, LineNumbers)> = IndexMap::new();
+        module_sources.insert(module_name, &data);
+
+        // Lambda { body: Lambda { body: Var } }
+        // Post-order:
+        //   0: inner Var
+        //   1: inner Lambda
+        //   2: outer Lambda
+        let term = Term::Lambda {
+            context: AstSourceLocation::new(module_name, Span { start: 0, end: 5 }), // line 1
+            parameter_name: Rc::new(Name {
+                text: "x".to_string(),
+                unique: 0.into(),
+            }),
+            body: Rc::new(Term::Lambda {
+                context: AstSourceLocation::new(module_name, Span { start: 6, end: 11 }), // line 2
+                parameter_name: Rc::new(Name {
+                    text: "y".to_string(),
+                    unique: 1.into(),
+                }),
+                body: Rc::new(Term::Var {
+                    context: AstSourceLocation::new(module_name, Span { start: 12, end: 17 }), // line 3
+                    name: Rc::new(Name {
+                        text: "x".to_string(),
+                        unique: 0.into(),
+                    }),
+                }),
+            }),
+        };
+
+        let source_map = SourceMap::from_term(&term, module_name, &module_sources);
+
+        assert_eq!(source_map.locations.len(), 3);
+
+        // Index 0: innermost Var on line 3
+        let loc0 = source_map.locations.get(&0).unwrap();
+        assert_eq!(loc0.line, 3);
+
+        // Index 1: inner Lambda on line 2
+        let loc1 = source_map.locations.get(&1).unwrap();
+        assert_eq!(loc1.line, 2);
+
+        // Index 2: outer Lambda on line 1
+        let loc2 = source_map.locations.get(&2).unwrap();
+        assert_eq!(loc2.line, 1);
+    }
+
+    #[test]
+    fn test_strip_interned_suffix() {
+        // Basic cases
+        assert_eq!(strip_interned_suffix("x_id_0"), "x");
+        assert_eq!(strip_interned_suffix("foo_id_42"), "foo");
+        assert_eq!(strip_interned_suffix("bar_id_999"), "bar");
+
+        // Names with underscores
+        assert_eq!(strip_interned_suffix("foo_bar_id_123"), "foo_bar");
+        assert_eq!(strip_interned_suffix("my_long_name_id_0"), "my_long_name");
+
+        // Names containing "_id_" as part of the actual name
+        assert_eq!(strip_interned_suffix("my_id_var_id_5"), "my_id_var");
+
+        // Edge cases - no interning, return unchanged
+        assert_eq!(strip_interned_suffix("no_suffix"), "no_suffix");
+        assert_eq!(strip_interned_suffix("x"), "x");
+        assert_eq!(strip_interned_suffix(""), "");
+
+        // Non-numeric suffix - return unchanged
+        assert_eq!(strip_interned_suffix("x_id_abc"), "x_id_abc");
+        assert_eq!(strip_interned_suffix("x_id_"), "x_id_");
+    }
+
+    #[test]
+    fn test_should_include_name() {
+        // Normal names should be included
+        assert!(should_include_name("x"));
+        assert!(should_include_name("foo"));
+        assert!(should_include_name("my_var"));
+
+        // Internal names (starting with _) are now included for debugging
+        assert!(should_include_name("_discarded"));
+        assert!(should_include_name("_"));
+        assert!(should_include_name("__context__"));
+
+        // Only empty names should be excluded
+        assert!(!should_include_name(""));
+    }
+
+    #[test]
+    fn from_term_extracts_names() {
+        use aiken_lang::{ast::Span, line_numbers::LineNumbers};
+
+        let src = "fn foo(x) { x }";
+        let module_name = "test";
+        let data = (src.to_string(), LineNumbers::new(src));
+        let mut module_sources: IndexMap<&str, &(String, LineNumbers)> = IndexMap::new();
+        module_sources.insert(module_name, &data);
+
+        // Lambda { parameter_name: "x_id_0", body: Var { name: "x_id_0" } }
+        let term = Term::Lambda {
+            context: AstSourceLocation::new(module_name, Span { start: 0, end: 15 }),
+            parameter_name: Rc::new(Name {
+                text: "x_id_0".to_string(),
+                unique: 0.into(),
+            }),
+            body: Rc::new(Term::Var {
+                context: AstSourceLocation::new(module_name, Span { start: 12, end: 13 }),
+                name: Rc::new(Name {
+                    text: "x_id_0".to_string(),
+                    unique: 0.into(),
+                }),
+            }),
+        };
+
+        let source_map = SourceMap::from_term(&term, module_name, &module_sources);
+
+        // Post-order: Var at index 0, Lambda at index 1
+        // Both should have name "x" (stripped from "x_id_0")
+        assert_eq!(source_map.names.get(&0), Some(&"x".to_string()));
+        assert_eq!(source_map.names.get(&1), Some(&"x".to_string()));
+    }
+
+    #[test]
+    fn from_term_skips_internal_names() {
+        use aiken_lang::{ast::Span, line_numbers::LineNumbers};
+
+        let src = "test";
+        let module_name = "test";
+        let data = (src.to_string(), LineNumbers::new(src));
+        let mut module_sources: IndexMap<&str, &(String, LineNumbers)> = IndexMap::new();
+        module_sources.insert(module_name, &data);
+
+        // Lambda with internal names that are now included for debugging
+        let term = Term::Lambda {
+            context: AstSourceLocation::new(module_name, Span { start: 0, end: 4 }),
+            parameter_name: Rc::new(Name {
+                text: "__context___id_0".to_string(),
+                unique: 0.into(),
+            }),
+            body: Rc::new(Term::Var {
+                context: AstSourceLocation::new(module_name, Span { start: 0, end: 4 }),
+                name: Rc::new(Name {
+                    text: "_discarded_id_1".to_string(),
+                    unique: 1.into(),
+                }),
+            }),
+        };
+
+        let source_map = SourceMap::from_term(&term, module_name, &module_sources);
+
+        // Internal names are now included (stripped of _id_ suffix)
+        assert_eq!(source_map.names.len(), 2);
+        assert_eq!(source_map.names.get(&0), Some(&"_discarded".to_string()));
+        assert_eq!(source_map.names.get(&1), Some(&"__context__".to_string()));
+    }
+
+    #[test]
+    fn serialize_source_map_with_names() {
+        let mut source_map = SourceMap::new();
+        source_map.sources.push("validators/spend.ak".to_string());
+        source_map.locations.insert(
+            0,
+            SourceLocation {
+                source_index: 0,
+                line: 10,
+                column: 5,
+                end_line: None,
+                end_column: None,
+            },
+        );
+        source_map.names.insert(0, "amount".to_string());
+        source_map.names.insert(1, "recipient".to_string());
+
+        let expected = json!({
+            "version": 1,
+            "sources": ["validators/spend.ak"],
+            "locations": {
+                "0": [0, 10, 5]
+            },
+            "names": {
+                "0": "amount",
+                "1": "recipient"
+            }
+        });
+
+        assert_eq!(serde_json::to_value(&source_map).unwrap(), expected);
+    }
+
+    #[test]
+    fn from_term_nested_lambdas_extracts_names() {
+        use aiken_lang::{ast::Span, line_numbers::LineNumbers};
+
+        let src = "line1\nline2\nline3\nline4";
+        let module_name = "test";
+        let data = (src.to_string(), LineNumbers::new(src));
+        let mut module_sources: IndexMap<&str, &(String, LineNumbers)> = IndexMap::new();
+        module_sources.insert(module_name, &data);
+
+        // Lambda { body: Lambda { body: Var } }
+        // Post-order:
+        //   0: inner Var "x"
+        //   1: inner Lambda "y"
+        //   2: outer Lambda "x"
+        let term = Term::Lambda {
+            context: AstSourceLocation::new(module_name, Span { start: 0, end: 5 }),
+            parameter_name: Rc::new(Name {
+                text: "x_id_0".to_string(),
+                unique: 0.into(),
+            }),
+            body: Rc::new(Term::Lambda {
+                context: AstSourceLocation::new(module_name, Span { start: 6, end: 11 }),
+                parameter_name: Rc::new(Name {
+                    text: "y_id_1".to_string(),
+                    unique: 1.into(),
+                }),
+                body: Rc::new(Term::Var {
+                    context: AstSourceLocation::new(module_name, Span { start: 12, end: 17 }),
+                    name: Rc::new(Name {
+                        text: "x_id_0".to_string(),
+                        unique: 0.into(),
+                    }),
+                }),
+            }),
+        };
+
+        let source_map = SourceMap::from_term(&term, module_name, &module_sources);
+
+        // Verify names are extracted correctly
+        assert_eq!(source_map.names.len(), 3);
+        assert_eq!(source_map.names.get(&0), Some(&"x".to_string())); // Var reference to x
+        assert_eq!(source_map.names.get(&1), Some(&"y".to_string())); // Lambda parameter y
+        assert_eq!(source_map.names.get(&2), Some(&"x".to_string())); // Lambda parameter x
+    }
+
+    #[test]
+    fn test_strip_interned_suffix_debruijn_names() {
+        // Names from DeBruijn conversion (i_{unique}) should NOT be stripped
+        // because they don't follow the _id_ pattern
+        assert_eq!(strip_interned_suffix("i_126"), "i_126");
+        assert_eq!(strip_interned_suffix("i_0"), "i_0");
+        assert_eq!(strip_interned_suffix("i_999"), "i_999");
+    }
+
+    #[test]
+    fn test_should_include_name_optimizer_generated() {
+        // Optimizer-generated names that start with __ are now included for debugging
+        assert!(should_include_name("__arg_1"));
+        assert!(should_include_name("__pair"));
+        assert!(should_include_name("__list_data"));
+        assert!(should_include_name("__constr_var"));
+
+        // Optimizer names that DON'T start with underscore should be included
+        assert!(should_include_name("blst_p1_index_0"));
+        assert!(should_include_name("blst_p2_index_1"));
+
+        // DeBruijn-converted names that start with "i_" should be included
+        assert!(should_include_name("i_126"));
+        assert!(should_include_name("i_0"));
+    }
+
+    #[test]
+    fn from_term_handles_debruijn_style_names() {
+        use aiken_lang::{ast::Span, line_numbers::LineNumbers};
+
+        let src = "test";
+        let module_name = "test";
+        let data = (src.to_string(), LineNumbers::new(src));
+        let mut module_sources: IndexMap<&str, &(String, LineNumbers)> = IndexMap::new();
+        module_sources.insert(module_name, &data);
+
+        // Simulate a term that went through DeBruijn conversion
+        // These names don't have _id_ suffix, so they pass through unchanged
+        let term = Term::Lambda {
+            context: AstSourceLocation::new(module_name, Span { start: 0, end: 4 }),
+            parameter_name: Rc::new(Name {
+                text: "i_126".to_string(),
+                unique: 126.into(),
+            }),
+            body: Rc::new(Term::Var {
+                context: AstSourceLocation::new(module_name, Span { start: 0, end: 4 }),
+                name: Rc::new(Name {
+                    text: "i_126".to_string(),
+                    unique: 126.into(),
+                }),
+            }),
+        };
+
+        let source_map = SourceMap::from_term(&term, module_name, &module_sources);
+
+        // DeBruijn-style names ARE included (they don't start with _)
+        // They just don't get the _id_ suffix stripped since they don't have it
+        assert_eq!(source_map.names.get(&0), Some(&"i_126".to_string()));
+        assert_eq!(source_map.names.get(&1), Some(&"i_126".to_string()));
+    }
+
+    #[test]
+    fn from_term_handles_optimizer_generated_names() {
+        use aiken_lang::{ast::Span, line_numbers::LineNumbers};
+
+        let src = "test";
+        let module_name = "test";
+        let data = (src.to_string(), LineNumbers::new(src));
+        let mut module_sources: IndexMap<&str, &(String, LineNumbers)> = IndexMap::new();
+        module_sources.insert(module_name, &data);
+
+        // Simulate optimizer-generated internal names (now included for debugging)
+        let term = Term::Lambda {
+            context: AstSourceLocation::new(module_name, Span { start: 0, end: 4 }),
+            parameter_name: Rc::new(Name {
+                text: "__pair".to_string(),
+                unique: 0.into(),
+            }),
+            body: Rc::new(Term::Lambda {
+                context: AstSourceLocation::new(module_name, Span { start: 0, end: 4 }),
+                parameter_name: Rc::new(Name {
+                    text: "blst_p1_index_0".to_string(),
+                    unique: 1.into(),
+                }),
+                body: Rc::new(Term::Var {
+                    context: AstSourceLocation::new(module_name, Span { start: 0, end: 4 }),
+                    name: Rc::new(Name {
+                        text: "__pair".to_string(),
+                        unique: 0.into(),
+                    }),
+                }),
+            }),
+        };
+
+        let source_map = SourceMap::from_term(&term, module_name, &module_sources);
+
+        // All names are now included for debugging
+        assert_eq!(source_map.names.len(), 3);
+        assert_eq!(source_map.names.get(&0), Some(&"__pair".to_string())); // Var reference
+        assert_eq!(
+            source_map.names.get(&1),
+            Some(&"blst_p1_index_0".to_string())
+        ); // Lambda param
+        assert_eq!(source_map.names.get(&2), Some(&"__pair".to_string())); // Outer Lambda param
+    }
+
+    /// Helper to collect all variable names from a term for debugging
+    fn collect_term_names(term: &Term<Name, AstSourceLocation>) -> Vec<String> {
+        let mut names = Vec::new();
+        collect_names_recursive(term, &mut names);
+        names
+    }
+
+    fn collect_names_recursive(term: &Term<Name, AstSourceLocation>, names: &mut Vec<String>) {
+        match term {
+            Term::Var { name, .. } => {
+                names.push(format!("Var({})", name.text));
+            }
+            Term::Lambda {
+                parameter_name,
+                body,
+                ..
+            } => {
+                names.push(format!("Lambda({})", parameter_name.text));
+                collect_names_recursive(body, names);
+            }
+            Term::Apply {
+                function, argument, ..
+            } => {
+                collect_names_recursive(argument, names);
+                collect_names_recursive(function, names);
+            }
+            Term::Delay { term, .. } => collect_names_recursive(term, names),
+            Term::Force { term, .. } => collect_names_recursive(term, names),
+            Term::Case {
+                constr, branches, ..
+            } => {
+                collect_names_recursive(constr, names);
+                for branch in branches {
+                    collect_names_recursive(branch, names);
+                }
+            }
+            Term::Constr { fields, .. } => {
+                for field in fields {
+                    collect_names_recursive(field, names);
+                }
+            }
+            Term::Constant { .. } | Term::Builtin { .. } | Term::Error { .. } => {}
+        }
+    }
+
+    #[test]
+    fn test_collect_term_names_helper() {
+        use aiken_lang::ast::Span;
+
+        let term = Term::Lambda {
+            context: AstSourceLocation::new("test", Span { start: 0, end: 4 }),
+            parameter_name: Rc::new(Name {
+                text: "x_id_0".to_string(),
+                unique: 0.into(),
+            }),
+            body: Rc::new(Term::Apply {
+                context: AstSourceLocation::new("test", Span { start: 0, end: 4 }),
+                function: Rc::new(Term::Var {
+                    context: AstSourceLocation::new("test", Span { start: 0, end: 4 }),
+                    name: Rc::new(Name {
+                        text: "f_id_1".to_string(),
+                        unique: 1.into(),
+                    }),
+                }),
+                argument: Rc::new(Term::Var {
+                    context: AstSourceLocation::new("test", Span { start: 0, end: 4 }),
+                    name: Rc::new(Name {
+                        text: "x_id_0".to_string(),
+                        unique: 0.into(),
+                    }),
+                }),
+            }),
+        };
+
+        let names = collect_term_names(&term);
+        assert_eq!(names, vec!["Lambda(x_id_0)", "Var(x_id_0)", "Var(f_id_1)",]);
+    }
+
+    #[test]
+    fn from_term_mixed_naming_patterns() {
+        use aiken_lang::{ast::Span, line_numbers::LineNumbers};
+
+        let src = "line1\nline2\nline3\nline4";
+        let module_name = "test";
+        let data = (src.to_string(), LineNumbers::new(src));
+        let mut module_sources: IndexMap<&str, &(String, LineNumbers)> = IndexMap::new();
+        module_sources.insert(module_name, &data);
+
+        // Term with various naming patterns
+        // Post-order:
+        //   0: Var(__internal) -> "__internal" (now included)
+        //   1: Var(x_id_0) -> "x"
+        //   2: Apply
+        //   3: Lambda(user_var_id_5) -> "user_var"
+        let term = Term::Lambda {
+            context: AstSourceLocation::new(module_name, Span { start: 0, end: 5 }),
+            parameter_name: Rc::new(Name {
+                text: "user_var_id_5".to_string(),
+                unique: 5.into(),
+            }),
+            body: Rc::new(Term::Apply {
+                context: AstSourceLocation::new(module_name, Span { start: 6, end: 11 }),
+                function: Rc::new(Term::Var {
+                    context: AstSourceLocation::new(module_name, Span { start: 6, end: 11 }),
+                    name: Rc::new(Name {
+                        text: "x_id_0".to_string(),
+                        unique: 0.into(),
+                    }),
+                }),
+                argument: Rc::new(Term::Var {
+                    context: AstSourceLocation::new(module_name, Span { start: 6, end: 11 }),
+                    name: Rc::new(Name {
+                        text: "__internal".to_string(),
+                        unique: 99.into(),
+                    }),
+                }),
+            }),
+        };
+
+        let source_map = SourceMap::from_term(&term, module_name, &module_sources);
+
+        // Check that names are correctly processed:
+        // - __internal (index 0) is now included
+        // - x_id_0 (index 1) becomes "x"
+        // - Apply (index 2) has no name
+        // - user_var_id_5 (index 3) becomes "user_var"
+        assert_eq!(source_map.names.len(), 3);
+        assert_eq!(source_map.names.get(&0), Some(&"__internal".to_string()));
+        assert_eq!(source_map.names.get(&1), Some(&"x".to_string()));
+        assert_eq!(source_map.names.get(&2), None); // Apply has no name
+        assert_eq!(source_map.names.get(&3), Some(&"user_var".to_string()));
+    }
+
+    #[test]
+    fn inject_names_restores_variable_names() {
+        use uplc::ast::{DeBruijn, NamedDeBruijn, Term as UplcTerm};
+
+        // Create a source map with names
+        let mut source_map = SourceMap::new();
+        source_map.names.insert(0, "my_arg".to_string());
+        source_map.names.insert(1, "my_func".to_string());
+        source_map.names.insert(2, "my_result".to_string());
+
+        // Create a term with placeholder names (simulating loading from flat)
+        // Lambda(0) { body: Apply(2) { func: Var(1), arg: Var(0) } }
+        let term: UplcTerm<NamedDeBruijn, u64> = UplcTerm::Lambda {
+            parameter_name: Rc::new(NamedDeBruijn {
+                text: "i".to_string(), // Placeholder name
+                index: DeBruijn::from(0),
+            }),
+            body: Rc::new(UplcTerm::Apply {
+                function: Rc::new(UplcTerm::Var {
+                    name: Rc::new(NamedDeBruijn {
+                        text: "i".to_string(), // Placeholder name
+                        index: DeBruijn::from(1),
+                    }),
+                    context: 1,
+                }),
+                argument: Rc::new(UplcTerm::Var {
+                    name: Rc::new(NamedDeBruijn {
+                        text: "i".to_string(), // Placeholder name
+                        index: DeBruijn::from(0),
+                    }),
+                    context: 0,
+                }),
+                context: 2,
+            }),
+            context: 1, // Note: this should be the lambda's context for the parameter name
+        };
+
+        // Inject names from source map
+        let injected = source_map.inject_names(&term);
+
+        // Verify names were injected correctly
+        match &injected {
+            UplcTerm::Lambda {
+                parameter_name,
+                body,
+                context,
+            } => {
+                // Lambda parameter gets name from context 1 -> "my_func"
+                assert_eq!(parameter_name.text, "my_func");
+                assert_eq!(*context, 1);
+
+                match body.as_ref() {
+                    UplcTerm::Apply {
+                        function,
+                        argument,
+                        context,
+                    } => {
+                        // Apply gets name from context 2 -> "my_result" (but Apply doesn't have a name field)
+                        assert_eq!(*context, 2);
+
+                        // Function var gets name from context 1 -> "my_func"
+                        if let UplcTerm::Var { name, context } = function.as_ref() {
+                            assert_eq!(name.text, "my_func");
+                            assert_eq!(*context, 1);
+                        } else {
+                            panic!("Expected Var for function");
+                        }
+
+                        // Argument var gets name from context 0 -> "my_arg"
+                        if let UplcTerm::Var { name, context } = argument.as_ref() {
+                            assert_eq!(name.text, "my_arg");
+                            assert_eq!(*context, 0);
+                        } else {
+                            panic!("Expected Var for argument");
+                        }
+                    }
+                    _ => panic!("Expected Apply for body"),
+                }
+            }
+            _ => panic!("Expected Lambda"),
+        }
+    }
+}

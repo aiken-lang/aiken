@@ -543,10 +543,10 @@ impl Benchmark {
         let mut size = 0;
 
         while error.is_none() && max_size >= size {
-            let fuzzer = self
-                .sampler
-                .program
-                .apply_term(&Term::Constant(Constant::Integer(size.into()).into()));
+            let fuzzer = self.sampler.program.apply_term(&Term::Constant {
+                value: Constant::Integer(size.into()).into(),
+                context: (),
+            });
 
             match prng.sample(&fuzzer) {
                 Ok(None) => {
@@ -744,9 +744,9 @@ impl Prng {
             unreachable!("malformed Prng: {cst:#?}")
         }
 
-        if let Term::Constant(rc) = &result {
+        if let Term::Constant { value: rc, .. } = &result {
             if let Constant::Data(PlutusData::Constr(Constr { tag, fields, .. })) = &rc.borrow() {
-                if *tag == 121 + Prng::SOME {
+                if tag == &(121 + Prng::SOME) {
                     if let [PlutusData::Array(elems)] = &fields[..] {
                         if let [new_seed, value] = &elems[..] {
                             return Some((as_prng(new_seed), value.clone()));
@@ -758,7 +758,7 @@ impl Prng {
                 // choices. If we run out of choices, or a choice end up being
                 // invalid as per the expectation, the fuzzer can't go further and
                 // fail.
-                if *tag == 121 + Prng::NONE {
+                if tag == &(121 + Prng::NONE) {
                     return None;
                 }
             }

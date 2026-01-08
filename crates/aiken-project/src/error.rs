@@ -152,6 +152,12 @@ pub enum Error {
         known_modules: Vec<String>,
     },
 
+    #[error("Failed to convert program to DeBruijn form: {error}")]
+    DeBruijnConversion { error: String },
+
+    #[error("Test failed during coverage: {name}")]
+    CoverageTestFailure { name: String },
+
     #[error("I located conditional modules under 'env', but no default one!")]
     NoDefaultEnvironment,
 
@@ -365,7 +371,9 @@ impl ExtraData for Error {
             | Error::ModuleNotFound { .. }
             | Error::ExportNotFound { .. }
             | Error::ScriptOverrideNotFound { .. }
-            | Error::ScriptOverrideArgumentParseError { .. } => None,
+            | Error::ScriptOverrideArgumentParseError { .. }
+            | Error::DeBruijnConversion { .. }
+            | Error::CoverageTestFailure { .. } => None,
             Error::Type { error, .. } => error.extra_data(),
         }
     }
@@ -396,7 +404,9 @@ impl GetSource for Error {
             | Error::NoDefaultEnvironment
             | Error::Module { .. }
             | Error::ScriptOverrideNotFound { .. }
-            | Error::ScriptOverrideArgumentParseError { .. } => None,
+            | Error::ScriptOverrideArgumentParseError { .. }
+            | Error::DeBruijnConversion { .. }
+            | Error::CoverageTestFailure { .. } => None,
             Error::DuplicateModule { second: path, .. }
             | Error::MissingManifest { path }
             | Error::TomlLoading { path, .. }
@@ -428,7 +438,9 @@ impl GetSource for Error {
             | Error::ExportNotFound { .. }
             | Error::Module { .. }
             | Error::ScriptOverrideNotFound { .. }
-            | Error::ScriptOverrideArgumentParseError { .. } => None,
+            | Error::ScriptOverrideArgumentParseError { .. }
+            | Error::DeBruijnConversion { .. }
+            | Error::CoverageTestFailure { .. } => None,
             Error::TomlLoading { src, .. } | Error::Parse { src, .. } | Error::Type { src, .. } => {
                 Some(src.to_string())
             }
@@ -482,7 +494,9 @@ impl Diagnostic for Error {
             | Error::ModuleNotFound { .. }
             | Error::NoDefaultEnvironment
             | Error::ScriptOverrideNotFound { .. }
-            | Error::ScriptOverrideArgumentParseError { .. } => None,
+            | Error::ScriptOverrideArgumentParseError { .. }
+            | Error::DeBruijnConversion { .. }
+            | Error::CoverageTestFailure { .. } => None,
             Error::Module(e) => e.code().map(boxed),
         }
     }
@@ -548,7 +562,9 @@ impl Diagnostic for Error {
             | Error::Http(_)
             | Error::ZipExtract(_)
             | Error::JoinError(_)
-            | Error::ExportNotFound { .. } => None,
+            | Error::ExportNotFound { .. }
+            | Error::DeBruijnConversion { .. }
+            | Error::CoverageTestFailure { .. } => None,
         }
     }
 
@@ -584,7 +600,9 @@ impl Diagnostic for Error {
             | Error::NoDefaultEnvironment
             | Error::ModuleNotFound { .. }
             | Error::ScriptOverrideNotFound { .. }
-            | Error::ScriptOverrideArgumentParseError { .. } => None,
+            | Error::ScriptOverrideArgumentParseError { .. }
+            | Error::DeBruijnConversion { .. }
+            | Error::CoverageTestFailure { .. } => None,
 
             Error::Module(e) => e.labels(),
         }
@@ -614,7 +632,9 @@ impl Diagnostic for Error {
             | Error::Json { .. }
             | Error::MalformedStakeAddress { .. }
             | Error::ScriptOverrideNotFound { .. }
-            | Error::ScriptOverrideArgumentParseError { .. } => None,
+            | Error::ScriptOverrideArgumentParseError { .. }
+            | Error::DeBruijnConversion { .. }
+            | Error::CoverageTestFailure { .. } => None,
             Error::Module(e) => e.source_code(),
         }
     }
@@ -643,7 +663,9 @@ impl Diagnostic for Error {
             | Error::MalformedStakeAddress { .. }
             | Error::NoDefaultEnvironment
             | Error::ScriptOverrideNotFound { .. }
-            | Error::ScriptOverrideArgumentParseError { .. } => None,
+            | Error::ScriptOverrideArgumentParseError { .. }
+            | Error::DeBruijnConversion { .. }
+            | Error::CoverageTestFailure { .. } => None,
 
             Error::Module(e) => e.url(),
         }
@@ -673,7 +695,9 @@ impl Diagnostic for Error {
             | Error::Json { .. }
             | Error::MalformedStakeAddress { .. }
             | Error::ScriptOverrideNotFound { .. }
-            | Error::ScriptOverrideArgumentParseError { .. } => None,
+            | Error::ScriptOverrideArgumentParseError { .. }
+            | Error::DeBruijnConversion { .. }
+            | Error::CoverageTestFailure { .. } => None,
             Error::Module(e) => e.related(),
         }
     }

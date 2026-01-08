@@ -39,6 +39,27 @@ impl EventListener for Json {
                 });
                 println!("{}", serde_json::to_string_pretty(&json_output).unwrap());
             }
+            Event::FinishedCoverage {
+                output_path,
+                lines_hit,
+                lines_total,
+            } => {
+                let percentage = if lines_total > 0 {
+                    (lines_hit as f64 / lines_total as f64) * 100.0
+                } else {
+                    0.0
+                };
+
+                let json_output = serde_json::json!({
+                    "coverage": {
+                        "output_path": output_path.display().to_string(),
+                        "lines_hit": lines_hit,
+                        "lines_total": lines_total,
+                        "percentage": percentage,
+                    }
+                });
+                println!("{}", serde_json::to_string_pretty(&json_output).unwrap());
+            }
             Event::FinishedBenchmarks { benchmarks, seed } => {
                 let benchmark_results: Vec<_> = benchmarks
                     .into_iter()

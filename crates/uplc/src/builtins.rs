@@ -633,14 +633,21 @@ impl DefaultFunction {
     }
 }
 
-impl<T> From<DefaultFunction> for Term<T> {
+impl<T, C: Default> From<DefaultFunction> for Term<T, C> {
     fn from(builtin: DefaultFunction) -> Self {
-        Term::Builtin(builtin)
+        Term::Builtin {
+            func: builtin,
+            context: C::default(),
+        }
     }
 }
 
-impl<T> From<DefaultFunction> for Rc<Term<T>> {
+impl<T, C: Default> From<DefaultFunction> for Rc<Term<T, C>> {
     fn from(builtin: DefaultFunction) -> Self {
-        Term::Builtin(builtin).into()
+        Term::Builtin {
+            func: builtin,
+            context: C::default(),
+        }
+        .into()
     }
 }

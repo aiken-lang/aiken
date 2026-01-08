@@ -24,9 +24,9 @@ pub trait Binder<'b>: Encode + Decode<'b> {
     fn text(&self) -> String;
 }
 
-impl<'b, T> Flat<'b> for Program<T> where T: Binder<'b> + Debug {}
+impl<'b, T, C: Default> Flat<'b> for Program<T, C> where T: Binder<'b> + Debug {}
 
-impl<'b, T> Program<T>
+impl<'b, T, C: Default> Program<T, C>
 where
     T: Binder<'b> + Debug,
 {
@@ -146,7 +146,7 @@ where
     }
 }
 
-impl<'b, T> Encode for Program<T>
+impl<'b, T, C> Encode for Program<T, C>
 where
     T: Binder<'b> + Debug,
 {
@@ -163,7 +163,7 @@ where
     }
 }
 
-impl<'b, T> Decode<'b> for Program<T>
+impl<'b, T, C: Default> Decode<'b> for Program<T, C>
 where
     T: Binder<'b>,
 {
@@ -182,60 +182,67 @@ where
     }
 }
 
-impl<'b, T> Encode for Term<T>
+impl<'b, T, C> Encode for Term<T, C>
 where
     T: Binder<'b> + Debug,
 {
     fn encode(&self, e: &mut Encoder) -> Result<(), en::Error> {
         match self {
-            Term::Var(name) => {
+            Term::Var { name, .. } => {
                 encode_term_tag(0, e)?;
                 name.encode(e)?;
             }
-            Term::Delay(term) => {
+            Term::Delay { term, .. } => {
                 encode_term_tag(1, e)?;
                 term.encode(e)?;
             }
             Term::Lambda {
                 parameter_name,
                 body,
+                ..
             } => {
                 encode_term_tag(2, e)?;
                 parameter_name.binder_encode(e)?;
                 body.encode(e)?;
             }
-            Term::Apply { function, argument } => {
+            Term::Apply {
+                function, argument, ..
+            } => {
                 encode_term_tag(3, e)?;
                 function.encode(e)?;
                 argument.encode(e)?;
             }
 
-            Term::Constant(constant) => {
+            Term::Constant {
+                value: constant, ..
+            } => {
                 encode_term_tag(4, e)?;
                 constant.encode(e)?;
             }
 
-            Term::Force(term) => {
+            Term::Force { term, .. } => {
                 encode_term_tag(5, e)?;
                 term.encode(e)?;
             }
 
-            Term::Error => {
+            Term::Error { .. } => {
                 encode_term_tag(6, e)?;
             }
-            Term::Builtin(builtin) => {
+            Term::Builtin { func: builtin, .. } => {
                 encode_term_tag(7, e)?;
 
                 builtin.encode(e)?;
             }
-            Term::Constr { tag, fields } => {
+            Term::Constr { tag, fields, .. } => {
                 encode_term_tag(8, e)?;
 
                 tag.encode(e)?;
 
                 e.encode_list_with(fields, |term, e| (*term).encode(e))?;
             }
-            Term::Case { constr, branches } => {
+            Term::Case {
+                constr, branches, ..
+            } => {
                 encode_term_tag(9, e)?;
 
                 constr.encode(e)?;
@@ -248,39 +255,66 @@ where
     }
 }
 
-impl<'b, T> Decode<'b> for Term<T>
+impl<'b, T, C: Default> Decode<'b> for Term<T, C>
 where
     T: Binder<'b>,
 {
     fn decode(d: &mut Decoder) -> Result<Self, de::Error> {
         match decode_term_tag(d)? {
-            0 => Ok(Term::Var(T::decode(d)?.into())),
-            1 => Ok(Term::Delay(Rc::new(Term::decode(d)?))),
+            0 => Ok(Term::Var {
+                name: T::decode(d)?.into(),
+                context: C::default(),
+            }),
+            1 => Ok(Term::Delay {
+                term: Rc::new(Term::decode(d)?),
+                context: C::default(),
+            }),
             2 => Ok(Term::Lambda {
                 parameter_name: T::binder_decode(d)?.into(),
                 body: Rc::new(Term::decode(d)?),
+                context: C::default(),
             }),
             3 => Ok(Term::Apply {
                 function: Rc::new(Term::decode(d)?),
                 argument: Rc::new(Term::decode(d)?),
+                context: C::default(),
             }),
             // Need size limit for Constant
-            4 => Ok(Term::Constant(Constant::decode(d)?.into())),
-            5 => Ok(Term::Force(Rc::new(Term::decode(d)?))),
-            6 => Ok(Term::Error),
-            7 => Ok(Term::Builtin(DefaultFunction::decode(d)?)),
+            4 => Ok(Term::Constant {
+                value: Constant::decode(d)?.into(),
+                context: C::default(),
+            }),
+            5 => Ok(Term::Force {
+                term: Rc::new(Term::decode(d)?),
+                context: C::default(),
+            }),
+            6 => Ok(Term::Error {
+                context: C::default(),
+            }),
+            7 => Ok(Term::Builtin {
+                func: DefaultFunction::decode(d)?,
+                context: C::default(),
+            }),
             8 => {
                 let tag = usize::decode(d)?;
-                let fields = d.decode_list_with(Term::<T>::decode)?;
+                let fields = d.decode_list_with(Term::<T, C>::decode)?;
 
-                Ok(Term::Constr { tag, fields })
+                Ok(Term::Constr {
+                    tag,
+                    fields,
+                    context: C::default(),
+                })
             }
             9 => {
-                let constr = (Term::<T>::decode(d)?).into();
+                let constr = (Term::<T, C>::decode(d)?).into();
 
-                let branches = d.decode_list_with(Term::<T>::decode)?;
+                let branches = d.decode_list_with(Term::<T, C>::decode)?;
 
-                Ok(Term::Case { constr, branches })
+                Ok(Term::Case {
+                    constr,
+                    branches,
+                    context: C::default(),
+                })
             }
             x => {
                 let buffer_slice: Vec<u8> = d
@@ -304,11 +338,11 @@ where
     }
 }
 
-impl<'b, T> Term<T>
+impl<'b, T, C: Default> Term<T, C>
 where
     T: Binder<'b>,
 {
-    fn decode_debug(d: &mut Decoder, state_log: &mut Vec<String>) -> Result<Term<T>, de::Error> {
+    fn decode_debug(d: &mut Decoder, state_log: &mut Vec<String>) -> Result<Term<T, C>, de::Error> {
         match decode_term_tag(d)? {
             0 => {
                 state_log.push("(var ".to_string());
@@ -316,7 +350,10 @@ where
                 match var_option {
                     Ok(var) => {
                         state_log.push(format!("{})", var.text()));
-                        Ok(Term::Var(var.into()))
+                        Ok(Term::Var {
+                            name: var.into(),
+                            context: C::default(),
+                        })
                     }
                     Err(error) => {
                         state_log.push("parse error)".to_string());
@@ -331,7 +368,10 @@ where
                 match term_option {
                     Ok(term) => {
                         state_log.push(")".to_string());
-                        Ok(Term::Delay(Rc::new(term)))
+                        Ok(Term::Delay {
+                            term: Rc::new(term),
+                            context: C::default(),
+                        })
                     }
                     Err(error) => {
                         state_log.push(")".to_string());
@@ -353,6 +393,7 @@ where
                                 Ok(Term::Lambda {
                                     parameter_name: var.into(),
                                     body: Rc::new(term),
+                                    context: C::default(),
                                 })
                             }
                             Err(error) => {
@@ -381,6 +422,7 @@ where
                                 Ok(Term::Apply {
                                     function: Rc::new(function),
                                     argument: Rc::new(argument),
+                                    context: C::default(),
                                 })
                             }
                             Err(error) => {
@@ -403,7 +445,10 @@ where
                 match con_option {
                     Ok(constant) => {
                         state_log.push(format!("{})", constant.to_pretty()));
-                        Ok(Term::Constant(constant.into()))
+                        Ok(Term::Constant {
+                            value: constant.into(),
+                            context: C::default(),
+                        })
                     }
                     Err(error) => {
                         state_log.push("parse error)".to_string());
@@ -417,7 +462,10 @@ where
                 match term_option {
                     Ok(term) => {
                         state_log.push(")".to_string());
-                        Ok(Term::Force(Rc::new(term)))
+                        Ok(Term::Force {
+                            term: Rc::new(term),
+                            context: C::default(),
+                        })
                     }
                     Err(error) => {
                         state_log.push(")".to_string());
@@ -427,7 +475,9 @@ where
             }
             6 => {
                 state_log.push("(error)".to_string());
-                Ok(Term::Error)
+                Ok(Term::Error {
+                    context: C::default(),
+                })
             }
             7 => {
                 state_log.push("(builtin ".to_string());
@@ -436,7 +486,10 @@ where
                 match builtin_option {
                     Ok(builtin) => {
                         state_log.push(format!("{builtin})"));
-                        Ok(Term::Builtin(builtin))
+                        Ok(Term::Builtin {
+                            func: builtin,
+                            context: C::default(),
+                        })
                     }
                     Err(error) => {
                         state_log.push("parse error)".to_string());
@@ -450,22 +503,30 @@ where
                 let tag = usize::decode(d)?;
 
                 let fields = d.decode_list_with_debug(
-                    |d, state_log| Term::<T>::decode_debug(d, state_log),
+                    |d, state_log| Term::<T, C>::decode_debug(d, state_log),
                     state_log,
                 )?;
 
-                Ok(Term::Constr { tag, fields })
+                Ok(Term::Constr {
+                    tag,
+                    fields,
+                    context: C::default(),
+                })
             }
             9 => {
                 state_log.push("(case ".to_string());
-                let constr = Term::<T>::decode_debug(d, state_log)?.into();
+                let constr = Term::<T, C>::decode_debug(d, state_log)?.into();
 
                 let branches = d.decode_list_with_debug(
-                    |d, state_log| Term::<T>::decode_debug(d, state_log),
+                    |d, state_log| Term::<T, C>::decode_debug(d, state_log),
                     state_log,
                 )?;
 
-                Ok(Term::Case { constr, branches })
+                Ok(Term::Case {
+                    constr,
+                    branches,
+                    context: C::default(),
+                })
             }
             x => {
                 state_log.push("parse error".to_string());
@@ -1010,7 +1071,10 @@ mod tests {
     fn flat_encode_integer() {
         let program = Program::<Name> {
             version: (11, 22, 33),
-            term: Term::Constant(Constant::Integer(11.into()).into()),
+            term: Term::Constant {
+                value: Constant::Integer(11.into()).into(),
+                context: (),
+            },
         };
 
         let expected_bytes = vec![
@@ -1026,8 +1090,8 @@ mod tests {
     fn flat_encode_list_list_integer() {
         let program = Program::<Name> {
             version: (1, 0, 0),
-            term: Term::Constant(
-                Constant::ProtoList(
+            term: Term::Constant {
+                value: Constant::ProtoList(
                     Type::List(Type::Integer.into()),
                     vec![
                         Constant::ProtoList(Type::Integer, vec![Constant::Integer(7.into())]),
@@ -1035,7 +1099,8 @@ mod tests {
                     ],
                 )
                 .into(),
-            ),
+                context: (),
+            },
         };
 
         let expected_bytes = vec![
@@ -1052,8 +1117,8 @@ mod tests {
     fn flat_encode_pair_pair_integer_bool_integer() {
         let program = Program::<Name> {
             version: (1, 0, 0),
-            term: Term::Constant(
-                Constant::ProtoPair(
+            term: Term::Constant {
+                value: Constant::ProtoPair(
                     Type::Pair(Type::Integer.into(), Type::Bool.into()),
                     Type::Integer,
                     Constant::ProtoPair(
@@ -1066,7 +1131,8 @@ mod tests {
                     Constant::Integer(11.into()).into(),
                 )
                 .into(),
-            ),
+                context: (),
+            },
         };
 
         let expected_bytes = vec![
@@ -1088,8 +1154,8 @@ mod tests {
 
         let expected_program = Program::<Name> {
             version: (1, 0, 0),
-            term: Term::Constant(
-                Constant::ProtoList(
+            term: Term::Constant {
+                value: Constant::ProtoList(
                     Type::List(Type::Integer.into()),
                     vec![
                         Constant::ProtoList(Type::Integer, vec![Constant::Integer(7.into())]),
@@ -1097,7 +1163,8 @@ mod tests {
                     ],
                 )
                 .into(),
-            ),
+                context: (),
+            },
         };
 
         let actual_program: Program<Name> = Program::unflat(&bytes).unwrap();
@@ -1114,8 +1181,8 @@ mod tests {
 
         let expected_program = Program::<Name> {
             version: (1, 0, 0),
-            term: Term::Constant(
-                Constant::ProtoPair(
+            term: Term::Constant {
+                value: Constant::ProtoPair(
                     Type::Pair(Type::Integer.into(), Type::Bool.into()),
                     Type::Integer,
                     Constant::ProtoPair(
@@ -1128,7 +1195,8 @@ mod tests {
                     Constant::Integer(11.into()).into(),
                 )
                 .into(),
-            ),
+                context: (),
+            },
         };
 
         let actual_program: Program<Name> = Program::unflat(&bytes).unwrap();
@@ -1144,7 +1212,10 @@ mod tests {
 
         let expected_program = Program {
             version: (11, 22, 33),
-            term: Term::Constant(Constant::Integer(11.into()).into()),
+            term: Term::Constant {
+                value: Constant::Integer(11.into()).into(),
+                context: (),
+            },
         };
 
         let actual_program: Program<Name> = Program::unflat(&bytes).unwrap();

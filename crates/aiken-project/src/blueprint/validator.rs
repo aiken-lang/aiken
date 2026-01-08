@@ -4,14 +4,20 @@ use super::{
     memo_program::MemoProgram,
     parameter::Parameter,
     schema::{Annotated, Data, Declaration, Schema},
+    source_map::SourceMap,
 };
-use crate::module::{CheckedModule, CheckedModules};
+use crate::{
+    module::{CheckedModule, CheckedModules},
+    options::SourceMapMode,
+};
 use aiken_lang::{
     ast::{Annotation, TypedArg, TypedFunction, TypedValidator, well_known},
     gen_uplc::CodeGenerator,
+    line_numbers::LineNumbers,
     plutus_version::PlutusVersion,
     tipo::Type,
 };
+use indexmap::IndexMap;
 use miette::NamedSource;
 use serde;
 use std::borrow::Borrow;
@@ -39,6 +45,14 @@ pub struct Validator<T> {
 
     #[serde(flatten)]
     pub program: T,
+
+    /// Inline source map (when embedded in blueprint)
+    #[serde(rename = "sourceMap", skip_serializing_if = "Option::is_none")]
+    pub source_map: Option<SourceMap>,
+
+    /// Path to external source map file
+    #[serde(rename = "sourceMapFile", skip_serializing_if = "Option::is_none")]
+    pub source_map_file: Option<String>,
 
     #[serde(skip_serializing_if = "Definitions::is_empty")]
     #[serde(default)]
@@ -213,10 +227,13 @@ impl Validator<()> {
             datum,
             redeemer,
             program: (),
+            source_map: None,
+            source_map_file: None,
             definitions,
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn attach_program(
         self,
         program: &mut MemoProgram,
@@ -224,7 +241,20 @@ impl Validator<()> {
         generator: &mut CodeGenerator,
         def: &TypedValidator,
         module_name: &str,
+        source_map_mode: &SourceMapMode,
+        module_sources: &IndexMap<&str, &(String, LineNumbers)>,
     ) -> Validator<SerializableProgram> {
+        // Generate the program (this also stores the term with spans)
+        let compiled_program = program.get(generator, def, module_name);
+
+        // Build source map if requested
+        let source_map = match source_map_mode {
+            SourceMapMode::None => None,
+            SourceMapMode::Inline | SourceMapMode::External(_) => program
+                .get_term_with_spans()
+                .map(|term| SourceMap::from_term(term, module_name, module_sources)),
+        };
+
         Validator {
             title: self.title,
             description: self.description,
@@ -235,7 +265,9 @@ impl Validator<()> {
                 PlutusVersion::V1 => SerializableProgram::PlutusV1Program,
                 PlutusVersion::V2 => SerializableProgram::PlutusV2Program,
                 PlutusVersion::V3 => SerializableProgram::PlutusV3Program,
-            }(program.get(generator, def, module_name)),
+            }(compiled_program),
+            source_map,
+            source_map_file: self.source_map_file,
             definitions: self.definitions,
         }
     }
@@ -248,6 +280,8 @@ impl Validator<SerializableProgram> {
         module: &CheckedModule,
         def: &TypedValidator,
         plutus_version: &PlutusVersion,
+        source_map_mode: &SourceMapMode,
+        module_sources: &IndexMap<&str, &(String, LineNumbers)>,
     ) -> Result<Vec<Self>, Error> {
         let mut program = MemoProgram::default();
 
@@ -280,7 +314,15 @@ impl Validator<SerializableProgram> {
         Ok(validators
             .into_iter()
             .map(|validator| {
-                validator.attach_program(&mut program, plutus_version, generator, def, &module.name)
+                validator.attach_program(
+                    &mut program,
+                    plutus_version,
+                    generator,
+                    def,
+                    &module.name,
+                    source_map_mode,
+                    module_sources,
+                )
             })
             .collect())
     }
@@ -378,7 +420,16 @@ mod tests {
                 .next()
                 .expect("source code did no yield any validator");
 
-            let validators = Validator::from_checked_module(&modules, &mut generator, validator, def, &PlutusVersion::default());
+            let module_sources = IndexMap::new();
+            let validators = Validator::from_checked_module(
+                &modules,
+                &mut generator,
+                validator,
+                def,
+                &PlutusVersion::default(),
+                &SourceMapMode::None,
+                &module_sources,
+            );
 
             match validators.as_deref() {
                 Err(e) => insta::with_settings!({
