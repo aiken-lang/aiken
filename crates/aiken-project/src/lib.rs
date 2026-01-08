@@ -339,7 +339,7 @@ where
         match_tests: Option<Vec<String>>,
         exact_match: bool,
         seed: u32,
-        property_max_success: usize,
+        _property_max_success: usize,
         tracing: Tracing,
         env: Option<String>,
         output_path: PathBuf,
@@ -497,6 +497,7 @@ where
     }
 
     /// Collect tests for coverage, generating programs with source locations preserved.
+    #[allow(clippy::type_complexity)]
     fn collect_tests_for_coverage(
         &mut self,
         match_tests: Option<Vec<String>>,

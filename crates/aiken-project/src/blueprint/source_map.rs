@@ -1025,7 +1025,7 @@ mod tests {
 
     #[test]
     fn test_collect_term_names_helper() {
-        use aiken_lang::{ast::Span, line_numbers::LineNumbers};
+        use aiken_lang::ast::Span;
 
         let term = Term::Lambda {
             context: AstSourceLocation::new("test", Span { start: 0, end: 4 }),

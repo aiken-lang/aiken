@@ -119,7 +119,7 @@ pub fn exec(
             SourceMapMode::None
         };
 
-        let export = p.export(&module, &name, tracing, source_map_mode, no_optimize)?;
+        let export = p.export(module, name, tracing, source_map_mode, no_optimize)?;
 
         let json = serde_json::to_string_pretty(&export).unwrap();
 

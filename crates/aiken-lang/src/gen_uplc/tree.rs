@@ -840,6 +840,7 @@ impl AirTree {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn list_access(
         names: Vec<String>,
         tipo: Rc<Type>,
@@ -882,6 +883,7 @@ impl AirTree {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn pair_access(
         fst: Option<String>,
         snd: Option<String>,

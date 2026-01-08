@@ -176,7 +176,7 @@ impl LcovReport {
     }
 
     /// Render the report as a string.
-    pub fn to_string(&self) -> String {
+    pub fn render(&self) -> String {
         let mut buffer = Vec::new();
         self.write(&mut buffer)
             .expect("writing to Vec should not fail");
@@ -217,7 +217,7 @@ mod tests {
         let module_info: HashMap<String, ModuleInfo> = [make_module_info("test")].into();
 
         // Execute lines 1 and 3 (byte offsets 0-5 and 12-17)
-        let locations = vec![
+        let locations = [
             make_loc("test", 0, 5),   // line 1
             make_loc("test", 12, 17), // line 3
             make_loc("test", 0, 5),   // line 1 again (should increment count)
@@ -225,7 +225,7 @@ mod tests {
 
         report.add_coverage(locations.iter(), &module_sources, &module_info);
 
-        let output = report.to_string();
+        let output = report.render();
         assert!(output.contains("TN:test.ak"));
         assert!(output.contains("SF:test.ak"));
         assert!(output.contains("DA:1,2")); // line 1 hit twice
@@ -252,7 +252,7 @@ mod tests {
         let module_info: HashMap<String, ModuleInfo> =
             [make_module_info("module_a"), make_module_info("module_b")].into();
 
-        let locations = vec![
+        let locations = [
             make_loc("module_a", 0, 3),  // line 1 in a
             make_loc("module_b", 4, 7),  // line 2 in b
             make_loc("module_b", 8, 11), // line 3 in b
@@ -260,7 +260,7 @@ mod tests {
 
         report.add_coverage(locations.iter(), &module_sources, &module_info);
 
-        let output = report.to_string();
+        let output = report.render();
 
         // Both files should be present
         assert!(output.contains("SF:module_a.ak"));
@@ -285,7 +285,7 @@ mod tests {
         let module_info: HashMap<String, ModuleInfo> = [make_module_info("test")].into();
 
         // Only execute lines 1, 3, 5
-        let locations = vec![
+        let locations = [
             make_loc("test", 0, 1), // line 1
             make_loc("test", 4, 5), // line 3
             make_loc("test", 8, 9), // line 5
@@ -318,7 +318,7 @@ mod tests {
         )]
         .into();
 
-        let locations = vec![make_loc("stdlib/list", 0, 5)];
+        let locations = [make_loc("stdlib/list", 0, 5)];
 
         report.add_coverage(locations.iter(), &module_sources, &module_info);
 
