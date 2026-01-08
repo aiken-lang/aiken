@@ -1,3 +1,6 @@
+// Allow unused_assignments for derive macro false positives (thiserror/miette)
+#![allow(unused_assignments)]
+
 pub mod blueprint;
 pub mod config;
 pub mod coverage;
@@ -497,7 +500,7 @@ where
     }
 
     /// Collect tests for coverage, generating programs with source locations preserved.
-    #[allow(clippy::type_complexity)]
+    #[allow(clippy::type_complexity, clippy::result_large_err)]
     fn collect_tests_for_coverage(
         &mut self,
         match_tests: Option<Vec<String>>,

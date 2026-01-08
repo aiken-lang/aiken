@@ -1,3 +1,7 @@
+// Allow unused_assignments for derive macro false positives (thiserror/miette)
+// These struct fields in error enums ARE used by the derive macros but clippy doesn't see it
+#![allow(unused_assignments)]
+
 use std::sync::{
     Arc,
     atomic::{AtomicU64, Ordering},
