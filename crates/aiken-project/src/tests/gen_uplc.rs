@@ -6848,7 +6848,6 @@ fn as_data() {
 /// Debug test to verify source locations are threaded through to Terms
 #[test]
 fn debug_source_locations_fibonacci() {
-    use aiken_lang::ast::Span;
     use uplc::ast::Term as UplcTerm;
 
     let src = r#"
@@ -7084,10 +7083,6 @@ fn debug_source_locations_fibonacci() {
 /// This test compiles real Aiken code and verifies the names in the term with spans.
 #[test]
 fn source_map_variable_names_from_compiled_code() {
-    use crate::blueprint::source_map::SourceMap;
-    use aiken_lang::line_numbers::LineNumbers;
-    use indexmap::IndexMap;
-
     let src = r#"
         pub fn add(x: Int, y: Int) -> Int {
           x + y
@@ -7148,7 +7143,7 @@ fn source_map_variable_names_from_compiled_code() {
             // The main assertion: we should have user variable names with _id_ suffix
             // (like x_id_0, y_id_1) from the code generator, NOT DeBruijn-style names
             assert!(
-                interned_names.len() > 0 || names.is_empty(),
+                !interned_names.is_empty() || names.is_empty(),
                 "Expected some interned names with _id_ suffix from code generation"
             );
 
@@ -7183,7 +7178,7 @@ fn source_map_variable_names_from_validator() {
     for def in checked_module.ast.definitions() {
         if let Definition::Validator(validator) = def {
             // Generate with term to get source location info
-            let (program, term_with_spans) =
+            let (_program, term_with_spans) =
                 generator.generate_with_term(validator, &checked_module.name);
 
             // Collect names from the term with spans

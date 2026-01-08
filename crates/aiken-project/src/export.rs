@@ -45,6 +45,7 @@ pub struct Export {
 }
 
 impl Export {
+    #[allow(clippy::too_many_arguments)]
     pub fn from_function(
         func: &TypedFunction,
         module: &CheckedModule,
@@ -159,6 +160,7 @@ impl Export {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn from_test(
         test: &TypedTest,
         module: &CheckedModule,

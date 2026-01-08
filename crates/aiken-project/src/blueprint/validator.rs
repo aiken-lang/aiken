@@ -233,6 +233,7 @@ impl Validator<()> {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn attach_program(
         self,
         program: &mut MemoProgram,
