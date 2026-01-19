@@ -7,6 +7,7 @@ pub struct Options {
     pub tracing: Tracing,
     pub env: Option<String>,
     pub blueprint_path: PathBuf,
+    pub source_map_mode: SourceMapMode,
 }
 
 impl Default for Options {
@@ -16,8 +17,20 @@ impl Default for Options {
             tracing: Tracing::silent(),
             env: None,
             blueprint_path: PathBuf::from("plutus.json"),
+            source_map_mode: SourceMapMode::None,
         }
     }
+}
+
+/// Controls how source maps are generated and stored
+#[derive(Debug, Clone, PartialEq)]
+pub enum SourceMapMode {
+    /// No source maps generated
+    None,
+    /// Source maps embedded inline in the blueprint
+    Inline,
+    /// Source maps written to external files
+    External(PathBuf),
 }
 
 pub enum CodeGenMode {

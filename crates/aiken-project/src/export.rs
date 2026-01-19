@@ -4,14 +4,18 @@ use crate::{
         definitions::Definitions,
         parameter::Parameter,
         schema::{Annotated, Declaration, Schema},
+        source_map::SourceMap,
     },
     module::{CheckedModule, CheckedModules},
+    options::SourceMapMode,
 };
 use aiken_lang::{
-    ast::{ArgName, Span, TypedArg, TypedFunction},
+    ast::{ArgName, Span, TypedArg, TypedFunction, TypedTest},
     gen_uplc::CodeGenerator,
+    line_numbers::LineNumbers,
     plutus_version::PlutusVersion,
 };
+use indexmap::IndexMap;
 use miette::NamedSource;
 use uplc::ast::SerializableProgram;
 
@@ -34,15 +38,23 @@ pub struct Export {
     #[serde(skip_serializing_if = "Definitions::is_empty")]
     #[serde(default)]
     pub definitions: Definitions<Annotated<Schema>>,
+
+    /// Inline source map (when embedded in export)
+    #[serde(rename = "sourceMap", skip_serializing_if = "Option::is_none")]
+    pub source_map: Option<SourceMap>,
 }
 
 impl Export {
+    #[allow(clippy::too_many_arguments)]
     pub fn from_function(
         func: &TypedFunction,
         module: &CheckedModule,
         generator: &mut CodeGenerator,
         modules: &CheckedModules,
         plutus_version: &PlutusVersion,
+        source_map_mode: &SourceMapMode,
+        module_sources: &IndexMap<&str, &(String, LineNumbers)>,
+        no_optimize: bool,
     ) -> Result<Export, blueprint::Error> {
         let mut definitions = Definitions::new();
 
@@ -102,10 +114,34 @@ impl Export {
             ),
         })?;
 
-        let program = generator
-            .generate_raw(&func.body, &func.arguments, &module.name)
-            .to_debruijn()
-            .unwrap();
+        // Always generate with spans - both paths use the same code generation
+        let term_with_spans =
+            generator.generate_raw_with_spans(&func.body, &func.arguments, &module.name);
+
+        // Finalize and optimize (or use minimal optimization if no_optimize is set)
+        let optimized = if no_optimize {
+            generator.finalize_minimal_with_spans(term_with_spans)
+        } else {
+            generator.finalize_with_spans(term_with_spans)
+        };
+
+        // Build source map if requested, otherwise discard spans
+        let source_map = match source_map_mode {
+            SourceMapMode::None => None,
+            SourceMapMode::Inline | SourceMapMode::External(_) => Some(SourceMap::from_term(
+                &optimized.term,
+                &module.name,
+                module_sources,
+            )),
+        };
+
+        // Convert to DeBruijn for final output (strips spans)
+        let program = uplc::ast::Program {
+            version: optimized.version,
+            term: optimized.term.map_context(|_| ()),
+        }
+        .to_debruijn()
+        .unwrap();
 
         let program = match plutus_version {
             PlutusVersion::V1 => SerializableProgram::PlutusV1Program(program),
@@ -120,6 +156,129 @@ impl Export {
             return_type,
             program,
             definitions,
+            source_map,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_test(
+        test: &TypedTest,
+        module: &CheckedModule,
+        generator: &mut CodeGenerator,
+        modules: &CheckedModules,
+        plutus_version: &PlutusVersion,
+        source_map_mode: &SourceMapMode,
+        module_sources: &IndexMap<&str, &(String, LineNumbers)>,
+        no_optimize: bool,
+    ) -> Result<Export, blueprint::Error> {
+        let mut definitions = Definitions::new();
+
+        // Extract the inner TypedArg from each ArgVia for property tests
+        let args: Vec<TypedArg> = test
+            .arguments
+            .iter()
+            .map(|arg_via| arg_via.arg.clone())
+            .collect();
+
+        // Build parameter schemas for property test arguments
+        let parameters = args
+            .iter()
+            .map(|param| {
+                Annotated::from_type(
+                    modules.into(),
+                    blueprint::validator::tipo_or_annotation(module, param),
+                    &mut definitions,
+                )
+                .map(|schema| Parameter {
+                    title: Some(param.arg_name.get_label()),
+                    schema: Declaration::Referenced(schema),
+                })
+                .map_err(|error| blueprint::Error::Schema {
+                    error,
+                    location: param.location,
+                    source_code: NamedSource::new(
+                        module.input_path.display().to_string(),
+                        module.code.clone(),
+                    ),
+                })
+            })
+            .collect::<Result<_, _>>()?;
+
+        // Tests return Bool
+        let return_type = Annotated::from_type(
+            modules.into(),
+            blueprint::validator::tipo_or_annotation(
+                module,
+                &TypedArg {
+                    arg_name: ArgName::Discarded {
+                        name: "".to_string(),
+                        label: "".to_string(),
+                        location: Span::empty(),
+                    },
+                    location: Span::empty(),
+                    annotation: test.return_annotation.clone(),
+                    doc: None,
+                    is_validator_param: false,
+                    tipo: test.return_type.clone(),
+                },
+            ),
+            &mut definitions,
+        )
+        .map(|schema| Parameter {
+            title: Some("return_type".to_string()),
+            schema: Declaration::Referenced(schema),
+        })
+        .map_err(|error| blueprint::Error::Schema {
+            error,
+            location: test.location,
+            source_code: NamedSource::new(
+                module.input_path.display().to_string(),
+                module.code.clone(),
+            ),
+        })?;
+
+        // Always generate with spans - both paths use the same code generation
+        let term_with_spans = generator.generate_raw_with_spans(&test.body, &args, &module.name);
+
+        // Finalize and optimize (or use minimal optimization if no_optimize is set)
+        let optimized = if no_optimize {
+            generator.finalize_minimal_with_spans(term_with_spans)
+        } else {
+            generator.finalize_with_spans(term_with_spans)
+        };
+
+        // Build source map if requested, otherwise discard spans
+        let source_map = match source_map_mode {
+            SourceMapMode::None => None,
+            SourceMapMode::Inline | SourceMapMode::External(_) => Some(SourceMap::from_term(
+                &optimized.term,
+                &module.name,
+                module_sources,
+            )),
+        };
+
+        // Convert to DeBruijn for final output (strips spans)
+        let program = uplc::ast::Program {
+            version: optimized.version,
+            term: optimized.term.map_context(|_| ()),
+        }
+        .to_debruijn()
+        .unwrap();
+
+        let program = match plutus_version {
+            PlutusVersion::V1 => SerializableProgram::PlutusV1Program(program),
+            PlutusVersion::V2 => SerializableProgram::PlutusV2Program(program),
+            PlutusVersion::V3 => SerializableProgram::PlutusV3Program(program),
+        };
+
+        Ok(Export {
+            name: format!("{}.{}", &module.name, &test.name),
+            doc: test.doc.clone(),
+            parameters,
+            return_type,
+            program,
+            definitions,
+            source_map,
         })
     }
 }
@@ -127,12 +286,13 @@ impl Export {
 #[cfg(test)]
 mod tests {
     use super::{CheckedModules, Export};
-    use crate::tests::TestProject;
+    use crate::{options::SourceMapMode, tests::TestProject};
     use aiken_lang::{
         self,
         ast::{TraceLevel, Tracing},
         plutus_version::PlutusVersion,
     };
+    use indexmap::IndexMap;
 
     macro_rules! assert_export {
         ($code:expr) => {
@@ -149,7 +309,18 @@ mod tests {
                 .next()
                 .expect("source code did no yield any exports");
 
-            let export = Export::from_function(func, module, &mut generator, &modules, &PlutusVersion::default());
+            let module_sources: IndexMap<&str, &(String, aiken_lang::line_numbers::LineNumbers)> = IndexMap::new();
+
+            let export = Export::from_function(
+                func,
+                module,
+                &mut generator,
+                &modules,
+                &PlutusVersion::default(),
+                &SourceMapMode::None,
+                &module_sources,
+                false, // no_optimize
+            );
 
             match export {
                 Err(e) => insta::with_settings!({

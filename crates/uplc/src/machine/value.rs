@@ -11,28 +11,30 @@ use num_traits::{Signed, ToPrimitive, Zero};
 use pallas_primitives::conway::{self, PlutusData};
 use std::{collections::VecDeque, mem::size_of, ops::Deref, rc::Rc};
 
-pub(super) type Env = Rc<Vec<Value>>;
+/// Environment type that preserves variable names for debugging.
+/// Each entry is a (name, value) pair where the name comes from the Lambda parameter.
+pub type Env<C> = Rc<Vec<(Rc<NamedDeBruijn>, Value<C>)>>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Value {
+pub enum Value<C> {
     Con(Rc<Constant>),
-    Delay(Rc<Term<NamedDeBruijn>>, Env),
+    Delay(Rc<Term<NamedDeBruijn, C>>, Env<C>),
     Lambda {
         parameter_name: Rc<NamedDeBruijn>,
-        body: Rc<Term<NamedDeBruijn>>,
-        env: Env,
+        body: Rc<Term<NamedDeBruijn, C>>,
+        env: Env<C>,
     },
     Builtin {
         fun: DefaultFunction,
-        runtime: BuiltinRuntime,
+        runtime: BuiltinRuntime<C>,
     },
     Constr {
         tag: usize,
-        fields: Vec<Value>,
+        fields: Vec<Value<C>>,
     },
 }
 
-impl Value {
+impl<C> Value<C> {
     pub fn integer(n: BigInt) -> Self {
         let constant = Constant::Integer(n);
 
@@ -69,7 +71,54 @@ impl Value {
         Value::Con(constant.into())
     }
 
-    pub(super) fn unwrap_integer(&self) -> Result<&BigInt, Error> {
+    /// Erase the context type, converting Value<C> to Value<()>.
+    /// Used when creating errors that need a context-free value.
+    pub fn erase_context(&self) -> Value<()>
+    where
+        C: Clone,
+    {
+        match self {
+            Value::Con(c) => Value::Con(c.clone()),
+            Value::Delay(term, env) => Value::Delay(
+                Rc::new(term.as_ref().clone().map_context(|_| ())),
+                Rc::new(
+                    env.iter()
+                        .map(|(name, v)| (name.clone(), v.erase_context()))
+                        .collect(),
+                ),
+            ),
+            Value::Lambda {
+                parameter_name,
+                body,
+                env,
+            } => Value::Lambda {
+                parameter_name: parameter_name.clone(),
+                body: Rc::new(body.as_ref().clone().map_context(|_| ())),
+                env: Rc::new(
+                    env.iter()
+                        .map(|(name, v)| (name.clone(), v.erase_context()))
+                        .collect(),
+                ),
+            },
+            Value::Builtin { fun, runtime } => Value::Builtin {
+                fun: *fun,
+                runtime: BuiltinRuntime {
+                    fun: runtime.fun,
+                    args: runtime.args.iter().map(|v| v.erase_context()).collect(),
+                    forces: runtime.forces,
+                },
+            },
+            Value::Constr { tag, fields } => Value::Constr {
+                tag: *tag,
+                fields: fields.iter().map(|v| v.erase_context()).collect(),
+            },
+        }
+    }
+
+    pub(super) fn unwrap_integer(&self) -> Result<&BigInt, Error>
+    where
+        C: Clone,
+    {
         let inner = self.unwrap_constant()?;
 
         let Constant::Integer(integer) = inner else {
@@ -79,7 +128,10 @@ impl Value {
         Ok(integer)
     }
 
-    pub(super) fn unwrap_byte_string(&self) -> Result<&Vec<u8>, Error> {
+    pub(super) fn unwrap_byte_string(&self) -> Result<&Vec<u8>, Error>
+    where
+        C: Clone,
+    {
         let inner = self.unwrap_constant()?;
 
         let Constant::ByteString(byte_string) = inner else {
@@ -89,7 +141,10 @@ impl Value {
         Ok(byte_string)
     }
 
-    pub(super) fn unwrap_string(&self) -> Result<&String, Error> {
+    pub(super) fn unwrap_string(&self) -> Result<&String, Error>
+    where
+        C: Clone,
+    {
         let inner = self.unwrap_constant()?;
 
         let Constant::String(string) = inner else {
@@ -99,7 +154,10 @@ impl Value {
         Ok(string)
     }
 
-    pub(super) fn unwrap_bool(&self) -> Result<&bool, Error> {
+    pub(super) fn unwrap_bool(&self) -> Result<&bool, Error>
+    where
+        C: Clone,
+    {
         let inner = self.unwrap_constant()?;
 
         let Constant::Bool(condition) = inner else {
@@ -110,9 +168,10 @@ impl Value {
     }
 
     #[allow(clippy::type_complexity)]
-    pub(super) fn unwrap_pair(
-        &self,
-    ) -> Result<(&Type, &Type, &Rc<Constant>, &Rc<Constant>), Error> {
+    pub(super) fn unwrap_pair(&self) -> Result<(&Type, &Type, &Rc<Constant>, &Rc<Constant>), Error>
+    where
+        C: Clone,
+    {
         let inner = self.unwrap_constant()?;
 
         let Constant::ProtoPair(t1, t2, first, second) = inner else {
@@ -122,7 +181,10 @@ impl Value {
         Ok((t1, t2, first, second))
     }
 
-    pub(super) fn unwrap_list(&self) -> Result<(&Type, &Vec<Constant>), Error> {
+    pub(super) fn unwrap_list(&self) -> Result<(&Type, &Vec<Constant>), Error>
+    where
+        C: Clone,
+    {
         let inner = self.unwrap_constant()?;
 
         let Constant::ProtoList(t, list) = inner else {
@@ -132,7 +194,10 @@ impl Value {
         Ok((t, list))
     }
 
-    pub(super) fn unwrap_data(&self) -> Result<&PlutusData, Error> {
+    pub(super) fn unwrap_data(&self) -> Result<&PlutusData, Error>
+    where
+        C: Clone,
+    {
         let inner = self.unwrap_constant()?;
 
         let Constant::Data(data) = inner else {
@@ -142,7 +207,10 @@ impl Value {
         Ok(data)
     }
 
-    pub(super) fn unwrap_unit(&self) -> Result<(), Error> {
+    pub(super) fn unwrap_unit(&self) -> Result<(), Error>
+    where
+        C: Clone,
+    {
         let inner = self.unwrap_constant()?;
 
         let Constant::Unit = inner else {
@@ -152,15 +220,21 @@ impl Value {
         Ok(())
     }
 
-    pub(super) fn unwrap_constant(&self) -> Result<&Constant, Error> {
+    pub(super) fn unwrap_constant(&self) -> Result<&Constant, Error>
+    where
+        C: Clone,
+    {
         let Value::Con(item) = self else {
-            return Err(Error::NotAConstant(self.clone()));
+            return Err(Error::NotAConstant(self.erase_context()));
         };
 
         Ok(item.as_ref())
     }
 
-    pub(super) fn unwrap_data_list(&self) -> Result<&Vec<Constant>, Error> {
+    pub(super) fn unwrap_data_list(&self) -> Result<&Vec<Constant>, Error>
+    where
+        C: Clone,
+    {
         let inner = self.unwrap_constant()?;
 
         let Constant::ProtoList(Type::Data, list) = inner else {
@@ -173,7 +247,10 @@ impl Value {
         Ok(list)
     }
 
-    pub(super) fn unwrap_int_list(&self) -> Result<&Vec<Constant>, Error> {
+    pub(super) fn unwrap_int_list(&self) -> Result<&Vec<Constant>, Error>
+    where
+        C: Clone,
+    {
         let inner = self.unwrap_constant()?;
 
         let Constant::ProtoList(Type::Integer, list) = inner else {
@@ -186,7 +263,10 @@ impl Value {
         Ok(list)
     }
 
-    pub(super) fn unwrap_bls12_381_g1_element(&self) -> Result<&blst::blst_p1, Error> {
+    pub(super) fn unwrap_bls12_381_g1_element(&self) -> Result<&blst::blst_p1, Error>
+    where
+        C: Clone,
+    {
         let inner = self.unwrap_constant()?;
 
         let Constant::Bls12_381G1Element(element) = inner else {
@@ -196,7 +276,10 @@ impl Value {
         Ok(element)
     }
 
-    pub(super) fn unwrap_bls12_381_g2_element(&self) -> Result<&blst::blst_p2, Error> {
+    pub(super) fn unwrap_bls12_381_g2_element(&self) -> Result<&blst::blst_p2, Error>
+    where
+        C: Clone,
+    {
         let inner = self.unwrap_constant()?;
 
         let Constant::Bls12_381G2Element(element) = inner else {
@@ -206,7 +289,10 @@ impl Value {
         Ok(element)
     }
 
-    pub(super) fn unwrap_bls12_381_ml_result(&self) -> Result<&blst::blst_fp12, Error> {
+    pub(super) fn unwrap_bls12_381_ml_result(&self) -> Result<&blst::blst_fp12, Error>
+    where
+        C: Clone,
+    {
         let inner = self.unwrap_constant()?;
 
         let Constant::Bls12_381MlResult(element) = inner else {
@@ -224,7 +310,10 @@ impl Value {
         matches!(self, Value::Con(b) if matches!(b.as_ref(), Constant::Bool(_)))
     }
 
-    pub fn cost_as_size(&self, func: DefaultFunction) -> Result<i64, Error> {
+    pub fn cost_as_size(&self, func: DefaultFunction) -> Result<i64, Error>
+    where
+        C: Clone,
+    {
         let size = self.unwrap_integer()?;
 
         if size.is_negative() {
@@ -282,10 +371,11 @@ impl Value {
                 Constant::Unit => 1,
                 Constant::Bool(_) => 1,
                 Constant::ProtoList(_, items) => items.iter().fold(0, |acc, constant| {
-                    acc + Value::Con(constant.clone().into()).to_ex_mem()
+                    acc + Value::<()>::Con(constant.clone().into()).to_ex_mem()
                 }),
                 Constant::ProtoPair(_, _, l, r) => {
-                    Value::Con(l.clone()).to_ex_mem() + Value::Con(r.clone()).to_ex_mem()
+                    Value::<()>::Con(l.clone()).to_ex_mem()
+                        + Value::<()>::Con(r.clone()).to_ex_mem()
                 }
                 Constant::Data(item) => self.data_to_ex_mem(item),
                 Constant::Bls12_381G1Element(_) => size_of::<blst::blst_p1>() as i64 / 8,
@@ -333,11 +423,11 @@ impl Value {
                 PlutusData::BigInt(i) => {
                     let i = from_pallas_bigint(i);
 
-                    total += Value::Con(Constant::Integer(i).into()).to_ex_mem();
+                    total += Value::<()>::Con(Constant::Integer(i).into()).to_ex_mem();
                 }
                 PlutusData::BoundedBytes(b) => {
                     let byte_string: Vec<u8> = b.deref().clone();
-                    total += Value::Con(Constant::ByteString(byte_string).into()).to_ex_mem();
+                    total += Value::<()>::Con(Constant::ByteString(byte_string).into()).to_ex_mem();
                 }
                 PlutusData::Array(a) => {
                     // create new stack with of items from the list of data
@@ -352,8 +442,11 @@ impl Value {
         total
     }
 
-    pub fn expect_type(&self, r#type: Type) -> Result<(), Error> {
-        let constant: Constant = self.clone().try_into()?;
+    pub fn expect_type(&self, r#type: Type) -> Result<(), Error>
+    where
+        C: Clone,
+    {
+        let constant: Constant = self.try_into()?;
 
         let constant_type = Type::from(&constant);
 
@@ -364,8 +457,11 @@ impl Value {
         }
     }
 
-    pub fn expect_list(&self) -> Result<(), Error> {
-        let constant: Constant = self.clone().try_into()?;
+    pub fn expect_list(&self) -> Result<(), Error>
+    where
+        C: Clone,
+    {
+        let constant: Constant = self.try_into()?;
 
         let constant_type = Type::from(&constant);
 
@@ -376,8 +472,11 @@ impl Value {
         }
     }
 
-    pub fn expect_pair(&self) -> Result<(), Error> {
-        let constant: Constant = self.clone().try_into()?;
+    pub fn expect_pair(&self) -> Result<(), Error>
+    where
+        C: Clone,
+    {
+        let constant: Constant = self.try_into()?;
 
         let constant_type = Type::from(&constant);
 
@@ -389,48 +488,98 @@ impl Value {
     }
 }
 
-impl TryFrom<Value> for Type {
-    type Error = Error;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        let constant: Constant = value.try_into()?;
-
-        let constant_type = Type::from(&constant);
-
-        Ok(constant_type)
-    }
-}
-
-impl TryFrom<&Value> for Type {
-    type Error = Error;
-
-    fn try_from(value: &Value) -> Result<Self, Self::Error> {
-        let constant: Constant = value.try_into()?;
-
-        let constant_type = Type::from(&constant);
-
-        Ok(constant_type)
-    }
-}
-
-impl TryFrom<Value> for Constant {
-    type Error = Error;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::Con(constant) => Ok(constant.as_ref().clone()),
-            rest => Err(Error::NotAConstant(rest)),
+impl Value<()> {
+    /// Convert Value<()> to Value<C> using C::default() for all context values.
+    /// Used when builtin results need to be lifted into a generic context.
+    pub fn with_default_context<C: Clone + Default>(self) -> Value<C> {
+        match self {
+            Value::Con(c) => Value::Con(c),
+            Value::Delay(term, env) => Value::Delay(
+                Rc::new(term.as_ref().clone().map_context(|_| C::default())),
+                Rc::new(
+                    env.iter()
+                        .map(|(name, v)| (name.clone(), v.clone().with_default_context()))
+                        .collect(),
+                ),
+            ),
+            Value::Lambda {
+                parameter_name,
+                body,
+                env,
+            } => Value::Lambda {
+                parameter_name,
+                body: Rc::new(body.as_ref().clone().map_context(|_| C::default())),
+                env: Rc::new(
+                    env.iter()
+                        .map(|(name, v)| (name.clone(), v.clone().with_default_context()))
+                        .collect(),
+                ),
+            },
+            Value::Builtin { fun, runtime } => Value::Builtin {
+                fun,
+                runtime: BuiltinRuntime {
+                    fun: runtime.fun,
+                    args: runtime
+                        .args
+                        .into_iter()
+                        .map(|v| v.with_default_context())
+                        .collect(),
+                    forces: runtime.forces,
+                },
+            },
+            Value::Constr { tag, fields } => Value::Constr {
+                tag,
+                fields: fields
+                    .into_iter()
+                    .map(|v| v.with_default_context())
+                    .collect(),
+            },
         }
     }
 }
 
-impl TryFrom<&Value> for Constant {
+impl<C: Clone> TryFrom<Value<C>> for Type {
     type Error = Error;
 
-    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+    fn try_from(value: Value<C>) -> Result<Self, Self::Error> {
+        let constant: Constant = value.try_into()?;
+
+        let constant_type = Type::from(&constant);
+
+        Ok(constant_type)
+    }
+}
+
+impl<C: Clone> TryFrom<&Value<C>> for Type {
+    type Error = Error;
+
+    fn try_from(value: &Value<C>) -> Result<Self, Self::Error> {
+        let constant: Constant = value.try_into()?;
+
+        let constant_type = Type::from(&constant);
+
+        Ok(constant_type)
+    }
+}
+
+impl<C: Clone> TryFrom<Value<C>> for Constant {
+    type Error = Error;
+
+    fn try_from(value: Value<C>) -> Result<Self, Self::Error> {
         match value {
             Value::Con(constant) => Ok(constant.as_ref().clone()),
-            rest => Err(Error::NotAConstant(rest.clone())),
+            rest => Err(Error::NotAConstant(rest.erase_context())),
+        }
+    }
+}
+
+impl<C: Clone> TryFrom<&Value<C>> for Constant {
+    type Error = Error;
+
+    fn try_from(value: &Value<C>) -> Result<Self, Self::Error> {
+        match value {
+            Value::Con(constant) => Ok(constant.as_ref().clone()),
+            rest => Err(Error::NotAConstant(rest.erase_context())),
         }
     }
 }
@@ -486,22 +635,22 @@ mod tests {
 
     #[test]
     fn to_ex_mem_bigint() {
-        let value = Value::Con(Constant::Integer(1.into()).into());
+        let value: Value<()> = Value::Con(Constant::Integer(1.into()).into());
 
         assert_eq!(value.to_ex_mem(), 1);
 
-        let value = Value::Con(Constant::Integer(42.into()).into());
+        let value: Value<()> = Value::Con(Constant::Integer(42.into()).into());
 
         assert_eq!(value.to_ex_mem(), 1);
 
-        let value = Value::Con(
+        let value: Value<()> = Value::Con(
             Constant::Integer(BigInt::parse_bytes("18446744073709551615".as_bytes(), 10).unwrap())
                 .into(),
         );
 
         assert_eq!(value.to_ex_mem(), 1);
 
-        let value = Value::Con(
+        let value: Value<()> = Value::Con(
             Constant::Integer(
                 BigInt::parse_bytes("999999999999999999999999999999".as_bytes(), 10).unwrap(),
             )
@@ -510,7 +659,7 @@ mod tests {
 
         assert_eq!(value.to_ex_mem(), 2);
 
-        let value = Value::Con(
+        let value: Value<()> = Value::Con(
             Constant::Integer(
                 BigInt::parse_bytes("170141183460469231731687303715884105726".as_bytes(), 10)
                     .unwrap(),
@@ -520,7 +669,7 @@ mod tests {
 
         assert_eq!(value.to_ex_mem(), 2);
 
-        let value = Value::Con(
+        let value: Value<()> = Value::Con(
             Constant::Integer(
                 BigInt::parse_bytes("170141183460469231731687303715884105727".as_bytes(), 10)
                     .unwrap(),
@@ -530,7 +679,7 @@ mod tests {
 
         assert_eq!(value.to_ex_mem(), 2);
 
-        let value = Value::Con(
+        let value: Value<()> = Value::Con(
             Constant::Integer(
                 BigInt::parse_bytes("170141183460469231731687303715884105728".as_bytes(), 10)
                     .unwrap(),
@@ -540,7 +689,7 @@ mod tests {
 
         assert_eq!(value.to_ex_mem(), 2);
 
-        let value = Value::Con(
+        let value: Value<()> = Value::Con(
             Constant::Integer(
                 BigInt::parse_bytes("170141183460469231731687303715884105729".as_bytes(), 10)
                     .unwrap(),
@@ -550,7 +699,7 @@ mod tests {
 
         assert_eq!(value.to_ex_mem(), 2);
 
-        let value = Value::Con(
+        let value: Value<()> = Value::Con(
             Constant::Integer(
                 BigInt::parse_bytes("340282366920938463463374607431768211458".as_bytes(), 10)
                     .unwrap(),
@@ -560,7 +709,7 @@ mod tests {
 
         assert_eq!(value.to_ex_mem(), 3);
 
-        let value = Value::Con(
+        let value: Value<()> = Value::Con(
             Constant::Integer(
                 BigInt::parse_bytes("999999999999999999999999999999999999999999".as_bytes(), 10)
                     .unwrap(),
@@ -570,7 +719,7 @@ mod tests {
 
         assert_eq!(value.to_ex_mem(), 3);
 
-        let value =
+        let value: Value<()> =
             Value::Con(Constant::Integer(BigInt::parse_bytes("999999999999999999999999999999999999999999999999999999999999999999999999999999999999".as_bytes(), 10).unwrap()).into());
 
         assert_eq!(value.to_ex_mem(), 5);

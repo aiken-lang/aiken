@@ -3,7 +3,7 @@ use std::{fmt::Display, rc::Rc};
 use crate::ast::{Constant, NamedDeBruijn, Term, Type};
 
 pub mod cost_model;
-mod discharge;
+pub mod discharge;
 mod error;
 pub mod eval_result;
 pub mod runtime;
@@ -13,32 +13,111 @@ use cost_model::{ExBudget, StepKind};
 pub use error::Error;
 use pallas_primitives::conway::Language;
 
-use self::{
-    cost_model::CostModel,
-    runtime::BuiltinRuntime,
-    value::{Env, Value},
-};
+use self::{cost_model::CostModel, runtime::BuiltinRuntime, value::Value};
 
-enum MachineState {
-    Return(Context, Value),
-    Compute(Context, Env, Term<NamedDeBruijn>),
-    Done(Term<NamedDeBruijn>),
+/// Environment for the CEK machine with named values for debugging.
+/// The `values` field provides name-value pairs for variable inspection.
+/// Generic over context type C (e.g., u64 for source map indices).
+#[derive(Clone, Debug)]
+pub struct Env<C> {
+    pub values: Rc<Vec<(NamedDeBruijn, Value<C>)>>,
 }
 
-#[derive(Clone)]
-enum Context {
-    FrameAwaitArg(Value, Box<Context>),
-    FrameAwaitFunTerm(Env, Term<NamedDeBruijn>, Box<Context>),
-    FrameAwaitFunValue(Value, Box<Context>),
-    FrameForce(Box<Context>),
+impl<C: Clone> Env<C> {
+    pub fn new() -> Self {
+        Env {
+            values: Rc::new(vec![]),
+        }
+    }
+
+    fn push(&mut self, name: NamedDeBruijn, value: Value<C>) {
+        Rc::make_mut(&mut self.values).push((name, value));
+    }
+
+    fn get(&self, index: usize) -> Option<&Value<C>> {
+        let len = self.values.len();
+        if index <= len {
+            self.values.get(len - index).map(|(_, v)| v)
+        } else {
+            None
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+}
+
+impl<C: Clone> Default for Env<C> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Machine state for step-by-step execution with source map support.
+/// Generic over context type C which is preserved through evaluation.
+#[derive(Clone, Debug)]
+pub enum MachineState<C> {
+    Return(Context<C>, Value<C>),
+    Compute(Context<C>, Env<C>, Term<NamedDeBruijn, C>),
+    Done(Term<NamedDeBruijn, C>),
+}
+
+/// Evaluation context (continuation) for the stepping interface.
+/// Generic over context type C.
+#[derive(Clone, Debug)]
+pub enum Context<C> {
+    FrameAwaitArg(Value<C>, Box<Context<C>>),
+    FrameAwaitFunTerm(Env<C>, Term<NamedDeBruijn, C>, Box<Context<C>>),
+    FrameAwaitFunValue(Value<C>, Box<Context<C>>),
+    FrameForce(Box<Context<C>>),
     FrameConstr(
-        Env,
+        Env<C>,
         usize,
-        Vec<Term<NamedDeBruijn>>,
-        Vec<Value>,
-        Box<Context>,
+        Vec<Term<NamedDeBruijn, C>>,
+        Vec<Value<C>>,
+        Box<Context<C>>,
     ),
-    FrameCases(Env, Vec<Term<NamedDeBruijn>>, Box<Context>),
+    FrameCases(Env<C>, Vec<Term<NamedDeBruijn, C>>, Box<Context<C>>),
+    NoFrame,
+}
+
+/// Internal machine state using regular Terms (for the non-stepping interface).
+/// Uses () as context for efficiency.
+enum InternalState {
+    Return(InternalContext, value::Env<()>, Value<()>),
+    Compute(InternalContext, value::Env<()>, Term<NamedDeBruijn, ()>),
+    Done(Term<NamedDeBruijn, ()>),
+}
+
+/// Internal context using regular Terms.
+/// Uses () as context for efficiency.
+#[derive(Clone)]
+enum InternalContext {
+    FrameAwaitArg(Value<()>, Box<InternalContext>),
+    FrameAwaitFunTerm(
+        value::Env<()>,
+        Term<NamedDeBruijn, ()>,
+        Box<InternalContext>,
+    ),
+    FrameAwaitFunValue(Value<()>, Box<InternalContext>),
+    FrameForce(Box<InternalContext>),
+    FrameConstr(
+        value::Env<()>,
+        usize,
+        Vec<Term<NamedDeBruijn, ()>>,
+        Vec<Value<()>>,
+        Box<InternalContext>,
+    ),
+    FrameCases(
+        value::Env<()>,
+        Vec<Term<NamedDeBruijn, ()>>,
+        Box<InternalContext>,
+    ),
     NoFrame,
 }
 
@@ -121,63 +200,97 @@ impl Machine {
         }
     }
 
-    pub fn run(&mut self, term: Term<NamedDeBruijn>) -> Result<Term<NamedDeBruijn>, Error> {
-        use MachineState::*;
-
+    /// Run the machine to completion (non-stepping interface).
+    /// Uses () as context for efficiency.
+    pub fn run(&mut self, term: Term<NamedDeBruijn, ()>) -> Result<Term<NamedDeBruijn, ()>, Error> {
         let startup_budget = self.costs.machine_costs.get(StepKind::StartUp);
-
         self.spend_budget(startup_budget)?;
 
-        let mut state = Compute(Context::NoFrame, Rc::new(vec![]), term);
+        let mut state = InternalState::Compute(InternalContext::NoFrame, Rc::new(vec![]), term);
 
         loop {
             state = match state {
-                Compute(context, env, t) => self.compute(context, env, t)?,
-                Return(context, value) => self.return_compute(context, value)?,
-                Done(t) => {
+                InternalState::Compute(context, env, t) => {
+                    self.internal_compute(context, env, t)?
+                }
+                InternalState::Return(context, env, value) => {
+                    self.internal_return(context, env, value)?
+                }
+                InternalState::Done(t) => {
                     return Ok(t);
                 }
             };
         }
     }
 
-    fn compute(
+    /// Get initial machine state for stepping.
+    /// Generic over context type C which is preserved through evaluation.
+    pub fn get_initial_machine_state<C: Clone + Default>(
         &mut self,
-        context: Context,
-        env: Env,
-        term: Term<NamedDeBruijn>,
-    ) -> Result<MachineState, Error> {
+        term: Term<NamedDeBruijn, C>,
+    ) -> Result<MachineState<C>, Error> {
+        let startup_budget = self.costs.machine_costs.get(StepKind::StartUp);
+        self.spend_budget(startup_budget)?;
+
+        Ok(MachineState::Compute(Context::NoFrame, Env::new(), term))
+    }
+
+    /// Step the machine one step forward.
+    /// Generic over context type C which is preserved through evaluation.
+    pub fn step<C: Clone + Default>(
+        &mut self,
+        state: MachineState<C>,
+    ) -> Result<MachineState<C>, Error> {
+        match state {
+            MachineState::Compute(context, env, term) => self.step_compute(context, env, term),
+            MachineState::Return(context, value) => self.step_return(context, value),
+            MachineState::Done(t) => Ok(MachineState::Done(t)),
+        }
+    }
+
+    fn step_compute<C: Clone + Default>(
+        &mut self,
+        context: Context<C>,
+        env: Env<C>,
+        term: Term<NamedDeBruijn, C>,
+    ) -> Result<MachineState<C>, Error> {
         match term {
-            Term::Var(name) => {
+            Term::Var { name, .. } => {
                 self.step_and_maybe_spend(StepKind::Var)?;
-
-                let val = self.lookup_var(name.as_ref(), &env)?;
-
+                let val = self.lookup_var_env(name.as_ref(), &env)?;
                 Ok(MachineState::Return(context, val))
             }
-            Term::Delay(body) => {
+            Term::Delay {
+                term: body,
+                context: _,
+            } => {
                 self.step_and_maybe_spend(StepKind::Delay)?;
-
-                Ok(MachineState::Return(context, Value::Delay(body, env)))
+                Ok(MachineState::Return(
+                    context,
+                    Value::Delay(body.clone(), env_to_value_env(&env)),
+                ))
             }
             Term::Lambda {
                 parameter_name,
                 body,
+                context: _,
             } => {
                 self.step_and_maybe_spend(StepKind::Lambda)?;
-
                 Ok(MachineState::Return(
                     context,
                     Value::Lambda {
                         parameter_name,
-                        body,
-                        env,
+                        body: body.clone(),
+                        env: env_to_value_env(&env),
                     },
                 ))
             }
-            Term::Apply { function, argument } => {
+            Term::Apply {
+                function,
+                argument,
+                context: _,
+            } => {
                 self.step_and_maybe_spend(StepKind::Apply)?;
-
                 Ok(MachineState::Compute(
                     Context::FrameAwaitFunTerm(
                         env.clone(),
@@ -188,39 +301,39 @@ impl Machine {
                     function.as_ref().clone(),
                 ))
             }
-            Term::Constant(x) => {
+            Term::Constant { value: x, .. } => {
                 self.step_and_maybe_spend(StepKind::Constant)?;
-
                 Ok(MachineState::Return(context, Value::Con(x)))
             }
-            Term::Force(body) => {
+            Term::Force {
+                term: body,
+                context: _,
+            } => {
                 self.step_and_maybe_spend(StepKind::Force)?;
-
                 Ok(MachineState::Compute(
                     Context::FrameForce(context.into()),
                     env,
                     body.as_ref().clone(),
                 ))
             }
-            Term::Error => Err(Error::EvaluationFailure),
-            Term::Builtin(fun) => {
+            Term::Error { .. } => Err(Error::EvaluationFailure),
+            Term::Builtin { func: fun, .. } => {
                 self.step_and_maybe_spend(StepKind::Builtin)?;
-
-                let runtime: BuiltinRuntime = fun.into();
-
+                let runtime: BuiltinRuntime<C> = fun.into();
                 Ok(MachineState::Return(
                     context,
                     Value::Builtin { fun, runtime },
                 ))
             }
-            Term::Constr { tag, mut fields } => {
+            Term::Constr {
+                tag,
+                mut fields,
+                context: _,
+            } => {
                 self.step_and_maybe_spend(StepKind::Constr)?;
-
                 fields.reverse();
-
                 if !fields.is_empty() {
                     let popped_field = fields.pop().unwrap();
-
                     Ok(MachineState::Compute(
                         Context::FrameConstr(env.clone(), tag, fields, vec![], context.into()),
                         env,
@@ -236,9 +349,12 @@ impl Machine {
                     ))
                 }
             }
-            Term::Case { constr, branches } => {
+            Term::Case {
+                constr,
+                branches,
+                context: _,
+            } => {
                 self.step_and_maybe_spend(StepKind::Case)?;
-
                 Ok(MachineState::Compute(
                     Context::FrameCases(env.clone(), branches, context.into()),
                     env,
@@ -248,31 +364,31 @@ impl Machine {
         }
     }
 
-    fn return_compute(&mut self, context: Context, value: Value) -> Result<MachineState, Error> {
+    fn step_return<C: Clone + Default>(
+        &mut self,
+        context: Context<C>,
+        value: Value<C>,
+    ) -> Result<MachineState<C>, Error> {
         match context {
             Context::NoFrame => {
                 if self.unbudgeted_steps[9] > 0 {
                     self.spend_unbudgeted_steps()?;
                 }
-
                 let term = discharge::value_as_term(value);
-
                 Ok(MachineState::Done(term))
             }
-            Context::FrameForce(ctx) => self.force_evaluate(*ctx, value),
+            Context::FrameForce(ctx) => self.step_force(*ctx, value),
             Context::FrameAwaitFunTerm(arg_env, arg, ctx) => Ok(MachineState::Compute(
                 Context::FrameAwaitArg(value, ctx),
                 arg_env,
                 arg,
             )),
-            Context::FrameAwaitArg(fun, ctx) => self.apply_evaluate(*ctx, fun, value),
-            Context::FrameAwaitFunValue(arg, ctx) => self.apply_evaluate(*ctx, value, arg),
+            Context::FrameAwaitArg(fun, ctx) => self.step_apply(*ctx, fun, value),
+            Context::FrameAwaitFunValue(arg, ctx) => self.step_apply(*ctx, value, arg),
             Context::FrameConstr(env, tag, mut fields, mut resolved_fields, ctx) => {
                 resolved_fields.push(value);
-
                 if !fields.is_empty() {
                     let popped_field = fields.pop().unwrap();
-
                     Ok(MachineState::Compute(
                         Context::FrameConstr(env.clone(), tag, fields, resolved_fields, ctx),
                         env,
@@ -291,8 +407,265 @@ impl Machine {
             Context::FrameCases(env, branches, ctx) => match value {
                 Value::Constr { tag, fields } => match branches.get(tag) {
                     Some(t) => Ok(MachineState::Compute(
-                        transfer_arg_stack(fields, *ctx),
+                        step_transfer_arg_stack(fields, *ctx),
                         env,
+                        t.clone(),
+                    )),
+                    None => {
+                        let term_branches: Vec<Term<NamedDeBruijn, ()>> = branches
+                            .into_iter()
+                            .map(|t| t.map_context(|_| ()))
+                            .collect();
+                        Err(Error::MissingCaseBranch(
+                            term_branches,
+                            Value::Constr { tag, fields }.erase_context(),
+                        ))
+                    }
+                },
+                v => Err(Error::NonConstrScrutinized(v.erase_context())),
+            },
+        }
+    }
+
+    fn step_force<C: Clone + Default>(
+        &mut self,
+        context: Context<C>,
+        value: Value<C>,
+    ) -> Result<MachineState<C>, Error> {
+        match value {
+            Value::Delay(body, value_env) => {
+                let env = value_env_to_env(&value_env);
+                Ok(MachineState::Compute(context, env, body.as_ref().clone()))
+            }
+            Value::Builtin { fun, mut runtime } => {
+                if runtime.needs_force() {
+                    runtime.consume_force();
+                    let res = if runtime.is_ready() {
+                        self.eval_builtin_app(runtime)?
+                    } else {
+                        Value::Builtin { fun, runtime }
+                    };
+                    Ok(MachineState::Return(context, res))
+                } else {
+                    let term =
+                        discharge::value_as_term(Value::Builtin { fun, runtime }.erase_context());
+                    Err(Error::BuiltinTermArgumentExpected(term))
+                }
+            }
+            rest => Err(Error::NonPolymorphicInstantiation(rest.erase_context())),
+        }
+    }
+
+    fn step_apply<C: Clone + Default>(
+        &mut self,
+        context: Context<C>,
+        function: Value<C>,
+        argument: Value<C>,
+    ) -> Result<MachineState<C>, Error> {
+        match function {
+            Value::Lambda {
+                parameter_name,
+                body,
+                env: value_env,
+            } => {
+                let mut env = value_env_to_env(&value_env);
+                env.push((*parameter_name).clone(), argument);
+                Ok(MachineState::Compute(context, env, body.as_ref().clone()))
+            }
+            Value::Builtin { fun, runtime } => {
+                if runtime.is_arrow() && !runtime.needs_force() {
+                    let mut runtime = runtime;
+                    runtime.push(argument)?;
+                    let res = if runtime.is_ready() {
+                        self.eval_builtin_app(runtime)?
+                    } else {
+                        Value::Builtin { fun, runtime }
+                    };
+                    Ok(MachineState::Return(context, res))
+                } else {
+                    let term =
+                        discharge::value_as_term(Value::Builtin { fun, runtime }.erase_context());
+                    Err(Error::UnexpectedBuiltinTermArgument(term))
+                }
+            }
+            rest => Err(Error::NonFunctionalApplication(
+                rest.erase_context(),
+                argument.erase_context(),
+            )),
+        }
+    }
+
+    // ===== Internal compute/return for the non-stepping interface =====
+
+    fn internal_compute(
+        &mut self,
+        context: InternalContext,
+        env: value::Env<()>,
+        term: Term<NamedDeBruijn, ()>,
+    ) -> Result<InternalState, Error> {
+        match term {
+            Term::Var { name, .. } => {
+                self.step_and_maybe_spend(StepKind::Var)?;
+                let val = self.lookup_var(name.as_ref(), &env)?;
+                Ok(InternalState::Return(context, env, val))
+            }
+            Term::Delay { term: body, .. } => {
+                self.step_and_maybe_spend(StepKind::Delay)?;
+                Ok(InternalState::Return(
+                    context,
+                    env.clone(),
+                    Value::Delay(body, env),
+                ))
+            }
+            Term::Lambda {
+                parameter_name,
+                body,
+                ..
+            } => {
+                self.step_and_maybe_spend(StepKind::Lambda)?;
+                Ok(InternalState::Return(
+                    context,
+                    env.clone(),
+                    Value::Lambda {
+                        parameter_name,
+                        body,
+                        env,
+                    },
+                ))
+            }
+            Term::Apply {
+                function, argument, ..
+            } => {
+                self.step_and_maybe_spend(StepKind::Apply)?;
+                Ok(InternalState::Compute(
+                    InternalContext::FrameAwaitFunTerm(
+                        env.clone(),
+                        argument.as_ref().clone(),
+                        context.into(),
+                    ),
+                    env,
+                    function.as_ref().clone(),
+                ))
+            }
+            Term::Constant { value: x, .. } => {
+                self.step_and_maybe_spend(StepKind::Constant)?;
+                Ok(InternalState::Return(context, env, Value::Con(x)))
+            }
+            Term::Force { term: body, .. } => {
+                self.step_and_maybe_spend(StepKind::Force)?;
+                Ok(InternalState::Compute(
+                    InternalContext::FrameForce(context.into()),
+                    env,
+                    body.as_ref().clone(),
+                ))
+            }
+            Term::Error { .. } => Err(Error::EvaluationFailure),
+            Term::Builtin { func: fun, .. } => {
+                self.step_and_maybe_spend(StepKind::Builtin)?;
+                let runtime: BuiltinRuntime<()> = fun.into();
+                Ok(InternalState::Return(
+                    context,
+                    env,
+                    Value::Builtin { fun, runtime },
+                ))
+            }
+            Term::Constr {
+                tag, mut fields, ..
+            } => {
+                self.step_and_maybe_spend(StepKind::Constr)?;
+                fields.reverse();
+                if !fields.is_empty() {
+                    let popped_field = fields.pop().unwrap();
+                    Ok(InternalState::Compute(
+                        InternalContext::FrameConstr(
+                            env.clone(),
+                            tag,
+                            fields,
+                            vec![],
+                            context.into(),
+                        ),
+                        env,
+                        popped_field,
+                    ))
+                } else {
+                    Ok(InternalState::Return(
+                        context,
+                        env,
+                        Value::Constr {
+                            tag,
+                            fields: vec![],
+                        },
+                    ))
+                }
+            }
+            Term::Case {
+                constr, branches, ..
+            } => {
+                self.step_and_maybe_spend(StepKind::Case)?;
+                Ok(InternalState::Compute(
+                    InternalContext::FrameCases(env.clone(), branches, context.into()),
+                    env,
+                    constr.as_ref().clone(),
+                ))
+            }
+        }
+    }
+
+    fn internal_return(
+        &mut self,
+        context: InternalContext,
+        env: value::Env<()>,
+        value: Value<()>,
+    ) -> Result<InternalState, Error> {
+        match context {
+            InternalContext::NoFrame => {
+                if self.unbudgeted_steps[9] > 0 {
+                    self.spend_unbudgeted_steps()?;
+                }
+                let term = discharge::value_as_term(value);
+                Ok(InternalState::Done(term))
+            }
+            InternalContext::FrameForce(ctx) => self.internal_force(*ctx, env, value),
+            InternalContext::FrameAwaitFunTerm(arg_env, arg, ctx) => Ok(InternalState::Compute(
+                InternalContext::FrameAwaitArg(value, ctx),
+                arg_env,
+                arg,
+            )),
+            InternalContext::FrameAwaitArg(fun, ctx) => self.internal_apply(*ctx, env, fun, value),
+            InternalContext::FrameAwaitFunValue(arg, ctx) => {
+                self.internal_apply(*ctx, env, value, arg)
+            }
+            InternalContext::FrameConstr(frame_env, tag, mut fields, mut resolved_fields, ctx) => {
+                resolved_fields.push(value);
+                if !fields.is_empty() {
+                    let popped_field = fields.pop().unwrap();
+                    Ok(InternalState::Compute(
+                        InternalContext::FrameConstr(
+                            frame_env.clone(),
+                            tag,
+                            fields,
+                            resolved_fields,
+                            ctx,
+                        ),
+                        frame_env,
+                        popped_field,
+                    ))
+                } else {
+                    Ok(InternalState::Return(
+                        *ctx,
+                        frame_env,
+                        Value::Constr {
+                            tag,
+                            fields: resolved_fields,
+                        },
+                    ))
+                }
+            }
+            InternalContext::FrameCases(frame_env, branches, ctx) => match value {
+                Value::Constr { tag, fields } => match branches.get(tag) {
+                    Some(t) => Ok(InternalState::Compute(
+                        internal_transfer_arg_stack(fields, *ctx),
+                        frame_env,
                         t.clone(),
                     )),
                     None => Err(Error::MissingCaseBranch(
@@ -305,25 +678,29 @@ impl Machine {
         }
     }
 
-    fn force_evaluate(&mut self, context: Context, value: Value) -> Result<MachineState, Error> {
+    fn internal_force(
+        &mut self,
+        context: InternalContext,
+        _env: value::Env<()>,
+        value: Value<()>,
+    ) -> Result<InternalState, Error> {
         match value {
-            Value::Delay(body, env) => {
-                Ok(MachineState::Compute(context, env, body.as_ref().clone()))
-            }
+            Value::Delay(body, delay_env) => Ok(InternalState::Compute(
+                context,
+                delay_env,
+                body.as_ref().clone(),
+            )),
             Value::Builtin { fun, mut runtime } => {
                 if runtime.needs_force() {
                     runtime.consume_force();
-
                     let res = if runtime.is_ready() {
                         self.eval_builtin_app(runtime)?
                     } else {
                         Value::Builtin { fun, runtime }
                     };
-
-                    Ok(MachineState::Return(context, res))
+                    Ok(InternalState::Return(context, Rc::new(vec![]), res))
                 } else {
                     let term = discharge::value_as_term(Value::Builtin { fun, runtime });
-
                     Err(Error::BuiltinTermArgumentExpected(term))
                 }
             }
@@ -331,19 +708,22 @@ impl Machine {
         }
     }
 
-    fn apply_evaluate(
+    fn internal_apply(
         &mut self,
-        context: Context,
-        function: Value,
-        argument: Value,
-    ) -> Result<MachineState, Error> {
+        context: InternalContext,
+        _env: value::Env<()>,
+        function: Value<()>,
+        argument: Value<()>,
+    ) -> Result<InternalState, Error> {
         match function {
-            Value::Lambda { body, mut env, .. } => {
+            Value::Lambda {
+                parameter_name,
+                body,
+                mut env,
+            } => {
                 let e = Rc::make_mut(&mut env);
-
-                e.push(argument);
-
-                Ok(MachineState::Compute(
+                e.push((parameter_name, argument));
+                Ok(InternalState::Compute(
                     context,
                     Rc::new(e.clone()),
                     body.as_ref().clone(),
@@ -352,19 +732,15 @@ impl Machine {
             Value::Builtin { fun, runtime } => {
                 if runtime.is_arrow() && !runtime.needs_force() {
                     let mut runtime = runtime;
-
                     runtime.push(argument)?;
-
                     let res = if runtime.is_ready() {
                         self.eval_builtin_app(runtime)?
                     } else {
                         Value::Builtin { fun, runtime }
                     };
-
-                    Ok(MachineState::Return(context, res))
+                    Ok(InternalState::Return(context, Rc::new(vec![]), res))
                 } else {
                     let term = discharge::value_as_term(Value::Builtin { fun, runtime });
-
                     Err(Error::UnexpectedBuiltinTermArgument(term))
                 }
             }
@@ -372,25 +748,51 @@ impl Machine {
         }
     }
 
-    fn eval_builtin_app(&mut self, runtime: BuiltinRuntime) -> Result<Value, Error> {
-        let cost = runtime.to_ex_budget(&self.costs.builtin_costs)?;
+    // ===== Shared helpers =====
 
+    fn eval_builtin_app<C: Clone>(
+        &mut self,
+        runtime: BuiltinRuntime<C>,
+    ) -> Result<Value<C>, Error> {
+        let cost = runtime.to_ex_budget(&self.costs.builtin_costs)?;
         self.spend_budget(cost)?;
 
         if let Some(counter) = &mut self.spend_counter {
             let i = (runtime.fun as usize + TERM_COUNT) * 2;
-
             counter[i] += cost.mem;
             counter[i + 1] += cost.cpu;
         }
 
+        // Builtins now preserve context - when IfThenElse returns one of its
+        // arguments, the context is preserved.
         runtime.call(&self.version, &mut self.traces)
     }
 
-    fn lookup_var(&mut self, name: &NamedDeBruijn, env: &[Value]) -> Result<Value, Error> {
-        env.get::<usize>(env.len() - usize::from(name.index))
-            .cloned()
-            .ok_or_else(|| Error::OpenTermEvaluated(Term::Var(name.clone().into())))
+    fn lookup_var(
+        &mut self,
+        name: &NamedDeBruijn,
+        env: &value::Env<()>,
+    ) -> Result<Value<()>, Error> {
+        let index = env.len() - usize::from(name.index);
+        env.get(index).map(|(_, v)| v.clone()).ok_or_else(|| {
+            Error::OpenTermEvaluated(Term::Var {
+                name: name.clone().into(),
+                context: (),
+            })
+        })
+    }
+
+    fn lookup_var_env<C: Clone>(
+        &mut self,
+        name: &NamedDeBruijn,
+        env: &Env<C>,
+    ) -> Result<Value<C>, Error> {
+        env.get(usize::from(name.index)).cloned().ok_or_else(|| {
+            Error::OpenTermEvaluated(Term::Var {
+                name: name.clone().into(),
+                context: (),
+            })
+        })
     }
 
     fn step_and_maybe_spend(&mut self, step: StepKind) -> Result<(), Error> {
@@ -409,11 +811,8 @@ impl Machine {
         for i in 0..self.unbudgeted_steps.len() - 1 {
             let mut unspent_step_budget =
                 self.costs.machine_costs.get(StepKind::try_from(i as u8)?);
-
             unspent_step_budget.occurrences(self.unbudgeted_steps[i] as i64);
-
             self.spend_budget(unspent_step_budget)?;
-
             self.unbudgeted_steps[i] = 0;
 
             if let Some(counter) = &mut self.spend_counter {
@@ -423,7 +822,6 @@ impl Machine {
         }
 
         self.unbudgeted_steps[9] = 0;
-
         Ok(())
     }
 
@@ -439,14 +837,47 @@ impl Machine {
     }
 }
 
-fn transfer_arg_stack(mut args: Vec<Value>, ctx: Context) -> Context {
+// ===== Helper functions =====
+
+fn internal_transfer_arg_stack(mut args: Vec<Value<()>>, ctx: InternalContext) -> InternalContext {
     if args.is_empty() {
         ctx
     } else {
         let popped_field = args.pop().unwrap();
-
-        transfer_arg_stack(args, Context::FrameAwaitFunValue(popped_field, ctx.into()))
+        internal_transfer_arg_stack(
+            args,
+            InternalContext::FrameAwaitFunValue(popped_field, ctx.into()),
+        )
     }
+}
+
+fn step_transfer_arg_stack<C>(mut args: Vec<Value<C>>, ctx: Context<C>) -> Context<C> {
+    if args.is_empty() {
+        ctx
+    } else {
+        let popped_field = args.pop().unwrap();
+        step_transfer_arg_stack(args, Context::FrameAwaitFunValue(popped_field, ctx.into()))
+    }
+}
+
+/// Convert value::Env<C> to the named Env<C> type.
+/// Now that value::Env stores names, we can preserve them.
+fn value_env_to_env<C: Clone>(value_env: &value::Env<C>) -> Env<C> {
+    let mut env = Env::new();
+    for (name, val) in value_env.iter() {
+        env.push((**name).clone(), val.clone());
+    }
+    env
+}
+
+/// Convert the named Env<C> type to value::Env<C>, preserving names.
+fn env_to_value_env<C: Clone>(env: &Env<C>) -> value::Env<C> {
+    Rc::new(
+        env.values
+            .iter()
+            .map(|(name, v)| (Rc::new(name.clone()), v.clone()))
+            .collect(),
+    )
 }
 
 impl From<&Constant> for Type {
@@ -485,11 +916,25 @@ mod tests {
             version: (0, 0, 0),
             term: Term::Apply {
                 function: Term::Apply {
-                    function: Term::Builtin(DefaultFunction::AddInteger).into(),
-                    argument: Term::Constant(Constant::Integer(i128::MAX.into()).into()).into(),
+                    function: Term::Builtin {
+                        func: DefaultFunction::AddInteger,
+                        context: (),
+                    }
+                    .into(),
+                    argument: Term::Constant {
+                        value: Constant::Integer(i128::MAX.into()).into(),
+                        context: (),
+                    }
+                    .into(),
+                    context: (),
                 }
                 .into(),
-                argument: Term::Constant(Constant::Integer(i128::MAX.into()).into()).into(),
+                argument: Term::Constant {
+                    value: Constant::Integer(i128::MAX.into()).into(),
+                    context: (),
+                }
+                .into(),
+                context: (),
             },
         };
 
@@ -499,12 +944,13 @@ mod tests {
 
         assert_eq!(
             term,
-            Term::Constant(
-                Constant::Integer(
+            Term::Constant {
+                value: Constant::Integer(
                     Into::<BigInt>::into(i128::MAX) + Into::<BigInt>::into(i128::MAX)
                 )
-                .into()
-            )
+                .into(),
+                context: (),
+            }
         );
     }
 
@@ -514,11 +960,25 @@ mod tests {
             version: (0, 0, 0),
             term: Term::Apply {
                 function: Term::Apply {
-                    function: Term::Builtin(fun).into(),
-                    argument: Term::Constant(Constant::Integer(n.into()).into()).into(),
+                    function: Term::Builtin {
+                        func: fun,
+                        context: (),
+                    }
+                    .into(),
+                    argument: Term::Constant {
+                        value: Constant::Integer(n.into()).into(),
+                        context: (),
+                    }
+                    .into(),
+                    context: (),
                 }
                 .into(),
-                argument: Term::Constant(Constant::Integer(m.into()).into()).into(),
+                argument: Term::Constant {
+                    value: Constant::Integer(m.into()).into(),
+                    context: (),
+                }
+                .into(),
+                context: (),
             },
         };
 
@@ -546,7 +1006,10 @@ mod tests {
 
             assert_eq!(
                 eval_result.result().unwrap(),
-                Term::Constant(Constant::Integer(result.into()).into())
+                Term::Constant {
+                    value: Constant::Integer(result.into()).into(),
+                    context: (),
+                }
             );
         }
     }
@@ -560,12 +1023,26 @@ mod tests {
                     constr: Term::Constr {
                         tag,
                         fields: vec![
-                            Term::Constant(Constant::Integer(n.into()).into()),
-                            Term::Constant(Constant::Integer(m.into()).into()),
+                            Term::Constant {
+                                value: Constant::Integer(n.into()).into(),
+                                context: (),
+                            },
+                            Term::Constant {
+                                value: Constant::Integer(m.into()).into(),
+                                context: (),
+                            },
                         ],
+                        context: (),
                     }
                     .into(),
-                    branches: vec![Term::Builtin(fun), Term::subtract_integer()],
+                    branches: vec![
+                        Term::Builtin {
+                            func: fun,
+                            context: (),
+                        },
+                        Term::subtract_integer(),
+                    ],
+                    context: (),
                 },
             };
 
@@ -579,7 +1056,10 @@ mod tests {
 
             assert_eq!(
                 eval_result.result().unwrap(),
-                Term::Constant(Constant::Integer(result.into()).into())
+                Term::Constant {
+                    value: Constant::Integer(result.into()).into(),
+                    context: (),
+                }
             );
         }
     }
@@ -592,6 +1072,7 @@ mod tests {
                 constr: Term::Constr {
                     tag,
                     fields: vec![],
+                    context: (),
                 }
                 .into(),
                 branches: vec![
@@ -599,6 +1080,7 @@ mod tests {
                     Term::integer(10.into()),
                     Term::integer(15.into()),
                 ],
+                context: (),
             },
         };
 
@@ -609,7 +1091,10 @@ mod tests {
 
             assert_eq!(
                 eval_result.result().unwrap(),
-                Term::Constant(Constant::Integer(result.into()).into())
+                Term::Constant {
+                    value: Constant::Integer(result.into()).into(),
+                    context: (),
+                }
             );
         }
     }
@@ -724,5 +1209,101 @@ mod tests {
         let final_term = eval_result.result().unwrap();
 
         assert_eq!(final_term, Term::bool(true))
+    }
+
+    #[test]
+    fn stepping_preserves_variable_names_in_env() {
+        use super::{Machine, MachineState};
+        use crate::ast::DeBruijn;
+        use std::rc::Rc;
+
+        // Create a simple program: (\x -> \y -> x) 1 2
+        // This should result in env containing [("x", 1), ("y", 2)] at some point
+        let term: Term<NamedDeBruijn, u64> = Term::Lambda {
+            parameter_name: Rc::new(NamedDeBruijn {
+                text: "my_x_var".to_string(),
+                index: DeBruijn::from(0),
+            }),
+            body: Rc::new(Term::Lambda {
+                parameter_name: Rc::new(NamedDeBruijn {
+                    text: "my_y_var".to_string(),
+                    index: DeBruijn::from(0),
+                }),
+                body: Rc::new(Term::Var {
+                    name: Rc::new(NamedDeBruijn {
+                        text: "my_x_var".to_string(),
+                        index: DeBruijn::from(2),
+                    }),
+                    context: 100,
+                }),
+                context: 200,
+            }),
+            context: 300,
+        };
+
+        // Apply to 1 and then 2
+        let term = Term::Apply {
+            function: Rc::new(Term::Apply {
+                function: Rc::new(term),
+                argument: Rc::new(Term::Constant {
+                    value: Rc::new(Constant::Integer(1.into())),
+                    context: 400,
+                }),
+                context: 500,
+            }),
+            argument: Rc::new(Term::Constant {
+                value: Rc::new(Constant::Integer(2.into())),
+                context: 600,
+            }),
+            context: 700,
+        };
+
+        let mut machine = Machine::new(
+            pallas_primitives::conway::Language::PlutusV3,
+            crate::machine::cost_model::CostModel::default(),
+            ExBudget::default(),
+            200,
+        );
+
+        let mut state = machine.get_initial_machine_state(term).unwrap();
+
+        // Track the env names we see
+        let mut found_x = false;
+        let mut found_y = false;
+        let mut found_both = false;
+
+        for _ in 0..100 {
+            match &state {
+                MachineState::Compute(_, env, _) => {
+                    // Check if we have the expected variable names in the env
+                    for (name, _) in env.values.iter() {
+                        if name.text == "my_x_var" {
+                            found_x = true;
+                        }
+                        if name.text == "my_y_var" {
+                            found_y = true;
+                        }
+                    }
+                    // Check if both are present at the same time
+                    if env.values.len() >= 2 {
+                        let names: Vec<_> =
+                            env.values.iter().map(|(n, _)| n.text.as_str()).collect();
+                        if names.contains(&"my_x_var") && names.contains(&"my_y_var") {
+                            found_both = true;
+                        }
+                    }
+                }
+                MachineState::Done(_) => break,
+                MachineState::Return(_, _) => {}
+            }
+            state = machine.step(state).unwrap();
+        }
+
+        assert!(found_x, "Should have seen 'my_x_var' in env at some point");
+        assert!(found_y, "Should have seen 'my_y_var' in env at some point");
+        assert!(
+            found_both,
+            "Should have seen both 'my_x_var' and 'my_y_var' in env together"
+        );
     }
 }

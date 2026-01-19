@@ -3,6 +3,7 @@ pub mod error;
 mod memo_program;
 pub mod parameter;
 pub mod schema;
+pub mod source_map;
 pub mod validator;
 
 use crate::{
@@ -66,6 +67,8 @@ impl Blueprint {
         config: &ProjectConfig,
         modules: &CheckedModules,
         generator: &mut CodeGenerator,
+        source_map_mode: &crate::options::SourceMapMode,
+        module_sources: &indexmap::IndexMap<&str, &(String, aiken_lang::line_numbers::LineNumbers)>,
     ) -> Result<Self, Error> {
         let preamble = config.into();
 
@@ -80,6 +83,8 @@ impl Blueprint {
                     validator,
                     def,
                     &config.plutus,
+                    source_map_mode,
+                    module_sources,
                 )?
                 .into_iter()
                 .map(|mut schema| {

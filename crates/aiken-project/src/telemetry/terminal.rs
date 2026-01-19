@@ -355,6 +355,45 @@ impl EventListener for Terminal {
                     println!();
                 }
             }
+            Event::FinishedCoverage {
+                output_path,
+                lines_hit,
+                lines_total,
+            } => {
+                let percentage = if lines_total > 0 {
+                    (lines_hit as f64 / lines_total as f64) * 100.0
+                } else {
+                    0.0
+                };
+
+                let coverage_text = format!("{:.1}%", percentage);
+                let coverage_styled = if percentage >= 80.0 {
+                    coverage_text
+                        .if_supports_color(Stderr, |s| s.green())
+                        .to_string()
+                } else if percentage >= 50.0 {
+                    coverage_text
+                        .if_supports_color(Stderr, |s| s.yellow())
+                        .to_string()
+                } else {
+                    coverage_text
+                        .if_supports_color(Stderr, |s| s.red())
+                        .to_string()
+                };
+
+                eprintln!(
+                    "\n{} {} coverage ({}/{} lines) written to {}",
+                    "     Coverage"
+                        .if_supports_color(Stderr, |s| s.bold())
+                        .if_supports_color(Stderr, |s| s.purple()),
+                    coverage_styled,
+                    lines_hit,
+                    lines_total,
+                    output_path
+                        .display()
+                        .if_supports_color(Stderr, |s| s.bright_blue())
+                );
+            }
         }
     }
 }

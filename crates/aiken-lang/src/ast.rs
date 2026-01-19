@@ -2366,6 +2366,12 @@ pub struct Span {
     pub end: usize,
 }
 
+impl Default for Span {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
 impl From<Span> for miette::SourceSpan {
     fn from(span: Span) -> Self {
         Self::new(span.start.into(), span.end - span.start)
@@ -2474,6 +2480,39 @@ impl chumsky::Span for Span {
 
     fn end(&self) -> Self::Offset {
         self.end
+    }
+}
+
+/// A source location that includes both the module name and the byte span.
+/// Used for tracking source locations across module boundaries during code generation.
+#[derive(Clone, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct SourceLocation {
+    /// The module name (e.g., "aiken/collection/list" or "validators/my_validator")
+    pub module: String,
+    /// The byte span within the module's source
+    pub span: Span,
+}
+
+impl SourceLocation {
+    pub fn new(module: impl Into<String>, span: Span) -> Self {
+        Self {
+            module: module.into(),
+            span,
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.module.is_empty() && self.span.start == 0 && self.span.end == 0
+    }
+}
+
+impl fmt::Debug for SourceLocation {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{:?}", self.module, self.span.range())
     }
 }
 
