@@ -36,6 +36,31 @@ pub struct Export {
     pub definitions: Definitions<Annotated<Schema>>,
 }
 
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ExportedProgram {
+    pub hex: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub flat_bytes: Option<Vec<u8>>,
+}
+
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ExportedPropertyTest {
+    pub name: String,
+    pub module: String,
+    pub input_path: String,
+    pub test_program: ExportedProgram,
+    pub fuzzer_program: ExportedProgram,
+    pub fuzzer_type: String,
+}
+
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ExportedTests {
+    pub plutus_version: PlutusVersion,
+    pub property_tests: Vec<ExportedPropertyTest>,
+}
+
 impl Export {
     pub fn from_function(
         func: &TypedFunction,
