@@ -40,11 +40,11 @@ use aiken_lang::{
     format::{Formatter, MAX_COLUMNS},
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
-    test_framework::{RunnableKind, Test, TestResult},
-    tipo::{Type, TypeInfo},
+    test_framework::{PropertyTest, RunnableKind, Test, TestResult},
+    tipo::{self, Type, TypeInfo},
     utils,
 };
-use export::Export;
+use export::{Export, ExportedProgram, ExportedPropertyTest, ExportedTests};
 use indexmap::IndexMap;
 use miette::NamedSource;
 use options::{CodeGenMode, Options};
@@ -666,6 +666,97 @@ where
                 module: module.to_string(),
                 name: name.to_string(),
             })
+    }
+
+    #[allow(clippy::result_large_err)]
+    pub fn export_tests(
+        &mut self,
+        match_tests: Option<Vec<String>>,
+        exact_match: bool,
+        tracing: Tracing,
+        include_flat_bytes: bool,
+    ) -> Result<ExportedTests, Error> {
+        let tests = self.collect_tests(false, match_tests, exact_match, tracing)?;
+        let plutus_version = self.config.plutus.clone();
+
+        // Filter to only property tests - unit tests and benchmarks are not
+        // useful for external fuzzing tools which is the primary use case.
+        let property_tests = tests
+            .into_iter()
+            .filter_map(|test| match test {
+                Test::PropertyTest(pt) => Some(pt),
+                _ => None,
+            })
+            .map(|pt| self.export_property_test(pt, include_flat_bytes))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(ExportedTests {
+            plutus_version,
+            property_tests,
+        })
+    }
+
+    fn export_property_test(
+        &self,
+        test: PropertyTest,
+        include_flat_bytes: bool,
+    ) -> Result<ExportedPropertyTest, Error> {
+        let mut printer = tipo::pretty::Printer::new();
+        let fuzzer_type = printer.print(&test.fuzzer.type_info).to_pretty_string(80);
+
+        let test_program = test
+            .program
+            .to_debruijn()
+            .map_err(|e| Error::DeBruijn { error: e.to_string() })?;
+
+        let fuzzer_program = test
+            .fuzzer
+            .program
+            .to_debruijn()
+            .map_err(|e| Error::DeBruijn { error: e.to_string() })?;
+
+        let test_hex = test_program
+            .to_hex()
+            .map_err(|e| Error::FlatEncode { error: e.to_string() })?;
+
+        let fuzzer_hex = fuzzer_program
+            .to_hex()
+            .map_err(|e| Error::FlatEncode { error: e.to_string() })?;
+
+        let test_flat_bytes = if include_flat_bytes {
+            Some(
+                test_program
+                    .to_flat()
+                    .map_err(|e| Error::FlatEncode { error: e.to_string() })?,
+            )
+        } else {
+            None
+        };
+
+        let fuzzer_flat_bytes = if include_flat_bytes {
+            Some(
+                fuzzer_program
+                    .to_flat()
+                    .map_err(|e| Error::FlatEncode { error: e.to_string() })?,
+            )
+        } else {
+            None
+        };
+
+        Ok(ExportedPropertyTest {
+            name: format!("{}.{}", &test.module, &test.name),
+            module: test.module,
+            input_path: test.input_path.display().to_string(),
+            test_program: ExportedProgram {
+                hex: test_hex,
+                flat_bytes: test_flat_bytes,
+            },
+            fuzzer_program: ExportedProgram {
+                hex: fuzzer_hex,
+                flat_bytes: fuzzer_flat_bytes,
+            },
+            fuzzer_type,
+        })
     }
 
     #[allow(clippy::result_large_err)]

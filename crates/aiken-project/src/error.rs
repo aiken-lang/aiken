@@ -173,6 +173,12 @@ pub enum Error {
         #[source]
         error: ScriptOverrideArgumentError,
     },
+
+    #[error("Failed to convert program to DeBruijn representation.")]
+    DeBruijn { error: String },
+
+    #[error("Failed to flat-encode program.")]
+    FlatEncode { error: String },
 }
 
 #[derive(thiserror::Error, Debug, Diagnostic)]
@@ -365,7 +371,9 @@ impl ExtraData for Error {
             | Error::ModuleNotFound { .. }
             | Error::ExportNotFound { .. }
             | Error::ScriptOverrideNotFound { .. }
-            | Error::ScriptOverrideArgumentParseError { .. } => None,
+            | Error::ScriptOverrideArgumentParseError { .. }
+            | Error::DeBruijn { .. }
+            | Error::FlatEncode { .. } => None,
             Error::Type { error, .. } => error.extra_data(),
         }
     }
@@ -396,7 +404,9 @@ impl GetSource for Error {
             | Error::NoDefaultEnvironment
             | Error::Module { .. }
             | Error::ScriptOverrideNotFound { .. }
-            | Error::ScriptOverrideArgumentParseError { .. } => None,
+            | Error::ScriptOverrideArgumentParseError { .. }
+            | Error::DeBruijn { .. }
+            | Error::FlatEncode { .. } => None,
             Error::DuplicateModule { second: path, .. }
             | Error::MissingManifest { path }
             | Error::TomlLoading { path, .. }
@@ -428,7 +438,9 @@ impl GetSource for Error {
             | Error::ExportNotFound { .. }
             | Error::Module { .. }
             | Error::ScriptOverrideNotFound { .. }
-            | Error::ScriptOverrideArgumentParseError { .. } => None,
+            | Error::ScriptOverrideArgumentParseError { .. }
+            | Error::DeBruijn { .. }
+            | Error::FlatEncode { .. } => None,
             Error::TomlLoading { src, .. } | Error::Parse { src, .. } | Error::Type { src, .. } => {
                 Some(src.to_string())
             }
@@ -482,7 +494,9 @@ impl Diagnostic for Error {
             | Error::ModuleNotFound { .. }
             | Error::NoDefaultEnvironment
             | Error::ScriptOverrideNotFound { .. }
-            | Error::ScriptOverrideArgumentParseError { .. } => None,
+            | Error::ScriptOverrideArgumentParseError { .. }
+            | Error::DeBruijn { .. }
+            | Error::FlatEncode { .. } => None,
             Error::Module(e) => e.code().map(boxed),
         }
     }
@@ -548,7 +562,9 @@ impl Diagnostic for Error {
             | Error::Http(_)
             | Error::ZipExtract(_)
             | Error::JoinError(_)
-            | Error::ExportNotFound { .. } => None,
+            | Error::ExportNotFound { .. }
+            | Error::DeBruijn { .. }
+            | Error::FlatEncode { .. } => None,
         }
     }
 
@@ -584,7 +600,9 @@ impl Diagnostic for Error {
             | Error::NoDefaultEnvironment
             | Error::ModuleNotFound { .. }
             | Error::ScriptOverrideNotFound { .. }
-            | Error::ScriptOverrideArgumentParseError { .. } => None,
+            | Error::ScriptOverrideArgumentParseError { .. }
+            | Error::DeBruijn { .. }
+            | Error::FlatEncode { .. } => None,
 
             Error::Module(e) => e.labels(),
         }
@@ -614,7 +632,9 @@ impl Diagnostic for Error {
             | Error::Json { .. }
             | Error::MalformedStakeAddress { .. }
             | Error::ScriptOverrideNotFound { .. }
-            | Error::ScriptOverrideArgumentParseError { .. } => None,
+            | Error::ScriptOverrideArgumentParseError { .. }
+            | Error::DeBruijn { .. }
+            | Error::FlatEncode { .. } => None,
             Error::Module(e) => e.source_code(),
         }
     }
@@ -643,7 +663,9 @@ impl Diagnostic for Error {
             | Error::MalformedStakeAddress { .. }
             | Error::NoDefaultEnvironment
             | Error::ScriptOverrideNotFound { .. }
-            | Error::ScriptOverrideArgumentParseError { .. } => None,
+            | Error::ScriptOverrideArgumentParseError { .. }
+            | Error::DeBruijn { .. }
+            | Error::FlatEncode { .. } => None,
 
             Error::Module(e) => e.url(),
         }
@@ -673,7 +695,9 @@ impl Diagnostic for Error {
             | Error::Json { .. }
             | Error::MalformedStakeAddress { .. }
             | Error::ScriptOverrideNotFound { .. }
-            | Error::ScriptOverrideArgumentParseError { .. } => None,
+            | Error::ScriptOverrideArgumentParseError { .. }
+            | Error::DeBruijn { .. }
+            | Error::FlatEncode { .. } => None,
             Error::Module(e) => e.related(),
         }
     }
