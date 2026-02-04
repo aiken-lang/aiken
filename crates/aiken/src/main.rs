@@ -4,7 +4,7 @@ use cmd::completion;
 use cmd::{
     Cmd, benchmark,
     blueprint::{self, address},
-    build, check, docs, export, fmt, lsp, new,
+    build, check, docs, export, export_tests, fmt, lsp, new,
     packages::{self, add},
     tx, uplc,
 };
@@ -35,6 +35,7 @@ fn main() -> miette::Result<()> {
         #[cfg(not(target_os = "windows"))]
         Cmd::Completion(sub_cmd) => completion::exec(sub_cmd),
         Cmd::Export(args) => export::exec(args),
+        Cmd::ExportTests(args) => export_tests::exec(args),
     }
 }
 
