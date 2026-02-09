@@ -12,6 +12,7 @@ pub mod package_name;
 pub mod paths;
 pub mod pretty;
 pub mod telemetry;
+pub mod verify;
 pub mod watch;
 
 mod test_framework;
@@ -40,11 +41,14 @@ use aiken_lang::{
     format::{Formatter, MAX_COLUMNS},
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
-    test_framework::{PropertyTest, RunnableKind, Test, TestResult},
+    test_framework::{ExtractedBounds, PropertyTest, RunnableKind, Test, TestResult},
     tipo::{self, Type, TypeInfo},
     utils,
 };
-use export::{Export, ExportedProgram, ExportedPropertyTest, ExportedTests};
+use export::{
+    Export, ExportedBounds, ExportedProgram, ExportedPropertyTest, ExportedTests,
+    fuzzer_output_type_from,
+};
 use indexmap::IndexMap;
 use miette::NamedSource;
 use options::{CodeGenMode, Options};
@@ -743,10 +747,21 @@ where
             None
         };
 
+        let fuzzer_output_type = fuzzer_output_type_from(&test.fuzzer.stripped_type_info);
+
+        let extracted_bounds = match &test.fuzzer.extracted_bounds {
+            ExtractedBounds::IntBetween { min, max } => ExportedBounds::IntBetween {
+                min: min.clone(),
+                max: max.clone(),
+            },
+            ExtractedBounds::Unknown => ExportedBounds::Unknown,
+        };
+
         Ok(ExportedPropertyTest {
             name: format!("{}.{}", &test.module, &test.name),
             module: test.module,
             input_path: test.input_path.display().to_string(),
+            on_test_failure: test.on_test_failure,
             test_program: ExportedProgram {
                 hex: test_hex,
                 flat_bytes: test_flat_bytes,
@@ -756,6 +771,8 @@ where
                 flat_bytes: fuzzer_flat_bytes,
             },
             fuzzer_type,
+            fuzzer_output_type,
+            extracted_bounds,
         })
     }
 

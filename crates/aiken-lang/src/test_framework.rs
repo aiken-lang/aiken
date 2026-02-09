@@ -1,5 +1,8 @@
 use crate::{
-    ast::{BinOp, DataTypeKey, IfBranch, OnTestFailure, Span, TypedArg, TypedDataType, TypedTest},
+    ast::{
+        BinOp, DataTypeKey, IfBranch, OnTestFailure, Span, TypedArg, TypedDataType, TypedTest,
+        UnOp,
+    },
     expr::{TypedExpr, UntypedExpr},
     format::Formatter,
     gen_uplc::CodeGenerator,
@@ -141,6 +144,7 @@ impl Test {
             let parameter = test.arguments.first().unwrap().to_owned();
 
             let via = parameter.via.clone();
+            let extracted_bounds = extract_bounds_from_via(&via);
 
             let type_info = parameter.arg.tipo.clone();
 
@@ -183,6 +187,7 @@ impl Test {
                         program: generator_program,
                         stripped_type_info,
                         type_info,
+                        extracted_bounds,
                     },
                 ),
             }
@@ -262,6 +267,15 @@ pub struct PropertyTest {
 
 unsafe impl Send for PropertyTest {}
 
+/// Bounds extracted from a fuzzer's TypedExpr for formal verification.
+#[derive(Debug, Clone)]
+pub enum ExtractedBounds {
+    /// Integer bounds: min <= x <= max
+    IntBetween { min: String, max: String },
+    /// Could not extract bounds from this fuzzer
+    Unknown,
+}
+
 #[derive(Debug, Clone)]
 pub struct Fuzzer<T> {
     pub program: Program<T>,
@@ -272,6 +286,125 @@ pub struct Fuzzer<T> {
     /// all erasable opaque type. This is needed in order to
     /// generate Plutus data with the appropriate shape.
     pub stripped_type_info: Rc<Type>,
+
+    /// Bounds extracted from the fuzzer expression for formal verification.
+    pub extracted_bounds: ExtractedBounds,
+}
+
+fn extract_bounds_from_via(via: &TypedExpr) -> ExtractedBounds {
+    match via {
+        TypedExpr::Call { fun, args, .. } => {
+            let fn_name = match fun.as_ref() {
+                TypedExpr::ModuleSelect { label, .. } => Some(label.as_str()),
+                TypedExpr::Var { name, .. } => Some(name.as_str()),
+                _ => None,
+            };
+
+            match fn_name {
+                Some("int_between") if args.len() == 2 => {
+                    let min = extract_int_value(&args[0].value);
+                    let max = extract_int_value(&args[1].value);
+                    match (min, max) {
+                        (Some(min), Some(max)) => ExtractedBounds::IntBetween { min, max },
+                        _ => ExtractedBounds::Unknown,
+                    }
+                }
+                Some("int") if args.is_empty() => ExtractedBounds::IntBetween {
+                    min: "-255".to_string(),
+                    max: "16383".to_string(),
+                },
+                Some("int_at_least") if args.len() == 1 => {
+                    if let Some(min_str) = extract_int_value(&args[0].value) {
+                        let min_val: i128 = min_str.parse().unwrap_or(0);
+                        let abs_min = min_val.abs();
+                        let max_val = if abs_min <= 255 {
+                            255i128
+                        } else {
+                            min_val + 5 * abs_min
+                        };
+                        ExtractedBounds::IntBetween {
+                            min: min_str,
+                            max: max_val.to_string(),
+                        }
+                    } else {
+                        ExtractedBounds::Unknown
+                    }
+                }
+                Some("int_at_most") if args.len() == 1 => {
+                    if let Some(max_str) = extract_int_value(&args[0].value) {
+                        let max_val: i128 = max_str.parse().unwrap_or(0);
+                        let abs_max = max_val.abs();
+                        let min_val = if abs_max <= 255 {
+                            -255i128
+                        } else {
+                            max_val - 5 * abs_max
+                        };
+                        ExtractedBounds::IntBetween {
+                            min: min_val.to_string(),
+                            max: max_str,
+                        }
+                    } else {
+                        ExtractedBounds::Unknown
+                    }
+                }
+                // map(fuzzer, transform_fn): bounds come from the inner fuzzer.
+                // The mapping function changes the output type but the extracted
+                // bounds still describe the input fuzzer's domain.
+                Some("map") if args.len() == 2 => {
+                    extract_bounds_from_via(&args[0].value)
+                }
+                // and_then(fuzzer, continuation_fn): bounds come from the inner
+                // fuzzer. The continuation produces a new fuzzer but the first
+                // fuzzer's bounds are a useful conservative approximation.
+                Some("and_then") | Some("then") if args.len() == 2 => {
+                    extract_bounds_from_via(&args[0].value)
+                }
+                // both(fuzzer_a, fuzzer_b) / map2(a, b, f): composite bounds
+                // cannot be represented in the current ExtractedBounds enum.
+                Some("both") | Some("map2") if args.len() >= 2 => ExtractedBounds::Unknown,
+                // constant(value): always produces the same value.
+                Some("constant") if args.len() == 1 => {
+                    if let Some(val) = extract_int_value(&args[0].value) {
+                        ExtractedBounds::IntBetween {
+                            min: val.clone(),
+                            max: val,
+                        }
+                    } else {
+                        ExtractedBounds::Unknown
+                    }
+                }
+                _ => ExtractedBounds::Unknown,
+            }
+        }
+        // Pipelines and sequences are desugared into a list of expressions
+        // where the last one carries the final value. Recurse into it.
+        TypedExpr::Pipeline { expressions, .. } | TypedExpr::Sequence { expressions, .. } => {
+            if let Some(last) = expressions.last() {
+                extract_bounds_from_via(last)
+            } else {
+                ExtractedBounds::Unknown
+            }
+        }
+        _ => ExtractedBounds::Unknown,
+    }
+}
+
+fn extract_int_value(expr: &TypedExpr) -> Option<String> {
+    match expr {
+        TypedExpr::UInt { value, .. } => Some(value.clone()),
+        TypedExpr::UnOp {
+            op: UnOp::Negate,
+            value,
+            ..
+        } => {
+            if let TypedExpr::UInt { value, .. } = value.as_ref() {
+                Some(format!("-{}", value))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone, thiserror::Error, miette::Diagnostic)]

@@ -67,6 +67,7 @@ indoc = "2.0.1"
 insta.workspace = true
 proptest = "1.2.0"
 pretty_assertions = "1.3.0"
+tempfile = "3"
 
 [build-dependencies]
 built = { version = "0.7.1", features = ["git2"] }

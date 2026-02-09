@@ -17,6 +17,7 @@ pub mod new;
 pub mod packages;
 pub mod tx;
 pub mod uplc;
+pub mod verify;
 
 /// Aiken: a smart-contract language and toolchain for Cardano
 #[derive(Parser)]
@@ -55,6 +56,8 @@ pub enum Cmd {
     #[cfg(not(target_os = "windows"))]
     #[clap(subcommand)]
     Completion(completion::Cmd),
+
+    Verify(verify::Args),
 
     #[clap(hide = true)]
     Lsp(lsp::Args),

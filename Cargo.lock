@@ -177,6 +177,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strip-ansi-escapes",
+ "tempfile",
  "textplots",
  "thiserror 1.0.69",
  "tokio",

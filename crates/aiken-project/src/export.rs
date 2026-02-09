@@ -8,11 +8,13 @@ use crate::{
     module::{CheckedModule, CheckedModules},
 };
 use aiken_lang::{
-    ast::{ArgName, Span, TypedArg, TypedFunction},
+    ast::{ArgName, OnTestFailure, Span, TypedArg, TypedFunction},
     gen_uplc::CodeGenerator,
     plutus_version::PlutusVersion,
+    tipo::{pretty::Printer, Type, TypeVar},
 };
 use miette::NamedSource;
+use std::{ops::Deref, rc::Rc};
 use uplc::ast::SerializableProgram;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
@@ -46,13 +48,90 @@ pub struct ExportedProgram {
 }
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+pub enum FuzzerOutputType {
+    Int,
+    Bool,
+    ByteArray,
+    String,
+    Data,
+    List(Box<FuzzerOutputType>),
+    Tuple(Vec<FuzzerOutputType>),
+    Pair(Box<FuzzerOutputType>, Box<FuzzerOutputType>),
+    Unsupported(std::string::String),
+}
+
+pub fn fuzzer_output_type_from(tipo: &Rc<Type>) -> FuzzerOutputType {
+    fuzzer_output_type_from_type(tipo.as_ref())
+}
+
+fn fuzzer_output_type_from_type(tipo: &Type) -> FuzzerOutputType {
+    if tipo.is_int() {
+        return FuzzerOutputType::Int;
+    }
+    if tipo.is_bool() {
+        return FuzzerOutputType::Bool;
+    }
+    if tipo.is_bytearray() {
+        return FuzzerOutputType::ByteArray;
+    }
+    if tipo.is_string() {
+        return FuzzerOutputType::String;
+    }
+    if tipo.is_data() {
+        return FuzzerOutputType::Data;
+    }
+
+    match tipo {
+        Type::App {
+            name, args, module, ..
+        } if name == "List" && module.is_empty() => {
+            let inner = args
+                .first()
+                .map(|a| fuzzer_output_type_from(a))
+                .unwrap_or(FuzzerOutputType::Unsupported("List<?>".into()));
+            FuzzerOutputType::List(Box::new(inner))
+        }
+        Type::Tuple { elems, .. } => {
+            let inner = elems.iter().map(|e| fuzzer_output_type_from(e)).collect();
+            FuzzerOutputType::Tuple(inner)
+        }
+        Type::Pair { fst, snd, .. } => FuzzerOutputType::Pair(
+            Box::new(fuzzer_output_type_from(fst)),
+            Box::new(fuzzer_output_type_from(snd)),
+        ),
+        Type::Var { tipo: var, .. } => {
+            let borrowed = var.borrow();
+            match borrowed.deref() {
+                TypeVar::Link { tipo: linked } => fuzzer_output_type_from(linked),
+                _ => FuzzerOutputType::Unsupported(pretty_print_type(tipo)),
+            }
+        }
+        _ => FuzzerOutputType::Unsupported(pretty_print_type(tipo)),
+    }
+}
+
+fn pretty_print_type(tipo: &Type) -> std::string::String {
+    let mut printer = Printer::new();
+    printer.print(tipo).to_pretty_string(80)
+}
+
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+pub enum ExportedBounds {
+    IntBetween { min: String, max: String },
+    Unknown,
+}
+
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExportedPropertyTest {
     pub name: String,
     pub module: String,
     pub input_path: String,
+    pub on_test_failure: OnTestFailure,
     pub test_program: ExportedProgram,
     pub fuzzer_program: ExportedProgram,
     pub fuzzer_type: String,
+    pub fuzzer_output_type: FuzzerOutputType,
+    pub extracted_bounds: ExportedBounds,
 }
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]

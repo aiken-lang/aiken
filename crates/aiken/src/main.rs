@@ -6,7 +6,7 @@ use cmd::{
     blueprint::{self, address},
     build, check, docs, export, export_tests, fmt, lsp, new,
     packages::{self, add},
-    tx, uplc,
+    tx, uplc, verify,
 };
 use owo_colors::OwoColorize;
 
@@ -36,6 +36,7 @@ fn main() -> miette::Result<()> {
         Cmd::Completion(sub_cmd) => completion::exec(sub_cmd),
         Cmd::Export(args) => export::exec(args),
         Cmd::ExportTests(args) => export_tests::exec(args),
+        Cmd::Verify(args) => verify::exec(args),
     }
 }
 
