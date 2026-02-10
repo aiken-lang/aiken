@@ -11,7 +11,7 @@ use aiken_lang::{
     ast::{ArgName, OnTestFailure, Span, TypedArg, TypedFunction},
     gen_uplc::CodeGenerator,
     plutus_version::PlutusVersion,
-    tipo::{pretty::Printer, Type, TypeVar},
+    tipo::{Type, TypeVar, pretty::Printer},
 };
 use miette::NamedSource;
 use std::{ops::Deref, rc::Rc};
@@ -118,6 +118,7 @@ fn pretty_print_type(tipo: &Type) -> std::string::String {
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ExportedBounds {
     IntBetween { min: String, max: String },
+    IntTupleBetween { bounds: Vec<(String, String)> },
     Unknown,
 }
 

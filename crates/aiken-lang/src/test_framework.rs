@@ -1,17 +1,18 @@
 use crate::{
     ast::{
-        BinOp, DataTypeKey, IfBranch, OnTestFailure, Span, TypedArg, TypedDataType, TypedTest,
-        UnOp,
+        BinOp, DataTypeKey, FunctionAccessKey, IfBranch, OnTestFailure, Span, TypedArg,
+        TypedDataType, TypedFunction, TypedTest, UnOp,
     },
     expr::{TypedExpr, UntypedExpr},
     format::Formatter,
     gen_uplc::CodeGenerator,
     plutus_version::PlutusVersion,
-    tipo::{Type, convert_opaque_type},
+    tipo::{ModuleValueConstructor, Type, ValueConstructorVariant, convert_opaque_type},
 };
 use cryptoxide::{blake2b::Blake2b, digest::Digest};
 use indexmap::IndexMap;
 use itertools::Itertools;
+use num_bigint::BigInt;
 use owo_colors::{OwoColorize, Stream, Stream::Stderr};
 use pallas_primitives::alonzo::{Constr, PlutusData};
 use patricia_tree::PatriciaMap;
@@ -144,7 +145,8 @@ impl Test {
             let parameter = test.arguments.first().unwrap().to_owned();
 
             let via = parameter.via.clone();
-            let extracted_bounds = extract_bounds_from_via(&via);
+            let extracted_bounds =
+                extract_bounds_from_via(&via, module_name.as_str(), generator.functions());
 
             let type_info = parameter.arg.tipo.clone();
 
@@ -272,6 +274,8 @@ unsafe impl Send for PropertyTest {}
 pub enum ExtractedBounds {
     /// Integer bounds: min <= x <= max
     IntBetween { min: String, max: String },
+    /// Tuple-like integer bounds in argument order
+    IntTupleBetween { bounds: Vec<(String, String)> },
     /// Could not extract bounds from this fuzzer
     Unknown,
 }
@@ -291,7 +295,11 @@ pub struct Fuzzer<T> {
     pub extracted_bounds: ExtractedBounds,
 }
 
-fn extract_bounds_from_via(via: &TypedExpr) -> ExtractedBounds {
+fn extract_bounds_from_via(
+    via: &TypedExpr,
+    current_module: &str,
+    known_functions: &IndexMap<&FunctionAccessKey, &TypedFunction>,
+) -> ExtractedBounds {
     match via {
         TypedExpr::Call { fun, args, .. } => {
             let fn_name = match fun.as_ref() {
@@ -305,7 +313,7 @@ fn extract_bounds_from_via(via: &TypedExpr) -> ExtractedBounds {
                     let min = extract_int_value(&args[0].value);
                     let max = extract_int_value(&args[1].value);
                     match (min, max) {
-                        (Some(min), Some(max)) => ExtractedBounds::IntBetween { min, max },
+                        (Some(min), Some(max)) => normalize_int_between_bounds(min, max),
                         _ => ExtractedBounds::Unknown,
                     }
                 }
@@ -315,34 +323,18 @@ fn extract_bounds_from_via(via: &TypedExpr) -> ExtractedBounds {
                 },
                 Some("int_at_least") if args.len() == 1 => {
                     if let Some(min_str) = extract_int_value(&args[0].value) {
-                        let min_val: i128 = min_str.parse().unwrap_or(0);
-                        let abs_min = min_val.abs();
-                        let max_val = if abs_min <= 255 {
-                            255i128
-                        } else {
-                            min_val + 5 * abs_min
-                        };
-                        ExtractedBounds::IntBetween {
-                            min: min_str,
-                            max: max_val.to_string(),
-                        }
+                        int_at_least_bounds(min_str)
+                            .map(|(min, max)| ExtractedBounds::IntBetween { min, max })
+                            .unwrap_or(ExtractedBounds::Unknown)
                     } else {
                         ExtractedBounds::Unknown
                     }
                 }
                 Some("int_at_most") if args.len() == 1 => {
                     if let Some(max_str) = extract_int_value(&args[0].value) {
-                        let max_val: i128 = max_str.parse().unwrap_or(0);
-                        let abs_max = max_val.abs();
-                        let min_val = if abs_max <= 255 {
-                            -255i128
-                        } else {
-                            max_val - 5 * abs_max
-                        };
-                        ExtractedBounds::IntBetween {
-                            min: min_val.to_string(),
-                            max: max_str,
-                        }
+                        int_at_most_bounds(max_str)
+                            .map(|(min, max)| ExtractedBounds::IntBetween { min, max })
+                            .unwrap_or(ExtractedBounds::Unknown)
                     } else {
                         ExtractedBounds::Unknown
                     }
@@ -351,17 +343,36 @@ fn extract_bounds_from_via(via: &TypedExpr) -> ExtractedBounds {
                 // The mapping function changes the output type but the extracted
                 // bounds still describe the input fuzzer's domain.
                 Some("map") if args.len() == 2 => {
-                    extract_bounds_from_via(&args[0].value)
+                    extract_bounds_from_via(&args[0].value, current_module, known_functions)
                 }
                 // and_then(fuzzer, continuation_fn): bounds come from the inner
                 // fuzzer. The continuation produces a new fuzzer but the first
                 // fuzzer's bounds are a useful conservative approximation.
                 Some("and_then") | Some("then") if args.len() == 2 => {
-                    extract_bounds_from_via(&args[0].value)
+                    extract_bounds_from_via(&args[0].value, current_module, known_functions)
                 }
-                // both(fuzzer_a, fuzzer_b) / map2(a, b, f): composite bounds
-                // cannot be represented in the current ExtractedBounds enum.
-                Some("both") | Some("map2") if args.len() >= 2 => ExtractedBounds::Unknown,
+                // both(fuzzer_a, fuzzer_b): tuple bounds are built directly
+                // from both component fuzzers in argument order.
+                Some("both") if args.len() >= 2 => combine_tuple_bounds(
+                    extract_bounds_from_via(&args[0].value, current_module, known_functions),
+                    extract_bounds_from_via(&args[1].value, current_module, known_functions),
+                ),
+                // map2(fuzzer_a, fuzzer_b, mapper): preserve/reorder bounds
+                // only when the mapper is known to return a direct tuple of
+                // its two inputs (possibly swapped).
+                Some("map2") if args.len() >= 3 => {
+                    let Some(mapper_arg_order) =
+                        map2_mapper_arg_order(&args[2].value, current_module, known_functions)
+                    else {
+                        return ExtractedBounds::Unknown;
+                    };
+
+                    combine_map2_tuple_bounds(
+                        extract_bounds_from_via(&args[0].value, current_module, known_functions),
+                        extract_bounds_from_via(&args[1].value, current_module, known_functions),
+                        mapper_arg_order,
+                    )
+                }
                 // constant(value): always produces the same value.
                 Some("constant") if args.len() == 1 => {
                     if let Some(val) = extract_int_value(&args[0].value) {
@@ -380,12 +391,224 @@ fn extract_bounds_from_via(via: &TypedExpr) -> ExtractedBounds {
         // where the last one carries the final value. Recurse into it.
         TypedExpr::Pipeline { expressions, .. } | TypedExpr::Sequence { expressions, .. } => {
             if let Some(last) = expressions.last() {
-                extract_bounds_from_via(last)
+                extract_bounds_from_via(last, current_module, known_functions)
             } else {
                 ExtractedBounds::Unknown
             }
         }
         _ => ExtractedBounds::Unknown,
+    }
+}
+
+fn parse_bigint_literal(value: &str) -> Option<BigInt> {
+    value.parse::<BigInt>().ok()
+}
+
+fn bigint_abs(value: &BigInt) -> BigInt {
+    if value < &BigInt::from(0) {
+        -value
+    } else {
+        value.clone()
+    }
+}
+
+fn normalize_int_between_bounds(min: String, max: String) -> ExtractedBounds {
+    let (min_val, max_val) = match (parse_bigint_literal(&min), parse_bigint_literal(&max)) {
+        (Some(min_val), Some(max_val)) => (min_val, max_val),
+        _ => return ExtractedBounds::Unknown,
+    };
+
+    if min_val <= max_val {
+        ExtractedBounds::IntBetween { min, max }
+    } else {
+        ExtractedBounds::IntBetween { min: max, max: min }
+    }
+}
+
+fn int_at_least_bounds(min: String) -> Option<(String, String)> {
+    let min_val = parse_bigint_literal(&min)?;
+    let abs_min = bigint_abs(&min_val);
+    let threshold = BigInt::from(255);
+    let max_val = if abs_min <= threshold {
+        threshold
+    } else {
+        min_val + BigInt::from(5) * abs_min
+    };
+
+    Some((min, max_val.to_string()))
+}
+
+fn int_at_most_bounds(max: String) -> Option<(String, String)> {
+    let max_val = parse_bigint_literal(&max)?;
+    let abs_max = bigint_abs(&max_val);
+    let threshold = BigInt::from(255);
+    let min_val = if abs_max <= threshold {
+        -threshold
+    } else {
+        max_val - BigInt::from(5) * abs_max
+    };
+
+    Some((min_val.to_string(), max))
+}
+
+fn into_tuple_bounds(bounds: ExtractedBounds) -> Option<Vec<(String, String)>> {
+    match bounds {
+        ExtractedBounds::IntBetween { min, max } => Some(vec![(min, max)]),
+        ExtractedBounds::IntTupleBetween { bounds } => Some(bounds),
+        ExtractedBounds::Unknown => None,
+    }
+}
+
+fn combine_tuple_bounds(left: ExtractedBounds, right: ExtractedBounds) -> ExtractedBounds {
+    let Some(mut left_bounds) = into_tuple_bounds(left) else {
+        return ExtractedBounds::Unknown;
+    };
+
+    let Some(mut right_bounds) = into_tuple_bounds(right) else {
+        return ExtractedBounds::Unknown;
+    };
+
+    left_bounds.append(&mut right_bounds);
+
+    ExtractedBounds::IntTupleBetween {
+        bounds: left_bounds,
+    }
+}
+
+fn combine_map2_tuple_bounds(
+    left: ExtractedBounds,
+    right: ExtractedBounds,
+    mapper_arg_order: [usize; 2],
+) -> ExtractedBounds {
+    let Some(mut left_bounds) = into_tuple_bounds(left) else {
+        return ExtractedBounds::Unknown;
+    };
+
+    let Some(mut right_bounds) = into_tuple_bounds(right) else {
+        return ExtractedBounds::Unknown;
+    };
+
+    let mut merged = Vec::with_capacity(left_bounds.len() + right_bounds.len());
+
+    match mapper_arg_order {
+        [0, 1] => {
+            merged.append(&mut left_bounds);
+            merged.append(&mut right_bounds);
+        }
+        [1, 0] => {
+            merged.append(&mut right_bounds);
+            merged.append(&mut left_bounds);
+        }
+        _ => return ExtractedBounds::Unknown,
+    }
+
+    ExtractedBounds::IntTupleBetween { bounds: merged }
+}
+
+fn map2_mapper_arg_order(
+    mapper: &TypedExpr,
+    current_module: &str,
+    known_functions: &IndexMap<&FunctionAccessKey, &TypedFunction>,
+) -> Option<[usize; 2]> {
+    let mapper = terminal_expression(mapper);
+
+    match mapper {
+        TypedExpr::Fn { args, body, .. } => map2_tuple_arg_order(args, body),
+        TypedExpr::Var {
+            name, constructor, ..
+        } => match &constructor.variant {
+            ValueConstructorVariant::ModuleFn { module, name, .. } => {
+                let mapper_fn = find_function(known_functions, module, name)?;
+                map2_tuple_arg_order(&mapper_fn.arguments, &mapper_fn.body)
+            }
+            _ => {
+                let mapper_fn = find_function(known_functions, current_module, name)?;
+                map2_tuple_arg_order(&mapper_fn.arguments, &mapper_fn.body)
+            }
+        },
+        TypedExpr::ModuleSelect {
+            module_name,
+            label,
+            constructor,
+            ..
+        } => match constructor {
+            ModuleValueConstructor::Fn { module, name, .. } => {
+                let mapper_fn = find_function(known_functions, module, name)?;
+                map2_tuple_arg_order(&mapper_fn.arguments, &mapper_fn.body)
+            }
+            _ => {
+                let mapper_fn = find_function(known_functions, module_name, label)?;
+                map2_tuple_arg_order(&mapper_fn.arguments, &mapper_fn.body)
+            }
+        },
+        _ => None,
+    }
+}
+
+fn find_function<'a>(
+    known_functions: &'a IndexMap<&FunctionAccessKey, &TypedFunction>,
+    module_name: &str,
+    function_name: &str,
+) -> Option<&'a TypedFunction> {
+    known_functions.iter().find_map(|(key, function)| {
+        (key.module_name == module_name && key.function_name == function_name).then_some(*function)
+    })
+}
+
+fn map2_tuple_arg_order(args: &[TypedArg], body: &TypedExpr) -> Option<[usize; 2]> {
+    let [first_arg, second_arg] = args else {
+        return None;
+    };
+
+    let first_name = first_arg.get_variable_name()?;
+    let second_name = second_arg.get_variable_name()?;
+
+    let body = terminal_expression(body);
+    let TypedExpr::Tuple { elems, .. } = body else {
+        return None;
+    };
+
+    let [first_elem, second_elem] = elems.as_slice() else {
+        return None;
+    };
+
+    let first_ix = tuple_elem_arg_index(first_elem, first_name, second_name)?;
+    let second_ix = tuple_elem_arg_index(second_elem, first_name, second_name)?;
+
+    if first_ix == second_ix {
+        None
+    } else {
+        Some([first_ix, second_ix])
+    }
+}
+
+fn tuple_elem_arg_index(elem: &TypedExpr, first_name: &str, second_name: &str) -> Option<usize> {
+    let elem = terminal_expression(elem);
+    let TypedExpr::Var { name, .. } = elem else {
+        return None;
+    };
+
+    if name == first_name {
+        Some(0)
+    } else if name == second_name {
+        Some(1)
+    } else {
+        None
+    }
+}
+
+fn terminal_expression(mut expr: &TypedExpr) -> &TypedExpr {
+    loop {
+        match expr {
+            TypedExpr::Pipeline { expressions, .. } | TypedExpr::Sequence { expressions, .. } => {
+                if let Some(last) = expressions.last() {
+                    expr = last;
+                } else {
+                    return expr;
+                }
+            }
+            _ => return expr,
+        }
     }
 }
 
@@ -1660,6 +1883,349 @@ unsafe impl Sync for BenchmarkResult {}
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::ast::CallArg;
+    use crate::parser::token::Base;
+    use crate::tipo::{ValueConstructor, ValueConstructorVariant};
+
+    fn local_var(name: &str, tipo: Rc<Type>) -> TypedExpr {
+        TypedExpr::Var {
+            location: Span::empty(),
+            constructor: ValueConstructor::public(
+                tipo.clone(),
+                ValueConstructorVariant::LocalVariable {
+                    location: Span::empty(),
+                },
+            ),
+            name: name.to_string(),
+        }
+    }
+
+    fn make_map2_mapper(elems: Vec<TypedExpr>) -> TypedExpr {
+        let int_tipo = Type::int();
+        let tuple_tipo = Type::tuple(vec![int_tipo.clone(), int_tipo.clone()]);
+
+        TypedExpr::Fn {
+            location: Span::empty(),
+            tipo: Type::function(vec![int_tipo.clone(), int_tipo.clone()], tuple_tipo.clone()),
+            is_capture: false,
+            args: vec![
+                TypedArg::new("a", int_tipo.clone()),
+                TypedArg::new("b", int_tipo),
+            ],
+            body: Box::new(TypedExpr::Tuple {
+                location: Span::empty(),
+                tipo: tuple_tipo,
+                elems,
+            }),
+            return_annotation: None,
+        }
+    }
+
+    fn map2_mapper_tipo() -> Rc<Type> {
+        let int_tipo = Type::int();
+        Type::function(
+            vec![int_tipo.clone(), int_tipo.clone()],
+            Type::tuple(vec![int_tipo.clone(), int_tipo]),
+        )
+    }
+
+    fn make_named_map2_mapper(name: &str) -> TypedExpr {
+        local_var(name, map2_mapper_tipo())
+    }
+
+    fn make_named_map2_mapper_function(
+        name: &str,
+        elems: Vec<TypedExpr>,
+    ) -> (FunctionAccessKey, TypedFunction) {
+        let int_tipo = Type::int();
+        let tuple_tipo = Type::tuple(vec![int_tipo.clone(), int_tipo.clone()]);
+
+        (
+            FunctionAccessKey {
+                module_name: "math".to_string(),
+                function_name: name.to_string(),
+            },
+            TypedFunction {
+                arguments: vec![
+                    TypedArg::new("a", int_tipo.clone()),
+                    TypedArg::new("b", int_tipo.clone()),
+                ],
+                body: TypedExpr::Tuple {
+                    location: Span::empty(),
+                    tipo: tuple_tipo.clone(),
+                    elems,
+                },
+                doc: None,
+                location: Span::empty(),
+                name: name.to_string(),
+                public: false,
+                return_annotation: None,
+                return_type: tuple_tipo,
+                end_position: 0,
+                on_test_failure: OnTestFailure::FailImmediately,
+            },
+        )
+    }
+
+    fn uint_lit(value: &str) -> TypedExpr {
+        TypedExpr::UInt {
+            location: Span::empty(),
+            tipo: Type::int(),
+            value: value.to_string(),
+            base: Base::Decimal {
+                numeric_underscore: false,
+            },
+        }
+    }
+
+    fn call_arg(value: TypedExpr) -> CallArg<TypedExpr> {
+        CallArg {
+            label: None,
+            location: Span::empty(),
+            value,
+        }
+    }
+
+    fn make_int_between_via(min: &str, max: &str) -> TypedExpr {
+        TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(local_var(
+                "int_between",
+                Type::function(vec![Type::int(), Type::int()], Type::int()),
+            )),
+            args: vec![call_arg(uint_lit(min)), call_arg(uint_lit(max))],
+        }
+    }
+
+    fn make_map2_via(fuzzer_a: TypedExpr, fuzzer_b: TypedExpr, mapper: TypedExpr) -> TypedExpr {
+        TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::tuple(vec![Type::int(), Type::int()]),
+            fun: Box::new(local_var(
+                "map2",
+                Type::function(
+                    vec![Type::int(), Type::int(), Type::int()],
+                    Type::tuple(vec![Type::int(), Type::int()]),
+                ),
+            )),
+            args: vec![call_arg(fuzzer_a), call_arg(fuzzer_b), call_arg(mapper)],
+        }
+    }
+
+    fn empty_known_functions<'a>() -> IndexMap<&'a FunctionAccessKey, &'a TypedFunction> {
+        IndexMap::new()
+    }
+
+    #[test]
+    fn normalize_int_between_swaps_reversed_bounds() {
+        let bounds = normalize_int_between_bounds("10".to_string(), "0".to_string());
+
+        match bounds {
+            ExtractedBounds::IntBetween { min, max } => {
+                assert_eq!(min, "0");
+                assert_eq!(max, "10");
+            }
+            other => panic!("expected IntBetween bounds, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn int_at_least_handles_big_literal_without_fallback() {
+        let min = "170141183460469231731687303715884105728".to_string(); // i128::MAX + 1
+        let expected_max = "1020847100762815390390123822295304634368".to_string(); // min * 6
+
+        let bounds = int_at_least_bounds(min.clone()).expect("expected parsed bounds");
+
+        assert_eq!(bounds.0, min);
+        assert_eq!(bounds.1, expected_max);
+    }
+
+    #[test]
+    fn int_at_most_handles_i128_min_without_overflow() {
+        let max = "-170141183460469231731687303715884105728".to_string(); // i128::MIN
+        let expected_min = "-1020847100762815390390123822295304634368".to_string(); // max * 6
+
+        let bounds = int_at_most_bounds(max.clone()).expect("expected parsed bounds");
+
+        assert_eq!(bounds.0, expected_min);
+        assert_eq!(bounds.1, max);
+    }
+
+    #[test]
+    fn combine_tuple_bounds_preserves_component_order() {
+        let combined = combine_tuple_bounds(
+            ExtractedBounds::IntBetween {
+                min: "0".to_string(),
+                max: "10".to_string(),
+            },
+            ExtractedBounds::IntBetween {
+                min: "20".to_string(),
+                max: "30".to_string(),
+            },
+        );
+
+        match combined {
+            ExtractedBounds::IntTupleBetween { bounds } => {
+                assert_eq!(bounds.len(), 2);
+                assert_eq!(bounds[0], ("0".to_string(), "10".to_string()));
+                assert_eq!(bounds[1], ("20".to_string(), "30".to_string()));
+            }
+            other => panic!("expected IntTupleBetween bounds, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn map2_identity_mapper_preserves_order() {
+        let int_tipo = Type::int();
+        let mapper = make_map2_mapper(vec![
+            local_var("a", int_tipo.clone()),
+            local_var("b", int_tipo),
+        ]);
+
+        let functions = empty_known_functions();
+        assert_eq!(
+            map2_mapper_arg_order(&mapper, "math", &functions),
+            Some([0, 1])
+        );
+    }
+
+    #[test]
+    fn map2_swapped_mapper_reports_swapped_order() {
+        let int_tipo = Type::int();
+        let mapper = make_map2_mapper(vec![
+            local_var("b", int_tipo.clone()),
+            local_var("a", int_tipo),
+        ]);
+
+        let functions = empty_known_functions();
+        assert_eq!(
+            map2_mapper_arg_order(&mapper, "math", &functions),
+            Some([1, 0])
+        );
+    }
+
+    #[test]
+    fn extract_bounds_map2_identity_mapper_yields_tuple_bounds() {
+        let int_tipo = Type::int();
+        let mapper = make_map2_mapper(vec![
+            local_var("a", int_tipo.clone()),
+            local_var("b", int_tipo),
+        ]);
+
+        let via = make_map2_via(
+            make_int_between_via("0", "10"),
+            make_int_between_via("20", "30"),
+            mapper,
+        );
+
+        let functions = empty_known_functions();
+        match extract_bounds_from_via(&via, "math", &functions) {
+            ExtractedBounds::IntTupleBetween { bounds } => {
+                assert_eq!(bounds.len(), 2);
+                assert_eq!(bounds[0], ("0".to_string(), "10".to_string()));
+                assert_eq!(bounds[1], ("20".to_string(), "30".to_string()));
+            }
+            other => panic!("expected IntTupleBetween bounds, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn extract_bounds_map2_swapped_mapper_reorders_bounds() {
+        let int_tipo = Type::int();
+        let mapper = make_map2_mapper(vec![
+            local_var("b", int_tipo.clone()),
+            local_var("a", int_tipo),
+        ]);
+
+        let via = make_map2_via(
+            make_int_between_via("0", "10"),
+            make_int_between_via("20", "30"),
+            mapper,
+        );
+
+        let functions = empty_known_functions();
+        match extract_bounds_from_via(&via, "math", &functions) {
+            ExtractedBounds::IntTupleBetween { bounds } => {
+                assert_eq!(bounds.len(), 2);
+                assert_eq!(bounds[0], ("20".to_string(), "30".to_string()));
+                assert_eq!(bounds[1], ("0".to_string(), "10".to_string()));
+            }
+            other => panic!("expected IntTupleBetween bounds, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn extract_bounds_map2_named_mapper_without_definition_is_unknown() {
+        let mapper = make_named_map2_mapper("int_pair");
+        let via = make_map2_via(
+            make_int_between_via("0", "10"),
+            make_int_between_via("20", "30"),
+            mapper,
+        );
+
+        let functions = empty_known_functions();
+        assert!(matches!(
+            extract_bounds_from_via(&via, "math", &functions),
+            ExtractedBounds::Unknown
+        ));
+    }
+
+    #[test]
+    fn extract_bounds_map2_named_identity_mapper_uses_function_definition() {
+        let int_tipo = Type::int();
+        let (fn_key, fn_def) = make_named_map2_mapper_function(
+            "int_pair",
+            vec![local_var("a", int_tipo.clone()), local_var("b", int_tipo)],
+        );
+
+        let mut functions = empty_known_functions();
+        functions.insert(&fn_key, &fn_def);
+
+        let mapper = make_named_map2_mapper("int_pair");
+        let via = make_map2_via(
+            make_int_between_via("0", "10"),
+            make_int_between_via("20", "30"),
+            mapper,
+        );
+
+        match extract_bounds_from_via(&via, "math", &functions) {
+            ExtractedBounds::IntTupleBetween { bounds } => {
+                assert_eq!(bounds.len(), 2);
+                assert_eq!(bounds[0], ("0".to_string(), "10".to_string()));
+                assert_eq!(bounds[1], ("20".to_string(), "30".to_string()));
+            }
+            other => panic!("expected IntTupleBetween bounds, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn extract_bounds_map2_named_swapped_mapper_uses_function_definition() {
+        let int_tipo = Type::int();
+        let (fn_key, fn_def) = make_named_map2_mapper_function(
+            "swapped_int_pair",
+            vec![local_var("b", int_tipo.clone()), local_var("a", int_tipo)],
+        );
+
+        let mut functions = empty_known_functions();
+        functions.insert(&fn_key, &fn_def);
+
+        let mapper = make_named_map2_mapper("swapped_int_pair");
+        let via = make_map2_via(
+            make_int_between_via("0", "10"),
+            make_int_between_via("20", "30"),
+            mapper,
+        );
+
+        match extract_bounds_from_via(&via, "math", &functions) {
+            ExtractedBounds::IntTupleBetween { bounds } => {
+                assert_eq!(bounds.len(), 2);
+                assert_eq!(bounds[0], ("20".to_string(), "30".to_string()));
+                assert_eq!(bounds[1], ("0".to_string(), "10".to_string()));
+            }
+            other => panic!("expected IntTupleBetween bounds, got {other:?}"),
+        }
+    }
 
     #[test]
     fn test_cache() {

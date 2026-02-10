@@ -708,41 +708,38 @@ where
         let mut printer = tipo::pretty::Printer::new();
         let fuzzer_type = printer.print(&test.fuzzer.type_info).to_pretty_string(80);
 
-        let test_program = test
-            .program
-            .to_debruijn()
-            .map_err(|e| Error::DeBruijn { error: e.to_string() })?;
+        let test_program = test.program.to_debruijn().map_err(|e| Error::DeBruijn {
+            error: e.to_string(),
+        })?;
 
         let fuzzer_program = test
             .fuzzer
             .program
             .to_debruijn()
-            .map_err(|e| Error::DeBruijn { error: e.to_string() })?;
+            .map_err(|e| Error::DeBruijn {
+                error: e.to_string(),
+            })?;
 
-        let test_hex = test_program
-            .to_hex()
-            .map_err(|e| Error::FlatEncode { error: e.to_string() })?;
+        let test_hex = test_program.to_hex().map_err(|e| Error::FlatEncode {
+            error: e.to_string(),
+        })?;
 
-        let fuzzer_hex = fuzzer_program
-            .to_hex()
-            .map_err(|e| Error::FlatEncode { error: e.to_string() })?;
+        let fuzzer_hex = fuzzer_program.to_hex().map_err(|e| Error::FlatEncode {
+            error: e.to_string(),
+        })?;
 
         let test_flat_bytes = if include_flat_bytes {
-            Some(
-                test_program
-                    .to_flat()
-                    .map_err(|e| Error::FlatEncode { error: e.to_string() })?,
-            )
+            Some(test_program.to_flat().map_err(|e| Error::FlatEncode {
+                error: e.to_string(),
+            })?)
         } else {
             None
         };
 
         let fuzzer_flat_bytes = if include_flat_bytes {
-            Some(
-                fuzzer_program
-                    .to_flat()
-                    .map_err(|e| Error::FlatEncode { error: e.to_string() })?,
-            )
+            Some(fuzzer_program.to_flat().map_err(|e| Error::FlatEncode {
+                error: e.to_string(),
+            })?)
         } else {
             None
         };
@@ -753,6 +750,9 @@ where
             ExtractedBounds::IntBetween { min, max } => ExportedBounds::IntBetween {
                 min: min.clone(),
                 max: max.clone(),
+            },
+            ExtractedBounds::IntTupleBetween { bounds } => ExportedBounds::IntTupleBetween {
+                bounds: bounds.clone(),
             },
             ExtractedBounds::Unknown => ExportedBounds::Unknown,
         };

@@ -84,10 +84,34 @@ fn sanitize_lean_name(aiken_name: &str) -> String {
     };
     // Check for Lean reserved words
     const LEAN_KEYWORDS: &[&str] = &[
-        "def", "theorem", "lemma", "where", "import", "open", "namespace",
-        "end", "by", "match", "do", "let", "have", "if", "else", "return",
-        "fun", "in", "with", "structure", "class", "instance", "section",
-        "variable", "mutual", "protected", "private", "noncomputable",
+        "def",
+        "theorem",
+        "lemma",
+        "where",
+        "import",
+        "open",
+        "namespace",
+        "end",
+        "by",
+        "match",
+        "do",
+        "let",
+        "have",
+        "if",
+        "else",
+        "return",
+        "fun",
+        "in",
+        "with",
+        "structure",
+        "class",
+        "instance",
+        "section",
+        "variable",
+        "mutual",
+        "protected",
+        "private",
+        "noncomputable",
     ];
     if LEAN_KEYWORDS.contains(&s.as_str()) {
         format!("l_{s}")
@@ -246,16 +270,10 @@ pub fn generate_lean_workspace(
         .map_err(|e| miette::miette!("Failed to create flat directory: {e}"))?;
 
     // Write lakefile.lean
-    write_file(
-        &out.join("lakefile.lean"),
-        &generate_lakefile(),
-    )?;
+    write_file(&out.join("lakefile.lean"), &generate_lakefile())?;
 
     // Write lean-toolchain
-    write_file(
-        &out.join("lean-toolchain"),
-        "leanprover/lean4:v4.24.0\n",
-    )?;
+    write_file(&out.join("lean-toolchain"), "leanprover/lean4:v4.24.0\n")?;
 
     // Write Utils.lean
     write_file(
@@ -283,30 +301,21 @@ pub fn generate_lean_workspace(
         let lean_module = format!("AikenVerify.Proofs.{lean_module_segment}.{lean_test_name}");
 
         // Directory for this module's proofs
-        let proof_dir = out
-            .join("AikenVerify/Proofs")
-            .join(&lean_module_segment);
+        let proof_dir = out.join("AikenVerify/Proofs").join(&lean_module_segment);
         fs::create_dir_all(&proof_dir)
             .map_err(|e| miette::miette!("Failed to create proof directory: {e}"))?;
 
         // Lean file path relative to out_dir
-        let lean_file_rel = format!(
-            "AikenVerify/Proofs/{lean_module_segment}/{lean_test_name}.lean"
-        );
+        let lean_file_rel =
+            format!("AikenVerify/Proofs/{lean_module_segment}/{lean_test_name}.lean");
 
         // Write the .lean proof file for this test
         let proof_content = generate_proof_file(test, &id, &lean_test_name, &lean_module)?;
-        write_file(
-            &out.join(&lean_file_rel),
-            &proof_content,
-        )?;
+        write_file(&out.join(&lean_file_rel), &proof_content)?;
 
         // Write the flat file (hex content)
         let flat_file_rel = format!("flat/{id}.flat");
-        write_file(
-            &out.join(&flat_file_rel),
-            &test.test_program.hex,
-        )?;
+        write_file(&out.join(&flat_file_rel), &test.test_program.hex)?;
 
         // Track import for root module
         module_dirs
@@ -345,8 +354,7 @@ pub fn generate_lean_workspace(
 }
 
 fn write_file(path: &Path, content: &str) -> miette::Result<()> {
-    fs::write(path, content)
-        .map_err(|e| miette::miette!("Failed to write {}: {e}", path.display()))
+    fs::write(path, content).map_err(|e| miette::miette!("Failed to write {}: {e}", path.display()))
 }
 
 fn generate_lakefile() -> String {
@@ -452,10 +460,35 @@ fn prog_name(test_id: &str) -> String {
     format!("prog_{test_id}")
 }
 
+fn validate_int_bounds_literals(test_name: &str, min: &str, max: &str) -> miette::Result<()> {
+    if !is_valid_integer_literal(min) {
+        return Err(miette::miette!(
+            "Test '{}' has invalid min bound '{}'; expected an integer literal",
+            test_name,
+            min,
+        ));
+    }
+    if !is_valid_integer_literal(max) {
+        return Err(miette::miette!(
+            "Test '{}' has invalid max bound '{}'; expected an integer literal",
+            test_name,
+            max,
+        ));
+    }
+
+    Ok(())
+}
+
 /// Extract and validate integer bounds from the test's extracted_bounds.
 fn extract_int_bounds(test: &ExportedPropertyTest) -> miette::Result<(String, String)> {
     let (min, max) = match &test.extracted_bounds {
         ExportedBounds::IntBetween { min, max } => (min.clone(), max.clone()),
+        ExportedBounds::IntTupleBetween { .. } => {
+            return Err(miette::miette!(
+                "Test '{}' has tuple bounds but expected scalar Int bounds",
+                test.name,
+            ));
+        }
         ExportedBounds::Unknown => {
             return Err(miette::miette!(
                 "Test '{}' has unknown bounds; cannot generate a bounded theorem without explicit Int bounds",
@@ -464,22 +497,44 @@ fn extract_int_bounds(test: &ExportedPropertyTest) -> miette::Result<(String, St
         }
     };
 
-    if !is_valid_integer_literal(&min) {
-        return Err(miette::miette!(
-            "Test '{}' has invalid min bound '{}'; expected an integer literal",
-            test.name,
-            min,
-        ));
-    }
-    if !is_valid_integer_literal(&max) {
-        return Err(miette::miette!(
-            "Test '{}' has invalid max bound '{}'; expected an integer literal",
-            test.name,
-            max,
-        ));
-    }
+    validate_int_bounds_literals(&test.name, &min, &max)?;
 
     Ok((min, max))
+}
+
+fn extract_tuple_int2_bounds(
+    test: &ExportedPropertyTest,
+) -> miette::Result<((String, String), (String, String))> {
+    let pair_bounds = match &test.extracted_bounds {
+        ExportedBounds::IntTupleBetween { bounds } => {
+            if bounds.len() != 2 {
+                return Err(miette::miette!(
+                    "Test '{}' has {} tuple bounds but (Int, Int) verification expects exactly 2",
+                    test.name,
+                    bounds.len(),
+                ));
+            }
+
+            (bounds[0].clone(), bounds[1].clone())
+        }
+        // Backward compatibility: a single shared range for both tuple components.
+        ExportedBounds::IntBetween { min, max } => {
+            let pair = (min.clone(), max.clone());
+            (pair.clone(), pair)
+        }
+        ExportedBounds::Unknown => {
+            return Err(miette::miette!(
+                "Test '{}' has unknown bounds; cannot generate a bounded theorem without explicit Int bounds",
+                test.name,
+            ));
+        }
+    };
+
+    let ((x_min, x_max), (y_min, y_max)) = &pair_bounds;
+    validate_int_bounds_literals(&test.name, x_min, x_max)?;
+    validate_int_bounds_literals(&test.name, y_min, y_max)?;
+
+    Ok(pair_bounds)
 }
 
 fn generate_proof_file(
@@ -543,9 +598,8 @@ end {lean_module}
             ))
         }
 
-        FuzzerOutputType::Bool => {
-            Ok(format!(
-                r#"import AikenVerify.Utils
+        FuzzerOutputType::Bool => Ok(format!(
+            r#"import AikenVerify.Utils
 import PlutusCore.UPLC.ScriptEncoding
 import Blaster
 
@@ -568,15 +622,14 @@ theorem {lean_test_name}_alwaysTerminating :
 
 end {lean_module}
 "#
-            ))
-        }
+        )),
 
         FuzzerOutputType::Tuple(types)
             if types.len() == 2
                 && matches!(types[0], FuzzerOutputType::Int)
                 && matches!(types[1], FuzzerOutputType::Int) =>
         {
-            let (min, max) = extract_int_bounds(test)?;
+            let ((x_min, x_max), (y_min, y_max)) = extract_tuple_int2_bounds(test)?;
 
             Ok(format!(
                 r#"import AikenVerify.Utils
@@ -593,18 +646,18 @@ open AikenVerify.Utils
 
 theorem {lean_test_name} :
   ∀ (x : Integer) (y : Integer),
-  ({min} <= x && x <= {max})
+  ({x_min} <= x && x <= {x_max})
   →
-  ({min} <= y && y <= {max})
+  ({y_min} <= y && y <= {y_max})
   →
   (proveTests {prog} (intArgs2 x y)) = {assertion} :=
   by blaster
 
 theorem {lean_test_name}_alwaysTerminating :
   ∀ (x : Integer) (y : Integer),
-  ({min} <= x && x <= {max})
+  ({x_min} <= x && x <= {x_max})
   →
-  ({min} <= y && y <= {max})
+  ({y_min} <= y && y <= {y_max})
   →
   Option.isSome (proveTests {prog} (intArgs2 x y)) :=
   by blaster
@@ -614,30 +667,24 @@ end {lean_module}
             ))
         }
 
-        FuzzerOutputType::ByteArray => {
-            Err(miette::miette!(
-                "Test '{}' uses ByteArray fuzzer which is not yet supported for verification; \
+        FuzzerOutputType::ByteArray => Err(miette::miette!(
+            "Test '{}' uses ByteArray fuzzer which is not yet supported for verification; \
                  ByteArray proofs require bounded-length assumptions which are not yet implemented",
-                test.name,
-            ))
-        }
+            test.name,
+        )),
 
-        FuzzerOutputType::List(_) => {
-            Err(miette::miette!(
-                "Test '{}' uses List fuzzer which is not yet supported for verification; \
+        FuzzerOutputType::List(_) => Err(miette::miette!(
+            "Test '{}' uses List fuzzer which is not yet supported for verification; \
                  List proofs require bounded-length assumptions which are not yet implemented",
-                test.name,
-            ))
-        }
+            test.name,
+        )),
 
-        other => {
-            Err(miette::miette!(
-                "Test '{}' has unsupported fuzzer output type {:?}; \
+        other => Err(miette::miette!(
+            "Test '{}' has unsupported fuzzer output type {:?}; \
                  only Int, Bool, and (Int, Int) tuples are supported for verification",
-                test.name,
-                other,
-            ))
-        }
+            test.name,
+            other,
+        )),
     }
 }
 
@@ -662,16 +709,16 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
     } else {
         let stderr = &raw.stderr;
         for entry in &manifest.tests {
-            let correctness_status =
-                if stderr.contains(&format!("error: '{}' ", entry.lean_theorem))
-                    || stderr.contains(&format!("'{}'", entry.lean_theorem))
-                {
-                    ProofStatus::Failed {
-                        reason: extract_error_for_theorem(&entry.lean_theorem, stderr),
-                    }
-                } else {
-                    ProofStatus::Unknown
-                };
+            let correctness_status = if stderr
+                .contains(&format!("error: '{}' ", entry.lean_theorem))
+                || stderr.contains(&format!("'{}'", entry.lean_theorem))
+            {
+                ProofStatus::Failed {
+                    reason: extract_error_for_theorem(&entry.lean_theorem, stderr),
+                }
+            } else {
+                ProofStatus::Unknown
+            };
 
             theorems.push(TheoremResult {
                 test_name: format!("{}.{}", entry.aiken_module, entry.aiken_name),
@@ -819,15 +866,17 @@ mod tests {
         assert!(out_dir.join("manifest.json").exists());
 
         // Check per-test files
-        assert!(out_dir
-            .join("AikenVerify/Proofs/My_module/test_roundtrip.lean")
-            .exists());
-        assert!(out_dir
-            .join("AikenVerify/Proofs/AikenList/test_map.lean")
-            .exists());
-        assert!(out_dir
-            .join("flat/my_module__test_roundtrip.flat")
-            .exists());
+        assert!(
+            out_dir
+                .join("AikenVerify/Proofs/My_module/test_roundtrip.lean")
+                .exists()
+        );
+        assert!(
+            out_dir
+                .join("AikenVerify/Proofs/AikenList/test_map.lean")
+                .exists()
+        );
+        assert!(out_dir.join("flat/my_module__test_roundtrip.flat").exists());
         assert!(out_dir.join("flat/aiken_list__test_map.flat").exists());
 
         // Check manifest
@@ -855,10 +904,9 @@ mod tests {
         assert!(root.contains("import AikenVerify.Proofs.My_module.test_roundtrip"));
 
         // Check generated .lean proof files contain actual theorems
-        let proof1 = fs::read_to_string(
-            out_dir.join("AikenVerify/Proofs/My_module/test_roundtrip.lean"),
-        )
-        .unwrap();
+        let proof1 =
+            fs::read_to_string(out_dir.join("AikenVerify/Proofs/My_module/test_roundtrip.lean"))
+                .unwrap();
         assert!(proof1.contains("theorem test_roundtrip"));
         assert!(proof1.contains("theorem test_roundtrip_alwaysTerminating"));
         assert!(proof1.contains("by blaster"));
@@ -866,10 +914,8 @@ mod tests {
         assert!(proof1.contains("(0 <= x && x <= 255)"));
         assert!(proof1.contains("namespace AikenVerify.Proofs.My_module.test_roundtrip"));
 
-        let proof2 = fs::read_to_string(
-            out_dir.join("AikenVerify/Proofs/AikenList/test_map.lean"),
-        )
-        .unwrap();
+        let proof2 =
+            fs::read_to_string(out_dir.join("AikenVerify/Proofs/AikenList/test_map.lean")).unwrap();
         assert!(proof2.contains("theorem test_map"));
         assert!(proof2.contains("theorem test_map_alwaysTerminating"));
         assert!(proof2.contains("#import_uplc prog_aiken_list__test_map single_cbor_hex"));
@@ -1077,6 +1123,64 @@ mod tests {
     }
 
     #[test]
+    fn tuple_int_int_component_bounds_generate_two_ranges() {
+        let test = make_test_with_type(
+            "my_module",
+            "test_pair_components",
+            FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Int]),
+            ExportedBounds::IntTupleBetween {
+                bounds: vec![
+                    ("0".to_string(), "10".to_string()),
+                    ("20".to_string(), "30".to_string()),
+                ],
+            },
+        );
+        let id = test_id("my_module", "test_pair_components");
+        let lean_name = sanitize_lean_name("test_pair_components");
+        let lean_module = "AikenVerify.Proofs.My_module.test_pair_components";
+
+        let proof = generate_proof_file(&test, &id, &lean_name, lean_module).unwrap();
+
+        assert!(
+            proof.contains("∀ (x : Integer) (y : Integer),"),
+            "Tuple theorem should quantify over two Integers, got:\n{proof}"
+        );
+        assert!(
+            proof.contains("(0 <= x && x <= 10)"),
+            "Should have first component bounds for x, got:\n{proof}"
+        );
+        assert!(
+            proof.contains("(20 <= y && y <= 30)"),
+            "Should have second component bounds for y, got:\n{proof}"
+        );
+    }
+
+    #[test]
+    fn tuple_int_int_component_bounds_wrong_arity_errors() {
+        let test = make_test_with_type(
+            "my_module",
+            "test_pair_components_bad_arity",
+            FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Int]),
+            ExportedBounds::IntTupleBetween {
+                bounds: vec![("0".to_string(), "10".to_string())],
+            },
+        );
+        let id = test_id("my_module", "test_pair_components_bad_arity");
+        let lean_name = sanitize_lean_name("test_pair_components_bad_arity");
+        let lean_module = "AikenVerify.Proofs.My_module.test_pair_components_bad_arity";
+
+        let result = generate_proof_file(&test, &id, &lean_name, lean_module);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("expects exactly 2"),
+            "Expected arity error for tuple bounds"
+        );
+    }
+
+    #[test]
     fn tuple_int_int_unknown_bounds_errors() {
         let test = make_test_with_type(
             "my_module",
@@ -1214,10 +1318,12 @@ mod tests {
         assert_eq!(summary.proved, 4);
         assert_eq!(summary.failed, 0);
         assert_eq!(summary.unknown, 0);
-        assert!(summary
-            .theorems
-            .iter()
-            .all(|t| matches!(t.status, ProofStatus::Proved)));
+        assert!(
+            summary
+                .theorems
+                .iter()
+                .all(|t| matches!(t.status, ProofStatus::Proved))
+        );
     }
 
     #[test]
@@ -1327,6 +1433,9 @@ mod tests {
     fn extract_error_for_theorem_filters_correctly() {
         let stderr = "line1: unrelated\nerror: 'my_thm' unsolved goals\nline3: also unrelated\nmy_thm failed to synthesize\n";
         let result = extract_error_for_theorem("my_thm", stderr);
-        assert_eq!(result, "error: 'my_thm' unsolved goals\nmy_thm failed to synthesize");
+        assert_eq!(
+            result,
+            "error: 'my_thm' unsolved goals\nmy_thm failed to synthesize"
+        );
     }
 }

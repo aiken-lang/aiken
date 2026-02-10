@@ -92,6 +92,10 @@ impl<'a> CodeGenerator<'a> {
         &self.data_types
     }
 
+    pub fn functions(&self) -> &IndexMap<&'a FunctionAccessKey, &'a TypedFunction> {
+        &self.functions
+    }
+
     pub fn new(
         plutus_version: PlutusVersion,
         functions: IndexMap<&'a FunctionAccessKey, &'a TypedFunction>,

@@ -130,8 +130,12 @@ pub fn exec(
             None => Tracing::All(trace_level),
         };
 
-        let exported =
-            p.export_tests(match_tests.clone(), exact_match, tracing, include_flat_bytes)?;
+        let exported = p.export_tests(
+            match_tests.clone(),
+            exact_match,
+            tracing,
+            include_flat_bytes,
+        )?;
 
         let json = serde_json::to_string_pretty(&exported).unwrap();
 
