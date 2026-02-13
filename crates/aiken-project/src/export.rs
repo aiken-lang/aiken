@@ -115,11 +115,98 @@ fn pretty_print_type(tipo: &Type) -> std::string::String {
     printer.print(tipo).to_pretty_string(80)
 }
 
+/// Typed constraint IR describing what a fuzzer is known to produce.
+///
+/// This replaces the old `ExportedBounds` with a richer, composable representation
+/// that can describe constraints for arbitrary fuzzer output shapes (not just integers).
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-pub enum ExportedBounds {
-    IntBetween { min: String, max: String },
-    IntTupleBetween { bounds: Vec<(String, String)> },
-    Unknown,
+pub enum FuzzerConstraint {
+    /// No constraint known; the fuzzer may produce any value of the given type.
+    Any,
+    /// Integer in a closed range [min, max].
+    IntRange { min: String, max: String },
+    /// A tuple whose elements each carry their own constraint.
+    Tuple(Vec<FuzzerConstraint>),
+    /// A list whose elements satisfy `elem`, with optional length bounds.
+    List {
+        elem: Box<FuzzerConstraint>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        min_len: Option<usize>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        max_len: Option<usize>,
+    },
+    /// A mapped constraint: the underlying constraint describes the input domain,
+    /// but the output type may differ (e.g. `fuzz.map(int_between(0,10), fn(x) { ... })`).
+    Map(Box<FuzzerConstraint>),
+    /// Conjunction of constraints (all must hold).
+    And(Vec<FuzzerConstraint>),
+    /// Constraint could not be extracted; includes a human-readable reason.
+    Unsupported { reason: String },
+}
+
+/// Whether a property test returns Bool or Void.
+///
+/// Bool-returning tests are verified via `proveTests` (Option Bool) with `= true`/`= false`.
+/// Void-returning tests are verified via `proveTestsHalt` which checks for non-error termination.
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+pub enum TestReturnMode {
+    Bool,
+    Void,
+}
+
+/// Classification of a verification target.
+///
+/// - `PropertyWrapper`: the test is a standalone property test (default).
+/// - `ValidatorHandler`: the test exercises a validator handler directly.
+/// - `Equivalence`: the test proves that a property wrapper and a validator
+///   handler produce the same result for all inputs.
+#[derive(Debug, PartialEq, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub enum VerificationTargetKind {
+    #[default]
+    PropertyWrapper,
+    ValidatorHandler,
+    Equivalence,
+}
+
+impl std::fmt::Display for VerificationTargetKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VerificationTargetKind::PropertyWrapper => write!(f, "property"),
+            VerificationTargetKind::ValidatorHandler => write!(f, "validator"),
+            VerificationTargetKind::Equivalence => write!(f, "equivalence"),
+        }
+    }
+}
+
+impl std::str::FromStr for VerificationTargetKind {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "property" => Ok(VerificationTargetKind::PropertyWrapper),
+            "validator" => Ok(VerificationTargetKind::ValidatorHandler),
+            "equivalence" => Ok(VerificationTargetKind::Equivalence),
+            _ => Err(format!(
+                "Unknown verification target '{}'; expected 'property', 'validator', or 'equivalence'",
+                s
+            )),
+        }
+    }
+}
+
+/// Optional metadata describing the validator handler associated with a property test.
+/// Present when the test targets a specific validator handler for direct or equivalence verification.
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ValidatorTarget {
+    /// Module containing the validator (e.g. "validators/my_validator")
+    pub validator_module: String,
+    /// Validator name (e.g. "spend")
+    pub validator_name: String,
+    /// Handler function name within the validator (e.g. "spend.handler")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub handler_name: Option<String>,
+    /// Compiled handler program (UPLC flat hex)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub handler_program: Option<ExportedProgram>,
 }
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
@@ -128,11 +215,19 @@ pub struct ExportedPropertyTest {
     pub module: String,
     pub input_path: String,
     pub on_test_failure: OnTestFailure,
+    pub return_mode: TestReturnMode,
+    /// Classification of the verification target (default: PropertyWrapper).
+    #[serde(default)]
+    pub target_kind: VerificationTargetKind,
+    /// Validator target metadata, present for ValidatorHandler and Equivalence modes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub validator_target: Option<ValidatorTarget>,
     pub test_program: ExportedProgram,
     pub fuzzer_program: ExportedProgram,
     pub fuzzer_type: String,
     pub fuzzer_output_type: FuzzerOutputType,
-    pub extracted_bounds: ExportedBounds,
+    pub constraint: FuzzerConstraint,
 }
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]

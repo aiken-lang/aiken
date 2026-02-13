@@ -115,6 +115,7 @@ impl Test {
         module: String,
         name: String,
         on_test_failure: OnTestFailure,
+        return_type: Rc<Type>,
         program: Program<Name>,
         fuzzer: Fuzzer<Name>,
     ) -> Test {
@@ -124,6 +125,7 @@ impl Test {
             name,
             program,
             on_test_failure,
+            return_type,
             fuzzer,
         })
     }
@@ -145,8 +147,8 @@ impl Test {
             let parameter = test.arguments.first().unwrap().to_owned();
 
             let via = parameter.via.clone();
-            let extracted_bounds =
-                extract_bounds_from_via(&via, module_name.as_str(), generator.functions());
+            let constraint =
+                extract_constraint_from_via(&via, module_name.as_str(), generator.functions());
 
             let type_info = parameter.arg.tipo.clone();
 
@@ -184,12 +186,13 @@ impl Test {
                     module_name,
                     test.name,
                     test.on_test_failure,
+                    test.return_type,
                     program,
                     Fuzzer {
                         program: generator_program,
                         stripped_type_info,
                         type_info,
-                        extracted_bounds,
+                        constraint,
                     },
                 ),
             }
@@ -263,21 +266,38 @@ pub struct PropertyTest {
     pub module: String,
     pub name: String,
     pub on_test_failure: OnTestFailure,
+    pub return_type: Rc<Type>,
     pub program: Program<Name>,
     pub fuzzer: Fuzzer<Name>,
 }
 
 unsafe impl Send for PropertyTest {}
 
-/// Bounds extracted from a fuzzer's TypedExpr for formal verification.
-#[derive(Debug, Clone)]
-pub enum ExtractedBounds {
-    /// Integer bounds: min <= x <= max
-    IntBetween { min: String, max: String },
-    /// Tuple-like integer bounds in argument order
-    IntTupleBetween { bounds: Vec<(String, String)> },
-    /// Could not extract bounds from this fuzzer
-    Unknown,
+/// Typed constraint IR describing what a fuzzer is known to produce.
+///
+/// This is re-exported from the project crate as `FuzzerConstraint` in the
+/// export manifest. It supports composable constraints for arbitrary fuzzer
+/// output shapes (integers, tuples, lists, mapped values, etc.).
+#[derive(Debug, Clone, PartialEq)]
+pub enum FuzzerConstraint {
+    /// No constraint known; the fuzzer may produce any value of the given type.
+    Any,
+    /// Integer in a closed range [min, max].
+    IntRange { min: String, max: String },
+    /// A tuple whose elements each carry their own constraint.
+    Tuple(Vec<FuzzerConstraint>),
+    /// A list whose elements satisfy `elem`, with optional length bounds.
+    List {
+        elem: Box<FuzzerConstraint>,
+        min_len: Option<usize>,
+        max_len: Option<usize>,
+    },
+    /// A mapped constraint: the underlying constraint describes the input domain.
+    Map(Box<FuzzerConstraint>),
+    /// Conjunction of constraints (all must hold).
+    And(Vec<FuzzerConstraint>),
+    /// Constraint could not be extracted; includes a human-readable reason.
+    Unsupported { reason: String },
 }
 
 #[derive(Debug, Clone)]
@@ -291,112 +311,207 @@ pub struct Fuzzer<T> {
     /// generate Plutus data with the appropriate shape.
     pub stripped_type_info: Rc<Type>,
 
-    /// Bounds extracted from the fuzzer expression for formal verification.
-    pub extracted_bounds: ExtractedBounds,
+    /// Constraint extracted from the fuzzer expression for formal verification.
+    pub constraint: FuzzerConstraint,
 }
 
-fn extract_bounds_from_via(
+fn extract_constraint_from_via(
     via: &TypedExpr,
     current_module: &str,
     known_functions: &IndexMap<&FunctionAccessKey, &TypedFunction>,
-) -> ExtractedBounds {
+) -> FuzzerConstraint {
     match via {
         TypedExpr::Call { fun, args, .. } => {
-            let fn_name = match fun.as_ref() {
-                TypedExpr::ModuleSelect { label, .. } => Some(label.as_str()),
-                TypedExpr::Var { name, .. } => Some(name.as_str()),
-                _ => None,
-            };
+            let fn_name = fuzz_builtin_name(fun.as_ref());
 
             match fn_name {
                 Some("int_between") if args.len() == 2 => {
                     let min = extract_int_value(&args[0].value);
                     let max = extract_int_value(&args[1].value);
                     match (min, max) {
-                        (Some(min), Some(max)) => normalize_int_between_bounds(min, max),
-                        _ => ExtractedBounds::Unknown,
+                        (Some(min), Some(max)) => normalize_int_range(min, max),
+                        _ => FuzzerConstraint::Unsupported {
+                            reason: "int_between: could not extract literal bounds".to_string(),
+                        },
                     }
                 }
-                Some("int") if args.is_empty() => ExtractedBounds::IntBetween {
-                    min: "-255".to_string(),
-                    max: "16383".to_string(),
-                },
+                Some("int") if args.is_empty() => {
+                    // aiken/fuzz.int() produces values in [-255, 16383].
+                    // These are the documented bounds of the fuzz library implementation.
+                    FuzzerConstraint::IntRange {
+                        min: "-255".to_string(),
+                        max: "16383".to_string(),
+                    }
+                }
                 Some("int_at_least") if args.len() == 1 => {
                     if let Some(min_str) = extract_int_value(&args[0].value) {
-                        int_at_least_bounds(min_str)
-                            .map(|(min, max)| ExtractedBounds::IntBetween { min, max })
-                            .unwrap_or(ExtractedBounds::Unknown)
+                        int_at_least_constraint(min_str)
                     } else {
-                        ExtractedBounds::Unknown
+                        FuzzerConstraint::Unsupported {
+                            reason: "int_at_least: could not extract literal bound".to_string(),
+                        }
                     }
                 }
                 Some("int_at_most") if args.len() == 1 => {
                     if let Some(max_str) = extract_int_value(&args[0].value) {
-                        int_at_most_bounds(max_str)
-                            .map(|(min, max)| ExtractedBounds::IntBetween { min, max })
-                            .unwrap_or(ExtractedBounds::Unknown)
+                        int_at_most_constraint(max_str)
                     } else {
-                        ExtractedBounds::Unknown
+                        FuzzerConstraint::Unsupported {
+                            reason: "int_at_most: could not extract literal bound".to_string(),
+                        }
                     }
                 }
-                // map(fuzzer, transform_fn): bounds come from the inner fuzzer.
-                // The mapping function changes the output type but the extracted
-                // bounds still describe the input fuzzer's domain.
+                // map(fuzzer, transform_fn): the underlying constraint describes
+                // the input fuzzer's domain, wrapped in Map to indicate the output
+                // type may differ.
                 Some("map") if args.len() == 2 => {
-                    extract_bounds_from_via(&args[0].value, current_module, known_functions)
+                    let inner = extract_constraint_from_via(
+                        &args[0].value,
+                        current_module,
+                        known_functions,
+                    );
+                    FuzzerConstraint::Map(Box::new(inner))
                 }
-                // and_then(fuzzer, continuation_fn): bounds come from the inner
-                // fuzzer. The continuation produces a new fuzzer but the first
-                // fuzzer's bounds are a useful conservative approximation.
+                // and_then(fuzzer, continuation_fn): constraint comes from the
+                // inner fuzzer as a conservative approximation.
                 Some("and_then") | Some("then") if args.len() == 2 => {
-                    extract_bounds_from_via(&args[0].value, current_module, known_functions)
+                    extract_constraint_from_via(&args[0].value, current_module, known_functions)
                 }
-                // both(fuzzer_a, fuzzer_b): tuple bounds are built directly
-                // from both component fuzzers in argument order.
-                Some("both") if args.len() >= 2 => combine_tuple_bounds(
-                    extract_bounds_from_via(&args[0].value, current_module, known_functions),
-                    extract_bounds_from_via(&args[1].value, current_module, known_functions),
-                ),
-                // map2(fuzzer_a, fuzzer_b, mapper): preserve/reorder bounds
+                // both(fuzzer_a, fuzzer_b): tuple constraint from both components.
+                Some("both") if args.len() >= 2 => {
+                    let left = extract_constraint_from_via(
+                        &args[0].value,
+                        current_module,
+                        known_functions,
+                    );
+                    let right = extract_constraint_from_via(
+                        &args[1].value,
+                        current_module,
+                        known_functions,
+                    );
+                    FuzzerConstraint::Tuple(vec![left, right])
+                }
+                // map2(fuzzer_a, fuzzer_b, mapper): preserve/reorder constraints
                 // only when the mapper is known to return a direct tuple of
                 // its two inputs (possibly swapped).
+                //
+                // NOTE (over-approximation): This decomposition extracts
+                // per-element constraints independently. Any relational
+                // correlations introduced by the mapper (e.g., a < b) are
+                // not captured in the constraint IR. The generated proof
+                // domain will therefore be a Cartesian product of the
+                // individual element domains, which is an over-approximation
+                // of the actual fuzzer sample space. Properties that depend
+                // on inter-element invariants enforced only by the mapper
+                // may fail formal verification even when property testing
+                // passes.
                 Some("map2") if args.len() >= 3 => {
                     let Some(mapper_arg_order) =
                         map2_mapper_arg_order(&args[2].value, current_module, known_functions)
                     else {
-                        return ExtractedBounds::Unknown;
+                        return FuzzerConstraint::Unsupported {
+                            reason: "map2: mapper is not a simple tuple constructor".to_string(),
+                        };
                     };
 
-                    combine_map2_tuple_bounds(
-                        extract_bounds_from_via(&args[0].value, current_module, known_functions),
-                        extract_bounds_from_via(&args[1].value, current_module, known_functions),
-                        mapper_arg_order,
-                    )
+                    let left = extract_constraint_from_via(
+                        &args[0].value,
+                        current_module,
+                        known_functions,
+                    );
+                    let right = extract_constraint_from_via(
+                        &args[1].value,
+                        current_module,
+                        known_functions,
+                    );
+
+                    let ordered = match mapper_arg_order {
+                        [0, 1] => vec![left, right],
+                        [1, 0] => vec![right, left],
+                        _ => {
+                            return FuzzerConstraint::Unsupported {
+                                reason: "map2: unexpected mapper argument order".to_string(),
+                            };
+                        }
+                    };
+
+                    FuzzerConstraint::Tuple(ordered)
                 }
                 // constant(value): always produces the same value.
                 Some("constant") if args.len() == 1 => {
                     if let Some(val) = extract_int_value(&args[0].value) {
-                        ExtractedBounds::IntBetween {
+                        FuzzerConstraint::IntRange {
                             min: val.clone(),
                             max: val,
                         }
                     } else {
-                        ExtractedBounds::Unknown
+                        // Non-integer constant: we know it's fixed but can't express the constraint
+                        FuzzerConstraint::Any
                     }
                 }
-                _ => ExtractedBounds::Unknown,
+                // list(elem_fuzzer): list with element constraint, no length bounds known.
+                Some("list") if args.len() == 1 => {
+                    let elem = extract_constraint_from_via(
+                        &args[0].value,
+                        current_module,
+                        known_functions,
+                    );
+                    FuzzerConstraint::List {
+                        elem: Box::new(elem),
+                        min_len: None,
+                        max_len: None,
+                    }
+                }
+                // list_between(elem_fuzzer, min_len, max_len): list with length bounds.
+                Some("list_between") if args.len() == 3 => {
+                    let elem = extract_constraint_from_via(
+                        &args[0].value,
+                        current_module,
+                        known_functions,
+                    );
+                    let min_len =
+                        extract_int_value(&args[1].value).and_then(|s| s.parse::<usize>().ok());
+                    let max_len =
+                        extract_int_value(&args[2].value).and_then(|s| s.parse::<usize>().ok());
+                    FuzzerConstraint::List {
+                        elem: Box::new(elem),
+                        min_len,
+                        max_len,
+                    }
+                }
+                _ => FuzzerConstraint::Any,
             }
         }
         // Pipelines and sequences are desugared into a list of expressions
         // where the last one carries the final value. Recurse into it.
         TypedExpr::Pipeline { expressions, .. } | TypedExpr::Sequence { expressions, .. } => {
             if let Some(last) = expressions.last() {
-                extract_bounds_from_via(last, current_module, known_functions)
+                extract_constraint_from_via(last, current_module, known_functions)
             } else {
-                ExtractedBounds::Unknown
+                FuzzerConstraint::Any
             }
         }
-        _ => ExtractedBounds::Unknown,
+        _ => FuzzerConstraint::Any,
+    }
+}
+
+fn fuzz_builtin_name(fun: &TypedExpr) -> Option<&str> {
+    const FUZZ_MODULE: &str = "aiken/fuzz";
+
+    match fun {
+        TypedExpr::Var { constructor, .. } => match &constructor.variant {
+            ValueConstructorVariant::ModuleFn { module, name, .. } if module == FUZZ_MODULE => {
+                Some(name.as_str())
+            }
+            _ => None,
+        },
+        TypedExpr::ModuleSelect { constructor, .. } => match constructor {
+            ModuleValueConstructor::Fn { module, name, .. } if module == FUZZ_MODULE => {
+                Some(name.as_str())
+            }
+            _ => None,
+        },
+        _ => None,
     }
 }
 
@@ -412,97 +527,73 @@ fn bigint_abs(value: &BigInt) -> BigInt {
     }
 }
 
-fn normalize_int_between_bounds(min: String, max: String) -> ExtractedBounds {
+fn normalize_int_range(min: String, max: String) -> FuzzerConstraint {
     let (min_val, max_val) = match (parse_bigint_literal(&min), parse_bigint_literal(&max)) {
         (Some(min_val), Some(max_val)) => (min_val, max_val),
-        _ => return ExtractedBounds::Unknown,
+        _ => {
+            return FuzzerConstraint::Unsupported {
+                reason: format!("could not parse integer bounds: min={min}, max={max}"),
+            };
+        }
     };
 
     if min_val <= max_val {
-        ExtractedBounds::IntBetween { min, max }
+        FuzzerConstraint::IntRange { min, max }
     } else {
-        ExtractedBounds::IntBetween { min: max, max: min }
+        FuzzerConstraint::IntRange { min: max, max: min }
     }
 }
 
-fn int_at_least_bounds(min: String) -> Option<(String, String)> {
-    let min_val = parse_bigint_literal(&min)?;
+/// Heuristic parameters for `int_at_least` / `int_at_most` bound estimation.
+///
+/// The aiken/fuzz library generates random integers using a scheme that, for
+/// small absolute values (at or below `SMALL_INT_THRESHOLD`), stays within
+/// `[-SMALL_INT_THRESHOLD, SMALL_INT_THRESHOLD]`. For larger values, the range
+/// expands proportionally by `EXPANSION_FACTOR * abs(anchor)`.
+///
+/// These are derived from the current aiken/fuzz implementation and should be
+/// updated if the library semantics change.
+const SMALL_INT_THRESHOLD: i64 = 255;
+const EXPANSION_FACTOR: i64 = 5;
+
+fn int_at_least_constraint(min: String) -> FuzzerConstraint {
+    let Some(min_val) = parse_bigint_literal(&min) else {
+        return FuzzerConstraint::Unsupported {
+            reason: format!("int_at_least: could not parse bound '{min}'"),
+        };
+    };
     let abs_min = bigint_abs(&min_val);
-    let threshold = BigInt::from(255);
+    let threshold = BigInt::from(SMALL_INT_THRESHOLD);
     let max_val = if abs_min <= threshold {
         threshold
     } else {
-        min_val + BigInt::from(5) * abs_min
+        &min_val + BigInt::from(EXPANSION_FACTOR) * &abs_min
     };
 
-    Some((min, max_val.to_string()))
+    FuzzerConstraint::IntRange {
+        min,
+        max: max_val.to_string(),
+    }
 }
 
-fn int_at_most_bounds(max: String) -> Option<(String, String)> {
-    let max_val = parse_bigint_literal(&max)?;
+fn int_at_most_constraint(max: String) -> FuzzerConstraint {
+    let Some(max_val) = parse_bigint_literal(&max) else {
+        return FuzzerConstraint::Unsupported {
+            reason: format!("int_at_most: could not parse bound '{max}'"),
+        };
+    };
     let abs_max = bigint_abs(&max_val);
-    let threshold = BigInt::from(255);
+    let threshold = BigInt::from(SMALL_INT_THRESHOLD);
     let min_val = if abs_max <= threshold {
         -threshold
     } else {
-        max_val - BigInt::from(5) * abs_max
+        &max_val - BigInt::from(EXPANSION_FACTOR) * &abs_max
     };
 
-    Some((min_val.to_string(), max))
-}
-
-fn into_tuple_bounds(bounds: ExtractedBounds) -> Option<Vec<(String, String)>> {
-    match bounds {
-        ExtractedBounds::IntBetween { min, max } => Some(vec![(min, max)]),
-        ExtractedBounds::IntTupleBetween { bounds } => Some(bounds),
-        ExtractedBounds::Unknown => None,
+    FuzzerConstraint::IntRange {
+        min: min_val.to_string(),
+        max,
     }
-}
-
-fn combine_tuple_bounds(left: ExtractedBounds, right: ExtractedBounds) -> ExtractedBounds {
-    let Some(mut left_bounds) = into_tuple_bounds(left) else {
-        return ExtractedBounds::Unknown;
-    };
-
-    let Some(mut right_bounds) = into_tuple_bounds(right) else {
-        return ExtractedBounds::Unknown;
-    };
-
-    left_bounds.append(&mut right_bounds);
-
-    ExtractedBounds::IntTupleBetween {
-        bounds: left_bounds,
-    }
-}
-
-fn combine_map2_tuple_bounds(
-    left: ExtractedBounds,
-    right: ExtractedBounds,
-    mapper_arg_order: [usize; 2],
-) -> ExtractedBounds {
-    let Some(mut left_bounds) = into_tuple_bounds(left) else {
-        return ExtractedBounds::Unknown;
-    };
-
-    let Some(mut right_bounds) = into_tuple_bounds(right) else {
-        return ExtractedBounds::Unknown;
-    };
-
-    let mut merged = Vec::with_capacity(left_bounds.len() + right_bounds.len());
-
-    match mapper_arg_order {
-        [0, 1] => {
-            merged.append(&mut left_bounds);
-            merged.append(&mut right_bounds);
-        }
-        [1, 0] => {
-            merged.append(&mut right_bounds);
-            merged.append(&mut left_bounds);
-        }
-        _ => return ExtractedBounds::Unknown,
-    }
-
-    ExtractedBounds::IntTupleBetween { bounds: merged }
 }
 
 fn map2_mapper_arg_order(
@@ -1900,6 +1991,28 @@ mod test {
         }
     }
 
+    fn module_fn_var(name: &str, module: &str, tipo: Rc<Type>) -> TypedExpr {
+        TypedExpr::Var {
+            location: Span::empty(),
+            constructor: ValueConstructor::public(
+                tipo.clone(),
+                ValueConstructorVariant::ModuleFn {
+                    name: name.to_string(),
+                    field_map: None,
+                    module: module.to_string(),
+                    arity: 0,
+                    location: Span::empty(),
+                    builtin: None,
+                },
+            ),
+            name: name.to_string(),
+        }
+    }
+
+    fn fuzz_var(name: &str, tipo: Rc<Type>) -> TypedExpr {
+        module_fn_var(name, "aiken/fuzz", tipo)
+    }
+
     fn make_map2_mapper(elems: Vec<TypedExpr>) -> TypedExpr {
         let int_tipo = Type::int();
         let tuple_tipo = Type::tuple(vec![int_tipo.clone(), int_tipo.clone()]);
@@ -1990,7 +2103,7 @@ mod test {
         TypedExpr::Call {
             location: Span::empty(),
             tipo: Type::int(),
-            fun: Box::new(local_var(
+            fun: Box::new(fuzz_var(
                 "int_between",
                 Type::function(vec![Type::int(), Type::int()], Type::int()),
             )),
@@ -2002,7 +2115,7 @@ mod test {
         TypedExpr::Call {
             location: Span::empty(),
             tipo: Type::tuple(vec![Type::int(), Type::int()]),
-            fun: Box::new(local_var(
+            fun: Box::new(fuzz_var(
                 "map2",
                 Type::function(
                     vec![Type::int(), Type::int(), Type::int()],
@@ -2018,15 +2131,15 @@ mod test {
     }
 
     #[test]
-    fn normalize_int_between_swaps_reversed_bounds() {
-        let bounds = normalize_int_between_bounds("10".to_string(), "0".to_string());
+    fn normalize_int_range_swaps_reversed_bounds() {
+        let constraint = normalize_int_range("10".to_string(), "0".to_string());
 
-        match bounds {
-            ExtractedBounds::IntBetween { min, max } => {
+        match constraint {
+            FuzzerConstraint::IntRange { min, max } => {
                 assert_eq!(min, "0");
                 assert_eq!(max, "10");
             }
-            other => panic!("expected IntBetween bounds, got {other:?}"),
+            other => panic!("expected IntRange, got {other:?}"),
         }
     }
 
@@ -2035,10 +2148,15 @@ mod test {
         let min = "170141183460469231731687303715884105728".to_string(); // i128::MAX + 1
         let expected_max = "1020847100762815390390123822295304634368".to_string(); // min * 6
 
-        let bounds = int_at_least_bounds(min.clone()).expect("expected parsed bounds");
+        let constraint = int_at_least_constraint(min.clone());
 
-        assert_eq!(bounds.0, min);
-        assert_eq!(bounds.1, expected_max);
+        match constraint {
+            FuzzerConstraint::IntRange { min: got_min, max } => {
+                assert_eq!(got_min, min);
+                assert_eq!(max, expected_max);
+            }
+            other => panic!("expected IntRange, got {other:?}"),
+        }
     }
 
     #[test]
@@ -2046,32 +2164,14 @@ mod test {
         let max = "-170141183460469231731687303715884105728".to_string(); // i128::MIN
         let expected_min = "-1020847100762815390390123822295304634368".to_string(); // max * 6
 
-        let bounds = int_at_most_bounds(max.clone()).expect("expected parsed bounds");
+        let constraint = int_at_most_constraint(max.clone());
 
-        assert_eq!(bounds.0, expected_min);
-        assert_eq!(bounds.1, max);
-    }
-
-    #[test]
-    fn combine_tuple_bounds_preserves_component_order() {
-        let combined = combine_tuple_bounds(
-            ExtractedBounds::IntBetween {
-                min: "0".to_string(),
-                max: "10".to_string(),
-            },
-            ExtractedBounds::IntBetween {
-                min: "20".to_string(),
-                max: "30".to_string(),
-            },
-        );
-
-        match combined {
-            ExtractedBounds::IntTupleBetween { bounds } => {
-                assert_eq!(bounds.len(), 2);
-                assert_eq!(bounds[0], ("0".to_string(), "10".to_string()));
-                assert_eq!(bounds[1], ("20".to_string(), "30".to_string()));
+        match constraint {
+            FuzzerConstraint::IntRange { min, max: got_max } => {
+                assert_eq!(min, expected_min);
+                assert_eq!(got_max, max);
             }
-            other => panic!("expected IntTupleBetween bounds, got {other:?}"),
+            other => panic!("expected IntRange, got {other:?}"),
         }
     }
 
@@ -2106,7 +2206,7 @@ mod test {
     }
 
     #[test]
-    fn extract_bounds_map2_identity_mapper_yields_tuple_bounds() {
+    fn extract_constraint_map2_identity_mapper_yields_tuple() {
         let int_tipo = Type::int();
         let mapper = make_map2_mapper(vec![
             local_var("a", int_tipo.clone()),
@@ -2120,18 +2220,24 @@ mod test {
         );
 
         let functions = empty_known_functions();
-        match extract_bounds_from_via(&via, "math", &functions) {
-            ExtractedBounds::IntTupleBetween { bounds } => {
-                assert_eq!(bounds.len(), 2);
-                assert_eq!(bounds[0], ("0".to_string(), "10".to_string()));
-                assert_eq!(bounds[1], ("20".to_string(), "30".to_string()));
-            }
-            other => panic!("expected IntTupleBetween bounds, got {other:?}"),
-        }
+        let constraint = extract_constraint_from_via(&via, "math", &functions);
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::Tuple(vec![
+                FuzzerConstraint::IntRange {
+                    min: "0".to_string(),
+                    max: "10".to_string(),
+                },
+                FuzzerConstraint::IntRange {
+                    min: "20".to_string(),
+                    max: "30".to_string(),
+                },
+            ])
+        );
     }
 
     #[test]
-    fn extract_bounds_map2_swapped_mapper_reorders_bounds() {
+    fn extract_constraint_map2_swapped_mapper_reorders() {
         let int_tipo = Type::int();
         let mapper = make_map2_mapper(vec![
             local_var("b", int_tipo.clone()),
@@ -2145,18 +2251,95 @@ mod test {
         );
 
         let functions = empty_known_functions();
-        match extract_bounds_from_via(&via, "math", &functions) {
-            ExtractedBounds::IntTupleBetween { bounds } => {
-                assert_eq!(bounds.len(), 2);
-                assert_eq!(bounds[0], ("20".to_string(), "30".to_string()));
-                assert_eq!(bounds[1], ("0".to_string(), "10".to_string()));
-            }
-            other => panic!("expected IntTupleBetween bounds, got {other:?}"),
-        }
+        let constraint = extract_constraint_from_via(&via, "math", &functions);
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::Tuple(vec![
+                FuzzerConstraint::IntRange {
+                    min: "20".to_string(),
+                    max: "30".to_string(),
+                },
+                FuzzerConstraint::IntRange {
+                    min: "0".to_string(),
+                    max: "10".to_string(),
+                },
+            ])
+        );
     }
 
     #[test]
-    fn extract_bounds_map2_named_mapper_without_definition_is_unknown() {
+    fn extract_constraint_ignores_local_int_between_name_collision() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(local_var(
+                "int_between",
+                Type::function(vec![Type::int(), Type::int()], Type::int()),
+            )),
+            args: vec![call_arg(uint_lit("0")), call_arg(uint_lit("10"))],
+        };
+
+        let functions = empty_known_functions();
+        assert!(matches!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::Any
+        ));
+    }
+
+    #[test]
+    fn extract_constraint_ignores_non_fuzz_module_int_between() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(module_fn_var(
+                "int_between",
+                "my/custom/module",
+                Type::function(vec![Type::int(), Type::int()], Type::int()),
+            )),
+            args: vec![call_arg(uint_lit("0")), call_arg(uint_lit("10"))],
+        };
+
+        let functions = empty_known_functions();
+        assert!(matches!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::Any
+        ));
+    }
+
+    #[test]
+    fn extract_constraint_ignores_local_map2_name_collision() {
+        let int_tipo = Type::int();
+        let mapper = make_map2_mapper(vec![
+            local_var("a", int_tipo.clone()),
+            local_var("b", int_tipo),
+        ]);
+
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::tuple(vec![Type::int(), Type::int()]),
+            fun: Box::new(local_var(
+                "map2",
+                Type::function(
+                    vec![Type::int(), Type::int(), Type::int()],
+                    Type::tuple(vec![Type::int(), Type::int()]),
+                ),
+            )),
+            args: vec![
+                call_arg(make_int_between_via("0", "10")),
+                call_arg(make_int_between_via("20", "30")),
+                call_arg(mapper),
+            ],
+        };
+
+        let functions = empty_known_functions();
+        assert!(matches!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::Any
+        ));
+    }
+
+    #[test]
+    fn extract_constraint_map2_named_mapper_without_definition_is_unsupported() {
         let mapper = make_named_map2_mapper("int_pair");
         let via = make_map2_via(
             make_int_between_via("0", "10"),
@@ -2166,13 +2349,13 @@ mod test {
 
         let functions = empty_known_functions();
         assert!(matches!(
-            extract_bounds_from_via(&via, "math", &functions),
-            ExtractedBounds::Unknown
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::Unsupported { .. }
         ));
     }
 
     #[test]
-    fn extract_bounds_map2_named_identity_mapper_uses_function_definition() {
+    fn extract_constraint_map2_named_identity_mapper_uses_function_definition() {
         let int_tipo = Type::int();
         let (fn_key, fn_def) = make_named_map2_mapper_function(
             "int_pair",
@@ -2189,18 +2372,24 @@ mod test {
             mapper,
         );
 
-        match extract_bounds_from_via(&via, "math", &functions) {
-            ExtractedBounds::IntTupleBetween { bounds } => {
-                assert_eq!(bounds.len(), 2);
-                assert_eq!(bounds[0], ("0".to_string(), "10".to_string()));
-                assert_eq!(bounds[1], ("20".to_string(), "30".to_string()));
-            }
-            other => panic!("expected IntTupleBetween bounds, got {other:?}"),
-        }
+        let constraint = extract_constraint_from_via(&via, "math", &functions);
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::Tuple(vec![
+                FuzzerConstraint::IntRange {
+                    min: "0".to_string(),
+                    max: "10".to_string(),
+                },
+                FuzzerConstraint::IntRange {
+                    min: "20".to_string(),
+                    max: "30".to_string(),
+                },
+            ])
+        );
     }
 
     #[test]
-    fn extract_bounds_map2_named_swapped_mapper_uses_function_definition() {
+    fn extract_constraint_map2_named_swapped_mapper_uses_function_definition() {
         let int_tipo = Type::int();
         let (fn_key, fn_def) = make_named_map2_mapper_function(
             "swapped_int_pair",
@@ -2217,14 +2406,342 @@ mod test {
             mapper,
         );
 
-        match extract_bounds_from_via(&via, "math", &functions) {
-            ExtractedBounds::IntTupleBetween { bounds } => {
-                assert_eq!(bounds.len(), 2);
-                assert_eq!(bounds[0], ("20".to_string(), "30".to_string()));
-                assert_eq!(bounds[1], ("0".to_string(), "10".to_string()));
+        let constraint = extract_constraint_from_via(&via, "math", &functions);
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::Tuple(vec![
+                FuzzerConstraint::IntRange {
+                    min: "20".to_string(),
+                    max: "30".to_string(),
+                },
+                FuzzerConstraint::IntRange {
+                    min: "0".to_string(),
+                    max: "10".to_string(),
+                },
+            ])
+        );
+    }
+
+    #[test]
+    fn extract_constraint_int_between_basic() {
+        let via = make_int_between_via("5", "100");
+        let functions = empty_known_functions();
+        assert_eq!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::IntRange {
+                min: "5".to_string(),
+                max: "100".to_string(),
             }
-            other => panic!("expected IntTupleBetween bounds, got {other:?}"),
-        }
+        );
+    }
+
+    #[test]
+    fn extract_constraint_int_no_args() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(fuzz_var("int", Type::function(vec![], Type::int()))),
+            args: vec![],
+        };
+        let functions = empty_known_functions();
+        assert_eq!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::IntRange {
+                min: "-255".to_string(),
+                max: "16383".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn extract_constraint_int_at_least_small() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(fuzz_var(
+                "int_at_least",
+                Type::function(vec![Type::int()], Type::int()),
+            )),
+            args: vec![call_arg(uint_lit("10"))],
+        };
+        let functions = empty_known_functions();
+        assert_eq!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::IntRange {
+                min: "10".to_string(),
+                max: "255".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn extract_constraint_int_at_most_small() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(fuzz_var(
+                "int_at_most",
+                Type::function(vec![Type::int()], Type::int()),
+            )),
+            args: vec![call_arg(uint_lit("10"))],
+        };
+        let functions = empty_known_functions();
+        assert_eq!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::IntRange {
+                min: "-255".to_string(),
+                max: "10".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn extract_constraint_constant_int() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(fuzz_var(
+                "constant",
+                Type::function(vec![Type::int()], Type::int()),
+            )),
+            args: vec![call_arg(uint_lit("42"))],
+        };
+        let functions = empty_known_functions();
+        assert_eq!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::IntRange {
+                min: "42".to_string(),
+                max: "42".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn extract_constraint_map_wraps_inner() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(fuzz_var(
+                "map",
+                Type::function(vec![Type::int(), Type::int()], Type::int()),
+            )),
+            args: vec![
+                call_arg(make_int_between_via("0", "10")),
+                call_arg(local_var(
+                    "f",
+                    Type::function(vec![Type::int()], Type::int()),
+                )),
+            ],
+        };
+        let functions = empty_known_functions();
+        let constraint = extract_constraint_from_via(&via, "math", &functions);
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::Map(Box::new(FuzzerConstraint::IntRange {
+                min: "0".to_string(),
+                max: "10".to_string(),
+            }))
+        );
+    }
+
+    #[test]
+    fn extract_constraint_and_then_uses_inner() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(fuzz_var(
+                "and_then",
+                Type::function(vec![Type::int(), Type::int()], Type::int()),
+            )),
+            args: vec![
+                call_arg(make_int_between_via("1", "5")),
+                call_arg(local_var(
+                    "f",
+                    Type::function(vec![Type::int()], Type::int()),
+                )),
+            ],
+        };
+        let functions = empty_known_functions();
+        assert_eq!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::IntRange {
+                min: "1".to_string(),
+                max: "5".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn extract_constraint_both_produces_tuple() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::tuple(vec![Type::int(), Type::int()]),
+            fun: Box::new(fuzz_var(
+                "both",
+                Type::function(
+                    vec![Type::int(), Type::int()],
+                    Type::tuple(vec![Type::int(), Type::int()]),
+                ),
+            )),
+            args: vec![
+                call_arg(make_int_between_via("0", "10")),
+                call_arg(make_int_between_via("20", "30")),
+            ],
+        };
+        let functions = empty_known_functions();
+        assert_eq!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::Tuple(vec![
+                FuzzerConstraint::IntRange {
+                    min: "0".to_string(),
+                    max: "10".to_string(),
+                },
+                FuzzerConstraint::IntRange {
+                    min: "20".to_string(),
+                    max: "30".to_string(),
+                },
+            ])
+        );
+    }
+
+    #[test]
+    fn extract_constraint_list_no_bounds() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(), // simplification
+            fun: Box::new(fuzz_var(
+                "list",
+                Type::function(vec![Type::int()], Type::int()),
+            )),
+            args: vec![call_arg(make_int_between_via("0", "10"))],
+        };
+        let functions = empty_known_functions();
+        assert_eq!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::List {
+                elem: Box::new(FuzzerConstraint::IntRange {
+                    min: "0".to_string(),
+                    max: "10".to_string(),
+                }),
+                min_len: None,
+                max_len: None,
+            }
+        );
+    }
+
+    #[test]
+    fn extract_constraint_list_between_with_bounds() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(fuzz_var(
+                "list_between",
+                Type::function(vec![Type::int(), Type::int(), Type::int()], Type::int()),
+            )),
+            args: vec![
+                call_arg(make_int_between_via("0", "10")),
+                call_arg(uint_lit("2")),
+                call_arg(uint_lit("5")),
+            ],
+        };
+        let functions = empty_known_functions();
+        assert_eq!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::List {
+                elem: Box::new(FuzzerConstraint::IntRange {
+                    min: "0".to_string(),
+                    max: "10".to_string(),
+                }),
+                min_len: Some(2),
+                max_len: Some(5),
+            }
+        );
+    }
+
+    #[test]
+    fn extract_constraint_pipeline_uses_last() {
+        let via = TypedExpr::Pipeline {
+            location: Span::empty(),
+            expressions: vec![
+                local_var("ignored", Type::int()),
+                make_int_between_via("3", "7"),
+            ],
+        };
+        let functions = empty_known_functions();
+        assert_eq!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::IntRange {
+                min: "3".to_string(),
+                max: "7".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn extract_constraint_unknown_function_returns_any() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(fuzz_var(
+                "some_unknown_fuzzer",
+                Type::function(vec![], Type::int()),
+            )),
+            args: vec![],
+        };
+        let functions = empty_known_functions();
+        assert!(matches!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::Any
+        ));
+    }
+
+    #[test]
+    fn extract_constraint_nested_both_with_map() {
+        // both(map(int_between(0,10), f), int_between(20,30))
+        let inner_map = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(fuzz_var(
+                "map",
+                Type::function(vec![Type::int(), Type::int()], Type::int()),
+            )),
+            args: vec![
+                call_arg(make_int_between_via("0", "10")),
+                call_arg(local_var(
+                    "f",
+                    Type::function(vec![Type::int()], Type::int()),
+                )),
+            ],
+        };
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::tuple(vec![Type::int(), Type::int()]),
+            fun: Box::new(fuzz_var(
+                "both",
+                Type::function(
+                    vec![Type::int(), Type::int()],
+                    Type::tuple(vec![Type::int(), Type::int()]),
+                ),
+            )),
+            args: vec![
+                call_arg(inner_map),
+                call_arg(make_int_between_via("20", "30")),
+            ],
+        };
+        let functions = empty_known_functions();
+        assert_eq!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::Tuple(vec![
+                FuzzerConstraint::Map(Box::new(FuzzerConstraint::IntRange {
+                    min: "0".to_string(),
+                    max: "10".to_string(),
+                })),
+                FuzzerConstraint::IntRange {
+                    min: "20".to_string(),
+                    max: "30".to_string(),
+                },
+            ])
+        );
     }
 
     #[test]

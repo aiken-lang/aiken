@@ -73,6 +73,39 @@ jobs:
         run: |
           cargo run -r -- check benchmarks
 
+  verify_unit_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          key: ${{ runner.os }}-cache-verify-v${{ inputs.cache-version }}
+      - name: Run verify module tests
+        run: cargo test -p aiken-project -- verify::tests::
+      - name: Run test_framework tests
+        run: cargo test -p aiken-lang -- test_framework::test::
+
+  verify_generate_only:
+    runs-on: ubuntu-latest
+    needs: [verify_unit_tests]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          key: ${{ runner.os }}-cache-verify-v${{ inputs.cache-version }}
+      - name: Build aiken CLI
+        run: cargo build -p aiken
+      - name: Verify --generate-only pipeline does not regress
+        run: |
+          set -euo pipefail
+          for project in examples/hello_world examples/gift_card; do
+            echo "--- Checking $project ---"
+            ./target/debug/aiken check "$project"
+            ./target/debug/aiken verify run "$project" --generate-only --json
+          done
+
   checks:
     runs-on: ubuntu-latest
     steps:

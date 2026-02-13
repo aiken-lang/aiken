@@ -41,12 +41,14 @@ use aiken_lang::{
     format::{Formatter, MAX_COLUMNS},
     gen_uplc::CodeGenerator,
     line_numbers::LineNumbers,
-    test_framework::{ExtractedBounds, PropertyTest, RunnableKind, Test, TestResult},
+    test_framework::{
+        FuzzerConstraint as LangFuzzerConstraint, PropertyTest, RunnableKind, Test, TestResult,
+    },
     tipo::{self, Type, TypeInfo},
     utils,
 };
 use export::{
-    Export, ExportedBounds, ExportedProgram, ExportedPropertyTest, ExportedTests,
+    Export, ExportedProgram, ExportedPropertyTest, ExportedTests, FuzzerConstraint, TestReturnMode,
     fuzzer_output_type_from,
 };
 use indexmap::IndexMap;
@@ -67,6 +69,38 @@ use uplc::{
     PlutusData,
     ast::{Constant, Name, Program},
 };
+
+/// Convert a `FuzzerConstraint` from the lang crate to the export crate's version.
+fn convert_constraint(lang: &LangFuzzerConstraint) -> FuzzerConstraint {
+    match lang {
+        LangFuzzerConstraint::Any => FuzzerConstraint::Any,
+        LangFuzzerConstraint::IntRange { min, max } => FuzzerConstraint::IntRange {
+            min: min.clone(),
+            max: max.clone(),
+        },
+        LangFuzzerConstraint::Tuple(elems) => {
+            FuzzerConstraint::Tuple(elems.iter().map(convert_constraint).collect())
+        }
+        LangFuzzerConstraint::List {
+            elem,
+            min_len,
+            max_len,
+        } => FuzzerConstraint::List {
+            elem: Box::new(convert_constraint(elem)),
+            min_len: *min_len,
+            max_len: *max_len,
+        },
+        LangFuzzerConstraint::Map(inner) => {
+            FuzzerConstraint::Map(Box::new(convert_constraint(inner)))
+        }
+        LangFuzzerConstraint::And(constraints) => {
+            FuzzerConstraint::And(constraints.iter().map(convert_constraint).collect())
+        }
+        LangFuzzerConstraint::Unsupported { reason } => FuzzerConstraint::Unsupported {
+            reason: reason.clone(),
+        },
+    }
+}
 
 #[derive(Debug)]
 pub struct Source {
@@ -746,15 +780,12 @@ where
 
         let fuzzer_output_type = fuzzer_output_type_from(&test.fuzzer.stripped_type_info);
 
-        let extracted_bounds = match &test.fuzzer.extracted_bounds {
-            ExtractedBounds::IntBetween { min, max } => ExportedBounds::IntBetween {
-                min: min.clone(),
-                max: max.clone(),
-            },
-            ExtractedBounds::IntTupleBetween { bounds } => ExportedBounds::IntTupleBetween {
-                bounds: bounds.clone(),
-            },
-            ExtractedBounds::Unknown => ExportedBounds::Unknown,
+        let constraint = convert_constraint(&test.fuzzer.constraint);
+
+        let return_mode = if test.return_type.is_void() {
+            TestReturnMode::Void
+        } else {
+            TestReturnMode::Bool
         };
 
         Ok(ExportedPropertyTest {
@@ -762,6 +793,9 @@ where
             module: test.module,
             input_path: test.input_path.display().to_string(),
             on_test_failure: test.on_test_failure,
+            return_mode,
+            target_kind: Default::default(),
+            validator_target: None,
             test_program: ExportedProgram {
                 hex: test_hex,
                 flat_bytes: test_flat_bytes,
@@ -772,7 +806,7 @@ where
             },
             fuzzer_type,
             fuzzer_output_type,
-            extracted_bounds,
+            constraint,
         })
     }
 

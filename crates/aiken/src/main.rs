@@ -36,7 +36,7 @@ fn main() -> miette::Result<()> {
         Cmd::Completion(sub_cmd) => completion::exec(sub_cmd),
         Cmd::Export(args) => export::exec(args),
         Cmd::ExportTests(args) => export_tests::exec(args),
-        Cmd::Verify(args) => verify::exec(args),
+        Cmd::Verify(sub_cmd) => verify::exec(sub_cmd),
     }
 }
 

@@ -1,12 +1,32 @@
 use aiken_lang::ast::Tracing;
 use aiken_project::{
-    export::{ExportedBounds, FuzzerOutputType},
+    export::VerificationTargetKind,
     options::Options,
-    verify::{self, ProofStatus, VerifyConfig},
+    verify::{
+        self, ArtifactRetention, DEFAULT_BLASTER_REV, ExistentialMode, FailureCategory,
+        ProofStatus, VerifyConfig,
+    },
     watch::with_project,
 };
 use owo_colors::{OwoColorize, Stream::Stderr};
 use std::{path::PathBuf, process};
+
+/// Commands for formal verification of property tests
+#[derive(clap::Subcommand)]
+#[clap(disable_version_flag(true))]
+pub enum Cmd {
+    /// Run formal verification on property tests
+    Run(RunArgs),
+
+    /// Check toolchain, dependencies, and configuration
+    Doctor(DoctorArgs),
+
+    /// Remove generated verification artifacts and logs
+    Clean(CleanArgs),
+
+    /// Show supported verification capabilities
+    Capabilities(CapabilitiesArgs),
+}
 
 #[derive(clap::Args)]
 #[clap(disable_version_flag(true))]
@@ -17,19 +37,25 @@ Formally verify property tests using the Blaster theorem prover.
 "#),
     after_long_help = color_print::cstr!(r#"<bold><underline>Examples:</underline></bold>
 
-    <bold>aiken verify</bold>
+    <bold>aiken verify run</bold>
         Verify all property tests in the current project
 
-    <bold>aiken verify -m "my_module.test_"</bold>
+    <bold>aiken verify run -m "my_module.test_"</bold>
         Verify only property tests matching the pattern
 
-    <bold>aiken verify --generate-only</bold>
+    <bold>aiken verify run --generate-only</bold>
         Generate Lean artifacts without running proofs
+
+    <bold>aiken verify run --blaster-rev abc123</bold>
+        Pin Blaster to a specific git revision
+
+    <bold>aiken verify run --artifacts always</bold>
+        Keep generated Lean artifacts regardless of outcome
 
 You are seeing the extended help. Use `-h` instead of `--help` for a more compact view.
 "#
 ))]
-pub struct Args {
+pub struct RunArgs {
     /// Path to project
     directory: Option<PathBuf>,
 
@@ -60,11 +86,19 @@ pub struct Args {
     #[clap(long, default_value = "build/verify")]
     out_dir: PathBuf,
 
-    /// Keep generated Lean artifacts after verification
-    #[clap(long)]
+    /// [Deprecated: use --artifacts always] Keep generated Lean artifacts after verification
+    #[clap(long, hide = true)]
     keep_artifacts: bool,
 
-    /// Timeout in seconds for Blaster per theorem
+    /// When to retain generated Lean artifacts.
+    /// `on-failure` (default): keep only when proofs fail/timeout/unknown.
+    /// `on-success`: keep only after a fully successful run.
+    /// `always`: always keep artifacts.
+    /// `never`: always remove artifacts after verification.
+    #[clap(long, default_value = "on-failure", verbatim_doc_comment)]
+    artifacts: ArtifactRetention,
+
+    /// Timeout in seconds per theorem build. Use 0 to disable timeout (wait indefinitely).
     #[clap(long, default_value = "300")]
     timeout: u64,
 
@@ -72,13 +106,245 @@ pub struct Args {
     #[clap(long, default_value = "20000")]
     cek_budget: u64,
 
+    /// Number of parallel theorem builds (default: number of logical CPUs, max 8)
+    #[clap(short = 'j', long, default_value = "0")]
+    jobs: usize,
+
     /// Output results as JSON
+    #[clap(long)]
+    json: bool,
+
+    /// Skip unsupported tests instead of failing. Skipped tests are reported but
+    /// do not block proof generation for other tests.
+    #[clap(long)]
+    skip_unsupported: bool,
+
+    /// When used with --skip-unsupported, exit 0 even if tests were skipped.
+    /// Without this flag, skipped tests cause a non-zero exit.
+    #[clap(long, requires = "skip_unsupported")]
+    allow_skips: bool,
+
+    /// Git revision (commit, tag, or branch) for the Blaster dependency.
+    /// Defaults to the version pinned in this release.
+    #[clap(long, default_value = DEFAULT_BLASTER_REV)]
+    blaster_rev: String,
+
+    /// Strategy for `fail once` (existential) tests.
+    /// `witness`: deterministic witness search + concrete proof (default).
+    /// `proof`: attempt full existential theorem via Lean tactics.
+    #[clap(long, default_value = "witness")]
+    existential_mode: ExistentialMode,
+
+    /// Verification target mode.
+    /// `property` (default): verify property tests directly.
+    /// `validator`: verify validator handler programs.
+    /// `equivalence`: prove property wrapper and validator handler produce identical results.
+    #[clap(long, default_value = "property")]
+    target: VerificationTargetKind,
+}
+
+#[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
+pub struct DoctorArgs {
+    /// Output directory for Lean workspace (used to check PlutusCore)
+    #[clap(long, default_value = "build/verify")]
+    out_dir: PathBuf,
+
+    /// Output results as JSON
+    #[clap(long)]
+    json: bool,
+
+    /// Git revision (commit, tag, or branch) for the Blaster dependency to report
+    #[clap(long, default_value = DEFAULT_BLASTER_REV)]
+    blaster_rev: String,
+}
+
+#[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
+pub struct CleanArgs {
+    /// Output directory containing verification artifacts to remove
+    #[clap(long, default_value = "build/verify")]
+    out_dir: PathBuf,
+}
+
+#[derive(clap::Args)]
+#[clap(disable_version_flag(true))]
+pub struct CapabilitiesArgs {
+    /// Output as JSON
     #[clap(long)]
     json: bool,
 }
 
-pub fn exec(
-    Args {
+pub fn exec(cmd: Cmd) -> miette::Result<()> {
+    match cmd {
+        Cmd::Run(args) => exec_run(args),
+        Cmd::Doctor(args) => exec_doctor(args),
+        Cmd::Clean(args) => exec_clean(args),
+        Cmd::Capabilities(args) => exec_capabilities(args),
+    }
+}
+
+fn exec_doctor(
+    DoctorArgs {
+        out_dir,
+        json,
+        blaster_rev,
+    }: DoctorArgs,
+) -> miette::Result<()> {
+    let report = verify::run_doctor(&out_dir, &blaster_rev);
+
+    if json {
+        let output = serde_json::to_string_pretty(&report).unwrap();
+        println!("{output}");
+    } else {
+        println!("Verify Doctor Report");
+        println!("====================\n");
+
+        for tool in &report.tools {
+            let status = if !tool.found {
+                "NOT FOUND"
+                    .if_supports_color(Stderr, |s| s.red())
+                    .to_string()
+            } else if !tool.meets_minimum {
+                format!(
+                    "{} (minimum: {})",
+                    "VERSION TOO LOW"
+                        .if_supports_color(Stderr, |s| s.red())
+                        .to_string(),
+                    tool.minimum_version,
+                )
+            } else {
+                "OK".if_supports_color(Stderr, |s| s.green()).to_string()
+            };
+
+            let version_str = tool.version.as_deref().unwrap_or("unknown");
+            println!("  {}: {} ({})", tool.tool, status, version_str);
+
+            if let Some(err) = &tool.error {
+                println!("    {}", err.if_supports_color(Stderr, |s| s.yellow()));
+            }
+        }
+
+        println!();
+
+        let pc_status = if report.plutus_core.found && report.plutus_core.has_lakefile {
+            "OK".if_supports_color(Stderr, |s| s.green()).to_string()
+        } else if report.plutus_core.found {
+            "INCOMPLETE (missing lakefile.lean)"
+                .if_supports_color(Stderr, |s| s.red())
+                .to_string()
+        } else {
+            "NOT FOUND"
+                .if_supports_color(Stderr, |s| s.red())
+                .to_string()
+        };
+        println!("  PlutusCore: {} ({})", pc_status, report.plutus_core.path);
+        if let Some(err) = &report.plutus_core.error {
+            println!("    {}", err.if_supports_color(Stderr, |s| s.yellow()));
+        }
+
+        println!();
+        println!("  Blaster revision: {}", report.blaster_rev);
+
+        println!();
+        if report.all_ok {
+            println!(
+                "{}",
+                "All checks passed."
+                    .if_supports_color(Stderr, |s| s.green())
+                    .if_supports_color(Stderr, |s| s.bold())
+            );
+        } else {
+            println!(
+                "{}",
+                "Some checks failed. See above for details."
+                    .if_supports_color(Stderr, |s| s.red())
+                    .if_supports_color(Stderr, |s| s.bold())
+            );
+        }
+    }
+
+    if !report.all_ok {
+        std::process::exit(1);
+    }
+
+    Ok(())
+}
+
+fn exec_clean(CleanArgs { out_dir }: CleanArgs) -> miette::Result<()> {
+    match verify::clean_artifacts(&out_dir) {
+        Ok(removed) => {
+            if removed.is_empty() {
+                println!("No verification artifacts found at {}", out_dir.display());
+            } else {
+                for p in &removed {
+                    println!("Removed {}", p.display());
+                }
+            }
+            Ok(())
+        }
+        Err(e) => Err(miette::miette!(
+            "Failed to clean verification artifacts at {}: {}",
+            out_dir.display(),
+            e
+        )),
+    }
+}
+
+fn exec_capabilities(CapabilitiesArgs { json }: CapabilitiesArgs) -> miette::Result<()> {
+    let caps = verify::capabilities();
+
+    if json {
+        let output = serde_json::to_string_pretty(&caps).unwrap();
+        println!("{output}");
+    } else {
+        println!("Verification Capabilities");
+        println!("=========================\n");
+
+        println!("Supported test kinds:");
+        for k in &caps.supported_test_kinds {
+            println!("  - {k}");
+        }
+
+        println!();
+        println!("Unsupported test kinds:");
+        for n in &caps.unsupported_test_kinds {
+            println!("  - {} [{}]: {}", n.kind, n.status, n.reason);
+        }
+
+        println!();
+        println!("Target modes:");
+        for m in &caps.target_modes {
+            println!("  - {m}");
+        }
+
+        println!();
+        println!("Supported fuzzer output types:");
+        for t in &caps.supported_fuzzer_types {
+            println!("  - {t}");
+        }
+
+        println!();
+        println!("Unsupported fuzzer output types:");
+        for t in &caps.unsupported_fuzzer_types {
+            println!("  - {t}");
+        }
+
+        println!();
+        println!("Existential modes:");
+        for m in &caps.existential_modes {
+            println!("  - {m}");
+        }
+
+        println!();
+        println!("Max test arity: {}", caps.max_test_arity);
+    }
+
+    Ok(())
+}
+
+fn exec_run(
+    RunArgs {
         directory,
         deny,
         silent,
@@ -87,11 +353,38 @@ pub fn exec(
         generate_only,
         out_dir,
         keep_artifacts,
+        artifacts,
         timeout,
         cek_budget,
+        jobs,
         json,
-    }: Args,
+        skip_unsupported,
+        allow_skips,
+        blaster_rev,
+        existential_mode,
+        target,
+    }: RunArgs,
 ) -> miette::Result<()> {
+    // Handle deprecated --keep-artifacts flag: treat as --artifacts always
+    let artifact_policy = if keep_artifacts {
+        eprintln!(
+            "{} --keep-artifacts is deprecated; use --artifacts always",
+            "Warning:"
+                .if_supports_color(Stderr, |s| s.yellow())
+                .if_supports_color(Stderr, |s| s.bold()),
+        );
+        ArtifactRetention::Always
+    } else {
+        artifacts
+    };
+
+    let max_jobs = if jobs == 0 {
+        std::thread::available_parallelism()
+            .map(|n| n.get().min(8))
+            .unwrap_or(1)
+    } else {
+        jobs
+    };
     with_project(directory.as_deref(), deny, silent, true, |p| {
         p.compile(Options {
             ..Default::default()
@@ -108,14 +401,32 @@ pub fn exec(
             return Ok(());
         }
 
-        // When --generate-only, reject tests with Unknown bounds where bounds
-        // are actually required (e.g. Int). Types like Bool don't need bounds.
-        if generate_only {
+        // Validator and equivalence modes require validator metadata that is
+        // not yet populated during export. Reject early with a clear message.
+        if matches!(
+            target,
+            VerificationTargetKind::ValidatorHandler | VerificationTargetKind::Equivalence
+        ) {
+            return Err(vec![aiken_project::error::Error::StandardIo(
+                std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    format!(
+                        "--target {} is not yet supported for in-project tests. \
+                         Validator metadata export is not implemented; \
+                         use --target property (the default) instead.",
+                        target,
+                    ),
+                ),
+            )]);
+        }
+
+        // When --generate-only, reject tests where bounds are required but
+        // the constraint doesn't provide them (e.g. Int with Any constraint).
+        if generate_only && !skip_unsupported {
             let unknown: Vec<&str> = property_tests
                 .iter()
                 .filter(|t| {
-                    matches!(t.extracted_bounds, ExportedBounds::Unknown)
-                        && !matches!(t.fuzzer_output_type, FuzzerOutputType::Bool)
+                    verify::requires_explicit_bounds(&t.fuzzer_output_type, &t.constraint)
                 })
                 .map(|t| t.name.as_str())
                 .collect();
@@ -129,7 +440,8 @@ pub fn exec(
                             "Cannot generate Lean workspace: the following property tests have \
                              unknown fuzzer bounds and cannot be verified:\n  - {names}\n\n\
                              Hint: use fuzzers with explicit integer bounds (e.g. \
-                             `fuzz.int_between`) so the prover knows the input domain."
+                             `fuzz.int_between`) so the prover knows the input domain, \
+                             or use --skip-unsupported to skip these tests."
                         ),
                     ),
                 )]);
@@ -147,14 +459,32 @@ pub fn exec(
         let config = VerifyConfig {
             out_dir: out_dir.clone(),
             cek_budget,
+            blaster_rev: blaster_rev.clone(),
+            existential_mode,
+            target: target.clone(),
         };
 
-        let manifest = verify::generate_lean_workspace(property_tests, &config)
+        let manifest = verify::generate_lean_workspace(property_tests, &config, skip_unsupported)
             .map_err(|e| {
                 vec![aiken_project::error::Error::StandardIo(
                     std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
                 )]
             })?;
+
+        // Report skipped tests
+        if !manifest.skipped.is_empty() && !json {
+            eprintln!(
+                "{} Skipped {} unsupported test(s):",
+                "Warning:"
+                    .if_supports_color(Stderr, |s| s.yellow())
+                    .if_supports_color(Stderr, |s| s.bold()),
+                manifest.skipped.len(),
+            );
+            for s in &manifest.skipped {
+                eprintln!("  - {}: {}", s.name, s.reason);
+            }
+            eprintln!();
+        }
 
         if generate_only {
             if json {
@@ -191,7 +521,7 @@ pub fn exec(
             println!("Running proofs via lake build...");
 
             let start = std::time::Instant::now();
-            let result = verify::run_proofs(&out_dir, timeout).map_err(|e| {
+            let result = verify::run_proofs(&out_dir, timeout, max_jobs, &manifest).map_err(|e| {
                 vec![aiken_project::error::Error::StandardIo(
                     std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
                 )]
@@ -212,25 +542,59 @@ pub fn exec(
                             "PASS"
                                 .if_supports_color(Stderr, |s| s.green())
                                 .to_string(),
-                            "PROVED",
+                            "PROVED".to_string(),
                         ),
-                        ProofStatus::Failed { .. } => (
-                            "FAIL"
-                                .if_supports_color(Stderr, |s| s.red())
+                        ProofStatus::Failed { category, .. } => {
+                            let cat = match category {
+                                FailureCategory::Counterexample => "counterexample",
+                                FailureCategory::UnsatGoal => "unsat-goal",
+                                FailureCategory::Timeout => "timeout",
+                                FailureCategory::BuildError => "build-error",
+                                FailureCategory::DependencyError => "dependency-error",
+                                FailureCategory::Unknown => "unknown",
+                            };
+                            (
+                                "FAIL"
+                                    .if_supports_color(Stderr, |s| s.red())
+                                    .to_string(),
+                                format!("FAILED [{}]", cat),
+                            )
+                        }
+                        ProofStatus::TimedOut { .. } => (
+                            "TIME"
+                                .if_supports_color(Stderr, |s| s.yellow())
                                 .to_string(),
-                            "FAILED",
+                            "TIMED OUT".to_string(),
                         ),
                         ProofStatus::Unknown => (
                             "????"
                                 .if_supports_color(Stderr, |s| s.yellow())
                                 .to_string(),
-                            "UNKNOWN",
+                            "UNKNOWN".to_string(),
                         ),
                     };
                     println!(
                         "  {} {} [{}] - {}",
                         icon, t.test_name, t.theorem_name, label
                     );
+                    // Print inline failure context snippet
+                    if let ProofStatus::Failed { reason, .. } = &t.status {
+                        if !reason.is_empty() {
+                            for line in reason.lines().take(10) {
+                                println!(
+                                    "       {}",
+                                    line.if_supports_color(Stderr, |s| s.dimmed())
+                                );
+                            }
+                            let total_lines = reason.lines().count();
+                            if total_lines > 10 {
+                                println!(
+                                    "       {} more lines in logs...",
+                                    total_lines - 10
+                                );
+                            }
+                        }
+                    }
                 }
 
                 let elapsed_str = if elapsed.as_secs() > 0 {
@@ -240,11 +604,16 @@ pub fn exec(
                 };
 
                 println!(
-                    "\nResults: {} proved, {} failed, {} unknown out of {} theorems in {}",
-                    summary.proved, summary.failed, summary.unknown, summary.total, elapsed_str,
+                    "\nResults: {} proved, {} failed, {} timed out, {} unknown out of {} theorems in {}",
+                    summary.proved,
+                    summary.failed,
+                    summary.timed_out,
+                    summary.unknown,
+                    summary.total,
+                    elapsed_str,
                 );
 
-                if summary.failed > 0 || summary.unknown > 0 {
+                if summary.failed > 0 || summary.timed_out > 0 || summary.unknown > 0 {
                     if !summary.raw_output.stderr.is_empty() {
                         eprintln!("\n{}", summary.raw_output.stderr);
                     }
@@ -256,8 +625,10 @@ pub fn exec(
                 }
             }
 
-            // Clean up generated workspace unless --keep-artifacts was passed.
-            if !keep_artifacts {
+            // Apply artifact retention policy
+            let verification_succeeded =
+                summary.failed == 0 && summary.timed_out == 0 && summary.unknown == 0;
+            if !verify::should_retain_artifacts(artifact_policy, verification_succeeded) {
                 if let Err(e) = std::fs::remove_dir_all(&out_dir) {
                     eprintln!(
                         "Warning: failed to clean up {}: {}",
@@ -267,17 +638,30 @@ pub fn exec(
                 }
             }
 
-            if summary.failed > 0 || summary.unknown > 0 {
+            if !verification_succeeded {
                 return Err(vec![aiken_project::error::Error::StandardIo(
                     std::io::Error::new(
                         std::io::ErrorKind::Other,
                         format!(
-                            "Proof verification incomplete: {} failed, {} unknown out of {} theorems",
-                            summary.failed, summary.unknown, summary.total
+                            "Proof verification incomplete: {} failed, {} timed out, {} unknown out of {} theorems",
+                            summary.failed, summary.timed_out, summary.unknown, summary.total
                         ),
                     ),
                 )]);
             }
+        }
+
+        // When tests were skipped and --allow-skips was NOT given, exit non-zero.
+        if !manifest.skipped.is_empty() && !allow_skips {
+            return Err(vec![aiken_project::error::Error::StandardIo(
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "{} unsupported test(s) were skipped. Use --allow-skips to treat skips as success.",
+                        manifest.skipped.len()
+                    ),
+                ),
+            )]);
         }
 
         Ok(())

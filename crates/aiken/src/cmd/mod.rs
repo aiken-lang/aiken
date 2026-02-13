@@ -57,7 +57,8 @@ pub enum Cmd {
     #[clap(subcommand)]
     Completion(completion::Cmd),
 
-    Verify(verify::Args),
+    #[clap(subcommand)]
+    Verify(verify::Cmd),
 
     #[clap(hide = true)]
     Lsp(lsp::Args),
