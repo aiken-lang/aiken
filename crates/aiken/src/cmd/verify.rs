@@ -3,8 +3,8 @@ use aiken_project::{
     export::VerificationTargetKind,
     options::Options,
     verify::{
-        self, ArtifactRetention, DEFAULT_BLASTER_REV, ExistentialMode, FailureCategory,
-        ProofStatus, VerifyConfig,
+        self, ArtifactRetention, ExistentialMode, FailureCategory, ProofStatus, VerifyConfig,
+        DEFAULT_BLASTER_REV,
     },
     watch::with_project,
 };
@@ -551,6 +551,7 @@ fn exec_run(
                                 FailureCategory::Timeout => "timeout",
                                 FailureCategory::BuildError => "build-error",
                                 FailureCategory::DependencyError => "dependency-error",
+                                FailureCategory::BlasterUnsupported => "blaster-unsupported",
                                 FailureCategory::Unknown => "unknown",
                             };
                             (

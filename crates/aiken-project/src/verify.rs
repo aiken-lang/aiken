@@ -87,7 +87,11 @@ pub fn capabilities() -> VerificationCapabilities {
             "Tuple(T, ...)".to_string(),
             "Pair(T, T)".to_string(),
         ],
-        unsupported_fuzzer_types: vec!["nested List/Tuple/Pair".to_string()],
+        unsupported_fuzzer_types: vec![
+            "nested List/Tuple/Pair".to_string(),
+            "Blaster translation gaps for some generated Lean predicates (e.g. List.Mem)"
+                .to_string(),
+        ],
         existential_modes: vec!["witness".to_string(), "proof".to_string()],
         max_test_arity: 1,
     }
@@ -106,6 +110,8 @@ pub enum FailureCategory {
     BuildError,
     /// Dependency resolution or fetch failed
     DependencyError,
+    /// Blaster does not yet support translating the generated Lean construct
+    BlasterUnsupported,
     /// Could not classify the failure
     Unknown,
 }
@@ -2181,7 +2187,9 @@ fn generate_proof_file(
                 None
             };
             let preconditions = if let Some((ref emin, ref emax)) = elem_bounds {
-                format!("\n  {length_precond}\n  →\n  (∀ x_i ∈ xs, {emin} <= x_i && x_i <= {emax})")
+                format!(
+                    "\n  {length_precond}\n  →\n  ((xs.all (fun x_i => {emin} <= x_i && x_i <= {emax})) = true)"
+                )
             } else {
                 format!("\n  {length_precond}")
             };
@@ -2622,6 +2630,11 @@ fn classify_failure(output: &str) -> FailureCategory {
         || output.contains("lake fetch")
     {
         FailureCategory::DependencyError
+    } else if output.contains("translateApp: Inductive predicate not yet supported")
+        || (output.contains("translateApp:") && output.contains("not yet supported"))
+        || output.contains("Lean.Expr.const `List.Mem")
+    {
+        FailureCategory::BlasterUnsupported
     } else if output.contains("error:") {
         FailureCategory::BuildError
     } else {
@@ -2794,16 +2807,12 @@ mod tests {
         assert!(out_dir.join("manifest.json").exists());
 
         // Check per-test files
-        assert!(
-            out_dir
-                .join("AikenVerify/Proofs/My_module/test_roundtrip.lean")
-                .exists()
-        );
-        assert!(
-            out_dir
-                .join("AikenVerify/Proofs/AikenList/test_map.lean")
-                .exists()
-        );
+        assert!(out_dir
+            .join("AikenVerify/Proofs/My_module/test_roundtrip.lean")
+            .exists());
+        assert!(out_dir
+            .join("AikenVerify/Proofs/AikenList/test_map.lean")
+            .exists());
         let id0 = &manifest.tests[0].id;
         let id1 = &manifest.tests[1].id;
         assert!(out_dir.join(format!("flat/{id0}.flat")).exists());
@@ -4123,12 +4132,10 @@ mod tests {
         assert_eq!(summary.failed, 0);
         assert_eq!(summary.timed_out, 0);
         assert_eq!(summary.unknown, 0);
-        assert!(
-            summary
-                .theorems
-                .iter()
-                .all(|t| matches!(t.status, ProofStatus::Proved))
-        );
+        assert!(summary
+            .theorems
+            .iter()
+            .all(|t| matches!(t.status, ProofStatus::Proved)));
     }
 
     #[test]
@@ -4812,6 +4819,16 @@ mod tests {
     }
 
     #[test]
+    fn classify_failure_blaster_unsupported() {
+        assert_eq!(
+            classify_failure(
+                "error: translateApp: Inductive predicate not yet supported: Lean.Expr.const `List.Mem [Lean.Level.zero]"
+            ),
+            FailureCategory::BlasterUnsupported
+        );
+    }
+
+    #[test]
     fn classify_failure_build_error() {
         assert_eq!(
             classify_failure("error: Lean exited with code 1"),
@@ -5154,7 +5171,10 @@ mod tests {
             "test_list_bounded",
             FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
             FuzzerConstraint::List {
-                elem: Box::new(FuzzerConstraint::Any),
+                elem: Box::new(FuzzerConstraint::IntRange {
+                    min: "0".to_string(),
+                    max: "10".to_string(),
+                }),
                 min_len: Some(0),
                 max_len: Some(10),
             },
@@ -5180,6 +5200,14 @@ mod tests {
         assert!(
             proof.contains("(0 <= xs.length && xs.length <= 10)"),
             "Should have length bounds, got:\n{proof}"
+        );
+        assert!(
+            proof.contains("xs.all (fun x_i => 0 <= x_i && x_i <= 10)"),
+            "Should use List.all for element bounds, got:\n{proof}"
+        );
+        assert!(
+            !proof.contains("∀ x_i ∈ xs"),
+            "Should avoid List.Mem-style quantification in generated bounds, got:\n{proof}"
         );
         assert!(
             proof.contains("Data.I x_i"),
@@ -5506,10 +5534,9 @@ mod tests {
         let caps = capabilities();
         assert!(caps.supported_fuzzer_types.contains(&"Int".to_string()));
         assert!(caps.supported_fuzzer_types.contains(&"Bool".to_string()));
-        assert!(
-            caps.supported_fuzzer_types
-                .contains(&"ByteArray".to_string())
-        );
+        assert!(caps
+            .supported_fuzzer_types
+            .contains(&"ByteArray".to_string()));
         assert!(caps.supported_fuzzer_types.contains(&"String".to_string()));
         assert!(caps.supported_fuzzer_types.contains(&"Data".to_string()));
     }
@@ -5775,13 +5802,19 @@ mod tests {
         // 4. Nested composite types (List/Tuple/Pair inside List/Tuple/Pair) are
         //    unsupported. Reconsideration: when Lean Data encoding infrastructure
         //    supports recursive type decomposition.
-        assert!(
-            caps.unsupported_fuzzer_types
-                .iter()
-                .any(|t| t.contains("nested"))
-        );
+        assert!(caps
+            .unsupported_fuzzer_types
+            .iter()
+            .any(|t| t.contains("nested")));
 
-        // 5. Supported envelope includes all three target modes.
+        // 5. Blaster translation gaps are documented explicitly so failures can
+        //    be surfaced with actionable context (e.g. List.Mem translation).
+        assert!(caps
+            .unsupported_fuzzer_types
+            .iter()
+            .any(|t| t.contains("Blaster translation gaps")));
+
+        // 6. Supported envelope includes all three target modes.
         assert_eq!(caps.target_modes.len(), 3);
     }
 
