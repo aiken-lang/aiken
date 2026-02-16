@@ -3,6 +3,7 @@ use crate::export::{
 };
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io::Read;
@@ -758,7 +759,7 @@ fn lake_fetch_is_unknown_command(stderr: &str) -> bool {
 pub fn run_proofs(
     out_dir: &Path,
     timeout_secs: u64,
-    max_jobs: usize,
+    _max_jobs: usize,
     manifest: &GeneratedManifest,
 ) -> miette::Result<VerifyResult> {
     struct CommandRunResult {
@@ -994,14 +995,12 @@ pub fn run_proofs(
     }
 
     // Build all modules with a single `lake build` invocation.
-    // We delegate parallelism to Lake via a single `lake build` invocation
-    // (running multiple concurrent `lake build` processes in the same workspace
-    // corrupts `.olean` files). The --jobs flag is forwarded to Lake's `-jN`.
+    // We intentionally do not forward `--jobs` here because Lake 5 rejects
+    // `-jN`, and we want default `verify run` flows to succeed reliably.
+    // Running multiple concurrent `lake build` processes in the same workspace
+    // can also corrupt `.olean` files.
     let mut build_cmd = Command::new("lake");
     build_cmd.arg("build").current_dir(out_dir);
-    if max_jobs > 0 {
-        build_cmd.arg(format!("-j{max_jobs}"));
-    }
 
     let build_result = run_command_with_timeout(build_cmd, timeout_secs);
 
@@ -2431,20 +2430,33 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
             }
         }
     } else {
-        let stderr = &raw.stderr;
-        let timed_out_run = stderr.contains("[verify-timeout]");
+        let combined_output = format!("{}\n{}", raw.stdout, raw.stderr);
+        let timed_out_run = combined_output.contains("[verify-timeout]");
+        let failed_modules = collect_failed_proof_modules(&combined_output);
+        let succeeded_modules = collect_succeeded_proof_modules(&combined_output);
+
         for entry in &manifest.tests {
+            let module_failed = failed_modules.contains(&entry.lean_module);
+            let module_succeeded = succeeded_modules.contains(&entry.lean_module);
+            let theorem_failed =
+                theorem_has_explicit_failure(&entry.lean_theorem, &combined_output);
+
             let correctness_status = if timed_out_run {
                 ProofStatus::TimedOut {
                     reason: "Proof execution timed out".to_string(),
                 }
-            } else if stderr.contains(&format!("error: '{}' ", entry.lean_theorem))
-                || stderr.contains(&format!("'{}'", entry.lean_theorem))
-            {
+            } else if theorem_failed || module_failed {
+                let reason = if theorem_failed {
+                    extract_error_for_theorem(&entry.lean_theorem, &combined_output)
+                } else {
+                    extract_error_for_module(&entry.lean_module, &combined_output)
+                };
                 ProofStatus::Failed {
-                    category: classify_failure(stderr),
-                    reason: extract_error_for_theorem(&entry.lean_theorem, stderr),
+                    category: classify_failure(&combined_output),
+                    reason,
                 }
+            } else if module_succeeded {
+                ProofStatus::Proved
             } else {
                 ProofStatus::Unknown
             };
@@ -2457,15 +2469,23 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
 
             if entry.has_termination_theorem {
                 let term_name = format!("{}_alwaysTerminating", entry.lean_theorem);
+                let term_failed = theorem_has_explicit_failure(&term_name, &combined_output);
                 let term_status = if timed_out_run {
                     ProofStatus::TimedOut {
                         reason: "Proof execution timed out".to_string(),
                     }
-                } else if stderr.contains(&term_name) {
+                } else if term_failed || module_failed {
+                    let reason = if term_failed {
+                        extract_error_for_theorem(&term_name, &combined_output)
+                    } else {
+                        extract_error_for_module(&entry.lean_module, &combined_output)
+                    };
                     ProofStatus::Failed {
-                        category: classify_failure(stderr),
-                        reason: extract_error_for_theorem(&term_name, stderr),
+                        category: classify_failure(&combined_output),
+                        reason,
                     }
+                } else if module_succeeded {
+                    ProofStatus::Proved
                 } else {
                     ProofStatus::Unknown
                 };
@@ -2515,6 +2535,77 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
     }
 }
 
+fn parse_proof_module_token(token: &str) -> Option<String> {
+    let cleaned = token
+        .split_whitespace()
+        .next()
+        .unwrap_or(token)
+        .split(':')
+        .next()
+        .unwrap_or(token)
+        .trim_end_matches(|c: char| c == ',' || c == ';' || c == '.')
+        .trim();
+
+    if cleaned.starts_with("AikenVerify.Proofs.") {
+        Some(cleaned.to_string())
+    } else {
+        None
+    }
+}
+
+fn collect_succeeded_proof_modules(output: &str) -> HashSet<String> {
+    let mut modules = HashSet::new();
+
+    for line in output.lines() {
+        if let Some(idx) = line.find("Built ") {
+            let token = &line[idx + "Built ".len()..];
+            if let Some(module) = parse_proof_module_token(token) {
+                modules.insert(module);
+            }
+        }
+
+        if let Some(idx) = line.find("Replayed ") {
+            let token = &line[idx + "Replayed ".len()..];
+            if let Some(module) = parse_proof_module_token(token) {
+                modules.insert(module);
+            }
+        }
+    }
+
+    modules
+}
+
+fn collect_failed_proof_modules(output: &str) -> HashSet<String> {
+    let mut modules = HashSet::new();
+
+    for line in output.lines() {
+        if line.contains('✖') {
+            if let Some(idx) = line.find("Building ") {
+                let token = &line[idx + "Building ".len()..];
+                if let Some(module) = parse_proof_module_token(token) {
+                    modules.insert(module);
+                }
+            }
+        }
+
+        if let Some(token) = line.trim().strip_prefix("- ") {
+            if let Some(module) = parse_proof_module_token(token) {
+                modules.insert(module);
+            }
+        }
+    }
+
+    modules
+}
+
+fn theorem_has_explicit_failure(theorem: &str, output: &str) -> bool {
+    output.contains(&format!("error: '{}' ", theorem))
+        || output.lines().any(|line| {
+            line.contains("error:")
+                && (line.contains(theorem) || line.contains(&format!("'{}'", theorem)))
+        })
+}
+
 /// Classify a failure based on build output content.
 fn classify_failure(output: &str) -> FailureCategory {
     if output.contains("❌ Falsified") || output.contains("Counterexample:") {
@@ -2541,13 +2632,13 @@ fn classify_failure(output: &str) -> FailureCategory {
 /// Extract error context for a theorem from build output.
 /// Includes the matching line plus surrounding context lines (up to `CONTEXT_LINES`
 /// before and after each match) for more useful diagnostics.
-fn extract_error_for_theorem(theorem: &str, output: &str) -> String {
+fn extract_error_for_pattern(pattern: &str, output: &str) -> String {
     const CONTEXT_LINES: usize = 3;
     let lines: Vec<&str> = output.lines().collect();
     let mut included = vec![false; lines.len()];
 
     for (i, line) in lines.iter().enumerate() {
-        if line.contains(theorem) || line.trim_start().starts_with("error:") {
+        if line.contains(pattern) || line.trim_start().starts_with("error:") {
             let start = i.saturating_sub(CONTEXT_LINES);
             let end = (i + CONTEXT_LINES + 1).min(lines.len());
             for included_flag in included.iter_mut().take(end).skip(start) {
@@ -2571,6 +2662,14 @@ fn extract_error_for_theorem(theorem: &str, output: &str) -> String {
     }
 
     result.join("\n")
+}
+
+fn extract_error_for_module(module: &str, output: &str) -> String {
+    extract_error_for_pattern(module, output)
+}
+
+fn extract_error_for_theorem(theorem: &str, output: &str) -> String {
+    extract_error_for_pattern(theorem, output)
 }
 
 #[cfg(test)]
@@ -4073,6 +4172,72 @@ mod tests {
             matches!(test_sub.status, ProofStatus::Unknown),
             "test_sub should be Unknown, got: {:?}",
             test_sub.status
+        );
+    }
+
+    #[test]
+    fn parse_verify_results_marks_built_modules_as_proved_when_one_module_fails() {
+        let manifest = make_manifest(vec![
+            ("my_module", "test_add", "test_add"),
+            ("my_module", "test_sub", "test_sub"),
+            ("my_module", "test_bad", "test_bad"),
+        ]);
+        let raw = VerifyResult {
+            success: false,
+            stdout: "⚠ [1/3] Replayed AikenVerify.Proofs.My_module.test_add\n\
+                     info: AikenVerify/Proofs/My_module/test_add.lean:10:5: ✅ Valid\n\
+                     ⚠ [2/3] Replayed AikenVerify.Proofs.My_module.test_sub\n\
+                     info: AikenVerify/Proofs/My_module/test_sub.lean:11:5: ✅ Valid\n\
+                     ✖ [3/3] Building AikenVerify.Proofs.My_module.test_bad (5s)\n\
+                     error: AikenVerify/Proofs/My_module/test_bad.lean:21:5: translateApp: unsupported\n\
+                     error: Lean exited with code 1\n\
+                     Some required targets logged failures:\n\
+                     - AikenVerify.Proofs.My_module.test_bad"
+                .to_string(),
+            stderr: "error: build failed".to_string(),
+            exit_code: Some(1),
+            theorem_results: None,
+        };
+
+        let summary = parse_verify_results(raw, &manifest);
+
+        assert_eq!(summary.total, 6);
+        assert_eq!(summary.proved, 4);
+        assert_eq!(summary.failed, 2);
+        assert_eq!(summary.timed_out, 0);
+        assert_eq!(summary.unknown, 0);
+
+        let test_add = summary
+            .theorems
+            .iter()
+            .find(|t| t.theorem_name == "test_add")
+            .unwrap();
+        assert!(
+            matches!(test_add.status, ProofStatus::Proved),
+            "test_add should be Proved, got: {:?}",
+            test_add.status
+        );
+
+        let test_sub = summary
+            .theorems
+            .iter()
+            .find(|t| t.theorem_name == "test_sub")
+            .unwrap();
+        assert!(
+            matches!(test_sub.status, ProofStatus::Proved),
+            "test_sub should be Proved, got: {:?}",
+            test_sub.status
+        );
+
+        let test_bad = summary
+            .theorems
+            .iter()
+            .find(|t| t.theorem_name == "test_bad")
+            .unwrap();
+        assert!(
+            matches!(&test_bad.status, ProofStatus::Failed { .. }),
+            "test_bad should be Failed, got: {:?}",
+            test_bad.status
         );
     }
 

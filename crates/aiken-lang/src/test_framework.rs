@@ -1,6 +1,6 @@
 use crate::{
     ast::{
-        BinOp, DataTypeKey, FunctionAccessKey, IfBranch, OnTestFailure, Span, TypedArg,
+        BinOp, CallArg, DataTypeKey, FunctionAccessKey, IfBranch, OnTestFailure, Span, TypedArg,
         TypedDataType, TypedFunction, TypedTest, UnOp,
     },
     expr::{TypedExpr, UntypedExpr},
@@ -370,7 +370,16 @@ fn extract_constraint_from_via(
                         current_module,
                         known_functions,
                     );
-                    FuzzerConstraint::Map(Box::new(inner))
+                    // When the mapper is an obvious unary integer transform,
+                    // preserve output-domain bounds instead of leaving a generic
+                    // Map wrapper.
+                    map_int_constraint_through_mapper(
+                        &inner,
+                        &args[1].value,
+                        current_module,
+                        known_functions,
+                    )
+                    .unwrap_or_else(|| FuzzerConstraint::Map(Box::new(inner)))
                 }
                 // and_then(fuzzer, continuation_fn): constraint comes from the
                 // inner fuzzer as a conservative approximation.
@@ -390,6 +399,20 @@ fn extract_constraint_from_via(
                         known_functions,
                     );
                     FuzzerConstraint::Tuple(vec![left, right])
+                }
+                // tuple/tuple3/tuple4/... : preserve per-component constraints.
+                Some(name) if tuple_builtin_arity(name).is_some_and(|arity| args.len() == arity) => {
+                    FuzzerConstraint::Tuple(
+                        args.iter()
+                            .map(|arg| {
+                                extract_constraint_from_via(
+                                    &arg.value,
+                                    current_module,
+                                    known_functions,
+                                )
+                            })
+                            .collect(),
+                    )
                 }
                 // map2(fuzzer_a, fuzzer_b, mapper): preserve/reorder constraints
                 // only when the mapper is known to return a direct tuple of
@@ -479,7 +502,13 @@ fn extract_constraint_from_via(
                         max_len,
                     }
                 }
-                _ => FuzzerConstraint::Any,
+                _ => extract_constraint_from_zero_arg_helper_call(
+                    fun.as_ref(),
+                    args,
+                    current_module,
+                    known_functions,
+                )
+                .unwrap_or(FuzzerConstraint::Any),
             }
         }
         // Pipelines and sequences are desugared into a list of expressions
@@ -492,6 +521,169 @@ fn extract_constraint_from_via(
             }
         }
         _ => FuzzerConstraint::Any,
+    }
+}
+
+/// Return the tuple arity for fuzz tuple constructors.
+/// Supports `tuple` (=2), `tuple3`, `tuple4`, ...
+fn tuple_builtin_arity(name: &str) -> Option<usize> {
+    if name == "tuple" {
+        Some(2)
+    } else {
+        let suffix = name.strip_prefix("tuple")?;
+        let arity = suffix.parse::<usize>().ok()?;
+        (arity >= 2).then_some(arity)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UnaryIntTransform {
+    Identity,
+    Negate,
+}
+
+/// Preserve output-domain bounds for simple integer `fuzz.map` mappers.
+fn map_int_constraint_through_mapper(
+    inner: &FuzzerConstraint,
+    mapper: &TypedExpr,
+    current_module: &str,
+    known_functions: &IndexMap<&FunctionAccessKey, &TypedFunction>,
+) -> Option<FuzzerConstraint> {
+    let (min, max) = extract_int_range_from_constraint(inner)?;
+    let transform = unary_int_mapper_transform(mapper, current_module, known_functions)?;
+
+    let (min, max) = match transform {
+        UnaryIntTransform::Identity => (min, max),
+        UnaryIntTransform::Negate => {
+            let min_val = parse_bigint_literal(&min)?;
+            let max_val = parse_bigint_literal(&max)?;
+            ((-max_val).to_string(), (-min_val).to_string())
+        }
+    };
+
+    Some(FuzzerConstraint::IntRange { min, max })
+}
+
+/// Extract an IntRange from a constraint, recursively unwrapping Map layers.
+fn extract_int_range_from_constraint(constraint: &FuzzerConstraint) -> Option<(String, String)> {
+    match constraint {
+        FuzzerConstraint::IntRange { min, max } => Some((min.clone(), max.clone())),
+        FuzzerConstraint::Map(inner) => extract_int_range_from_constraint(inner),
+        _ => None,
+    }
+}
+
+fn unary_int_mapper_transform(
+    mapper: &TypedExpr,
+    current_module: &str,
+    known_functions: &IndexMap<&FunctionAccessKey, &TypedFunction>,
+) -> Option<UnaryIntTransform> {
+    let mapper = terminal_expression(mapper);
+
+    match mapper {
+        TypedExpr::Fn { args, body, .. } => unary_int_transform_from_fn(args, body),
+        _ => {
+            let (module_name, mapper_fn) =
+                resolve_function_from_expr(mapper, current_module, known_functions)?;
+            unary_int_transform_from_fn_in_module(&module_name, mapper_fn, known_functions)
+        }
+    }
+}
+
+fn unary_int_transform_from_fn(
+    args: &[TypedArg],
+    body: &TypedExpr,
+) -> Option<UnaryIntTransform> {
+    let [arg] = args else {
+        return None;
+    };
+    let arg_name = arg.get_variable_name()?;
+    let body = terminal_expression(body);
+
+    match body {
+        TypedExpr::Var { name, .. } if name == arg_name => Some(UnaryIntTransform::Identity),
+        TypedExpr::UnOp {
+            op: UnOp::Negate,
+            value,
+            ..
+        } => {
+            let value = terminal_expression(value.as_ref());
+            if let TypedExpr::Var { name, .. } = value {
+                (name == arg_name).then_some(UnaryIntTransform::Negate)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+fn unary_int_transform_from_fn_in_module(
+    _module_name: &str,
+    function: &TypedFunction,
+    _known_functions: &IndexMap<&FunctionAccessKey, &TypedFunction>,
+) -> Option<UnaryIntTransform> {
+    unary_int_transform_from_fn(&function.arguments, &function.body)
+}
+
+/// For zero-arg helper functions that wrap a fuzzer expression, recursively
+/// inspect the helper body.
+fn extract_constraint_from_zero_arg_helper_call(
+    fun: &TypedExpr,
+    args: &[CallArg<TypedExpr>],
+    current_module: &str,
+    known_functions: &IndexMap<&FunctionAccessKey, &TypedFunction>,
+) -> Option<FuzzerConstraint> {
+    if !args.is_empty() {
+        return None;
+    }
+
+    let (module_name, helper_fn) = resolve_function_from_expr(fun, current_module, known_functions)?;
+    if !helper_fn.arguments.is_empty() {
+        return None;
+    }
+
+    Some(extract_constraint_from_via(
+        &helper_fn.body,
+        &module_name,
+        known_functions,
+    ))
+}
+
+fn resolve_function_from_expr<'a>(
+    expr: &TypedExpr,
+    current_module: &str,
+    known_functions: &'a IndexMap<&FunctionAccessKey, &TypedFunction>,
+) -> Option<(String, &'a TypedFunction)> {
+    match expr {
+        TypedExpr::Var {
+            name, constructor, ..
+        } => match &constructor.variant {
+            ValueConstructorVariant::ModuleFn { module, name, .. } => {
+                let function = find_function(known_functions, module, name)?;
+                Some((module.clone(), function))
+            }
+            _ => {
+                let function = find_function(known_functions, current_module, name)?;
+                Some((current_module.to_string(), function))
+            }
+        },
+        TypedExpr::ModuleSelect {
+            module_name,
+            label,
+            constructor,
+            ..
+        } => match constructor {
+            ModuleValueConstructor::Fn { module, name, .. } => {
+                let function = find_function(known_functions, module, name)?;
+                Some((module.clone(), function))
+            }
+            _ => {
+                let function = find_function(known_functions, module_name, label)?;
+                Some((module_name.clone(), function))
+            }
+        },
+        _ => None,
     }
 }
 
@@ -2126,6 +2318,118 @@ mod test {
         }
     }
 
+    fn make_map_via(fuzzer_a: TypedExpr, mapper: TypedExpr) -> TypedExpr {
+        TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(fuzz_var(
+                "map",
+                Type::function(
+                    vec![
+                        Type::function(vec![Type::int()], Type::int()),
+                        Type::function(vec![Type::int()], Type::int()),
+                    ],
+                    Type::function(vec![Type::int()], Type::int()),
+                ),
+            )),
+            args: vec![call_arg(fuzzer_a), call_arg(mapper)],
+        }
+    }
+
+    fn make_tuple4_via(
+        fuzzer_a: TypedExpr,
+        fuzzer_b: TypedExpr,
+        fuzzer_c: TypedExpr,
+        fuzzer_d: TypedExpr,
+    ) -> TypedExpr {
+        TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::tuple(vec![Type::int(), Type::int(), Type::int(), Type::int()]),
+            fun: Box::new(fuzz_var(
+                "tuple4",
+                Type::function(
+                    vec![Type::int(), Type::int(), Type::int(), Type::int()],
+                    Type::tuple(vec![Type::int(), Type::int(), Type::int(), Type::int()]),
+                ),
+            )),
+            args: vec![
+                call_arg(fuzzer_a),
+                call_arg(fuzzer_b),
+                call_arg(fuzzer_c),
+                call_arg(fuzzer_d),
+            ],
+        }
+    }
+
+    fn negate_expr(value: TypedExpr) -> TypedExpr {
+        TypedExpr::UnOp {
+            location: Span::empty(),
+            value: Box::new(value),
+            tipo: Type::int(),
+            op: UnOp::Negate,
+        }
+    }
+
+    fn make_named_unary_negate_mapper_function(name: &str) -> (FunctionAccessKey, TypedFunction) {
+        let int_tipo = Type::int();
+        (
+            FunctionAccessKey {
+                module_name: "math".to_string(),
+                function_name: name.to_string(),
+            },
+            TypedFunction {
+                arguments: vec![TypedArg::new("n", int_tipo.clone())],
+                body: negate_expr(local_var("n", int_tipo.clone())),
+                doc: None,
+                location: Span::empty(),
+                name: name.to_string(),
+                public: false,
+                return_annotation: None,
+                return_type: int_tipo,
+                end_position: 0,
+                on_test_failure: OnTestFailure::FailImmediately,
+            },
+        )
+    }
+
+    fn make_zero_arg_function(
+        name: &str,
+        return_type: Rc<Type>,
+        body: TypedExpr,
+    ) -> (FunctionAccessKey, TypedFunction) {
+        (
+            FunctionAccessKey {
+                module_name: "math".to_string(),
+                function_name: name.to_string(),
+            },
+            TypedFunction {
+                arguments: vec![],
+                body,
+                doc: None,
+                location: Span::empty(),
+                name: name.to_string(),
+                public: false,
+                return_annotation: None,
+                return_type,
+                end_position: 0,
+                on_test_failure: OnTestFailure::FailImmediately,
+            },
+        )
+    }
+
+    fn make_zero_arg_call(name: &str, return_type: Rc<Type>) -> TypedExpr {
+        TypedExpr::Call {
+            location: Span::empty(),
+            tipo: return_type.clone(),
+            fun: Box::new(module_fn_var(
+                name,
+                "math",
+                Type::function(vec![], return_type),
+            )),
+            args: vec![],
+        }
+    }
+
     fn empty_known_functions<'a>() -> IndexMap<&'a FunctionAccessKey, &'a TypedFunction> {
         IndexMap::new()
     }
@@ -2541,6 +2845,118 @@ mod test {
                 min: "0".to_string(),
                 max: "10".to_string(),
             }))
+        );
+    }
+
+    #[test]
+    fn extract_constraint_map_with_named_negate_mapper_transforms_bounds() {
+        let (negate_key, negate_fn) = make_named_unary_negate_mapper_function("negate");
+        let mut functions = empty_known_functions();
+        functions.insert(&negate_key, &negate_fn);
+
+        let via = make_map_via(
+            make_int_between_via("1", "50"),
+            module_fn_var(
+                "negate",
+                "math",
+                Type::function(vec![Type::int()], Type::int()),
+            ),
+        );
+
+        let constraint = extract_constraint_from_via(&via, "math", &functions);
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::IntRange {
+                min: "-50".to_string(),
+                max: "-1".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn extract_constraint_zero_arg_helper_call_is_unwrapped() {
+        let (helper_key, helper_fn) = make_zero_arg_function(
+            "helper_fuzzer",
+            Type::int(),
+            make_int_between_via("3", "7"),
+        );
+        let mut functions = empty_known_functions();
+        functions.insert(&helper_key, &helper_fn);
+
+        let via = make_zero_arg_call("helper_fuzzer", Type::int());
+        let constraint = extract_constraint_from_via(&via, "math", &functions);
+
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::IntRange {
+                min: "3".to_string(),
+                max: "7".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn extract_constraint_zero_arg_helper_with_map_negate_transforms_bounds() {
+        let (negate_key, negate_fn) = make_named_unary_negate_mapper_function("negate");
+        let (fuzzer_key, fuzzer_fn) = make_zero_arg_function(
+            "negate_fuzzer",
+            Type::int(),
+            make_map_via(
+                make_int_between_via("1", "50"),
+                module_fn_var(
+                    "negate",
+                    "math",
+                    Type::function(vec![Type::int()], Type::int()),
+                ),
+            ),
+        );
+        let mut functions = empty_known_functions();
+        functions.insert(&negate_key, &negate_fn);
+        functions.insert(&fuzzer_key, &fuzzer_fn);
+
+        let via = make_zero_arg_call("negate_fuzzer", Type::int());
+        let constraint = extract_constraint_from_via(&via, "math", &functions);
+
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::IntRange {
+                min: "-50".to_string(),
+                max: "-1".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn extract_constraint_tuple4_collects_component_bounds() {
+        let via = make_tuple4_via(
+            make_int_between_via("0", "5"),
+            make_int_between_via("10", "15"),
+            make_int_between_via("20", "25"),
+            make_int_between_via("30", "35"),
+        );
+        let functions = empty_known_functions();
+        let constraint = extract_constraint_from_via(&via, "math", &functions);
+
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::Tuple(vec![
+                FuzzerConstraint::IntRange {
+                    min: "0".to_string(),
+                    max: "5".to_string(),
+                },
+                FuzzerConstraint::IntRange {
+                    min: "10".to_string(),
+                    max: "15".to_string(),
+                },
+                FuzzerConstraint::IntRange {
+                    min: "20".to_string(),
+                    max: "25".to_string(),
+                },
+                FuzzerConstraint::IntRange {
+                    min: "30".to_string(),
+                    max: "35".to_string(),
+                },
+            ])
         );
     }
 
