@@ -507,17 +507,6 @@ fn exec_run(
                 println!("      You can symlink or copy it there before running `lake build`.");
             }
         } else {
-            // Warn early if PlutusCore is missing -- users often forget this.
-            if let Err(e) = verify::check_plutus_core(&out_dir) {
-                eprintln!(
-                    "{} {}",
-                    "Warning:"
-                        .if_supports_color(Stderr, |s| s.yellow())
-                        .if_supports_color(Stderr, |s| s.bold()),
-                    e,
-                );
-            }
-
             println!("Running proofs via lake build...");
 
             let start = std::time::Instant::now();
@@ -630,7 +619,7 @@ fn exec_run(
             let verification_succeeded =
                 summary.failed == 0 && summary.timed_out == 0 && summary.unknown == 0;
             if !verify::should_retain_artifacts(artifact_policy, verification_succeeded) {
-                if let Err(e) = std::fs::remove_dir_all(&out_dir) {
+                if let Err(e) = verify::clear_generated_workspace(&out_dir) {
                     eprintln!(
                         "Warning: failed to clean up {}: {}",
                         out_dir.display(),

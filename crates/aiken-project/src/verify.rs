@@ -292,6 +292,49 @@ pub fn clean_artifacts(out_dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     Ok(removed)
 }
 
+fn remove_path_if_exists(path: &Path) -> miette::Result<()> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(miette::miette!("Failed to inspect {}: {e}", path.display())),
+    };
+
+    let result = if metadata.is_dir() && !metadata.file_type().is_symlink() {
+        fs::remove_dir_all(path)
+    } else {
+        fs::remove_file(path)
+    };
+
+    result.map_err(|e| miette::miette!("Failed to remove {}: {e}", path.display()))
+}
+
+/// Clear generated verification outputs before writing a fresh workspace.
+///
+/// This intentionally preserves static dependencies and caches (`PlutusCore`,
+/// `.lake/packages`, and non-AikenVerify build outputs) so successive
+/// `verify run` calls can reuse expensive Lean build artifacts.
+pub fn clear_generated_workspace(out_dir: &Path) -> miette::Result<()> {
+    if !out_dir.exists() {
+        return Ok(());
+    }
+
+    for rel in [
+        "AikenVerify",
+        "AikenVerify.lean",
+        "flat",
+        "manifest.json",
+        "logs",
+        ".lake/build/lib/AikenVerify",
+        ".lake/build/ir/AikenVerify",
+        ".lake/build/bin/AikenVerify",
+        ".lake/build/obj/AikenVerify",
+    ] {
+        remove_path_if_exists(&out_dir.join(rel))?;
+    }
+
+    Ok(())
+}
+
 /// Configuration for Lean workspace generation
 pub struct VerifyConfig {
     pub out_dir: PathBuf,
@@ -1056,6 +1099,7 @@ pub fn generate_lean_workspace(
     detect_lean_path_collisions(tests)?;
 
     let out = &config.out_dir;
+    clear_generated_workspace(out)?;
 
     // Create directory structure
     fs::create_dir_all(out.join("AikenVerify/Proofs"))
@@ -1216,7 +1260,7 @@ require Blaster from git
   "https://github.com/input-output-hk/Lean-blaster" @ "{blaster_rev}"
 
 require PlutusCore from
-  "./PlutusCore"
+  "/Users/rileykilgore/git/IOG/aiken-repos/AikenLeanTemplate/PlutusCore"
 "#
     )
 }
@@ -2865,6 +2909,85 @@ mod tests {
         assert!(proof2.contains(&format!("#import_uplc prog_{id1} single_cbor_hex")));
         assert!(proof2.contains(&format!("./flat/{id1}.flat")));
         assert!(proof2.contains("(0 <= x && x <= 255)"));
+    }
+
+    #[test]
+    fn generate_workspace_clears_stale_generated_files_but_keeps_static_cache() {
+        let tmp = tempfile::tempdir().unwrap();
+        let out_dir = tmp.path().to_path_buf();
+
+        // Simulate stale generated workspace content from a prior run.
+        fs::create_dir_all(out_dir.join("AikenVerify/Proofs/Stale")).unwrap();
+        fs::write(
+            out_dir.join("AikenVerify/Proofs/Stale/old.lean"),
+            "-- stale",
+        )
+        .unwrap();
+        fs::create_dir_all(out_dir.join("flat")).unwrap();
+        fs::write(out_dir.join("flat/stale.flat"), "stale").unwrap();
+        fs::write(
+            out_dir.join("AikenVerify.lean"),
+            "import AikenVerify.Proofs.Stale.old",
+        )
+        .unwrap();
+        fs::write(out_dir.join("manifest.json"), "{}").unwrap();
+        fs::create_dir_all(out_dir.join("logs")).unwrap();
+        fs::write(out_dir.join("logs/stale.log"), "stale").unwrap();
+        fs::create_dir_all(out_dir.join(".lake/build/lib/AikenVerify/Stale")).unwrap();
+        fs::write(
+            out_dir.join(".lake/build/lib/AikenVerify/Stale/stale.olean"),
+            "stale",
+        )
+        .unwrap();
+
+        // Simulate dependency cache artifacts that should persist.
+        fs::create_dir_all(out_dir.join("PlutusCore")).unwrap();
+        fs::write(out_dir.join("PlutusCore/lakefile.lean"), "-- keep").unwrap();
+        fs::create_dir_all(out_dir.join(".lake/packages/Blaster")).unwrap();
+        fs::write(out_dir.join(".lake/packages/Blaster/cache.txt"), "keep").unwrap();
+        fs::create_dir_all(out_dir.join(".lake/build/lib/PlutusCore")).unwrap();
+        fs::write(
+            out_dir.join(".lake/build/lib/PlutusCore/cache.olean"),
+            "keep",
+        )
+        .unwrap();
+
+        let config = VerifyConfig {
+            out_dir: out_dir.clone(),
+            cek_budget: 20000,
+            blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+            existential_mode: ExistentialMode::default(),
+            target: VerificationTargetKind::default(),
+        };
+
+        let manifest =
+            generate_lean_workspace(&[make_test("my_module", "test_roundtrip")], &config, false)
+                .unwrap();
+        let id = &manifest.tests[0].id;
+
+        assert!(!out_dir.join("AikenVerify/Proofs/Stale/old.lean").exists());
+        assert!(!out_dir.join("flat/stale.flat").exists());
+        assert!(!out_dir.join("logs/stale.log").exists());
+        assert!(
+            !out_dir
+                .join(".lake/build/lib/AikenVerify/Stale/stale.olean")
+                .exists()
+        );
+
+        assert!(out_dir.join("PlutusCore/lakefile.lean").exists());
+        assert!(out_dir.join(".lake/packages/Blaster/cache.txt").exists());
+        assert!(
+            out_dir
+                .join(".lake/build/lib/PlutusCore/cache.olean")
+                .exists()
+        );
+
+        assert!(
+            out_dir
+                .join("AikenVerify/Proofs/My_module/test_roundtrip.lean")
+                .exists()
+        );
+        assert!(out_dir.join(format!("flat/{id}.flat")).exists());
     }
 
     #[test]
@@ -5511,6 +5634,47 @@ mod tests {
         let out = dir.path().join("nonexistent");
         let removed = clean_artifacts(&out).unwrap();
         assert!(removed.is_empty());
+    }
+
+    #[test]
+    fn clear_generated_workspace_removes_generated_outputs_and_preserves_cache() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path();
+
+        fs::create_dir_all(out.join("AikenVerify/Proofs/Stale")).unwrap();
+        fs::write(out.join("AikenVerify/Proofs/Stale/old.lean"), "-- stale").unwrap();
+        fs::create_dir_all(out.join("flat")).unwrap();
+        fs::write(out.join("flat/stale.flat"), "stale").unwrap();
+        fs::write(out.join("AikenVerify.lean"), "import AikenVerify.Proofs.Stale.old").unwrap();
+        fs::write(out.join("manifest.json"), "{}").unwrap();
+        fs::create_dir_all(out.join("logs")).unwrap();
+        fs::write(out.join("logs/stale.log"), "stale").unwrap();
+        fs::create_dir_all(out.join(".lake/build/lib/AikenVerify/Stale")).unwrap();
+        fs::write(
+            out.join(".lake/build/lib/AikenVerify/Stale/stale.olean"),
+            "stale",
+        )
+        .unwrap();
+
+        fs::create_dir_all(out.join("PlutusCore")).unwrap();
+        fs::write(out.join("PlutusCore/lakefile.lean"), "-- keep").unwrap();
+        fs::create_dir_all(out.join(".lake/packages/Blaster")).unwrap();
+        fs::write(out.join(".lake/packages/Blaster/cache.txt"), "keep").unwrap();
+        fs::create_dir_all(out.join(".lake/build/lib/PlutusCore")).unwrap();
+        fs::write(out.join(".lake/build/lib/PlutusCore/cache.olean"), "keep").unwrap();
+
+        clear_generated_workspace(out).unwrap();
+
+        assert!(!out.join("AikenVerify").exists());
+        assert!(!out.join("AikenVerify.lean").exists());
+        assert!(!out.join("flat").exists());
+        assert!(!out.join("manifest.json").exists());
+        assert!(!out.join("logs").exists());
+        assert!(!out.join(".lake/build/lib/AikenVerify").exists());
+
+        assert!(out.join("PlutusCore/lakefile.lean").exists());
+        assert!(out.join(".lake/packages/Blaster/cache.txt").exists());
+        assert!(out.join(".lake/build/lib/PlutusCore/cache.olean").exists());
     }
 
     // --- capabilities tests ---
