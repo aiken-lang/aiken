@@ -342,7 +342,7 @@ where
         match_tests: Option<Vec<String>>,
         exact_match: bool,
         seed: u32,
-        _property_max_success: usize,
+        property_max_success: usize,
         tracing: Tracing,
         env: Option<String>,
         output_path: PathBuf,
@@ -365,8 +365,13 @@ where
         self.type_check(&mut modules, tracing, env.as_deref(), true)?;
 
         // Collect tests to run
-        let tests_to_run =
-            self.collect_tests_for_coverage(match_tests, exact_match, seed, tracing)?;
+        let tests_to_run = self.collect_tests_for_coverage(
+            match_tests,
+            exact_match,
+            seed,
+            property_max_success,
+            tracing,
+        )?;
 
         if tests_to_run.is_empty() {
             // No tests to run, just write empty coverage file
@@ -506,6 +511,7 @@ where
         match_tests: Option<Vec<String>>,
         exact_match: bool,
         seed: u32,
+        property_max_success: usize,
         tracing: Tracing,
     ) -> Result<
         Vec<(
@@ -607,11 +613,8 @@ where
             let is_property_test = !test.arguments.is_empty();
 
             if is_property_test {
-                // For property tests, we need to:
-                // 1. Generate the fuzzer program (without spans)
-                // 2. Sample from it to get a test value
-                // 3. Generate the test body with spans
-                // 4. Apply the sampled value to the test body
+                // For property tests, we run multiple iterations (like normal property tests)
+                // to get better coverage across different input values.
 
                 let parameter = test.arguments.first().unwrap();
                 let type_info = parameter.arg.tipo.clone();
@@ -624,37 +627,47 @@ where
                         .clone()
                         .generate_raw(&parameter.via, &[], &module_name);
 
-                // Sample a value from the fuzzer using the provided seed
-                let prng = Prng::from_seed(seed);
-                let sampled_value = match prng.sample(&fuzzer_program) {
-                    Ok(Some((_, value))) => value,
-                    Ok(None) => {
-                        // Fuzzer returned None - skip this test for coverage
-                        continue;
-                    }
-                    Err(_) => {
-                        // Fuzzer failed - skip this test for coverage
-                        continue;
-                    }
-                };
-
-                // Generate test body with source locations
+                // Generate test body with source locations (reused for each iteration)
                 let args = vec![TypedArg {
                     tipo: stripped_type_info,
                     ..parameter.clone().into()
                 }];
                 let term = generator.generate_raw_with_spans(&test.body, &args, &module_name);
                 let program_with_spans = generator.finalize_minimal_with_spans(term);
-                let program = program_with_spans.try_into_named_debruijn().map_err(|e| {
-                    Error::DeBruijnConversion {
-                        error: e.to_string(),
+                let base_program =
+                    program_with_spans.try_into_named_debruijn().map_err(|e| {
+                        Error::DeBruijnConversion {
+                            error: e.to_string(),
+                        }
+                    })?;
+
+                // Sample multiple values from the fuzzer, chaining the PRNG state
+                let mut prng = Prng::from_seed(seed);
+                let mut iteration = 0;
+
+                while iteration < property_max_success {
+                    match prng.sample(&fuzzer_program) {
+                        Ok(Some((next_prng, value))) => {
+                            let program = base_program.clone().apply_data(value);
+                            let iter_name = format!("{}[{}]", test_name, iteration);
+                            tests.push((
+                                iter_name,
+                                test.on_test_failure.clone(),
+                                program,
+                            ));
+                            prng = next_prng;
+                            iteration += 1;
+                        }
+                        Ok(None) => {
+                            // Fuzzer exhausted
+                            break;
+                        }
+                        Err(_) => {
+                            // Fuzzer failed
+                            break;
+                        }
                     }
-                })?;
-
-                // Apply the sampled value to the test program
-                let program = program.apply_data(sampled_value);
-
-                tests.push((test_name, test.on_test_failure.clone(), program));
+                }
             } else {
                 // Unit test - generate directly without fuzzer
                 let term = generator.generate_raw_with_spans(&test.body, &[], &module_name);
@@ -779,7 +792,11 @@ where
                     // Write each validator's source map to a file
                     for validator in &mut blueprint.validators {
                         if let Some(source_map) = validator.source_map.take() {
-                            let filename = format!("{}.sourcemap.json", validator.title);
+                            // Replace path separators with dashes to keep a flat directory structure.
+                            // Validator titles may contain slashes from nested module paths
+                            // (e.g. "governance/voting.my_vote.spend").
+                            let safe_title = validator.title.replace('/', "-");
+                            let filename = format!("{}.sourcemap.json", safe_title);
                             let file_path = dir.join(&filename);
 
                             let source_map_json = serde_json::to_string_pretty(&source_map)
