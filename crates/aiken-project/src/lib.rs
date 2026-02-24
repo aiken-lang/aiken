@@ -48,8 +48,8 @@ use aiken_lang::{
     utils,
 };
 use export::{
-    Export, ExportedProgram, ExportedPropertyTest, ExportedTests, FuzzerConstraint, TestReturnMode,
-    fuzzer_output_type_from,
+    Export, ExportedProgram, ExportedPropertyTest, ExportedTests, FuzzerConstraint,
+    FuzzerExactValue, TestReturnMode, fuzzer_output_type_from,
 };
 use indexmap::IndexMap;
 use miette::NamedSource;
@@ -78,6 +78,15 @@ fn convert_constraint(lang: &LangFuzzerConstraint) -> FuzzerConstraint {
             min: min.clone(),
             max: max.clone(),
         },
+        LangFuzzerConstraint::Exact(value) => FuzzerConstraint::Exact(match value {
+            aiken_lang::test_framework::FuzzerExactValue::Bool(v) => FuzzerExactValue::Bool(*v),
+            aiken_lang::test_framework::FuzzerExactValue::ByteArray(bytes) => {
+                FuzzerExactValue::ByteArray(bytes.clone())
+            }
+            aiken_lang::test_framework::FuzzerExactValue::String(s) => {
+                FuzzerExactValue::String(s.clone())
+            }
+        }),
         LangFuzzerConstraint::Tuple(elems) => {
             FuzzerConstraint::Tuple(elems.iter().map(convert_constraint).collect())
         }

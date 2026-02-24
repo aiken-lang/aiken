@@ -1,10 +1,10 @@
 use aiken_lang::ast::Tracing;
 use aiken_project::{
-    export::VerificationTargetKind,
+    export::{ExportedPropertyTest, VerificationTargetKind},
     options::Options,
     verify::{
-        self, ArtifactRetention, ExistentialMode, FailureCategory, ProofStatus, VerifyConfig,
-        DEFAULT_BLASTER_REV,
+        self, ArtifactRetention, DEFAULT_BLASTER_REV, ExistentialMode, FailureCategory,
+        ProofStatus, VerifyConfig,
     },
     watch::with_project,
 };
@@ -106,7 +106,8 @@ pub struct RunArgs {
     #[clap(long, default_value = "20000")]
     cek_budget: u64,
 
-    /// Number of parallel theorem builds (default: number of logical CPUs, max 8)
+    /// Optional Lake jobs override for `lake build`.
+    /// When omitted (`0`), Lake's default scheduling is used.
     #[clap(short = 'j', long, default_value = "0")]
     jobs: usize,
 
@@ -497,13 +498,7 @@ fn exec_run(
         artifacts
     };
 
-    let max_jobs = if jobs == 0 {
-        std::thread::available_parallelism()
-            .map(|n| n.get().min(8))
-            .unwrap_or(1)
-    } else {
-        jobs
-    };
+    let jobs_override = (jobs != 0).then_some(jobs);
     with_project(directory.as_deref(), deny, silent, true, |p| {
         p.compile(Options {
             ..Default::default()
@@ -520,47 +515,22 @@ fn exec_run(
             return Ok(());
         }
 
-        // Validator and equivalence modes require validator metadata that is
-        // not yet populated during export. Reject early with a clear message.
-        if matches!(
-            target,
-            VerificationTargetKind::ValidatorHandler | VerificationTargetKind::Equivalence
-        ) {
-            return Err(vec![aiken_project::error::Error::StandardIo(
-                std::io::Error::new(
-                    std::io::ErrorKind::Unsupported,
-                    format!(
-                        "--target {} is not yet supported for in-project tests. \
-                         Validator metadata export is not implemented; \
-                         use --target property (the default) instead.",
-                        target,
-                    ),
-                ),
-            )]);
-        }
-
-        // When --generate-only, reject tests where bounds are required but
-        // the constraint doesn't provide them (e.g. Int with Any constraint).
+        // When --generate-only, run theorem-shape preflight before file generation work.
+        // This uses the same proof generator path (including sampled-domain fallback),
+        // so fallback-capable tests are accepted here.
         if generate_only && !skip_unsupported {
-            let unknown: Vec<&str> = property_tests
-                .iter()
-                .filter(|t| {
-                    verify::requires_explicit_bounds(&t.fuzzer_output_type, &t.constraint)
-                })
-                .map(|t| t.name.as_str())
-                .collect();
+            let unsupported =
+                collect_generate_only_preflight_errors(property_tests, existential_mode, &target);
 
-            if !unknown.is_empty() {
-                let names = unknown.join("\n  - ");
+            if !unsupported.is_empty() {
                 return Err(vec![aiken_project::error::Error::StandardIo(
                     std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         format!(
-                            "Cannot generate Lean workspace: the following property tests have \
-                             unknown fuzzer bounds and cannot be verified:\n  - {names}\n\n\
-                             Hint: use fuzzers with explicit integer bounds (e.g. \
-                             `fuzz.int_between`) so the prover knows the input domain, \
-                             or use --skip-unsupported to skip these tests."
+                            "Cannot generate Lean workspace:\n\n\
+                             The following property tests have unsupported theorem/constraint shapes:\n  - {}\n\n\
+                             Hint: use --skip-unsupported to skip unsupported tests.",
+                            unsupported.join("\n  - ")
                         ),
                     ),
                 )]);
@@ -629,7 +599,8 @@ fn exec_run(
             println!("Running proofs via lake build...");
 
             let start = std::time::Instant::now();
-            let result = verify::run_proofs(&out_dir, timeout, max_jobs, &manifest).map_err(|e| {
+            let result =
+                verify::run_proofs(&out_dir, timeout, jobs_override, &manifest).map_err(|e| {
                 vec![aiken_project::error::Error::StandardIo(
                     std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
                 )]
@@ -793,9 +764,63 @@ fn exec_run(
     .map_err(|_| process::exit(1))
 }
 
+fn collect_generate_only_preflight_errors(
+    property_tests: &[ExportedPropertyTest],
+    existential_mode: ExistentialMode,
+    target: &VerificationTargetKind,
+) -> Vec<String> {
+    collect_generate_only_preflight_errors_with(property_tests, |t| {
+        verify::preflight_validate_test(t, existential_mode, target)
+    })
+}
+
+fn collect_generate_only_preflight_errors_with<F>(
+    property_tests: &[ExportedPropertyTest],
+    mut validate: F,
+) -> Vec<String>
+where
+    F: FnMut(&ExportedPropertyTest) -> miette::Result<()>,
+{
+    property_tests
+        .iter()
+        .filter_map(|t| validate(t).err().map(|e| format!("{}: {}", t.name, e)))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aiken_lang::ast::OnTestFailure;
+    use aiken_project::export::{
+        ExportedProgram, FuzzerConstraint, FuzzerOutputType, TestReturnMode,
+    };
+
+    fn dummy_property_test(
+        name: &str,
+        fuzzer_output_type: FuzzerOutputType,
+        constraint: FuzzerConstraint,
+    ) -> ExportedPropertyTest {
+        ExportedPropertyTest {
+            name: name.to_string(),
+            module: "example".to_string(),
+            input_path: "lib/example.ak".to_string(),
+            on_test_failure: OnTestFailure::FailImmediately,
+            return_mode: TestReturnMode::Bool,
+            target_kind: VerificationTargetKind::PropertyWrapper,
+            validator_target: None,
+            test_program: ExportedProgram {
+                hex: String::new(),
+                flat_bytes: None,
+            },
+            fuzzer_program: ExportedProgram {
+                hex: String::new(),
+                flat_bytes: None,
+            },
+            fuzzer_type: "Int".to_string(),
+            fuzzer_output_type,
+            constraint,
+        }
+    }
 
     #[test]
     fn extract_counterexample_display_multiline_bytestring() {
@@ -845,5 +870,46 @@ error: Foo.lean:15:5: Tactic `blaster` failed";
             sanitize_stderr_for_display(stderr),
             "error: Foo.lean:15:5: Counterexample:\nerror: Foo.lean:15:5: Tactic `blaster` failed"
         );
+    }
+
+    #[test]
+    fn generate_only_preflight_helper_does_not_enforce_explicit_bounds() {
+        let tests = vec![dummy_property_test(
+            "example.test_any_int",
+            FuzzerOutputType::Int,
+            FuzzerConstraint::Any,
+        )];
+
+        let unsupported = collect_generate_only_preflight_errors_with(&tests, |_t| Ok(()));
+        assert!(
+            unsupported.is_empty(),
+            "helper must only report validator failures"
+        );
+    }
+
+    #[test]
+    fn generate_only_preflight_helper_reports_validator_errors() {
+        let tests = vec![
+            dummy_property_test(
+                "example.test_ok",
+                FuzzerOutputType::Int,
+                FuzzerConstraint::Any,
+            ),
+            dummy_property_test(
+                "example.test_bad",
+                FuzzerOutputType::Int,
+                FuzzerConstraint::Any,
+            ),
+        ];
+
+        let unsupported = collect_generate_only_preflight_errors_with(&tests, |t| {
+            if t.name.ends_with("bad") {
+                Err(miette::miette!("unsupported shape"))
+            } else {
+                Ok(())
+            }
+        });
+
+        assert_eq!(unsupported, vec!["example.test_bad: unsupported shape"]);
     }
 }

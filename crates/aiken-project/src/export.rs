@@ -120,11 +120,20 @@ fn pretty_print_type(tipo: &Type) -> std::string::String {
 /// This replaces the old `ExportedBounds` with a richer, composable representation
 /// that can describe constraints for arbitrary fuzzer output shapes (not just integers).
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+pub enum FuzzerExactValue {
+    Bool(bool),
+    ByteArray(Vec<u8>),
+    String(String),
+}
+
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub enum FuzzerConstraint {
     /// No constraint known; the fuzzer may produce any value of the given type.
     Any,
     /// Integer in a closed range [min, max].
     IntRange { min: String, max: String },
+    /// Exact scalar value.
+    Exact(FuzzerExactValue),
     /// A tuple whose elements each carry their own constraint.
     Tuple(Vec<FuzzerConstraint>),
     /// A list whose elements satisfy `elem`, with optional length bounds.

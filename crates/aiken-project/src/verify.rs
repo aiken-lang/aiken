@@ -1,6 +1,8 @@
 use crate::export::{
-    ExportedPropertyTest, FuzzerConstraint, FuzzerOutputType, VerificationTargetKind,
+    ExportedPropertyTest, FuzzerConstraint, FuzzerExactValue, FuzzerOutputType,
+    VerificationTargetKind,
 };
+use num_bigint::BigInt;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -96,10 +98,18 @@ pub fn capabilities() -> VerificationCapabilities {
             "List<T>".to_string(),
             "Tuple(T, ...)".to_string(),
             "Pair(T, T)".to_string(),
+            "Any fuzzer output via sampled-domain fallback".to_string(),
         ],
         unsupported_fuzzer_types: vec![
-            "nested List/Tuple/Pair".to_string(),
             "Blaster translation gaps for some generated Lean predicates (e.g. List.Mem)"
+                .to_string(),
+            "Test arity > 1 is not supported directly; multi-input properties must be tuple/record encoded."
+                .to_string(),
+            "fuzz.bytearray_between output-domain predicates are not translated yet; these cases use sampled-domain fallback."
+                .to_string(),
+            "scenario.report_coverage output-domain extraction is not implemented; these cases use sampled-domain fallback."
+                .to_string(),
+            "General higher-order/partial-application fuzzer resolver coverage is incomplete; unresolved shapes use sampled-domain fallback."
                 .to_string(),
         ],
         existential_modes: vec!["witness".to_string(), "proof".to_string()],
@@ -813,13 +823,30 @@ fn lake_fetch_is_unknown_command(stderr: &str) -> bool {
         || stderr_lower.contains("unknown command \"fetch\"")
 }
 
+fn lake_build_jobs_flag_unsupported(stderr: &str) -> bool {
+    let stderr_lower = stderr.to_ascii_lowercase();
+    (stderr_lower.contains("unknown option") || stderr_lower.contains("unrecognized option"))
+        && stderr_lower.contains("-j")
+}
+
+fn normalize_jobs_override(max_jobs: Option<usize>) -> Option<usize> {
+    max_jobs.and_then(|jobs| (jobs > 0).then_some(jobs))
+}
+
+fn lake_build_command_for_jobs(jobs_override: Option<usize>) -> String {
+    match jobs_override {
+        Some(jobs) => format!("lake build -j {jobs}"),
+        None => "lake build".to_string(),
+    }
+}
+
 /// Run dependency sync (`lake fetch` with `lake update` fallback) then
 /// `lake build` in the generated workspace directory.
 /// Logs are written to `<out_dir>/logs/`.
 pub fn run_proofs(
     out_dir: &Path,
     timeout_secs: u64,
-    _max_jobs: usize,
+    max_jobs: Option<usize>,
     manifest: &GeneratedManifest,
 ) -> miette::Result<VerifyResult> {
     struct CommandRunResult {
@@ -1081,29 +1108,50 @@ pub fn run_proofs(
     }
 
     // Build all modules with a single `lake build` invocation.
-    // We intentionally do not forward `--jobs` here because Lake 5 rejects
-    // `-jN`, and we want default `verify run` flows to succeed reliably.
-    // Running multiple concurrent `lake build` processes in the same workspace
-    // can also corrupt `.olean` files.
-    let mut build_cmd = Command::new("lake");
-    build_cmd.arg("build").current_dir(out_dir);
+    // If the caller explicitly sets `--jobs`, try forwarding `-j <N>`.
+    // If that flag is unsupported in the installed Lake, retry once without it.
+    let (build_command, build_result) = {
+        let mut build_cmd = Command::new("lake");
+        build_cmd.arg("build").current_dir(out_dir);
+        let jobs_override = normalize_jobs_override(max_jobs);
+        if let Some(jobs) = jobs_override {
+            build_cmd.arg("-j").arg(jobs.to_string());
+        }
+        let cmd_str = lake_build_command_for_jobs(jobs_override);
 
-    let build_result = run_command_with_timeout(build_cmd, timeout_secs);
+        (cmd_str, run_command_with_timeout(build_cmd, timeout_secs))
+    };
 
-    let (build_stdout, build_stderr, build_exit_code, build_timed_out) = match build_result {
-        Ok(r) => (r.stdout, r.stderr, r.exit_code, r.timed_out),
+    let mut build_command_used = build_command.clone();
+    let mut build_result = match build_result {
+        Ok(r) => r,
         Err(e) => {
             // OS-level spawn failure (e.g. lake not found). The build never ran,
             // so report every theorem as BuildError rather than silently dropping.
-            let reason = format!("Failed to execute lake build: {e}");
+            let reason = format!("Failed to execute {build_command}: {e}");
             return Err(miette::miette!("{reason}"));
         }
     };
 
+    if build_command_used.contains("-j")
+        && build_result.exit_code != Some(0)
+        && lake_build_jobs_flag_unsupported(&build_result.stderr)
+    {
+        let mut fallback_cmd = Command::new("lake");
+        fallback_cmd.arg("build").current_dir(out_dir);
+        build_command_used = "lake build".to_string();
+        build_result = run_command_with_timeout(fallback_cmd, timeout_secs)?;
+    }
+
+    let build_stdout = build_result.stdout;
+    let build_stderr = build_result.stderr;
+    let build_exit_code = build_result.exit_code;
+    let build_timed_out = build_result.timed_out;
+
     let _ = fs::write(
         logs_dir.join("lake-build.log"),
         format!(
-            "command: lake build\n--- stdout ---\n{}\n--- stderr ---\n{}\n",
+            "command: {build_command_used}\n--- stdout ---\n{}\n--- stderr ---\n{}\n",
             build_stdout, build_stderr
         ),
     );
@@ -1122,6 +1170,50 @@ pub fn run_proofs(
         exit_code: build_exit_code,
         theorem_results: None,
     })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GenerationErrorCategory {
+    UnsupportedShape,
+    MissingDomain,
+    FallbackRequired,
+    InvalidConstraint,
+}
+
+#[derive(Debug)]
+struct GenerationError {
+    category: GenerationErrorCategory,
+    message: String,
+}
+
+impl std::fmt::Display for GenerationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for GenerationError {}
+impl miette::Diagnostic for GenerationError {}
+
+fn generation_error(
+    category: GenerationErrorCategory,
+    message: impl Into<String>,
+) -> miette::Report {
+    miette::Report::new(GenerationError {
+        category,
+        message: message.into(),
+    })
+}
+
+fn is_skippable_generation_error(error: &miette::Report) -> bool {
+    matches!(
+        error.downcast_ref::<GenerationError>().map(|e| e.category),
+        Some(
+            GenerationErrorCategory::UnsupportedShape
+                | GenerationErrorCategory::MissingDomain
+                | GenerationErrorCategory::FallbackRequired
+        )
+    )
 }
 
 /// Generate a Lean workspace from exported property tests.
@@ -1198,13 +1290,20 @@ pub fn generate_lean_workspace(
             &config.target,
         ) {
             Ok(content) => content,
-            Err(e) if skip_unsupported => {
+            Err(e) if skip_unsupported && is_skippable_generation_error(&e) => {
                 skipped_tests.push(SkippedTest {
                     name: full_name.clone(),
                     module: module.clone(),
                     reason: e.to_string(),
                 });
                 continue;
+            }
+            Err(e) if skip_unsupported => {
+                return Err(miette::miette!(
+                    "Test '{}' failed workspace generation with non-skippable error:\n{}",
+                    full_name,
+                    e
+                ));
             }
             Err(e) => return Err(e),
         };
@@ -1299,7 +1398,7 @@ require Blaster from git
   "https://github.com/input-output-hk/Lean-blaster" @ "{blaster_rev}"
 
 require PlutusCore from
-  "/Users/rileykilgore/git/IOG/aiken-repos/AikenLeanTemplate/PlutusCore"
+  "./PlutusCore"
 "#
     )
 }
@@ -1384,13 +1483,10 @@ def dataArg (x : Data) : List Term :=
 /-- Decode the sampled value from `Fuzzer<a> = Prng -> Option (Prng, a)` output encoded as Data. -/
 def decodeFuzzerSampleValue (d : Data) : Option Data :=
   match d with
-  | Data.Constr tag fields =>
-      if tag == 121 then
-        match fields with
-        | [Data.List [_nextPrng, value]] => some value
-        | _ => none
-      else
-        none
+  | Data.Constr _ fields =>
+      match fields with
+      | [Data.List [_nextPrng, value]] => some value
+      | _ => none
   | _ => none
 
 /-- Execute a fuzzer program at a given seed and decode the sampled output value (if any). -/
@@ -1441,15 +1537,53 @@ fn is_valid_integer_literal(s: &str) -> bool {
     !s.is_empty() && s.chars().all(|c| c.is_ascii_digit())
 }
 
+fn parse_integer_literal(s: &str) -> Option<BigInt> {
+    if !is_valid_integer_literal(s) {
+        return None;
+    }
+    s.parse::<BigInt>().ok()
+}
+
+fn validate_list_len_bounds(
+    test_name: &str,
+    min_len: Option<usize>,
+    max_len: Option<usize>,
+) -> miette::Result<()> {
+    if let (Some(min), Some(max)) = (min_len, max_len) {
+        if min > max {
+            return Err(generation_error(
+                GenerationErrorCategory::InvalidConstraint,
+                format!(
+                    "Test '{}' has inconsistent list-length bounds: min_len={} exceeds max_len={}",
+                    test_name, min, max,
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Convert a test_id to a valid Lean identifier for the UPLC program binding.
 fn prog_name(test_id: &str) -> String {
     format!("prog_{test_id}")
 }
 
-/// Variable names used for quantified tuple/pair elements: a, b, c, d, e, ...
-const VAR_NAMES: &[&str] = &[
-    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
-];
+fn tuple_var_name(mut index: usize) -> String {
+    let mut chars = Vec::new();
+    loop {
+        let rem = (index % 26) as u8;
+        chars.push((b'a' + rem) as char);
+        if index < 26 {
+            break;
+        }
+        index = (index / 26) - 1;
+    }
+    chars.into_iter().rev().collect()
+}
+
+fn tuple_var_names(arity: usize) -> Vec<String> {
+    (0..arity).map(tuple_var_name).collect()
+}
 
 /// Map a FuzzerOutputType element to its Lean type name.
 /// Returns None if the type cannot be mapped (truly unsupported).
@@ -1515,6 +1649,124 @@ fn lean_opens_for_types(types: &[&FuzzerOutputType]) -> String {
     opens.join("\n")
 }
 
+fn exact_value_to_scalar_literal(
+    output_type: &FuzzerOutputType,
+    value: &FuzzerExactValue,
+) -> Option<String> {
+    fn lean_bytestring_literal_from_bytes(bytes: &[u8]) -> String {
+        if bytes.is_empty() {
+            return "ByteString.empty".to_string();
+        }
+        bytes.iter().rev().fold(
+            "PlutusCore.ByteString.emptyByteString".to_string(),
+            |acc, b| format!("PlutusCore.ByteString.consByteStringV1 {} ({acc})", b),
+        )
+    }
+
+    match (output_type, value) {
+        (FuzzerOutputType::Bool, FuzzerExactValue::Bool(v)) => Some(v.to_string()),
+        (FuzzerOutputType::ByteArray, FuzzerExactValue::ByteArray(bytes)) => {
+            Some(lean_bytestring_literal_from_bytes(bytes))
+        }
+        (FuzzerOutputType::String, FuzzerExactValue::String(s)) => {
+            Some(lean_bytestring_literal_from_bytes(s.as_bytes()))
+        }
+        _ => None,
+    }
+}
+
+fn collect_scalar_precondition_parts(
+    test_name: &str,
+    output_type: &FuzzerOutputType,
+    constraint: &FuzzerConstraint,
+    var: &str,
+    out: &mut Vec<String>,
+    witness: &mut Option<String>,
+) -> miette::Result<()> {
+    match constraint {
+        FuzzerConstraint::Any => Ok(()),
+        FuzzerConstraint::IntRange { min, max } => {
+            if !matches!(output_type, FuzzerOutputType::Int) {
+                return Err(generation_error(
+                    GenerationErrorCategory::InvalidConstraint,
+                    format!(
+                        "Test '{}' has Int bounds for non-Int output type {:?}.\nConstraint: {:?}",
+                        test_name, output_type, constraint
+                    ),
+                ));
+            }
+            validate_int_bounds_literals(test_name, min, max)?;
+            out.push(format!("({min} <= {var} && {var} <= {max})"));
+            if witness.is_none() {
+                *witness = Some(format!("({min} : Integer)"));
+            }
+            Ok(())
+        }
+        FuzzerConstraint::Exact(value) => {
+            let lit = exact_value_to_scalar_literal(output_type, value).ok_or_else(|| {
+                generation_error(
+                    GenerationErrorCategory::FallbackRequired,
+                    format!(
+                        "Test '{}' has exact scalar constraint {:?} that cannot be translated for output type {:?}.",
+                        test_name, value, output_type
+                    ),
+                )
+            })?;
+            out.push(format!("({var} = {lit})"));
+            *witness = Some(lit);
+            Ok(())
+        }
+        FuzzerConstraint::Map(_) => Err(generation_error(
+            GenerationErrorCategory::FallbackRequired,
+            format!(
+                "Test '{}' has mapped scalar constraints for output type {:?}. \
+                 `Map` captures input-domain information, not direct output-domain predicates.\n\
+                 Constraint: {:?}",
+                test_name, output_type, constraint
+            ),
+        )),
+        FuzzerConstraint::And(parts) => {
+            for part in parts {
+                collect_scalar_precondition_parts(test_name, output_type, part, var, out, witness)?;
+            }
+            Ok(())
+        }
+        FuzzerConstraint::Unsupported { reason } => Err(generation_error(
+            GenerationErrorCategory::UnsupportedShape,
+            format!(
+                "Test '{}' contains unsupported scalar-domain extraction: {}.\nConstraint: {:?}",
+                test_name, reason, constraint
+            ),
+        )),
+        other => Err(generation_error(
+            GenerationErrorCategory::UnsupportedShape,
+            format!(
+                "Test '{}' has unsupported scalar-domain constraint fragment {:?} for output type {:?}.",
+                test_name, other, output_type
+            ),
+        )),
+    }
+}
+
+fn build_scalar_domain_preconditions(
+    test_name: &str,
+    output_type: &FuzzerOutputType,
+    constraint: &FuzzerConstraint,
+    var: &str,
+) -> miette::Result<(Vec<String>, Option<String>)> {
+    let mut out = Vec::new();
+    let mut witness = None;
+    collect_scalar_precondition_parts(
+        test_name,
+        output_type,
+        constraint,
+        var,
+        &mut out,
+        &mut witness,
+    )?;
+    Ok((out, witness))
+}
+
 /// Whether theorem generation needs explicit extracted bounds for this output type.
 ///
 /// This is now constraint-driven: it checks whether the constraint provides
@@ -1553,22 +1805,83 @@ pub fn requires_explicit_bounds(
     }
 }
 
-/// Check if a constraint provides an IntRange (possibly wrapped in Map).
+/// Check if a constraint provides an IntRange (possibly wrapped/combined).
 fn constraint_has_int_range(constraint: &FuzzerConstraint) -> bool {
-    match constraint {
-        FuzzerConstraint::IntRange { .. } => true,
-        FuzzerConstraint::Map(inner) => constraint_has_int_range(inner),
-        _ => false,
-    }
+    extract_int_range_from_constraint(constraint).is_some()
 }
 
 /// Check if a constraint contains a list domain (possibly nested in Map/And).
 fn constraint_has_list_domain(constraint: &FuzzerConstraint) -> bool {
     match constraint {
         FuzzerConstraint::List { .. } => true,
-        FuzzerConstraint::Map(inner) => constraint_has_list_domain(inner),
         FuzzerConstraint::And(parts) => parts.iter().any(constraint_has_list_domain),
         _ => false,
+    }
+}
+
+fn constraint_contains_unsupported(constraint: &FuzzerConstraint) -> bool {
+    match constraint {
+        FuzzerConstraint::Unsupported { .. } => true,
+        FuzzerConstraint::Map(inner) => constraint_contains_unsupported(inner),
+        FuzzerConstraint::List { elem, .. } => constraint_contains_unsupported(elem),
+        FuzzerConstraint::Tuple(elems) => elems.iter().any(constraint_contains_unsupported),
+        FuzzerConstraint::And(parts) => parts.iter().any(constraint_contains_unsupported),
+        _ => false,
+    }
+}
+
+/// Drop `Unsupported` fragments while preserving usable domain predicates.
+///
+/// This is only used for universal theorem generation, where widening the
+/// domain by discarding unsupported conjuncts remains sound (it strengthens the
+/// obligation). Existential theorem generation keeps strict sampled-domain
+/// fallback behavior when unsupported fragments are present.
+fn strip_unsupported_constraint(constraint: &FuzzerConstraint) -> Option<FuzzerConstraint> {
+    match constraint {
+        FuzzerConstraint::Unsupported { .. } => None,
+        FuzzerConstraint::And(parts) => {
+            let mut kept = Vec::new();
+            for part in parts {
+                let Some(stripped) = strip_unsupported_constraint(part) else {
+                    continue;
+                };
+                match stripped {
+                    FuzzerConstraint::And(nested) => kept.extend(nested),
+                    other => kept.push(other),
+                }
+            }
+
+            if kept.is_empty() {
+                None
+            } else if kept.len() == 1 {
+                Some(kept.pop().expect("length checked"))
+            } else {
+                Some(FuzzerConstraint::And(kept))
+            }
+        }
+        FuzzerConstraint::Tuple(elems) => Some(FuzzerConstraint::Tuple(
+            elems
+                .iter()
+                .map(|elem| strip_unsupported_constraint(elem).unwrap_or(FuzzerConstraint::Any))
+                .collect(),
+        )),
+        FuzzerConstraint::List {
+            elem,
+            min_len,
+            max_len,
+        } => {
+            let elem = strip_unsupported_constraint(elem).unwrap_or(FuzzerConstraint::Any);
+            Some(FuzzerConstraint::List {
+                elem: Box::new(elem),
+                min_len: *min_len,
+                max_len: *max_len,
+            })
+        }
+        FuzzerConstraint::Map(inner) => {
+            let inner = strip_unsupported_constraint(inner)?;
+            Some(FuzzerConstraint::Map(Box::new(inner)))
+        }
+        other => Some(other.clone()),
     }
 }
 
@@ -1578,37 +1891,32 @@ fn constraint_has_tuple_int_ranges_for_types(
     constraint: &FuzzerConstraint,
     types: &[FuzzerOutputType],
 ) -> bool {
-    match constraint {
-        FuzzerConstraint::Tuple(elems) => {
-            elems.len() == types.len()
-                && elems.iter().zip(types.iter()).all(|(c, t)| {
-                    if matches!(t, FuzzerOutputType::Int) {
-                        constraint_has_int_range(c)
-                    } else {
-                        true // non-Int positions don't need IntRange
-                    }
-                })
+    types.iter().enumerate().all(|(index, ty)| {
+        if matches!(ty, FuzzerOutputType::Int) {
+            extract_tuple_element_int_range(constraint, types.len(), index).is_some()
+        } else {
+            true
         }
-        FuzzerConstraint::Map(inner) => constraint_has_tuple_int_ranges_for_types(inner, types),
-        // A shared IntRange covers all Int-typed positions uniformly.
-        FuzzerConstraint::IntRange { .. } => true,
-        _ => false,
-    }
+    })
 }
 
-/// Extract optional List bounds and element constraint from a constraint,
-/// looking through Map wrappers.
-fn extract_list_bounds(
-    constraint: &FuzzerConstraint,
-) -> Option<(Option<usize>, Option<usize>, &FuzzerConstraint)> {
+/// Extract merged IntRange constraints for list elements from nested List/Map/And structures.
+fn extract_list_element_int_range(constraint: &FuzzerConstraint) -> Option<(String, String)> {
     match constraint {
-        FuzzerConstraint::List {
-            elem,
-            min_len,
-            max_len,
-        } => Some((*min_len, *max_len, elem.as_ref())),
-        FuzzerConstraint::Map(inner) => extract_list_bounds(inner),
-        FuzzerConstraint::And(parts) => parts.iter().find_map(extract_list_bounds),
+        FuzzerConstraint::List { elem, .. } => extract_int_range_from_constraint(elem),
+        FuzzerConstraint::And(parts) => {
+            let mut merged: Option<(String, String)> = None;
+            for part in parts {
+                let Some(next) = extract_list_element_int_range(part) else {
+                    continue;
+                };
+                merged = match merged {
+                    Some(acc) => Some(intersect_int_ranges(acc, next)?),
+                    None => Some(next),
+                };
+            }
+            merged
+        }
         _ => None,
     }
 }
@@ -1625,6 +1933,7 @@ fn collect_list_element_precondition_parts(
     elem_constraint: &FuzzerConstraint,
     list_var: &str,
     out: &mut Vec<String>,
+    witness_elem: &mut Option<String>,
 ) -> miette::Result<()> {
     match elem_constraint {
         FuzzerConstraint::Any => Ok(()),
@@ -1637,44 +1946,90 @@ fn collect_list_element_precondition_parts(
                         "(({list_var}.all (fun x_i => {min} <= x_i && x_i <= {max})) = true)"
                     ));
                 }
-                // Data-encoded element domains (including unsupported ADTs encoded as Data).
                 FuzzerOutputType::Data | FuzzerOutputType::Unsupported(_) => {
-                    out.push(format!(
-                        "(({list_var}.all (fun x_i => match x_i with | Data.I i => {min} <= i && i <= {max} | _ => false)) = true)"
+                    return Err(generation_error(
+                        GenerationErrorCategory::FallbackRequired,
+                        format!(
+                            "Test '{}' has list element Int bounds over Data-encoded elements; \
+                             this would require assuming a `Data.I` representation.\n\
+                             Use fuzzer-domain fallback instead.\n\
+                             Constraint: {:?}",
+                            test_name, elem_constraint
+                        ),
                     ));
                 }
-                // If a mapper changed element type (e.g. Int -> Bool), the input-domain
-                // IntRange does not constrain output elements directly; keep an
-                // over-approximation by not emitting an element predicate.
-                _ => {}
+                _ => {
+                    return Err(generation_error(
+                        GenerationErrorCategory::FallbackRequired,
+                        format!(
+                            "Test '{}' has mapped/non-Int list element Int bounds that do not directly constrain \
+                             output elements of type {:?}.\n\
+                             Use fuzzer-domain fallback instead.\n\
+                             Constraint: {:?}",
+                            test_name, elem_type, elem_constraint
+                        ),
+                    ));
+                }
             }
 
             Ok(())
         }
-        FuzzerConstraint::Map(inner) => {
-            collect_list_element_precondition_parts(test_name, elem_type, inner, list_var, out)
+        FuzzerConstraint::Exact(value) => {
+            let lit = exact_value_to_scalar_literal(elem_type, value).ok_or_else(|| {
+                generation_error(
+                    GenerationErrorCategory::FallbackRequired,
+                    format!(
+                        "Test '{}' has unsupported exact list element constraint {:?} for element type {:?}.",
+                        test_name, value, elem_type
+                    ),
+                )
+            })?;
+            out.push(format!(
+                "(({list_var}.all (fun x_i => x_i = {lit})) = true)"
+            ));
+            // Exact predicates should drive witness construction in existential mode.
+            *witness_elem = Some(lit);
+            Ok(())
         }
+        FuzzerConstraint::Map(_) => Err(generation_error(
+            GenerationErrorCategory::FallbackRequired,
+            format!(
+                "Test '{}' has mapped list element-domain constraints. \
+                 `Map` captures input-domain information, not direct output-domain predicates.\n\
+                 Use fuzzer-domain fallback instead.\n\
+                 Constraint: {:?}",
+                test_name, elem_constraint
+            ),
+        )),
         FuzzerConstraint::And(parts) => {
             for part in parts {
-                collect_list_element_precondition_parts(test_name, elem_type, part, list_var, out)?;
+                collect_list_element_precondition_parts(
+                    test_name,
+                    elem_type,
+                    part,
+                    list_var,
+                    out,
+                    witness_elem,
+                )?;
             }
             Ok(())
         }
-        FuzzerConstraint::Unsupported { reason } => Err(miette::miette!(
-            "Test '{}' contains unsupported list element-domain extraction: {}.\n\
-             Constraint: {:?}",
-            test_name,
-            reason,
-            elem_constraint,
+        FuzzerConstraint::Unsupported { reason } => Err(generation_error(
+            GenerationErrorCategory::UnsupportedShape,
+            format!(
+                "Test '{}' contains unsupported list element-domain extraction: {}.\n\
+                 Constraint: {:?}",
+                test_name, reason, elem_constraint
+            ),
         )),
-        other => Err(miette::miette!(
-            "Test '{}' has unsupported list element-domain constraint fragment {:?} for element type {:?}; \
-             cannot translate to Lean precondition.\n\
-             Constraint: {:?}",
-            test_name,
-            other,
-            elem_type,
-            elem_constraint,
+        other => Err(generation_error(
+            GenerationErrorCategory::UnsupportedShape,
+            format!(
+                "Test '{}' has unsupported list element-domain constraint fragment {:?} for element type {:?}; \
+                 cannot translate to Lean precondition.\n\
+                 Constraint: {:?}",
+                test_name, other, elem_type, elem_constraint
+            ),
         )),
     }
 }
@@ -1687,6 +2042,7 @@ fn collect_list_domain_precondition_parts(
     out: &mut Vec<String>,
     saw_list_domain: &mut bool,
     witness_min_len: &mut Option<usize>,
+    witness_elem: &mut Option<String>,
 ) -> miette::Result<()> {
     match constraint {
         FuzzerConstraint::List {
@@ -1695,29 +2051,40 @@ fn collect_list_domain_precondition_parts(
             max_len,
         } => {
             *saw_list_domain = true;
+            validate_list_len_bounds(test_name, *min_len, *max_len)?;
             update_witness_min_len(witness_min_len, *min_len);
 
             match (min_len, max_len) {
                 (Some(min), Some(max)) => {
-                    out.push(format!("({min} <= {list_var}.length && {list_var}.length <= {max})"));
+                    out.push(format!(
+                        "({min} <= {list_var}.length && {list_var}.length <= {max})"
+                    ));
                 }
                 (Some(min), None) => out.push(format!("({min} <= {list_var}.length)")),
                 (None, Some(max)) => out.push(format!("({list_var}.length <= {max})")),
                 (None, None) => {}
             }
 
-            collect_list_element_precondition_parts(test_name, elem_type, elem, list_var, out)?;
+            collect_list_element_precondition_parts(
+                test_name,
+                elem_type,
+                elem,
+                list_var,
+                out,
+                witness_elem,
+            )?;
             Ok(())
         }
-        FuzzerConstraint::Map(inner) => collect_list_domain_precondition_parts(
-            test_name,
-            elem_type,
-            inner,
-            list_var,
-            out,
-            saw_list_domain,
-            witness_min_len,
-        ),
+        FuzzerConstraint::Map(_) => Err(generation_error(
+            GenerationErrorCategory::FallbackRequired,
+            format!(
+                "Test '{}' has mapped list-domain constraints. `Map` captures input-domain information, \
+                 not direct output-domain predicates.\n\
+                 Use fuzzer-domain fallback instead.\n\
+                 Constraint: {:?}",
+                test_name, constraint
+            ),
+        )),
         FuzzerConstraint::And(parts) => {
             for part in parts {
                 collect_list_domain_precondition_parts(
@@ -1728,25 +2095,28 @@ fn collect_list_domain_precondition_parts(
                     out,
                     saw_list_domain,
                     witness_min_len,
+                    witness_elem,
                 )?;
             }
             Ok(())
         }
         FuzzerConstraint::Any => Ok(()),
-        FuzzerConstraint::Unsupported { reason } => Err(miette::miette!(
-            "Test '{}' contains unsupported list-domain extraction: {}.\n\
-             Constraint: {:?}",
-            test_name,
-            reason,
-            constraint,
+        FuzzerConstraint::Unsupported { reason } => Err(generation_error(
+            GenerationErrorCategory::UnsupportedShape,
+            format!(
+                "Test '{}' contains unsupported list-domain extraction: {}.\n\
+                 Constraint: {:?}",
+                test_name, reason, constraint
+            ),
         )),
-        other => Err(miette::miette!(
-            "Test '{}' has unsupported list-domain constraint fragment {:?}; \
-             cannot translate to Lean precondition.\n\
-             Constraint: {:?}",
-            test_name,
-            other,
-            constraint,
+        other => Err(generation_error(
+            GenerationErrorCategory::UnsupportedShape,
+            format!(
+                "Test '{}' has unsupported list-domain constraint fragment {:?}; \
+                 cannot translate to Lean precondition.\n\
+                 Constraint: {:?}",
+                test_name, other, constraint
+            ),
         )),
     }
 }
@@ -1756,10 +2126,11 @@ fn build_list_domain_preconditions(
     elem_type: &FuzzerOutputType,
     constraint: &FuzzerConstraint,
     list_var: &str,
-) -> miette::Result<(Vec<String>, Option<usize>)> {
+) -> miette::Result<(Vec<String>, Option<usize>, Option<String>)> {
     let mut precondition_parts = Vec::new();
     let mut saw_list_domain = false;
     let mut witness_min_len = None;
+    let mut witness_elem = None;
 
     collect_list_domain_precondition_parts(
         test_name,
@@ -1769,34 +2140,51 @@ fn build_list_domain_preconditions(
         &mut precondition_parts,
         &mut saw_list_domain,
         &mut witness_min_len,
+        &mut witness_elem,
     )?;
 
     if !saw_list_domain {
-        return Err(miette::miette!(
-            "Test '{}' uses List fuzzer but has no extractable list-domain constraints; \
-             List proofs require a constraint derived from list/list_between.\n\
-             Constraint: {:?}",
-            test_name,
-            constraint,
+        return Err(generation_error(
+            GenerationErrorCategory::MissingDomain,
+            format!(
+                "Test '{}' uses List fuzzer but has no extractable list-domain constraints; \
+                 List proofs require a constraint derived from list/list_between.\n\
+                 Constraint: {:?}",
+                test_name, constraint
+            ),
         ));
     }
 
-    Ok((precondition_parts, witness_min_len))
+    Ok((precondition_parts, witness_min_len, witness_elem))
 }
 
 fn validate_int_bounds_literals(test_name: &str, min: &str, max: &str) -> miette::Result<()> {
-    if !is_valid_integer_literal(min) {
-        return Err(miette::miette!(
-            "Test '{}' has invalid min bound '{}'; expected an integer literal",
-            test_name,
-            min,
+    let Some(min_val) = parse_integer_literal(min) else {
+        return Err(generation_error(
+            GenerationErrorCategory::InvalidConstraint,
+            format!(
+                "Test '{}' has invalid min bound '{}'; expected an integer literal",
+                test_name, min
+            ),
         ));
-    }
-    if !is_valid_integer_literal(max) {
-        return Err(miette::miette!(
-            "Test '{}' has invalid max bound '{}'; expected an integer literal",
-            test_name,
-            max,
+    };
+    let Some(max_val) = parse_integer_literal(max) else {
+        return Err(generation_error(
+            GenerationErrorCategory::InvalidConstraint,
+            format!(
+                "Test '{}' has invalid max bound '{}'; expected an integer literal",
+                test_name, max
+            ),
+        ));
+    };
+
+    if min_val > max_val {
+        return Err(generation_error(
+            GenerationErrorCategory::InvalidConstraint,
+            format!(
+                "Test '{}' has inconsistent integer bounds: min={} exceeds max={}",
+                test_name, min, max,
+            ),
         ));
     }
 
@@ -1808,12 +2196,14 @@ fn extract_int_bounds(test: &ExportedPropertyTest) -> miette::Result<(String, St
     let (min, max) = match extract_int_range_from_constraint(&test.constraint) {
         Some((min, max)) => (min, max),
         None => {
-            return Err(miette::miette!(
-                "Test '{}' has no extractable Int range constraint; \
-                 cannot generate a bounded theorem without explicit Int bounds.\n\
-                 Constraint: {:?}",
-                test.name,
-                test.constraint,
+            return Err(generation_error(
+                GenerationErrorCategory::MissingDomain,
+                format!(
+                    "Test '{}' has no extractable Int range constraint; \
+                     cannot generate a bounded theorem without explicit Int bounds.\n\
+                     Constraint: {:?}",
+                    test.name, test.constraint
+                ),
             ));
         }
     };
@@ -1829,39 +2219,17 @@ fn extract_tuple_element_bounds(
     test: &ExportedPropertyTest,
     types: &[FuzzerOutputType],
 ) -> miette::Result<Vec<Option<(String, String)>>> {
-    // Unwrap Map wrappers to reach the inner tuple/range constraint.
-    let unwrapped = unwrap_map_constraint(&test.constraint);
-
-    let constraint_elems: Vec<&FuzzerConstraint> = match unwrapped {
-        FuzzerConstraint::Tuple(elems) if elems.len() == types.len() => elems.iter().collect(),
-        // Backward compatibility: a single IntRange shared for all Int components.
-        FuzzerConstraint::IntRange { .. } => {
-            vec![unwrapped; types.len()]
-        }
-        _ if types.iter().any(|t| matches!(t, FuzzerOutputType::Int)) => {
-            return Err(miette::miette!(
-                "Test '{}' has no extractable tuple Int range constraint; \
-                 cannot generate a bounded theorem.\n\
-                 Constraint: {:?}",
-                test.name,
-                test.constraint,
-            ));
-        }
-        _ => {
-            // No Int elements, no bounds needed
-            return Ok(vec![None; types.len()]);
-        }
-    };
-
     let mut bounds = Vec::with_capacity(types.len());
     for (i, t) in types.iter().enumerate() {
         if matches!(t, FuzzerOutputType::Int) {
-            let (min, max) =
-                extract_int_range_from_constraint(constraint_elems[i]).ok_or_else(|| {
-                    miette::miette!(
-                        "Test '{}': tuple element {} has no extractable Int range",
-                        test.name,
-                        i,
+            let (min, max) = extract_tuple_element_int_range(&test.constraint, types.len(), i)
+                .ok_or_else(|| {
+                    generation_error(
+                        GenerationErrorCategory::MissingDomain,
+                        format!(
+                            "Test '{}': tuple element {} has no extractable Int range",
+                            test.name, i
+                        ),
                     )
                 })?;
             validate_int_bounds_literals(&test.name, &min, &max)?;
@@ -1873,19 +2241,138 @@ fn extract_tuple_element_bounds(
     Ok(bounds)
 }
 
-/// Recursively unwrap Map wrappers to reach the inner constraint.
-fn unwrap_map_constraint(constraint: &FuzzerConstraint) -> &FuzzerConstraint {
+fn extract_tuple_element_int_range(
+    constraint: &FuzzerConstraint,
+    arity: usize,
+    index: usize,
+) -> Option<(String, String)> {
     match constraint {
-        FuzzerConstraint::Map(inner) => unwrap_map_constraint(inner),
-        other => other,
+        FuzzerConstraint::Tuple(elems) if elems.len() == arity => {
+            extract_int_range_from_constraint(&elems[index])
+        }
+        // Backward compatibility: a single IntRange shared for all Int components.
+        FuzzerConstraint::IntRange { .. } => extract_int_range_from_constraint(constraint),
+        FuzzerConstraint::And(parts) => {
+            let mut merged: Option<(String, String)> = None;
+            for part in parts {
+                let Some(next) = extract_tuple_element_int_range(part, arity, index) else {
+                    continue;
+                };
+                merged = match merged {
+                    Some(acc) => Some(intersect_int_ranges(acc, next)?),
+                    None => Some(next),
+                };
+            }
+            merged
+        }
+        _ => None,
     }
 }
 
-/// Recursively extract an IntRange from a constraint, looking through Map wrappers.
+fn collect_tuple_element_precondition_parts(
+    test_name: &str,
+    elem_type: &FuzzerOutputType,
+    constraint: &FuzzerConstraint,
+    arity: usize,
+    index: usize,
+    var: &str,
+    out: &mut Vec<String>,
+    witness: &mut Option<String>,
+) -> miette::Result<()> {
+    match constraint {
+        FuzzerConstraint::Tuple(elems) if elems.len() == arity => {
+            collect_scalar_precondition_parts(
+                test_name,
+                elem_type,
+                &elems[index],
+                var,
+                out,
+                witness,
+            )
+        }
+        // Backward compatibility: Any/Exact can be shared across tuple elements.
+        FuzzerConstraint::Any | FuzzerConstraint::Exact(_) => {
+            collect_scalar_precondition_parts(test_name, elem_type, constraint, var, out, witness)
+        }
+        // Backward compatibility: a shared IntRange only applies to Int-typed elements.
+        FuzzerConstraint::IntRange { .. } => {
+            if matches!(elem_type, FuzzerOutputType::Int) {
+                collect_scalar_precondition_parts(
+                    test_name, elem_type, constraint, var, out, witness,
+                )
+            } else {
+                Ok(())
+            }
+        }
+        FuzzerConstraint::Map(_) => Err(generation_error(
+            GenerationErrorCategory::FallbackRequired,
+            format!(
+                "Test '{}' has mapped tuple constraints. `Map` captures input-domain information, \
+                 not direct output-domain predicates.\n\
+                 Constraint: {:?}",
+                test_name, constraint
+            ),
+        )),
+        FuzzerConstraint::And(parts) => {
+            for part in parts {
+                collect_tuple_element_precondition_parts(
+                    test_name, elem_type, part, arity, index, var, out, witness,
+                )?;
+            }
+            Ok(())
+        }
+        FuzzerConstraint::Unsupported { reason } => Err(generation_error(
+            GenerationErrorCategory::UnsupportedShape,
+            format!(
+                "Test '{}' contains unsupported tuple-domain extraction: {}.\nConstraint: {:?}",
+                test_name, reason, constraint
+            ),
+        )),
+        other => Err(generation_error(
+            GenerationErrorCategory::UnsupportedShape,
+            format!(
+                "Test '{}' has unsupported tuple-domain constraint fragment {:?} at index {}.",
+                test_name, other, index
+            ),
+        )),
+    }
+}
+
+fn intersect_int_ranges(
+    left: (String, String),
+    right: (String, String),
+) -> Option<(String, String)> {
+    let left_min = parse_integer_literal(&left.0)?;
+    let left_max = parse_integer_literal(&left.1)?;
+    let right_min = parse_integer_literal(&right.0)?;
+    let right_max = parse_integer_literal(&right.1)?;
+
+    let min = left_min.max(right_min);
+    let max = left_max.min(right_max);
+    if min > max {
+        return None;
+    }
+
+    Some((min.to_string(), max.to_string()))
+}
+
+/// Recursively extract an IntRange from a constraint, looking through Map/And wrappers.
 fn extract_int_range_from_constraint(constraint: &FuzzerConstraint) -> Option<(String, String)> {
     match constraint {
         FuzzerConstraint::IntRange { min, max } => Some((min.clone(), max.clone())),
-        FuzzerConstraint::Map(inner) => extract_int_range_from_constraint(inner),
+        FuzzerConstraint::And(parts) => {
+            let mut merged: Option<(String, String)> = None;
+            for part in parts {
+                let Some(next) = extract_int_range_from_constraint(part) else {
+                    continue;
+                };
+                merged = match merged {
+                    Some(acc) => Some(intersect_int_ranges(acc, next)?),
+                    None => Some(next),
+                };
+            }
+            merged
+        }
         _ => None,
     }
 }
@@ -2133,6 +2620,103 @@ fn determine_theorem_form(
     }
 }
 
+fn ensure_target_kind_compatible(
+    test: &ExportedPropertyTest,
+    target: &VerificationTargetKind,
+) -> miette::Result<()> {
+    if &test.target_kind == target {
+        return Ok(());
+    }
+
+    Err(miette::miette!(
+        "Test '{}' target kind mismatch: exported as '{}' but `verify run --target {}` was requested.",
+        test.name,
+        test.target_kind,
+        target,
+    ))
+}
+
+fn should_use_sampled_fallback_for_error(error: &miette::Report) -> bool {
+    is_skippable_generation_error(error)
+}
+
+fn format_sampled_domain_fallback_theorems(
+    form: &TheoremForm,
+    lean_test_name: &str,
+    verify_prog: &str,
+    fuzzer_prog: &str,
+    target: &VerificationTargetKind,
+    prop_prog: &str,
+    handler_prog: &str,
+) -> String {
+    let sample_expr = format!("sampleFuzzerValue {fuzzer_prog} seed");
+    let correctness_body = form.correctness.format(verify_prog, "dataArg x");
+    let correctness_tactic = form.correctness.tactic();
+
+    let mut out = if form.existential {
+        let mode_comment = match form.existential_mode {
+            Some(ExistentialMode::Witness) => {
+                "-- Mode: witness (sampled-domain fallback auto-escalated to proof)\n"
+            }
+            Some(ExistentialMode::Proof) => "-- Mode: proof (existential proof attempt)\n",
+            None => "",
+        };
+        let existential_tactic = if form.existential_mode == Some(ExistentialMode::Witness) {
+            "blaster"
+        } else {
+            correctness_tactic
+        };
+        let proof = format!("by {existential_tactic}");
+        format!(
+            "{mode_comment}theorem {lean_test_name} :\n  \
+             ∃ (seed : Data),\n  \
+             match {sample_expr} with\n  \
+             | some x => {correctness_body}\n  \
+             | none => False :=\n  \
+             {proof}\n"
+        )
+    } else {
+        let mut theorems = format!(
+            "theorem {lean_test_name} :\n  \
+             ∀ (seed : Data),\n  \
+             match {sample_expr} with\n  \
+             | some x => {correctness_body}\n  \
+             | none => True :=\n  \
+             by {correctness_tactic}\n"
+        );
+
+        if let Some(ref term_body) = form.termination {
+            let termination_body = term_body.format(verify_prog, "dataArg x");
+            let termination_tactic = term_body.tactic();
+            theorems.push_str(&format!(
+                "\ntheorem {lean_test_name}_alwaysTerminating :\n  \
+                 ∀ (seed : Data),\n  \
+                 match {sample_expr} with\n  \
+                 | some x => {termination_body}\n  \
+                 | none => True :=\n  \
+                 by {termination_tactic}\n"
+            ));
+        }
+
+        theorems
+    };
+
+    if let VerificationTargetKind::Equivalence = target {
+        // Equivalence remains universally quantified even for fail-once tests:
+        // we must show wrapper/handler agreement for every sampled seed.
+        out.push_str(&format!(
+            "\ntheorem {lean_test_name}_equivalence :\n  \
+             ∀ (seed : Data),\n  \
+             match {sample_expr} with\n  \
+             | some x => proveTests {prop_prog} (dataArg x) = proveTests {handler_prog} (dataArg x)\n  \
+             | none => True :=\n  \
+             by blaster\n"
+        ));
+    }
+
+    out
+}
+
 fn generate_proof_file(
     test: &ExportedPropertyTest,
     test_id: &str,
@@ -2141,6 +2725,8 @@ fn generate_proof_file(
     existential_mode: ExistentialMode,
     target: &VerificationTargetKind,
 ) -> miette::Result<String> {
+    ensure_target_kind_compatible(test, target)?;
+
     // Validator/equivalence modes require a validator_target with handler_program
     match target {
         VerificationTargetKind::ValidatorHandler | VerificationTargetKind::Equivalence => {
@@ -2214,10 +2800,66 @@ fn generate_proof_file(
         _ => prog.clone(),
     };
 
+    let mut domain_test = test.clone();
+    if constraint_contains_unsupported(&domain_test.constraint) {
+        if form.existential {
+            let theorems = format_sampled_domain_fallback_theorems(
+                &form,
+                lean_test_name,
+                &verify_prog,
+                &fuzzer_prog,
+                target,
+                &prog,
+                &handler_prog,
+            );
+            let mut content = format!("{}{theorems}", header("open PlutusCore.Data (Data)"));
+            content.push_str(&footer);
+            return Ok(content);
+        }
+
+        let Some(stripped) = strip_unsupported_constraint(&domain_test.constraint) else {
+            let theorems = format_sampled_domain_fallback_theorems(
+                &form,
+                lean_test_name,
+                &verify_prog,
+                &fuzzer_prog,
+                target,
+                &prog,
+                &handler_prog,
+            );
+            let mut content = format!("{}{theorems}", header("open PlutusCore.Data (Data)"));
+            content.push_str(&footer);
+            return Ok(content);
+        };
+        domain_test.constraint = stripped;
+    }
+
+    let test = &domain_test;
+
     match &test.fuzzer_output_type {
         // --- Scalar types ---
         FuzzerOutputType::Int => {
-            let (min, max) = extract_int_bounds(test)?;
+            let (min, max) = match extract_int_bounds(test) {
+                Ok(bounds) => bounds,
+                Err(e) => {
+                    let theorems = format_sampled_domain_fallback_theorems(
+                        &form,
+                        lean_test_name,
+                        &verify_prog,
+                        &fuzzer_prog,
+                        target,
+                        &prog,
+                        &handler_prog,
+                    );
+                    let mut content =
+                        format!("{}{theorems}", header("open PlutusCore.Data (Data)"));
+                    content.push_str(&footer);
+                    if should_use_sampled_fallback_for_error(&e) {
+                        return Ok(content);
+                    }
+                    return Err(e);
+                }
+            };
             let quantifiers = "∀ (x : Integer),";
             let preconditions = format!("\n  ({min} <= x && x <= {max})");
             let witness = if form.existential_mode == Some(ExistentialMode::Witness) {
@@ -2251,8 +2893,49 @@ fn generate_proof_file(
 
         FuzzerOutputType::Bool => {
             let quantifiers = "∀ (x : Bool),";
+            let (precondition_parts, constraint_witness) = match build_scalar_domain_preconditions(
+                &test.name,
+                &test.fuzzer_output_type,
+                &test.constraint,
+                "x",
+            ) {
+                Ok(v) => v,
+                Err(e) => {
+                    if should_use_sampled_fallback_for_error(&e) {
+                        let theorems = format_sampled_domain_fallback_theorems(
+                            &form,
+                            lean_test_name,
+                            &verify_prog,
+                            &fuzzer_prog,
+                            target,
+                            &prog,
+                            &handler_prog,
+                        );
+                        let mut content =
+                            format!("{}{theorems}", header("open PlutusCore.Data (Data)"));
+                        content.push_str(&footer);
+                        return Ok(content);
+                    }
+                    return Err(e);
+                }
+            };
+            if precondition_parts.is_empty() {
+                let theorems = format_sampled_domain_fallback_theorems(
+                    &form,
+                    lean_test_name,
+                    &verify_prog,
+                    &fuzzer_prog,
+                    target,
+                    &prog,
+                    &handler_prog,
+                );
+                let mut content = format!("{}{theorems}", header("open PlutusCore.Data (Data)"));
+                content.push_str(&footer);
+                return Ok(content);
+            }
+            let preconditions = format!("\n  {}", precondition_parts.join("\n  →\n  "));
             let witness = if form.existential_mode == Some(ExistentialMode::Witness) {
-                Some("true")
+                Some(constraint_witness.as_deref().unwrap_or("true"))
             } else {
                 None
             };
@@ -2262,7 +2945,7 @@ fn generate_proof_file(
                 &verify_prog,
                 "boolArg x",
                 quantifiers,
-                "",
+                &preconditions,
                 witness,
             );
             let mut content = format!("{}{theorems}", header(""));
@@ -2273,7 +2956,7 @@ fn generate_proof_file(
                     &handler_prog,
                     "boolArg x",
                     quantifiers,
-                    "",
+                    &preconditions,
                 ));
             }
             content.push_str(&footer);
@@ -2282,8 +2965,49 @@ fn generate_proof_file(
 
         FuzzerOutputType::ByteArray => {
             let quantifiers = "∀ (x : ByteString),";
+            let (precondition_parts, constraint_witness) = match build_scalar_domain_preconditions(
+                &test.name,
+                &test.fuzzer_output_type,
+                &test.constraint,
+                "x",
+            ) {
+                Ok(v) => v,
+                Err(e) => {
+                    if should_use_sampled_fallback_for_error(&e) {
+                        let theorems = format_sampled_domain_fallback_theorems(
+                            &form,
+                            lean_test_name,
+                            &verify_prog,
+                            &fuzzer_prog,
+                            target,
+                            &prog,
+                            &handler_prog,
+                        );
+                        let mut content =
+                            format!("{}{theorems}", header("open PlutusCore.Data (Data)"));
+                        content.push_str(&footer);
+                        return Ok(content);
+                    }
+                    return Err(e);
+                }
+            };
+            if precondition_parts.is_empty() {
+                let theorems = format_sampled_domain_fallback_theorems(
+                    &form,
+                    lean_test_name,
+                    &verify_prog,
+                    &fuzzer_prog,
+                    target,
+                    &prog,
+                    &handler_prog,
+                );
+                let mut content = format!("{}{theorems}", header("open PlutusCore.Data (Data)"));
+                content.push_str(&footer);
+                return Ok(content);
+            };
+            let preconditions = format!("\n  {}", precondition_parts.join("\n  →\n  "));
             let witness = if form.existential_mode == Some(ExistentialMode::Witness) {
-                Some("ByteString.empty")
+                Some(constraint_witness.as_deref().unwrap_or("ByteString.empty"))
             } else {
                 None
             };
@@ -2293,7 +3017,7 @@ fn generate_proof_file(
                 &verify_prog,
                 "bytearrayArg x",
                 quantifiers,
-                "",
+                &preconditions,
                 witness,
             );
             let mut content = format!(
@@ -2307,7 +3031,7 @@ fn generate_proof_file(
                     &handler_prog,
                     "bytearrayArg x",
                     quantifiers,
-                    "",
+                    &preconditions,
                 ));
             }
             content.push_str(&footer);
@@ -2316,8 +3040,49 @@ fn generate_proof_file(
 
         FuzzerOutputType::String => {
             let quantifiers = "∀ (x : ByteString),";
+            let (precondition_parts, constraint_witness) = match build_scalar_domain_preconditions(
+                &test.name,
+                &test.fuzzer_output_type,
+                &test.constraint,
+                "x",
+            ) {
+                Ok(v) => v,
+                Err(e) => {
+                    if should_use_sampled_fallback_for_error(&e) {
+                        let theorems = format_sampled_domain_fallback_theorems(
+                            &form,
+                            lean_test_name,
+                            &verify_prog,
+                            &fuzzer_prog,
+                            target,
+                            &prog,
+                            &handler_prog,
+                        );
+                        let mut content =
+                            format!("{}{theorems}", header("open PlutusCore.Data (Data)"));
+                        content.push_str(&footer);
+                        return Ok(content);
+                    }
+                    return Err(e);
+                }
+            };
+            if precondition_parts.is_empty() {
+                let theorems = format_sampled_domain_fallback_theorems(
+                    &form,
+                    lean_test_name,
+                    &verify_prog,
+                    &fuzzer_prog,
+                    target,
+                    &prog,
+                    &handler_prog,
+                );
+                let mut content = format!("{}{theorems}", header("open PlutusCore.Data (Data)"));
+                content.push_str(&footer);
+                return Ok(content);
+            };
+            let preconditions = format!("\n  {}", precondition_parts.join("\n  →\n  "));
             let witness = if form.existential_mode == Some(ExistentialMode::Witness) {
-                Some("ByteString.empty")
+                Some(constraint_witness.as_deref().unwrap_or("ByteString.empty"))
             } else {
                 None
             };
@@ -2327,7 +3092,7 @@ fn generate_proof_file(
                 &verify_prog,
                 "stringArg x",
                 quantifiers,
-                "",
+                &preconditions,
                 witness,
             );
             let mut content = format!(
@@ -2341,7 +3106,7 @@ fn generate_proof_file(
                     &handler_prog,
                     "stringArg x",
                     quantifiers,
-                    "",
+                    &preconditions,
                 ));
             }
             content.push_str(&footer);
@@ -2350,8 +3115,49 @@ fn generate_proof_file(
 
         FuzzerOutputType::Data => {
             let quantifiers = "∀ (x : Data),";
+            let (precondition_parts, constraint_witness) = match build_scalar_domain_preconditions(
+                &test.name,
+                &test.fuzzer_output_type,
+                &test.constraint,
+                "x",
+            ) {
+                Ok(v) => v,
+                Err(e) => {
+                    if should_use_sampled_fallback_for_error(&e) {
+                        let theorems = format_sampled_domain_fallback_theorems(
+                            &form,
+                            lean_test_name,
+                            &verify_prog,
+                            &fuzzer_prog,
+                            target,
+                            &prog,
+                            &handler_prog,
+                        );
+                        let mut content =
+                            format!("{}{theorems}", header("open PlutusCore.Data (Data)"));
+                        content.push_str(&footer);
+                        return Ok(content);
+                    }
+                    return Err(e);
+                }
+            };
+            if precondition_parts.is_empty() {
+                let theorems = format_sampled_domain_fallback_theorems(
+                    &form,
+                    lean_test_name,
+                    &verify_prog,
+                    &fuzzer_prog,
+                    target,
+                    &prog,
+                    &handler_prog,
+                );
+                let mut content = format!("{}{theorems}", header("open PlutusCore.Data (Data)"));
+                content.push_str(&footer);
+                return Ok(content);
+            };
+            let preconditions = format!("\n  {}", precondition_parts.join("\n  →\n  "));
             let witness = if form.existential_mode == Some(ExistentialMode::Witness) {
-                Some("Data.I 0")
+                Some(constraint_witness.as_deref().unwrap_or("Data.I 0"))
             } else {
                 None
             };
@@ -2361,7 +3167,7 @@ fn generate_proof_file(
                 &verify_prog,
                 "dataArg x",
                 quantifiers,
-                "",
+                &preconditions,
                 witness,
             );
             let mut content = format!("{}{theorems}", header("open PlutusCore.Data (Data)"));
@@ -2372,7 +3178,7 @@ fn generate_proof_file(
                     &handler_prog,
                     "dataArg x",
                     quantifiers,
-                    "",
+                    &preconditions,
                 ));
             }
             content.push_str(&footer);
@@ -2382,17 +3188,25 @@ fn generate_proof_file(
         // --- Pair(a, b) handled like a 2-tuple ---
         FuzzerOutputType::Pair(fst, snd) => {
             // Validate element types are supported scalars (same check as Tuple branch)
-            for (i, t) in [fst.as_ref(), snd.as_ref()].iter().enumerate() {
-                if lean_type_for(t).is_none() {
-                    return Err(miette::miette!(
-                        "Test '{}' has unsupported pair element type at index {}: {:?}",
-                        test.name,
-                        i,
-                        t,
-                    ));
-                }
+            if [fst.as_ref(), snd.as_ref()]
+                .iter()
+                .any(|t| lean_type_for(t).is_none())
+            {
+                let opens = lean_opens_for_types(&[fst.as_ref(), snd.as_ref()]);
+                let theorems = format_sampled_domain_fallback_theorems(
+                    &form,
+                    lean_test_name,
+                    &verify_prog,
+                    &fuzzer_prog,
+                    target,
+                    &prog,
+                    &handler_prog,
+                );
+                let mut content = format!("{}{theorems}", header(&opens));
+                content.push_str(&footer);
+                return Ok(content);
             }
-            generate_tuple_proof(
+            match generate_tuple_proof(
                 test,
                 &[fst.as_ref(), snd.as_ref()],
                 &form,
@@ -2403,24 +3217,50 @@ fn generate_proof_file(
                 target,
                 &prog,
                 &handler_prog,
-            )
+            ) {
+                Ok(content) => Ok(content),
+                Err(e) => {
+                    if should_use_sampled_fallback_for_error(&e) {
+                        let opens = lean_opens_for_types(&[fst.as_ref(), snd.as_ref()]);
+                        let theorems = format_sampled_domain_fallback_theorems(
+                            &form,
+                            lean_test_name,
+                            &verify_prog,
+                            &fuzzer_prog,
+                            target,
+                            &prog,
+                            &handler_prog,
+                        );
+                        let mut content = format!("{}{theorems}", header(&opens));
+                        content.push_str(&footer);
+                        Ok(content)
+                    } else {
+                        Err(e)
+                    }
+                }
+            }
         }
 
         // --- Generic tuple support (arities >= 2) ---
         FuzzerOutputType::Tuple(types) if types.len() >= 2 => {
             let type_refs: Vec<&FuzzerOutputType> = types.iter().collect();
             // Verify all element types are supported scalars
-            for (i, t) in types.iter().enumerate() {
-                if lean_type_for(t).is_none() {
-                    return Err(miette::miette!(
-                        "Test '{}' has unsupported tuple element type at index {}: {:?}",
-                        test.name,
-                        i,
-                        t,
-                    ));
-                }
+            if types.iter().any(|t| lean_type_for(t).is_none()) {
+                let opens = lean_opens_for_types(&type_refs);
+                let theorems = format_sampled_domain_fallback_theorems(
+                    &form,
+                    lean_test_name,
+                    &verify_prog,
+                    &fuzzer_prog,
+                    target,
+                    &prog,
+                    &handler_prog,
+                );
+                let mut content = format!("{}{theorems}", header(&opens));
+                content.push_str(&footer);
+                return Ok(content);
             }
-            generate_tuple_proof(
+            match generate_tuple_proof(
                 test,
                 &type_refs,
                 &form,
@@ -2431,121 +3271,124 @@ fn generate_proof_file(
                 target,
                 &prog,
                 &handler_prog,
-            )
+            ) {
+                Ok(content) => Ok(content),
+                Err(e) => {
+                    if should_use_sampled_fallback_for_error(&e) {
+                        let opens = lean_opens_for_types(&type_refs);
+                        let theorems = format_sampled_domain_fallback_theorems(
+                            &form,
+                            lean_test_name,
+                            &verify_prog,
+                            &fuzzer_prog,
+                            target,
+                            &prog,
+                            &handler_prog,
+                        );
+                        let mut content = format!("{}{theorems}", header(&opens));
+                        content.push_str(&footer);
+                        Ok(content)
+                    } else {
+                        Err(e)
+                    }
+                }
+            }
         }
 
         // --- List with optional bounds ---
         FuzzerOutputType::List(elem_type) => {
-            let (precondition_parts, witness_min_len) = build_list_domain_preconditions(
-                &test.name,
-                elem_type.as_ref(),
-                &test.constraint,
-                "xs",
-            )?;
-
-            // When list-domain extraction yields no usable predicate for Data-encoded
-            // elements, fall back to a fuzzer-domain theorem that reasons directly on
-            // the sampled value for each seed:
-            //
-            //   ∀ seed, match sampleFuzzerValue fuzzer seed with
-            //           | some x => property x
-            //           | none => True
-            //
-            // This is sound (domain is exactly the exported fuzzer image), avoids an
-            // unconstrained universal theorem over `List Data`, and is far more
-            // tractable for blaster than an implication with a separate `x` quantifier.
-            if precondition_parts.is_empty()
-                && matches!(
+            let (precondition_parts, witness_min_len, witness_elem, mut use_sampled_fallback) =
+                match build_list_domain_preconditions(
+                    &test.name,
                     elem_type.as_ref(),
-                    FuzzerOutputType::Data | FuzzerOutputType::Unsupported(_)
-                )
-            {
-                if form.existential {
-                    return Err(miette::miette!(
-                        "Test '{}' requires fuzzer-domain fallback for unconstrained Data list, \
-                         but existential mode is not supported for this fallback theorem shape.\n\
-                         Constraint: {:?}",
-                        test.name,
-                        test.constraint,
-                    ));
-                }
+                    &test.constraint,
+                    "xs",
+                ) {
+                    Ok((parts, witness_min, witness_elem)) => {
+                        (parts, witness_min, witness_elem, false)
+                    }
+                    Err(e) => {
+                        if should_use_sampled_fallback_for_error(&e) {
+                            (Vec::new(), None, None, true)
+                        } else {
+                            return Err(e);
+                        }
+                    }
+                };
 
-                let sample_expr = format!("sampleFuzzerValue {fuzzer_prog} seed");
-                let correctness_body = form.correctness.format(&verify_prog, "dataArg x");
-                let correctness_tactic = form.correctness.tactic();
-                let mut theorems = format!(
-                    "theorem {lean_test_name} :\n  \
-                     ∀ (seed : Data),\n  \
-                     match {sample_expr} with\n  \
-                     | some x => {correctness_body}\n  \
-                     | none => True :=\n  \
-                     by {correctness_tactic}\n"
+            let elem_bounds = if matches!(elem_type.as_ref(), FuzzerOutputType::Int) {
+                extract_list_element_int_range(&test.constraint)
+            } else {
+                None
+            };
+
+            // If we cannot represent a faithful list domain (no constraints, unsupported
+            // fragments, or no element bounds for Int lists), switch to sampled-domain
+            // fallback theorem generation over the exported fuzzer image.
+            if precondition_parts.is_empty() {
+                use_sampled_fallback = true;
+            }
+            if matches!(elem_type.as_ref(), FuzzerOutputType::Int) && elem_bounds.is_none() {
+                use_sampled_fallback = true;
+            }
+
+            if use_sampled_fallback {
+                let opens = lean_opens_for_types(&[elem_type.as_ref()]);
+                let theorems = format_sampled_domain_fallback_theorems(
+                    &form,
+                    lean_test_name,
+                    &verify_prog,
+                    &fuzzer_prog,
+                    target,
+                    &prog,
+                    &handler_prog,
                 );
-
-                if let Some(ref term_body) = form.termination {
-                    let termination_body = term_body.format(&verify_prog, "dataArg x");
-                    let termination_tactic = term_body.tactic();
-                    theorems.push_str(&format!(
-                        "\ntheorem {lean_test_name}_alwaysTerminating :\n  \
-                         ∀ (seed : Data),\n  \
-                         match {sample_expr} with\n  \
-                         | some x => {termination_body}\n  \
-                         | none => True :=\n  \
-                         by {termination_tactic}\n"
-                    ));
-                }
-
-                let mut content = format!("{}{theorems}", header("open PlutusCore.Data (Data)"));
-                if let VerificationTargetKind::Equivalence = target {
-                    content.push_str(&format!(
-                        "\ntheorem {lean_test_name}_equivalence :\n  \
-                         ∀ (seed : Data),\n  \
-                         match {sample_expr} with\n  \
-                         | some x => proveTests {prog} (dataArg x) = proveTests {handler_prog} (dataArg x)\n  \
-                         | none => True :=\n  \
-                         by blaster\n"
-                    ));
-                }
+                let mut content = format!("{}{theorems}", header(&opens));
                 content.push_str(&footer);
                 return Ok(content);
             }
 
-            // Keep a representative element constraint for witness construction in
-            // existential mode.
-            let (_, _, elem_constraint) = extract_list_bounds(&test.constraint).ok_or_else(|| {
-                miette::miette!(
-                    "Test '{}' uses List fuzzer but has no extractable list-domain constraints; \
-                     List proofs require a constraint derived from list/list_between.\n\
-                     Constraint: {:?}",
-                    test.name,
-                    test.constraint,
-                )
-            })?;
-
-            let elem_lean_type = lean_type_for(elem_type).ok_or_else(|| {
-                miette::miette!(
-                    "Test '{}' has unsupported list element type: {:?}",
-                    test.name,
-                    elem_type,
-                )
-            })?;
-            let elem_encoder = lean_data_encoder(elem_type, "x_i").ok_or_else(|| {
-                miette::miette!(
-                    "Test '{}' has unsupported list element type for encoding: {:?}",
-                    test.name,
-                    elem_type,
-                )
-            })?;
+            let elem_lean_type = match lean_type_for(elem_type) {
+                Some(v) => v,
+                None => {
+                    let opens = lean_opens_for_types(&[elem_type.as_ref()]);
+                    let theorems = format_sampled_domain_fallback_theorems(
+                        &form,
+                        lean_test_name,
+                        &verify_prog,
+                        &fuzzer_prog,
+                        target,
+                        &prog,
+                        &handler_prog,
+                    );
+                    let mut content = format!("{}{theorems}", header(&opens));
+                    content.push_str(&footer);
+                    return Ok(content);
+                }
+            };
+            let elem_encoder = match lean_data_encoder(elem_type, "x_i") {
+                Some(v) => v,
+                None => {
+                    let opens = lean_opens_for_types(&[elem_type.as_ref()]);
+                    let theorems = format_sampled_domain_fallback_theorems(
+                        &form,
+                        lean_test_name,
+                        &verify_prog,
+                        &fuzzer_prog,
+                        target,
+                        &prog,
+                        &handler_prog,
+                    );
+                    let mut content = format!("{}{theorems}", header(&opens));
+                    content.push_str(&footer);
+                    return Ok(content);
+                }
+            };
 
             let opens = lean_opens_for_types(&[elem_type.as_ref()]);
             let quantifiers = format!("∀ (xs : List {elem_lean_type}),");
 
             // Build preconditions from extracted list-domain constraints.
-            let elem_bounds = if matches!(elem_type.as_ref(), FuzzerOutputType::Int) {
-                extract_int_range_from_constraint(elem_constraint)
-            } else {
-                None
-            };
             let preconditions = if precondition_parts.is_empty() {
                 String::new()
             } else {
@@ -2560,6 +3403,8 @@ fn generate_proof_file(
                 // element bounds (if present) or the generic default.
                 let elem_witness: String = if let Some((emin, _)) = elem_bounds.as_ref() {
                     format!("({emin} : {elem_lean_type})")
+                } else if let Some(exact_elem) = witness_elem.as_deref() {
+                    exact_elem.to_string()
                 } else {
                     lean_default_witness(elem_type).to_string()
                 };
@@ -2595,41 +3440,27 @@ fn generate_proof_file(
 
         // --- ADT fallback via Data encoding ---
         FuzzerOutputType::Unsupported(_) => {
-            let quantifiers = "∀ (x : Data),";
-            let witness = if form.existential_mode == Some(ExistentialMode::Witness) {
-                Some("Data.I 0")
-            } else {
-                None
-            };
-            let theorems = format_theorems(
+            let theorems = format_sampled_domain_fallback_theorems(
                 &form,
                 lean_test_name,
                 &verify_prog,
-                "dataArg x",
-                quantifiers,
-                "",
-                witness,
+                &fuzzer_prog,
+                target,
+                &prog,
+                &handler_prog,
             );
             let mut content = format!("{}{theorems}", header("open PlutusCore.Data (Data)"));
-            if let VerificationTargetKind::Equivalence = target {
-                content.push_str(&format_equivalence_theorem(
-                    lean_test_name,
-                    &prog,
-                    &handler_prog,
-                    "dataArg x",
-                    quantifiers,
-                    "",
-                ));
-            }
             content.push_str(&footer);
             Ok(content)
         }
 
-        other => Err(miette::miette!(
-            "Test '{}' has unsupported fuzzer output type {:?}; \
-             cannot generate a proof for this shape",
-            test.name,
-            other,
+        other => Err(generation_error(
+            GenerationErrorCategory::UnsupportedShape,
+            format!(
+                "Test '{}' has unsupported fuzzer output type {:?}; \
+                 cannot generate a proof for this shape",
+                test.name, other
+            ),
         )),
     }
 }
@@ -2648,38 +3479,44 @@ fn generate_tuple_proof(
     handler_prog: &str,
 ) -> miette::Result<String> {
     let arity = types.len();
-    if arity > VAR_NAMES.len() {
-        return Err(miette::miette!(
-            "Test '{}' has tuple arity {} which exceeds maximum supported arity {}",
-            test.name,
-            arity,
-            VAR_NAMES.len(),
-        ));
-    }
-
-    // Build per-element bounds
-    let owned_types: Vec<FuzzerOutputType> = types.iter().map(|t| (*t).clone()).collect();
-    let bounds = extract_tuple_element_bounds(test, &owned_types)?;
+    let var_names = tuple_var_names(arity);
 
     // Build quantifiers: ∀ (a : Integer) (b : Data),
     let quantifier_parts: Vec<String> = types
         .iter()
         .enumerate()
         .map(|(i, t)| {
-            let var = VAR_NAMES[i];
+            let var = &var_names[i];
             let lean_type = lean_type_for(t).unwrap(); // already validated
             format!("({var} : {lean_type})")
         })
         .collect();
     let quantifiers = format!("∀ {},", quantifier_parts.join(" "));
 
-    // Build preconditions from Int bounds
+    // Build preconditions from per-element constraints.
     let mut precond_parts = Vec::new();
-    for (i, bound) in bounds.iter().enumerate() {
-        if let Some((min, max)) = bound {
-            let var = VAR_NAMES[i];
-            precond_parts.push(format!("({min} <= {var} && {var} <= {max})"));
-        }
+    let mut witness_parts: Vec<Option<String>> = vec![None; arity];
+    for (i, t) in types.iter().enumerate() {
+        collect_tuple_element_precondition_parts(
+            &test.name,
+            t,
+            &test.constraint,
+            arity,
+            i,
+            &var_names[i],
+            &mut precond_parts,
+            &mut witness_parts[i],
+        )?;
+    }
+    if precond_parts.is_empty() {
+        return Err(generation_error(
+            GenerationErrorCategory::MissingDomain,
+            format!(
+                "Test '{}' uses tuple/pair fuzzers but has no extractable tuple-domain predicates.\n\
+                 Constraint: {:?}",
+                test.name, test.constraint
+            ),
+        ));
     }
     let preconditions = if precond_parts.is_empty() {
         String::new()
@@ -2691,7 +3528,7 @@ fn generate_tuple_proof(
     let encoded_parts: Vec<String> = types
         .iter()
         .enumerate()
-        .map(|(i, t)| lean_data_encoder(t, VAR_NAMES[i]).unwrap())
+        .map(|(i, t)| lean_data_encoder(t, &var_names[i]).unwrap())
         .collect();
     let arg_expr = format!(
         "[Term.Const (Const.Data (Data.List [{}]))]",
@@ -2700,19 +3537,19 @@ fn generate_tuple_proof(
 
     let opens = lean_opens_for_types(types);
     let witness = if form.existential_mode == Some(ExistentialMode::Witness) {
-        // Build a tuple witness from element defaults/bounds
-        let witness_parts: Vec<String> = types
+        // Build a tuple witness from extracted scalar constraints.
+        let witness_values: Vec<String> = types
             .iter()
             .enumerate()
             .map(|(i, t)| {
-                if let Some((ref min, _)) = bounds[i] {
-                    format!("({min} : Integer)")
+                if let Some(ref w) = witness_parts[i] {
+                    w.to_string()
                 } else {
                     lean_default_witness(t).to_string()
                 }
             })
             .collect();
-        Some(witness_parts.join(", "))
+        Some(witness_values.join(", "))
     } else {
         None
     };
@@ -2738,6 +3575,24 @@ fn generate_tuple_proof(
     }
     content.push_str(footer);
     Ok(content)
+}
+
+/// Validate that a test can be translated to a Lean theorem shape for the
+/// selected mode/target without writing workspace files.
+pub fn preflight_validate_test(
+    test: &ExportedPropertyTest,
+    existential_mode: ExistentialMode,
+    target: &VerificationTargetKind,
+) -> miette::Result<()> {
+    generate_proof_file(
+        test,
+        "__preflight__",
+        "__preflight__",
+        "AikenVerify.Preflight",
+        existential_mode,
+        target,
+    )
+    .map(|_| ())
 }
 
 /// Parse lake build output into per-theorem results.
@@ -3205,12 +4060,16 @@ mod tests {
         assert!(out_dir.join("manifest.json").exists());
 
         // Check per-test files
-        assert!(out_dir
-            .join("AikenVerify/Proofs/My_module/test_roundtrip.lean")
-            .exists());
-        assert!(out_dir
-            .join("AikenVerify/Proofs/AikenList/test_map.lean")
-            .exists());
+        assert!(
+            out_dir
+                .join("AikenVerify/Proofs/My_module/test_roundtrip.lean")
+                .exists()
+        );
+        assert!(
+            out_dir
+                .join("AikenVerify/Proofs/AikenList/test_map.lean")
+                .exists()
+        );
         let id0 = &manifest.tests[0].id;
         let id1 = &manifest.tests[1].id;
         assert!(out_dir.join(format!("flat/{id0}.flat")).exists());
@@ -3355,19 +4214,25 @@ mod tests {
         assert!(!out_dir.join("AikenVerify/Proofs/Stale/old.lean").exists());
         assert!(!out_dir.join("flat/stale.flat").exists());
         assert!(!out_dir.join("logs/stale.log").exists());
-        assert!(!out_dir
-            .join(".lake/build/lib/AikenVerify/Stale/stale.olean")
-            .exists());
+        assert!(
+            !out_dir
+                .join(".lake/build/lib/AikenVerify/Stale/stale.olean")
+                .exists()
+        );
 
         assert!(out_dir.join("PlutusCore/lakefile.lean").exists());
         assert!(out_dir.join(".lake/packages/Blaster/cache.txt").exists());
-        assert!(out_dir
-            .join(".lake/build/lib/PlutusCore/cache.olean")
-            .exists());
+        assert!(
+            out_dir
+                .join(".lake/build/lib/PlutusCore/cache.olean")
+                .exists()
+        );
 
-        assert!(out_dir
-            .join("AikenVerify/Proofs/My_module/test_roundtrip.lean")
-            .exists());
+        assert!(
+            out_dir
+                .join("AikenVerify/Proofs/My_module/test_roundtrip.lean")
+                .exists()
+        );
         assert!(out_dir.join(format!("flat/{id}.flat")).exists());
         assert!(out_dir.join(format!("flat/{id}_fuzzer.flat")).exists());
     }
@@ -3664,12 +4529,20 @@ mod tests {
         .unwrap();
 
         assert!(
-            proof.contains("∃ (x : Data),"),
-            "Data fail-once witness should use existential quantifier, got:\n{proof}"
+            proof.contains("∃ (seed : Data),"),
+            "Data fail-once witness should use existential seed quantifier in sampled fallback, got:\n{proof}"
         );
         assert!(
-            proof.contains("⟨Data.I 0, by decide⟩"),
-            "Data fail-once witness should use Data.I constructor, got:\n{proof}"
+            proof.contains("-- Mode: witness (sampled-domain fallback auto-escalated to proof)"),
+            "Sampled-domain witness mode should document auto-escalation, got:\n{proof}"
+        );
+        assert!(
+            proof.contains("by blaster"),
+            "Sampled-domain existential witness mode should escalate to proof search, got:\n{proof}"
+        );
+        assert!(
+            !proof.contains("refine ⟨Data.I 0, ?_⟩"),
+            "Sampled-domain existential witness mode should not hardcode a single seed witness, got:\n{proof}"
         );
         assert!(
             !proof.contains("Data.Integer"),
@@ -3701,12 +4574,20 @@ mod tests {
         .unwrap();
 
         assert!(
-            proof.contains("∃ (x : Data),"),
-            "Unsupported fail-once witness should use existential Data quantifier, got:\n{proof}"
+            proof.contains("∃ (seed : Data),"),
+            "Unsupported fail-once witness should use existential seed quantifier, got:\n{proof}"
         );
         assert!(
-            proof.contains("⟨Data.I 0, by decide⟩"),
-            "Unsupported fail-once witness should use Data.I constructor, got:\n{proof}"
+            proof.contains("-- Mode: witness (sampled-domain fallback auto-escalated to proof)"),
+            "Sampled-domain witness mode should document auto-escalation, got:\n{proof}"
+        );
+        assert!(
+            proof.contains("by blaster"),
+            "Sampled-domain existential witness mode should escalate to proof search, got:\n{proof}"
+        );
+        assert!(
+            !proof.contains("refine ⟨Data.I 0, ?_⟩"),
+            "Sampled-domain existential witness mode should not hardcode a single seed witness, got:\n{proof}"
         );
         assert!(
             !proof.contains("Data.Integer"),
@@ -3795,6 +4676,51 @@ mod tests {
         assert!(
             !proof.contains("Data.Integer"),
             "List<Data> fail-once witness should not use invalid Data.Integer constructor, got:\n{proof}"
+        );
+    }
+
+    #[test]
+    fn fail_once_list_bool_exact_witness_uses_exact_element() {
+        let mut test = make_test_with_type(
+            "my_module",
+            "test_list_bool_exact_exist",
+            FuzzerOutputType::List(Box::new(FuzzerOutputType::Bool)),
+            FuzzerConstraint::List {
+                elem: Box::new(FuzzerConstraint::Exact(FuzzerExactValue::Bool(false))),
+                min_len: Some(1),
+                max_len: Some(3),
+            },
+        );
+        test.on_test_failure = OnTestFailure::SucceedImmediately;
+        let id = test_id("my_module", "test_list_bool_exact_exist");
+        let lean_name = sanitize_lean_name("test_list_bool_exact_exist");
+        let lean_module = "AikenVerify.Proofs.My_module.test_list_bool_exact_exist";
+
+        let proof = generate_proof_file(
+            &test,
+            &id,
+            &lean_name,
+            lean_module,
+            ExistentialMode::Witness,
+            &VerificationTargetKind::default(),
+        )
+        .unwrap();
+
+        assert!(
+            proof.contains("∃ (xs : List Bool),"),
+            "List<Bool> fail-once witness should quantify over List Bool, got:\n{proof}"
+        );
+        assert!(
+            proof.contains("(xs.all (fun x_i => x_i = false))"),
+            "List<Bool> exact predicate should be emitted in preconditions, got:\n{proof}"
+        );
+        assert!(
+            proof.contains("⟨[false], by decide⟩"),
+            "List<Bool> fail-once witness should satisfy exact element constraints, got:\n{proof}"
+        );
+        assert!(
+            !proof.contains("⟨[true], by decide⟩"),
+            "List<Bool> fail-once witness must not use default true when exact false is required, got:\n{proof}"
         );
     }
 
@@ -3928,7 +4854,7 @@ mod tests {
     }
 
     #[test]
-    fn bool_generates_theorem_without_bounds() {
+    fn bool_without_domain_predicate_uses_sampled_domain_fallback() {
         let test = make_test_with_type(
             "my_module",
             "test_bool",
@@ -3950,28 +4876,22 @@ mod tests {
         .unwrap();
 
         assert!(
-            proof.contains("∀ (x : Bool),"),
-            "Bool theorem should quantify over Bool, got:\n{proof}"
+            proof.contains("∀ (seed : Data),"),
+            "Bool fallback theorem should quantify over seed, got:\n{proof}"
         );
         assert!(
-            proof.contains(&format!("(proveTests prog_{id} (boolArg x)) = true")),
-            "Bool theorem should use boolArg, got:\n{proof}"
+            proof.contains(&format!(
+                "match sampleFuzzerValue fuzzer_prog_{id} seed with"
+            )),
+            "Bool fallback theorem should sample the exported fuzzer domain, got:\n{proof}"
         );
         assert!(
             proof.contains("theorem test_bool_alwaysTerminating"),
             "Should have termination theorem, got:\n{proof}"
         );
         assert!(
-            proof.contains(&format!("Option.isSome (proveTests prog_{id} (boolArg x))")),
-            "Termination theorem should use boolArg, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("<="),
-            "Bool theorem should not have bounds, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("Integer"),
-            "Bool theorem should not reference Integer, got:\n{proof}"
+            proof.contains(&format!("Option.isSome (proveTests prog_{id} (dataArg x))")),
+            "Termination theorem should evaluate sampled value x via dataArg, got:\n{proof}"
         );
     }
 
@@ -4001,8 +4921,8 @@ mod tests {
         .unwrap();
 
         assert!(
-            proof.contains("(boolArg x)) = false"),
-            "SucceedEventually (fail keyword) Bool should generate = false, got:\n{proof}"
+            proof.contains("(dataArg x)) = false"),
+            "SucceedEventually (fail keyword) Bool fallback should assert = false on sampled x, got:\n{proof}"
         );
     }
 
@@ -4103,7 +5023,7 @@ mod tests {
     }
 
     #[test]
-    fn tuple_int_int_component_bounds_wrong_arity_errors() {
+    fn tuple_int_int_component_bounds_wrong_arity_uses_fallback() {
         let test = make_test_with_type(
             "my_module",
             "test_pair_components_bad_arity",
@@ -4117,22 +5037,23 @@ mod tests {
         let lean_name = sanitize_lean_name("test_pair_components_bad_arity");
         let lean_module = "AikenVerify.Proofs.My_module.test_pair_components_bad_arity";
 
-        let result = generate_proof_file(
+        let proof = generate_proof_file(
             &test,
             &id,
             &lean_name,
             lean_module,
             ExistentialMode::default(),
             &VerificationTargetKind::default(),
-        );
+        )
+        .unwrap();
         assert!(
-            result.is_err(),
-            "Tuple with wrong arity constraint should error"
+            proof.contains("match sampleFuzzerValue"),
+            "Wrong-arity tuple constraints should route to sampled-domain fallback, got:\n{proof}"
         );
     }
 
     #[test]
-    fn tuple_int_int_unknown_bounds_errors() {
+    fn tuple_int_int_unknown_bounds_use_fallback() {
         let test = make_test_with_type(
             "my_module",
             "test_pair_nobound",
@@ -4143,23 +5064,23 @@ mod tests {
         let lean_name = sanitize_lean_name("test_pair_nobound");
         let lean_module = "AikenVerify.Proofs.My_module.test_pair_nobound";
 
-        let result = generate_proof_file(
+        let proof = generate_proof_file(
             &test,
             &id,
             &lean_name,
             lean_module,
             ExistentialMode::default(),
             &VerificationTargetKind::default(),
-        );
-        assert!(result.is_err());
+        )
+        .unwrap();
         assert!(
-            result.unwrap_err().to_string().contains("no extractable"),
-            "Should indicate missing Int range constraint"
+            proof.contains("match sampleFuzzerValue"),
+            "Unknown tuple bounds should route to sampled-domain fallback, got:\n{proof}"
         );
     }
 
     #[test]
-    fn bytearray_generates_theorem_without_bounds() {
+    fn bytearray_without_domain_predicate_uses_sampled_domain_fallback() {
         let test = make_test_with_type(
             "my_module",
             "test_bytes",
@@ -4181,21 +5102,83 @@ mod tests {
         assert!(result.is_ok());
         let proof = result.unwrap();
         assert!(
-            proof.contains("∀ (x : ByteString),"),
-            "ByteArray theorem should quantify over ByteString, got:\n{proof}"
+            proof.contains("∀ (seed : Data),"),
+            "ByteArray fallback theorem should quantify over seed, got:\n{proof}"
         );
         assert!(
-            proof.contains(&format!("(proveTests prog_{id} (bytearrayArg x)) = true")),
-            "ByteArray theorem should use bytearrayArg, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("<="),
-            "ByteArray theorem should not rely on integer bounds, got:\n{proof}"
+            proof.contains(&format!(
+                "match sampleFuzzerValue fuzzer_prog_{id} seed with"
+            )),
+            "ByteArray fallback theorem should sample fuzzer outputs, got:\n{proof}"
         );
     }
 
     #[test]
-    fn list_without_bounds_generates_theorem() {
+    fn bytearray_exact_non_empty_generates_direct_scalar_domain() {
+        let test = make_test_with_type(
+            "my_module",
+            "test_bytes_exact_non_empty",
+            FuzzerOutputType::ByteArray,
+            FuzzerConstraint::Exact(FuzzerExactValue::ByteArray(vec![0x66, 0x6f, 0x6f])),
+        );
+        let id = test_id("my_module", "test_bytes_exact_non_empty");
+        let lean_name = sanitize_lean_name("test_bytes_exact_non_empty");
+        let lean_module = "AikenVerify.Proofs.My_module.test_bytes_exact_non_empty";
+
+        let proof = generate_proof_file(
+            &test,
+            &id,
+            &lean_name,
+            lean_module,
+            ExistentialMode::default(),
+            &VerificationTargetKind::default(),
+        )
+        .unwrap();
+
+        assert!(
+            !proof.contains("match sampleFuzzerValue"),
+            "Exact non-empty ByteArray should stay in direct scalar theorem path, got:\n{proof}"
+        );
+        assert!(
+            proof.contains("PlutusCore.ByteString.consByteStringV1 102"),
+            "Expected emitted ByteString literal for non-empty bytes, got:\n{proof}"
+        );
+    }
+
+    #[test]
+    fn string_exact_non_empty_generates_direct_scalar_domain() {
+        let test = make_test_with_type(
+            "my_module",
+            "test_string_exact_non_empty",
+            FuzzerOutputType::String,
+            FuzzerConstraint::Exact(FuzzerExactValue::String("Hi".to_string())),
+        );
+        let id = test_id("my_module", "test_string_exact_non_empty");
+        let lean_name = sanitize_lean_name("test_string_exact_non_empty");
+        let lean_module = "AikenVerify.Proofs.My_module.test_string_exact_non_empty";
+
+        let proof = generate_proof_file(
+            &test,
+            &id,
+            &lean_name,
+            lean_module,
+            ExistentialMode::default(),
+            &VerificationTargetKind::default(),
+        )
+        .unwrap();
+
+        assert!(
+            !proof.contains("match sampleFuzzerValue"),
+            "Exact non-empty String should stay in direct scalar theorem path, got:\n{proof}"
+        );
+        assert!(
+            proof.contains("PlutusCore.ByteString.consByteStringV1 72"),
+            "Expected UTF-8 ByteString literal emission for String exact value, got:\n{proof}"
+        );
+    }
+
+    #[test]
+    fn list_without_bounds_uses_sampled_domain_fallback() {
         let test = make_test_with_type(
             "my_module",
             "test_list",
@@ -4220,17 +5203,19 @@ mod tests {
         )
         .unwrap();
         assert!(
-            proof.contains("∀ (xs : List Integer),"),
-            "List<Int> should quantify over List Integer, got:\n{proof}"
+            proof.contains("∀ (seed : Data),"),
+            "Fallback theorem should quantify over seed, got:\n{proof}"
         );
         assert!(
-            !proof.contains("xs.length"),
-            "Unbounded List should not emit length preconditions, got:\n{proof}"
+            proof.contains(&format!(
+                "match sampleFuzzerValue fuzzer_prog_{id} seed with"
+            )),
+            "Fallback theorem should branch on sampled fuzzer value, got:\n{proof}"
         );
     }
 
     #[test]
-    fn list_with_any_constraint_errors() {
+    fn list_with_any_constraint_uses_sampled_domain_fallback() {
         let test = make_test_with_type(
             "my_module",
             "test_list_any",
@@ -4249,16 +5234,16 @@ mod tests {
             ExistentialMode::default(),
             &VerificationTargetKind::default(),
         );
-        assert!(result.is_err());
-        let msg = result.unwrap_err().to_string();
+        assert!(result.is_ok());
+        let proof = result.unwrap();
         assert!(
-            msg.contains("no extractable list-domain constraints"),
-            "Should indicate missing list-domain constraint, got:\n{msg}"
+            proof.contains("match sampleFuzzerValue"),
+            "Should use sampled-domain fallback theorem, got:\n{proof}"
         );
     }
 
     #[test]
-    fn list_with_unsupported_constraint_errors() {
+    fn list_with_unsupported_constraint_uses_sampled_domain_fallback() {
         let test = make_test_with_type(
             "my_module",
             "test_list_unsupported",
@@ -4279,13 +5264,130 @@ mod tests {
             ExistentialMode::default(),
             &VerificationTargetKind::default(),
         );
-        assert!(result.is_err());
-        let msg = result.unwrap_err().to_string();
+        assert!(result.is_ok());
+        let proof = result.unwrap();
         assert!(
-            msg.contains("unsupported list-domain extraction"),
-            "Should indicate unsupported list-domain extraction, got:\n{msg}"
+            proof.contains(&format!(
+                "match sampleFuzzerValue fuzzer_prog_{id} seed with"
+            )),
+            "Unsupported constraints should use sampled-domain fallback theorem, got:\n{proof}"
         );
-        assert!(msg.contains("scenario.ok"));
+    }
+
+    #[test]
+    fn int_with_unsupported_constraint_uses_sampled_domain_fallback() {
+        let test = make_test_with_type(
+            "my_module",
+            "test_int_unsupported",
+            FuzzerOutputType::Int,
+            FuzzerConstraint::Unsupported {
+                reason: "custom lambda fuzzer domain not yet extracted".to_string(),
+            },
+        );
+        let id = test_id("my_module", "test_int_unsupported");
+        let lean_name = sanitize_lean_name("test_int_unsupported");
+        let lean_module = "AikenVerify.Proofs.My_module.test_int_unsupported";
+
+        let proof = generate_proof_file(
+            &test,
+            &id,
+            &lean_name,
+            lean_module,
+            ExistentialMode::default(),
+            &VerificationTargetKind::default(),
+        )
+        .unwrap();
+        assert!(
+            proof.contains(&format!(
+                "match sampleFuzzerValue fuzzer_prog_{id} seed with"
+            )),
+            "Unsupported scalar constraints should use sampled-domain fallback theorem, got:\n{proof}"
+        );
+    }
+
+    #[test]
+    fn universal_int_and_with_unsupported_salvages_supported_bounds() {
+        let test = make_test_with_type(
+            "my_module",
+            "test_int_partial_salvage",
+            FuzzerOutputType::Int,
+            FuzzerConstraint::And(vec![
+                FuzzerConstraint::IntRange {
+                    min: "1".to_string(),
+                    max: "9".to_string(),
+                },
+                FuzzerConstraint::Unsupported {
+                    reason: "custom lambda fragment".to_string(),
+                },
+            ]),
+        );
+        let id = test_id("my_module", "test_int_partial_salvage");
+        let lean_name = sanitize_lean_name("test_int_partial_salvage");
+        let lean_module = "AikenVerify.Proofs.My_module.test_int_partial_salvage";
+
+        let proof = generate_proof_file(
+            &test,
+            &id,
+            &lean_name,
+            lean_module,
+            ExistentialMode::default(),
+            &VerificationTargetKind::default(),
+        )
+        .unwrap();
+
+        assert!(
+            proof.contains("∀ (x : Integer),"),
+            "Universal mode should keep direct Int quantification when salvageable, got:\n{proof}"
+        );
+        assert!(
+            proof.contains("(1 <= x && x <= 9)"),
+            "Supported IntRange fragment should be preserved, got:\n{proof}"
+        );
+        assert!(
+            !proof.contains("match sampleFuzzerValue"),
+            "Universal mode with salvageable constraints should not force sampled fallback, got:\n{proof}"
+        );
+    }
+
+    #[test]
+    fn existential_int_and_with_unsupported_uses_sampled_fallback() {
+        let mut test = make_test_with_type(
+            "my_module",
+            "test_int_partial_salvage_existential",
+            FuzzerOutputType::Int,
+            FuzzerConstraint::And(vec![
+                FuzzerConstraint::IntRange {
+                    min: "1".to_string(),
+                    max: "9".to_string(),
+                },
+                FuzzerConstraint::Unsupported {
+                    reason: "custom lambda fragment".to_string(),
+                },
+            ]),
+        );
+        test.on_test_failure = OnTestFailure::SucceedImmediately;
+        let id = test_id("my_module", "test_int_partial_salvage_existential");
+        let lean_name = sanitize_lean_name("test_int_partial_salvage_existential");
+        let lean_module = "AikenVerify.Proofs.My_module.test_int_partial_salvage_existential";
+
+        let proof = generate_proof_file(
+            &test,
+            &id,
+            &lean_name,
+            lean_module,
+            ExistentialMode::Witness,
+            &VerificationTargetKind::default(),
+        )
+        .unwrap();
+
+        assert!(
+            proof.contains("∃ (seed : Data),"),
+            "Existential mode should fall back to sampled-domain seed quantification, got:\n{proof}"
+        );
+        assert!(
+            proof.contains("match sampleFuzzerValue"),
+            "Existential mode with unsupported fragments must use sampled fallback, got:\n{proof}"
+        );
     }
 
     #[test]
@@ -4318,11 +5420,15 @@ mod tests {
             "Fallback theorem should quantify over seed only, got:\n{proof}"
         );
         assert!(
-            proof.contains(&format!("match sampleFuzzerValue fuzzer_prog_{id} seed with")),
+            proof.contains(&format!(
+                "match sampleFuzzerValue fuzzer_prog_{id} seed with"
+            )),
             "Fallback theorem should branch on sampled fuzzer value, got:\n{proof}"
         );
         assert!(
-            proof.contains(&format!("| some x => (proveTests prog_{id} (dataArg x)) = true")),
+            proof.contains(&format!(
+                "| some x => (proveTests prog_{id} (dataArg x)) = true"
+            )),
             "Fallback theorem should evaluate property on sampled x, got:\n{proof}"
         );
     }
@@ -4355,13 +5461,15 @@ mod tests {
         )
         .unwrap();
         assert!(
-            proof.contains(&format!("match sampleFuzzerValue fuzzer_prog_{id} seed with")),
+            proof.contains(&format!(
+                "match sampleFuzzerValue fuzzer_prog_{id} seed with"
+            )),
             "Fallback theorem should branch on sampled fuzzer value, got:\n{proof}"
         );
     }
 
     #[test]
-    fn list_data_fallback_rejects_existential_mode() {
+    fn list_data_fallback_supports_existential_mode() {
         let mut test = make_test_with_type(
             "my_module",
             "test_list_data_existential",
@@ -4386,16 +5494,28 @@ mod tests {
             ExistentialMode::Witness,
             &VerificationTargetKind::default(),
         );
-        assert!(result.is_err());
-        let msg = result.unwrap_err().to_string();
+        assert!(result.is_ok());
+        let proof = result.unwrap();
         assert!(
-            msg.contains("existential mode is not supported"),
-            "Expected explicit fallback limitation for existential mode, got:\n{msg}"
+            proof.contains("∃ (seed : Data),"),
+            "Fallback existential theorem should quantify existentially over seed, got:\n{proof}"
+        );
+        assert!(
+            proof.contains("-- Mode: witness (sampled-domain fallback auto-escalated to proof)"),
+            "Sampled-domain witness mode should document auto-escalation, got:\n{proof}"
+        );
+        assert!(
+            proof.contains("by blaster"),
+            "Sampled-domain existential witness mode should escalate to proof search, got:\n{proof}"
+        );
+        assert!(
+            !proof.contains("refine ⟨Data.I 0, ?_⟩"),
+            "Sampled-domain existential witness mode should not hardcode a single seed witness, got:\n{proof}"
         );
     }
 
     #[test]
-    fn data_generates_theorem_without_bounds() {
+    fn data_without_domain_predicate_uses_sampled_domain_fallback() {
         let test = make_test_with_type(
             "my_module",
             "test_data",
@@ -4416,18 +5536,14 @@ mod tests {
         )
         .unwrap();
 
-        assert!(
-            proof.contains("∀ (x : Data),"),
-            "Data theorem should quantify over Data, got:\n{proof}"
-        );
-        assert!(
-            proof.contains(&format!("(proveTests prog_{id} (dataArg x)) = true")),
-            "Data theorem should use dataArg, got:\n{proof}"
-        );
+        assert!(proof.contains("∀ (seed : Data),"));
+        assert!(proof.contains(&format!(
+            "match sampleFuzzerValue fuzzer_prog_{id} seed with"
+        )));
     }
 
     #[test]
-    fn tuple_data_data_generates_two_variable_theorem() {
+    fn tuple_data_data_without_predicates_uses_fallback() {
         let test = make_test_with_type(
             "my_module",
             "test_data_pair",
@@ -4448,19 +5564,11 @@ mod tests {
         )
         .unwrap();
 
-        assert!(
-            proof.contains("∀ (a : Data) (b : Data),"),
-            "Tuple(Data,Data) should quantify over two Data vars, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("Data.List [a, b]"),
-            "Tuple(Data,Data) should inline Data.List encoding, got:\n{proof}"
-        );
-        assert!(proof.contains("= true"));
+        assert!(proof.contains("match sampleFuzzerValue"));
     }
 
     #[test]
-    fn tuple_data_data_data_generates_three_variable_theorem() {
+    fn tuple_data_data_data_without_predicates_uses_fallback() {
         let test = make_test_with_type(
             "my_module",
             "test_data_triple",
@@ -4485,15 +5593,7 @@ mod tests {
         )
         .unwrap();
 
-        assert!(
-            proof.contains("∀ (a : Data) (b : Data) (c : Data),"),
-            "Tuple(Data,Data,Data) should quantify over three Data vars, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("Data.List [a, b, c]"),
-            "Tuple(Data,Data,Data) should inline Data.List encoding, got:\n{proof}"
-        );
-        assert!(proof.contains("= true"));
+        assert!(proof.contains("match sampleFuzzerValue"));
     }
 
     #[test]
@@ -4539,7 +5639,7 @@ mod tests {
     }
 
     #[test]
-    fn tuple_with_nested_list_element_returns_error() {
+    fn tuple_with_nested_list_element_uses_fallback() {
         let test = make_test_with_type(
             "my_module",
             "test_tuple_nested",
@@ -4553,19 +5653,18 @@ mod tests {
         let lean_name = sanitize_lean_name("test_tuple_nested");
         let lean_module = "AikenVerify.Proofs.My_module.test_tuple_nested";
 
-        let result = generate_proof_file(
+        let proof = generate_proof_file(
             &test,
             &id,
             &lean_name,
             lean_module,
             ExistentialMode::default(),
             &VerificationTargetKind::default(),
-        );
-        assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
+        )
+        .unwrap();
         assert!(
-            err_msg.contains("unsupported tuple element type"),
-            "Tuple with nested List element should error, got: {err_msg}"
+            proof.contains("match sampleFuzzerValue"),
+            "Nested tuple elements should use sampled-domain fallback, got:\n{proof}"
         );
     }
 
@@ -4743,8 +5842,8 @@ mod tests {
             &FuzzerOutputType::Tuple(vec![FuzzerOutputType::Data, FuzzerOutputType::Data]),
             &FuzzerConstraint::Any,
         ));
-        // Int with Map(IntRange) => does not need bounds (Map is transparent)
-        assert!(!requires_explicit_bounds(
+        // Int with Map(IntRange) still needs bounds since Map describes input-domain.
+        assert!(requires_explicit_bounds(
             &FuzzerOutputType::Int,
             &FuzzerConstraint::Map(Box::new(FuzzerConstraint::IntRange {
                 min: "0".to_string(),
@@ -4809,10 +5908,12 @@ mod tests {
         assert_eq!(summary.failed, 0);
         assert_eq!(summary.timed_out, 0);
         assert_eq!(summary.unknown, 0);
-        assert!(summary
-            .theorems
-            .iter()
-            .all(|t| matches!(t.status, ProofStatus::Proved)));
+        assert!(
+            summary
+                .theorems
+                .iter()
+                .all(|t| matches!(t.status, ProofStatus::Proved))
+        );
     }
 
     #[test]
@@ -5144,6 +6245,37 @@ mod tests {
     }
 
     #[test]
+    fn generate_lakefile_uses_workspace_relative_plutus_core_path() {
+        let lakefile = generate_lakefile(DEFAULT_BLASTER_REV);
+        assert!(
+            lakefile.contains("require PlutusCore from\n  \"./PlutusCore\""),
+            "Lakefile should reference workspace-relative PlutusCore path, got:\n{lakefile}"
+        );
+    }
+
+    #[test]
+    fn lake_build_jobs_flag_unsupported_detects_unknown_j_option() {
+        let stderr = "error: unknown option '-j'";
+        assert!(lake_build_jobs_flag_unsupported(stderr));
+    }
+
+    #[test]
+    fn normalize_jobs_override_accepts_one() {
+        assert_eq!(normalize_jobs_override(Some(1)), Some(1));
+    }
+
+    #[test]
+    fn lake_build_command_for_jobs_includes_single_job_override() {
+        assert_eq!(lake_build_command_for_jobs(Some(1)), "lake build -j 1");
+    }
+
+    #[test]
+    fn lake_build_jobs_flag_unsupported_ignores_unrelated_errors() {
+        let stderr = "error: failed to load manifest";
+        assert!(!lake_build_jobs_flag_unsupported(stderr));
+    }
+
+    #[test]
     fn check_plutus_core_missing_dir() {
         let tmp = tempfile::tempdir().unwrap();
         let result = check_plutus_core(tmp.path());
@@ -5236,7 +6368,8 @@ mod tests {
 
     #[test]
     fn validator_target_mode_errors_without_metadata() {
-        let test = make_test("my_module", "test_val");
+        let mut test = make_test("my_module", "test_val");
+        test.target_kind = VerificationTargetKind::ValidatorHandler;
         let id = test_id("my_module", "test_val");
         let lean_name = sanitize_lean_name("test_val");
         let lean_module = "AikenVerify.Proofs.My_module.test_val";
@@ -5254,6 +6387,29 @@ mod tests {
         assert!(
             err.contains("no validator target metadata"),
             "Should error about missing validator_target, got: {err}"
+        );
+    }
+
+    #[test]
+    fn target_kind_mismatch_is_reported() {
+        let test = make_test("my_module", "test_target_mismatch");
+        let id = test_id("my_module", "test_target_mismatch");
+        let lean_name = sanitize_lean_name("test_target_mismatch");
+        let lean_module = "AikenVerify.Proofs.My_module.test_target_mismatch";
+
+        let result = generate_proof_file(
+            &test,
+            &id,
+            &lean_name,
+            lean_module,
+            ExistentialMode::default(),
+            &VerificationTargetKind::ValidatorHandler,
+        );
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("target kind mismatch"),
+            "Should report target_kind mismatch, got: {err}"
         );
     }
 
@@ -5343,6 +6499,64 @@ mod tests {
         assert!(
             proof.contains("_handler.flat"),
             "Should import handler flat file, got:\n{proof}"
+        );
+    }
+
+    #[test]
+    fn equivalence_target_fallback_stays_universal_in_fail_once_mode() {
+        let mut test = make_test_with_type(
+            "my_module",
+            "test_eq_fallback_fail_once",
+            FuzzerOutputType::Data,
+            FuzzerConstraint::Any,
+        );
+        test.on_test_failure = OnTestFailure::SucceedImmediately;
+        test.target_kind = VerificationTargetKind::Equivalence;
+        test.validator_target = Some(ValidatorTarget {
+            validator_module: "validators/my_validator".to_string(),
+            validator_name: "spend".to_string(),
+            handler_name: None,
+            handler_program: Some(ExportedProgram {
+                hex: "handler_hex".to_string(),
+                flat_bytes: None,
+            }),
+        });
+
+        let id = test_id("my_module", "test_eq_fallback_fail_once");
+        let lean_name = sanitize_lean_name("test_eq_fallback_fail_once");
+        let lean_module = "AikenVerify.Proofs.My_module.test_eq_fallback_fail_once";
+
+        let proof = generate_proof_file(
+            &test,
+            &id,
+            &lean_name,
+            lean_module,
+            ExistentialMode::default(),
+            &VerificationTargetKind::Equivalence,
+        )
+        .unwrap();
+
+        assert!(
+            proof.contains("-- Mode: witness (sampled-domain fallback auto-escalated to proof)"),
+            "Expected sampled-domain fallback in fail-once witness mode, got:\n{proof}"
+        );
+
+        let marker = format!("theorem {lean_name}_equivalence :");
+        let (_, equivalence_theorem) = proof
+            .split_once(&marker)
+            .expect("equivalence theorem marker should be present");
+
+        assert!(
+            equivalence_theorem.contains("∀ (seed : Data),"),
+            "Fallback equivalence theorem must stay universal, got:\n{equivalence_theorem}"
+        );
+        assert!(
+            equivalence_theorem.contains("| none => True :="),
+            "Fallback equivalence theorem should be vacuously true on unsampled seeds, got:\n{equivalence_theorem}"
+        );
+        assert!(
+            !equivalence_theorem.contains("∃ (seed : Data),"),
+            "Fallback equivalence theorem must not switch to existential quantification, got:\n{equivalence_theorem}"
         );
     }
 
@@ -5558,6 +6772,51 @@ mod tests {
     }
 
     #[test]
+    fn skippable_generation_errors_use_structured_categories() {
+        let err = generation_error(
+            GenerationErrorCategory::MissingDomain,
+            "category-driven skip should not depend on message wording",
+        );
+        assert!(
+            is_skippable_generation_error(&err),
+            "MissingDomain category should be skippable regardless of message text"
+        );
+    }
+
+    #[test]
+    fn non_skippable_generation_errors_ignore_legacy_message_fragments() {
+        let err = generation_error(
+            GenerationErrorCategory::InvalidConstraint,
+            "unsupported no extractable cannot generate a proof for this shape",
+        );
+        assert!(
+            !is_skippable_generation_error(&err),
+            "Skip behavior must be category-driven, not substring-driven"
+        );
+    }
+
+    #[test]
+    fn sampled_fallback_classification_is_category_driven() {
+        let fallback = generation_error(
+            GenerationErrorCategory::FallbackRequired,
+            "message text is irrelevant",
+        );
+        assert!(
+            should_use_sampled_fallback_for_error(&fallback),
+            "Fallback classification should follow structured categories"
+        );
+
+        let invalid = generation_error(
+            GenerationErrorCategory::InvalidConstraint,
+            "unsupported no extractable requires fallback",
+        );
+        assert!(
+            !should_use_sampled_fallback_for_error(&invalid),
+            "Fallback classification should not depend on message fragments"
+        );
+    }
+
+    #[test]
     fn skip_unsupported_collects_skipped_tests() {
         let tmp = tempfile::tempdir().unwrap();
         let config = VerifyConfig {
@@ -5568,7 +6827,8 @@ mod tests {
             target: VerificationTargetKind::default(),
         };
 
-        // Nested composite types remain unsupported for proof generation.
+        // Nested composites are now handled via sampled-domain fallback, so
+        // generation succeeds without skip entries.
         let mut unsupported = make_test("my_module", "test_list");
         unsupported.fuzzer_output_type = FuzzerOutputType::Tuple(vec![
             FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
@@ -5577,17 +6837,8 @@ mod tests {
         unsupported.constraint = FuzzerConstraint::Any;
 
         let manifest = generate_lean_workspace(&[unsupported], &config, true).unwrap();
-        assert!(
-            manifest.tests.is_empty(),
-            "Unsupported test should not appear in tests"
-        );
-        assert_eq!(manifest.skipped.len(), 1);
-        assert_eq!(manifest.skipped[0].name, "my_module.test_list");
-        assert!(
-            manifest.skipped[0].reason.contains("List"),
-            "Skip reason should mention List: {}",
-            manifest.skipped[0].reason
-        );
+        assert_eq!(manifest.tests.len(), 1);
+        assert!(manifest.skipped.is_empty());
     }
 
     #[test]
@@ -5610,8 +6861,42 @@ mod tests {
 
         let result = generate_lean_workspace(&[unsupported], &config, false);
         assert!(
-            result.is_err(),
-            "skip_unsupported=false should error on unsupported type"
+            result.is_ok(),
+            "Nested composites should generate via fallback even without skip mode"
+        );
+    }
+
+    #[test]
+    fn skip_unsupported_does_not_swallow_non_skippable_generation_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = VerifyConfig {
+            out_dir: tmp.path().to_path_buf(),
+            cek_budget: 20000,
+            blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+            existential_mode: ExistentialMode::default(),
+            target: VerificationTargetKind::default(),
+        };
+
+        // Semantically invalid (min > max) should be treated as generation error,
+        // not as a skippable unsupported-shape case.
+        let bad = make_test_with_type(
+            "my_module",
+            "test_bad_bounds",
+            FuzzerOutputType::Int,
+            FuzzerConstraint::IntRange {
+                min: "10".to_string(),
+                max: "0".to_string(),
+            },
+        );
+
+        let result = generate_lean_workspace(&[bad], &config, true);
+        assert!(result.is_err(), "Non-skippable errors should still fail");
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("non-skippable error"),
+            "Error should indicate non-skippable generation failure"
         );
     }
 
@@ -5635,16 +6920,14 @@ mod tests {
         bad.constraint = FuzzerConstraint::Any;
 
         let manifest = generate_lean_workspace(&[good, bad], &config, true).unwrap();
-        assert_eq!(manifest.tests.len(), 1, "Should have 1 supported test");
-        assert_eq!(manifest.skipped.len(), 1, "Should have 1 skipped test");
-        assert_eq!(manifest.tests[0].aiken_name, "test_int");
-        assert_eq!(manifest.skipped[0].name, "my_module.test_list");
+        assert_eq!(manifest.tests.len(), 2, "Both tests should generate");
+        assert!(manifest.skipped.is_empty(), "No tests should be skipped");
     }
 
     // --- Step 3.1 tests: String and Pair ---
 
     #[test]
-    fn string_generates_theorem_without_bounds() {
+    fn string_without_domain_predicate_uses_sampled_domain_fallback() {
         let test = make_test_with_type(
             "my_module",
             "test_string",
@@ -5665,22 +6948,12 @@ mod tests {
         )
         .unwrap();
 
-        assert!(
-            proof.contains("∀ (x : ByteString),"),
-            "String theorem should quantify over ByteString, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("stringArg x"),
-            "String theorem should use stringArg, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("<="),
-            "String theorem should not rely on integer bounds, got:\n{proof}"
-        );
+        assert!(proof.contains("∀ (seed : Data),"));
+        assert!(proof.contains("match sampleFuzzerValue"));
     }
 
     #[test]
-    fn pair_data_data_generates_theorem() {
+    fn pair_data_data_without_predicates_uses_fallback() {
         let test = make_test_with_type(
             "my_module",
             "test_pair_dd",
@@ -5704,15 +6977,7 @@ mod tests {
         )
         .unwrap();
 
-        assert!(
-            proof.contains("∀ (a : Data) (b : Data),"),
-            "Pair(Data,Data) should quantify over two Data vars, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("Data.List [a, b]"),
-            "Pair(Data,Data) should encode as Data.List, got:\n{proof}"
-        );
-        assert!(proof.contains("= true"));
+        assert!(proof.contains("match sampleFuzzerValue"));
     }
 
     #[test]
@@ -5814,7 +7079,7 @@ mod tests {
     }
 
     #[test]
-    fn tuple_arity_5_all_data_generates_theorem() {
+    fn tuple_arity_5_all_data_without_predicates_uses_fallback() {
         let test = make_test_with_type(
             "my_module",
             "test_quint",
@@ -5841,18 +7106,32 @@ mod tests {
         )
         .unwrap();
 
-        assert!(
-            proof.contains("∀ (a : Data) (b : Data) (c : Data) (d : Data) (e : Data),"),
-            "5-tuple should quantify over five vars, got:\n{proof}"
+        assert!(proof.contains("match sampleFuzzerValue"));
+    }
+
+    #[test]
+    fn tuple_high_arity_without_predicates_uses_fallback() {
+        let test = make_test_with_type(
+            "my_module",
+            "test_arity_20",
+            FuzzerOutputType::Tuple(vec![FuzzerOutputType::Data; 20]),
+            FuzzerConstraint::Any,
         );
-        assert!(
-            proof.contains("Data.List [a, b, c, d, e]"),
-            "Should encode as Data.List with five elements, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("<="),
-            "All-Data tuple should have no bounds"
-        );
+        let id = test_id("my_module", "test_arity_20");
+        let lean_name = sanitize_lean_name("test_arity_20");
+        let lean_module = "AikenVerify.Proofs.My_module.test_arity_20";
+
+        let proof = generate_proof_file(
+            &test,
+            &id,
+            &lean_name,
+            lean_module,
+            ExistentialMode::default(),
+            &VerificationTargetKind::default(),
+        )
+        .unwrap();
+
+        assert!(proof.contains("match sampleFuzzerValue"));
     }
 
     // --- Step 3.3 tests: List with bounds ---
@@ -5946,6 +7225,42 @@ mod tests {
     }
 
     #[test]
+    fn list_with_inconsistent_length_bounds_errors() {
+        let test = make_test_with_type(
+            "my_module",
+            "test_list_bad_len_bounds",
+            FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
+            FuzzerConstraint::List {
+                elem: Box::new(FuzzerConstraint::IntRange {
+                    min: "0".to_string(),
+                    max: "10".to_string(),
+                }),
+                min_len: Some(5),
+                max_len: Some(2),
+            },
+        );
+        let id = test_id("my_module", "test_list_bad_len_bounds");
+        let lean_name = sanitize_lean_name("test_list_bad_len_bounds");
+        let lean_module = "AikenVerify.Proofs.My_module.test_list_bad_len_bounds";
+
+        let err = generate_proof_file(
+            &test,
+            &id,
+            &lean_name,
+            lean_module,
+            ExistentialMode::default(),
+            &VerificationTargetKind::default(),
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(
+            err.contains("inconsistent list-length bounds"),
+            "Should report inconsistent list bounds, got:\n{err}"
+        );
+    }
+
+    #[test]
     fn list_bounds_can_be_extracted_through_and_constraint() {
         let test = make_test_with_type(
             "my_module",
@@ -5987,7 +7302,10 @@ mod tests {
             "test_list_nomax",
             FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
             FuzzerConstraint::List {
-                elem: Box::new(FuzzerConstraint::Any),
+                elem: Box::new(FuzzerConstraint::IntRange {
+                    min: "0".to_string(),
+                    max: "10".to_string(),
+                }),
                 min_len: Some(0),
                 max_len: None,
             },
@@ -6018,7 +7336,7 @@ mod tests {
     // --- Step 3.4 tests: ADT fallback via Data encoding ---
 
     #[test]
-    fn unsupported_type_falls_back_to_data() {
+    fn unsupported_type_uses_sampled_domain_fallback() {
         let test = make_test_with_type(
             "my_module",
             "test_adt",
@@ -6039,14 +7357,8 @@ mod tests {
         )
         .unwrap();
 
-        assert!(
-            proof.contains("∀ (x : Data),"),
-            "Unsupported ADT should fall back to Data quantification, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("dataArg x"),
-            "Unsupported ADT should use dataArg, got:\n{proof}"
-        );
+        assert!(proof.contains("∀ (seed : Data),"));
+        assert!(proof.contains("match sampleFuzzerValue"));
     }
 
     #[test]
@@ -6091,6 +7403,45 @@ mod tests {
         assert!(
             proof.contains("Data.List [Data.I a, b]"),
             "Should encode ADT element as plain Data var, got:\n{proof}"
+        );
+    }
+
+    #[test]
+    fn tuple_int_data_with_shared_int_range_constrains_only_int_positions() {
+        let test = make_test_with_type(
+            "my_module",
+            "test_tuple_shared_range",
+            FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Data]),
+            FuzzerConstraint::IntRange {
+                min: "0".to_string(),
+                max: "50".to_string(),
+            },
+        );
+        let id = test_id("my_module", "test_tuple_shared_range");
+        let lean_name = sanitize_lean_name("test_tuple_shared_range");
+        let lean_module = "AikenVerify.Proofs.My_module.test_tuple_shared_range";
+
+        let proof = generate_proof_file(
+            &test,
+            &id,
+            &lean_name,
+            lean_module,
+            ExistentialMode::default(),
+            &VerificationTargetKind::default(),
+        )
+        .unwrap();
+
+        assert!(
+            proof.contains("∀ (a : Integer) (b : Data),"),
+            "Tuple(Int, Data) should quantify over Integer and Data, got:\n{proof}"
+        );
+        assert!(
+            proof.contains("(0 <= a && a <= 50)"),
+            "Shared IntRange should constrain Int slot, got:\n{proof}"
+        );
+        assert!(
+            !proof.contains("0 <= b"),
+            "Shared IntRange must not constrain non-Int tuple slots, got:\n{proof}"
         );
     }
 
@@ -6310,9 +7661,10 @@ mod tests {
         let caps = capabilities();
         assert!(caps.supported_fuzzer_types.contains(&"Int".to_string()));
         assert!(caps.supported_fuzzer_types.contains(&"Bool".to_string()));
-        assert!(caps
-            .supported_fuzzer_types
-            .contains(&"ByteArray".to_string()));
+        assert!(
+            caps.supported_fuzzer_types
+                .contains(&"ByteArray".to_string())
+        );
         assert!(caps.supported_fuzzer_types.contains(&"String".to_string()));
         assert!(caps.supported_fuzzer_types.contains(&"Data".to_string()));
     }
@@ -6455,8 +7807,8 @@ mod tests {
 
         let result = generate_lean_workspace(&[test], &config, false);
         assert!(
-            result.is_err(),
-            "Nested unsupported type should fail without skip"
+            result.is_ok(),
+            "Nested composites should now generate via sampled-domain fallback"
         );
     }
 
@@ -6479,9 +7831,8 @@ mod tests {
         };
 
         let manifest = generate_lean_workspace(&[test], &config, true).unwrap();
-        assert!(manifest.tests.is_empty());
-        assert_eq!(manifest.skipped.len(), 1);
-        assert!(manifest.skipped[0].reason.contains("nested"));
+        assert_eq!(manifest.tests.len(), 1);
+        assert!(manifest.skipped.is_empty());
     }
 
     #[test]
@@ -6575,23 +7926,47 @@ mod tests {
         //    automatic multi-arg decomposition to tuple fuzzers.
         assert_eq!(caps.max_test_arity, 1);
 
-        // 4. Nested composite types (List/Tuple/Pair inside List/Tuple/Pair) are
-        //    unsupported. Reconsideration: when Lean Data encoding infrastructure
-        //    supports recursive type decomposition.
-        assert!(caps
-            .unsupported_fuzzer_types
-            .iter()
-            .any(|t| t.contains("nested")));
+        // 4. Nested composite types are supported via sampled-domain fallback.
+        assert!(
+            caps.supported_fuzzer_types
+                .iter()
+                .any(|t| t.contains("sampled-domain fallback"))
+        );
 
         // 5. Blaster translation gaps are documented explicitly so failures can
         //    be surfaced with actionable context (e.g. List.Mem translation).
-        assert!(caps
-            .unsupported_fuzzer_types
-            .iter()
-            .any(|t| t.contains("Blaster translation gaps")));
+        assert!(
+            caps.unsupported_fuzzer_types
+                .iter()
+                .any(|t| t.contains("Blaster translation gaps"))
+        );
 
         // 6. Supported envelope includes all three target modes.
         assert_eq!(caps.target_modes.len(), 3);
+
+        // 7. Bytearray length-domain translation is currently sampled-domain
+        //    fallback only.
+        assert!(
+            caps.unsupported_fuzzer_types
+                .iter()
+                .any(|t| t.contains("bytearray_between"))
+        );
+
+        // 8. scenario.report_coverage extraction is currently sampled-domain
+        //    fallback only.
+        assert!(
+            caps.unsupported_fuzzer_types
+                .iter()
+                .any(|t| t.contains("report_coverage"))
+        );
+
+        // 9. Partial-application/higher-order resolver support is explicitly
+        //    tracked as a known limitation.
+        assert!(
+            caps.unsupported_fuzzer_types
+                .iter()
+                .any(|t| t.contains("partial-application"))
+        );
     }
 
     #[test]
@@ -6616,8 +7991,9 @@ mod tests {
                 max: "10".to_string(),
             },
         ));
-        // Pair(Int, Bool) with Map(IntRange) => no explicit bounds needed
-        assert!(!requires_explicit_bounds(
+        // Pair(Int, Bool) with Map(IntRange) still needs explicit bounds since
+        // Map constraints are input-domain only.
+        assert!(requires_explicit_bounds(
             &FuzzerOutputType::Pair(
                 Box::new(FuzzerOutputType::Int),
                 Box::new(FuzzerOutputType::Bool),
@@ -6627,6 +8003,24 @@ mod tests {
                 max: "255".to_string(),
             })),
         ));
+    }
+
+    #[test]
+    fn extract_int_range_from_and_intersects_bounds() {
+        let range = extract_int_range_from_constraint(&FuzzerConstraint::And(vec![
+            FuzzerConstraint::IntRange {
+                min: "0".to_string(),
+                max: "100".to_string(),
+            },
+            FuzzerConstraint::IntRange {
+                min: "20".to_string(),
+                max: "80".to_string(),
+            },
+        ]))
+        .expect("And-wrapped ranges should be extractable");
+
+        assert_eq!(range.0, "20");
+        assert_eq!(range.1, "80");
     }
 
     #[test]
@@ -6673,9 +8067,9 @@ mod tests {
     }
 
     #[test]
-    fn list_bool_with_mapped_int_range_no_element_bounds() {
-        // List<Bool> produced via fuzz.map(int_between(...), ...) should NOT emit
-        // numeric element bound predicates like `0 <= x_i` where x_i : Bool.
+    fn list_bool_with_mapped_int_range_uses_sampled_domain_fallback() {
+        // Mapped IntRange over Bool output cannot be translated to direct output
+        // predicates; we should fall back to sampled-domain theorems.
         let test = make_test_with_type(
             "my_module",
             "test_list_bool",
@@ -6705,16 +8099,16 @@ mod tests {
         )
         .unwrap();
 
-        // Should have length bounds
         assert!(
-            proof.contains("(0 <= xs.length && xs.length <= 5)"),
-            "Should have length bounds, got:\n{proof}"
+            proof.contains(&format!(
+                "match sampleFuzzerValue fuzzer_prog_{id} seed with"
+            )),
+            "Should use sampled-domain fallback theorem, got:\n{proof}"
         );
         assert!(
             proof.contains("open PlutusCore.Data (Data)"),
             "List proof should open Data namespace for Data.List encoding, got:\n{proof}"
         );
-        // Must NOT have numeric element predicates for Bool elements
         assert!(
             !proof.contains("0 <= x_i"),
             "Should NOT emit numeric element bounds for Bool type, got:\n{proof}"
