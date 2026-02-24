@@ -343,6 +343,125 @@ fn exec_capabilities(CapabilitiesArgs { json }: CapabilitiesArgs) -> miette::Res
     Ok(())
 }
 
+fn extract_first_double_quoted(input: &str) -> Option<String> {
+    let start = input.find('"')?;
+    let rest = &input[start + 1..];
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
+fn is_simple_identifier(input: &str) -> bool {
+    !input.is_empty()
+        && input
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+}
+
+fn simplify_counterexample_expr(expr: &str) -> String {
+    if let Some(text) = extract_first_double_quoted(expr) {
+        return format!("\"{text}\"");
+    }
+
+    expr.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn format_counterexample_item(item: &str, include_name: bool) -> String {
+    if let Some((name, value)) = item.split_once(':') {
+        let value = simplify_counterexample_expr(value.trim());
+        if include_name {
+            format!("{} = {}", name.trim(), value)
+        } else {
+            value
+        }
+    } else {
+        simplify_counterexample_expr(item)
+    }
+}
+
+fn extract_counterexample_display(reason: &str) -> Option<String> {
+    let mut in_counterexample_block = false;
+    let mut items = Vec::new();
+    let mut current_item: Option<String> = None;
+
+    for line in reason.lines() {
+        if !in_counterexample_block {
+            if let Some(idx) = line.find("Counterexample:") {
+                let tail = line[idx + "Counterexample:".len()..].trim();
+                if !tail.is_empty() {
+                    if let Some((name, value)) = tail.split_once('=') {
+                        if is_simple_identifier(name.trim()) {
+                            return Some(simplify_counterexample_expr(value.trim()));
+                        }
+                    }
+
+                    return Some(simplify_counterexample_expr(tail));
+                }
+                in_counterexample_block = true;
+            }
+            continue;
+        }
+
+        if line.contains("Tactic `blaster` failed")
+            || line.contains("❌ Falsified")
+            || line.contains("unsolved goals")
+        {
+            break;
+        }
+
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if let Some(idx) = line.find("- ") {
+            if let Some(item) = current_item.take() {
+                items.push(item);
+            }
+
+            let item = line[idx + 2..].trim();
+            if !item.is_empty() {
+                current_item = Some(item.to_string());
+            }
+            continue;
+        }
+
+        if let Some(item) = &mut current_item {
+            item.push(' ');
+            item.push_str(trimmed);
+        }
+    }
+
+    if let Some(item) = current_item {
+        items.push(item);
+    }
+
+    if items.is_empty() {
+        return None;
+    }
+
+    if items.len() == 1 {
+        return items
+            .first()
+            .map(|item| format_counterexample_item(item, false));
+    }
+
+    Some(
+        items
+            .iter()
+            .map(|item| format_counterexample_item(item, true))
+            .collect::<Vec<_>>()
+            .join(", "),
+    )
+}
+
+fn sanitize_stderr_for_display(stderr: &str) -> String {
+    stderr
+        .lines()
+        .filter(|line| line.trim() != "error: build failed")
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn exec_run(
     RunArgs {
         directory,
@@ -533,23 +652,36 @@ fn exec_run(
                                 .to_string(),
                             "PROVED".to_string(),
                         ),
-                        ProofStatus::Failed { category, .. } => {
-                            let cat = match category {
-                                FailureCategory::Counterexample => "counterexample",
-                                FailureCategory::UnsatGoal => "unsat-goal",
-                                FailureCategory::Timeout => "timeout",
-                                FailureCategory::BuildError => "build-error",
-                                FailureCategory::DependencyError => "dependency-error",
-                                FailureCategory::BlasterUnsupported => "blaster-unsupported",
-                                FailureCategory::Unknown => "unknown",
-                            };
-                            (
-                                "FAIL"
-                                    .if_supports_color(Stderr, |s| s.red())
-                                    .to_string(),
-                                format!("FAILED [{}]", cat),
-                            )
-                        }
+                        ProofStatus::Failed { category, reason } => match category {
+                            FailureCategory::Counterexample => {
+                                let label = extract_counterexample_display(reason)
+                                    .map(|value| format!("COUNTEREXAMPLE: {value}"))
+                                    .unwrap_or_else(|| "COUNTEREXAMPLE".to_string());
+                                (
+                                    "FAIL"
+                                        .if_supports_color(Stderr, |s| s.red())
+                                        .to_string(),
+                                    label,
+                                )
+                            }
+                            _ => {
+                                let cat = match category {
+                                    FailureCategory::Counterexample => "counterexample",
+                                    FailureCategory::UnsatGoal => "unsat-goal",
+                                    FailureCategory::Timeout => "timeout",
+                                    FailureCategory::BuildError => "build-error",
+                                    FailureCategory::DependencyError => "dependency-error",
+                                    FailureCategory::BlasterUnsupported => "blaster-unsupported",
+                                    FailureCategory::Unknown => "unknown",
+                                };
+                                (
+                                    "FAIL"
+                                        .if_supports_color(Stderr, |s| s.red())
+                                        .to_string(),
+                                    format!("FAILED [{}]", cat),
+                                )
+                            }
+                        },
                         ProofStatus::TimedOut { .. } => (
                             "TIME"
                                 .if_supports_color(Stderr, |s| s.yellow())
@@ -568,8 +700,8 @@ fn exec_run(
                         icon, t.test_name, t.theorem_name, label
                     );
                     // Print inline failure context snippet
-                    if let ProofStatus::Failed { reason, .. } = &t.status {
-                        if !reason.is_empty() {
+                    if let ProofStatus::Failed { category, reason } = &t.status {
+                        if *category != FailureCategory::Counterexample && !reason.is_empty() {
                             for line in reason.lines().take(10) {
                                 println!(
                                     "       {}",
@@ -604,8 +736,10 @@ fn exec_run(
                 );
 
                 if summary.failed > 0 || summary.timed_out > 0 || summary.unknown > 0 {
-                    if !summary.raw_output.stderr.is_empty() {
-                        eprintln!("\n{}", summary.raw_output.stderr);
+                    let stderr_for_display =
+                        sanitize_stderr_for_display(&summary.raw_output.stderr);
+                    if !stderr_for_display.trim().is_empty() {
+                        eprintln!("\n{}", stderr_for_display);
                     }
                     eprintln!("Logs available at {}/logs/", out_dir.display());
                     eprintln!(
@@ -657,4 +791,59 @@ fn exec_run(
         Ok(())
     })
     .map_err(|_| process::exit(1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_counterexample_display_multiline_bytestring() {
+        let reason = "\
+error: AikenVerify/Proofs/Foo.lean:15:5: Counterexample:
+error: AikenVerify/Proofs/Foo.lean:15:5: - x: (PlutusCore.ByteString.PlutusCore.ByteStringInternal.ByteString.mk
+  \"Hello World.\")
+error: AikenVerify/Proofs/Foo.lean:15:5: Tactic `blaster` failed: Goal was falsified";
+
+        assert_eq!(
+            extract_counterexample_display(reason),
+            Some("\"Hello World.\"".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_counterexample_display_inline_assignment() {
+        let reason = "error: Foo.lean:1:1: Counterexample: x = 42";
+        assert_eq!(
+            extract_counterexample_display(reason),
+            Some("42".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_counterexample_display_multiple_inputs() {
+        let reason = "\
+error: Foo.lean:1:1: Counterexample:
+error: Foo.lean:1:1: - x: 1
+error: Foo.lean:1:1: - y: True
+error: Foo.lean:1:1: Tactic `blaster` failed";
+
+        assert_eq!(
+            extract_counterexample_display(reason),
+            Some("x = 1, y = True".to_string())
+        );
+    }
+
+    #[test]
+    fn sanitize_stderr_for_display_removes_generic_build_failed_line() {
+        let stderr = "\
+error: Foo.lean:15:5: Counterexample:
+error: build failed
+error: Foo.lean:15:5: Tactic `blaster` failed";
+
+        assert_eq!(
+            sanitize_stderr_for_display(stderr),
+            "error: Foo.lean:15:5: Counterexample:\nerror: Foo.lean:15:5: Tactic `blaster` failed"
+        );
+    }
 }

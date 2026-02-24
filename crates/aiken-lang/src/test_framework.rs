@@ -20,7 +20,7 @@ use patricia_tree::PatriciaMap;
 use std::time::Duration;
 use std::{
     borrow::Borrow,
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
     fmt::{Debug, Display},
     ops::Deref,
@@ -147,8 +147,12 @@ impl Test {
             let parameter = test.arguments.first().unwrap().to_owned();
 
             let via = parameter.via.clone();
-            let constraint =
-                extract_constraint_from_via(&via, module_name.as_str(), generator.functions());
+            let constraint = extract_constraint_from_via_with_constants(
+                &via,
+                module_name.as_str(),
+                generator.functions(),
+                generator.constants(),
+            );
 
             let type_info = parameter.arg.tipo.clone();
 
@@ -320,14 +324,28 @@ fn extract_constraint_from_via(
     current_module: &str,
     known_functions: &IndexMap<&FunctionAccessKey, &TypedFunction>,
 ) -> FuzzerConstraint {
+    extract_constraint_from_via_with_constants(
+        via,
+        current_module,
+        known_functions,
+        &IndexMap::new(),
+    )
+}
+
+fn extract_constraint_from_via_with_constants(
+    via: &TypedExpr,
+    current_module: &str,
+    known_functions: &IndexMap<&FunctionAccessKey, &TypedFunction>,
+    known_constants: &IndexMap<&FunctionAccessKey, &TypedExpr>,
+) -> FuzzerConstraint {
     match via {
         TypedExpr::Call { fun, args, .. } => {
             let fn_name = fuzz_builtin_name(fun.as_ref());
 
             match fn_name {
                 Some("int_between") if args.len() == 2 => {
-                    let min = extract_int_value(&args[0].value);
-                    let max = extract_int_value(&args[1].value);
+                    let min = extract_int_value(&args[0].value, current_module, known_constants);
+                    let max = extract_int_value(&args[1].value, current_module, known_constants);
                     match (min, max) {
                         (Some(min), Some(max)) => normalize_int_range(min, max),
                         _ => FuzzerConstraint::Unsupported {
@@ -344,7 +362,9 @@ fn extract_constraint_from_via(
                     }
                 }
                 Some("int_at_least") if args.len() == 1 => {
-                    if let Some(min_str) = extract_int_value(&args[0].value) {
+                    if let Some(min_str) =
+                        extract_int_value(&args[0].value, current_module, known_constants)
+                    {
                         int_at_least_constraint(min_str)
                     } else {
                         FuzzerConstraint::Unsupported {
@@ -353,7 +373,9 @@ fn extract_constraint_from_via(
                     }
                 }
                 Some("int_at_most") if args.len() == 1 => {
-                    if let Some(max_str) = extract_int_value(&args[0].value) {
+                    if let Some(max_str) =
+                        extract_int_value(&args[0].value, current_module, known_constants)
+                    {
                         int_at_most_constraint(max_str)
                     } else {
                         FuzzerConstraint::Unsupported {
@@ -365,10 +387,11 @@ fn extract_constraint_from_via(
                 // the input fuzzer's domain, wrapped in Map to indicate the output
                 // type may differ.
                 Some("map") if args.len() == 2 => {
-                    let inner = extract_constraint_from_via(
+                    let inner = extract_constraint_from_via_with_constants(
                         &args[0].value,
                         current_module,
                         known_functions,
+                        known_constants,
                     );
                     // When the mapper is an obvious unary integer transform,
                     // preserve output-domain bounds instead of leaving a generic
@@ -384,19 +407,26 @@ fn extract_constraint_from_via(
                 // and_then(fuzzer, continuation_fn): constraint comes from the
                 // inner fuzzer as a conservative approximation.
                 Some("and_then") | Some("then") if args.len() == 2 => {
-                    extract_constraint_from_via(&args[0].value, current_module, known_functions)
-                }
-                // both(fuzzer_a, fuzzer_b): tuple constraint from both components.
-                Some("both") if args.len() >= 2 => {
-                    let left = extract_constraint_from_via(
+                    extract_constraint_from_via_with_constants(
                         &args[0].value,
                         current_module,
                         known_functions,
+                        known_constants,
+                    )
+                }
+                // both(fuzzer_a, fuzzer_b): tuple constraint from both components.
+                Some("both") if args.len() >= 2 => {
+                    let left = extract_constraint_from_via_with_constants(
+                        &args[0].value,
+                        current_module,
+                        known_functions,
+                        known_constants,
                     );
-                    let right = extract_constraint_from_via(
+                    let right = extract_constraint_from_via_with_constants(
                         &args[1].value,
                         current_module,
                         known_functions,
+                        known_constants,
                     );
                     FuzzerConstraint::Tuple(vec![left, right])
                 }
@@ -405,10 +435,11 @@ fn extract_constraint_from_via(
                     FuzzerConstraint::Tuple(
                         args.iter()
                             .map(|arg| {
-                                extract_constraint_from_via(
+                                extract_constraint_from_via_with_constants(
                                     &arg.value,
                                     current_module,
                                     known_functions,
+                                    known_constants,
                                 )
                             })
                             .collect(),
@@ -437,15 +468,17 @@ fn extract_constraint_from_via(
                         };
                     };
 
-                    let left = extract_constraint_from_via(
+                    let left = extract_constraint_from_via_with_constants(
                         &args[0].value,
                         current_module,
                         known_functions,
+                        known_constants,
                     );
-                    let right = extract_constraint_from_via(
+                    let right = extract_constraint_from_via_with_constants(
                         &args[1].value,
                         current_module,
                         known_functions,
+                        known_constants,
                     );
 
                     let ordered = match mapper_arg_order {
@@ -462,7 +495,9 @@ fn extract_constraint_from_via(
                 }
                 // constant(value): always produces the same value.
                 Some("constant") if args.len() == 1 => {
-                    if let Some(val) = extract_int_value(&args[0].value) {
+                    if let Some(val) =
+                        extract_int_value(&args[0].value, current_module, known_constants)
+                    {
                         FuzzerConstraint::IntRange {
                             min: val.clone(),
                             max: val,
@@ -474,10 +509,11 @@ fn extract_constraint_from_via(
                 }
                 // list(elem_fuzzer): list with element constraint, no length bounds known.
                 Some("list") if args.len() == 1 => {
-                    let elem = extract_constraint_from_via(
+                    let elem = extract_constraint_from_via_with_constants(
                         &args[0].value,
                         current_module,
                         known_functions,
+                        known_constants,
                     );
                     FuzzerConstraint::List {
                         elem: Box::new(elem),
@@ -487,40 +523,73 @@ fn extract_constraint_from_via(
                 }
                 // list_between(elem_fuzzer, min_len, max_len): list with length bounds.
                 Some("list_between") if args.len() == 3 => {
-                    let elem = extract_constraint_from_via(
+                    let elem = extract_constraint_from_via_with_constants(
                         &args[0].value,
                         current_module,
                         known_functions,
+                        known_constants,
                     );
-                    let min_len =
-                        extract_int_value(&args[1].value).and_then(|s| s.parse::<usize>().ok());
-                    let max_len =
-                        extract_int_value(&args[2].value).and_then(|s| s.parse::<usize>().ok());
+                    let min_len = extract_int_value(&args[1].value, current_module, known_constants)
+                        .and_then(|s| s.parse::<usize>().ok());
+                    let max_len = extract_int_value(&args[2].value, current_module, known_constants)
+                        .and_then(|s| s.parse::<usize>().ok());
                     FuzzerConstraint::List {
                         elem: Box::new(elem),
                         min_len,
                         max_len,
                     }
                 }
-                _ => extract_constraint_from_zero_arg_helper_call(
-                    fun.as_ref(),
-                    args,
-                    current_module,
-                    known_functions,
-                )
-                .unwrap_or(FuzzerConstraint::Any),
+                _ => {
+                    if let Some(name) = scenario_builtin_name(fun.as_ref()) {
+                        extract_constraint_from_scenario_call(name, args)
+                    } else {
+                        extract_constraint_from_zero_arg_helper_call(
+                            fun.as_ref(),
+                            args,
+                            current_module,
+                            known_functions,
+                            known_constants,
+                        )
+                        .unwrap_or(FuzzerConstraint::Any)
+                    }
+                }
             }
         }
         // Pipelines and sequences are desugared into a list of expressions
         // where the last one carries the final value. Recurse into it.
         TypedExpr::Pipeline { expressions, .. } | TypedExpr::Sequence { expressions, .. } => {
             if let Some(last) = expressions.last() {
-                extract_constraint_from_via(last, current_module, known_functions)
+                extract_constraint_from_via_with_constants(
+                    last,
+                    current_module,
+                    known_functions,
+                    known_constants,
+                )
             } else {
                 FuzzerConstraint::Any
             }
         }
         _ => FuzzerConstraint::Any,
+    }
+}
+
+fn extract_constraint_from_scenario_call(name: &str, args: &[CallArg<TypedExpr>]) -> FuzzerConstraint {
+    let unbounded_list = || FuzzerConstraint::List {
+        elem: Box::new(FuzzerConstraint::Any),
+        min_len: None,
+        max_len: None,
+    };
+
+    match name {
+        // scenario.ok(initial_state, step) : Fuzzer<List<Transaction>>
+        "ok" if args.len() == 2 => unbounded_list(),
+        // scenario.ko(initial_state, step) : Fuzzer<(List<Label>, List<Transaction>)>
+        "ko" if args.len() == 2 => FuzzerConstraint::Tuple(vec![unbounded_list(), unbounded_list()]),
+        // scenario.report_coverage(initial_state, step) : Fuzzer<Outcome>
+        "report_coverage" if args.len() == 2 => FuzzerConstraint::Any,
+        _ => FuzzerConstraint::Unsupported {
+            reason: format!("scenario.{name}: unsupported call shape"),
+        },
     }
 }
 
@@ -633,6 +702,7 @@ fn extract_constraint_from_zero_arg_helper_call(
     args: &[CallArg<TypedExpr>],
     current_module: &str,
     known_functions: &IndexMap<&FunctionAccessKey, &TypedFunction>,
+    known_constants: &IndexMap<&FunctionAccessKey, &TypedExpr>,
 ) -> Option<FuzzerConstraint> {
     if !args.is_empty() {
         return None;
@@ -643,10 +713,11 @@ fn extract_constraint_from_zero_arg_helper_call(
         return None;
     }
 
-    Some(extract_constraint_from_via(
+    Some(extract_constraint_from_via_with_constants(
         &helper_fn.body,
         &module_name,
         known_functions,
+        known_constants,
     ))
 }
 
@@ -701,6 +772,26 @@ fn fuzz_builtin_name(fun: &TypedExpr) -> Option<&str> {
             ModuleValueConstructor::Fn { module, name, .. } if module == FUZZ_MODULE => {
                 Some(name.as_str())
             }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn scenario_builtin_name(fun: &TypedExpr) -> Option<&str> {
+    const SCENARIO_MODULE: &str = "aiken/fuzz/scenario";
+
+    match fun {
+        TypedExpr::Var { constructor, .. } => match &constructor.variant {
+            ValueConstructorVariant::ModuleFn {
+                module, name, ..
+            } if module == SCENARIO_MODULE => Some(name.as_str()),
+            _ => None,
+        },
+        TypedExpr::ModuleSelect { constructor, .. } => match constructor {
+            ModuleValueConstructor::Fn {
+                module, name, ..
+            } if module == SCENARIO_MODULE => Some(name.as_str()),
             _ => None,
         },
         _ => None,
@@ -838,6 +929,16 @@ fn find_function<'a>(
     })
 }
 
+fn find_constant<'a>(
+    known_constants: &'a IndexMap<&FunctionAccessKey, &TypedExpr>,
+    module_name: &str,
+    constant_name: &str,
+) -> Option<&'a TypedExpr> {
+    known_constants.iter().find_map(|(key, expr)| {
+        (key.module_name == module_name && key.function_name == constant_name).then_some(*expr)
+    })
+}
+
 fn map2_tuple_arg_order(args: &[TypedArg], body: &TypedExpr) -> Option<[usize; 2]> {
     let [first_arg, second_arg] = args else {
         return None;
@@ -895,7 +996,28 @@ fn terminal_expression(mut expr: &TypedExpr) -> &TypedExpr {
     }
 }
 
-fn extract_int_value(expr: &TypedExpr) -> Option<String> {
+fn extract_int_value(
+    expr: &TypedExpr,
+    current_module: &str,
+    known_constants: &IndexMap<&FunctionAccessKey, &TypedExpr>,
+) -> Option<String> {
+    let mut visiting_constants = BTreeSet::new();
+    extract_int_value_with_constants(
+        expr,
+        current_module,
+        known_constants,
+        &mut visiting_constants,
+    )
+}
+
+fn extract_int_value_with_constants(
+    expr: &TypedExpr,
+    current_module: &str,
+    known_constants: &IndexMap<&FunctionAccessKey, &TypedExpr>,
+    visiting_constants: &mut BTreeSet<(String, String)>,
+) -> Option<String> {
+    let expr = terminal_expression(expr);
+
     match expr {
         TypedExpr::UInt { value, .. } => Some(value.clone()),
         TypedExpr::UnOp {
@@ -903,14 +1025,67 @@ fn extract_int_value(expr: &TypedExpr) -> Option<String> {
             value,
             ..
         } => {
-            if let TypedExpr::UInt { value, .. } = value.as_ref() {
+            let value = terminal_expression(value.as_ref());
+            if let TypedExpr::UInt { value, .. } = value {
                 Some(format!("-{}", value))
             } else {
-                None
+                let inner = extract_int_value_with_constants(
+                    value,
+                    current_module,
+                    known_constants,
+                    visiting_constants,
+                )?;
+                let parsed = parse_bigint_literal(&inner)?;
+                Some((-parsed).to_string())
             }
         }
+        TypedExpr::Var {
+            name, constructor, ..
+        } => match &constructor.variant {
+            ValueConstructorVariant::ModuleConstant { module, name, .. } => resolve_int_constant(
+                module,
+                name,
+                known_constants,
+                visiting_constants,
+            ),
+            // Best-effort fallback for unqualified constant references.
+            _ => resolve_int_constant(current_module, name, known_constants, visiting_constants),
+        },
+        TypedExpr::ModuleSelect {
+            module_name,
+            label,
+            constructor,
+            ..
+        } => match constructor {
+            ModuleValueConstructor::Constant { module, name, .. } => {
+                resolve_int_constant(module, name, known_constants, visiting_constants)
+            }
+            _ => resolve_int_constant(module_name, label, known_constants, visiting_constants),
+        },
         _ => None,
     }
+}
+
+fn resolve_int_constant(
+    module_name: &str,
+    constant_name: &str,
+    known_constants: &IndexMap<&FunctionAccessKey, &TypedExpr>,
+    visiting_constants: &mut BTreeSet<(String, String)>,
+) -> Option<String> {
+    let key = (module_name.to_string(), constant_name.to_string());
+    if !visiting_constants.insert(key.clone()) {
+        return None;
+    }
+
+    let value_expr = find_constant(known_constants, module_name, constant_name)?;
+    let result = extract_int_value_with_constants(
+        value_expr,
+        module_name,
+        known_constants,
+        visiting_constants,
+    );
+    visiting_constants.remove(&key);
+    result
 }
 
 #[derive(Debug, Clone, thiserror::Error, miette::Diagnostic)]
@@ -2201,6 +2376,21 @@ mod test {
         }
     }
 
+    fn module_const_var(name: &str, module: &str, tipo: Rc<Type>) -> TypedExpr {
+        TypedExpr::Var {
+            location: Span::empty(),
+            constructor: ValueConstructor::public(
+                tipo.clone(),
+                ValueConstructorVariant::ModuleConstant {
+                    location: Span::empty(),
+                    module: module.to_string(),
+                    name: name.to_string(),
+                },
+            ),
+            name: name.to_string(),
+        }
+    }
+
     fn fuzz_var(name: &str, tipo: Rc<Type>) -> TypedExpr {
         module_fn_var(name, "aiken/fuzz", tipo)
     }
@@ -2431,6 +2621,10 @@ mod test {
     }
 
     fn empty_known_functions<'a>() -> IndexMap<&'a FunctionAccessKey, &'a TypedFunction> {
+        IndexMap::new()
+    }
+
+    fn empty_known_constants<'a>() -> IndexMap<&'a FunctionAccessKey, &'a TypedExpr> {
         IndexMap::new()
     }
 
@@ -2735,6 +2929,107 @@ mod test {
             FuzzerConstraint::IntRange {
                 min: "5".to_string(),
                 max: "100".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn extract_constraint_int_between_with_module_constant_bounds() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(fuzz_var(
+                "int_between",
+                Type::function(vec![Type::int(), Type::int()], Type::int()),
+            )),
+            args: vec![
+                call_arg(module_const_var(
+                    "core_development",
+                    "permissions_examples",
+                    Type::int(),
+                )),
+                call_arg(module_const_var(
+                    "core_development",
+                    "permissions_examples",
+                    Type::int(),
+                )),
+            ],
+        };
+
+        let functions = empty_known_functions();
+        let mut constants = empty_known_constants();
+        let key = FunctionAccessKey {
+            module_name: "permissions_examples".to_string(),
+            function_name: "core_development".to_string(),
+        };
+        let value = uint_lit("0");
+        constants.insert(&key, &value);
+
+        assert_eq!(
+            extract_constraint_from_via_with_constants(
+                &via,
+                "permissions_examples",
+                &functions,
+                &constants,
+            ),
+            FuzzerConstraint::IntRange {
+                min: "0".to_string(),
+                max: "0".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn extract_constraint_int_between_with_nested_module_constant_bounds() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(fuzz_var(
+                "int_between",
+                Type::function(vec![Type::int(), Type::int()], Type::int()),
+            )),
+            args: vec![
+                call_arg(module_const_var(
+                    "core_development",
+                    "permissions_examples",
+                    Type::int(),
+                )),
+                call_arg(module_const_var(
+                    "core_development",
+                    "permissions_examples",
+                    Type::int(),
+                )),
+            ],
+        };
+
+        let functions = empty_known_functions();
+        let mut constants = empty_known_constants();
+
+        let key_core = FunctionAccessKey {
+            module_name: "permissions_examples".to_string(),
+            function_name: "core_development".to_string(),
+        };
+        let key_base = FunctionAccessKey {
+            module_name: "permissions_examples".to_string(),
+            function_name: "base_scope".to_string(),
+        };
+
+        let value_core = module_const_var("base_scope", "permissions_examples", Type::int());
+        let value_base = uint_lit("0");
+
+        constants.insert(&key_core, &value_core);
+        constants.insert(&key_base, &value_base);
+
+        assert_eq!(
+            extract_constraint_from_via_with_constants(
+                &via,
+                "permissions_examples",
+                &functions,
+                &constants,
+            ),
+            FuzzerConstraint::IntRange {
+                min: "0".to_string(),
+                max: "0".to_string(),
             }
         );
     }
@@ -3103,6 +3398,78 @@ mod test {
                 Type::function(vec![], Type::int()),
             )),
             args: vec![],
+        };
+        let functions = empty_known_functions();
+        assert!(matches!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::Any
+        ));
+    }
+
+    #[test]
+    fn extract_constraint_scenario_ok_is_list_domain() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(module_fn_var(
+                "ok",
+                "aiken/fuzz/scenario",
+                Type::function(vec![Type::int(), Type::int()], Type::int()),
+            )),
+            args: vec![call_arg(make_int_between_via("0", "10")), call_arg(uint_lit("0"))],
+        };
+        let functions = empty_known_functions();
+        assert_eq!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::List {
+                elem: Box::new(FuzzerConstraint::Any),
+                min_len: None,
+                max_len: None,
+            }
+        );
+    }
+
+    #[test]
+    fn extract_constraint_scenario_ko_is_tuple_of_lists() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(module_fn_var(
+                "ko",
+                "aiken/fuzz/scenario",
+                Type::function(vec![Type::int(), Type::int()], Type::int()),
+            )),
+            args: vec![call_arg(make_int_between_via("0", "10")), call_arg(uint_lit("0"))],
+        };
+        let functions = empty_known_functions();
+        assert_eq!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::Tuple(vec![
+                FuzzerConstraint::List {
+                    elem: Box::new(FuzzerConstraint::Any),
+                    min_len: None,
+                    max_len: None,
+                },
+                FuzzerConstraint::List {
+                    elem: Box::new(FuzzerConstraint::Any),
+                    min_len: None,
+                    max_len: None,
+                },
+            ])
+        );
+    }
+
+    #[test]
+    fn extract_constraint_scenario_report_coverage_is_any() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::int(),
+            fun: Box::new(module_fn_var(
+                "report_coverage",
+                "aiken/fuzz/scenario",
+                Type::function(vec![Type::int(), Type::int()], Type::int()),
+            )),
+            args: vec![call_arg(make_int_between_via("0", "10")), call_arg(uint_lit("0"))],
         };
         let functions = empty_known_functions();
         assert!(matches!(

@@ -12,6 +12,16 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[cfg(unix)]
+unsafe extern "C" {
+    fn kill(pid: i32, sig: i32) -> i32;
+}
+
+#[cfg(unix)]
+const SIGTERM: i32 = 15;
+#[cfg(unix)]
+const SIGKILL: i32 = 9;
+
 /// Result of running proof verification
 #[derive(Debug, serde::Serialize)]
 pub struct VerifyResult {
@@ -429,11 +439,12 @@ fn sanitize_lean_name(aiken_name: &str) -> String {
     }
 }
 
-/// Convert an Aiken module path like `aiken/list` to a PascalCase Lean module segment
-/// like `AikenList`.
+/// Convert an Aiken module path like `aiken/list` or `permissions.test`
+/// to a PascalCase Lean module segment like `AikenList` or `PermissionsTest`.
 fn module_to_lean_segment(module: &str) -> String {
     module
-        .split('/')
+        .split(['/', '.'])
+        .filter(|part| !part.is_empty())
         .map(|part| {
             let sanitized = sanitize_lean_name(part);
             let mut chars = sanitized.chars();
@@ -822,6 +833,14 @@ pub fn run_proofs(
         mut command: Command,
         timeout_secs: u64,
     ) -> miette::Result<CommandRunResult> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            // Put `lake` in its own process group so timeout handling can terminate
+            // descendants (`lean`, `blaster`, `z3`) together.
+            command.process_group(0);
+        }
+
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
 
         let mut child = command
@@ -868,9 +887,27 @@ pub fn run_proofs(
 
             if timeout.is_some_and(|limit| start.elapsed() >= limit) {
                 timed_out = true;
-                // This kills only the direct child. If future CI failures show
-                // descendants keeping pipes open, switch to process-group kill.
-                let _ = child.kill();
+                #[cfg(unix)]
+                {
+                    // Kill the entire process group to ensure descendant processes
+                    // release stdout/stderr pipes and reader threads can finish.
+                    if let Ok(raw_pid) = i32::try_from(child.id()) {
+                        // Negative PID targets the process group ID.
+                        unsafe {
+                            let _ = kill(-raw_pid, SIGTERM);
+                        }
+                        thread::sleep(Duration::from_millis(200));
+                        unsafe {
+                            let _ = kill(-raw_pid, SIGKILL);
+                        }
+                    } else {
+                        let _ = child.kill();
+                    }
+                }
+                #[cfg(not(unix))]
+                {
+                    let _ = child.kill();
+                }
                 break child
                     .wait()
                     .map_err(|e| miette::miette!("Failed to wait for timed out command: {e}"))?;
@@ -1176,6 +1213,8 @@ pub fn generate_lean_workspace(
         // Write the flat file (hex content)
         let flat_file_rel = format!("flat/{id}.flat");
         write_file(&out.join(&flat_file_rel), &test.test_program.hex)?;
+        let fuzzer_flat_rel = format!("flat/{id}_fuzzer.flat");
+        write_file(&out.join(&fuzzer_flat_rel), &test.fuzzer_program.hex)?;
 
         // For validator/equivalence modes, also write the handler flat file
         if matches!(
@@ -1292,10 +1331,18 @@ def fromFrameToBool (s : State) : Option Bool :=
   | .Halt (.VCon (Const.Bool x)) => some x
   | _ => none
 
+def fromFrameToData (s : State) : Option Data :=
+  match s with
+  | .Halt (.VCon (Const.Data x)) => some x
+  | _ => none
+
 def integerToBuiltin (x : Integer) : Term := Term.Const (Const.Integer x)
 
 def executeIntProgram (p : Program) (args : List Term) (exUnit : Nat) : Option Integer :=
   fromFrameToInt $ cekExecuteProgram p args exUnit
+
+def executeDataProgram (p : Program) (args : List Term) (exUnit : Nat) : Option Data :=
+  fromFrameToData $ cekExecuteProgram p args exUnit
 
 def intArgs2 (x : Integer) (y : Integer) : List Term :=
     [integerToBuiltin x, integerToBuiltin y]
@@ -1333,6 +1380,24 @@ def bytearrayArg (x : ByteString) : List Term :=
 
 def dataArg (x : Data) : List Term :=
   [Term.Const (Const.Data x)]
+
+/-- Decode the sampled value from `Fuzzer<a> = Prng -> Option (Prng, a)` output encoded as Data. -/
+def decodeFuzzerSampleValue (d : Data) : Option Data :=
+  match d with
+  | Data.Constr tag fields =>
+      if tag == 121 then
+        match fields with
+        | [Data.List [_nextPrng, value]] => some value
+        | _ => none
+      else
+        none
+  | _ => none
+
+/-- Execute a fuzzer program at a given seed and decode the sampled output value (if any). -/
+def sampleFuzzerValue (fuzzer : Program) (seed : Data) : Option Data :=
+  match executeDataProgram fuzzer (dataArg seed) {cek_budget} with
+  | some d => decodeFuzzerSampleValue d
+  | none => none
 
 def dataArgs2 (x : Data) (y : Data) : List Term :=
   [Term.Const (Const.Data x), Term.Const (Const.Data y)]
@@ -1482,10 +1547,8 @@ pub fn requires_explicit_bounds(
             let types = vec![fst.as_ref().clone(), snd.as_ref().clone()];
             !constraint_has_tuple_int_ranges_for_types(constraint, &types)
         }
-        FuzzerOutputType::List(_) => {
-            // Lists need explicit length bounds from the constraint
-            !constraint_has_list_bounds(constraint)
-        }
+        // List proofs require an extractable list-domain constraint.
+        FuzzerOutputType::List(_) => !constraint_has_list_domain(constraint),
         _ => false,
     }
 }
@@ -1495,6 +1558,16 @@ fn constraint_has_int_range(constraint: &FuzzerConstraint) -> bool {
     match constraint {
         FuzzerConstraint::IntRange { .. } => true,
         FuzzerConstraint::Map(inner) => constraint_has_int_range(inner),
+        _ => false,
+    }
+}
+
+/// Check if a constraint contains a list domain (possibly nested in Map/And).
+fn constraint_has_list_domain(constraint: &FuzzerConstraint) -> bool {
+    match constraint {
+        FuzzerConstraint::List { .. } => true,
+        FuzzerConstraint::Map(inner) => constraint_has_list_domain(inner),
+        FuzzerConstraint::And(parts) => parts.iter().any(constraint_has_list_domain),
         _ => false,
     }
 }
@@ -1523,28 +1596,192 @@ fn constraint_has_tuple_int_ranges_for_types(
     }
 }
 
-/// Check if a constraint provides List bounds (min_len and max_len both present).
-fn constraint_has_list_bounds(constraint: &FuzzerConstraint) -> bool {
-    match constraint {
-        FuzzerConstraint::List {
-            min_len, max_len, ..
-        } => min_len.is_some() && max_len.is_some(),
-        FuzzerConstraint::Map(inner) => constraint_has_list_bounds(inner),
-        _ => false,
-    }
-}
-
-/// Extract List bounds from a constraint, looking through Map wrappers.
-fn extract_list_bounds(constraint: &FuzzerConstraint) -> Option<(usize, usize, &FuzzerConstraint)> {
+/// Extract optional List bounds and element constraint from a constraint,
+/// looking through Map wrappers.
+fn extract_list_bounds(
+    constraint: &FuzzerConstraint,
+) -> Option<(Option<usize>, Option<usize>, &FuzzerConstraint)> {
     match constraint {
         FuzzerConstraint::List {
             elem,
-            min_len: Some(min),
-            max_len: Some(max),
-        } => Some((*min, *max, elem.as_ref())),
+            min_len,
+            max_len,
+        } => Some((*min_len, *max_len, elem.as_ref())),
         FuzzerConstraint::Map(inner) => extract_list_bounds(inner),
+        FuzzerConstraint::And(parts) => parts.iter().find_map(extract_list_bounds),
         _ => None,
     }
+}
+
+fn update_witness_min_len(current: &mut Option<usize>, candidate: Option<usize>) {
+    if let Some(min_len) = candidate {
+        *current = Some(current.map_or(min_len, |existing| existing.max(min_len)));
+    }
+}
+
+fn collect_list_element_precondition_parts(
+    test_name: &str,
+    elem_type: &FuzzerOutputType,
+    elem_constraint: &FuzzerConstraint,
+    list_var: &str,
+    out: &mut Vec<String>,
+) -> miette::Result<()> {
+    match elem_constraint {
+        FuzzerConstraint::Any => Ok(()),
+        FuzzerConstraint::IntRange { min, max } => {
+            validate_int_bounds_literals(test_name, min, max)?;
+
+            match elem_type {
+                FuzzerOutputType::Int => {
+                    out.push(format!(
+                        "(({list_var}.all (fun x_i => {min} <= x_i && x_i <= {max})) = true)"
+                    ));
+                }
+                // Data-encoded element domains (including unsupported ADTs encoded as Data).
+                FuzzerOutputType::Data | FuzzerOutputType::Unsupported(_) => {
+                    out.push(format!(
+                        "(({list_var}.all (fun x_i => match x_i with | Data.I i => {min} <= i && i <= {max} | _ => false)) = true)"
+                    ));
+                }
+                // If a mapper changed element type (e.g. Int -> Bool), the input-domain
+                // IntRange does not constrain output elements directly; keep an
+                // over-approximation by not emitting an element predicate.
+                _ => {}
+            }
+
+            Ok(())
+        }
+        FuzzerConstraint::Map(inner) => {
+            collect_list_element_precondition_parts(test_name, elem_type, inner, list_var, out)
+        }
+        FuzzerConstraint::And(parts) => {
+            for part in parts {
+                collect_list_element_precondition_parts(test_name, elem_type, part, list_var, out)?;
+            }
+            Ok(())
+        }
+        FuzzerConstraint::Unsupported { reason } => Err(miette::miette!(
+            "Test '{}' contains unsupported list element-domain extraction: {}.\n\
+             Constraint: {:?}",
+            test_name,
+            reason,
+            elem_constraint,
+        )),
+        other => Err(miette::miette!(
+            "Test '{}' has unsupported list element-domain constraint fragment {:?} for element type {:?}; \
+             cannot translate to Lean precondition.\n\
+             Constraint: {:?}",
+            test_name,
+            other,
+            elem_type,
+            elem_constraint,
+        )),
+    }
+}
+
+fn collect_list_domain_precondition_parts(
+    test_name: &str,
+    elem_type: &FuzzerOutputType,
+    constraint: &FuzzerConstraint,
+    list_var: &str,
+    out: &mut Vec<String>,
+    saw_list_domain: &mut bool,
+    witness_min_len: &mut Option<usize>,
+) -> miette::Result<()> {
+    match constraint {
+        FuzzerConstraint::List {
+            elem,
+            min_len,
+            max_len,
+        } => {
+            *saw_list_domain = true;
+            update_witness_min_len(witness_min_len, *min_len);
+
+            match (min_len, max_len) {
+                (Some(min), Some(max)) => {
+                    out.push(format!("({min} <= {list_var}.length && {list_var}.length <= {max})"));
+                }
+                (Some(min), None) => out.push(format!("({min} <= {list_var}.length)")),
+                (None, Some(max)) => out.push(format!("({list_var}.length <= {max})")),
+                (None, None) => {}
+            }
+
+            collect_list_element_precondition_parts(test_name, elem_type, elem, list_var, out)?;
+            Ok(())
+        }
+        FuzzerConstraint::Map(inner) => collect_list_domain_precondition_parts(
+            test_name,
+            elem_type,
+            inner,
+            list_var,
+            out,
+            saw_list_domain,
+            witness_min_len,
+        ),
+        FuzzerConstraint::And(parts) => {
+            for part in parts {
+                collect_list_domain_precondition_parts(
+                    test_name,
+                    elem_type,
+                    part,
+                    list_var,
+                    out,
+                    saw_list_domain,
+                    witness_min_len,
+                )?;
+            }
+            Ok(())
+        }
+        FuzzerConstraint::Any => Ok(()),
+        FuzzerConstraint::Unsupported { reason } => Err(miette::miette!(
+            "Test '{}' contains unsupported list-domain extraction: {}.\n\
+             Constraint: {:?}",
+            test_name,
+            reason,
+            constraint,
+        )),
+        other => Err(miette::miette!(
+            "Test '{}' has unsupported list-domain constraint fragment {:?}; \
+             cannot translate to Lean precondition.\n\
+             Constraint: {:?}",
+            test_name,
+            other,
+            constraint,
+        )),
+    }
+}
+
+fn build_list_domain_preconditions(
+    test_name: &str,
+    elem_type: &FuzzerOutputType,
+    constraint: &FuzzerConstraint,
+    list_var: &str,
+) -> miette::Result<(Vec<String>, Option<usize>)> {
+    let mut precondition_parts = Vec::new();
+    let mut saw_list_domain = false;
+    let mut witness_min_len = None;
+
+    collect_list_domain_precondition_parts(
+        test_name,
+        elem_type,
+        constraint,
+        list_var,
+        &mut precondition_parts,
+        &mut saw_list_domain,
+        &mut witness_min_len,
+    )?;
+
+    if !saw_list_domain {
+        return Err(miette::miette!(
+            "Test '{}' uses List fuzzer but has no extractable list-domain constraints; \
+             List proofs require a constraint derived from list/list_between.\n\
+             Constraint: {:?}",
+            test_name,
+            constraint,
+        ));
+    }
+
+    Ok((precondition_parts, witness_min_len))
 }
 
 fn validate_int_bounds_literals(test_name: &str, min: &str, max: &str) -> miette::Result<()> {
@@ -1932,6 +2169,7 @@ fn generate_proof_file(
     let form = determine_theorem_form(test, existential_mode)?;
 
     let prog = prog_name(test_id);
+    let fuzzer_prog = format!("fuzzer_{}", prog_name(test_id));
     let handler_prog = format!("handler_{}", prog_name(test_id));
 
     // Common header for all proof files
@@ -1951,6 +2189,9 @@ fn generate_proof_file(
         }
         s.push_str(&format!(
             "\n#import_uplc {prog} single_cbor_hex \"./flat/{test_id}.flat\"\n"
+        ));
+        s.push_str(&format!(
+            "#import_uplc {fuzzer_prog} single_cbor_hex \"./flat/{test_id}_fuzzer.flat\"\n"
         ));
         // For validator/equivalence modes, also import the handler program
         match target {
@@ -2193,18 +2434,94 @@ fn generate_proof_file(
             )
         }
 
-        // --- List with bounds ---
+        // --- List with optional bounds ---
         FuzzerOutputType::List(elem_type) => {
-            let (min_len, max_len, elem_constraint) = extract_list_bounds(&test.constraint)
-                .ok_or_else(|| {
-                    miette::miette!(
-                        "Test '{}' uses List fuzzer but has no extractable length bounds; \
-                         List proofs require explicit min_len and max_len from the constraint.\n\
+            let (precondition_parts, witness_min_len) = build_list_domain_preconditions(
+                &test.name,
+                elem_type.as_ref(),
+                &test.constraint,
+                "xs",
+            )?;
+
+            // When list-domain extraction yields no usable predicate for Data-encoded
+            // elements, fall back to a fuzzer-domain theorem that reasons directly on
+            // the sampled value for each seed:
+            //
+            //   ∀ seed, match sampleFuzzerValue fuzzer seed with
+            //           | some x => property x
+            //           | none => True
+            //
+            // This is sound (domain is exactly the exported fuzzer image), avoids an
+            // unconstrained universal theorem over `List Data`, and is far more
+            // tractable for blaster than an implication with a separate `x` quantifier.
+            if precondition_parts.is_empty()
+                && matches!(
+                    elem_type.as_ref(),
+                    FuzzerOutputType::Data | FuzzerOutputType::Unsupported(_)
+                )
+            {
+                if form.existential {
+                    return Err(miette::miette!(
+                        "Test '{}' requires fuzzer-domain fallback for unconstrained Data list, \
+                         but existential mode is not supported for this fallback theorem shape.\n\
                          Constraint: {:?}",
                         test.name,
                         test.constraint,
-                    )
-                })?;
+                    ));
+                }
+
+                let sample_expr = format!("sampleFuzzerValue {fuzzer_prog} seed");
+                let correctness_body = form.correctness.format(&verify_prog, "dataArg x");
+                let correctness_tactic = form.correctness.tactic();
+                let mut theorems = format!(
+                    "theorem {lean_test_name} :\n  \
+                     ∀ (seed : Data),\n  \
+                     match {sample_expr} with\n  \
+                     | some x => {correctness_body}\n  \
+                     | none => True :=\n  \
+                     by {correctness_tactic}\n"
+                );
+
+                if let Some(ref term_body) = form.termination {
+                    let termination_body = term_body.format(&verify_prog, "dataArg x");
+                    let termination_tactic = term_body.tactic();
+                    theorems.push_str(&format!(
+                        "\ntheorem {lean_test_name}_alwaysTerminating :\n  \
+                         ∀ (seed : Data),\n  \
+                         match {sample_expr} with\n  \
+                         | some x => {termination_body}\n  \
+                         | none => True :=\n  \
+                         by {termination_tactic}\n"
+                    ));
+                }
+
+                let mut content = format!("{}{theorems}", header("open PlutusCore.Data (Data)"));
+                if let VerificationTargetKind::Equivalence = target {
+                    content.push_str(&format!(
+                        "\ntheorem {lean_test_name}_equivalence :\n  \
+                         ∀ (seed : Data),\n  \
+                         match {sample_expr} with\n  \
+                         | some x => proveTests {prog} (dataArg x) = proveTests {handler_prog} (dataArg x)\n  \
+                         | none => True :=\n  \
+                         by blaster\n"
+                    ));
+                }
+                content.push_str(&footer);
+                return Ok(content);
+            }
+
+            // Keep a representative element constraint for witness construction in
+            // existential mode.
+            let (_, _, elem_constraint) = extract_list_bounds(&test.constraint).ok_or_else(|| {
+                miette::miette!(
+                    "Test '{}' uses List fuzzer but has no extractable list-domain constraints; \
+                     List proofs require a constraint derived from list/list_between.\n\
+                     Constraint: {:?}",
+                    test.name,
+                    test.constraint,
+                )
+            })?;
+
             let elem_lean_type = lean_type_for(elem_type).ok_or_else(|| {
                 miette::miette!(
                     "Test '{}' has unsupported list element type: {:?}",
@@ -2223,19 +2540,16 @@ fn generate_proof_file(
             let opens = lean_opens_for_types(&[elem_type.as_ref()]);
             let quantifiers = format!("∀ (xs : List {elem_lean_type}),");
 
-            // Build preconditions: length bounds + optional element bounds
-            let length_precond = format!("({min_len} <= xs.length && xs.length <= {max_len})");
+            // Build preconditions from extracted list-domain constraints.
             let elem_bounds = if matches!(elem_type.as_ref(), FuzzerOutputType::Int) {
                 extract_int_range_from_constraint(elem_constraint)
             } else {
                 None
             };
-            let preconditions = if let Some((ref emin, ref emax)) = elem_bounds {
-                format!(
-                    "\n  {length_precond}\n  →\n  ((xs.all (fun x_i => {emin} <= x_i && x_i <= {emax})) = true)"
-                )
+            let preconditions = if precondition_parts.is_empty() {
+                String::new()
             } else {
-                format!("\n  {length_precond}")
+                format!("\n  {}", precondition_parts.join("\n  →\n  "))
             };
             // Build the arg expression: inline list encoding as Data.List (xs.map ...)
             let arg_expr = format!(
@@ -2244,12 +2558,13 @@ fn generate_proof_file(
             let witness = if form.existential_mode == Some(ExistentialMode::Witness) {
                 // Generate a list with min_len elements using a witness that satisfies
                 // element bounds (if present) or the generic default.
-                let elem_witness: String = if let Some((ref emin, _)) = elem_bounds {
+                let elem_witness: String = if let Some((emin, _)) = elem_bounds.as_ref() {
                     format!("({emin} : {elem_lean_type})")
                 } else {
                     lean_default_witness(elem_type).to_string()
                 };
-                let elems: Vec<&str> = (0..min_len).map(|_| elem_witness.as_str()).collect();
+                let witness_len = witness_min_len.unwrap_or(0);
+                let elems: Vec<&str> = (0..witness_len).map(|_| elem_witness.as_str()).collect();
                 Some(format!("[{}]", elems.join(", ")))
             } else {
                 None
@@ -2465,6 +2780,7 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
     }
 
     let mut theorems = Vec::new();
+    let combined_output = format!("{}\n{}", raw.stdout, raw.stderr);
 
     if raw.success {
         for entry in &manifest.tests {
@@ -2482,7 +2798,6 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
             }
         }
     } else {
-        let combined_output = format!("{}\n{}", raw.stdout, raw.stderr);
         let timed_out_run = combined_output.contains("[verify-timeout]");
         let failed_modules = collect_failed_proof_modules(&combined_output);
         let succeeded_modules = collect_succeeded_proof_modules(&combined_output);
@@ -2547,6 +2862,26 @@ pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> 
                     theorem_name: term_name,
                     status: term_status,
                 });
+            }
+        }
+    }
+
+    // If the run failed and no theorem received a concrete status signal
+    // (proved/failed/timed out), classify the run-level failure for all theorems.
+    // This avoids surfacing opaque UNKNOWN statuses for generic lake failures.
+    if !raw.success
+        && theorems
+            .iter()
+            .all(|t| matches!(t.status, ProofStatus::Unknown))
+    {
+        let category = classify_failure(&combined_output);
+        if category != FailureCategory::Unknown {
+            let reason = extract_global_failure_reason(&combined_output);
+            for theorem in &mut theorems {
+                theorem.status = ProofStatus::Failed {
+                    category: category.clone(),
+                    reason: reason.clone(),
+                };
             }
         }
     }
@@ -2729,6 +3064,21 @@ fn extract_error_for_theorem(theorem: &str, output: &str) -> String {
     extract_error_for_pattern(theorem, output)
 }
 
+fn extract_global_failure_reason(output: &str) -> String {
+    let extracted = extract_error_for_pattern("error:", output);
+    if !extracted.trim().is_empty() {
+        return extracted;
+    }
+
+    output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .take(20)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2783,6 +3133,10 @@ mod tests {
     fn module_to_lean_segment_basic() {
         assert_eq!(module_to_lean_segment("aiken/list"), "AikenList");
         assert_eq!(module_to_lean_segment("my_module"), "My_module");
+        assert_eq!(
+            module_to_lean_segment("permissions.test"),
+            "PermissionsTest"
+        );
         assert_eq!(
             module_to_lean_segment("deep/nested/module"),
             "DeepNestedModule"
@@ -2860,7 +3214,9 @@ mod tests {
         let id0 = &manifest.tests[0].id;
         let id1 = &manifest.tests[1].id;
         assert!(out_dir.join(format!("flat/{id0}.flat")).exists());
+        assert!(out_dir.join(format!("flat/{id0}_fuzzer.flat")).exists());
         assert!(out_dir.join(format!("flat/{id1}.flat")).exists());
+        assert!(out_dir.join(format!("flat/{id1}_fuzzer.flat")).exists());
 
         // Check manifest
         assert_eq!(manifest.tests.len(), 2);
@@ -2899,6 +3255,7 @@ mod tests {
         assert!(proof1.contains("theorem test_roundtrip_alwaysTerminating"));
         assert!(proof1.contains("by blaster"));
         assert!(proof1.contains(&format!("#import_uplc prog_{id0} single_cbor_hex")));
+        assert!(proof1.contains(&format!("#import_uplc fuzzer_prog_{id0} single_cbor_hex")));
         assert!(proof1.contains("(0 <= x && x <= 255)"));
         assert!(proof1.contains("namespace AikenVerify.Proofs.My_module.test_roundtrip"));
 
@@ -2907,8 +3264,38 @@ mod tests {
         assert!(proof2.contains("theorem test_map"));
         assert!(proof2.contains("theorem test_map_alwaysTerminating"));
         assert!(proof2.contains(&format!("#import_uplc prog_{id1} single_cbor_hex")));
+        assert!(proof2.contains(&format!("#import_uplc fuzzer_prog_{id1} single_cbor_hex")));
         assert!(proof2.contains(&format!("./flat/{id1}.flat")));
         assert!(proof2.contains("(0 <= x && x <= 255)"));
+    }
+
+    #[test]
+    fn generate_workspace_dotted_module_creates_matching_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let out_dir = tmp.path().to_path_buf();
+        let tests = vec![make_test(
+            "permissions.test",
+            "prop_permissions_core_development_standard_ok",
+        )];
+
+        let config = VerifyConfig {
+            out_dir: out_dir.clone(),
+            cek_budget: 20000,
+            blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+            existential_mode: ExistentialMode::default(),
+            target: VerificationTargetKind::default(),
+        };
+
+        let manifest = generate_lean_workspace(&tests, &config, false).unwrap();
+        assert_eq!(manifest.tests.len(), 1);
+        assert_eq!(
+            manifest.tests[0].lean_module,
+            "AikenVerify.Proofs.PermissionsTest.prop_permissions_core_development_standard_ok"
+        );
+        assert!(
+            out_dir.join(&manifest.tests[0].lean_file).exists(),
+            "Generated proof file should exist at manifest path"
+        );
     }
 
     #[test]
@@ -2968,26 +3355,21 @@ mod tests {
         assert!(!out_dir.join("AikenVerify/Proofs/Stale/old.lean").exists());
         assert!(!out_dir.join("flat/stale.flat").exists());
         assert!(!out_dir.join("logs/stale.log").exists());
-        assert!(
-            !out_dir
-                .join(".lake/build/lib/AikenVerify/Stale/stale.olean")
-                .exists()
-        );
+        assert!(!out_dir
+            .join(".lake/build/lib/AikenVerify/Stale/stale.olean")
+            .exists());
 
         assert!(out_dir.join("PlutusCore/lakefile.lean").exists());
         assert!(out_dir.join(".lake/packages/Blaster/cache.txt").exists());
-        assert!(
-            out_dir
-                .join(".lake/build/lib/PlutusCore/cache.olean")
-                .exists()
-        );
+        assert!(out_dir
+            .join(".lake/build/lib/PlutusCore/cache.olean")
+            .exists());
 
-        assert!(
-            out_dir
-                .join("AikenVerify/Proofs/My_module/test_roundtrip.lean")
-                .exists()
-        );
+        assert!(out_dir
+            .join("AikenVerify/Proofs/My_module/test_roundtrip.lean")
+            .exists());
         assert!(out_dir.join(format!("flat/{id}.flat")).exists());
+        assert!(out_dir.join(format!("flat/{id}_fuzzer.flat")).exists());
     }
 
     #[test]
@@ -3813,16 +4195,51 @@ mod tests {
     }
 
     #[test]
-    fn list_without_bounds_errors() {
+    fn list_without_bounds_generates_theorem() {
         let test = make_test_with_type(
             "my_module",
             "test_list",
             FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
-            FuzzerConstraint::Any,
+            FuzzerConstraint::List {
+                elem: Box::new(FuzzerConstraint::Any),
+                min_len: None,
+                max_len: None,
+            },
         );
         let id = test_id("my_module", "test_list");
         let lean_name = sanitize_lean_name("test_list");
         let lean_module = "AikenVerify.Proofs.My_module.test_list";
+
+        let proof = generate_proof_file(
+            &test,
+            &id,
+            &lean_name,
+            lean_module,
+            ExistentialMode::default(),
+            &VerificationTargetKind::default(),
+        )
+        .unwrap();
+        assert!(
+            proof.contains("∀ (xs : List Integer),"),
+            "List<Int> should quantify over List Integer, got:\n{proof}"
+        );
+        assert!(
+            !proof.contains("xs.length"),
+            "Unbounded List should not emit length preconditions, got:\n{proof}"
+        );
+    }
+
+    #[test]
+    fn list_with_any_constraint_errors() {
+        let test = make_test_with_type(
+            "my_module",
+            "test_list_any",
+            FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
+            FuzzerConstraint::Any,
+        );
+        let id = test_id("my_module", "test_list_any");
+        let lean_name = sanitize_lean_name("test_list_any");
+        let lean_module = "AikenVerify.Proofs.My_module.test_list_any";
 
         let result = generate_proof_file(
             &test,
@@ -3833,10 +4250,147 @@ mod tests {
             &VerificationTargetKind::default(),
         );
         assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
+        let msg = result.unwrap_err().to_string();
         assert!(
-            err_msg.contains("List") && err_msg.contains("no extractable length bounds"),
-            "Should mention List needs bounds, got: {err_msg}"
+            msg.contains("no extractable list-domain constraints"),
+            "Should indicate missing list-domain constraint, got:\n{msg}"
+        );
+    }
+
+    #[test]
+    fn list_with_unsupported_constraint_errors() {
+        let test = make_test_with_type(
+            "my_module",
+            "test_list_unsupported",
+            FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
+            FuzzerConstraint::Unsupported {
+                reason: "scenario.ok: constraint extraction not implemented yet".to_string(),
+            },
+        );
+        let id = test_id("my_module", "test_list_unsupported");
+        let lean_name = sanitize_lean_name("test_list_unsupported");
+        let lean_module = "AikenVerify.Proofs.My_module.test_list_unsupported";
+
+        let result = generate_proof_file(
+            &test,
+            &id,
+            &lean_name,
+            lean_module,
+            ExistentialMode::default(),
+            &VerificationTargetKind::default(),
+        );
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("unsupported list-domain extraction"),
+            "Should indicate unsupported list-domain extraction, got:\n{msg}"
+        );
+        assert!(msg.contains("scenario.ok"));
+    }
+
+    #[test]
+    fn list_data_without_domain_predicate_uses_fuzzer_domain_fallback() {
+        let test = make_test_with_type(
+            "my_module",
+            "test_list_data_unconstrained",
+            FuzzerOutputType::List(Box::new(FuzzerOutputType::Data)),
+            FuzzerConstraint::List {
+                elem: Box::new(FuzzerConstraint::Any),
+                min_len: None,
+                max_len: None,
+            },
+        );
+        let id = test_id("my_module", "test_list_data_unconstrained");
+        let lean_name = sanitize_lean_name("test_list_data_unconstrained");
+        let lean_module = "AikenVerify.Proofs.My_module.test_list_data_unconstrained";
+
+        let proof = generate_proof_file(
+            &test,
+            &id,
+            &lean_name,
+            lean_module,
+            ExistentialMode::default(),
+            &VerificationTargetKind::default(),
+        )
+        .unwrap();
+        assert!(
+            proof.contains("∀ (seed : Data),"),
+            "Fallback theorem should quantify over seed only, got:\n{proof}"
+        );
+        assert!(
+            proof.contains(&format!("match sampleFuzzerValue fuzzer_prog_{id} seed with")),
+            "Fallback theorem should branch on sampled fuzzer value, got:\n{proof}"
+        );
+        assert!(
+            proof.contains(&format!("| some x => (proveTests prog_{id} (dataArg x)) = true")),
+            "Fallback theorem should evaluate property on sampled x, got:\n{proof}"
+        );
+    }
+
+    #[test]
+    fn list_unsupported_element_without_domain_predicate_uses_fuzzer_domain_fallback() {
+        let test = make_test_with_type(
+            "my_module",
+            "test_list_transaction_like",
+            FuzzerOutputType::List(Box::new(FuzzerOutputType::Unsupported(
+                "cardano/transaction.Transaction".to_string(),
+            ))),
+            FuzzerConstraint::List {
+                elem: Box::new(FuzzerConstraint::Any),
+                min_len: None,
+                max_len: None,
+            },
+        );
+        let id = test_id("my_module", "test_list_transaction_like");
+        let lean_name = sanitize_lean_name("test_list_transaction_like");
+        let lean_module = "AikenVerify.Proofs.My_module.test_list_transaction_like";
+
+        let proof = generate_proof_file(
+            &test,
+            &id,
+            &lean_name,
+            lean_module,
+            ExistentialMode::default(),
+            &VerificationTargetKind::default(),
+        )
+        .unwrap();
+        assert!(
+            proof.contains(&format!("match sampleFuzzerValue fuzzer_prog_{id} seed with")),
+            "Fallback theorem should branch on sampled fuzzer value, got:\n{proof}"
+        );
+    }
+
+    #[test]
+    fn list_data_fallback_rejects_existential_mode() {
+        let mut test = make_test_with_type(
+            "my_module",
+            "test_list_data_existential",
+            FuzzerOutputType::List(Box::new(FuzzerOutputType::Data)),
+            FuzzerConstraint::List {
+                elem: Box::new(FuzzerConstraint::Any),
+                min_len: None,
+                max_len: None,
+            },
+        );
+        test.on_test_failure = OnTestFailure::SucceedImmediately;
+
+        let id = test_id("my_module", "test_list_data_existential");
+        let lean_name = sanitize_lean_name("test_list_data_existential");
+        let lean_module = "AikenVerify.Proofs.My_module.test_list_data_existential";
+
+        let result = generate_proof_file(
+            &test,
+            &id,
+            &lean_name,
+            lean_module,
+            ExistentialMode::Witness,
+            &VerificationTargetKind::default(),
+        );
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("existential mode is not supported"),
+            "Expected explicit fallback limitation for existential mode, got:\n{msg}"
         );
     }
 
@@ -4432,8 +4986,15 @@ mod tests {
         let summary = parse_verify_results(raw, &manifest);
 
         assert_eq!(summary.total, 2);
-        assert_eq!(summary.unknown, 2);
-        assert_eq!(summary.failed, 0);
+        assert_eq!(summary.unknown, 0);
+        assert_eq!(summary.failed, 2);
+        assert!(summary.theorems.iter().all(|t| matches!(
+            t.status,
+            ProofStatus::Failed {
+                category: FailureCategory::BuildError,
+                ..
+            }
+        )));
     }
 
     #[test]
@@ -5007,9 +5568,12 @@ mod tests {
             target: VerificationTargetKind::default(),
         };
 
-        // List without bounds is genuinely unsupported for proof generation
+        // Nested composite types remain unsupported for proof generation.
         let mut unsupported = make_test("my_module", "test_list");
-        unsupported.fuzzer_output_type = FuzzerOutputType::List(Box::new(FuzzerOutputType::Int));
+        unsupported.fuzzer_output_type = FuzzerOutputType::Tuple(vec![
+            FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
+            FuzzerOutputType::Data,
+        ]);
         unsupported.constraint = FuzzerConstraint::Any;
 
         let manifest = generate_lean_workspace(&[unsupported], &config, true).unwrap();
@@ -5038,7 +5602,10 @@ mod tests {
         };
 
         let mut unsupported = make_test("my_module", "test_list");
-        unsupported.fuzzer_output_type = FuzzerOutputType::List(Box::new(FuzzerOutputType::Int));
+        unsupported.fuzzer_output_type = FuzzerOutputType::Tuple(vec![
+            FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
+            FuzzerOutputType::Data,
+        ]);
         unsupported.constraint = FuzzerConstraint::Any;
 
         let result = generate_lean_workspace(&[unsupported], &config, false);
@@ -5061,7 +5628,10 @@ mod tests {
 
         let good = make_test("my_module", "test_int");
         let mut bad = make_test("my_module", "test_list");
-        bad.fuzzer_output_type = FuzzerOutputType::List(Box::new(FuzzerOutputType::Int));
+        bad.fuzzer_output_type = FuzzerOutputType::Tuple(vec![
+            FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
+            FuzzerOutputType::Data,
+        ]);
         bad.constraint = FuzzerConstraint::Any;
 
         let manifest = generate_lean_workspace(&[good, bad], &config, true).unwrap();
@@ -5376,7 +5946,42 @@ mod tests {
     }
 
     #[test]
-    fn list_missing_max_len_errors() {
+    fn list_bounds_can_be_extracted_through_and_constraint() {
+        let test = make_test_with_type(
+            "my_module",
+            "test_list_and",
+            FuzzerOutputType::List(Box::new(FuzzerOutputType::Data)),
+            FuzzerConstraint::And(vec![
+                FuzzerConstraint::Any,
+                FuzzerConstraint::List {
+                    elem: Box::new(FuzzerConstraint::Any),
+                    min_len: Some(1),
+                    max_len: Some(5),
+                },
+            ]),
+        );
+        let id = test_id("my_module", "test_list_and");
+        let lean_name = sanitize_lean_name("test_list_and");
+        let lean_module = "AikenVerify.Proofs.My_module.test_list_and";
+
+        let proof = generate_proof_file(
+            &test,
+            &id,
+            &lean_name,
+            lean_module,
+            ExistentialMode::default(),
+            &VerificationTargetKind::default(),
+        )
+        .unwrap();
+
+        assert!(
+            proof.contains("(1 <= xs.length && xs.length <= 5)"),
+            "Should extract list bounds through And constraint, got:\n{proof}"
+        );
+    }
+
+    #[test]
+    fn list_missing_max_len_generates_one_sided_length_precondition() {
         let test = make_test_with_type(
             "my_module",
             "test_list_nomax",
@@ -5391,19 +5996,22 @@ mod tests {
         let lean_name = sanitize_lean_name("test_list_nomax");
         let lean_module = "AikenVerify.Proofs.My_module.test_list_nomax";
 
-        let result = generate_proof_file(
+        let proof = generate_proof_file(
             &test,
             &id,
             &lean_name,
             lean_module,
             ExistentialMode::default(),
             &VerificationTargetKind::default(),
-        );
-        assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
+        )
+        .unwrap();
         assert!(
-            err_msg.contains("no extractable length bounds"),
-            "Should error on missing max_len, got: {err_msg}"
+            proof.contains("(0 <= xs.length)"),
+            "Should emit lower-bound-only length precondition, got:\n{proof}"
+        );
+        assert!(
+            !proof.contains("xs.length <= "),
+            "Should not emit upper length bound when max_len is missing, got:\n{proof}"
         );
     }
 
@@ -5489,7 +6097,7 @@ mod tests {
     // --- requires_explicit_bounds extended tests ---
 
     #[test]
-    fn requires_explicit_bounds_list_needs_bounds() {
+    fn requires_explicit_bounds_list_needs_extractable_domain() {
         assert!(requires_explicit_bounds(
             &FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
             &FuzzerConstraint::Any,
@@ -5645,7 +6253,11 @@ mod tests {
         fs::write(out.join("AikenVerify/Proofs/Stale/old.lean"), "-- stale").unwrap();
         fs::create_dir_all(out.join("flat")).unwrap();
         fs::write(out.join("flat/stale.flat"), "stale").unwrap();
-        fs::write(out.join("AikenVerify.lean"), "import AikenVerify.Proofs.Stale.old").unwrap();
+        fs::write(
+            out.join("AikenVerify.lean"),
+            "import AikenVerify.Proofs.Stale.old",
+        )
+        .unwrap();
         fs::write(out.join("manifest.json"), "{}").unwrap();
         fs::create_dir_all(out.join("logs")).unwrap();
         fs::write(out.join("logs/stale.log"), "stale").unwrap();
