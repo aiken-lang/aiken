@@ -634,12 +634,11 @@ where
                 }];
                 let term = generator.generate_raw_with_spans(&test.body, &args, &module_name);
                 let program_with_spans = generator.finalize_minimal_with_spans(term);
-                let base_program =
-                    program_with_spans.try_into_named_debruijn().map_err(|e| {
-                        Error::DeBruijnConversion {
-                            error: e.to_string(),
-                        }
-                    })?;
+                let base_program = program_with_spans.try_into_named_debruijn().map_err(|e| {
+                    Error::DeBruijnConversion {
+                        error: e.to_string(),
+                    }
+                })?;
 
                 // Sample multiple values from the fuzzer, chaining the PRNG state
                 let mut prng = Prng::from_seed(seed);
@@ -650,11 +649,7 @@ where
                         Ok(Some((next_prng, value))) => {
                             let program = base_program.clone().apply_data(value);
                             let iter_name = format!("{}[{}]", test_name, iteration);
-                            tests.push((
-                                iter_name,
-                                test.on_test_failure.clone(),
-                                program,
-                            ));
+                            tests.push((iter_name, test.on_test_failure.clone(), program));
                             prng = next_prng;
                             iteration += 1;
                         }
