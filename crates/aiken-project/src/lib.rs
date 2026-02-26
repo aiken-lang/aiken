@@ -34,7 +34,7 @@ use aiken_lang::{
     IdGenerator,
     ast::{
         self, DataTypeKey, Definition, FunctionAccessKey, ModuleKind, Tracing, TypedDataType,
-        TypedFunction, UntypedDefinition,
+        TypedFunction, TypedValidator, UntypedDefinition,
     },
     builtins,
     expr::{TypedExpr, UntypedExpr},
@@ -44,12 +44,13 @@ use aiken_lang::{
     test_framework::{
         FuzzerConstraint as LangFuzzerConstraint, PropertyTest, RunnableKind, Test, TestResult,
     },
-    tipo::{self, Type, TypeInfo},
+    tipo::{self, ModuleValueConstructor, Type, TypeInfo, ValueConstructorVariant},
     utils,
 };
 use export::{
     Export, ExportedProgram, ExportedPropertyTest, ExportedTests, FuzzerConstraint,
-    FuzzerExactValue, TestReturnMode, fuzzer_output_type_from,
+    FuzzerExactValue, TestReturnMode, ValidatorTarget, VerificationTargetKind,
+    fuzzer_output_type_from,
 };
 use indexmap::IndexMap;
 use miette::NamedSource;
@@ -109,6 +110,26 @@ fn convert_constraint(lang: &LangFuzzerConstraint) -> FuzzerConstraint {
             reason: reason.clone(),
         },
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ValidatorHandlerReference {
+    module: String,
+    validator_name: String,
+    handler_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ModuleFunctionReference {
+    module: String,
+    function_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct ValidatorHandlerCall {
+    module: String,
+    reference: ValidatorHandlerReference,
+    expression: TypedExpr,
 }
 
 #[derive(Debug)]
@@ -245,6 +266,10 @@ where
             Some(filepath) => filepath.to_path_buf(),
             None => self.root.join(Options::default().blueprint_path),
         }
+    }
+
+    pub fn root(&self) -> &Path {
+        &self.root
     }
 
     pub fn build(
@@ -734,7 +759,7 @@ where
                 Test::PropertyTest(pt) => Some(pt),
                 _ => None,
             })
-            .map(|pt| self.export_property_test(pt, include_flat_bytes))
+            .map(|pt| self.export_property_test(pt, include_flat_bytes, tracing))
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(ExportedTests {
@@ -743,11 +768,1141 @@ where
         })
     }
 
+    fn find_validator_definition(
+        &self,
+        module_name: &str,
+        validator_name: &str,
+        handler_name: &str,
+    ) -> Option<(&CheckedModule, &TypedValidator)> {
+        let checked_module = self.checked_modules.get(module_name)?;
+
+        checked_module
+            .ast
+            .definitions()
+            .find_map(|definition| match definition {
+                Definition::Validator(validator)
+                    if validator.name == validator_name
+                        && (validator
+                            .handlers
+                            .iter()
+                            .any(|handler| handler.name == handler_name)
+                            || validator.fallback.name == handler_name) =>
+                {
+                    Some((checked_module, validator))
+                }
+                _ => None,
+            })
+    }
+
+    fn find_function_definition(
+        &self,
+        module_name: &str,
+        function_name: &str,
+    ) -> Option<&TypedFunction> {
+        let checked_module = self.checked_modules.get(module_name)?;
+
+        checked_module
+            .ast
+            .definitions()
+            .find_map(|definition| match definition {
+                Definition::Fn(function) if function.name == function_name => Some(function),
+                _ => None,
+            })
+    }
+
+    fn function_reference_from_expr(&self, expr: &TypedExpr) -> Option<ModuleFunctionReference> {
+        match expr {
+            TypedExpr::Var { constructor, .. } => {
+                if let ValueConstructorVariant::ModuleFn { module, name, .. } = &constructor.variant
+                {
+                    Some(ModuleFunctionReference {
+                        module: module.clone(),
+                        function_name: name.clone(),
+                    })
+                } else {
+                    None
+                }
+            }
+            TypedExpr::ModuleSelect { constructor, .. } => {
+                if let ModuleValueConstructor::Fn { module, name, .. } = constructor {
+                    Some(ModuleFunctionReference {
+                        module: module.clone(),
+                        function_name: name.clone(),
+                    })
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn validator_handler_reference_from_function_reference(
+        &self,
+        function_reference: &ModuleFunctionReference,
+    ) -> Option<ValidatorHandlerReference> {
+        let (validator_name, handler_name) = function_reference.function_name.split_once('.')?;
+
+        Some(ValidatorHandlerReference {
+            module: function_reference.module.clone(),
+            validator_name: validator_name.to_string(),
+            handler_name: handler_name.to_string(),
+        })
+    }
+
+    fn substitute_local_variables(
+        &self,
+        expr: &TypedExpr,
+        substitutions: &HashMap<String, TypedExpr>,
+    ) -> TypedExpr {
+        match expr {
+            TypedExpr::Var {
+                constructor, name, ..
+            } => {
+                if matches!(
+                    constructor.variant,
+                    ValueConstructorVariant::LocalVariable { .. }
+                ) && let Some(substituted) = substitutions.get(name)
+                {
+                    substituted.clone()
+                } else {
+                    expr.clone()
+                }
+            }
+            TypedExpr::Sequence {
+                location,
+                expressions,
+            } => TypedExpr::Sequence {
+                location: *location,
+                expressions: expressions
+                    .iter()
+                    .map(|expression| self.substitute_local_variables(expression, substitutions))
+                    .collect(),
+            },
+            TypedExpr::Pipeline {
+                location,
+                expressions,
+            } => TypedExpr::Pipeline {
+                location: *location,
+                expressions: expressions
+                    .iter()
+                    .map(|expression| self.substitute_local_variables(expression, substitutions))
+                    .collect(),
+            },
+            TypedExpr::Fn {
+                location,
+                tipo,
+                is_capture,
+                args,
+                body,
+                return_annotation,
+            } => {
+                let mut scoped_substitutions = substitutions.clone();
+                for arg in args {
+                    if let Some(name) = arg.get_variable_name() {
+                        scoped_substitutions.remove(name);
+                    }
+                }
+
+                TypedExpr::Fn {
+                    location: *location,
+                    tipo: tipo.clone(),
+                    is_capture: *is_capture,
+                    args: args.clone(),
+                    body: Box::new(self.substitute_local_variables(body, &scoped_substitutions)),
+                    return_annotation: return_annotation.clone(),
+                }
+            }
+            TypedExpr::List {
+                location,
+                tipo,
+                elements,
+                tail,
+            } => TypedExpr::List {
+                location: *location,
+                tipo: tipo.clone(),
+                elements: elements
+                    .iter()
+                    .map(|element| self.substitute_local_variables(element, substitutions))
+                    .collect(),
+                tail: tail
+                    .as_ref()
+                    .map(|tail| Box::new(self.substitute_local_variables(tail, substitutions))),
+            },
+            TypedExpr::Call {
+                location,
+                tipo,
+                fun,
+                args,
+            } => TypedExpr::Call {
+                location: *location,
+                tipo: tipo.clone(),
+                fun: Box::new(self.substitute_local_variables(fun, substitutions)),
+                args: args
+                    .iter()
+                    .map(|arg| ast::CallArg {
+                        label: arg.label.clone(),
+                        location: arg.location,
+                        value: self.substitute_local_variables(&arg.value, substitutions),
+                    })
+                    .collect(),
+            },
+            TypedExpr::BinOp {
+                location,
+                tipo,
+                name,
+                left,
+                right,
+            } => TypedExpr::BinOp {
+                location: *location,
+                tipo: tipo.clone(),
+                name: name.clone(),
+                left: Box::new(self.substitute_local_variables(left, substitutions)),
+                right: Box::new(self.substitute_local_variables(right, substitutions)),
+            },
+            TypedExpr::Assignment {
+                location,
+                tipo,
+                value,
+                pattern,
+                kind,
+                comment,
+            } => TypedExpr::Assignment {
+                location: *location,
+                tipo: tipo.clone(),
+                value: Box::new(self.substitute_local_variables(value, substitutions)),
+                pattern: pattern.clone(),
+                kind: kind.clone(),
+                comment: comment.clone(),
+            },
+            TypedExpr::Trace {
+                location,
+                tipo,
+                then,
+                text,
+            } => TypedExpr::Trace {
+                location: *location,
+                tipo: tipo.clone(),
+                then: Box::new(self.substitute_local_variables(then, substitutions)),
+                text: Box::new(self.substitute_local_variables(text, substitutions)),
+            },
+            TypedExpr::When {
+                location,
+                tipo,
+                subject,
+                clauses,
+            } => TypedExpr::When {
+                location: *location,
+                tipo: tipo.clone(),
+                subject: Box::new(self.substitute_local_variables(subject, substitutions)),
+                clauses: clauses
+                    .iter()
+                    .map(|clause| {
+                        let mut clause = clause.clone();
+                        let mut scoped_substitutions = substitutions.clone();
+                        Self::remove_pattern_bound_substitutions(
+                            &clause.pattern,
+                            &mut scoped_substitutions,
+                        );
+                        clause.then =
+                            self.substitute_local_variables(&clause.then, &scoped_substitutions);
+                        clause
+                    })
+                    .collect(),
+            },
+            TypedExpr::If {
+                location,
+                branches,
+                final_else,
+                tipo,
+            } => {
+                let mut substituted_branches = branches.clone();
+                for branch in substituted_branches.iter_mut() {
+                    branch.condition =
+                        self.substitute_local_variables(&branch.condition, substitutions);
+                    let mut scoped_substitutions = substitutions.clone();
+
+                    if let Some((pattern, _)) = &branch.is {
+                        Self::remove_pattern_bound_substitutions(
+                            pattern,
+                            &mut scoped_substitutions,
+                        );
+                    }
+
+                    branch.body =
+                        self.substitute_local_variables(&branch.body, &scoped_substitutions);
+                }
+
+                TypedExpr::If {
+                    location: *location,
+                    branches: substituted_branches,
+                    final_else: Box::new(
+                        self.substitute_local_variables(final_else, substitutions),
+                    ),
+                    tipo: tipo.clone(),
+                }
+            }
+            TypedExpr::RecordAccess {
+                location,
+                tipo,
+                label,
+                index,
+                record,
+            } => TypedExpr::RecordAccess {
+                location: *location,
+                tipo: tipo.clone(),
+                label: label.clone(),
+                index: *index,
+                record: Box::new(self.substitute_local_variables(record, substitutions)),
+            },
+            TypedExpr::Tuple {
+                location,
+                tipo,
+                elems,
+            } => TypedExpr::Tuple {
+                location: *location,
+                tipo: tipo.clone(),
+                elems: elems
+                    .iter()
+                    .map(|element| self.substitute_local_variables(element, substitutions))
+                    .collect(),
+            },
+            TypedExpr::Pair {
+                location,
+                tipo,
+                fst,
+                snd,
+            } => TypedExpr::Pair {
+                location: *location,
+                tipo: tipo.clone(),
+                fst: Box::new(self.substitute_local_variables(fst, substitutions)),
+                snd: Box::new(self.substitute_local_variables(snd, substitutions)),
+            },
+            TypedExpr::TupleIndex {
+                location,
+                tipo,
+                index,
+                tuple,
+            } => TypedExpr::TupleIndex {
+                location: *location,
+                tipo: tipo.clone(),
+                index: *index,
+                tuple: Box::new(self.substitute_local_variables(tuple, substitutions)),
+            },
+            TypedExpr::RecordUpdate {
+                location,
+                tipo,
+                spread,
+                args,
+            } => TypedExpr::RecordUpdate {
+                location: *location,
+                tipo: tipo.clone(),
+                spread: Box::new(self.substitute_local_variables(spread, substitutions)),
+                args: args
+                    .iter()
+                    .map(|arg| ast::TypedRecordUpdateArg {
+                        label: arg.label.clone(),
+                        location: arg.location,
+                        value: self.substitute_local_variables(&arg.value, substitutions),
+                        index: arg.index,
+                    })
+                    .collect(),
+            },
+            TypedExpr::UnOp {
+                location,
+                value,
+                tipo,
+                op,
+            } => TypedExpr::UnOp {
+                location: *location,
+                value: Box::new(self.substitute_local_variables(value, substitutions)),
+                tipo: tipo.clone(),
+                op: *op,
+            },
+            TypedExpr::UInt { .. }
+            | TypedExpr::String { .. }
+            | TypedExpr::ByteArray { .. }
+            | TypedExpr::CurvePoint { .. }
+            | TypedExpr::ErrorTerm { .. }
+            | TypedExpr::ModuleSelect { .. } => expr.clone(),
+        }
+    }
+
+    fn collect_pattern_bound_names(pattern: &ast::TypedPattern, bound_names: &mut Vec<String>) {
+        match pattern {
+            ast::Pattern::Var { name, .. } => bound_names.push(name.clone()),
+            ast::Pattern::Assign { name, pattern, .. } => {
+                bound_names.push(name.clone());
+                Self::collect_pattern_bound_names(pattern, bound_names);
+            }
+            ast::Pattern::List { elements, tail, .. } => {
+                for element in elements {
+                    Self::collect_pattern_bound_names(element, bound_names);
+                }
+                if let Some(tail) = tail {
+                    Self::collect_pattern_bound_names(tail, bound_names);
+                }
+            }
+            ast::Pattern::Pair { fst, snd, .. } => {
+                Self::collect_pattern_bound_names(fst, bound_names);
+                Self::collect_pattern_bound_names(snd, bound_names);
+            }
+            ast::Pattern::Tuple { elems, .. } => {
+                for element in elems {
+                    Self::collect_pattern_bound_names(element, bound_names);
+                }
+            }
+            ast::Pattern::Constructor { arguments, .. } => {
+                for argument in arguments {
+                    Self::collect_pattern_bound_names(&argument.value, bound_names);
+                }
+            }
+            ast::Pattern::Int { .. }
+            | ast::Pattern::ByteArray { .. }
+            | ast::Pattern::Discard { .. } => {}
+        }
+    }
+
+    fn collect_pattern_bound_names_with_types(
+        pattern: &ast::TypedPattern,
+        tipo: Rc<Type>,
+        bound_names: &mut Vec<(String, Rc<Type>)>,
+    ) {
+        let tipo = Type::collapse_links(tipo);
+
+        match pattern {
+            ast::Pattern::Var { name, .. } => bound_names.push((name.clone(), tipo)),
+            ast::Pattern::Assign { name, pattern, .. } => {
+                bound_names.push((name.clone(), tipo.clone()));
+                Self::collect_pattern_bound_names_with_types(pattern, tipo, bound_names);
+            }
+            ast::Pattern::List { elements, tail, .. } => {
+                if let Type::App {
+                    module,
+                    name: type_name,
+                    args,
+                    ..
+                } = tipo.as_ref()
+                    && module.is_empty()
+                    && type_name == "List"
+                    && let Some(element_tipo) = args.first()
+                {
+                    for element in elements {
+                        Self::collect_pattern_bound_names_with_types(
+                            element,
+                            element_tipo.clone(),
+                            bound_names,
+                        );
+                    }
+                    if let Some(tail) = tail {
+                        Self::collect_pattern_bound_names_with_types(
+                            tail,
+                            tipo.clone(),
+                            bound_names,
+                        );
+                    }
+                }
+            }
+            ast::Pattern::Pair { fst, snd, .. } => {
+                if let Type::Pair {
+                    fst: fst_tipo,
+                    snd: snd_tipo,
+                    ..
+                } = tipo.as_ref()
+                {
+                    Self::collect_pattern_bound_names_with_types(
+                        fst,
+                        fst_tipo.clone(),
+                        bound_names,
+                    );
+                    Self::collect_pattern_bound_names_with_types(
+                        snd,
+                        snd_tipo.clone(),
+                        bound_names,
+                    );
+                }
+            }
+            ast::Pattern::Tuple { elems, .. } => {
+                if let Type::Tuple {
+                    elems: tuple_element_tipos,
+                    ..
+                } = tipo.as_ref()
+                {
+                    for (element, element_tipo) in elems.iter().zip(tuple_element_tipos.iter()) {
+                        Self::collect_pattern_bound_names_with_types(
+                            element,
+                            element_tipo.clone(),
+                            bound_names,
+                        );
+                    }
+                }
+            }
+            ast::Pattern::Constructor {
+                arguments,
+                tipo: constructor_tipo,
+                ..
+            } => {
+                let constructor_tipo = Type::collapse_links(constructor_tipo.clone());
+                if let Type::Fn {
+                    args: argument_tipos,
+                    ..
+                } = constructor_tipo.as_ref()
+                {
+                    for (argument, argument_tipo) in arguments.iter().zip(argument_tipos.iter()) {
+                        Self::collect_pattern_bound_names_with_types(
+                            &argument.value,
+                            argument_tipo.clone(),
+                            bound_names,
+                        );
+                    }
+                }
+            }
+            ast::Pattern::Int { .. }
+            | ast::Pattern::ByteArray { .. }
+            | ast::Pattern::Discard { .. } => {}
+        }
+    }
+
+    fn expression_for_pattern_bound_name(
+        pattern: &ast::TypedPattern,
+        value: &TypedExpr,
+        name: &str,
+        tipo: Rc<Type>,
+    ) -> TypedExpr {
+        match pattern {
+            ast::Pattern::Var {
+                name: pattern_name, ..
+            }
+            | ast::Pattern::Assign {
+                name: pattern_name, ..
+            } if pattern_name == name => value.clone(),
+            _ => {
+                let location = value.location();
+
+                TypedExpr::When {
+                    location,
+                    tipo: tipo.clone(),
+                    subject: Box::new(value.clone()),
+                    clauses: vec![ast::TypedClause {
+                        location: pattern.location(),
+                        pattern: pattern.clone(),
+                        then: TypedExpr::local_var(name, tipo, pattern.location()),
+                    }],
+                }
+            }
+        }
+    }
+
+    fn remove_pattern_bound_substitutions(
+        pattern: &ast::TypedPattern,
+        substitutions: &mut HashMap<String, TypedExpr>,
+    ) {
+        let mut bound_names = Vec::new();
+        Self::collect_pattern_bound_names(pattern, &mut bound_names);
+
+        for name in bound_names {
+            substitutions.remove(&name);
+        }
+    }
+
+    fn update_substitutions_from_assignment(
+        &self,
+        pattern: &ast::TypedPattern,
+        value: &TypedExpr,
+        substitutions: &mut HashMap<String, TypedExpr>,
+    ) {
+        Self::remove_pattern_bound_substitutions(pattern, substitutions);
+
+        let mut bound_names = Vec::new();
+        Self::collect_pattern_bound_names_with_types(pattern, value.tipo(), &mut bound_names);
+
+        for (name, tipo) in bound_names {
+            let bound_expression =
+                Self::expression_for_pattern_bound_name(pattern, value, &name, tipo);
+            substitutions.insert(name, bound_expression);
+        }
+    }
+
+    fn collect_validator_handler_calls_from_expr(
+        &self,
+        expr: &TypedExpr,
+        current_module: &str,
+        substitutions: &HashMap<String, TypedExpr>,
+        calls: &mut Vec<ValidatorHandlerCall>,
+        visited_functions: &mut HashSet<ModuleFunctionReference>,
+        saw_control_flow_dependent_handler_call: &mut bool,
+        control_flow_dependent: bool,
+        direct_result_position: bool,
+    ) {
+        match expr {
+            TypedExpr::Sequence { expressions, .. } | TypedExpr::Pipeline { expressions, .. } => {
+                let mut scoped_substitutions = substitutions.clone();
+
+                for (index, expression) in expressions.iter().enumerate() {
+                    let expression_is_tail = index + 1 == expressions.len();
+                    self.collect_validator_handler_calls_from_expr(
+                        expression,
+                        current_module,
+                        &scoped_substitutions,
+                        calls,
+                        visited_functions,
+                        saw_control_flow_dependent_handler_call,
+                        control_flow_dependent,
+                        direct_result_position && expression_is_tail,
+                    );
+
+                    if let TypedExpr::Assignment { pattern, value, .. } = expression {
+                        let substituted_value =
+                            self.substitute_local_variables(value, &scoped_substitutions);
+                        self.update_substitutions_from_assignment(
+                            pattern,
+                            &substituted_value,
+                            &mut scoped_substitutions,
+                        );
+                    }
+                }
+            }
+            TypedExpr::Fn { args, body, .. } => {
+                let mut scoped_substitutions = substitutions.clone();
+
+                for arg in args {
+                    if let Some(name) = arg.get_variable_name() {
+                        scoped_substitutions.remove(name);
+                    }
+                }
+
+                self.collect_validator_handler_calls_from_expr(
+                    body,
+                    current_module,
+                    &scoped_substitutions,
+                    calls,
+                    visited_functions,
+                    saw_control_flow_dependent_handler_call,
+                    control_flow_dependent,
+                    false,
+                );
+            }
+            TypedExpr::List { elements, tail, .. } => {
+                for element in elements {
+                    self.collect_validator_handler_calls_from_expr(
+                        element,
+                        current_module,
+                        substitutions,
+                        calls,
+                        visited_functions,
+                        saw_control_flow_dependent_handler_call,
+                        control_flow_dependent,
+                        false,
+                    );
+                }
+                if let Some(tail) = tail {
+                    self.collect_validator_handler_calls_from_expr(
+                        tail,
+                        current_module,
+                        substitutions,
+                        calls,
+                        visited_functions,
+                        saw_control_flow_dependent_handler_call,
+                        control_flow_dependent,
+                        false,
+                    );
+                }
+            }
+            TypedExpr::Call {
+                location,
+                tipo,
+                fun,
+                args,
+            } => {
+                let substituted_fun = self.substitute_local_variables(fun, substitutions);
+
+                if let Some(function_reference) =
+                    self.function_reference_from_expr(&substituted_fun)
+                {
+                    if let Some(reference) = self
+                        .validator_handler_reference_from_function_reference(&function_reference)
+                    {
+                        if !control_flow_dependent && direct_result_position {
+                            let call_expression = TypedExpr::Call {
+                                location: *location,
+                                tipo: tipo.clone(),
+                                fun: Box::new(substituted_fun.clone()),
+                                args: args
+                                    .iter()
+                                    .map(|arg| ast::CallArg {
+                                        label: arg.label.clone(),
+                                        location: arg.location,
+                                        value: self
+                                            .substitute_local_variables(&arg.value, substitutions),
+                                    })
+                                    .collect(),
+                            };
+
+                            let call = ValidatorHandlerCall {
+                                module: current_module.to_string(),
+                                reference,
+                                expression: call_expression,
+                            };
+
+                            calls.push(call);
+                        } else {
+                            if control_flow_dependent {
+                                *saw_control_flow_dependent_handler_call = true;
+                            }
+                        }
+                    } else if let Some(function) = self.find_function_definition(
+                        &function_reference.module,
+                        &function_reference.function_name,
+                    ) && args.len() == function.arguments.len()
+                        && visited_functions.insert(function_reference.clone())
+                    {
+                        let mut call_substitutions = HashMap::new();
+
+                        for (argument, parameter) in args.iter().zip(function.arguments.iter()) {
+                            if let Some(parameter_name) = parameter.get_variable_name() {
+                                call_substitutions.insert(
+                                    parameter_name.to_string(),
+                                    self.substitute_local_variables(&argument.value, substitutions),
+                                );
+                            }
+                        }
+
+                        self.collect_validator_handler_calls_from_expr(
+                            &function.body,
+                            &function_reference.module,
+                            &call_substitutions,
+                            calls,
+                            visited_functions,
+                            saw_control_flow_dependent_handler_call,
+                            control_flow_dependent,
+                            direct_result_position,
+                        );
+
+                        visited_functions.remove(&function_reference);
+                    }
+                }
+
+                self.collect_validator_handler_calls_from_expr(
+                    fun,
+                    current_module,
+                    substitutions,
+                    calls,
+                    visited_functions,
+                    saw_control_flow_dependent_handler_call,
+                    control_flow_dependent,
+                    false,
+                );
+                for arg in args {
+                    self.collect_validator_handler_calls_from_expr(
+                        &arg.value,
+                        current_module,
+                        substitutions,
+                        calls,
+                        visited_functions,
+                        saw_control_flow_dependent_handler_call,
+                        control_flow_dependent,
+                        false,
+                    );
+                }
+            }
+            TypedExpr::BinOp {
+                name, left, right, ..
+            } => {
+                let right_control_flow_dependent =
+                    control_flow_dependent || matches!(name, ast::BinOp::And | ast::BinOp::Or);
+
+                self.collect_validator_handler_calls_from_expr(
+                    left,
+                    current_module,
+                    substitutions,
+                    calls,
+                    visited_functions,
+                    saw_control_flow_dependent_handler_call,
+                    control_flow_dependent,
+                    false,
+                );
+                self.collect_validator_handler_calls_from_expr(
+                    right,
+                    current_module,
+                    substitutions,
+                    calls,
+                    visited_functions,
+                    saw_control_flow_dependent_handler_call,
+                    right_control_flow_dependent,
+                    false,
+                );
+            }
+            TypedExpr::Assignment { value, .. } => {
+                self.collect_validator_handler_calls_from_expr(
+                    value,
+                    current_module,
+                    substitutions,
+                    calls,
+                    visited_functions,
+                    saw_control_flow_dependent_handler_call,
+                    control_flow_dependent,
+                    false,
+                );
+            }
+            TypedExpr::Trace { text, then, .. } => {
+                self.collect_validator_handler_calls_from_expr(
+                    text,
+                    current_module,
+                    substitutions,
+                    calls,
+                    visited_functions,
+                    saw_control_flow_dependent_handler_call,
+                    control_flow_dependent,
+                    false,
+                );
+                self.collect_validator_handler_calls_from_expr(
+                    then,
+                    current_module,
+                    substitutions,
+                    calls,
+                    visited_functions,
+                    saw_control_flow_dependent_handler_call,
+                    control_flow_dependent,
+                    direct_result_position,
+                );
+            }
+            TypedExpr::When {
+                subject, clauses, ..
+            } => {
+                self.collect_validator_handler_calls_from_expr(
+                    subject,
+                    current_module,
+                    substitutions,
+                    calls,
+                    visited_functions,
+                    saw_control_flow_dependent_handler_call,
+                    true,
+                    false,
+                );
+                for clause in clauses {
+                    let mut scoped_substitutions = substitutions.clone();
+                    Self::remove_pattern_bound_substitutions(
+                        &clause.pattern,
+                        &mut scoped_substitutions,
+                    );
+                    self.collect_validator_handler_calls_from_expr(
+                        &clause.then,
+                        current_module,
+                        &scoped_substitutions,
+                        calls,
+                        visited_functions,
+                        saw_control_flow_dependent_handler_call,
+                        true,
+                        direct_result_position,
+                    );
+                }
+            }
+            TypedExpr::If {
+                branches,
+                final_else,
+                ..
+            } => {
+                for branch in branches {
+                    self.collect_validator_handler_calls_from_expr(
+                        &branch.condition,
+                        current_module,
+                        substitutions,
+                        calls,
+                        visited_functions,
+                        saw_control_flow_dependent_handler_call,
+                        true,
+                        false,
+                    );
+
+                    let mut scoped_substitutions = substitutions.clone();
+                    if let Some((pattern, _)) = &branch.is {
+                        Self::remove_pattern_bound_substitutions(
+                            pattern,
+                            &mut scoped_substitutions,
+                        );
+                    }
+
+                    self.collect_validator_handler_calls_from_expr(
+                        &branch.body,
+                        current_module,
+                        &scoped_substitutions,
+                        calls,
+                        visited_functions,
+                        saw_control_flow_dependent_handler_call,
+                        true,
+                        direct_result_position,
+                    );
+                }
+                self.collect_validator_handler_calls_from_expr(
+                    final_else,
+                    current_module,
+                    substitutions,
+                    calls,
+                    visited_functions,
+                    saw_control_flow_dependent_handler_call,
+                    true,
+                    direct_result_position,
+                );
+            }
+            TypedExpr::RecordAccess { record, .. } => {
+                self.collect_validator_handler_calls_from_expr(
+                    record,
+                    current_module,
+                    substitutions,
+                    calls,
+                    visited_functions,
+                    saw_control_flow_dependent_handler_call,
+                    control_flow_dependent,
+                    false,
+                );
+            }
+            TypedExpr::Tuple { elems, .. } => {
+                for element in elems {
+                    self.collect_validator_handler_calls_from_expr(
+                        element,
+                        current_module,
+                        substitutions,
+                        calls,
+                        visited_functions,
+                        saw_control_flow_dependent_handler_call,
+                        control_flow_dependent,
+                        false,
+                    );
+                }
+            }
+            TypedExpr::Pair { fst, snd, .. } => {
+                self.collect_validator_handler_calls_from_expr(
+                    fst,
+                    current_module,
+                    substitutions,
+                    calls,
+                    visited_functions,
+                    saw_control_flow_dependent_handler_call,
+                    control_flow_dependent,
+                    false,
+                );
+                self.collect_validator_handler_calls_from_expr(
+                    snd,
+                    current_module,
+                    substitutions,
+                    calls,
+                    visited_functions,
+                    saw_control_flow_dependent_handler_call,
+                    control_flow_dependent,
+                    false,
+                );
+            }
+            TypedExpr::TupleIndex { tuple, .. } => {
+                self.collect_validator_handler_calls_from_expr(
+                    tuple,
+                    current_module,
+                    substitutions,
+                    calls,
+                    visited_functions,
+                    saw_control_flow_dependent_handler_call,
+                    control_flow_dependent,
+                    false,
+                );
+            }
+            TypedExpr::RecordUpdate { spread, args, .. } => {
+                self.collect_validator_handler_calls_from_expr(
+                    spread,
+                    current_module,
+                    substitutions,
+                    calls,
+                    visited_functions,
+                    saw_control_flow_dependent_handler_call,
+                    control_flow_dependent,
+                    false,
+                );
+                for arg in args {
+                    self.collect_validator_handler_calls_from_expr(
+                        &arg.value,
+                        current_module,
+                        substitutions,
+                        calls,
+                        visited_functions,
+                        saw_control_flow_dependent_handler_call,
+                        control_flow_dependent,
+                        false,
+                    );
+                }
+            }
+            TypedExpr::UnOp { value, .. } => {
+                self.collect_validator_handler_calls_from_expr(
+                    value,
+                    current_module,
+                    substitutions,
+                    calls,
+                    visited_functions,
+                    saw_control_flow_dependent_handler_call,
+                    control_flow_dependent,
+                    false,
+                );
+            }
+            TypedExpr::Var { name, .. } => {
+                if direct_result_position {
+                    if let Some(substituted_expr) = substitutions.get(name) {
+                        let same_variable_alias = matches!(
+                            substituted_expr,
+                            TypedExpr::Var {
+                                name: substituted_name,
+                                ..
+                            } if substituted_name == name
+                        );
+
+                        if !same_variable_alias {
+                            self.collect_validator_handler_calls_from_expr(
+                                substituted_expr,
+                                current_module,
+                                substitutions,
+                                calls,
+                                visited_functions,
+                                saw_control_flow_dependent_handler_call,
+                                control_flow_dependent,
+                                true,
+                            );
+                        }
+                    }
+                }
+            }
+            TypedExpr::ModuleSelect { .. } => {}
+            TypedExpr::UInt { .. }
+            | TypedExpr::String { .. }
+            | TypedExpr::ByteArray { .. }
+            | TypedExpr::CurvePoint { .. }
+            | TypedExpr::ErrorTerm { .. } => {}
+        }
+    }
+
+    fn infer_validator_handler_call(
+        &self,
+        module_name: &str,
+        test_body: &TypedExpr,
+    ) -> Option<ValidatorHandlerCall> {
+        let mut calls = Vec::new();
+        let mut visited_functions = HashSet::new();
+        let mut saw_control_flow_dependent_handler_call = false;
+
+        self.collect_validator_handler_calls_from_expr(
+            test_body,
+            module_name,
+            &HashMap::new(),
+            &mut calls,
+            &mut visited_functions,
+            &mut saw_control_flow_dependent_handler_call,
+            false,
+            true,
+        );
+
+        if calls.len() == 1 && !saw_control_flow_dependent_handler_call {
+            calls.pop()
+        } else {
+            None
+        }
+    }
+
+    fn stripped_test_arguments(&self, test_arguments: &[ast::TypedArgVia]) -> Vec<ast::TypedArg> {
+        let data_types = utils::indexmap::as_ref_values(&self.data_types);
+
+        test_arguments
+            .iter()
+            .cloned()
+            .map(|arg_via| {
+                let mut arg: ast::TypedArg = arg_via.into();
+                arg.tipo = tipo::convert_opaque_type(&arg.tipo, &data_types, true);
+                arg
+            })
+            .collect()
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn infer_validator_target(
+        &self,
+        module_name: &str,
+        test_name: &str,
+        include_flat_bytes: bool,
+        tracing: Tracing,
+    ) -> Result<Option<ValidatorTarget>, Error> {
+        let checked_module = match self.checked_modules.get(module_name) {
+            Some(module) => module,
+            None => return Ok(None),
+        };
+
+        let test_definition =
+            checked_module
+                .ast
+                .definitions()
+                .find_map(|definition| match definition {
+                    Definition::Test(test) if test.name == test_name => Some(test),
+                    _ => None,
+                });
+
+        let Some(test_definition) = test_definition else {
+            return Ok(None);
+        };
+
+        let Some(handler_call) =
+            self.infer_validator_handler_call(module_name, &test_definition.body)
+        else {
+            return Ok(None);
+        };
+
+        let Some((_handler_module, _validator)) = self.find_validator_definition(
+            &handler_call.reference.module,
+            &handler_call.reference.validator_name,
+            &handler_call.reference.handler_name,
+        ) else {
+            return Ok(None);
+        };
+
+        let mut generator = self.new_generator(tracing);
+        let test_arguments = self.stripped_test_arguments(&test_definition.arguments);
+        let handler_program = generator.generate_raw(
+            &handler_call.expression,
+            &test_arguments,
+            &handler_call.module,
+        );
+        let handler_program = handler_program.to_debruijn().map_err(|e| Error::DeBruijn {
+            error: e.to_string(),
+        })?;
+
+        let handler_hex = handler_program.to_hex().map_err(|e| Error::FlatEncode {
+            error: e.to_string(),
+        })?;
+
+        let handler_flat_bytes = if include_flat_bytes {
+            Some(handler_program.to_flat().map_err(|e| Error::FlatEncode {
+                error: e.to_string(),
+            })?)
+        } else {
+            None
+        };
+
+        let validator_module = handler_call.reference.module;
+        let validator_name = handler_call.reference.validator_name;
+        let handler_name = handler_call.reference.handler_name;
+
+        Ok(Some(ValidatorTarget {
+            validator_module,
+            validator_name: validator_name.clone(),
+            handler_name: Some(format!("{validator_name}.{handler_name}")),
+            handler_program: Some(ExportedProgram {
+                hex: handler_hex,
+                flat_bytes: handler_flat_bytes,
+            }),
+        }))
+    }
+
     fn export_property_test(
         &self,
         test: PropertyTest,
         include_flat_bytes: bool,
+        tracing: Tracing,
     ) -> Result<ExportedPropertyTest, Error> {
+        let validator_target =
+            self.infer_validator_target(&test.module, &test.name, include_flat_bytes, tracing)?;
+
         let mut printer = tipo::pretty::Printer::new();
         let fuzzer_type = printer.print(&test.fuzzer.type_info).to_pretty_string(80);
 
@@ -796,6 +1951,11 @@ where
         } else {
             TestReturnMode::Bool
         };
+        let target_kind = if validator_target.is_some() {
+            VerificationTargetKind::ValidatorHandler
+        } else {
+            VerificationTargetKind::PropertyWrapper
+        };
 
         Ok(ExportedPropertyTest {
             name: format!("{}.{}", &test.module, &test.name),
@@ -803,8 +1963,8 @@ where
             input_path: test.input_path.display().to_string(),
             on_test_failure: test.on_test_failure,
             return_mode,
-            target_kind: Default::default(),
-            validator_target: None,
+            target_kind,
+            validator_target,
             test_program: ExportedProgram {
                 hex: test_hex,
                 flat_bytes: test_flat_bytes,

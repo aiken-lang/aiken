@@ -174,10 +174,10 @@ pub enum Error {
         error: ScriptOverrideArgumentError,
     },
 
-    #[error("Failed to convert program to DeBruijn representation.")]
+    #[error("Failed to convert program to DeBruijn representation: {error}")]
     DeBruijn { error: String },
 
-    #[error("Failed to flat-encode program.")]
+    #[error("Failed to flat-encode program: {error}")]
     FlatEncode { error: String },
 }
 

@@ -2,8 +2,12 @@
 
 use super::build::{trace_filter_parser, trace_level_parser};
 use aiken_lang::ast::{TraceLevel, Tracing};
-use aiken_project::{error::Error, options::Options, watch::with_project};
-use std::{fs, path::PathBuf, process};
+use aiken_project::{error::Error, export::ExportedTests, options::Options, watch::with_project};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process,
+};
 
 #[derive(clap::Args)]
 #[clap(disable_version_flag(true))]
@@ -105,6 +109,75 @@ pub struct Args {
     trace_level: TraceLevel,
 }
 
+#[derive(Clone)]
+struct ExportCommandOptions {
+    match_tests: Option<Vec<String>>,
+    exact_match: bool,
+    output: Option<PathBuf>,
+    include_flat_bytes: bool,
+    env: Option<String>,
+    trace_filter: Option<fn(TraceLevel) -> Tracing>,
+    trace_level: TraceLevel,
+}
+
+fn export_compile_options(env: Option<String>) -> Options {
+    Options {
+        env,
+        ..Default::default()
+    }
+}
+
+fn export_tracing(
+    trace_filter: Option<fn(TraceLevel) -> Tracing>,
+    trace_level: TraceLevel,
+) -> Tracing {
+    match trace_filter {
+        Some(trace_filter) => trace_filter(trace_level),
+        None => Tracing::All(trace_level),
+    }
+}
+
+fn run_export_command_with<R, W>(
+    options: ExportCommandOptions,
+    mut run_export: R,
+    mut write_output: W,
+) -> Result<Option<String>, Vec<Error>>
+where
+    R: FnMut(
+        Options,
+        Option<Vec<String>>,
+        bool,
+        Tracing,
+        bool,
+    ) -> Result<ExportedTests, Vec<Error>>,
+    W: FnMut(&Path, &str) -> std::io::Result<()>,
+{
+    let compile_options = export_compile_options(options.env.clone());
+    let tracing = export_tracing(options.trace_filter, options.trace_level);
+    let exported = run_export(
+        compile_options,
+        options.match_tests,
+        options.exact_match,
+        tracing,
+        options.include_flat_bytes,
+    )?;
+
+    let json = serde_json::to_string_pretty(&exported).map_err(|e| vec![Error::from(e)])?;
+
+    match options.output {
+        Some(path) => {
+            write_output(&path, &json)
+                .map_err(|error| Error::FileIo {
+                    error,
+                    path: path.clone(),
+                })
+                .map_err(|e| vec![e])?;
+            Ok(None)
+        }
+        None => Ok(Some(json)),
+    }
+}
+
 pub fn exec(
     Args {
         directory,
@@ -119,39 +192,211 @@ pub fn exec(
         trace_level,
     }: Args,
 ) -> miette::Result<()> {
+    let command_options = ExportCommandOptions {
+        match_tests,
+        exact_match,
+        output,
+        include_flat_bytes,
+        env,
+        trace_filter,
+        trace_level,
+    };
+
     with_project(directory.as_deref(), deny, silent, true, |p| {
-        p.compile(Options {
-            env: env.clone(),
-            ..Default::default()
-        })?;
-
-        let tracing = match trace_filter {
-            Some(trace_filter) => trace_filter(trace_level),
-            None => Tracing::All(trace_level),
-        };
-
-        let exported = p.export_tests(
-            match_tests.clone(),
-            exact_match,
-            tracing,
-            include_flat_bytes,
+        let output = run_export_command_with(
+            command_options.clone(),
+            |compile_options, match_tests, exact_match, tracing, include_flat_bytes| {
+                p.compile(compile_options)?;
+                p.export_tests(match_tests, exact_match, tracing, include_flat_bytes)
+                    .map_err(|e| vec![e])
+            },
+            |path, json| fs::write(path, json),
         )?;
 
-        let json = serde_json::to_string_pretty(&exported).unwrap();
-
-        match &output {
-            Some(path) => {
-                fs::write(path, json).map_err(|error| Error::FileIo {
-                    error,
-                    path: path.clone(),
-                })?;
-            }
-            None => {
-                println!("{json}");
-            }
+        if let Some(json) = output {
+            println!("{json}");
         }
 
         Ok(())
     })
     .map_err(|_| process::exit(1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Args, ExportCommandOptions, run_export_command_with};
+    use aiken_lang::{ast::TraceLevel, plutus_version::PlutusVersion};
+    use aiken_project::{error::Error, export::ExportedTests};
+    use clap::Parser;
+    use std::{fs, path::PathBuf, time::SystemTime};
+
+    #[derive(Parser)]
+    struct TestCli {
+        #[command(flatten)]
+        args: Args,
+    }
+
+    fn dummy_exported_tests() -> ExportedTests {
+        ExportedTests {
+            plutus_version: PlutusVersion::default(),
+            property_tests: vec![],
+        }
+    }
+
+    fn sample_command_options() -> ExportCommandOptions {
+        ExportCommandOptions {
+            match_tests: None,
+            exact_match: false,
+            output: None,
+            include_flat_bytes: false,
+            env: None,
+            trace_filter: None,
+            trace_level: TraceLevel::Verbose,
+        }
+    }
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("system clock should be after UNIX_EPOCH")
+            .as_nanos();
+        std::env::temp_dir().join(format!("{prefix}-{}-{timestamp}", std::process::id()))
+    }
+
+    #[test]
+    fn parses_export_tests_flags() {
+        let cli = TestCli::parse_from([
+            "aiken",
+            "--output",
+            "tests.json",
+            "--include-flat-bytes",
+            "--exact-match",
+            "--match-tests",
+            "validators/foo.{bar}",
+            "--env",
+            "staging",
+        ]);
+
+        assert_eq!(cli.args.output, Some(PathBuf::from("tests.json")));
+        assert!(cli.args.include_flat_bytes);
+        assert!(cli.args.exact_match);
+        assert_eq!(
+            cli.args.match_tests,
+            Some(vec!["validators/foo.{bar}".to_string()])
+        );
+        assert_eq!(cli.args.env, Some("staging".to_string()));
+    }
+
+    #[test]
+    fn export_command_forwards_env_to_compile_options() {
+        let mut options = sample_command_options();
+        options.env = Some("staging".to_string());
+
+        let mut captured_env = None;
+        let _ = run_export_command_with(
+            options,
+            |compile_options, _match_tests, _exact_match, _tracing, _include_flat_bytes| {
+                captured_env = compile_options.env;
+                Ok(dummy_exported_tests())
+            },
+            |_path, _json| Ok(()),
+        )
+        .expect("export command should compile and export successfully");
+
+        assert_eq!(captured_env.as_deref(), Some("staging"));
+    }
+
+    #[test]
+    fn export_command_returns_json_for_stdout_output() {
+        let options = sample_command_options();
+        let mut write_called = false;
+
+        let output = run_export_command_with(
+            options,
+            |_compile_options, _match_tests, _exact_match, _tracing, _include_flat_bytes| {
+                Ok(dummy_exported_tests())
+            },
+            |_path, _json| -> std::io::Result<()> {
+                write_called = true;
+                Ok(())
+            },
+        )
+        .expect("export command should serialize stdout JSON");
+
+        assert!(
+            output.is_some(),
+            "stdout mode should return serialized JSON payload"
+        );
+        assert!(!write_called, "stdout mode must not attempt file writes");
+    }
+
+    #[test]
+    fn export_command_writes_json_to_file_when_output_is_set() {
+        let temp_dir = unique_temp_dir("aiken-export-tests-output");
+        if temp_dir.exists() {
+            fs::remove_dir_all(&temp_dir).expect("stale temp dir should be removable");
+        }
+        fs::create_dir_all(&temp_dir).expect("temp dir should be creatable");
+        let output_path = temp_dir.join("tests.json");
+
+        let mut options = sample_command_options();
+        options.output = Some(output_path.clone());
+        let mut write_called = false;
+
+        let output = run_export_command_with(
+            options,
+            |_compile_options, _match_tests, _exact_match, _tracing, _include_flat_bytes| {
+                Ok(dummy_exported_tests())
+            },
+            |path, json| {
+                write_called = true;
+                fs::write(path, json)
+            },
+        )
+        .expect("export command should write output JSON");
+
+        assert!(output.is_none(), "file mode should suppress stdout output");
+        assert!(write_called, "file mode should write to disk");
+
+        let written = fs::read_to_string(&output_path).expect("written JSON should be readable");
+        let parsed: serde_json::Value =
+            serde_json::from_str(&written).expect("written JSON should parse");
+        assert_eq!(
+            parsed["property_tests"].as_array().map(|tests| tests.len()),
+            Some(0),
+            "fixture payload should include the serialized property_tests array"
+        );
+
+        fs::remove_dir_all(temp_dir).expect("temp dir should be removable");
+    }
+
+    #[test]
+    fn export_command_reports_file_write_errors_with_output_path() {
+        let temp_dir = unique_temp_dir("aiken-export-tests-error");
+        if temp_dir.exists() {
+            fs::remove_dir_all(&temp_dir).expect("stale temp dir should be removable");
+        }
+        fs::create_dir_all(&temp_dir).expect("temp dir should be creatable");
+        let output_path = temp_dir.join("missing").join("tests.json");
+
+        let mut options = sample_command_options();
+        options.output = Some(output_path.clone());
+
+        let mut errors = run_export_command_with(
+            options,
+            |_compile_options, _match_tests, _exact_match, _tracing, _include_flat_bytes| {
+                Ok(dummy_exported_tests())
+            },
+            |path, json| fs::write(path, json),
+        )
+        .expect_err("export command should surface file write errors");
+
+        assert_eq!(errors.len(), 1, "expected one file write error");
+        match errors.pop().expect("expected one error") {
+            Error::FileIo { path, .. } => assert_eq!(path, output_path),
+            other => panic!("expected file IO error, got {other:?}"),
+        }
+
+        fs::remove_dir_all(temp_dir).expect("temp dir should be removable");
+    }
 }

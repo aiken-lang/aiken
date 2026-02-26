@@ -5,11 +5,9 @@ use crate::export::{
 use num_bigint::BigInt;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -23,6 +21,41 @@ unsafe extern "C" {
 const SIGTERM: i32 = 15;
 #[cfg(unix)]
 const SIGKILL: i32 = 9;
+
+#[cfg(unix)]
+fn terminate_child_process_tree(child: &mut std::process::Child) {
+    // Kill the entire process group to ensure descendant processes
+    // release stdout/stderr pipes and reader threads can finish.
+    if let Ok(raw_pid) = i32::try_from(child.id()) {
+        // Negative PID targets the process group ID.
+        unsafe {
+            let _ = kill(-raw_pid, SIGTERM);
+        }
+        thread::sleep(Duration::from_millis(200));
+        unsafe {
+            let _ = kill(-raw_pid, SIGKILL);
+        }
+    } else {
+        let _ = child.kill();
+    }
+}
+
+#[cfg(windows)]
+fn terminate_child_process_tree(child: &mut std::process::Child) {
+    // `taskkill /T` terminates the process and descendants in the same tree.
+    let pid = child.id().to_string();
+    let _ = Command::new("taskkill")
+        .args(["/PID", pid.as_str(), "/T", "/F"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    let _ = child.kill();
+}
+
+#[cfg(all(not(unix), not(windows)))]
+fn terminate_child_process_tree(child: &mut std::process::Child) {
+    let _ = child.kill();
+}
 
 /// Result of running proof verification
 #[derive(Debug, serde::Serialize)]
@@ -86,8 +119,8 @@ pub fn capabilities() -> VerificationCapabilities {
         ],
         target_modes: vec![
             "property".to_string(),
-            "validator".to_string(),
-            "equivalence".to_string(),
+            "validator (requires validator metadata)".to_string(),
+            "equivalence (requires validator metadata)".to_string(),
         ],
         supported_fuzzer_types: vec![
             "Int".to_string(),
@@ -168,6 +201,8 @@ pub struct VerifySummary {
     pub failed: usize,
     pub timed_out: usize,
     pub unknown: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skipped: Vec<SkippedTest>,
     pub theorems: Vec<TheoremResult>,
     pub raw_output: VerifyResult,
     /// Wall-clock milliseconds spent running proofs (dependency sync + lake build).
@@ -176,7 +211,7 @@ pub struct VerifySummary {
 }
 
 /// Default pinned Blaster revision. Update this when upgrading to a new tested Blaster version.
-pub const DEFAULT_BLASTER_REV: &str = "main";
+pub const DEFAULT_BLASTER_REV: &str = "95368fb83f0e359be762a64d2e75facb754d3ee2";
 
 /// Minimum supported Lean version (major, minor, patch).
 pub const MIN_LEAN_VERSION: (u32, u32, u32) = (4, 24, 0);
@@ -303,29 +338,158 @@ pub fn should_retain_artifacts(policy: ArtifactRetention, verification_succeeded
 /// Remove stale verification workspaces and logs under `out_dir`.
 /// Returns a list of paths that were removed.
 pub fn clean_artifacts(out_dir: &Path) -> std::io::Result<Vec<PathBuf>> {
-    let mut removed = Vec::new();
-    if out_dir.exists() {
-        // Remove the entire output directory
-        fs::remove_dir_all(out_dir)?;
-        removed.push(out_dir.to_path_buf());
-    }
-    Ok(removed)
+    remove_generated_workspace_paths(out_dir)
 }
 
-fn remove_path_if_exists(path: &Path) -> miette::Result<()> {
+const GENERATED_WORKSPACE_PATHS: [&str; 11] = [
+    "AikenVerify",
+    "AikenVerify.lean",
+    "flat",
+    "manifest.json",
+    "lakefile.lean",
+    "lean-toolchain",
+    "logs",
+    ".lake/build/lib/AikenVerify",
+    ".lake/build/ir/AikenVerify",
+    ".lake/build/bin/AikenVerify",
+    ".lake/build/obj/AikenVerify",
+];
+
+const VERIFY_WORKSPACE_MARKERS: [&str; 6] = [
+    "AikenVerify",
+    "AikenVerify.lean",
+    ".lake/build/lib/AikenVerify",
+    ".lake/build/ir/AikenVerify",
+    ".lake/build/bin/AikenVerify",
+    ".lake/build/obj/AikenVerify",
+];
+
+const GENERIC_WORKSPACE_PATHS: [&str; 5] = [
+    "flat",
+    "manifest.json",
+    "lakefile.lean",
+    "lean-toolchain",
+    "logs",
+];
+
+fn ensure_path_stays_within_workspace(
+    path: &Path,
+    metadata: &fs::Metadata,
+    canonical_out_dir: &Path,
+) -> std::io::Result<()> {
+    let parent = path.parent().unwrap_or(path);
+    let resolved_parent = fs::canonicalize(parent)?;
+    if !resolved_parent.starts_with(canonical_out_dir) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "Refusing to clean '{}': resolved parent '{}' escapes workspace root '{}'.",
+                path.display(),
+                resolved_parent.display(),
+                canonical_out_dir.display()
+            ),
+        ));
+    }
+
+    if !metadata.file_type().is_symlink() {
+        let resolved_path = fs::canonicalize(path)?;
+        if !resolved_path.starts_with(canonical_out_dir) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "Refusing to clean '{}': resolved target '{}' escapes workspace root '{}'.",
+                    path.display(),
+                    resolved_path.display(),
+                    canonical_out_dir.display()
+                ),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn remove_path_if_exists(path: &Path, canonical_out_dir: &Path) -> std::io::Result<bool> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(e) => return Err(miette::miette!("Failed to inspect {}: {e}", path.display())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(e) => return Err(e),
     };
 
-    let result = if metadata.is_dir() && !metadata.file_type().is_symlink() {
+    ensure_path_stays_within_workspace(path, &metadata, canonical_out_dir)?;
+
+    if metadata.is_dir() && !metadata.file_type().is_symlink() {
         fs::remove_dir_all(path)
     } else {
         fs::remove_file(path)
-    };
+    }?;
 
-    result.map_err(|e| miette::miette!("Failed to remove {}: {e}", path.display()))
+    Ok(true)
+}
+
+fn looks_like_verify_workspace(out_dir: &Path) -> bool {
+    VERIFY_WORKSPACE_MARKERS
+        .iter()
+        .any(|rel| out_dir.join(rel).exists())
+}
+
+fn is_generic_workspace_path(rel: &str) -> bool {
+    GENERIC_WORKSPACE_PATHS.contains(&rel)
+}
+
+fn remove_generated_workspace_paths(out_dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    if out_dir
+        .components()
+        .any(|component| matches!(component, Component::ParentDir))
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "Invalid verification workspace path '{}': parent directory segments ('..') are not allowed.",
+                out_dir.display()
+            ),
+        ));
+    }
+
+    let mut removed = Vec::new();
+    if !out_dir.exists() {
+        return Ok(removed);
+    }
+    let canonical_out_dir = fs::canonicalize(out_dir)?;
+
+    let has_verify_workspace_markers = looks_like_verify_workspace(out_dir);
+    let mut blocked_generic = Vec::new();
+
+    for rel in GENERATED_WORKSPACE_PATHS {
+        let path = out_dir.join(rel);
+        if !has_verify_workspace_markers && is_generic_workspace_path(rel) {
+            if path.exists() {
+                blocked_generic.push(path);
+            }
+            continue;
+        }
+
+        if remove_path_if_exists(&path, &canonical_out_dir)? {
+            removed.push(path);
+        }
+    }
+
+    if !has_verify_workspace_markers && !blocked_generic.is_empty() {
+        let paths = blocked_generic
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "Refusing to clean '{}': target does not look like an Aiken verify workspace (missing AikenVerify markers). Found generic verification paths: {paths}",
+                out_dir.display()
+            ),
+        ));
+    }
+
+    Ok(removed)
 }
 
 /// Clear generated verification outputs before writing a fresh workspace.
@@ -334,23 +498,12 @@ fn remove_path_if_exists(path: &Path) -> miette::Result<()> {
 /// `.lake/packages`, and non-AikenVerify build outputs) so successive
 /// `verify run` calls can reuse expensive Lean build artifacts.
 pub fn clear_generated_workspace(out_dir: &Path) -> miette::Result<()> {
-    if !out_dir.exists() {
-        return Ok(());
-    }
-
-    for rel in [
-        "AikenVerify",
-        "AikenVerify.lean",
-        "flat",
-        "manifest.json",
-        "logs",
-        ".lake/build/lib/AikenVerify",
-        ".lake/build/ir/AikenVerify",
-        ".lake/build/bin/AikenVerify",
-        ".lake/build/obj/AikenVerify",
-    ] {
-        remove_path_if_exists(&out_dir.join(rel))?;
-    }
+    remove_generated_workspace_paths(out_dir).map_err(|e| {
+        miette::miette!(
+            "Failed to clear generated verification workspace at {}: {e}",
+            out_dir.display(),
+        )
+    })?;
 
     Ok(())
 }
@@ -473,7 +626,7 @@ fn module_to_lean_segment(module: &str) -> String {
 /// Appends a short hash of the original (unsanitized) module.name to avoid collisions
 /// when sanitization collapses distinct names to the same string.
 fn test_id(module: &str, name: &str) -> String {
-    let module_part = sanitize_lean_name(&module.replace('/', "_"));
+    let module_part = sanitize_lean_name(&module.replace(['/', '.'], "_"));
     let name_part = sanitize_lean_name(name);
     let hash = short_hash(&format!("{module}.{name}"));
     format!("{module_part}__{name_part}_{hash}")
@@ -481,15 +634,23 @@ fn test_id(module: &str, name: &str) -> String {
 
 /// Produce an 8-hex-char hash of the input string for use as a disambiguation suffix.
 fn short_hash(input: &str) -> String {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    input.hash(&mut hasher);
-    let h = hasher.finish();
-    format!("{:08x}", h as u32)
+    // Stable 32-bit FNV-1a so IDs remain reproducible across toolchain changes.
+    const FNV_OFFSET_BASIS: u32 = 0x811c9dc5;
+    const FNV_PRIME: u32 = 0x01000193;
+
+    let mut hash = FNV_OFFSET_BASIS;
+    for byte in input.as_bytes() {
+        hash ^= u32::from(*byte);
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+
+    format!("{hash:08x}")
 }
 
 /// Detect collisions in generated Lean file paths before writing any files.
 /// The collision surface is `(lean_module_segment, lean_test_name)` since those
 /// determine the `.lean` file path, which does not include the hash suffix.
+#[cfg(test)]
 fn detect_lean_path_collisions(tests: &[ExportedPropertyTest]) -> miette::Result<()> {
     // Map from lean file path -> original "module.test_name"
     let mut seen: HashMap<String, String> = HashMap::new();
@@ -610,6 +771,7 @@ pub fn check_toolchain() -> miette::Result<()> {
 /// against the minimum. Returns a structured result.
 pub fn check_tool_version(name: &str, min: (u32, u32, u32)) -> ToolCheck {
     let minimum_version = format!("{}.{}.{}", min.0, min.1, min.2);
+    let has_no_version_floor = min == (0, 0, 0);
 
     let output = Command::new(name)
         .arg("--version")
@@ -631,11 +793,16 @@ pub fn check_tool_version(name: &str, min: (u32, u32, u32)) -> ToolCheck {
         }
     };
 
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{stdout}\n{stderr}");
+    let version_str = parse_version_from_output(&combined);
+
     if !output.status.success() {
         return ToolCheck {
             tool: name.to_string(),
-            found: true,
-            version: None,
+            found: false,
+            version: version_str,
             meets_minimum: false,
             minimum_version,
             error: Some(format!(
@@ -645,16 +812,14 @@ pub fn check_tool_version(name: &str, min: (u32, u32, u32)) -> ToolCheck {
         };
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let combined = format!("{stdout}\n{stderr}");
-
-    let version_str = parse_version_from_output(&combined);
-
-    let meets_minimum = version_str
-        .as_ref()
-        .map(|v| version_meets_minimum(v, min))
-        .unwrap_or(false); // unparseable version output cannot satisfy any minimum
+    let meets_minimum = if has_no_version_floor {
+        true
+    } else {
+        version_str
+            .as_ref()
+            .map(|v| version_meets_minimum(v, min))
+            .unwrap_or(false) // unparseable version output cannot satisfy a real minimum
+    };
 
     ToolCheck {
         tool: name.to_string(),
@@ -798,14 +963,7 @@ pub fn run_doctor(out_dir: &Path, blaster_rev: &str) -> DoctorReport {
     let z3_check = check_tool_version("z3", MIN_Z3_VERSION);
     let plutus_core = check_plutus_core_detailed(out_dir);
 
-    let all_ok = lean_check.found
-        && lean_check.meets_minimum
-        && lake_check.found
-        && lake_check.meets_minimum
-        && z3_check.found
-        && z3_check.meets_minimum
-        && plutus_core.found
-        && plutus_core.has_lakefile;
+    let all_ok = doctor_all_ok(&lean_check, &lake_check, &z3_check, &plutus_core);
 
     DoctorReport {
         tools: vec![lean_check, lake_check, z3_check],
@@ -816,17 +974,32 @@ pub fn run_doctor(out_dir: &Path, blaster_rev: &str) -> DoctorReport {
     }
 }
 
-fn lake_fetch_is_unknown_command(stderr: &str) -> bool {
-    let stderr_lower = stderr.to_ascii_lowercase();
-    stderr_lower.contains("unknown command 'fetch'")
-        || stderr_lower.contains("unknown command `fetch`")
-        || stderr_lower.contains("unknown command \"fetch\"")
+fn doctor_all_ok(
+    lean_check: &ToolCheck,
+    lake_check: &ToolCheck,
+    z3_check: &ToolCheck,
+    plutus_core: &PlutusCoreCheck,
+) -> bool {
+    lean_check.found
+        && lean_check.meets_minimum
+        && lake_check.found
+        && z3_check.found
+        && z3_check.meets_minimum
+        && plutus_core.found
+        && plutus_core.has_lakefile
 }
 
-fn lake_build_jobs_flag_unsupported(stderr: &str) -> bool {
-    let stderr_lower = stderr.to_ascii_lowercase();
-    (stderr_lower.contains("unknown option") || stderr_lower.contains("unrecognized option"))
-        && stderr_lower.contains("-j")
+fn lake_fetch_is_unknown_command(stdout: &str, stderr: &str) -> bool {
+    let output_lower = format!("{stdout}\n{stderr}").to_ascii_lowercase();
+    output_lower.contains("unknown command 'fetch'")
+        || output_lower.contains("unknown command `fetch`")
+        || output_lower.contains("unknown command \"fetch\"")
+}
+
+fn lake_build_jobs_flag_unsupported(stdout: &str, stderr: &str) -> bool {
+    let output_lower = format!("{stdout}\n{stderr}").to_ascii_lowercase();
+    (output_lower.contains("unknown option") || output_lower.contains("unrecognized option"))
+        && output_lower.contains("-j")
 }
 
 fn normalize_jobs_override(max_jobs: Option<usize>) -> Option<usize> {
@@ -837,6 +1010,17 @@ fn lake_build_command_for_jobs(jobs_override: Option<usize>) -> String {
     match jobs_override {
         Some(jobs) => format!("lake build -j {jobs}"),
         None => "lake build".to_string(),
+    }
+}
+
+fn lake_build_module_command_for_jobs(module: &str, jobs_override: Option<usize>) -> String {
+    format!("{} {module}", lake_build_command_for_jobs(jobs_override))
+}
+
+fn normalize_failure_exit_code(exit_code: Option<i32>) -> i32 {
+    match exit_code {
+        Some(code) if code != 0 => code,
+        _ => 1,
     }
 }
 
@@ -914,27 +1098,7 @@ pub fn run_proofs(
 
             if timeout.is_some_and(|limit| start.elapsed() >= limit) {
                 timed_out = true;
-                #[cfg(unix)]
-                {
-                    // Kill the entire process group to ensure descendant processes
-                    // release stdout/stderr pipes and reader threads can finish.
-                    if let Ok(raw_pid) = i32::try_from(child.id()) {
-                        // Negative PID targets the process group ID.
-                        unsafe {
-                            let _ = kill(-raw_pid, SIGTERM);
-                        }
-                        thread::sleep(Duration::from_millis(200));
-                        unsafe {
-                            let _ = kill(-raw_pid, SIGKILL);
-                        }
-                    } else {
-                        let _ = child.kill();
-                    }
-                }
-                #[cfg(not(unix))]
-                {
-                    let _ = child.kill();
-                }
+                terminate_child_process_tree(&mut child);
                 break child
                     .wait()
                     .map_err(|e| miette::miette!("Failed to wait for timed out command: {e}"))?;
@@ -968,25 +1132,17 @@ pub fn run_proofs(
         })
     }
 
-    // Retained for future per-module parallel builds (see --jobs flag comment).
-    #[allow(dead_code)]
     fn theorem_status_from_module_build(
         test_name: String,
         theorem_name: &str,
         build_output: &str,
         timed_out: bool,
+        build_exit_code: Option<i32>,
         timeout_secs: u64,
         module: &str,
+        fallback_to_module_failure: bool,
+        fallback_from_sibling_explicit_failure: bool,
     ) -> TheoremResult {
-        fn output_indicates_failure(output: &str) -> bool {
-            output.contains("❌ Falsified")
-                || output.contains("Counterexample:")
-                || output.contains("Tactic `blaster` failed")
-                || output.contains("unsolved goals")
-                || output.contains("error: build failed")
-                || output.contains("error: Lean exited with code")
-        }
-
         let status = if timed_out {
             ProofStatus::TimedOut {
                 reason: format!(
@@ -994,20 +1150,38 @@ pub fn run_proofs(
                     timeout_secs, module
                 ),
             }
-        } else if build_output.contains(&format!("error: '{}' ", theorem_name))
-            || build_output.contains(&format!("'{}'", theorem_name))
-            || output_indicates_failure(build_output)
-        {
-            let extracted = extract_error_for_theorem(theorem_name, build_output);
-            let category = classify_failure(build_output);
-            let reason = if extracted.is_empty() {
-                format!("Proof failed while building {module}")
-            } else {
-                extracted
-            };
-            ProofStatus::Failed { category, reason }
+        } else if build_exit_code == Some(0) {
+            ProofStatus::Proved
         } else {
-            ProofStatus::Unknown
+            let theorem_failed = theorem_has_explicit_failure(theorem_name, build_output);
+            if !theorem_failed && !fallback_to_module_failure {
+                ProofStatus::Unknown
+            } else {
+                let reason = if theorem_failed {
+                    let extracted = extract_error_for_theorem(theorem_name, build_output);
+                    if extracted.is_empty() {
+                        extract_global_failure_reason(build_output)
+                    } else {
+                        extracted
+                    }
+                } else {
+                    let extracted = extract_error_for_module(module, build_output);
+                    if extracted.is_empty() {
+                        extract_global_failure_reason(build_output)
+                    } else {
+                        extracted
+                    }
+                };
+                let category = if fallback_from_sibling_explicit_failure && !theorem_failed {
+                    FailureCategory::BuildError
+                } else {
+                    match classify_failure(&reason) {
+                        FailureCategory::Unknown => FailureCategory::BuildError,
+                        known => known,
+                    }
+                };
+                ProofStatus::Failed { category, reason }
+            }
         };
 
         TheoremResult {
@@ -1038,7 +1212,7 @@ pub fn run_proofs(
     let mut dep_step = "lake fetch";
     let dep_output = if !fetch_output.timed_out
         && fetch_output.exit_code != Some(0)
-        && lake_fetch_is_unknown_command(&fetch_output.stderr)
+        && lake_fetch_is_unknown_command(&fetch_output.stdout, &fetch_output.stderr)
     {
         let mut update_cmd = Command::new("lake");
         update_cmd.arg("update").current_dir(out_dir);
@@ -1092,7 +1266,7 @@ pub fn run_proofs(
             success: false,
             stdout: dep_stdout,
             stderr: dep_stderr,
-            exit_code: dep_exit_code,
+            exit_code: Some(normalize_failure_exit_code(dep_exit_code)),
             theorem_results: Some(theorem_results),
         });
     }
@@ -1102,73 +1276,141 @@ pub fn run_proofs(
             success: false,
             stdout: dep_stdout,
             stderr: dep_stderr,
-            exit_code: dep_exit_code,
+            exit_code: Some(normalize_failure_exit_code(dep_exit_code)),
             theorem_results: None,
         });
     }
 
-    // Build all modules with a single `lake build` invocation.
+    // Build each theorem module independently so timeout applies per theorem build.
     // If the caller explicitly sets `--jobs`, try forwarding `-j <N>`.
     // If that flag is unsupported in the installed Lake, retry once without it.
-    let (build_command, build_result) = {
+    let jobs_override = normalize_jobs_override(max_jobs);
+    let mut combined_build_stdout = Vec::new();
+    let mut combined_build_stderr = Vec::new();
+    let mut combined_build_log = Vec::new();
+    let mut theorem_results = Vec::new();
+    let mut success = true;
+    let mut first_failure_exit_code: Option<i32> = None;
+
+    for entry in &manifest.tests {
         let mut build_cmd = Command::new("lake");
         build_cmd.arg("build").current_dir(out_dir);
-        let jobs_override = normalize_jobs_override(max_jobs);
         if let Some(jobs) = jobs_override {
             build_cmd.arg("-j").arg(jobs.to_string());
         }
-        let cmd_str = lake_build_command_for_jobs(jobs_override);
+        build_cmd.arg(&entry.lean_module);
+        let mut build_command_used =
+            lake_build_module_command_for_jobs(&entry.lean_module, jobs_override);
+        let mut build_result = match run_command_with_timeout(build_cmd, timeout_secs) {
+            Ok(result) => result,
+            Err(e) => {
+                return Err(miette::miette!(
+                    "Failed to execute {build_command_used}: {e}"
+                ));
+            }
+        };
 
-        (cmd_str, run_command_with_timeout(build_cmd, timeout_secs))
-    };
-
-    let mut build_command_used = build_command.clone();
-    let mut build_result = match build_result {
-        Ok(r) => r,
-        Err(e) => {
-            // OS-level spawn failure (e.g. lake not found). The build never ran,
-            // so report every theorem as BuildError rather than silently dropping.
-            let reason = format!("Failed to execute {build_command}: {e}");
-            return Err(miette::miette!("{reason}"));
+        if jobs_override.is_some()
+            && build_result.exit_code != Some(0)
+            && lake_build_jobs_flag_unsupported(&build_result.stdout, &build_result.stderr)
+        {
+            let mut fallback_cmd = Command::new("lake");
+            fallback_cmd
+                .arg("build")
+                .current_dir(out_dir)
+                .arg(&entry.lean_module);
+            build_command_used = lake_build_module_command_for_jobs(&entry.lean_module, None);
+            build_result = run_command_with_timeout(fallback_cmd, timeout_secs)?;
         }
-    };
 
-    if build_command_used.contains("-j")
-        && build_result.exit_code != Some(0)
-        && lake_build_jobs_flag_unsupported(&build_result.stderr)
-    {
-        let mut fallback_cmd = Command::new("lake");
-        fallback_cmd.arg("build").current_dir(out_dir);
-        build_command_used = "lake build".to_string();
-        build_result = run_command_with_timeout(fallback_cmd, timeout_secs)?;
+        let module_stdout = build_result.stdout;
+        let module_stderr = build_result.stderr;
+        let module_exit_code = build_result.exit_code;
+        let module_timed_out = build_result.timed_out;
+        let module_output = format!("{module_stdout}\n{module_stderr}");
+
+        let _ = fs::write(
+            logs_dir.join(format!("lake-build-{}.log", entry.id)),
+            format!(
+                "command: {build_command_used}\nmodule: {}\n--- stdout ---\n{}\n--- stderr ---\n{}\n",
+                entry.lean_module, module_stdout, module_stderr
+            ),
+        );
+
+        combined_build_log.push(format!(
+            "command: {build_command_used}\nmodule: {}\n--- stdout ---\n{}\n--- stderr ---\n{}\n",
+            entry.lean_module, module_stdout, module_stderr
+        ));
+
+        combined_build_stdout.push(format!("[{}]\n{}", entry.lean_module, module_stdout));
+        combined_build_stderr.push(format!("[{}]\n{}", entry.lean_module, module_stderr));
+
+        let test_name = format!("{}.{}", entry.aiken_module, entry.aiken_name);
+        let term_theorem_name = entry
+            .has_termination_theorem
+            .then(|| format!("{}_alwaysTerminating", entry.lean_theorem));
+        let correctness_failed = theorem_has_explicit_failure(&entry.lean_theorem, &module_output);
+        let termination_failed = term_theorem_name
+            .as_ref()
+            .is_some_and(|name| theorem_has_explicit_failure(name, &module_output));
+        // Keep correctness conservative when a sibling termination failure is
+        // explicitly reported, but still allow the termination theorem to
+        // inherit module-level failures when it has no explicit marker.
+        let correctness_fallback_to_module_failure = !correctness_failed && !termination_failed;
+        let termination_fallback_to_module_failure = !termination_failed;
+
+        theorem_results.push(theorem_status_from_module_build(
+            test_name.clone(),
+            &entry.lean_theorem,
+            &module_output,
+            module_timed_out,
+            module_exit_code,
+            timeout_secs,
+            &entry.lean_module,
+            correctness_fallback_to_module_failure,
+            false,
+        ));
+        if let Some(term_theorem_name) = term_theorem_name {
+            theorem_results.push(theorem_status_from_module_build(
+                test_name,
+                &term_theorem_name,
+                &module_output,
+                module_timed_out,
+                module_exit_code,
+                timeout_secs,
+                &entry.lean_module,
+                termination_fallback_to_module_failure,
+                correctness_failed,
+            ));
+        }
+
+        if module_timed_out || module_exit_code != Some(0) {
+            success = false;
+            if first_failure_exit_code.is_none() {
+                first_failure_exit_code = Some(normalize_failure_exit_code(module_exit_code));
+            }
+        }
     }
-
-    let build_stdout = build_result.stdout;
-    let build_stderr = build_result.stderr;
-    let build_exit_code = build_result.exit_code;
-    let build_timed_out = build_result.timed_out;
 
     let _ = fs::write(
         logs_dir.join("lake-build.log"),
-        format!(
-            "command: {build_command_used}\n--- stdout ---\n{}\n--- stderr ---\n{}\n",
-            build_stdout, build_stderr
-        ),
+        combined_build_log.join("\n"),
     );
 
-    let success = build_exit_code == Some(0) && !build_timed_out;
-
-    let mut stderr_with_marker = build_stderr.clone();
-    if build_timed_out {
-        stderr_with_marker.push_str("\n[verify-timeout]");
-    }
+    let build_stdout = combined_build_stdout.join("\n");
+    let build_stderr = combined_build_stderr.join("\n");
+    let exit_code = if success {
+        Some(0)
+    } else {
+        Some(first_failure_exit_code.unwrap_or(1))
+    };
 
     Ok(VerifyResult {
         success,
         stdout: format!("{dep_stdout}\n{build_stdout}"),
-        stderr: format!("{dep_stderr}\n{stderr_with_marker}"),
-        exit_code: build_exit_code,
-        theorem_results: None,
+        stderr: format!("{dep_stderr}\n{build_stderr}"),
+        exit_code,
+        theorem_results: Some(theorem_results),
     })
 }
 
@@ -1225,7 +1467,21 @@ pub fn generate_lean_workspace(
     skip_unsupported: bool,
 ) -> miette::Result<GeneratedManifest> {
     validate_blaster_rev(&config.blaster_rev)?;
-    detect_lean_path_collisions(tests)?;
+
+    struct PreparedManifestEntry {
+        id: String,
+        aiken_module: String,
+        aiken_name: String,
+        lean_module_segment: String,
+        lean_test_name: String,
+        lean_module: String,
+        lean_file: String,
+        proof_content: String,
+        flat_content: String,
+        fuzzer_flat_content: String,
+        handler_flat_content: Option<String>,
+        has_termination_theorem: bool,
+    }
 
     let out = &config.out_dir;
     clear_generated_workspace(out)?;
@@ -1251,9 +1507,13 @@ pub fn generate_lean_workspace(
         &generate_utils(config.cek_budget),
     )?;
 
+    let mut prepared_entries = Vec::new();
+    let mut skipped_tests = Vec::new();
+    let mut seen_lean_paths: HashMap<String, String> = HashMap::new();
+    let mut collisions: Vec<String> = Vec::new();
+
     // Collect manifest entries and generate per-test files
     let mut manifest_entries = Vec::new();
-    let mut skipped_tests = Vec::new();
     // Track module directories we need to create and their imports
     let mut module_dirs: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
@@ -1271,16 +1531,11 @@ pub fn generate_lean_workspace(
         // Lean module path: AikenVerify.Proofs.<Module>.<TestName>
         let lean_module = format!("AikenVerify.Proofs.{lean_module_segment}.{lean_test_name}");
 
-        // Directory for this module's proofs
-        let proof_dir = out.join("AikenVerify/Proofs").join(&lean_module_segment);
-        fs::create_dir_all(&proof_dir)
-            .map_err(|e| miette::miette!("Failed to create proof directory: {e}"))?;
-
         // Lean file path relative to out_dir
         let lean_file_rel =
             format!("AikenVerify/Proofs/{lean_module_segment}/{lean_test_name}.lean");
 
-        // Write the .lean proof file for this test
+        // Generate proof content or classify skip/error before collision checks.
         let proof_content = match generate_proof_file(
             test,
             &id,
@@ -1307,32 +1562,15 @@ pub fn generate_lean_workspace(
             }
             Err(e) => return Err(e),
         };
-        write_file(&out.join(&lean_file_rel), &proof_content)?;
 
-        // Write the flat file (hex content)
-        let flat_file_rel = format!("flat/{id}.flat");
-        write_file(&out.join(&flat_file_rel), &test.test_program.hex)?;
-        let fuzzer_flat_rel = format!("flat/{id}_fuzzer.flat");
-        write_file(&out.join(&fuzzer_flat_rel), &test.fuzzer_program.hex)?;
-
-        // For validator/equivalence modes, also write the handler flat file
-        if matches!(
-            config.target,
-            VerificationTargetKind::ValidatorHandler | VerificationTargetKind::Equivalence
-        ) {
-            if let Some(ref vt) = test.validator_target {
-                if let Some(ref handler_program) = vt.handler_program {
-                    let handler_flat_rel = format!("flat/{id}_handler.flat");
-                    write_file(&out.join(&handler_flat_rel), &handler_program.hex)?;
-                }
-            }
+        let original = format!("{module}.{test_name}");
+        if let Some(existing) = seen_lean_paths.get(&lean_file_rel) {
+            collisions.push(format!(
+                "  \"{lean_file_rel}\" generated by both \"{existing}\" and \"{original}\""
+            ));
+            continue;
         }
-
-        // Track import for root module
-        module_dirs
-            .entry(lean_module_segment.clone())
-            .or_default()
-            .push(lean_test_name.clone());
+        seen_lean_paths.insert(lean_file_rel.clone(), original);
 
         // Termination theorem is generated only for Bool-returning universal
         // properties (FailImmediately / SucceedEventually). All other forms
@@ -1348,15 +1586,73 @@ pub fn generate_lean_workspace(
             )
         };
 
-        manifest_entries.push(ManifestEntry {
-            id: id.clone(),
+        let handler_flat_content = if matches!(
+            config.target,
+            VerificationTargetKind::ValidatorHandler | VerificationTargetKind::Equivalence
+        ) {
+            test.validator_target.as_ref().and_then(|vt| {
+                vt.handler_program
+                    .as_ref()
+                    .map(|program| program.hex.clone())
+            })
+        } else {
+            None
+        };
+
+        prepared_entries.push(PreparedManifestEntry {
+            id,
             aiken_module: module.clone(),
             aiken_name: test_name.to_string(),
+            lean_module_segment,
+            lean_test_name,
             lean_module,
-            lean_theorem: lean_test_name,
             lean_file: lean_file_rel,
-            flat_file: flat_file_rel,
+            proof_content,
+            flat_content: test.test_program.hex.clone(),
+            fuzzer_flat_content: test.fuzzer_program.hex.clone(),
+            handler_flat_content,
             has_termination_theorem,
+        });
+    }
+
+    if !collisions.is_empty() {
+        return Err(miette::miette!(
+            "Lean file path collisions detected — generated files would overwrite each other:\n{}",
+            collisions.join("\n")
+        ));
+    }
+
+    for entry in prepared_entries {
+        let proof_dir = out
+            .join("AikenVerify/Proofs")
+            .join(&entry.lean_module_segment);
+        fs::create_dir_all(&proof_dir)
+            .map_err(|e| miette::miette!("Failed to create proof directory: {e}"))?;
+        write_file(&out.join(&entry.lean_file), &entry.proof_content)?;
+
+        let flat_file_rel = format!("flat/{}.flat", entry.id);
+        write_file(&out.join(&flat_file_rel), &entry.flat_content)?;
+        let fuzzer_flat_rel = format!("flat/{}_fuzzer.flat", entry.id);
+        write_file(&out.join(&fuzzer_flat_rel), &entry.fuzzer_flat_content)?;
+        if let Some(handler_flat_content) = entry.handler_flat_content.as_deref() {
+            let handler_flat_rel = format!("flat/{}_handler.flat", entry.id);
+            write_file(&out.join(&handler_flat_rel), handler_flat_content)?;
+        }
+
+        module_dirs
+            .entry(entry.lean_module_segment.clone())
+            .or_default()
+            .push(entry.lean_test_name.clone());
+
+        manifest_entries.push(ManifestEntry {
+            id: entry.id,
+            aiken_module: entry.aiken_module,
+            aiken_name: entry.aiken_name,
+            lean_module: entry.lean_module,
+            lean_theorem: entry.lean_test_name,
+            lean_file: entry.lean_file,
+            flat_file: flat_file_rel,
+            has_termination_theorem: entry.has_termination_theorem,
         });
     }
 
@@ -2213,34 +2509,6 @@ fn extract_int_bounds(test: &ExportedPropertyTest) -> miette::Result<(String, St
     Ok((min, max))
 }
 
-/// Extract per-element Int bounds for a tuple/pair.
-/// Returns a Vec of Option<(min, max)> for each element -- None for non-Int elements.
-fn extract_tuple_element_bounds(
-    test: &ExportedPropertyTest,
-    types: &[FuzzerOutputType],
-) -> miette::Result<Vec<Option<(String, String)>>> {
-    let mut bounds = Vec::with_capacity(types.len());
-    for (i, t) in types.iter().enumerate() {
-        if matches!(t, FuzzerOutputType::Int) {
-            let (min, max) = extract_tuple_element_int_range(&test.constraint, types.len(), i)
-                .ok_or_else(|| {
-                    generation_error(
-                        GenerationErrorCategory::MissingDomain,
-                        format!(
-                            "Test '{}': tuple element {} has no extractable Int range",
-                            test.name, i
-                        ),
-                    )
-                })?;
-            validate_int_bounds_literals(&test.name, &min, &max)?;
-            bounds.push(Some((min, max)));
-        } else {
-            bounds.push(None);
-        }
-    }
-    Ok(bounds)
-}
-
 fn extract_tuple_element_int_range(
     constraint: &FuzzerConstraint,
     arity: usize,
@@ -2521,7 +2789,31 @@ fn format_theorems(
 
 /// Generate an equivalence theorem proving that the property wrapper and
 /// validator handler produce the same result for all inputs.
+fn equivalence_goal(
+    test: &ExportedPropertyTest,
+    prop_prog: &str,
+    handler_prog: &str,
+    arg_expr: &str,
+) -> String {
+    use crate::export::TestReturnMode;
+    use aiken_lang::ast::OnTestFailure;
+
+    match (&test.return_mode, &test.on_test_failure) {
+        (TestReturnMode::Bool, _) => {
+            format!("proveTests {prop_prog} ({arg_expr}) = proveTests {handler_prog} ({arg_expr})")
+        }
+        (TestReturnMode::Void, OnTestFailure::FailImmediately) => format!(
+            "proveTestsHalt {prop_prog} ({arg_expr}) ↔ proveTestsHalt {handler_prog} ({arg_expr})"
+        ),
+        (TestReturnMode::Void, OnTestFailure::SucceedEventually)
+        | (TestReturnMode::Void, OnTestFailure::SucceedImmediately) => format!(
+            "proveTestsError {prop_prog} ({arg_expr}) ↔ proveTestsError {handler_prog} ({arg_expr})"
+        ),
+    }
+}
+
 fn format_equivalence_theorem(
+    test: &ExportedPropertyTest,
     lean_test_name: &str,
     prop_prog: &str,
     handler_prog: &str,
@@ -2534,10 +2826,11 @@ fn format_equivalence_theorem(
     } else {
         "\n  →\n  "
     };
+    let equivalence_goal = equivalence_goal(test, prop_prog, handler_prog, arg_expr);
     format!(
         "\ntheorem {lean_test_name}_equivalence :\n  \
          {quantifiers}{preconditions}{arrow}\
-         proveTests {prop_prog} ({arg_expr}) = proveTests {handler_prog} ({arg_expr}) :=\n  \
+         {equivalence_goal} :=\n  \
          by blaster\n"
     )
 }
@@ -2624,16 +2917,33 @@ fn ensure_target_kind_compatible(
     test: &ExportedPropertyTest,
     target: &VerificationTargetKind,
 ) -> miette::Result<()> {
-    if &test.target_kind == target {
-        return Ok(());
+    match target {
+        VerificationTargetKind::PropertyWrapper => Ok(()),
+        VerificationTargetKind::ValidatorHandler | VerificationTargetKind::Equivalence => {
+            let vt = test.validator_target.as_ref().ok_or_else(|| {
+                generation_error(
+                    GenerationErrorCategory::UnsupportedShape,
+                    format!(
+                        "Test '{}' has no validator target metadata; \
+                         --target {} requires a validator_target with handler_program. \
+                         This test can only be verified in --target property mode.",
+                        test.name, target
+                    ),
+                )
+            })?;
+            if vt.handler_program.is_none() {
+                return Err(generation_error(
+                    GenerationErrorCategory::UnsupportedShape,
+                    format!(
+                        "Test '{}' has validator target metadata but no handler program; \
+                         --target {} requires an exported handler program.",
+                        test.name, target
+                    ),
+                ));
+            }
+            Ok(())
+        }
     }
-
-    Err(miette::miette!(
-        "Test '{}' target kind mismatch: exported as '{}' but `verify run --target {}` was requested.",
-        test.name,
-        test.target_kind,
-        target,
-    ))
 }
 
 fn should_use_sampled_fallback_for_error(error: &miette::Report) -> bool {
@@ -2641,6 +2951,7 @@ fn should_use_sampled_fallback_for_error(error: &miette::Report) -> bool {
 }
 
 fn format_sampled_domain_fallback_theorems(
+    test: &ExportedPropertyTest,
     form: &TheoremForm,
     lean_test_name: &str,
     verify_prog: &str,
@@ -2704,11 +3015,12 @@ fn format_sampled_domain_fallback_theorems(
     if let VerificationTargetKind::Equivalence = target {
         // Equivalence remains universally quantified even for fail-once tests:
         // we must show wrapper/handler agreement for every sampled seed.
+        let equivalence_goal = equivalence_goal(test, prop_prog, handler_prog, "dataArg x");
         out.push_str(&format!(
             "\ntheorem {lean_test_name}_equivalence :\n  \
              ∀ (seed : Data),\n  \
              match {sample_expr} with\n  \
-             | some x => proveTests {prop_prog} (dataArg x) = proveTests {handler_prog} (dataArg x)\n  \
+             | some x => {equivalence_goal}\n  \
              | none => True :=\n  \
              by blaster\n"
         ));
@@ -2727,31 +3039,6 @@ fn generate_proof_file(
 ) -> miette::Result<String> {
     ensure_target_kind_compatible(test, target)?;
 
-    // Validator/equivalence modes require a validator_target with handler_program
-    match target {
-        VerificationTargetKind::ValidatorHandler | VerificationTargetKind::Equivalence => {
-            if test.validator_target.is_none() {
-                return Err(miette::miette!(
-                    "Test '{}' has no validator target metadata; \
-                     --target {} requires a validator_target with handler_program. \
-                     This test can only be verified in --target property mode.",
-                    test.name,
-                    target,
-                ));
-            }
-            let vt = test.validator_target.as_ref().unwrap();
-            if vt.handler_program.is_none() {
-                return Err(miette::miette!(
-                    "Test '{}' has validator target metadata but no handler program; \
-                     --target {} requires an exported handler program.",
-                    test.name,
-                    target,
-                ));
-            }
-        }
-        VerificationTargetKind::PropertyWrapper => {}
-    }
-
     let form = determine_theorem_form(test, existential_mode)?;
 
     let prog = prog_name(test_id);
@@ -2762,17 +3049,17 @@ fn generate_proof_file(
     let header = |extra_opens: &str| -> String {
         let mut s = format!(
             "import AikenVerify.Utils\nimport PlutusCore.UPLC.ScriptEncoding\nimport Blaster\n\n\
-             namespace {lean_module}\n\
-             open PlutusCore.UPLC.CekMachine\n\
-             open PlutusCore.UPLC.Term (Term Const Program)\n\
-             open AikenVerify.Utils\n"
+             namespace {lean_module}\n"
         );
         if !extra_opens.is_empty() {
-            s.insert_str(
-                s.find("open PlutusCore.UPLC.CekMachine").unwrap(),
-                &format!("{extra_opens}\n"),
-            );
+            s.push_str(extra_opens);
+            s.push('\n');
         }
+        s.push_str(
+            "open PlutusCore.UPLC.CekMachine\n\
+             open PlutusCore.UPLC.Term (Term Const Program)\n\
+             open AikenVerify.Utils\n",
+        );
         s.push_str(&format!(
             "\n#import_uplc {prog} single_cbor_hex \"./flat/{test_id}.flat\"\n"
         ));
@@ -2804,6 +3091,7 @@ fn generate_proof_file(
     if constraint_contains_unsupported(&domain_test.constraint) {
         if form.existential {
             let theorems = format_sampled_domain_fallback_theorems(
+                test,
                 &form,
                 lean_test_name,
                 &verify_prog,
@@ -2819,6 +3107,7 @@ fn generate_proof_file(
 
         let Some(stripped) = strip_unsupported_constraint(&domain_test.constraint) else {
             let theorems = format_sampled_domain_fallback_theorems(
+                test,
                 &form,
                 lean_test_name,
                 &verify_prog,
@@ -2843,6 +3132,7 @@ fn generate_proof_file(
                 Ok(bounds) => bounds,
                 Err(e) => {
                     let theorems = format_sampled_domain_fallback_theorems(
+                        test,
                         &form,
                         lean_test_name,
                         &verify_prog,
@@ -2879,6 +3169,7 @@ fn generate_proof_file(
             let mut content = format!("{}{theorems}", header("open PlutusCore.Integer (Integer)"));
             if let VerificationTargetKind::Equivalence = target {
                 content.push_str(&format_equivalence_theorem(
+                    test,
                     lean_test_name,
                     &prog,
                     &handler_prog,
@@ -2903,6 +3194,7 @@ fn generate_proof_file(
                 Err(e) => {
                     if should_use_sampled_fallback_for_error(&e) {
                         let theorems = format_sampled_domain_fallback_theorems(
+                            test,
                             &form,
                             lean_test_name,
                             &verify_prog,
@@ -2921,6 +3213,7 @@ fn generate_proof_file(
             };
             if precondition_parts.is_empty() {
                 let theorems = format_sampled_domain_fallback_theorems(
+                    test,
                     &form,
                     lean_test_name,
                     &verify_prog,
@@ -2951,6 +3244,7 @@ fn generate_proof_file(
             let mut content = format!("{}{theorems}", header(""));
             if let VerificationTargetKind::Equivalence = target {
                 content.push_str(&format_equivalence_theorem(
+                    test,
                     lean_test_name,
                     &prog,
                     &handler_prog,
@@ -2975,6 +3269,7 @@ fn generate_proof_file(
                 Err(e) => {
                     if should_use_sampled_fallback_for_error(&e) {
                         let theorems = format_sampled_domain_fallback_theorems(
+                            test,
                             &form,
                             lean_test_name,
                             &verify_prog,
@@ -2993,6 +3288,7 @@ fn generate_proof_file(
             };
             if precondition_parts.is_empty() {
                 let theorems = format_sampled_domain_fallback_theorems(
+                    test,
                     &form,
                     lean_test_name,
                     &verify_prog,
@@ -3026,6 +3322,7 @@ fn generate_proof_file(
             );
             if let VerificationTargetKind::Equivalence = target {
                 content.push_str(&format_equivalence_theorem(
+                    test,
                     lean_test_name,
                     &prog,
                     &handler_prog,
@@ -3050,6 +3347,7 @@ fn generate_proof_file(
                 Err(e) => {
                     if should_use_sampled_fallback_for_error(&e) {
                         let theorems = format_sampled_domain_fallback_theorems(
+                            test,
                             &form,
                             lean_test_name,
                             &verify_prog,
@@ -3068,6 +3366,7 @@ fn generate_proof_file(
             };
             if precondition_parts.is_empty() {
                 let theorems = format_sampled_domain_fallback_theorems(
+                    test,
                     &form,
                     lean_test_name,
                     &verify_prog,
@@ -3101,6 +3400,7 @@ fn generate_proof_file(
             );
             if let VerificationTargetKind::Equivalence = target {
                 content.push_str(&format_equivalence_theorem(
+                    test,
                     lean_test_name,
                     &prog,
                     &handler_prog,
@@ -3125,6 +3425,7 @@ fn generate_proof_file(
                 Err(e) => {
                     if should_use_sampled_fallback_for_error(&e) {
                         let theorems = format_sampled_domain_fallback_theorems(
+                            test,
                             &form,
                             lean_test_name,
                             &verify_prog,
@@ -3143,6 +3444,7 @@ fn generate_proof_file(
             };
             if precondition_parts.is_empty() {
                 let theorems = format_sampled_domain_fallback_theorems(
+                    test,
                     &form,
                     lean_test_name,
                     &verify_prog,
@@ -3173,6 +3475,7 @@ fn generate_proof_file(
             let mut content = format!("{}{theorems}", header("open PlutusCore.Data (Data)"));
             if let VerificationTargetKind::Equivalence = target {
                 content.push_str(&format_equivalence_theorem(
+                    test,
                     lean_test_name,
                     &prog,
                     &handler_prog,
@@ -3194,6 +3497,7 @@ fn generate_proof_file(
             {
                 let opens = lean_opens_for_types(&[fst.as_ref(), snd.as_ref()]);
                 let theorems = format_sampled_domain_fallback_theorems(
+                    test,
                     &form,
                     lean_test_name,
                     &verify_prog,
@@ -3223,6 +3527,7 @@ fn generate_proof_file(
                     if should_use_sampled_fallback_for_error(&e) {
                         let opens = lean_opens_for_types(&[fst.as_ref(), snd.as_ref()]);
                         let theorems = format_sampled_domain_fallback_theorems(
+                            test,
                             &form,
                             lean_test_name,
                             &verify_prog,
@@ -3248,6 +3553,7 @@ fn generate_proof_file(
             if types.iter().any(|t| lean_type_for(t).is_none()) {
                 let opens = lean_opens_for_types(&type_refs);
                 let theorems = format_sampled_domain_fallback_theorems(
+                    test,
                     &form,
                     lean_test_name,
                     &verify_prog,
@@ -3277,6 +3583,7 @@ fn generate_proof_file(
                     if should_use_sampled_fallback_for_error(&e) {
                         let opens = lean_opens_for_types(&type_refs);
                         let theorems = format_sampled_domain_fallback_theorems(
+                            test,
                             &form,
                             lean_test_name,
                             &verify_prog,
@@ -3335,6 +3642,7 @@ fn generate_proof_file(
             if use_sampled_fallback {
                 let opens = lean_opens_for_types(&[elem_type.as_ref()]);
                 let theorems = format_sampled_domain_fallback_theorems(
+                    test,
                     &form,
                     lean_test_name,
                     &verify_prog,
@@ -3353,6 +3661,7 @@ fn generate_proof_file(
                 None => {
                     let opens = lean_opens_for_types(&[elem_type.as_ref()]);
                     let theorems = format_sampled_domain_fallback_theorems(
+                        test,
                         &form,
                         lean_test_name,
                         &verify_prog,
@@ -3371,6 +3680,7 @@ fn generate_proof_file(
                 None => {
                     let opens = lean_opens_for_types(&[elem_type.as_ref()]);
                     let theorems = format_sampled_domain_fallback_theorems(
+                        test,
                         &form,
                         lean_test_name,
                         &verify_prog,
@@ -3426,6 +3736,7 @@ fn generate_proof_file(
             let mut content = format!("{}{theorems}", header(&opens));
             if let VerificationTargetKind::Equivalence = target {
                 content.push_str(&format_equivalence_theorem(
+                    test,
                     lean_test_name,
                     &prog,
                     &handler_prog,
@@ -3441,6 +3752,7 @@ fn generate_proof_file(
         // --- ADT fallback via Data encoding ---
         FuzzerOutputType::Unsupported(_) => {
             let theorems = format_sampled_domain_fallback_theorems(
+                test,
                 &form,
                 lean_test_name,
                 &verify_prog,
@@ -3565,6 +3877,7 @@ fn generate_tuple_proof(
     let mut content = format!("{}{theorems}", header(&opens));
     if let VerificationTargetKind::Equivalence = target {
         content.push_str(&format_equivalence_theorem(
+            test,
             lean_test_name,
             prop_prog,
             handler_prog,
@@ -3595,4527 +3908,12 @@ pub fn preflight_validate_test(
     .map(|_| ())
 }
 
-/// Parse lake build output into per-theorem results.
-/// Uses the manifest to know which theorems were expected.
-pub fn parse_verify_results(raw: VerifyResult, manifest: &GeneratedManifest) -> VerifySummary {
-    if let Some(mut theorems) = raw.theorem_results.clone() {
-        let proved = theorems
-            .iter()
-            .filter(|t| matches!(t.status, ProofStatus::Proved))
-            .count();
-        let failed = theorems
-            .iter()
-            .filter(|t| matches!(t.status, ProofStatus::Failed { .. }))
-            .count();
-        let timed_out = theorems
-            .iter()
-            .filter(|t| matches!(t.status, ProofStatus::TimedOut { .. }))
-            .count();
-        let unknown = theorems
-            .iter()
-            .filter(|t| matches!(t.status, ProofStatus::Unknown))
-            .count();
-
-        theorems.sort_by(|a, b| {
-            a.test_name
-                .cmp(&b.test_name)
-                .then_with(|| a.theorem_name.cmp(&b.theorem_name))
-        });
-
-        return VerifySummary {
-            total: theorems.len(),
-            proved,
-            failed,
-            timed_out,
-            unknown,
-            theorems,
-            raw_output: raw,
-            elapsed_ms: None,
-        };
-    }
-
-    let mut theorems = Vec::new();
-    let combined_output = format!("{}\n{}", raw.stdout, raw.stderr);
-
-    if raw.success {
-        for entry in &manifest.tests {
-            theorems.push(TheoremResult {
-                test_name: format!("{}.{}", entry.aiken_module, entry.aiken_name),
-                theorem_name: entry.lean_theorem.clone(),
-                status: ProofStatus::Proved,
-            });
-            if entry.has_termination_theorem {
-                theorems.push(TheoremResult {
-                    test_name: format!("{}.{}", entry.aiken_module, entry.aiken_name),
-                    theorem_name: format!("{}_alwaysTerminating", entry.lean_theorem),
-                    status: ProofStatus::Proved,
-                });
-            }
-        }
-    } else {
-        let timed_out_run = combined_output.contains("[verify-timeout]");
-        let failed_modules = collect_failed_proof_modules(&combined_output);
-        let succeeded_modules = collect_succeeded_proof_modules(&combined_output);
-
-        for entry in &manifest.tests {
-            let module_failed = failed_modules.contains(&entry.lean_module);
-            let module_succeeded = succeeded_modules.contains(&entry.lean_module);
-            let theorem_failed =
-                theorem_has_explicit_failure(&entry.lean_theorem, &combined_output);
-
-            let correctness_status = if timed_out_run {
-                ProofStatus::TimedOut {
-                    reason: "Proof execution timed out".to_string(),
-                }
-            } else if theorem_failed || module_failed {
-                let reason = if theorem_failed {
-                    extract_error_for_theorem(&entry.lean_theorem, &combined_output)
-                } else {
-                    extract_error_for_module(&entry.lean_module, &combined_output)
-                };
-                ProofStatus::Failed {
-                    category: classify_failure(&combined_output),
-                    reason,
-                }
-            } else if module_succeeded {
-                ProofStatus::Proved
-            } else {
-                ProofStatus::Unknown
-            };
-
-            theorems.push(TheoremResult {
-                test_name: format!("{}.{}", entry.aiken_module, entry.aiken_name),
-                theorem_name: entry.lean_theorem.clone(),
-                status: correctness_status,
-            });
-
-            if entry.has_termination_theorem {
-                let term_name = format!("{}_alwaysTerminating", entry.lean_theorem);
-                let term_failed = theorem_has_explicit_failure(&term_name, &combined_output);
-                let term_status = if timed_out_run {
-                    ProofStatus::TimedOut {
-                        reason: "Proof execution timed out".to_string(),
-                    }
-                } else if term_failed || module_failed {
-                    let reason = if term_failed {
-                        extract_error_for_theorem(&term_name, &combined_output)
-                    } else {
-                        extract_error_for_module(&entry.lean_module, &combined_output)
-                    };
-                    ProofStatus::Failed {
-                        category: classify_failure(&combined_output),
-                        reason,
-                    }
-                } else if module_succeeded {
-                    ProofStatus::Proved
-                } else {
-                    ProofStatus::Unknown
-                };
-
-                theorems.push(TheoremResult {
-                    test_name: format!("{}.{}", entry.aiken_module, entry.aiken_name),
-                    theorem_name: term_name,
-                    status: term_status,
-                });
-            }
-        }
-    }
-
-    // If the run failed and no theorem received a concrete status signal
-    // (proved/failed/timed out), classify the run-level failure for all theorems.
-    // This avoids surfacing opaque UNKNOWN statuses for generic lake failures.
-    if !raw.success
-        && theorems
-            .iter()
-            .all(|t| matches!(t.status, ProofStatus::Unknown))
-    {
-        let category = classify_failure(&combined_output);
-        if category != FailureCategory::Unknown {
-            let reason = extract_global_failure_reason(&combined_output);
-            for theorem in &mut theorems {
-                theorem.status = ProofStatus::Failed {
-                    category: category.clone(),
-                    reason: reason.clone(),
-                };
-            }
-        }
-    }
-
-    let proved = theorems
-        .iter()
-        .filter(|t| matches!(t.status, ProofStatus::Proved))
-        .count();
-    let failed = theorems
-        .iter()
-        .filter(|t| matches!(t.status, ProofStatus::Failed { .. }))
-        .count();
-    let timed_out = theorems
-        .iter()
-        .filter(|t| matches!(t.status, ProofStatus::TimedOut { .. }))
-        .count();
-    let unknown = theorems
-        .iter()
-        .filter(|t| matches!(t.status, ProofStatus::Unknown))
-        .count();
-
-    // Sort for deterministic output (important for CI diffs).
-    theorems.sort_by(|a, b| {
-        a.test_name
-            .cmp(&b.test_name)
-            .then_with(|| a.theorem_name.cmp(&b.theorem_name))
-    });
-
-    VerifySummary {
-        total: theorems.len(),
-        proved,
-        failed,
-        timed_out,
-        unknown,
-        theorems,
-        raw_output: raw,
-        elapsed_ms: None,
-    }
-}
-
-fn parse_proof_module_token(token: &str) -> Option<String> {
-    let cleaned = token
-        .split_whitespace()
-        .next()
-        .unwrap_or(token)
-        .split(':')
-        .next()
-        .unwrap_or(token)
-        .trim_end_matches(|c: char| c == ',' || c == ';' || c == '.')
-        .trim();
-
-    if cleaned.starts_with("AikenVerify.Proofs.") {
-        Some(cleaned.to_string())
-    } else {
-        None
-    }
-}
-
-fn collect_succeeded_proof_modules(output: &str) -> HashSet<String> {
-    let mut modules = HashSet::new();
-
-    for line in output.lines() {
-        if let Some(idx) = line.find("Built ") {
-            let token = &line[idx + "Built ".len()..];
-            if let Some(module) = parse_proof_module_token(token) {
-                modules.insert(module);
-            }
-        }
-
-        if let Some(idx) = line.find("Replayed ") {
-            let token = &line[idx + "Replayed ".len()..];
-            if let Some(module) = parse_proof_module_token(token) {
-                modules.insert(module);
-            }
-        }
-    }
-
-    modules
-}
-
-fn collect_failed_proof_modules(output: &str) -> HashSet<String> {
-    let mut modules = HashSet::new();
-
-    for line in output.lines() {
-        if line.contains('✖') {
-            if let Some(idx) = line.find("Building ") {
-                let token = &line[idx + "Building ".len()..];
-                if let Some(module) = parse_proof_module_token(token) {
-                    modules.insert(module);
-                }
-            }
-        }
-
-        if let Some(token) = line.trim().strip_prefix("- ") {
-            if let Some(module) = parse_proof_module_token(token) {
-                modules.insert(module);
-            }
-        }
-    }
-
-    modules
-}
-
-fn theorem_has_explicit_failure(theorem: &str, output: &str) -> bool {
-    output.contains(&format!("error: '{}' ", theorem))
-        || output.lines().any(|line| {
-            line.contains("error:")
-                && (line.contains(theorem) || line.contains(&format!("'{}'", theorem)))
-        })
-}
-
-/// Classify a failure based on build output content.
-fn classify_failure(output: &str) -> FailureCategory {
-    if output.contains("❌ Falsified") || output.contains("Counterexample:") {
-        FailureCategory::Counterexample
-    } else if output.contains("Tactic `blaster` failed")
-        || output.contains("unsolved goals")
-        || output.contains("tactic 'blaster' failed")
-    {
-        FailureCategory::UnsatGoal
-    } else if output.contains("deterministic timeout") || output.contains("tactic timed out") {
-        FailureCategory::Timeout
-    } else if output.contains("unknown package")
-        || output.contains("could not resolve")
-        || output.contains("lake fetch")
-    {
-        FailureCategory::DependencyError
-    } else if output.contains("translateApp: Inductive predicate not yet supported")
-        || (output.contains("translateApp:") && output.contains("not yet supported"))
-        || output.contains("Lean.Expr.const `List.Mem")
-    {
-        FailureCategory::BlasterUnsupported
-    } else if output.contains("error:") {
-        FailureCategory::BuildError
-    } else {
-        FailureCategory::Unknown
-    }
-}
-
-/// Extract error context for a theorem from build output.
-/// Includes the matching line plus surrounding context lines (up to `CONTEXT_LINES`
-/// before and after each match) for more useful diagnostics.
-fn extract_error_for_pattern(pattern: &str, output: &str) -> String {
-    const CONTEXT_LINES: usize = 3;
-    let lines: Vec<&str> = output.lines().collect();
-    let mut included = vec![false; lines.len()];
-
-    for (i, line) in lines.iter().enumerate() {
-        if line.contains(pattern) || line.trim_start().starts_with("error:") {
-            let start = i.saturating_sub(CONTEXT_LINES);
-            let end = (i + CONTEXT_LINES + 1).min(lines.len());
-            for included_flag in included.iter_mut().take(end).skip(start) {
-                *included_flag = true;
-            }
-        }
-    }
-
-    let mut result = Vec::new();
-    let mut last_included = false;
-    for (i, line) in lines.iter().enumerate() {
-        if included[i] {
-            if !last_included && !result.is_empty() {
-                result.push("  ...");
-            }
-            result.push(*line);
-            last_included = true;
-        } else {
-            last_included = false;
-        }
-    }
-
-    result.join("\n")
-}
-
-fn extract_error_for_module(module: &str, output: &str) -> String {
-    extract_error_for_pattern(module, output)
-}
-
-fn extract_error_for_theorem(theorem: &str, output: &str) -> String {
-    extract_error_for_pattern(theorem, output)
-}
-
-fn extract_global_failure_reason(output: &str) -> String {
-    let extracted = extract_error_for_pattern("error:", output);
-    if !extracted.trim().is_empty() {
-        return extracted;
-    }
-
-    output
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .take(20)
-        .collect::<Vec<_>>()
-        .join("\n")
-}
+mod result_parser;
+pub use result_parser::parse_verify_results;
+use result_parser::{
+    classify_failure, extract_error_for_module, extract_error_for_theorem,
+    extract_global_failure_reason, theorem_has_explicit_failure,
+};
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::export::{
-        ExportedProgram, ExportedPropertyTest, FuzzerConstraint, FuzzerOutputType, TestReturnMode,
-        ValidatorTarget,
-    };
-    use aiken_lang::ast::OnTestFailure;
-
-    fn make_test(module: &str, name: &str) -> ExportedPropertyTest {
-        make_test_with_failure(module, name, OnTestFailure::FailImmediately)
-    }
-
-    fn make_test_with_failure(
-        module: &str,
-        name: &str,
-        on_test_failure: OnTestFailure,
-    ) -> ExportedPropertyTest {
-        ExportedPropertyTest {
-            name: format!("{module}.{name}"),
-            module: module.to_string(),
-            input_path: format!("lib/{}.ak", module.replace('/', "/")),
-            on_test_failure,
-            return_mode: TestReturnMode::Bool,
-            target_kind: Default::default(),
-            validator_target: None,
-            test_program: ExportedProgram {
-                hex: "deadbeef".to_string(),
-                flat_bytes: None,
-            },
-            fuzzer_program: ExportedProgram {
-                hex: "cafebabe".to_string(),
-                flat_bytes: None,
-            },
-            fuzzer_type: "Fuzzer<Int>".to_string(),
-            fuzzer_output_type: FuzzerOutputType::Int,
-            constraint: FuzzerConstraint::IntRange {
-                min: "0".to_string(),
-                max: "255".to_string(),
-            },
-        }
-    }
-
-    #[test]
-    fn sanitize_lean_name_basic() {
-        assert_eq!(sanitize_lean_name("test_map"), "test_map");
-        assert_eq!(sanitize_lean_name("my-test"), "my_test");
-        assert_eq!(sanitize_lean_name("3things"), "T_3things");
-    }
-
-    #[test]
-    fn module_to_lean_segment_basic() {
-        assert_eq!(module_to_lean_segment("aiken/list"), "AikenList");
-        assert_eq!(module_to_lean_segment("my_module"), "My_module");
-        assert_eq!(
-            module_to_lean_segment("permissions.test"),
-            "PermissionsTest"
-        );
-        assert_eq!(
-            module_to_lean_segment("deep/nested/module"),
-            "DeepNestedModule"
-        );
-    }
-
-    #[test]
-    fn test_id_has_readable_prefix_and_hash_suffix() {
-        let id = test_id("aiken/list", "test_map");
-        assert!(
-            id.starts_with("aiken_list__test_map_"),
-            "ID should start with readable prefix, got: {id}"
-        );
-        // Hash suffix is 8 hex chars
-        let suffix = id.strip_prefix("aiken_list__test_map_").unwrap();
-        assert_eq!(
-            suffix.len(),
-            8,
-            "Hash suffix should be 8 hex chars, got: {suffix}"
-        );
-        assert!(
-            suffix.chars().all(|c| c.is_ascii_hexdigit()),
-            "Hash suffix should be hex, got: {suffix}"
-        );
-    }
-
-    #[test]
-    fn test_id_different_inputs_produce_different_ids() {
-        let id1 = test_id("mod_a", "test_x");
-        let id2 = test_id("mod_b", "test_x");
-        assert_ne!(id1, id2, "Different modules should produce different IDs");
-    }
-
-    #[test]
-    fn test_id_is_deterministic() {
-        let id1 = test_id("my_module", "test_foo");
-        let id2 = test_id("my_module", "test_foo");
-        assert_eq!(id1, id2, "Same inputs should produce the same ID");
-    }
-
-    #[test]
-    fn generate_workspace_creates_files() {
-        let tmp = tempfile::tempdir().unwrap();
-        let out_dir = tmp.path().to_path_buf();
-
-        let tests = vec![
-            make_test("my_module", "test_roundtrip"),
-            make_test("aiken/list", "test_map"),
-        ];
-
-        let config = VerifyConfig {
-            out_dir: out_dir.clone(),
-            cek_budget: 20000,
-            blaster_rev: DEFAULT_BLASTER_REV.to_string(),
-            existential_mode: ExistentialMode::default(),
-            target: VerificationTargetKind::default(),
-        };
-
-        let manifest = generate_lean_workspace(&tests, &config, false).unwrap();
-
-        // Check files exist
-        assert!(out_dir.join("lakefile.lean").exists());
-        assert!(out_dir.join("lean-toolchain").exists());
-        assert!(out_dir.join("AikenVerify.lean").exists());
-        assert!(out_dir.join("AikenVerify/Utils.lean").exists());
-        assert!(out_dir.join("manifest.json").exists());
-
-        // Check per-test files
-        assert!(
-            out_dir
-                .join("AikenVerify/Proofs/My_module/test_roundtrip.lean")
-                .exists()
-        );
-        assert!(
-            out_dir
-                .join("AikenVerify/Proofs/AikenList/test_map.lean")
-                .exists()
-        );
-        let id0 = &manifest.tests[0].id;
-        let id1 = &manifest.tests[1].id;
-        assert!(out_dir.join(format!("flat/{id0}.flat")).exists());
-        assert!(out_dir.join(format!("flat/{id0}_fuzzer.flat")).exists());
-        assert!(out_dir.join(format!("flat/{id1}.flat")).exists());
-        assert!(out_dir.join(format!("flat/{id1}_fuzzer.flat")).exists());
-
-        // Check manifest
-        assert_eq!(manifest.tests.len(), 2);
-        assert!(
-            id0.starts_with("my_module__test_roundtrip_"),
-            "ID should have readable prefix + hash: {id0}"
-        );
-        assert_eq!(
-            manifest.tests[0].lean_module,
-            "AikenVerify.Proofs.My_module.test_roundtrip"
-        );
-        assert!(
-            id1.starts_with("aiken_list__test_map_"),
-            "ID should have readable prefix + hash: {id1}"
-        );
-
-        // Check flat file content is the hex
-        let flat_content = fs::read_to_string(out_dir.join(format!("flat/{id0}.flat"))).unwrap();
-        assert_eq!(flat_content, "deadbeef");
-
-        // Check Utils.lean contains the budget
-        let utils = fs::read_to_string(out_dir.join("AikenVerify/Utils.lean")).unwrap();
-        assert!(utils.contains("cekExecuteProgram p args 20000"));
-
-        // Check root import file
-        let root = fs::read_to_string(out_dir.join("AikenVerify.lean")).unwrap();
-        assert!(root.contains("import AikenVerify.Utils"));
-        assert!(root.contains("import AikenVerify.Proofs.AikenList.test_map"));
-        assert!(root.contains("import AikenVerify.Proofs.My_module.test_roundtrip"));
-
-        // Check generated .lean proof files contain actual theorems
-        let proof1 =
-            fs::read_to_string(out_dir.join("AikenVerify/Proofs/My_module/test_roundtrip.lean"))
-                .unwrap();
-        assert!(proof1.contains("theorem test_roundtrip"));
-        assert!(proof1.contains("theorem test_roundtrip_alwaysTerminating"));
-        assert!(proof1.contains("by blaster"));
-        assert!(proof1.contains(&format!("#import_uplc prog_{id0} single_cbor_hex")));
-        assert!(proof1.contains(&format!("#import_uplc fuzzer_prog_{id0} single_cbor_hex")));
-        assert!(proof1.contains("(0 <= x && x <= 255)"));
-        assert!(proof1.contains("namespace AikenVerify.Proofs.My_module.test_roundtrip"));
-
-        let proof2 =
-            fs::read_to_string(out_dir.join("AikenVerify/Proofs/AikenList/test_map.lean")).unwrap();
-        assert!(proof2.contains("theorem test_map"));
-        assert!(proof2.contains("theorem test_map_alwaysTerminating"));
-        assert!(proof2.contains(&format!("#import_uplc prog_{id1} single_cbor_hex")));
-        assert!(proof2.contains(&format!("#import_uplc fuzzer_prog_{id1} single_cbor_hex")));
-        assert!(proof2.contains(&format!("./flat/{id1}.flat")));
-        assert!(proof2.contains("(0 <= x && x <= 255)"));
-    }
-
-    #[test]
-    fn generate_workspace_dotted_module_creates_matching_path() {
-        let tmp = tempfile::tempdir().unwrap();
-        let out_dir = tmp.path().to_path_buf();
-        let tests = vec![make_test(
-            "permissions.test",
-            "prop_permissions_core_development_standard_ok",
-        )];
-
-        let config = VerifyConfig {
-            out_dir: out_dir.clone(),
-            cek_budget: 20000,
-            blaster_rev: DEFAULT_BLASTER_REV.to_string(),
-            existential_mode: ExistentialMode::default(),
-            target: VerificationTargetKind::default(),
-        };
-
-        let manifest = generate_lean_workspace(&tests, &config, false).unwrap();
-        assert_eq!(manifest.tests.len(), 1);
-        assert_eq!(
-            manifest.tests[0].lean_module,
-            "AikenVerify.Proofs.PermissionsTest.prop_permissions_core_development_standard_ok"
-        );
-        assert!(
-            out_dir.join(&manifest.tests[0].lean_file).exists(),
-            "Generated proof file should exist at manifest path"
-        );
-    }
-
-    #[test]
-    fn generate_workspace_clears_stale_generated_files_but_keeps_static_cache() {
-        let tmp = tempfile::tempdir().unwrap();
-        let out_dir = tmp.path().to_path_buf();
-
-        // Simulate stale generated workspace content from a prior run.
-        fs::create_dir_all(out_dir.join("AikenVerify/Proofs/Stale")).unwrap();
-        fs::write(
-            out_dir.join("AikenVerify/Proofs/Stale/old.lean"),
-            "-- stale",
-        )
-        .unwrap();
-        fs::create_dir_all(out_dir.join("flat")).unwrap();
-        fs::write(out_dir.join("flat/stale.flat"), "stale").unwrap();
-        fs::write(
-            out_dir.join("AikenVerify.lean"),
-            "import AikenVerify.Proofs.Stale.old",
-        )
-        .unwrap();
-        fs::write(out_dir.join("manifest.json"), "{}").unwrap();
-        fs::create_dir_all(out_dir.join("logs")).unwrap();
-        fs::write(out_dir.join("logs/stale.log"), "stale").unwrap();
-        fs::create_dir_all(out_dir.join(".lake/build/lib/AikenVerify/Stale")).unwrap();
-        fs::write(
-            out_dir.join(".lake/build/lib/AikenVerify/Stale/stale.olean"),
-            "stale",
-        )
-        .unwrap();
-
-        // Simulate dependency cache artifacts that should persist.
-        fs::create_dir_all(out_dir.join("PlutusCore")).unwrap();
-        fs::write(out_dir.join("PlutusCore/lakefile.lean"), "-- keep").unwrap();
-        fs::create_dir_all(out_dir.join(".lake/packages/Blaster")).unwrap();
-        fs::write(out_dir.join(".lake/packages/Blaster/cache.txt"), "keep").unwrap();
-        fs::create_dir_all(out_dir.join(".lake/build/lib/PlutusCore")).unwrap();
-        fs::write(
-            out_dir.join(".lake/build/lib/PlutusCore/cache.olean"),
-            "keep",
-        )
-        .unwrap();
-
-        let config = VerifyConfig {
-            out_dir: out_dir.clone(),
-            cek_budget: 20000,
-            blaster_rev: DEFAULT_BLASTER_REV.to_string(),
-            existential_mode: ExistentialMode::default(),
-            target: VerificationTargetKind::default(),
-        };
-
-        let manifest =
-            generate_lean_workspace(&[make_test("my_module", "test_roundtrip")], &config, false)
-                .unwrap();
-        let id = &manifest.tests[0].id;
-
-        assert!(!out_dir.join("AikenVerify/Proofs/Stale/old.lean").exists());
-        assert!(!out_dir.join("flat/stale.flat").exists());
-        assert!(!out_dir.join("logs/stale.log").exists());
-        assert!(
-            !out_dir
-                .join(".lake/build/lib/AikenVerify/Stale/stale.olean")
-                .exists()
-        );
-
-        assert!(out_dir.join("PlutusCore/lakefile.lean").exists());
-        assert!(out_dir.join(".lake/packages/Blaster/cache.txt").exists());
-        assert!(
-            out_dir
-                .join(".lake/build/lib/PlutusCore/cache.olean")
-                .exists()
-        );
-
-        assert!(
-            out_dir
-                .join("AikenVerify/Proofs/My_module/test_roundtrip.lean")
-                .exists()
-        );
-        assert!(out_dir.join(format!("flat/{id}.flat")).exists());
-        assert!(out_dir.join(format!("flat/{id}_fuzzer.flat")).exists());
-    }
-
-    #[test]
-    fn generate_workspace_empty_tests() {
-        let tmp = tempfile::tempdir().unwrap();
-        let config = VerifyConfig {
-            out_dir: tmp.path().to_path_buf(),
-            cek_budget: 20000,
-            blaster_rev: DEFAULT_BLASTER_REV.to_string(),
-            existential_mode: ExistentialMode::default(),
-            target: VerificationTargetKind::default(),
-        };
-
-        let manifest = generate_lean_workspace(&[], &config, false).unwrap();
-        assert!(manifest.tests.is_empty());
-        assert!(tmp.path().join("lakefile.lean").exists());
-    }
-
-    #[test]
-    fn fail_immediately_generates_true_assertion() {
-        // FailImmediately = default test (no `fail` keyword), body should return true
-        let test = make_test_with_failure("my_module", "test_pass", OnTestFailure::FailImmediately);
-        let id = test_id("my_module", "test_pass");
-        let lean_name = sanitize_lean_name("test_pass");
-        let lean_module = "AikenVerify.Proofs.My_module.test_pass";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains(&format!("(proveTests prog_{id} (intArg x)) = true")),
-            "FailImmediately (default) should generate = true assertion, got:\n{proof}"
-        );
-        assert!(
-            proof.contains(&format!("Option.isSome (proveTests prog_{id} (intArg x))")),
-            "Termination theorem should still be generated"
-        );
-    }
-
-    #[test]
-    fn succeed_eventually_generates_false_assertion() {
-        // SucceedEventually = `fail` keyword, body should return false
-        let test =
-            make_test_with_failure("my_module", "test_fail", OnTestFailure::SucceedEventually);
-        let id = test_id("my_module", "test_fail");
-        let lean_name = sanitize_lean_name("test_fail");
-        let lean_module = "AikenVerify.Proofs.My_module.test_fail";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains(&format!("(proveTests prog_{id} (intArg x)) = false")),
-            "SucceedEventually (fail keyword) should generate = false assertion, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("= true"),
-            "SucceedEventually should not contain = true"
-        );
-    }
-
-    #[test]
-    fn fail_once_witness_mode_generates_existential_theorem() {
-        let test =
-            make_test_with_failure("my_module", "test_ev", OnTestFailure::SucceedImmediately);
-        let id = test_id("my_module", "test_ev");
-        let lean_name = sanitize_lean_name("test_ev");
-        let lean_module = "AikenVerify.Proofs.My_module.test_ev";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::Witness,
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∃ (x : Integer),"),
-            "Witness mode should use existential quantifier, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("witnessTests"),
-            "Witness mode should use witnessTests, got:\n{proof}"
-        );
-        assert!(
-            proof.contains(&format!("witnessTests prog_{id} (intArg x) false")),
-            "Fail-once witness theorem should search for a falsifying input (= false), got:\n{proof}"
-        );
-        assert!(
-            proof.contains("∧"),
-            "Existential should use ∧ (conjunction), not → (implication), got:\n{proof}"
-        );
-        assert!(
-            proof.contains("⟨(0 : Integer), by decide⟩"),
-            "Witness mode should provide concrete witness with decide tactic, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("-- Mode: witness"),
-            "Should have mode comment, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("alwaysTerminating"),
-            "Existential theorems should not have termination theorem, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn fail_once_proof_mode_generates_existential_theorem() {
-        let test =
-            make_test_with_failure("my_module", "test_ev", OnTestFailure::SucceedImmediately);
-        let id = test_id("my_module", "test_ev");
-        let lean_name = sanitize_lean_name("test_ev");
-        let lean_module = "AikenVerify.Proofs.My_module.test_ev";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::Proof,
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∃ (x : Integer),"),
-            "Proof mode should use existential quantifier, got:\n{proof}"
-        );
-        assert!(
-            proof.contains(&format!("(proveTests prog_{id} (intArg x)) = false")),
-            "Fail-once proof theorem should assert existence of a falsifying input (= false), got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("= true"),
-            "Fail-once proof theorem should not assert success witnesses (= true), got:\n{proof}"
-        );
-        assert!(
-            proof.contains("∧"),
-            "Existential should use ∧ (conjunction), not → (implication), got:\n{proof}"
-        );
-        assert!(
-            proof.contains("by blaster"),
-            "Proof mode should use blaster tactic, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("⟨"),
-            "Proof mode should not provide concrete witness, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("-- Mode: proof"),
-            "Should have mode comment, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn fail_once_void_witness_mode_generates_existential_error_theorem() {
-        let mut test = make_test_with_failure(
-            "my_module",
-            "test_ev_void",
-            OnTestFailure::SucceedImmediately,
-        );
-        test.return_mode = TestReturnMode::Void;
-        let id = test_id("my_module", "test_ev_void");
-        let lean_name = sanitize_lean_name("test_ev_void");
-        let lean_module = "AikenVerify.Proofs.My_module.test_ev_void";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::Witness,
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∃ (x : Integer),"),
-            "Void witness should use existential quantifier, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("proveTestsError"),
-            "Void witness should use proveTestsError, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("∧"),
-            "Existential should use ∧ (conjunction), got:\n{proof}"
-        );
-        assert!(
-            proof.contains("⟨(0 : Integer), by decide⟩"),
-            "Void witness should provide concrete witness, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn fail_once_tuple_witness_mode_uses_conjunction_between_bounds() {
-        let mut test = make_test_with_type(
-            "my_module",
-            "test_tuple_exist",
-            FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Int]),
-            FuzzerConstraint::Tuple(vec![
-                FuzzerConstraint::IntRange {
-                    min: "0".to_string(),
-                    max: "10".to_string(),
-                },
-                FuzzerConstraint::IntRange {
-                    min: "20".to_string(),
-                    max: "30".to_string(),
-                },
-            ]),
-        );
-        test.on_test_failure = OnTestFailure::SucceedImmediately;
-        let id = test_id("my_module", "test_tuple_exist");
-        let lean_name = sanitize_lean_name("test_tuple_exist");
-        let lean_module = "AikenVerify.Proofs.My_module.test_tuple_exist";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::Witness,
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∃ (a : Integer) (b : Integer),"),
-            "Should use existential quantifier for tuple, got:\n{proof}"
-        );
-        // All connectors must be ∧, no → anywhere in the theorem
-        assert!(
-            !proof.contains("→"),
-            "Existential tuple theorem must not contain → (implication), got:\n{proof}"
-        );
-        assert!(
-            proof.contains("(0 <= a && a <= 10)"),
-            "First element bounds, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("(20 <= b && b <= 30)"),
-            "Second element bounds, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("∧"),
-            "All connectors must be ∧ (conjunction), got:\n{proof}"
-        );
-        assert!(
-            proof.contains("⟨(0 : Integer), (20 : Integer), by decide⟩"),
-            "Witness mode should provide tuple witness, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn fail_once_data_witness_mode_uses_valid_data_constructor() {
-        let mut test = make_test_with_type(
-            "my_module",
-            "test_data_exist",
-            FuzzerOutputType::Data,
-            FuzzerConstraint::Any,
-        );
-        test.on_test_failure = OnTestFailure::SucceedImmediately;
-        let id = test_id("my_module", "test_data_exist");
-        let lean_name = sanitize_lean_name("test_data_exist");
-        let lean_module = "AikenVerify.Proofs.My_module.test_data_exist";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::Witness,
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∃ (seed : Data),"),
-            "Data fail-once witness should use existential seed quantifier in sampled fallback, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("-- Mode: witness (sampled-domain fallback auto-escalated to proof)"),
-            "Sampled-domain witness mode should document auto-escalation, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("by blaster"),
-            "Sampled-domain existential witness mode should escalate to proof search, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("refine ⟨Data.I 0, ?_⟩"),
-            "Sampled-domain existential witness mode should not hardcode a single seed witness, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("Data.Integer"),
-            "Data fail-once witness should not use invalid Data.Integer constructor, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn fail_once_unsupported_witness_mode_uses_valid_data_constructor() {
-        let mut test = make_test_with_type(
-            "my_module",
-            "test_adt_exist",
-            FuzzerOutputType::Unsupported("MyCustomType".to_string()),
-            FuzzerConstraint::Any,
-        );
-        test.on_test_failure = OnTestFailure::SucceedImmediately;
-        let id = test_id("my_module", "test_adt_exist");
-        let lean_name = sanitize_lean_name("test_adt_exist");
-        let lean_module = "AikenVerify.Proofs.My_module.test_adt_exist";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::Witness,
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∃ (seed : Data),"),
-            "Unsupported fail-once witness should use existential seed quantifier, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("-- Mode: witness (sampled-domain fallback auto-escalated to proof)"),
-            "Sampled-domain witness mode should document auto-escalation, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("by blaster"),
-            "Sampled-domain existential witness mode should escalate to proof search, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("refine ⟨Data.I 0, ?_⟩"),
-            "Sampled-domain existential witness mode should not hardcode a single seed witness, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("Data.Integer"),
-            "Unsupported fail-once witness should not use invalid Data.Integer constructor, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn fail_once_tuple_with_data_witness_uses_valid_data_constructor() {
-        let mut test = make_test_with_type(
-            "my_module",
-            "test_tuple_data_exist",
-            FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Data]),
-            FuzzerConstraint::Tuple(vec![
-                FuzzerConstraint::IntRange {
-                    min: "0".to_string(),
-                    max: "10".to_string(),
-                },
-                FuzzerConstraint::Any,
-            ]),
-        );
-        test.on_test_failure = OnTestFailure::SucceedImmediately;
-        let id = test_id("my_module", "test_tuple_data_exist");
-        let lean_name = sanitize_lean_name("test_tuple_data_exist");
-        let lean_module = "AikenVerify.Proofs.My_module.test_tuple_data_exist";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::Witness,
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∃ (a : Integer) (b : Data),"),
-            "Tuple fail-once witness should quantify Integer and Data, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("⟨(0 : Integer), Data.I 0, by decide⟩"),
-            "Tuple fail-once witness should use Data.I constructor for Data elements, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("Data.Integer"),
-            "Tuple fail-once witness should not use invalid Data.Integer constructor, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn fail_once_list_of_data_witness_uses_valid_data_constructor() {
-        let mut test = make_test_with_type(
-            "my_module",
-            "test_list_data_exist",
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Data)),
-            FuzzerConstraint::List {
-                elem: Box::new(FuzzerConstraint::Any),
-                min_len: Some(2),
-                max_len: Some(5),
-            },
-        );
-        test.on_test_failure = OnTestFailure::SucceedImmediately;
-        let id = test_id("my_module", "test_list_data_exist");
-        let lean_name = sanitize_lean_name("test_list_data_exist");
-        let lean_module = "AikenVerify.Proofs.My_module.test_list_data_exist";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::Witness,
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∃ (xs : List Data),"),
-            "List<Data> fail-once witness should quantify over List Data, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("⟨[Data.I 0, Data.I 0], by decide⟩"),
-            "List<Data> fail-once witness should use Data.I constructor for elements, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("Data.Integer"),
-            "List<Data> fail-once witness should not use invalid Data.Integer constructor, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn fail_once_list_bool_exact_witness_uses_exact_element() {
-        let mut test = make_test_with_type(
-            "my_module",
-            "test_list_bool_exact_exist",
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Bool)),
-            FuzzerConstraint::List {
-                elem: Box::new(FuzzerConstraint::Exact(FuzzerExactValue::Bool(false))),
-                min_len: Some(1),
-                max_len: Some(3),
-            },
-        );
-        test.on_test_failure = OnTestFailure::SucceedImmediately;
-        let id = test_id("my_module", "test_list_bool_exact_exist");
-        let lean_name = sanitize_lean_name("test_list_bool_exact_exist");
-        let lean_module = "AikenVerify.Proofs.My_module.test_list_bool_exact_exist";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::Witness,
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∃ (xs : List Bool),"),
-            "List<Bool> fail-once witness should quantify over List Bool, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("(xs.all (fun x_i => x_i = false))"),
-            "List<Bool> exact predicate should be emitted in preconditions, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("⟨[false], by decide⟩"),
-            "List<Bool> fail-once witness should satisfy exact element constraints, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("⟨[true], by decide⟩"),
-            "List<Bool> fail-once witness must not use default true when exact false is required, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn void_return_mode_generates_halt_theorem() {
-        let mut test = make_test("my_module", "test_void");
-        test.return_mode = TestReturnMode::Void;
-        let id = test_id("my_module", "test_void");
-        let lean_name = sanitize_lean_name("test_void");
-        let lean_module = "AikenVerify.Proofs.My_module.test_void";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("proveTestsHalt"),
-            "Void mode should use proveTestsHalt, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("proveTests prog_"),
-            "Void mode should not use proveTests (Bool path), got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("alwaysTerminating"),
-            "Void mode should not generate separate termination theorem (halt implies it), got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn void_fail_mode_generates_error_theorem() {
-        let mut test = make_test_with_failure(
-            "my_module",
-            "test_void_fail",
-            OnTestFailure::SucceedEventually,
-        );
-        test.return_mode = TestReturnMode::Void;
-        let id = test_id("my_module", "test_void_fail");
-        let lean_name = sanitize_lean_name("test_void_fail");
-        let lean_module = "AikenVerify.Proofs.My_module.test_void_fail";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("proveTestsError"),
-            "Void+fail mode should use proveTestsError, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("= true") && !proof.contains("= false"),
-            "Void+fail mode should not contain = true or = false, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("alwaysTerminating"),
-            "Void+fail mode should not generate separate termination theorem, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn bool_return_mode_generates_prove_tests() {
-        // Verify Bool mode still works with explicit return_mode
-        let mut test = make_test("my_module", "test_bool");
-        test.return_mode = TestReturnMode::Bool;
-        let id = test_id("my_module", "test_bool");
-        let lean_name = sanitize_lean_name("test_bool");
-        let lean_module = "AikenVerify.Proofs.My_module.test_bool";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("= true"),
-            "Bool mode should contain = true, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("alwaysTerminating"),
-            "Bool mode should generate termination theorem, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("Option.isSome"),
-            "Bool mode should use Option.isSome for termination, got:\n{proof}"
-        );
-    }
-
-    fn make_test_with_type(
-        module: &str,
-        name: &str,
-        fuzzer_output_type: FuzzerOutputType,
-        constraint: FuzzerConstraint,
-    ) -> ExportedPropertyTest {
-        ExportedPropertyTest {
-            name: format!("{module}.{name}"),
-            module: module.to_string(),
-            input_path: format!("lib/{}.ak", module.replace('/', "/")),
-            on_test_failure: OnTestFailure::FailImmediately,
-            return_mode: TestReturnMode::Bool,
-            target_kind: Default::default(),
-            validator_target: None,
-            test_program: ExportedProgram {
-                hex: "deadbeef".to_string(),
-                flat_bytes: None,
-            },
-            fuzzer_program: ExportedProgram {
-                hex: "cafebabe".to_string(),
-                flat_bytes: None,
-            },
-            fuzzer_type: format!("Fuzzer<{:?}>", fuzzer_output_type),
-            fuzzer_output_type,
-            constraint,
-        }
-    }
-
-    #[test]
-    fn bool_without_domain_predicate_uses_sampled_domain_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_bool",
-            FuzzerOutputType::Bool,
-            FuzzerConstraint::Any,
-        );
-        let id = test_id("my_module", "test_bool");
-        let lean_name = sanitize_lean_name("test_bool");
-        let lean_module = "AikenVerify.Proofs.My_module.test_bool";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∀ (seed : Data),"),
-            "Bool fallback theorem should quantify over seed, got:\n{proof}"
-        );
-        assert!(
-            proof.contains(&format!(
-                "match sampleFuzzerValue fuzzer_prog_{id} seed with"
-            )),
-            "Bool fallback theorem should sample the exported fuzzer domain, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("theorem test_bool_alwaysTerminating"),
-            "Should have termination theorem, got:\n{proof}"
-        );
-        assert!(
-            proof.contains(&format!("Option.isSome (proveTests prog_{id} (dataArg x))")),
-            "Termination theorem should evaluate sampled value x via dataArg, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn bool_succeed_eventually_generates_false() {
-        // SucceedEventually = `fail` keyword, body should return false
-        let mut test = make_test_with_type(
-            "my_module",
-            "test_bool_fail",
-            FuzzerOutputType::Bool,
-            FuzzerConstraint::Any,
-        );
-        test.on_test_failure = OnTestFailure::SucceedEventually;
-
-        let id = test_id("my_module", "test_bool_fail");
-        let lean_name = sanitize_lean_name("test_bool_fail");
-        let lean_module = "AikenVerify.Proofs.My_module.test_bool_fail";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("(dataArg x)) = false"),
-            "SucceedEventually (fail keyword) Bool fallback should assert = false on sampled x, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn tuple_int_int_generates_two_variable_theorem() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_pair",
-            FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Int]),
-            FuzzerConstraint::IntRange {
-                min: "1".to_string(),
-                max: "10".to_string(),
-            },
-        );
-        let id = test_id("my_module", "test_pair");
-        let lean_name = sanitize_lean_name("test_pair");
-        let lean_module = "AikenVerify.Proofs.My_module.test_pair";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∀ (a : Integer) (b : Integer),"),
-            "Tuple theorem should quantify over two Integers, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("(1 <= a && a <= 10)"),
-            "Should have bounds for a, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("(1 <= b && b <= 10)"),
-            "Should have bounds for b, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("Data.List [Data.I a, Data.I b]"),
-            "Should inline tuple encoding, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("= true"),
-            "Should have correctness assertion, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("theorem test_pair_alwaysTerminating"),
-            "Termination theorem should be present, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn tuple_int_int_component_bounds_generate_two_ranges() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_pair_components",
-            FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Int]),
-            FuzzerConstraint::Tuple(vec![
-                FuzzerConstraint::IntRange {
-                    min: "0".to_string(),
-                    max: "10".to_string(),
-                },
-                FuzzerConstraint::IntRange {
-                    min: "20".to_string(),
-                    max: "30".to_string(),
-                },
-            ]),
-        );
-        let id = test_id("my_module", "test_pair_components");
-        let lean_name = sanitize_lean_name("test_pair_components");
-        let lean_module = "AikenVerify.Proofs.My_module.test_pair_components";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∀ (a : Integer) (b : Integer),"),
-            "Tuple theorem should quantify over two Integers, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("(0 <= a && a <= 10)"),
-            "Should have first component bounds for a, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("(20 <= b && b <= 30)"),
-            "Should have second component bounds for b, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn tuple_int_int_component_bounds_wrong_arity_uses_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_pair_components_bad_arity",
-            FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Int]),
-            FuzzerConstraint::Tuple(vec![FuzzerConstraint::IntRange {
-                min: "0".to_string(),
-                max: "10".to_string(),
-            }]),
-        );
-        let id = test_id("my_module", "test_pair_components_bad_arity");
-        let lean_name = sanitize_lean_name("test_pair_components_bad_arity");
-        let lean_module = "AikenVerify.Proofs.My_module.test_pair_components_bad_arity";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-        assert!(
-            proof.contains("match sampleFuzzerValue"),
-            "Wrong-arity tuple constraints should route to sampled-domain fallback, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn tuple_int_int_unknown_bounds_use_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_pair_nobound",
-            FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Int]),
-            FuzzerConstraint::Any,
-        );
-        let id = test_id("my_module", "test_pair_nobound");
-        let lean_name = sanitize_lean_name("test_pair_nobound");
-        let lean_module = "AikenVerify.Proofs.My_module.test_pair_nobound";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-        assert!(
-            proof.contains("match sampleFuzzerValue"),
-            "Unknown tuple bounds should route to sampled-domain fallback, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn bytearray_without_domain_predicate_uses_sampled_domain_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_bytes",
-            FuzzerOutputType::ByteArray,
-            FuzzerConstraint::Any,
-        );
-        let id = test_id("my_module", "test_bytes");
-        let lean_name = sanitize_lean_name("test_bytes");
-        let lean_module = "AikenVerify.Proofs.My_module.test_bytes";
-
-        let result = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        );
-        assert!(result.is_ok());
-        let proof = result.unwrap();
-        assert!(
-            proof.contains("∀ (seed : Data),"),
-            "ByteArray fallback theorem should quantify over seed, got:\n{proof}"
-        );
-        assert!(
-            proof.contains(&format!(
-                "match sampleFuzzerValue fuzzer_prog_{id} seed with"
-            )),
-            "ByteArray fallback theorem should sample fuzzer outputs, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn bytearray_exact_non_empty_generates_direct_scalar_domain() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_bytes_exact_non_empty",
-            FuzzerOutputType::ByteArray,
-            FuzzerConstraint::Exact(FuzzerExactValue::ByteArray(vec![0x66, 0x6f, 0x6f])),
-        );
-        let id = test_id("my_module", "test_bytes_exact_non_empty");
-        let lean_name = sanitize_lean_name("test_bytes_exact_non_empty");
-        let lean_module = "AikenVerify.Proofs.My_module.test_bytes_exact_non_empty";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            !proof.contains("match sampleFuzzerValue"),
-            "Exact non-empty ByteArray should stay in direct scalar theorem path, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("PlutusCore.ByteString.consByteStringV1 102"),
-            "Expected emitted ByteString literal for non-empty bytes, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn string_exact_non_empty_generates_direct_scalar_domain() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_string_exact_non_empty",
-            FuzzerOutputType::String,
-            FuzzerConstraint::Exact(FuzzerExactValue::String("Hi".to_string())),
-        );
-        let id = test_id("my_module", "test_string_exact_non_empty");
-        let lean_name = sanitize_lean_name("test_string_exact_non_empty");
-        let lean_module = "AikenVerify.Proofs.My_module.test_string_exact_non_empty";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            !proof.contains("match sampleFuzzerValue"),
-            "Exact non-empty String should stay in direct scalar theorem path, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("PlutusCore.ByteString.consByteStringV1 72"),
-            "Expected UTF-8 ByteString literal emission for String exact value, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn list_without_bounds_uses_sampled_domain_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_list",
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
-            FuzzerConstraint::List {
-                elem: Box::new(FuzzerConstraint::Any),
-                min_len: None,
-                max_len: None,
-            },
-        );
-        let id = test_id("my_module", "test_list");
-        let lean_name = sanitize_lean_name("test_list");
-        let lean_module = "AikenVerify.Proofs.My_module.test_list";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-        assert!(
-            proof.contains("∀ (seed : Data),"),
-            "Fallback theorem should quantify over seed, got:\n{proof}"
-        );
-        assert!(
-            proof.contains(&format!(
-                "match sampleFuzzerValue fuzzer_prog_{id} seed with"
-            )),
-            "Fallback theorem should branch on sampled fuzzer value, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn list_with_any_constraint_uses_sampled_domain_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_list_any",
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
-            FuzzerConstraint::Any,
-        );
-        let id = test_id("my_module", "test_list_any");
-        let lean_name = sanitize_lean_name("test_list_any");
-        let lean_module = "AikenVerify.Proofs.My_module.test_list_any";
-
-        let result = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        );
-        assert!(result.is_ok());
-        let proof = result.unwrap();
-        assert!(
-            proof.contains("match sampleFuzzerValue"),
-            "Should use sampled-domain fallback theorem, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn list_with_unsupported_constraint_uses_sampled_domain_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_list_unsupported",
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
-            FuzzerConstraint::Unsupported {
-                reason: "scenario.ok: constraint extraction not implemented yet".to_string(),
-            },
-        );
-        let id = test_id("my_module", "test_list_unsupported");
-        let lean_name = sanitize_lean_name("test_list_unsupported");
-        let lean_module = "AikenVerify.Proofs.My_module.test_list_unsupported";
-
-        let result = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        );
-        assert!(result.is_ok());
-        let proof = result.unwrap();
-        assert!(
-            proof.contains(&format!(
-                "match sampleFuzzerValue fuzzer_prog_{id} seed with"
-            )),
-            "Unsupported constraints should use sampled-domain fallback theorem, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn int_with_unsupported_constraint_uses_sampled_domain_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_int_unsupported",
-            FuzzerOutputType::Int,
-            FuzzerConstraint::Unsupported {
-                reason: "custom lambda fuzzer domain not yet extracted".to_string(),
-            },
-        );
-        let id = test_id("my_module", "test_int_unsupported");
-        let lean_name = sanitize_lean_name("test_int_unsupported");
-        let lean_module = "AikenVerify.Proofs.My_module.test_int_unsupported";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-        assert!(
-            proof.contains(&format!(
-                "match sampleFuzzerValue fuzzer_prog_{id} seed with"
-            )),
-            "Unsupported scalar constraints should use sampled-domain fallback theorem, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn universal_int_and_with_unsupported_salvages_supported_bounds() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_int_partial_salvage",
-            FuzzerOutputType::Int,
-            FuzzerConstraint::And(vec![
-                FuzzerConstraint::IntRange {
-                    min: "1".to_string(),
-                    max: "9".to_string(),
-                },
-                FuzzerConstraint::Unsupported {
-                    reason: "custom lambda fragment".to_string(),
-                },
-            ]),
-        );
-        let id = test_id("my_module", "test_int_partial_salvage");
-        let lean_name = sanitize_lean_name("test_int_partial_salvage");
-        let lean_module = "AikenVerify.Proofs.My_module.test_int_partial_salvage";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∀ (x : Integer),"),
-            "Universal mode should keep direct Int quantification when salvageable, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("(1 <= x && x <= 9)"),
-            "Supported IntRange fragment should be preserved, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("match sampleFuzzerValue"),
-            "Universal mode with salvageable constraints should not force sampled fallback, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn existential_int_and_with_unsupported_uses_sampled_fallback() {
-        let mut test = make_test_with_type(
-            "my_module",
-            "test_int_partial_salvage_existential",
-            FuzzerOutputType::Int,
-            FuzzerConstraint::And(vec![
-                FuzzerConstraint::IntRange {
-                    min: "1".to_string(),
-                    max: "9".to_string(),
-                },
-                FuzzerConstraint::Unsupported {
-                    reason: "custom lambda fragment".to_string(),
-                },
-            ]),
-        );
-        test.on_test_failure = OnTestFailure::SucceedImmediately;
-        let id = test_id("my_module", "test_int_partial_salvage_existential");
-        let lean_name = sanitize_lean_name("test_int_partial_salvage_existential");
-        let lean_module = "AikenVerify.Proofs.My_module.test_int_partial_salvage_existential";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::Witness,
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∃ (seed : Data),"),
-            "Existential mode should fall back to sampled-domain seed quantification, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("match sampleFuzzerValue"),
-            "Existential mode with unsupported fragments must use sampled fallback, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn list_data_without_domain_predicate_uses_fuzzer_domain_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_list_data_unconstrained",
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Data)),
-            FuzzerConstraint::List {
-                elem: Box::new(FuzzerConstraint::Any),
-                min_len: None,
-                max_len: None,
-            },
-        );
-        let id = test_id("my_module", "test_list_data_unconstrained");
-        let lean_name = sanitize_lean_name("test_list_data_unconstrained");
-        let lean_module = "AikenVerify.Proofs.My_module.test_list_data_unconstrained";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-        assert!(
-            proof.contains("∀ (seed : Data),"),
-            "Fallback theorem should quantify over seed only, got:\n{proof}"
-        );
-        assert!(
-            proof.contains(&format!(
-                "match sampleFuzzerValue fuzzer_prog_{id} seed with"
-            )),
-            "Fallback theorem should branch on sampled fuzzer value, got:\n{proof}"
-        );
-        assert!(
-            proof.contains(&format!(
-                "| some x => (proveTests prog_{id} (dataArg x)) = true"
-            )),
-            "Fallback theorem should evaluate property on sampled x, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn list_unsupported_element_without_domain_predicate_uses_fuzzer_domain_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_list_transaction_like",
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Unsupported(
-                "cardano/transaction.Transaction".to_string(),
-            ))),
-            FuzzerConstraint::List {
-                elem: Box::new(FuzzerConstraint::Any),
-                min_len: None,
-                max_len: None,
-            },
-        );
-        let id = test_id("my_module", "test_list_transaction_like");
-        let lean_name = sanitize_lean_name("test_list_transaction_like");
-        let lean_module = "AikenVerify.Proofs.My_module.test_list_transaction_like";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-        assert!(
-            proof.contains(&format!(
-                "match sampleFuzzerValue fuzzer_prog_{id} seed with"
-            )),
-            "Fallback theorem should branch on sampled fuzzer value, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn list_data_fallback_supports_existential_mode() {
-        let mut test = make_test_with_type(
-            "my_module",
-            "test_list_data_existential",
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Data)),
-            FuzzerConstraint::List {
-                elem: Box::new(FuzzerConstraint::Any),
-                min_len: None,
-                max_len: None,
-            },
-        );
-        test.on_test_failure = OnTestFailure::SucceedImmediately;
-
-        let id = test_id("my_module", "test_list_data_existential");
-        let lean_name = sanitize_lean_name("test_list_data_existential");
-        let lean_module = "AikenVerify.Proofs.My_module.test_list_data_existential";
-
-        let result = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::Witness,
-            &VerificationTargetKind::default(),
-        );
-        assert!(result.is_ok());
-        let proof = result.unwrap();
-        assert!(
-            proof.contains("∃ (seed : Data),"),
-            "Fallback existential theorem should quantify existentially over seed, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("-- Mode: witness (sampled-domain fallback auto-escalated to proof)"),
-            "Sampled-domain witness mode should document auto-escalation, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("by blaster"),
-            "Sampled-domain existential witness mode should escalate to proof search, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("refine ⟨Data.I 0, ?_⟩"),
-            "Sampled-domain existential witness mode should not hardcode a single seed witness, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn data_without_domain_predicate_uses_sampled_domain_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_data",
-            FuzzerOutputType::Data,
-            FuzzerConstraint::Any,
-        );
-        let id = test_id("my_module", "test_data");
-        let lean_name = sanitize_lean_name("test_data");
-        let lean_module = "AikenVerify.Proofs.My_module.test_data";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(proof.contains("∀ (seed : Data),"));
-        assert!(proof.contains(&format!(
-            "match sampleFuzzerValue fuzzer_prog_{id} seed with"
-        )));
-    }
-
-    #[test]
-    fn tuple_data_data_without_predicates_uses_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_data_pair",
-            FuzzerOutputType::Tuple(vec![FuzzerOutputType::Data, FuzzerOutputType::Data]),
-            FuzzerConstraint::Any,
-        );
-        let id = test_id("my_module", "test_data_pair");
-        let lean_name = sanitize_lean_name("test_data_pair");
-        let lean_module = "AikenVerify.Proofs.My_module.test_data_pair";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(proof.contains("match sampleFuzzerValue"));
-    }
-
-    #[test]
-    fn tuple_data_data_data_without_predicates_uses_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_data_triple",
-            FuzzerOutputType::Tuple(vec![
-                FuzzerOutputType::Data,
-                FuzzerOutputType::Data,
-                FuzzerOutputType::Data,
-            ]),
-            FuzzerConstraint::Any,
-        );
-        let id = test_id("my_module", "test_data_triple");
-        let lean_name = sanitize_lean_name("test_data_triple");
-        let lean_module = "AikenVerify.Proofs.My_module.test_data_triple";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(proof.contains("match sampleFuzzerValue"));
-    }
-
-    #[test]
-    fn tuple_mixed_int_bool_generates_theorem_with_bounds() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_tuple_mixed",
-            FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Bool]),
-            FuzzerConstraint::Tuple(vec![
-                FuzzerConstraint::IntRange {
-                    min: "0".to_string(),
-                    max: "100".to_string(),
-                },
-                FuzzerConstraint::Any,
-            ]),
-        );
-        let id = test_id("my_module", "test_tuple_mixed");
-        let lean_name = sanitize_lean_name("test_tuple_mixed");
-        let lean_module = "AikenVerify.Proofs.My_module.test_tuple_mixed";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∀ (a : Integer) (b : Bool),"),
-            "Mixed tuple should quantify over Integer and Bool, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("(0 <= a && a <= 100)"),
-            "Should have bounds for Int element, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("Data.List [Data.I a, (Data.Constr (if b then 1 else 0) [])]"),
-            "Should inline mixed encoding, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn tuple_with_nested_list_element_uses_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_tuple_nested",
-            FuzzerOutputType::Tuple(vec![
-                FuzzerOutputType::Int,
-                FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
-            ]),
-            FuzzerConstraint::Any,
-        );
-        let id = test_id("my_module", "test_tuple_nested");
-        let lean_name = sanitize_lean_name("test_tuple_nested");
-        let lean_module = "AikenVerify.Proofs.My_module.test_tuple_nested";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-        assert!(
-            proof.contains("match sampleFuzzerValue"),
-            "Nested tuple elements should use sampled-domain fallback, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn utils_contains_arg_helpers() {
-        let utils = generate_utils(10000);
-        assert!(
-            utils.contains("def boolArg"),
-            "Utils should contain boolArg definition"
-        );
-        assert!(
-            utils.contains("Data.Constr (if x then 1 else 0) []"),
-            "boolArg should encode Bool as Data.Constr"
-        );
-        assert!(utils.contains("def intArg"));
-        assert!(utils.contains("def bytearrayArg"));
-        assert!(utils.contains("def stringArg"));
-        assert!(utils.contains("def dataArg"));
-        assert!(utils.contains("def pairArg"));
-        assert!(utils.contains("def dataArgs2"));
-        assert!(utils.contains("def dataArgs3"));
-        assert!(
-            utils.contains("def proveTestsHalt"),
-            "Utils should contain proveTestsHalt for Void mode"
-        );
-        assert!(
-            utils.contains("def proveTestsError"),
-            "Utils should contain proveTestsError for Void+fail mode"
-        );
-        // Step 5.1: witness helper for fail-once existential mode
-        assert!(
-            utils.contains("def witnessTests"),
-            "Utils should contain witnessTests for fail-once witness mode"
-        );
-    }
-
-    #[test]
-    fn existential_mode_parse_roundtrip() {
-        assert_eq!(
-            "witness".parse::<ExistentialMode>().unwrap(),
-            ExistentialMode::Witness
-        );
-        assert_eq!(
-            "proof".parse::<ExistentialMode>().unwrap(),
-            ExistentialMode::Proof
-        );
-        assert_eq!(
-            "Witness".parse::<ExistentialMode>().unwrap(),
-            ExistentialMode::Witness
-        );
-        assert_eq!(
-            "PROOF".parse::<ExistentialMode>().unwrap(),
-            ExistentialMode::Proof
-        );
-        assert!("unknown".parse::<ExistentialMode>().is_err());
-    }
-
-    #[test]
-    fn existential_mode_display() {
-        assert_eq!(ExistentialMode::Witness.to_string(), "witness");
-        assert_eq!(ExistentialMode::Proof.to_string(), "proof");
-    }
-
-    /// Documents the map2 over-approximation: when a property test uses
-    /// `fuzz.map2(int_between(0, 10), int_between(20, 30), fn(a, b) { (a, b) })`,
-    /// the generated proof quantifies over the Cartesian product of [0,10] x [20,30]
-    /// independently. Any relational constraints introduced by the mapper (e.g. a < b)
-    /// are NOT captured -- the proof domain is an over-approximation. Properties
-    /// depending on such correlations may fail in formal verification even if
-    /// property testing passes.
-    #[test]
-    fn map2_tuple_decomposition_is_cartesian_product() {
-        // Simulates map2(int_between(0, 10), int_between(20, 30), fn(a, b) { (a, b) })
-        let test = make_test_with_type(
-            "my_module",
-            "test_map2_pair",
-            FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Int]),
-            FuzzerConstraint::Tuple(vec![
-                FuzzerConstraint::IntRange {
-                    min: "0".to_string(),
-                    max: "10".to_string(),
-                },
-                FuzzerConstraint::IntRange {
-                    min: "20".to_string(),
-                    max: "30".to_string(),
-                },
-            ]),
-        );
-        let id = test_id("my_module", "test_map2_pair");
-        let lean_name = sanitize_lean_name("test_map2_pair");
-        let lean_module = "AikenVerify.Proofs.My_module.test_map2_pair";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        // Each element is independently bounded (Cartesian product, no cross-element constraints)
-        assert!(
-            proof.contains("∀ (a : Integer) (b : Integer),"),
-            "map2 decomposition should produce independent quantifiers, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("(0 <= a && a <= 10)"),
-            "First element bounds preserved independently, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("(20 <= b && b <= 30)"),
-            "Second element bounds preserved independently, got:\n{proof}"
-        );
-        // Verify the preconditions use → (implication) connecting them, not ∧
-        // This shows they are independent constraints joined as implications
-        assert!(
-            proof.contains("→"),
-            "Element bounds should be connected with →, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn requires_explicit_bounds_is_constraint_driven() {
-        // Int with Any constraint => needs bounds
-        assert!(requires_explicit_bounds(
-            &FuzzerOutputType::Int,
-            &FuzzerConstraint::Any,
-        ));
-        // Int with IntRange => does not need bounds
-        assert!(!requires_explicit_bounds(
-            &FuzzerOutputType::Int,
-            &FuzzerConstraint::IntRange {
-                min: "0".to_string(),
-                max: "10".to_string(),
-            },
-        ));
-        // (Int, Int) with Any => needs bounds
-        assert!(requires_explicit_bounds(
-            &FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Int]),
-            &FuzzerConstraint::Any,
-        ));
-        // (Int, Int) with Tuple of IntRanges => does not need bounds
-        assert!(!requires_explicit_bounds(
-            &FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Int]),
-            &FuzzerConstraint::Tuple(vec![
-                FuzzerConstraint::IntRange {
-                    min: "0".to_string(),
-                    max: "10".to_string(),
-                },
-                FuzzerConstraint::IntRange {
-                    min: "20".to_string(),
-                    max: "30".to_string(),
-                },
-            ]),
-        ));
-        // Bool never needs bounds regardless of constraint
-        assert!(!requires_explicit_bounds(
-            &FuzzerOutputType::Bool,
-            &FuzzerConstraint::Any,
-        ));
-        // ByteArray never needs bounds
-        assert!(!requires_explicit_bounds(
-            &FuzzerOutputType::ByteArray,
-            &FuzzerConstraint::Any,
-        ));
-        // Data never needs bounds
-        assert!(!requires_explicit_bounds(
-            &FuzzerOutputType::Data,
-            &FuzzerConstraint::Any,
-        ));
-        // (Data, Data) never needs bounds
-        assert!(!requires_explicit_bounds(
-            &FuzzerOutputType::Tuple(vec![FuzzerOutputType::Data, FuzzerOutputType::Data]),
-            &FuzzerConstraint::Any,
-        ));
-        // Int with Map(IntRange) still needs bounds since Map describes input-domain.
-        assert!(requires_explicit_bounds(
-            &FuzzerOutputType::Int,
-            &FuzzerConstraint::Map(Box::new(FuzzerConstraint::IntRange {
-                min: "0".to_string(),
-                max: "10".to_string(),
-            })),
-        ));
-    }
-
-    fn make_manifest(entries: Vec<(&str, &str, &str)>) -> GeneratedManifest {
-        make_manifest_with_termination(entries, true)
-    }
-
-    fn make_manifest_with_termination(
-        entries: Vec<(&str, &str, &str)>,
-        has_termination_theorem: bool,
-    ) -> GeneratedManifest {
-        GeneratedManifest {
-            version: "1.0.0".to_string(),
-            tests: entries
-                .into_iter()
-                .map(|(module, name, lean_theorem)| ManifestEntry {
-                    id: test_id(module, name),
-                    aiken_module: module.to_string(),
-                    aiken_name: name.to_string(),
-                    lean_module: format!(
-                        "AikenVerify.Proofs.{}.{}",
-                        module_to_lean_segment(module),
-                        sanitize_lean_name(name)
-                    ),
-                    lean_theorem: lean_theorem.to_string(),
-                    lean_file: format!(
-                        "AikenVerify/Proofs/{}/{}.lean",
-                        module_to_lean_segment(module),
-                        sanitize_lean_name(name)
-                    ),
-                    flat_file: format!("flat/{}.flat", test_id(module, name)),
-                    has_termination_theorem,
-                })
-                .collect(),
-            skipped: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn parse_verify_results_all_proved() {
-        let manifest = make_manifest(vec![
-            ("my_module", "test_add", "test_add"),
-            ("my_module", "test_sub", "test_sub"),
-        ]);
-        let raw = VerifyResult {
-            success: true,
-            stdout: "Build completed successfully.".to_string(),
-            stderr: String::new(),
-            exit_code: Some(0),
-            theorem_results: None,
-        };
-
-        let summary = parse_verify_results(raw, &manifest);
-
-        assert_eq!(summary.total, 4);
-        assert_eq!(summary.proved, 4);
-        assert_eq!(summary.failed, 0);
-        assert_eq!(summary.timed_out, 0);
-        assert_eq!(summary.unknown, 0);
-        assert!(
-            summary
-                .theorems
-                .iter()
-                .all(|t| matches!(t.status, ProofStatus::Proved))
-        );
-    }
-
-    #[test]
-    fn parse_verify_results_specific_failure() {
-        let manifest = make_manifest(vec![
-            ("my_module", "test_add", "test_add"),
-            ("my_module", "test_sub", "test_sub"),
-        ]);
-        let raw = VerifyResult {
-            success: false,
-            stdout: String::new(),
-            stderr: "error: 'test_add' has unsolved goals\nsome other context".to_string(),
-            exit_code: Some(1),
-            theorem_results: None,
-        };
-
-        let summary = parse_verify_results(raw, &manifest);
-
-        assert_eq!(summary.total, 4);
-        assert_eq!(summary.failed, 1);
-        assert_eq!(summary.timed_out, 0);
-        assert!(summary.proved == 0);
-
-        let test_add = summary
-            .theorems
-            .iter()
-            .find(|t| t.theorem_name == "test_add")
-            .unwrap();
-        assert!(
-            matches!(&test_add.status, ProofStatus::Failed { reason, .. } if reason.contains("test_add")),
-            "test_add should be Failed, got: {:?}",
-            test_add.status
-        );
-
-        let test_sub = summary
-            .theorems
-            .iter()
-            .find(|t| t.theorem_name == "test_sub")
-            .unwrap();
-        assert!(
-            matches!(test_sub.status, ProofStatus::Unknown),
-            "test_sub should be Unknown, got: {:?}",
-            test_sub.status
-        );
-    }
-
-    #[test]
-    fn parse_verify_results_marks_built_modules_as_proved_when_one_module_fails() {
-        let manifest = make_manifest(vec![
-            ("my_module", "test_add", "test_add"),
-            ("my_module", "test_sub", "test_sub"),
-            ("my_module", "test_bad", "test_bad"),
-        ]);
-        let raw = VerifyResult {
-            success: false,
-            stdout: "⚠ [1/3] Replayed AikenVerify.Proofs.My_module.test_add\n\
-                     info: AikenVerify/Proofs/My_module/test_add.lean:10:5: ✅ Valid\n\
-                     ⚠ [2/3] Replayed AikenVerify.Proofs.My_module.test_sub\n\
-                     info: AikenVerify/Proofs/My_module/test_sub.lean:11:5: ✅ Valid\n\
-                     ✖ [3/3] Building AikenVerify.Proofs.My_module.test_bad (5s)\n\
-                     error: AikenVerify/Proofs/My_module/test_bad.lean:21:5: translateApp: unsupported\n\
-                     error: Lean exited with code 1\n\
-                     Some required targets logged failures:\n\
-                     - AikenVerify.Proofs.My_module.test_bad"
-                .to_string(),
-            stderr: "error: build failed".to_string(),
-            exit_code: Some(1),
-            theorem_results: None,
-        };
-
-        let summary = parse_verify_results(raw, &manifest);
-
-        assert_eq!(summary.total, 6);
-        assert_eq!(summary.proved, 4);
-        assert_eq!(summary.failed, 2);
-        assert_eq!(summary.timed_out, 0);
-        assert_eq!(summary.unknown, 0);
-
-        let test_add = summary
-            .theorems
-            .iter()
-            .find(|t| t.theorem_name == "test_add")
-            .unwrap();
-        assert!(
-            matches!(test_add.status, ProofStatus::Proved),
-            "test_add should be Proved, got: {:?}",
-            test_add.status
-        );
-
-        let test_sub = summary
-            .theorems
-            .iter()
-            .find(|t| t.theorem_name == "test_sub")
-            .unwrap();
-        assert!(
-            matches!(test_sub.status, ProofStatus::Proved),
-            "test_sub should be Proved, got: {:?}",
-            test_sub.status
-        );
-
-        let test_bad = summary
-            .theorems
-            .iter()
-            .find(|t| t.theorem_name == "test_bad")
-            .unwrap();
-        assert!(
-            matches!(&test_bad.status, ProofStatus::Failed { .. }),
-            "test_bad should be Failed, got: {:?}",
-            test_bad.status
-        );
-    }
-
-    #[test]
-    fn parse_verify_results_termination_failure() {
-        let manifest = make_manifest(vec![("my_module", "test_add", "test_add")]);
-        let raw = VerifyResult {
-            success: false,
-            stdout: String::new(),
-            stderr: "error: 'test_add_alwaysTerminating' tactic failed".to_string(),
-            exit_code: Some(1),
-            theorem_results: None,
-        };
-
-        let summary = parse_verify_results(raw, &manifest);
-
-        assert_eq!(summary.total, 2);
-
-        let term = summary
-            .theorems
-            .iter()
-            .find(|t| t.theorem_name == "test_add_alwaysTerminating")
-            .unwrap();
-        assert!(
-            matches!(&term.status, ProofStatus::Failed { .. }),
-            "Termination theorem should be Failed, got: {:?}",
-            term.status
-        );
-    }
-
-    #[test]
-    fn parse_verify_results_empty_manifest() {
-        let manifest = make_manifest(vec![]);
-        let raw = VerifyResult {
-            success: true,
-            stdout: String::new(),
-            stderr: String::new(),
-            exit_code: Some(0),
-            theorem_results: None,
-        };
-
-        let summary = parse_verify_results(raw, &manifest);
-
-        assert_eq!(summary.total, 0);
-        assert_eq!(summary.proved, 0);
-        assert_eq!(summary.failed, 0);
-        assert_eq!(summary.timed_out, 0);
-        assert_eq!(summary.unknown, 0);
-    }
-
-    #[test]
-    fn parse_verify_results_build_failure_no_specific_errors() {
-        let manifest = make_manifest(vec![("my_module", "test_add", "test_add")]);
-        let raw = VerifyResult {
-            success: false,
-            stdout: String::new(),
-            stderr: "error: build failed with some generic message".to_string(),
-            exit_code: Some(1),
-            theorem_results: None,
-        };
-
-        let summary = parse_verify_results(raw, &manifest);
-
-        assert_eq!(summary.total, 2);
-        assert_eq!(summary.unknown, 0);
-        assert_eq!(summary.failed, 2);
-        assert!(summary.theorems.iter().all(|t| matches!(
-            t.status,
-            ProofStatus::Failed {
-                category: FailureCategory::BuildError,
-                ..
-            }
-        )));
-    }
-
-    #[test]
-    fn parse_verify_results_timeout_marker_marks_timed_out() {
-        let manifest = make_manifest(vec![("my_module", "test_add", "test_add")]);
-        let raw = VerifyResult {
-            success: false,
-            stdout: String::new(),
-            stderr: "[verify-timeout] command timed out".to_string(),
-            exit_code: Some(1),
-            theorem_results: None,
-        };
-
-        let summary = parse_verify_results(raw, &manifest);
-
-        assert_eq!(summary.total, 2);
-        assert_eq!(summary.timed_out, 2);
-        assert_eq!(summary.failed, 0);
-        assert_eq!(summary.unknown, 0);
-    }
-
-    #[test]
-    fn lake_fetch_unknown_command_variants_are_detected() {
-        assert!(lake_fetch_is_unknown_command(
-            "error: unknown command 'fetch'"
-        ));
-        assert!(lake_fetch_is_unknown_command(
-            "error: unknown command `fetch`"
-        ));
-        assert!(lake_fetch_is_unknown_command(
-            "error: unknown command \"fetch\""
-        ));
-    }
-
-    #[test]
-    fn lake_fetch_unknown_command_ignores_other_failures() {
-        assert!(!lake_fetch_is_unknown_command(
-            "error: failed to load manifest from lakefile.lean"
-        ));
-        assert!(!lake_fetch_is_unknown_command(
-            "error: dependency resolution failed"
-        ));
-    }
-
-    #[test]
-    fn extract_error_for_theorem_includes_context_window() {
-        let stderr = "line1: unrelated\nerror: 'my_thm' unsolved goals\nline3: also unrelated\nmy_thm failed to synthesize\n";
-        let result = extract_error_for_theorem("my_thm", stderr);
-        // Context window includes surrounding lines around matches
-        assert!(
-            result.contains("error: 'my_thm' unsolved goals"),
-            "Should include the error line, got:\n{result}"
-        );
-        assert!(
-            result.contains("my_thm failed to synthesize"),
-            "Should include the theorem-matching line, got:\n{result}"
-        );
-    }
-
-    #[test]
-    fn extract_error_for_theorem_shows_gap_marker() {
-        // Matches far apart should have "..." separator
-        let mut lines: Vec<String> = (0..20).map(|i| format!("filler line {i}")).collect();
-        lines[2] = "error: 'my_thm' failed".to_string();
-        lines[18] = "my_thm: another error here".to_string();
-        let stderr = lines.join("\n");
-        let result = extract_error_for_theorem("my_thm", &stderr);
-        assert!(
-            result.contains("..."),
-            "Should have gap marker between distant matches, got:\n{result}"
-        );
-    }
-
-    #[test]
-    fn extract_error_for_theorem_empty_on_no_match() {
-        let stderr = "completely unrelated output\nnothing to see here\n";
-        let result = extract_error_for_theorem("my_thm", stderr);
-        assert!(
-            result.is_empty(),
-            "Should be empty when no match, got: {result}"
-        );
-    }
-
-    #[test]
-    fn version_meets_minimum_exact_match() {
-        assert!(version_meets_minimum("4.24.0", (4, 24, 0)));
-    }
-
-    #[test]
-    fn version_meets_minimum_higher() {
-        assert!(version_meets_minimum("4.25.1", (4, 24, 0)));
-    }
-
-    #[test]
-    fn version_meets_minimum_lower() {
-        assert!(!version_meets_minimum("4.23.9", (4, 24, 0)));
-    }
-
-    #[test]
-    fn version_meets_minimum_major_higher() {
-        assert!(version_meets_minimum("5.0.0", (4, 24, 0)));
-    }
-
-    #[test]
-    fn parse_version_from_lean_output() {
-        let output = "Lean (version 4.24.0, x86_64-unknown-linux-gnu, Release)";
-        assert_eq!(
-            parse_version_from_output(output),
-            Some("4.24.0".to_string())
-        );
-    }
-
-    #[test]
-    fn parse_version_from_z3_output() {
-        let output = "Z3 version 4.13.4 - 64 bit";
-        assert_eq!(
-            parse_version_from_output(output),
-            Some("4.13.4".to_string())
-        );
-    }
-
-    #[test]
-    fn parse_version_from_empty_output() {
-        assert_eq!(parse_version_from_output("no version here"), None);
-    }
-
-    #[test]
-    fn generate_lakefile_uses_blaster_rev() {
-        let lakefile = generate_lakefile("abc123def");
-        assert!(
-            lakefile.contains(r#"@ "abc123def""#),
-            "Lakefile should pin Blaster to the given rev, got:\n{lakefile}"
-        );
-        assert!(
-            !lakefile.contains(r#"@ "main""#),
-            "Lakefile should not contain 'main' when rev is overridden"
-        );
-    }
-
-    #[test]
-    fn generate_lakefile_default_rev() {
-        let lakefile = generate_lakefile(DEFAULT_BLASTER_REV);
-        assert!(
-            lakefile.contains(&format!(r#"@ "{DEFAULT_BLASTER_REV}""#)),
-            "Lakefile should use default rev"
-        );
-    }
-
-    #[test]
-    fn generate_lakefile_uses_workspace_relative_plutus_core_path() {
-        let lakefile = generate_lakefile(DEFAULT_BLASTER_REV);
-        assert!(
-            lakefile.contains("require PlutusCore from\n  \"./PlutusCore\""),
-            "Lakefile should reference workspace-relative PlutusCore path, got:\n{lakefile}"
-        );
-    }
-
-    #[test]
-    fn lake_build_jobs_flag_unsupported_detects_unknown_j_option() {
-        let stderr = "error: unknown option '-j'";
-        assert!(lake_build_jobs_flag_unsupported(stderr));
-    }
-
-    #[test]
-    fn normalize_jobs_override_accepts_one() {
-        assert_eq!(normalize_jobs_override(Some(1)), Some(1));
-    }
-
-    #[test]
-    fn lake_build_command_for_jobs_includes_single_job_override() {
-        assert_eq!(lake_build_command_for_jobs(Some(1)), "lake build -j 1");
-    }
-
-    #[test]
-    fn lake_build_jobs_flag_unsupported_ignores_unrelated_errors() {
-        let stderr = "error: failed to load manifest";
-        assert!(!lake_build_jobs_flag_unsupported(stderr));
-    }
-
-    #[test]
-    fn check_plutus_core_missing_dir() {
-        let tmp = tempfile::tempdir().unwrap();
-        let result = check_plutus_core(tmp.path());
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("not found"));
-    }
-
-    #[test]
-    fn check_plutus_core_empty_dir() {
-        let tmp = tempfile::tempdir().unwrap();
-        fs::create_dir(tmp.path().join("PlutusCore")).unwrap();
-        let result = check_plutus_core(tmp.path());
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("lakefile.lean"));
-    }
-
-    #[test]
-    fn check_plutus_core_valid_dir() {
-        let tmp = tempfile::tempdir().unwrap();
-        let pc = tmp.path().join("PlutusCore");
-        fs::create_dir(&pc).unwrap();
-        fs::write(pc.join("lakefile.lean"), "-- placeholder").unwrap();
-        let result = check_plutus_core(tmp.path());
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn check_plutus_core_detailed_missing() {
-        let tmp = tempfile::tempdir().unwrap();
-        let report = check_plutus_core_detailed(tmp.path());
-        assert!(!report.found);
-        assert!(!report.has_lakefile);
-        assert!(report.error.is_some());
-    }
-
-    #[test]
-    fn check_plutus_core_detailed_valid() {
-        let tmp = tempfile::tempdir().unwrap();
-        let pc = tmp.path().join("PlutusCore");
-        fs::create_dir(&pc).unwrap();
-        fs::write(pc.join("lakefile.lean"), "-- placeholder").unwrap();
-        let report = check_plutus_core_detailed(tmp.path());
-        assert!(report.found);
-        assert!(report.has_lakefile);
-        assert!(report.error.is_none());
-    }
-
-    #[test]
-    fn doctor_report_serializes_to_json() {
-        let report = DoctorReport {
-            tools: vec![ToolCheck {
-                tool: "lean".to_string(),
-                found: true,
-                version: Some("4.24.0".to_string()),
-                meets_minimum: true,
-                minimum_version: "4.24.0".to_string(),
-                error: None,
-            }],
-            plutus_core: PlutusCoreCheck {
-                found: true,
-                path: "/tmp/PlutusCore".to_string(),
-                has_lakefile: true,
-                error: None,
-            },
-            blaster_rev: "main".to_string(),
-            all_ok: true,
-            capabilities: capabilities(),
-        };
-        let json = serde_json::to_string(&report).unwrap();
-        assert!(json.contains("\"all_ok\":true"));
-        assert!(json.contains("\"blaster_rev\":\"main\""));
-        assert!(json.contains("\"supported_test_kinds\""));
-        assert!(json.contains("\"target_modes\""));
-    }
-
-    #[test]
-    fn capabilities_includes_expected_fields() {
-        let caps = capabilities();
-        assert_eq!(caps.supported_test_kinds, vec!["property"]);
-        assert_eq!(caps.unsupported_test_kinds.len(), 2);
-        assert_eq!(caps.unsupported_test_kinds[0].kind, "unit");
-        assert_eq!(caps.unsupported_test_kinds[0].status, "intentional");
-        assert_eq!(caps.unsupported_test_kinds[1].kind, "benchmark");
-        assert_eq!(caps.target_modes.len(), 3);
-        assert!(caps.target_modes.contains(&"property".to_string()));
-        assert!(caps.target_modes.contains(&"validator".to_string()));
-        assert!(caps.target_modes.contains(&"equivalence".to_string()));
-        assert_eq!(caps.max_test_arity, 1);
-    }
-
-    #[test]
-    fn validator_target_mode_errors_without_metadata() {
-        let mut test = make_test("my_module", "test_val");
-        test.target_kind = VerificationTargetKind::ValidatorHandler;
-        let id = test_id("my_module", "test_val");
-        let lean_name = sanitize_lean_name("test_val");
-        let lean_module = "AikenVerify.Proofs.My_module.test_val";
-
-        let result = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::ValidatorHandler,
-        );
-        assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(
-            err.contains("no validator target metadata"),
-            "Should error about missing validator_target, got: {err}"
-        );
-    }
-
-    #[test]
-    fn target_kind_mismatch_is_reported() {
-        let test = make_test("my_module", "test_target_mismatch");
-        let id = test_id("my_module", "test_target_mismatch");
-        let lean_name = sanitize_lean_name("test_target_mismatch");
-        let lean_module = "AikenVerify.Proofs.My_module.test_target_mismatch";
-
-        let result = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::ValidatorHandler,
-        );
-        assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(
-            err.contains("target kind mismatch"),
-            "Should report target_kind mismatch, got: {err}"
-        );
-    }
-
-    #[test]
-    fn validator_target_mode_uses_handler_prog() {
-        let mut test = make_test("my_module", "test_val");
-        test.target_kind = VerificationTargetKind::ValidatorHandler;
-        test.validator_target = Some(ValidatorTarget {
-            validator_module: "validators/my_validator".to_string(),
-            validator_name: "spend".to_string(),
-            handler_name: Some("spend.handler".to_string()),
-            handler_program: Some(ExportedProgram {
-                hex: "handler_hex".to_string(),
-                flat_bytes: None,
-            }),
-        });
-        let id = test_id("my_module", "test_val");
-        let lean_name = sanitize_lean_name("test_val");
-        let lean_module = "AikenVerify.Proofs.My_module.test_val";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::ValidatorHandler,
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("handler_prog_"),
-            "Validator mode should use handler_prog in theorems, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("_handler.flat"),
-            "Should import handler flat file, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn equivalence_target_mode_generates_equivalence_theorem() {
-        let mut test = make_test("my_module", "test_eq");
-        test.target_kind = VerificationTargetKind::Equivalence;
-        test.validator_target = Some(ValidatorTarget {
-            validator_module: "validators/my_validator".to_string(),
-            validator_name: "spend".to_string(),
-            handler_name: None,
-            handler_program: Some(ExportedProgram {
-                hex: "handler_hex".to_string(),
-                flat_bytes: None,
-            }),
-        });
-        let id = test_id("my_module", "test_eq");
-        let lean_name = sanitize_lean_name("test_eq");
-        let lean_module = "AikenVerify.Proofs.My_module.test_eq";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::Equivalence,
-        )
-        .unwrap();
-
-        // Should have the standard property theorem
-        assert!(
-            proof.contains("theorem test_eq :"),
-            "Should have standard property theorem, got:\n{proof}"
-        );
-        // Should have the equivalence theorem
-        assert!(
-            proof.contains("theorem test_eq_equivalence :"),
-            "Should have equivalence theorem, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("proveTests prog_"),
-            "Equivalence should reference property prog, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("proveTests handler_prog_"),
-            "Equivalence should reference handler prog, got:\n{proof}"
-        );
-        // Both flat imports should be present
-        assert!(
-            proof.contains("_handler.flat"),
-            "Should import handler flat file, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn equivalence_target_fallback_stays_universal_in_fail_once_mode() {
-        let mut test = make_test_with_type(
-            "my_module",
-            "test_eq_fallback_fail_once",
-            FuzzerOutputType::Data,
-            FuzzerConstraint::Any,
-        );
-        test.on_test_failure = OnTestFailure::SucceedImmediately;
-        test.target_kind = VerificationTargetKind::Equivalence;
-        test.validator_target = Some(ValidatorTarget {
-            validator_module: "validators/my_validator".to_string(),
-            validator_name: "spend".to_string(),
-            handler_name: None,
-            handler_program: Some(ExportedProgram {
-                hex: "handler_hex".to_string(),
-                flat_bytes: None,
-            }),
-        });
-
-        let id = test_id("my_module", "test_eq_fallback_fail_once");
-        let lean_name = sanitize_lean_name("test_eq_fallback_fail_once");
-        let lean_module = "AikenVerify.Proofs.My_module.test_eq_fallback_fail_once";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::Equivalence,
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("-- Mode: witness (sampled-domain fallback auto-escalated to proof)"),
-            "Expected sampled-domain fallback in fail-once witness mode, got:\n{proof}"
-        );
-
-        let marker = format!("theorem {lean_name}_equivalence :");
-        let (_, equivalence_theorem) = proof
-            .split_once(&marker)
-            .expect("equivalence theorem marker should be present");
-
-        assert!(
-            equivalence_theorem.contains("∀ (seed : Data),"),
-            "Fallback equivalence theorem must stay universal, got:\n{equivalence_theorem}"
-        );
-        assert!(
-            equivalence_theorem.contains("| none => True :="),
-            "Fallback equivalence theorem should be vacuously true on unsampled seeds, got:\n{equivalence_theorem}"
-        );
-        assert!(
-            !equivalence_theorem.contains("∃ (seed : Data),"),
-            "Fallback equivalence theorem must not switch to existential quantification, got:\n{equivalence_theorem}"
-        );
-    }
-
-    #[test]
-    fn verification_target_kind_parse_roundtrip() {
-        assert_eq!(
-            "property".parse::<VerificationTargetKind>().unwrap(),
-            VerificationTargetKind::PropertyWrapper
-        );
-        assert_eq!(
-            "validator".parse::<VerificationTargetKind>().unwrap(),
-            VerificationTargetKind::ValidatorHandler
-        );
-        assert_eq!(
-            "equivalence".parse::<VerificationTargetKind>().unwrap(),
-            VerificationTargetKind::Equivalence
-        );
-        assert!("invalid".parse::<VerificationTargetKind>().is_err());
-    }
-
-    #[test]
-    fn verification_target_kind_display() {
-        assert_eq!(
-            VerificationTargetKind::PropertyWrapper.to_string(),
-            "property"
-        );
-        assert_eq!(
-            VerificationTargetKind::ValidatorHandler.to_string(),
-            "validator"
-        );
-        assert_eq!(
-            VerificationTargetKind::Equivalence.to_string(),
-            "equivalence"
-        );
-    }
-
-    #[test]
-    fn validate_blaster_rev_accepts_valid_inputs() {
-        assert!(validate_blaster_rev("main").is_ok());
-        assert!(validate_blaster_rev("abc123def").is_ok());
-        assert!(validate_blaster_rev("v1.2.3").is_ok());
-        assert!(validate_blaster_rev("feature/my-branch").is_ok());
-        assert!(validate_blaster_rev("my_tag_1.0").is_ok());
-    }
-
-    #[test]
-    fn validate_blaster_rev_rejects_empty() {
-        assert!(validate_blaster_rev("").is_err());
-    }
-
-    #[test]
-    fn validate_blaster_rev_rejects_injection() {
-        assert!(validate_blaster_rev("main\" ; rm -rf /").is_err());
-        assert!(validate_blaster_rev("rev\nmalicious").is_err());
-        assert!(validate_blaster_rev("rev`cmd`").is_err());
-    }
-
-    #[test]
-    fn collision_detector_passes_distinct_tests() {
-        let tests = vec![
-            make_test("module_a", "test_x"),
-            make_test("module_b", "test_x"),
-            make_test("module_a", "test_y"),
-        ];
-        assert!(detect_lean_path_collisions(&tests).is_ok());
-    }
-
-    #[test]
-    fn collision_detector_catches_duplicate_test() {
-        // Exact same module+name should collide
-        let tests = vec![
-            make_test("module_a", "test_x"),
-            make_test("module_a", "test_x"),
-        ];
-        let err = detect_lean_path_collisions(&tests).unwrap_err();
-        let msg = err.to_string();
-        assert!(
-            msg.contains("collision"),
-            "Error should mention collision: {msg}"
-        );
-        assert!(
-            msg.contains("module_a.test_x"),
-            "Error should name the test: {msg}"
-        );
-    }
-
-    #[test]
-    fn collision_detector_catches_sanitization_collision() {
-        // my-module and my_module both sanitize to My_module in Lean paths
-        let tests = vec![
-            make_test("my-module", "test_foo"),
-            make_test("my_module", "test_foo"),
-        ];
-        let err = detect_lean_path_collisions(&tests).unwrap_err();
-        let msg = err.to_string();
-        assert!(
-            msg.contains("collision"),
-            "Should detect sanitization collision: {msg}"
-        );
-        assert!(
-            msg.contains("my-module.test_foo"),
-            "Should name first test: {msg}"
-        );
-        assert!(
-            msg.contains("my_module.test_foo"),
-            "Should name second test: {msg}"
-        );
-    }
-
-    #[test]
-    fn short_hash_is_deterministic() {
-        assert_eq!(short_hash("hello"), short_hash("hello"));
-    }
-
-    #[test]
-    fn short_hash_differs_for_different_inputs() {
-        assert_ne!(short_hash("hello"), short_hash("world"));
-    }
-
-    #[test]
-    fn classify_failure_counterexample() {
-        assert_eq!(
-            classify_failure("❌ Falsified after 3 tests"),
-            FailureCategory::Counterexample
-        );
-        assert_eq!(
-            classify_failure("Counterexample: x = 42"),
-            FailureCategory::Counterexample
-        );
-    }
-
-    #[test]
-    fn classify_failure_unsat_goal() {
-        assert_eq!(
-            classify_failure("Tactic `blaster` failed, unsolved goals remain"),
-            FailureCategory::UnsatGoal
-        );
-        assert_eq!(
-            classify_failure("error: unsolved goals\n⊢ False"),
-            FailureCategory::UnsatGoal
-        );
-    }
-
-    #[test]
-    fn classify_failure_timeout() {
-        assert_eq!(
-            classify_failure("deterministic timeout reached"),
-            FailureCategory::Timeout
-        );
-    }
-
-    #[test]
-    fn classify_failure_dependency() {
-        assert_eq!(
-            classify_failure("error: unknown package 'PlutusCore'\nlake fetch failed"),
-            FailureCategory::DependencyError
-        );
-    }
-
-    #[test]
-    fn classify_failure_blaster_unsupported() {
-        assert_eq!(
-            classify_failure(
-                "error: translateApp: Inductive predicate not yet supported: Lean.Expr.const `List.Mem [Lean.Level.zero]"
-            ),
-            FailureCategory::BlasterUnsupported
-        );
-    }
-
-    #[test]
-    fn classify_failure_build_error() {
-        assert_eq!(
-            classify_failure("error: Lean exited with code 1"),
-            FailureCategory::BuildError
-        );
-    }
-
-    #[test]
-    fn classify_failure_unknown() {
-        assert_eq!(
-            classify_failure("some totally unrecognized output"),
-            FailureCategory::Unknown
-        );
-    }
-
-    #[test]
-    fn parse_verify_results_failure_includes_category() {
-        let manifest = make_manifest(vec![("my_module", "test_add", "test_add")]);
-        let raw = VerifyResult {
-            success: false,
-            stdout: String::new(),
-            stderr: "error: 'test_add' unsolved goals\nTactic `blaster` failed".to_string(),
-            exit_code: Some(1),
-            theorem_results: None,
-        };
-
-        let summary = parse_verify_results(raw, &manifest);
-        let test_add = summary
-            .theorems
-            .iter()
-            .find(|t| t.theorem_name == "test_add")
-            .unwrap();
-        match &test_add.status {
-            ProofStatus::Failed { category, .. } => {
-                assert_eq!(
-                    *category,
-                    FailureCategory::UnsatGoal,
-                    "Should classify as UnsatGoal"
-                );
-            }
-            other => panic!("Expected Failed, got: {:?}", other),
-        }
-    }
-
-    #[test]
-    fn skippable_generation_errors_use_structured_categories() {
-        let err = generation_error(
-            GenerationErrorCategory::MissingDomain,
-            "category-driven skip should not depend on message wording",
-        );
-        assert!(
-            is_skippable_generation_error(&err),
-            "MissingDomain category should be skippable regardless of message text"
-        );
-    }
-
-    #[test]
-    fn non_skippable_generation_errors_ignore_legacy_message_fragments() {
-        let err = generation_error(
-            GenerationErrorCategory::InvalidConstraint,
-            "unsupported no extractable cannot generate a proof for this shape",
-        );
-        assert!(
-            !is_skippable_generation_error(&err),
-            "Skip behavior must be category-driven, not substring-driven"
-        );
-    }
-
-    #[test]
-    fn sampled_fallback_classification_is_category_driven() {
-        let fallback = generation_error(
-            GenerationErrorCategory::FallbackRequired,
-            "message text is irrelevant",
-        );
-        assert!(
-            should_use_sampled_fallback_for_error(&fallback),
-            "Fallback classification should follow structured categories"
-        );
-
-        let invalid = generation_error(
-            GenerationErrorCategory::InvalidConstraint,
-            "unsupported no extractable requires fallback",
-        );
-        assert!(
-            !should_use_sampled_fallback_for_error(&invalid),
-            "Fallback classification should not depend on message fragments"
-        );
-    }
-
-    #[test]
-    fn skip_unsupported_collects_skipped_tests() {
-        let tmp = tempfile::tempdir().unwrap();
-        let config = VerifyConfig {
-            out_dir: tmp.path().to_path_buf(),
-            cek_budget: 20000,
-            blaster_rev: DEFAULT_BLASTER_REV.to_string(),
-            existential_mode: ExistentialMode::default(),
-            target: VerificationTargetKind::default(),
-        };
-
-        // Nested composites are now handled via sampled-domain fallback, so
-        // generation succeeds without skip entries.
-        let mut unsupported = make_test("my_module", "test_list");
-        unsupported.fuzzer_output_type = FuzzerOutputType::Tuple(vec![
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
-            FuzzerOutputType::Data,
-        ]);
-        unsupported.constraint = FuzzerConstraint::Any;
-
-        let manifest = generate_lean_workspace(&[unsupported], &config, true).unwrap();
-        assert_eq!(manifest.tests.len(), 1);
-        assert!(manifest.skipped.is_empty());
-    }
-
-    #[test]
-    fn skip_unsupported_false_errors_on_unsupported() {
-        let tmp = tempfile::tempdir().unwrap();
-        let config = VerifyConfig {
-            out_dir: tmp.path().to_path_buf(),
-            cek_budget: 20000,
-            blaster_rev: DEFAULT_BLASTER_REV.to_string(),
-            existential_mode: ExistentialMode::default(),
-            target: VerificationTargetKind::default(),
-        };
-
-        let mut unsupported = make_test("my_module", "test_list");
-        unsupported.fuzzer_output_type = FuzzerOutputType::Tuple(vec![
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
-            FuzzerOutputType::Data,
-        ]);
-        unsupported.constraint = FuzzerConstraint::Any;
-
-        let result = generate_lean_workspace(&[unsupported], &config, false);
-        assert!(
-            result.is_ok(),
-            "Nested composites should generate via fallback even without skip mode"
-        );
-    }
-
-    #[test]
-    fn skip_unsupported_does_not_swallow_non_skippable_generation_error() {
-        let tmp = tempfile::tempdir().unwrap();
-        let config = VerifyConfig {
-            out_dir: tmp.path().to_path_buf(),
-            cek_budget: 20000,
-            blaster_rev: DEFAULT_BLASTER_REV.to_string(),
-            existential_mode: ExistentialMode::default(),
-            target: VerificationTargetKind::default(),
-        };
-
-        // Semantically invalid (min > max) should be treated as generation error,
-        // not as a skippable unsupported-shape case.
-        let bad = make_test_with_type(
-            "my_module",
-            "test_bad_bounds",
-            FuzzerOutputType::Int,
-            FuzzerConstraint::IntRange {
-                min: "10".to_string(),
-                max: "0".to_string(),
-            },
-        );
-
-        let result = generate_lean_workspace(&[bad], &config, true);
-        assert!(result.is_err(), "Non-skippable errors should still fail");
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("non-skippable error"),
-            "Error should indicate non-skippable generation failure"
-        );
-    }
-
-    #[test]
-    fn skip_unsupported_mixed_generates_supported_and_skips_rest() {
-        let tmp = tempfile::tempdir().unwrap();
-        let config = VerifyConfig {
-            out_dir: tmp.path().to_path_buf(),
-            cek_budget: 20000,
-            blaster_rev: DEFAULT_BLASTER_REV.to_string(),
-            existential_mode: ExistentialMode::default(),
-            target: VerificationTargetKind::default(),
-        };
-
-        let good = make_test("my_module", "test_int");
-        let mut bad = make_test("my_module", "test_list");
-        bad.fuzzer_output_type = FuzzerOutputType::Tuple(vec![
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
-            FuzzerOutputType::Data,
-        ]);
-        bad.constraint = FuzzerConstraint::Any;
-
-        let manifest = generate_lean_workspace(&[good, bad], &config, true).unwrap();
-        assert_eq!(manifest.tests.len(), 2, "Both tests should generate");
-        assert!(manifest.skipped.is_empty(), "No tests should be skipped");
-    }
-
-    // --- Step 3.1 tests: String and Pair ---
-
-    #[test]
-    fn string_without_domain_predicate_uses_sampled_domain_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_string",
-            FuzzerOutputType::String,
-            FuzzerConstraint::Any,
-        );
-        let id = test_id("my_module", "test_string");
-        let lean_name = sanitize_lean_name("test_string");
-        let lean_module = "AikenVerify.Proofs.My_module.test_string";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(proof.contains("∀ (seed : Data),"));
-        assert!(proof.contains("match sampleFuzzerValue"));
-    }
-
-    #[test]
-    fn pair_data_data_without_predicates_uses_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_pair_dd",
-            FuzzerOutputType::Pair(
-                Box::new(FuzzerOutputType::Data),
-                Box::new(FuzzerOutputType::Data),
-            ),
-            FuzzerConstraint::Any,
-        );
-        let id = test_id("my_module", "test_pair_dd");
-        let lean_name = sanitize_lean_name("test_pair_dd");
-        let lean_module = "AikenVerify.Proofs.My_module.test_pair_dd";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(proof.contains("match sampleFuzzerValue"));
-    }
-
-    #[test]
-    fn pair_int_data_generates_theorem_with_bounds() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_pair_id",
-            FuzzerOutputType::Pair(
-                Box::new(FuzzerOutputType::Int),
-                Box::new(FuzzerOutputType::Data),
-            ),
-            FuzzerConstraint::Tuple(vec![
-                FuzzerConstraint::IntRange {
-                    min: "-10".to_string(),
-                    max: "10".to_string(),
-                },
-                FuzzerConstraint::Any,
-            ]),
-        );
-        let id = test_id("my_module", "test_pair_id");
-        let lean_name = sanitize_lean_name("test_pair_id");
-        let lean_module = "AikenVerify.Proofs.My_module.test_pair_id";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∀ (a : Integer) (b : Data),"),
-            "Pair(Int,Data) should quantify over Integer and Data, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("(-10 <= a && a <= 10)"),
-            "Should have bounds for Int element, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("Data.List [Data.I a, b]"),
-            "Should encode pair with Int and Data, got:\n{proof}"
-        );
-    }
-
-    // --- Step 3.2 tests: Generic tuple arities ---
-
-    #[test]
-    fn tuple_arity_4_generates_theorem() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_quad",
-            FuzzerOutputType::Tuple(vec![
-                FuzzerOutputType::Data,
-                FuzzerOutputType::Int,
-                FuzzerOutputType::Bool,
-                FuzzerOutputType::ByteArray,
-            ]),
-            FuzzerConstraint::Tuple(vec![
-                FuzzerConstraint::Any,
-                FuzzerConstraint::IntRange {
-                    min: "0".to_string(),
-                    max: "99".to_string(),
-                },
-                FuzzerConstraint::Any,
-                FuzzerConstraint::Any,
-            ]),
-        );
-        let id = test_id("my_module", "test_quad");
-        let lean_name = sanitize_lean_name("test_quad");
-        let lean_module = "AikenVerify.Proofs.My_module.test_quad";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∀ (a : Data) (b : Integer) (c : Bool) (d : ByteString),"),
-            "4-tuple should quantify over four vars, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("(0 <= b && b <= 99)"),
-            "Should have bounds for Int element b, got:\n{proof}"
-        );
-        assert!(
-            proof.contains(
-                "Data.List [a, Data.I b, (Data.Constr (if c then 1 else 0) []), Data.B d]"
-            ),
-            "Should inline all element encoders, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn tuple_arity_5_all_data_without_predicates_uses_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_quint",
-            FuzzerOutputType::Tuple(vec![
-                FuzzerOutputType::Data,
-                FuzzerOutputType::Data,
-                FuzzerOutputType::Data,
-                FuzzerOutputType::Data,
-                FuzzerOutputType::Data,
-            ]),
-            FuzzerConstraint::Any,
-        );
-        let id = test_id("my_module", "test_quint");
-        let lean_name = sanitize_lean_name("test_quint");
-        let lean_module = "AikenVerify.Proofs.My_module.test_quint";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(proof.contains("match sampleFuzzerValue"));
-    }
-
-    #[test]
-    fn tuple_high_arity_without_predicates_uses_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_arity_20",
-            FuzzerOutputType::Tuple(vec![FuzzerOutputType::Data; 20]),
-            FuzzerConstraint::Any,
-        );
-        let id = test_id("my_module", "test_arity_20");
-        let lean_name = sanitize_lean_name("test_arity_20");
-        let lean_module = "AikenVerify.Proofs.My_module.test_arity_20";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(proof.contains("match sampleFuzzerValue"));
-    }
-
-    // --- Step 3.3 tests: List with bounds ---
-
-    #[test]
-    fn list_with_bounds_generates_theorem() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_list_bounded",
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
-            FuzzerConstraint::List {
-                elem: Box::new(FuzzerConstraint::IntRange {
-                    min: "0".to_string(),
-                    max: "10".to_string(),
-                }),
-                min_len: Some(0),
-                max_len: Some(10),
-            },
-        );
-        let id = test_id("my_module", "test_list_bounded");
-        let lean_name = sanitize_lean_name("test_list_bounded");
-        let lean_module = "AikenVerify.Proofs.My_module.test_list_bounded";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∀ (xs : List Integer),"),
-            "List<Int> should quantify over List Integer, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("(0 <= xs.length && xs.length <= 10)"),
-            "Should have length bounds, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("xs.all (fun x_i => 0 <= x_i && x_i <= 10)"),
-            "Should use List.all for element bounds, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("∀ x_i ∈ xs"),
-            "Should avoid List.Mem-style quantification in generated bounds, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("Data.I x_i"),
-            "Should encode elements as Data.I, got:\n{proof}"
-        );
-        assert!(proof.contains("xs.map"));
-    }
-
-    #[test]
-    fn list_data_with_bounds_generates_theorem() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_list_data",
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Data)),
-            FuzzerConstraint::List {
-                elem: Box::new(FuzzerConstraint::Any),
-                min_len: Some(1),
-                max_len: Some(5),
-            },
-        );
-        let id = test_id("my_module", "test_list_data");
-        let lean_name = sanitize_lean_name("test_list_data");
-        let lean_module = "AikenVerify.Proofs.My_module.test_list_data";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∀ (xs : List Data),"),
-            "List<Data> should quantify over List Data, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("(1 <= xs.length && xs.length <= 5)"),
-            "Should have length bounds, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn list_with_inconsistent_length_bounds_errors() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_list_bad_len_bounds",
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
-            FuzzerConstraint::List {
-                elem: Box::new(FuzzerConstraint::IntRange {
-                    min: "0".to_string(),
-                    max: "10".to_string(),
-                }),
-                min_len: Some(5),
-                max_len: Some(2),
-            },
-        );
-        let id = test_id("my_module", "test_list_bad_len_bounds");
-        let lean_name = sanitize_lean_name("test_list_bad_len_bounds");
-        let lean_module = "AikenVerify.Proofs.My_module.test_list_bad_len_bounds";
-
-        let err = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap_err()
-        .to_string();
-
-        assert!(
-            err.contains("inconsistent list-length bounds"),
-            "Should report inconsistent list bounds, got:\n{err}"
-        );
-    }
-
-    #[test]
-    fn list_bounds_can_be_extracted_through_and_constraint() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_list_and",
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Data)),
-            FuzzerConstraint::And(vec![
-                FuzzerConstraint::Any,
-                FuzzerConstraint::List {
-                    elem: Box::new(FuzzerConstraint::Any),
-                    min_len: Some(1),
-                    max_len: Some(5),
-                },
-            ]),
-        );
-        let id = test_id("my_module", "test_list_and");
-        let lean_name = sanitize_lean_name("test_list_and");
-        let lean_module = "AikenVerify.Proofs.My_module.test_list_and";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("(1 <= xs.length && xs.length <= 5)"),
-            "Should extract list bounds through And constraint, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn list_missing_max_len_generates_one_sided_length_precondition() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_list_nomax",
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
-            FuzzerConstraint::List {
-                elem: Box::new(FuzzerConstraint::IntRange {
-                    min: "0".to_string(),
-                    max: "10".to_string(),
-                }),
-                min_len: Some(0),
-                max_len: None,
-            },
-        );
-        let id = test_id("my_module", "test_list_nomax");
-        let lean_name = sanitize_lean_name("test_list_nomax");
-        let lean_module = "AikenVerify.Proofs.My_module.test_list_nomax";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-        assert!(
-            proof.contains("(0 <= xs.length)"),
-            "Should emit lower-bound-only length precondition, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("xs.length <= "),
-            "Should not emit upper length bound when max_len is missing, got:\n{proof}"
-        );
-    }
-
-    // --- Step 3.4 tests: ADT fallback via Data encoding ---
-
-    #[test]
-    fn unsupported_type_uses_sampled_domain_fallback() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_adt",
-            FuzzerOutputType::Unsupported("MyCustomType".to_string()),
-            FuzzerConstraint::Any,
-        );
-        let id = test_id("my_module", "test_adt");
-        let lean_name = sanitize_lean_name("test_adt");
-        let lean_module = "AikenVerify.Proofs.My_module.test_adt";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(proof.contains("∀ (seed : Data),"));
-        assert!(proof.contains("match sampleFuzzerValue"));
-    }
-
-    #[test]
-    fn unsupported_type_in_tuple_falls_back_to_data() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_tuple_adt",
-            FuzzerOutputType::Tuple(vec![
-                FuzzerOutputType::Int,
-                FuzzerOutputType::Unsupported("MyCustomType".to_string()),
-            ]),
-            FuzzerConstraint::Tuple(vec![
-                FuzzerConstraint::IntRange {
-                    min: "0".to_string(),
-                    max: "50".to_string(),
-                },
-                FuzzerConstraint::Any,
-            ]),
-        );
-        let id = test_id("my_module", "test_tuple_adt");
-        let lean_name = sanitize_lean_name("test_tuple_adt");
-        let lean_module = "AikenVerify.Proofs.My_module.test_tuple_adt";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∀ (a : Integer) (b : Data),"),
-            "Tuple(Int, ADT) should map ADT to Data, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("(0 <= a && a <= 50)"),
-            "Should have Int bounds, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("Data.List [Data.I a, b]"),
-            "Should encode ADT element as plain Data var, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn tuple_int_data_with_shared_int_range_constrains_only_int_positions() {
-        let test = make_test_with_type(
-            "my_module",
-            "test_tuple_shared_range",
-            FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Data]),
-            FuzzerConstraint::IntRange {
-                min: "0".to_string(),
-                max: "50".to_string(),
-            },
-        );
-        let id = test_id("my_module", "test_tuple_shared_range");
-        let lean_name = sanitize_lean_name("test_tuple_shared_range");
-        let lean_module = "AikenVerify.Proofs.My_module.test_tuple_shared_range";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("∀ (a : Integer) (b : Data),"),
-            "Tuple(Int, Data) should quantify over Integer and Data, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("(0 <= a && a <= 50)"),
-            "Shared IntRange should constrain Int slot, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("0 <= b"),
-            "Shared IntRange must not constrain non-Int tuple slots, got:\n{proof}"
-        );
-    }
-
-    // --- requires_explicit_bounds extended tests ---
-
-    #[test]
-    fn requires_explicit_bounds_list_needs_extractable_domain() {
-        assert!(requires_explicit_bounds(
-            &FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
-            &FuzzerConstraint::Any,
-        ));
-        assert!(!requires_explicit_bounds(
-            &FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
-            &FuzzerConstraint::List {
-                elem: Box::new(FuzzerConstraint::Any),
-                min_len: Some(0),
-                max_len: Some(10),
-            },
-        ));
-    }
-
-    #[test]
-    fn requires_explicit_bounds_pair_with_int() {
-        // Pair(Int, Data) with Any constraint => needs bounds
-        assert!(requires_explicit_bounds(
-            &FuzzerOutputType::Pair(
-                Box::new(FuzzerOutputType::Int),
-                Box::new(FuzzerOutputType::Data),
-            ),
-            &FuzzerConstraint::Any,
-        ));
-        // Pair(Data, Data) never needs bounds
-        assert!(!requires_explicit_bounds(
-            &FuzzerOutputType::Pair(
-                Box::new(FuzzerOutputType::Data),
-                Box::new(FuzzerOutputType::Data),
-            ),
-            &FuzzerConstraint::Any,
-        ));
-    }
-
-    #[test]
-    fn requires_explicit_bounds_generic_tuple_with_int() {
-        // Tuple(Int, Data, Bool) with Int needs bounds
-        assert!(requires_explicit_bounds(
-            &FuzzerOutputType::Tuple(vec![
-                FuzzerOutputType::Int,
-                FuzzerOutputType::Data,
-                FuzzerOutputType::Bool,
-            ]),
-            &FuzzerConstraint::Any,
-        ));
-        // Tuple(Data, Data, Bool) never needs bounds
-        assert!(!requires_explicit_bounds(
-            &FuzzerOutputType::Tuple(vec![
-                FuzzerOutputType::Data,
-                FuzzerOutputType::Data,
-                FuzzerOutputType::Bool,
-            ]),
-            &FuzzerConstraint::Any,
-        ));
-    }
-
-    #[test]
-    fn failure_category_serializes_to_json() {
-        let result = TheoremResult {
-            test_name: "mod.test".to_string(),
-            theorem_name: "test".to_string(),
-            status: ProofStatus::Failed {
-                category: FailureCategory::Counterexample,
-                reason: "x = 42".to_string(),
-            },
-        };
-        let json = serde_json::to_string(&result).unwrap();
-        assert!(
-            json.contains("\"category\":\"Counterexample\""),
-            "JSON should include category: {json}"
-        );
-        assert!(
-            json.contains("\"reason\":\"x = 42\""),
-            "JSON should include reason: {json}"
-        );
-    }
-
-    // --- ArtifactRetention tests ---
-
-    #[test]
-    fn artifact_retention_parse_roundtrip() {
-        for s in &["on-failure", "on-success", "always", "never"] {
-            let parsed: ArtifactRetention = s.parse().unwrap();
-            assert_eq!(parsed.to_string(), *s);
-        }
-    }
-
-    #[test]
-    fn artifact_retention_parse_rejects_unknown() {
-        assert!("bogus".parse::<ArtifactRetention>().is_err());
-    }
-
-    #[test]
-    fn artifact_retention_default_is_on_failure() {
-        assert_eq!(ArtifactRetention::default(), ArtifactRetention::OnFailure);
-    }
-
-    #[test]
-    fn should_retain_on_failure_keeps_on_fail() {
-        assert!(should_retain_artifacts(ArtifactRetention::OnFailure, false));
-        assert!(!should_retain_artifacts(ArtifactRetention::OnFailure, true));
-    }
-
-    #[test]
-    fn should_retain_on_success_keeps_on_pass() {
-        assert!(!should_retain_artifacts(
-            ArtifactRetention::OnSuccess,
-            false
-        ));
-        assert!(should_retain_artifacts(ArtifactRetention::OnSuccess, true));
-    }
-
-    #[test]
-    fn should_retain_always_keeps_everything() {
-        assert!(should_retain_artifacts(ArtifactRetention::Always, false));
-        assert!(should_retain_artifacts(ArtifactRetention::Always, true));
-    }
-
-    #[test]
-    fn should_retain_never_keeps_nothing() {
-        assert!(!should_retain_artifacts(ArtifactRetention::Never, false));
-        assert!(!should_retain_artifacts(ArtifactRetention::Never, true));
-    }
-
-    // --- clean_artifacts tests ---
-
-    #[test]
-    fn clean_artifacts_removes_existing_dir() {
-        let dir = tempfile::tempdir().unwrap();
-        let out = dir.path().join("verify_workspace");
-        fs::create_dir_all(&out).unwrap();
-        fs::write(out.join("test.lean"), "-- test").unwrap();
-
-        let removed = clean_artifacts(&out).unwrap();
-        assert_eq!(removed.len(), 1);
-        assert!(!out.exists());
-    }
-
-    #[test]
-    fn clean_artifacts_returns_empty_for_missing_dir() {
-        let dir = tempfile::tempdir().unwrap();
-        let out = dir.path().join("nonexistent");
-        let removed = clean_artifacts(&out).unwrap();
-        assert!(removed.is_empty());
-    }
-
-    #[test]
-    fn clear_generated_workspace_removes_generated_outputs_and_preserves_cache() {
-        let dir = tempfile::tempdir().unwrap();
-        let out = dir.path();
-
-        fs::create_dir_all(out.join("AikenVerify/Proofs/Stale")).unwrap();
-        fs::write(out.join("AikenVerify/Proofs/Stale/old.lean"), "-- stale").unwrap();
-        fs::create_dir_all(out.join("flat")).unwrap();
-        fs::write(out.join("flat/stale.flat"), "stale").unwrap();
-        fs::write(
-            out.join("AikenVerify.lean"),
-            "import AikenVerify.Proofs.Stale.old",
-        )
-        .unwrap();
-        fs::write(out.join("manifest.json"), "{}").unwrap();
-        fs::create_dir_all(out.join("logs")).unwrap();
-        fs::write(out.join("logs/stale.log"), "stale").unwrap();
-        fs::create_dir_all(out.join(".lake/build/lib/AikenVerify/Stale")).unwrap();
-        fs::write(
-            out.join(".lake/build/lib/AikenVerify/Stale/stale.olean"),
-            "stale",
-        )
-        .unwrap();
-
-        fs::create_dir_all(out.join("PlutusCore")).unwrap();
-        fs::write(out.join("PlutusCore/lakefile.lean"), "-- keep").unwrap();
-        fs::create_dir_all(out.join(".lake/packages/Blaster")).unwrap();
-        fs::write(out.join(".lake/packages/Blaster/cache.txt"), "keep").unwrap();
-        fs::create_dir_all(out.join(".lake/build/lib/PlutusCore")).unwrap();
-        fs::write(out.join(".lake/build/lib/PlutusCore/cache.olean"), "keep").unwrap();
-
-        clear_generated_workspace(out).unwrap();
-
-        assert!(!out.join("AikenVerify").exists());
-        assert!(!out.join("AikenVerify.lean").exists());
-        assert!(!out.join("flat").exists());
-        assert!(!out.join("manifest.json").exists());
-        assert!(!out.join("logs").exists());
-        assert!(!out.join(".lake/build/lib/AikenVerify").exists());
-
-        assert!(out.join("PlutusCore/lakefile.lean").exists());
-        assert!(out.join(".lake/packages/Blaster/cache.txt").exists());
-        assert!(out.join(".lake/build/lib/PlutusCore/cache.olean").exists());
-    }
-
-    // --- capabilities tests ---
-
-    #[test]
-    fn capabilities_json_roundtrip() {
-        let caps = capabilities();
-        let json = serde_json::to_string_pretty(&caps).unwrap();
-        // Verify it contains expected top-level fields
-        assert!(json.contains("supported_test_kinds"));
-        assert!(json.contains("unsupported_test_kinds"));
-        assert!(json.contains("target_modes"));
-        assert!(json.contains("supported_fuzzer_types"));
-        assert!(json.contains("unsupported_fuzzer_types"));
-        assert!(json.contains("existential_modes"));
-        assert!(json.contains("max_test_arity"));
-    }
-
-    #[test]
-    fn capabilities_supported_types_include_all_working_types() {
-        let caps = capabilities();
-        assert!(caps.supported_fuzzer_types.contains(&"Int".to_string()));
-        assert!(caps.supported_fuzzer_types.contains(&"Bool".to_string()));
-        assert!(
-            caps.supported_fuzzer_types
-                .contains(&"ByteArray".to_string())
-        );
-        assert!(caps.supported_fuzzer_types.contains(&"String".to_string()));
-        assert!(caps.supported_fuzzer_types.contains(&"Data".to_string()));
-    }
-
-    #[test]
-    fn capabilities_unsupported_kinds_include_unit_and_benchmark() {
-        let caps = capabilities();
-        let kinds: Vec<&str> = caps
-            .unsupported_test_kinds
-            .iter()
-            .map(|n| n.kind.as_str())
-            .collect();
-        assert!(kinds.contains(&"unit"));
-        assert!(kinds.contains(&"benchmark"));
-    }
-
-    #[test]
-    fn capabilities_existential_modes_include_witness_and_proof() {
-        let caps = capabilities();
-        assert!(caps.existential_modes.contains(&"witness".to_string()));
-        assert!(caps.existential_modes.contains(&"proof".to_string()));
-    }
-
-    #[test]
-    fn capabilities_max_arity_is_one() {
-        assert_eq!(capabilities().max_test_arity, 1);
-    }
-
-    // --- Step 11.2: Compatibility fixture suite ---
-    //
-    // These tests validate the full pipeline (export -> workspace gen -> proof file)
-    // for every supported type, expected failure cases, and skip scenarios.
-    // They serve as the e2e compatibility regression suite.
-
-    #[test]
-    fn compat_all_supported_scalar_types_generate_workspace() {
-        let types_and_constraints = vec![
-            (
-                FuzzerOutputType::Int,
-                FuzzerConstraint::IntRange {
-                    min: "0".into(),
-                    max: "10".into(),
-                },
-            ),
-            (FuzzerOutputType::Bool, FuzzerConstraint::Any),
-            (FuzzerOutputType::ByteArray, FuzzerConstraint::Any),
-            (FuzzerOutputType::String, FuzzerConstraint::Any),
-            (FuzzerOutputType::Data, FuzzerConstraint::Any),
-        ];
-
-        for (i, (output_type, constraint)) in types_and_constraints.iter().enumerate() {
-            let mut test = make_test("compat", &format!("scalar_{i}"));
-            test.fuzzer_output_type = output_type.clone();
-            test.constraint = constraint.clone();
-
-            let dir = tempfile::tempdir().unwrap();
-            let config = VerifyConfig {
-                out_dir: dir.path().to_path_buf(),
-                cek_budget: 20000,
-                blaster_rev: "main".to_string(),
-                existential_mode: ExistentialMode::Witness,
-                target: VerificationTargetKind::PropertyWrapper,
-            };
-
-            let manifest = generate_lean_workspace(&[test], &config, false);
-            assert!(
-                manifest.is_ok(),
-                "Scalar type {:?} should generate workspace",
-                output_type
-            );
-            assert_eq!(manifest.unwrap().tests.len(), 1);
-        }
-    }
-
-    #[test]
-    fn compat_tuple_and_list_types_generate_workspace() {
-        let cases: Vec<(FuzzerOutputType, FuzzerConstraint, &str)> = vec![
-            (
-                FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Data]),
-                FuzzerConstraint::Tuple(vec![
-                    FuzzerConstraint::IntRange {
-                        min: "0".into(),
-                        max: "5".into(),
-                    },
-                    FuzzerConstraint::Any,
-                ]),
-                "tuple_int_data",
-            ),
-            (
-                FuzzerOutputType::List(Box::new(FuzzerOutputType::Data)),
-                FuzzerConstraint::List {
-                    elem: Box::new(FuzzerConstraint::Any),
-                    min_len: Some(0),
-                    max_len: Some(3),
-                },
-                "list_data",
-            ),
-        ];
-
-        for (output_type, constraint, label) in &cases {
-            let mut test = make_test("compat", label);
-            test.fuzzer_output_type = output_type.clone();
-            test.constraint = constraint.clone();
-
-            let dir = tempfile::tempdir().unwrap();
-            let config = VerifyConfig {
-                out_dir: dir.path().to_path_buf(),
-                cek_budget: 20000,
-                blaster_rev: "main".to_string(),
-                existential_mode: ExistentialMode::Witness,
-                target: VerificationTargetKind::PropertyWrapper,
-            };
-
-            let manifest = generate_lean_workspace(&[test], &config, false);
-            assert!(
-                manifest.is_ok(),
-                "Composite type {label} should generate workspace"
-            );
-            assert_eq!(manifest.unwrap().tests.len(), 1);
-        }
-    }
-
-    #[test]
-    fn compat_unsupported_type_fails_without_skip() {
-        let mut test = make_test("compat", "nested");
-        test.fuzzer_output_type = FuzzerOutputType::Tuple(vec![
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
-            FuzzerOutputType::Data,
-        ]);
-        test.constraint = FuzzerConstraint::Any;
-
-        let dir = tempfile::tempdir().unwrap();
-        let config = VerifyConfig {
-            out_dir: dir.path().to_path_buf(),
-            cek_budget: 20000,
-            blaster_rev: "main".to_string(),
-            existential_mode: ExistentialMode::Witness,
-            target: VerificationTargetKind::PropertyWrapper,
-        };
-
-        let result = generate_lean_workspace(&[test], &config, false);
-        assert!(
-            result.is_ok(),
-            "Nested composites should now generate via sampled-domain fallback"
-        );
-    }
-
-    #[test]
-    fn compat_unsupported_type_skipped_with_flag() {
-        let mut test = make_test("compat", "nested");
-        test.fuzzer_output_type = FuzzerOutputType::Tuple(vec![
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Int)),
-            FuzzerOutputType::Data,
-        ]);
-        test.constraint = FuzzerConstraint::Any;
-
-        let dir = tempfile::tempdir().unwrap();
-        let config = VerifyConfig {
-            out_dir: dir.path().to_path_buf(),
-            cek_budget: 20000,
-            blaster_rev: "main".to_string(),
-            existential_mode: ExistentialMode::Witness,
-            target: VerificationTargetKind::PropertyWrapper,
-        };
-
-        let manifest = generate_lean_workspace(&[test], &config, true).unwrap();
-        assert_eq!(manifest.tests.len(), 1);
-        assert!(manifest.skipped.is_empty());
-    }
-
-    #[test]
-    fn compat_fail_once_witness_mode_generates_existential() {
-        let mut test = make_test_with_failure(
-            "compat",
-            "fail_once_test",
-            OnTestFailure::SucceedImmediately,
-        );
-        test.fuzzer_output_type = FuzzerOutputType::Data;
-        test.constraint = FuzzerConstraint::Any;
-
-        let dir = tempfile::tempdir().unwrap();
-        let config = VerifyConfig {
-            out_dir: dir.path().to_path_buf(),
-            cek_budget: 20000,
-            blaster_rev: "main".to_string(),
-            existential_mode: ExistentialMode::Witness,
-            target: VerificationTargetKind::PropertyWrapper,
-        };
-
-        let manifest = generate_lean_workspace(&[test], &config, false).unwrap();
-        assert_eq!(manifest.tests.len(), 1);
-
-        // Read the generated proof file to verify existential theorem
-        let proof_path = dir.path().join(&manifest.tests[0].lean_file);
-        let content = fs::read_to_string(proof_path).unwrap();
-        assert!(
-            content.contains("∃"),
-            "Existential theorem should use existential quantifier"
-        );
-    }
-
-    #[test]
-    fn compat_void_return_mode_generates_halt_theorem() {
-        let mut test = make_test("compat", "void_test");
-        test.return_mode = TestReturnMode::Void;
-        test.fuzzer_output_type = FuzzerOutputType::Data;
-        test.constraint = FuzzerConstraint::Any;
-
-        let dir = tempfile::tempdir().unwrap();
-        let config = VerifyConfig {
-            out_dir: dir.path().to_path_buf(),
-            cek_budget: 20000,
-            blaster_rev: "main".to_string(),
-            existential_mode: ExistentialMode::Witness,
-            target: VerificationTargetKind::PropertyWrapper,
-        };
-
-        let manifest = generate_lean_workspace(&[test], &config, false).unwrap();
-        assert_eq!(manifest.tests.len(), 1);
-
-        let proof_path = dir.path().join(&manifest.tests[0].lean_file);
-        let content = fs::read_to_string(proof_path).unwrap();
-        assert!(
-            content.contains("proveTestsHalt"),
-            "Void-returning test should use proveTestsHalt"
-        );
-    }
-
-    // --- Step 11.4: Intentional limitations register ---
-    //
-    // This test encodes the intentional limitations contract. Each entry is:
-    //   (limitation, status, rationale, impact, mitigation, reconsideration_trigger)
-    //
-    // If the capabilities() output changes, this test must be updated to reflect
-    // the new contract. This prevents undocumented behavior changes.
-
-    #[test]
-    fn intentional_limitations_register() {
-        let caps = capabilities();
-
-        // 1. Unit tests are intentionally unsupported.
-        let unit = caps
-            .unsupported_test_kinds
-            .iter()
-            .find(|n| n.kind == "unit")
-            .unwrap();
-        assert_eq!(unit.status, "intentional");
-
-        // 2. Benchmarks are intentionally unsupported.
-        let bench = caps
-            .unsupported_test_kinds
-            .iter()
-            .find(|n| n.kind == "benchmark")
-            .unwrap();
-        assert_eq!(bench.status, "intentional");
-
-        // 3. Max test arity is 1 (intentional: multi-arg tests must be
-        //    encoded as tuple/record). Reconsideration: when compiler supports
-        //    automatic multi-arg decomposition to tuple fuzzers.
-        assert_eq!(caps.max_test_arity, 1);
-
-        // 4. Nested composite types are supported via sampled-domain fallback.
-        assert!(
-            caps.supported_fuzzer_types
-                .iter()
-                .any(|t| t.contains("sampled-domain fallback"))
-        );
-
-        // 5. Blaster translation gaps are documented explicitly so failures can
-        //    be surfaced with actionable context (e.g. List.Mem translation).
-        assert!(
-            caps.unsupported_fuzzer_types
-                .iter()
-                .any(|t| t.contains("Blaster translation gaps"))
-        );
-
-        // 6. Supported envelope includes all three target modes.
-        assert_eq!(caps.target_modes.len(), 3);
-
-        // 7. Bytearray length-domain translation is currently sampled-domain
-        //    fallback only.
-        assert!(
-            caps.unsupported_fuzzer_types
-                .iter()
-                .any(|t| t.contains("bytearray_between"))
-        );
-
-        // 8. scenario.report_coverage extraction is currently sampled-domain
-        //    fallback only.
-        assert!(
-            caps.unsupported_fuzzer_types
-                .iter()
-                .any(|t| t.contains("report_coverage"))
-        );
-
-        // 9. Partial-application/higher-order resolver support is explicitly
-        //    tracked as a known limitation.
-        assert!(
-            caps.unsupported_fuzzer_types
-                .iter()
-                .any(|t| t.contains("partial-application"))
-        );
-    }
-
-    #[test]
-    fn requires_explicit_bounds_tuple_with_bare_int_range() {
-        // A bare IntRange constraint should satisfy tuple/pair Int-typed positions.
-        // Tuple(Int, Data) with IntRange => no explicit bounds needed
-        assert!(!requires_explicit_bounds(
-            &FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Data,]),
-            &FuzzerConstraint::IntRange {
-                min: "0".to_string(),
-                max: "100".to_string(),
-            },
-        ));
-        // Pair(Int, Int) with IntRange => no explicit bounds needed
-        assert!(!requires_explicit_bounds(
-            &FuzzerOutputType::Pair(
-                Box::new(FuzzerOutputType::Int),
-                Box::new(FuzzerOutputType::Int),
-            ),
-            &FuzzerConstraint::IntRange {
-                min: "-10".to_string(),
-                max: "10".to_string(),
-            },
-        ));
-        // Pair(Int, Bool) with Map(IntRange) still needs explicit bounds since
-        // Map constraints are input-domain only.
-        assert!(requires_explicit_bounds(
-            &FuzzerOutputType::Pair(
-                Box::new(FuzzerOutputType::Int),
-                Box::new(FuzzerOutputType::Bool),
-            ),
-            &FuzzerConstraint::Map(Box::new(FuzzerConstraint::IntRange {
-                min: "0".to_string(),
-                max: "255".to_string(),
-            })),
-        ));
-    }
-
-    #[test]
-    fn extract_int_range_from_and_intersects_bounds() {
-        let range = extract_int_range_from_constraint(&FuzzerConstraint::And(vec![
-            FuzzerConstraint::IntRange {
-                min: "0".to_string(),
-                max: "100".to_string(),
-            },
-            FuzzerConstraint::IntRange {
-                min: "20".to_string(),
-                max: "80".to_string(),
-            },
-        ]))
-        .expect("And-wrapped ranges should be extractable");
-
-        assert_eq!(range.0, "20");
-        assert_eq!(range.1, "80");
-    }
-
-    #[test]
-    fn tuple_int_proof_opens_data_namespace() {
-        // Tuple proofs always construct a `Data.List [...]` argument, so Data must
-        // be opened even when all element Lean types are non-Data.
-        let test = make_test_with_type(
-            "my_module",
-            "test_tuple_ints",
-            FuzzerOutputType::Tuple(vec![FuzzerOutputType::Int, FuzzerOutputType::Int]),
-            FuzzerConstraint::Tuple(vec![
-                FuzzerConstraint::IntRange {
-                    min: "0".to_string(),
-                    max: "10".to_string(),
-                },
-                FuzzerConstraint::IntRange {
-                    min: "20".to_string(),
-                    max: "30".to_string(),
-                },
-            ]),
-        );
-        let id = test_id("my_module", "test_tuple_ints");
-        let lean_name = sanitize_lean_name("test_tuple_ints");
-        let lean_module = "AikenVerify.Proofs.My_module.test_tuple_ints";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains("open PlutusCore.Data (Data)"),
-            "Tuple proof should open Data namespace for Data.List encoding, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("Data.List [Data.I a, Data.I b]"),
-            "Tuple proof should encode arguments through Data constructors, got:\n{proof}"
-        );
-    }
-
-    #[test]
-    fn list_bool_with_mapped_int_range_uses_sampled_domain_fallback() {
-        // Mapped IntRange over Bool output cannot be translated to direct output
-        // predicates; we should fall back to sampled-domain theorems.
-        let test = make_test_with_type(
-            "my_module",
-            "test_list_bool",
-            FuzzerOutputType::List(Box::new(FuzzerOutputType::Bool)),
-            FuzzerConstraint::List {
-                elem: Box::new(FuzzerConstraint::Map(Box::new(
-                    FuzzerConstraint::IntRange {
-                        min: "0".to_string(),
-                        max: "1".to_string(),
-                    },
-                ))),
-                min_len: Some(0),
-                max_len: Some(5),
-            },
-        );
-        let id = test_id("my_module", "test_list_bool");
-        let lean_name = sanitize_lean_name("test_list_bool");
-        let lean_module = "AikenVerify.Proofs.My_module.test_list_bool";
-
-        let proof = generate_proof_file(
-            &test,
-            &id,
-            &lean_name,
-            lean_module,
-            ExistentialMode::default(),
-            &VerificationTargetKind::default(),
-        )
-        .unwrap();
-
-        assert!(
-            proof.contains(&format!(
-                "match sampleFuzzerValue fuzzer_prog_{id} seed with"
-            )),
-            "Should use sampled-domain fallback theorem, got:\n{proof}"
-        );
-        assert!(
-            proof.contains("open PlutusCore.Data (Data)"),
-            "List proof should open Data namespace for Data.List encoding, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("0 <= x_i"),
-            "Should NOT emit numeric element bounds for Bool type, got:\n{proof}"
-        );
-        assert!(
-            !proof.contains("x_i <= 1"),
-            "Should NOT emit numeric element bounds for Bool type, got:\n{proof}"
-        );
-    }
-}
+mod tests;

@@ -328,6 +328,7 @@ pub struct Fuzzer<T> {
     pub constraint: FuzzerConstraint,
 }
 
+#[cfg(test)]
 fn extract_constraint_from_via(
     via: &TypedExpr,
     current_module: &str,
@@ -507,29 +508,21 @@ fn extract_constraint_from_expr(
                     )
                     .unwrap_or_else(|| FuzzerConstraint::Map(Box::new(inner)))
                 }
-                // and_then(fuzzer, continuation_fn): compose the input-domain and
-                // continuation-domain constraints when both are analyzable.
+                // and_then/then output-domain constraints come from the continuation fuzzer.
+                // The first argument constrains continuation input values, not final outputs,
+                // so conjoining both domains can produce invalid mixed-type constraints.
                 Some("and_then") | Some("then") if args.len() == 2 => {
-                    let left = extract_constraint_from_expr(
-                        &args[0].value,
-                        current_module,
-                        function_index,
-                        constant_index,
-                        local_values,
-                        visiting_functions,
-                    );
-                    let right = extract_constraint_from_continuation(
+                    extract_constraint_from_continuation(
                         &args[1].value,
                         current_module,
                         function_index,
                         constant_index,
                         local_values,
                         visiting_functions,
-                    );
-                    combine_constraints(vec![left, right])
+                    )
                 }
                 // both(fuzzer_a, fuzzer_b): tuple constraint from both components.
-                Some("both") if args.len() >= 2 => {
+                Some("both") if args.len() == 2 => {
                     let left = extract_constraint_from_expr(
                         &args[0].value,
                         current_module,
@@ -942,45 +935,6 @@ fn describe_expr(expr: &TypedExpr) -> String {
     }
 }
 
-fn combine_constraints(constraints: Vec<FuzzerConstraint>) -> FuzzerConstraint {
-    fn flatten_into(
-        constraint: FuzzerConstraint,
-        out: &mut Vec<FuzzerConstraint>,
-        unsupported: &mut Vec<String>,
-    ) {
-        match constraint {
-            FuzzerConstraint::Any => {}
-            FuzzerConstraint::And(parts) => {
-                for part in parts {
-                    flatten_into(part, out, unsupported);
-                }
-            }
-            FuzzerConstraint::Unsupported { reason } => unsupported.push(reason),
-            other => out.push(other),
-        }
-    }
-
-    let mut normalized = Vec::new();
-    let mut unsupported = Vec::new();
-    for constraint in constraints {
-        flatten_into(constraint, &mut normalized, &mut unsupported);
-    }
-
-    if !unsupported.is_empty() {
-        return FuzzerConstraint::Unsupported {
-            reason: unsupported.join("; "),
-        };
-    }
-
-    if normalized.is_empty() {
-        FuzzerConstraint::Any
-    } else if normalized.len() == 1 {
-        normalized.pop().expect("len checked")
-    } else {
-        FuzzerConstraint::And(normalized)
-    }
-}
-
 fn extract_constraint_from_continuation(
     continuation: &TypedExpr,
     current_module: &str,
@@ -1107,11 +1061,43 @@ fn map_int_constraint_through_mapper(
     Some(FuzzerConstraint::IntRange { min, max })
 }
 
-/// Extract an IntRange from a constraint, recursively unwrapping Map layers.
+/// Intersect two integer ranges.
+fn intersect_int_ranges(
+    left: (String, String),
+    right: (String, String),
+) -> Option<(String, String)> {
+    let left_min = parse_bigint_literal(&left.0)?;
+    let left_max = parse_bigint_literal(&left.1)?;
+    let right_min = parse_bigint_literal(&right.0)?;
+    let right_max = parse_bigint_literal(&right.1)?;
+
+    let min = left_min.max(right_min);
+    let max = left_max.min(right_max);
+    if min > max {
+        return None;
+    }
+
+    Some((min.to_string(), max.to_string()))
+}
+
+/// Extract an IntRange from a constraint, recursively unwrapping Map/And layers.
 fn extract_int_range_from_constraint(constraint: &FuzzerConstraint) -> Option<(String, String)> {
     match constraint {
         FuzzerConstraint::IntRange { min, max } => Some((min.clone(), max.clone())),
         FuzzerConstraint::Map(inner) => extract_int_range_from_constraint(inner),
+        FuzzerConstraint::And(parts) => {
+            let mut merged: Option<(String, String)> = None;
+            for part in parts {
+                let Some(next) = extract_int_range_from_constraint(part) else {
+                    continue;
+                };
+                merged = match merged {
+                    Some(acc) => Some(intersect_int_ranges(acc, next)?),
+                    None => Some(next),
+                };
+            }
+            merged
+        }
         _ => None,
     }
 }
@@ -1328,6 +1314,23 @@ fn fuzz_builtin_name(
     function_index: &FunctionIndex<'_>,
     local_values: &BTreeMap<String, TypedExpr>,
 ) -> Option<String> {
+    let mut visiting_local_aliases = BTreeSet::new();
+    fuzz_builtin_name_with_alias_guard(
+        fun,
+        current_module,
+        function_index,
+        local_values,
+        &mut visiting_local_aliases,
+    )
+}
+
+fn fuzz_builtin_name_with_alias_guard(
+    fun: &TypedExpr,
+    current_module: &str,
+    function_index: &FunctionIndex<'_>,
+    local_values: &BTreeMap<String, TypedExpr>,
+    visiting_local_aliases: &mut BTreeSet<String>,
+) -> Option<String> {
     const FUZZ_MODULE: &str = "aiken/fuzz";
 
     match fun {
@@ -1339,7 +1342,18 @@ fn fuzz_builtin_name(
             }
             ValueConstructorVariant::LocalVariable { .. } => {
                 let bound_expr = local_values.get(name)?;
-                fuzz_builtin_name(bound_expr, current_module, function_index, local_values)
+                if !visiting_local_aliases.insert(name.clone()) {
+                    return None;
+                }
+                let result = fuzz_builtin_name_with_alias_guard(
+                    bound_expr,
+                    current_module,
+                    function_index,
+                    local_values,
+                    visiting_local_aliases,
+                );
+                visiting_local_aliases.remove(name);
+                result
             }
             _ => None,
         },
@@ -1350,13 +1364,12 @@ fn fuzz_builtin_name(
             _ => None,
         },
         _ => {
-            let mut visiting_local_aliases = BTreeSet::new();
             let resolved = resolve_function_from_expr(
                 fun,
                 current_module,
                 function_index,
                 local_values,
-                &mut visiting_local_aliases,
+                visiting_local_aliases,
             )?;
             (resolved.module_name == FUZZ_MODULE).then_some(resolved.function_name)
         }
@@ -1369,6 +1382,23 @@ fn scenario_builtin_name(
     function_index: &FunctionIndex<'_>,
     local_values: &BTreeMap<String, TypedExpr>,
 ) -> Option<String> {
+    let mut visiting_local_aliases = BTreeSet::new();
+    scenario_builtin_name_with_alias_guard(
+        fun,
+        current_module,
+        function_index,
+        local_values,
+        &mut visiting_local_aliases,
+    )
+}
+
+fn scenario_builtin_name_with_alias_guard(
+    fun: &TypedExpr,
+    current_module: &str,
+    function_index: &FunctionIndex<'_>,
+    local_values: &BTreeMap<String, TypedExpr>,
+    visiting_local_aliases: &mut BTreeSet<String>,
+) -> Option<String> {
     const SCENARIO_MODULE: &str = "aiken/fuzz/scenario";
 
     match fun {
@@ -1380,7 +1410,18 @@ fn scenario_builtin_name(
             }
             ValueConstructorVariant::LocalVariable { .. } => {
                 let bound_expr = local_values.get(name)?;
-                scenario_builtin_name(bound_expr, current_module, function_index, local_values)
+                if !visiting_local_aliases.insert(name.clone()) {
+                    return None;
+                }
+                let result = scenario_builtin_name_with_alias_guard(
+                    bound_expr,
+                    current_module,
+                    function_index,
+                    local_values,
+                    visiting_local_aliases,
+                );
+                visiting_local_aliases.remove(name);
+                result
             }
             _ => None,
         },
@@ -1391,13 +1432,12 @@ fn scenario_builtin_name(
             _ => None,
         },
         _ => {
-            let mut visiting_local_aliases = BTreeSet::new();
             let resolved = resolve_function_from_expr(
                 fun,
                 current_module,
                 function_index,
                 local_values,
-                &mut visiting_local_aliases,
+                visiting_local_aliases,
             )?;
             (resolved.module_name == SCENARIO_MODULE).then_some(resolved.function_name)
         }
@@ -3569,6 +3609,50 @@ mod test {
     }
 
     #[test]
+    fn fuzz_builtin_name_returns_none_for_local_alias_cycles() {
+        let functions = empty_known_functions();
+        let function_index = index_known_functions(&functions);
+        let alias_tipo = Type::function(vec![Type::int()], Type::int());
+        let mut local_values = BTreeMap::new();
+        local_values.insert("a".to_string(), local_var("b", alias_tipo.clone()));
+        local_values.insert("b".to_string(), local_var("a", alias_tipo.clone()));
+
+        let resolved = fuzz_builtin_name(
+            &local_var("a", alias_tipo),
+            "math",
+            &function_index,
+            &local_values,
+        );
+
+        assert_eq!(
+            resolved, None,
+            "Cyclic local aliases must not recurse indefinitely"
+        );
+    }
+
+    #[test]
+    fn scenario_builtin_name_returns_none_for_local_alias_cycles() {
+        let functions = empty_known_functions();
+        let function_index = index_known_functions(&functions);
+        let alias_tipo = Type::function(vec![Type::int()], Type::int());
+        let mut local_values = BTreeMap::new();
+        local_values.insert("a".to_string(), local_var("b", alias_tipo.clone()));
+        local_values.insert("b".to_string(), local_var("a", alias_tipo.clone()));
+
+        let resolved = scenario_builtin_name(
+            &local_var("a", alias_tipo),
+            "math",
+            &function_index,
+            &local_values,
+        );
+
+        assert_eq!(
+            resolved, None,
+            "Cyclic local aliases must not recurse indefinitely"
+        );
+    }
+
+    #[test]
     fn extract_constraint_does_not_resolve_local_shadow_to_module_function() {
         let (fn_key, fn_def) = make_zero_arg_function(
             "wrapped_fuzzer",
@@ -4114,6 +4198,64 @@ mod test {
     }
 
     #[test]
+    fn extract_int_range_from_constraint_intersects_conjunctive_ranges() {
+        let range = extract_int_range_from_constraint(&FuzzerConstraint::And(vec![
+            FuzzerConstraint::IntRange {
+                min: "0".to_string(),
+                max: "100".to_string(),
+            },
+            FuzzerConstraint::IntRange {
+                min: "20".to_string(),
+                max: "80".to_string(),
+            },
+        ]))
+        .expect("And-wrapped ranges should be extractable");
+
+        assert_eq!(range, ("20".to_string(), "80".to_string()));
+    }
+
+    #[test]
+    fn map_int_constraint_through_mapper_handles_conjunctive_int_ranges() {
+        let (negate_key, negate_fn) = make_named_unary_negate_mapper_function("negate");
+        let mut functions = empty_known_functions();
+        functions.insert(&negate_key, &negate_fn);
+        let function_index = index_known_functions(&functions);
+
+        let inner = FuzzerConstraint::And(vec![
+            FuzzerConstraint::IntRange {
+                min: "0".to_string(),
+                max: "100".to_string(),
+            },
+            FuzzerConstraint::IntRange {
+                min: "20".to_string(),
+                max: "80".to_string(),
+            },
+        ]);
+        let mapper = module_fn_var(
+            "negate",
+            "math",
+            Type::function(vec![Type::int()], Type::int()),
+        );
+
+        let mapped = map_int_constraint_through_mapper(
+            &inner,
+            &mapper,
+            "math",
+            &function_index,
+            &BTreeMap::new(),
+        )
+        .expect("conjunctive int ranges should preserve mapper bounds");
+
+        assert_eq!(
+            mapped,
+            FuzzerConstraint::IntRange {
+                min: "-80".to_string(),
+                max: "-20".to_string(),
+            }
+        );
+    }
+
+    #[test]
     fn extract_constraint_zero_arg_helper_call_is_unwrapped() {
         let (helper_key, helper_fn) =
             make_zero_arg_function("helper_fuzzer", Type::int(), make_int_between_via("3", "7"));
@@ -4465,6 +4607,59 @@ mod test {
     }
 
     #[test]
+    fn extract_constraint_and_then_uses_continuation_output_domain_only() {
+        let list_int_tipo = Type::list(Type::int());
+        let continuation = TypedExpr::Fn {
+            location: Span::empty(),
+            tipo: Type::function(vec![Type::int()], list_int_tipo.clone()),
+            is_capture: false,
+            args: vec![TypedArg::new("n", Type::int())],
+            body: Box::new(TypedExpr::Call {
+                location: Span::empty(),
+                tipo: list_int_tipo.clone(),
+                fun: Box::new(fuzz_var(
+                    "list",
+                    Type::function(vec![Type::int()], list_int_tipo.clone()),
+                )),
+                args: vec![call_arg(make_int_between_via("0", "3"))],
+            }),
+            return_annotation: None,
+        };
+
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: list_int_tipo.clone(),
+            fun: Box::new(fuzz_var(
+                "and_then",
+                Type::function(
+                    vec![
+                        Type::int(),
+                        Type::function(vec![Type::int()], list_int_tipo.clone()),
+                    ],
+                    list_int_tipo,
+                ),
+            )),
+            args: vec![
+                call_arg(make_int_between_via("1", "5")),
+                call_arg(continuation),
+            ],
+        };
+
+        let functions = empty_known_functions();
+        assert_eq!(
+            extract_constraint_from_via(&via, "math", &functions),
+            FuzzerConstraint::List {
+                elem: Box::new(FuzzerConstraint::IntRange {
+                    min: "0".to_string(),
+                    max: "3".to_string(),
+                }),
+                min_len: None,
+                max_len: None,
+            }
+        );
+    }
+
+    #[test]
     fn extract_constraint_both_produces_tuple() {
         let via = TypedExpr::Call {
             location: Span::empty(),
@@ -4715,6 +4910,34 @@ mod test {
                     max: "30".to_string(),
                 },
             ])
+        );
+    }
+
+    #[test]
+    fn extract_constraint_both_with_extra_arguments_is_unsupported() {
+        let via = TypedExpr::Call {
+            location: Span::empty(),
+            tipo: Type::tuple(vec![Type::int(), Type::int(), Type::int()]),
+            fun: Box::new(fuzz_var(
+                "both",
+                Type::function(
+                    vec![Type::int(), Type::int(), Type::int()],
+                    Type::tuple(vec![Type::int(), Type::int(), Type::int()]),
+                ),
+            )),
+            args: vec![
+                call_arg(make_int_between_via("0", "10")),
+                call_arg(make_int_between_via("20", "30")),
+                call_arg(make_int_between_via("40", "50")),
+            ],
+        };
+        let functions = empty_known_functions();
+        assert!(
+            matches!(
+                extract_constraint_from_via(&via, "math", &functions),
+                FuzzerConstraint::Unsupported { .. }
+            ),
+            "both should reject unexpected arity"
         );
     }
 

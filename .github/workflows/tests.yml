@@ -82,9 +82,45 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           key: ${{ runner.os }}-cache-verify-v${{ inputs.cache-version }}
       - name: Run verify module tests
-        run: cargo test -p aiken-project -- verify::tests::
+        run: |
+          set -euo pipefail
+          test_filter='verify::tests::'
+          matched_tests="$(cargo test -p aiken-project -- "$test_filter" --list | grep -c "$test_filter" || true)"
+          if [ "$matched_tests" -eq 0 ]; then
+            echo "No tests matched $test_filter" >&2
+            exit 1
+          fi
+          cargo test -p aiken-project -- "$test_filter"
       - name: Run test_framework tests
-        run: cargo test -p aiken-lang -- test_framework::test::
+        run: |
+          set -euo pipefail
+          test_filter='test_framework::test::'
+          matched_tests="$(cargo test -p aiken-lang -- "$test_filter" --list | grep -c "$test_filter" || true)"
+          if [ "$matched_tests" -eq 0 ]; then
+            echo "No tests matched $test_filter" >&2
+            exit 1
+          fi
+          cargo test -p aiken-lang -- "$test_filter"
+      - name: Run verify CLI command tests
+        run: |
+          set -euo pipefail
+          test_filter='cmd::verify::tests::'
+          matched_tests="$(cargo test -p aiken -- "$test_filter" --list | grep -c "$test_filter" || true)"
+          if [ "$matched_tests" -eq 0 ]; then
+            echo "No tests matched $test_filter" >&2
+            exit 1
+          fi
+          cargo test -p aiken -- "$test_filter"
+      - name: Run export-tests CLI command tests
+        run: |
+          set -euo pipefail
+          test_filter='cmd::export_tests::tests::'
+          matched_tests="$(cargo test -p aiken -- "$test_filter" --list | grep -c "$test_filter" || true)"
+          if [ "$matched_tests" -eq 0 ]; then
+            echo "No tests matched $test_filter" >&2
+            exit 1
+          fi
+          cargo test -p aiken -- "$test_filter"
 
   verify_generate_only:
     runs-on: ubuntu-latest
@@ -97,6 +133,171 @@ jobs:
           key: ${{ runner.os }}-cache-verify-v${{ inputs.cache-version }}
       - name: Build aiken CLI
         run: cargo build -p aiken
+      - name: Verify end-to-end proof execution regressions
+        run: |
+          set -euo pipefail
+          fake_bin="$(mktemp -d)"
+
+          cat > "$fake_bin/lean" <<'SH'
+          #!/usr/bin/env bash
+          echo "Lean (version 4.24.0, x86_64-unknown-linux-gnu, Release)"
+          SH
+
+          cat > "$fake_bin/z3" <<'SH'
+          #!/usr/bin/env bash
+          echo "Z3 version 4.13.4 - 64 bit"
+          SH
+
+          cat > "$fake_bin/lake" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          if [[ "${1:-}" == "--version" ]]; then
+            echo "Lake version 5.0.0"
+            exit 0
+          fi
+
+          cmd="${1:-}"
+          case "$cmd" in
+            fetch|update)
+              exit 0
+              ;;
+            build)
+              shift
+              if [[ "${1:-}" == "-j" ]]; then
+                shift 2
+              fi
+              module="${1:-}"
+              if [[ -z "$module" ]]; then
+                echo "missing build module target" >&2
+                exit 1
+              fi
+              echo "built $module"
+              exit 0
+              ;;
+            *)
+              echo "unsupported lake invocation: $*" >&2
+              exit 1
+              ;;
+          esac
+          SH
+
+          chmod +x "$fake_bin/lean" "$fake_bin/z3" "$fake_bin/lake"
+          export PATH="$fake_bin:$PATH"
+
+          fixture_root="$(mktemp -d)"
+          project="$fixture_root/verify_fixture"
+          mkdir -p "$project/validators"
+
+          cat > "$project/aiken.toml" <<'TOML'
+          name = "test/verify_fixture"
+          version = "0.0.0"
+          plutusVersion = "v3"
+          description = "verify workflow regression fixture"
+
+          [config.staging]
+          marker = 42
+          TOML
+
+          cat > "$project/validators/fixture.ak" <<'AK'
+          fn byte_fuzzer() -> Fuzzer<ByteArray> {
+            todo
+          }
+
+          validator foo {
+            mint(_redeemer: Data, policy_id: ByteArray, _tx: Data) {
+              expect config.marker > 0
+              expect policy_id == "foo"
+              True
+            }
+
+            else(_ctx) {
+              fail
+            }
+          }
+
+          test foo_mint_roundtrip(policy_id via byte_fuzzer()) {
+            foo.mint(Void, policy_id, Void)
+          }
+          AK
+
+          mkdir -p "$project/build/verify/PlutusCore"
+          cat > "$project/build/verify/PlutusCore/lakefile.lean" <<'LEAN'
+          import Lake
+          open Lake DSL
+
+          package PlutusCore where
+          LEAN
+
+          outside_cwd="$fixture_root/outside"
+          mkdir -p "$outside_cwd"
+          for target in validator equivalence; do
+            json_out="$fixture_root/verify-run-$target.json"
+            (
+              cd "$outside_cwd"
+              "$GITHUB_WORKSPACE/target/debug/aiken" verify run \
+                "$project" \
+                --env staging \
+                --target "$target" \
+                --out-dir build/verify \
+                --artifacts always \
+                --json \
+                > "$json_out"
+            )
+
+            python - "$json_out" "$target" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          report = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          target = sys.argv[2]
+          assert report["total"] >= 1, f"{target}: {report}"
+          assert report["failed"] == 0, f"{target}: {report}"
+          assert report["timed_out"] == 0, f"{target}: {report}"
+          assert report["unknown"] == 0, f"{target}: {report}"
+          PY
+
+            test -d "$project/build/verify/logs"
+            test -f "$project/build/verify/logs/lake-build.log"
+            if [ -d "$outside_cwd/build/verify" ]; then
+              echo "verify artifacts were written relative to cwd instead of project root" >&2
+              exit 1
+            fi
+          done
+
+          no_props="$fixture_root/no_property_fixture"
+          mkdir -p "$no_props/validators"
+          cat > "$no_props/aiken.toml" <<'TOML'
+          name = "test/verify_no_property_fixture"
+          version = "0.0.0"
+          plutusVersion = "v3"
+          description = "verify no-property-tests JSON fixture"
+          TOML
+
+          cat > "$no_props/validators/fixture.ak" <<'AK'
+          test unit_smoke() {
+            True
+          }
+          AK
+
+          no_props_json="$fixture_root/verify-run-no-property.json"
+          (
+            cd "$outside_cwd"
+            "$GITHUB_WORKSPACE/target/debug/aiken" verify run \
+              "$no_props" \
+              --json \
+              > "$no_props_json"
+          )
+
+          python - "$no_props_json" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          report = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert report["status"] == "no_property_tests", report
+          assert report["message"] == "No property tests found.", report
+          PY
       - name: Verify --generate-only pipeline does not regress
         run: |
           set -euo pipefail
@@ -105,6 +306,23 @@ jobs:
             ./target/debug/aiken check "$project"
             ./target/debug/aiken verify run "$project" --generate-only --json
           done
+      - name: Verify target mode generation regressions
+        run: |
+          cargo test -p aiken-project -- verify::tests::export_tests_output_generates_validator_and_equivalence_workspaces
+          cargo test -p aiken-project -- verify::tests::equivalence_target_mode_uses_non_vacuous_void_equivalence_goal
+          cargo test -p aiken-project -- verify::tests::equivalence_target_fallback_uses_non_vacuous_void_error_goal
+      - name: Verify per-theorem attribution regressions
+        run: |
+          cargo test -p aiken-project -- verify::tests::parse_verify_results_module_failure_does_not_fail_sibling_theorem
+          cargo test -p aiken-project -- verify::tests::parse_verify_results_counterexample_does_not_contaminate_sibling_theorem_category
+      - name: Verify CLI JSON and skip-artifact regressions
+        run: |
+          cargo test -p aiken -- cmd::verify::tests::no_property_tests_output_is_json_in_json_mode
+          cargo test -p aiken -- cmd::verify::tests::run_compile_options_forwards_env
+          cargo test -p aiken -- cmd::verify::tests::run_args_parse_env_flag
+          cargo test -p aiken -- cmd::verify::tests::run_args_directory_and_relative_out_dir_resolve_under_project_root
+          cargo test -p aiken -- cmd::verify::tests::artifact_retention_on_failure_keeps_artifacts_when_skips_fail_run
+          cargo test -p aiken -- cmd::verify::tests::artifact_retention_on_success_requires_full_success
 
   checks:
     runs-on: ubuntu-latest
