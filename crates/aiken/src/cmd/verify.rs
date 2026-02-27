@@ -159,7 +159,7 @@ pub struct DoctorArgs {
     /// Path to project
     directory: Option<PathBuf>,
 
-    /// Output directory for Lean workspace (used to check PlutusCore)
+    /// Output directory for Lean workspace
     #[clap(long, default_value = "build/verify")]
     out_dir: PathBuf,
 
@@ -846,10 +846,12 @@ fn exec_run_with_project(
             }
             println!();
             println!(
-                "Note: The PlutusCore Lean library must be available at {}/PlutusCore.",
-                resolved_out_dir.display(),
+                "Note: The PlutusCore Lean library is configured at {}.",
+                verify::plutus_core_dir().display(),
             );
-            println!("      You can symlink or copy it there before running `lake build`.");
+            println!(
+                "      Update DEFAULT_PLUTUS_CORE_DIR in crates/aiken-project/src/verify.rs if needed."
+            );
         }
     } else {
         if manifest.tests.is_empty() {

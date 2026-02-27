@@ -2778,11 +2778,15 @@ fn generate_lakefile_default_rev() {
 }
 
 #[test]
-fn generate_lakefile_uses_workspace_relative_plutus_core_path() {
+fn generate_lakefile_uses_hardcoded_plutus_core_path() {
     let lakefile = generate_lakefile(DEFAULT_BLASTER_REV);
+    let expected = format!(
+        "require PlutusCore from\n  \"{}\"",
+        plutus_core_dir().display()
+    );
     assert!(
-        lakefile.contains("require PlutusCore from\n  \"./PlutusCore\""),
-        "Lakefile should reference workspace-relative PlutusCore path, got:\n{lakefile}"
+        lakefile.contains(&expected),
+        "Lakefile should reference hard-coded PlutusCore path, got:\n{lakefile}"
     );
 }
 
@@ -2830,7 +2834,7 @@ fn lake_build_jobs_flag_unsupported_ignores_unrelated_errors() {
 #[test]
 fn check_plutus_core_missing_dir() {
     let tmp = tempfile::tempdir().unwrap();
-    let result = check_plutus_core(tmp.path());
+    let result = check_plutus_core_at(&tmp.path().join("PlutusCore"));
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("not found"));
 }
@@ -2838,8 +2842,9 @@ fn check_plutus_core_missing_dir() {
 #[test]
 fn check_plutus_core_empty_dir() {
     let tmp = tempfile::tempdir().unwrap();
-    fs::create_dir(tmp.path().join("PlutusCore")).unwrap();
-    let result = check_plutus_core(tmp.path());
+    let pc = tmp.path().join("PlutusCore");
+    fs::create_dir(&pc).unwrap();
+    let result = check_plutus_core_at(&pc);
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("lakefile.lean"));
 }
@@ -2850,14 +2855,14 @@ fn check_plutus_core_valid_dir() {
     let pc = tmp.path().join("PlutusCore");
     fs::create_dir(&pc).unwrap();
     fs::write(pc.join("lakefile.lean"), "-- placeholder").unwrap();
-    let result = check_plutus_core(tmp.path());
+    let result = check_plutus_core_at(&pc);
     assert!(result.is_ok());
 }
 
 #[test]
 fn check_plutus_core_detailed_missing() {
     let tmp = tempfile::tempdir().unwrap();
-    let report = check_plutus_core_detailed(tmp.path());
+    let report = check_plutus_core_detailed_at(&tmp.path().join("PlutusCore"));
     assert!(!report.found);
     assert!(!report.has_lakefile);
     assert!(report.error.is_some());
@@ -2869,7 +2874,7 @@ fn check_plutus_core_detailed_valid() {
     let pc = tmp.path().join("PlutusCore");
     fs::create_dir(&pc).unwrap();
     fs::write(pc.join("lakefile.lean"), "-- placeholder").unwrap();
-    let report = check_plutus_core_detailed(tmp.path());
+    let report = check_plutus_core_detailed_at(&pc);
     assert!(report.found);
     assert!(report.has_lakefile);
     assert!(report.error.is_none());

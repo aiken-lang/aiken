@@ -219,6 +219,10 @@ pub const MIN_LEAN_VERSION: (u32, u32, u32) = (4, 24, 0);
 /// Minimum supported Z3 version (major, minor, patch).
 pub const MIN_Z3_VERSION: (u32, u32, u32) = (4, 8, 0);
 
+/// Hard-coded PlutusCore checkout used by generated lakefiles.
+/// This path is expanded from `~` using `$HOME` when possible.
+pub const DEFAULT_PLUTUS_CORE_DIR: &str = "~/git/IOG/aiken-repos/CardanoBlaster/PlutusCore";
+
 /// Validate that a blaster_rev string contains only safe characters for
 /// interpolation into lakefile.lean. Allows alphanumeric, dots, hyphens,
 /// slashes, and underscores (covering commit SHAs, tags, and branch names).
@@ -894,21 +898,34 @@ fn version_meets_minimum(version: &str, min: (u32, u32, u32)) -> bool {
     (parts[0], parts[1], parts[2]) >= min
 }
 
-/// Check whether the PlutusCore Lean library exists in the workspace and
-/// contains the expected structure (at minimum, a `lakefile.lean`).
-/// Returns `Ok(())` when the directory and structure are valid, or an
-/// informational error with instructions when they are not.
-pub fn check_plutus_core(out_dir: &Path) -> miette::Result<()> {
-    let pc_dir = out_dir.join("PlutusCore");
+fn expand_tilde(path: &str) -> PathBuf {
+    if path == "~" {
+        if let Some(home) = std::env::var_os("HOME") {
+            return PathBuf::from(home);
+        }
+    } else if let Some(rest) = path.strip_prefix("~/")
+        && let Some(home) = std::env::var_os("HOME")
+    {
+        return PathBuf::from(home).join(rest);
+    }
+
+    PathBuf::from(path)
+}
+
+/// Resolve the hard-coded PlutusCore path used by verify/lakefile generation.
+pub fn plutus_core_dir() -> PathBuf {
+    expand_tilde(DEFAULT_PLUTUS_CORE_DIR)
+}
+
+fn check_plutus_core_at(pc_dir: &Path) -> miette::Result<()> {
     if !pc_dir.is_dir() {
         return Err(miette::miette!(
             "PlutusCore Lean library not found at {path}.\n\n\
-             The generated lakefile.lean expects a local dependency at ./PlutusCore.\n\
-             Either symlink or copy the PlutusCore library there:\n\n\
-             \tln -s /path/to/PlutusCore {path}\n\n\
-             Then re-run `aiken verify` or manually: cd {out} && lake build",
+             The generated lakefile.lean expects a hard-coded dependency at:\n\n\
+             \t{path}\n\n\
+             Update DEFAULT_PLUTUS_CORE_DIR in crates/aiken-project/src/verify.rs \
+             if your checkout lives elsewhere.",
             path = pc_dir.display(),
-            out = out_dir.display(),
         ));
     }
 
@@ -927,9 +944,15 @@ pub fn check_plutus_core(out_dir: &Path) -> miette::Result<()> {
     Ok(())
 }
 
-/// Check the PlutusCore library and return a structured report (for doctor).
-pub fn check_plutus_core_detailed(out_dir: &Path) -> PlutusCoreCheck {
-    let pc_dir = out_dir.join("PlutusCore");
+/// Check whether the configured PlutusCore Lean library exists and contains
+/// the expected structure (at minimum, a `lakefile.lean`).
+/// Returns `Ok(())` when the directory and structure are valid, or an
+/// informational error with instructions when they are not.
+pub fn check_plutus_core(_out_dir: &Path) -> miette::Result<()> {
+    check_plutus_core_at(&plutus_core_dir())
+}
+
+fn check_plutus_core_detailed_at(pc_dir: &Path) -> PlutusCoreCheck {
     let found = pc_dir.is_dir();
     let has_lakefile = found && pc_dir.join("lakefile.lean").exists();
 
@@ -953,6 +976,11 @@ pub fn check_plutus_core_detailed(out_dir: &Path) -> PlutusCoreCheck {
         has_lakefile,
         error,
     }
+}
+
+/// Check the PlutusCore library and return a structured report (for doctor).
+pub fn check_plutus_core_detailed(_out_dir: &Path) -> PlutusCoreCheck {
+    check_plutus_core_detailed_at(&plutus_core_dir())
 }
 
 /// Run a full diagnostic check of the verify toolchain and dependencies.
@@ -1681,6 +1709,7 @@ fn write_file(path: &Path, content: &str) -> miette::Result<()> {
 }
 
 fn generate_lakefile(blaster_rev: &str) -> String {
+    let plutus_core_dir = plutus_core_dir();
     format!(
         r#"import Lake
 open Lake DSL
@@ -1694,8 +1723,9 @@ require Blaster from git
   "https://github.com/input-output-hk/Lean-blaster" @ "{blaster_rev}"
 
 require PlutusCore from
-  "./PlutusCore"
-"#
+  "{plutus_core_dir}"
+"#,
+        plutus_core_dir = plutus_core_dir.display(),
     )
 }
 
