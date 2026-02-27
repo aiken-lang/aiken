@@ -191,8 +191,8 @@ impl DefaultFunction {
             | DefaultFunction::RotateByteString
             | DefaultFunction::CountSetBits
             | DefaultFunction::FindFirstSetBit
-            | DefaultFunction::Ripemd_160 => false,
-            // | DefaultFunction::ExpModInteger
+            | DefaultFunction::Ripemd_160
+            | DefaultFunction::ExpModInteger => false,
             // | DefaultFunction::CaseList
             // | DefaultFunction::CaseData
         }
@@ -287,7 +287,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 1,
             DefaultFunction::FindFirstSetBit => 1,
             DefaultFunction::Ripemd_160 => 1,
-            // DefaultFunction::ExpModInteger => 3,
+            DefaultFunction::ExpModInteger => 3,
         }
     }
 
@@ -380,7 +380,7 @@ impl DefaultFunction {
             DefaultFunction::CountSetBits => 0,
             DefaultFunction::FindFirstSetBit => 0,
             DefaultFunction::Ripemd_160 => 0,
-            // DefaultFunction::ExpModInteger => 0,
+            DefaultFunction::ExpModInteger => 0,
         }
     }
 
@@ -1765,9 +1765,63 @@ impl DefaultFunction {
                 let value = Value::byte_string(bytes);
 
                 Ok(value)
-            } // DefaultFunction::ExpModInteger => todo!(),
+            }
+            DefaultFunction::ExpModInteger => {
+                let base = args[0].unwrap_integer()?;
+                let exponent = args[1].unwrap_integer()?;
+                let modulus = args[2].unwrap_integer()?;
+
+                if modulus <= &0.into() {
+                    return Err(Error::OutsideNaturalBounds(modulus.clone()));
+                }
+
+                let result = if exponent.is_negative() {
+                    let Some(inverse) = modular_inverse(base, modulus) else {
+                        return Err(Error::ExpModIntegerNoInverse(base.clone(), modulus.clone()));
+                    };
+
+                    let positive_exponent = -exponent;
+
+                    inverse.modpow(&positive_exponent, modulus)
+                } else {
+                    let positive_exponent = exponent.clone();
+
+                    base.modpow(&positive_exponent, modulus)
+                };
+
+                Ok(Value::integer(result))
+            }
         }
     }
+}
+
+fn modular_inverse(base: &BigInt, modulus: &BigInt) -> Option<BigInt> {
+    let mut t = BigInt::zero();
+    let mut new_t = BigInt::from(1);
+    let mut r = modulus.clone();
+    let mut new_r = base.mod_floor(modulus);
+
+    while !new_r.is_zero() {
+        let quotient = &r / &new_r;
+
+        let tmp_t = t - &quotient * &new_t;
+        t = new_t;
+        new_t = tmp_t;
+
+        let tmp_r = r - quotient * &new_r;
+        r = new_r;
+        new_r = tmp_r;
+    }
+
+    if r != BigInt::from(1) {
+        return None;
+    }
+
+    if t.is_negative() {
+        t += modulus;
+    }
+
+    Some(t)
 }
 
 pub trait Compressable {

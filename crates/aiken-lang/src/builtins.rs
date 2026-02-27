@@ -1065,11 +1065,12 @@ pub fn from_default_function(builtin: DefaultFunction, id_gen: &IdGenerator) -> 
             let tipo = Type::function(vec![Type::byte_array()], Type::byte_array());
 
             (tipo, 1)
-        } // DefaultFunction::ExpModInteger => {
-          //     let tipo = Type::function(vec![Type::int(), Type::int(), Type::int()], Type::int());
+        }
+        DefaultFunction::ExpModInteger => {
+            let tipo = Type::function(vec![Type::int(), Type::int(), Type::int()], Type::int());
 
-          //     (tipo, 3)
-          // }
+            (tipo, 3)
+        }
     };
 
     ValueConstructor::public(

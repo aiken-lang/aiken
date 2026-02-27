@@ -43,7 +43,7 @@ enum Context {
 }
 
 pub const TERM_COUNT: usize = 9;
-pub const BUILTIN_COUNT: usize = 87;
+pub const BUILTIN_COUNT: usize = 88;
 
 #[derive(Debug, Clone)]
 pub enum Trace {
