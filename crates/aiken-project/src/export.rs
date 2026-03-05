@@ -132,6 +132,8 @@ pub enum FuzzerConstraint {
     Any,
     /// Integer in a closed range [min, max].
     IntRange { min: String, max: String },
+    /// ByteString length in a closed range [min_len, max_len].
+    ByteStringLenRange { min_len: usize, max_len: usize },
     /// Exact scalar value.
     Exact(FuzzerExactValue),
     /// A tuple whose elements each carry their own constraint.
@@ -144,6 +146,10 @@ pub enum FuzzerConstraint {
         #[serde(skip_serializing_if = "Option::is_none")]
         max_len: Option<usize>,
     },
+    /// Finite set of nullary ADT constructors represented as `Data.Constr tag []`.
+    ///
+    /// Tags are constructor ordinals from source declaration order.
+    DataConstructorTags { tags: Vec<u64> },
     /// A mapped constraint: the underlying constraint describes the input domain,
     /// but the output type may differ (e.g. `fuzz.map(int_between(0,10), fn(x) { ... })`).
     Map(Box<FuzzerConstraint>),

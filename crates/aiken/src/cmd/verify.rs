@@ -6,7 +6,7 @@ use aiken_project::{
     telemetry::EventTarget,
     verify::{
         self, ArtifactRetention, DEFAULT_BLASTER_REV, ExistentialMode, FailureCategory,
-        ProofStatus, VerifyConfig,
+        ProofGenerationOptions, ProofStatus, VerifyConfig,
     },
     watch::with_project,
 };
@@ -151,6 +151,12 @@ pub struct RunArgs {
     /// `equivalence`: prove wrapper/handler equivalence for tests that export validator metadata.
     #[clap(long, default_value = "property")]
     target: VerificationTargetKind,
+
+    /// Force sampled-domain fallback for all tests.
+    /// When enabled, generated proofs always import and sample the fuzzer UPLC
+    /// instead of using extracted direct-domain constraints.
+    #[clap(long)]
+    force_sampled_fallback: bool,
 }
 
 #[derive(clap::Args)]
@@ -208,6 +214,7 @@ struct RunCommandOptions {
     blaster_rev: String,
     existential_mode: ExistentialMode,
     target: VerificationTargetKind,
+    force_sampled_fallback: bool,
 }
 
 pub fn exec(cmd: Cmd) -> miette::Result<()> {
@@ -256,6 +263,7 @@ fn no_proofs_summary(
         timed_out: 0,
         unknown: 0,
         skipped: manifest.skipped.clone(),
+        fallbacks: manifest.fallbacks.clone(),
         theorems: Vec::new(),
         raw_output: verify::VerifyResult {
             success: !skipped_without_allow,
@@ -691,6 +699,7 @@ fn exec_run(
         blaster_rev,
         existential_mode,
         target,
+        force_sampled_fallback,
     }: RunArgs,
 ) -> miette::Result<()> {
     // Handle deprecated --keep-artifacts flag: treat as --artifacts always
@@ -723,6 +732,7 @@ fn exec_run(
         blaster_rev,
         existential_mode,
         target,
+        force_sampled_fallback,
     };
 
     with_project(directory.as_deref(), deny, silent, true, |p| {
@@ -769,6 +779,7 @@ fn exec_run_with_project(
             property_tests,
             run_options.existential_mode,
             &run_options.target,
+            run_options.force_sampled_fallback,
         );
 
         if !unsupported.is_empty() {
@@ -794,13 +805,19 @@ fn exec_run_with_project(
         target: run_options.target.clone(),
     };
 
-    let manifest =
-        verify::generate_lean_workspace(property_tests, &config, run_options.skip_unsupported)
-            .map_err(|e| {
-                vec![aiken_project::error::Error::StandardIo(
-                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
-                )]
-            })?;
+    let manifest = verify::generate_lean_workspace_with_options(
+        property_tests,
+        &config,
+        run_options.skip_unsupported,
+        ProofGenerationOptions {
+            force_sampled_fallback: run_options.force_sampled_fallback,
+        },
+    )
+    .map_err(|e| {
+        vec![aiken_project::error::Error::StandardIo(
+            std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
+        )]
+    })?;
 
     let skipped_without_allow =
         skips_require_failure(manifest.skipped.len(), run_options.allow_skips);
@@ -816,6 +833,30 @@ fn exec_run_with_project(
         );
         for s in &manifest.skipped {
             eprintln!("  - {}: {}", s.name, s.reason);
+        }
+        eprintln!();
+    }
+
+    if run_options.force_sampled_fallback && !run_options.json {
+        eprintln!(
+            "{} Forcing sampled-domain fallback for all generated proofs (--force-sampled-fallback).",
+            "Notice:"
+                .if_supports_color(Stderr, |s| s.yellow())
+                .if_supports_color(Stderr, |s| s.bold()),
+        );
+        eprintln!();
+    }
+
+    if !manifest.fallbacks.is_empty() && !run_options.json {
+        eprintln!(
+            "{} Using sampled-domain fallback for {} test(s):",
+            "Notice:"
+                .if_supports_color(Stderr, |s| s.yellow())
+                .if_supports_color(Stderr, |s| s.bold()),
+            manifest.fallbacks.len(),
+        );
+        for fallback in &manifest.fallbacks {
+            eprintln!("  - {}: {}", fallback.name, fallback.reason);
         }
         eprintln!();
     }
@@ -1193,9 +1234,17 @@ fn collect_generate_only_preflight_errors(
     property_tests: &[ExportedPropertyTest],
     existential_mode: ExistentialMode,
     target: &VerificationTargetKind,
+    force_sampled_fallback: bool,
 ) -> Vec<String> {
     collect_generate_only_preflight_errors_with(property_tests, |t| {
-        verify::preflight_validate_test(t, existential_mode, target)
+        verify::preflight_validate_test_with_options(
+            t,
+            existential_mode,
+            target,
+            ProofGenerationOptions {
+                force_sampled_fallback,
+            },
+        )
     })
 }
 
@@ -1353,6 +1402,7 @@ test unsupported_for_validator_target(x via int_fuzzer()) {
             blaster_rev: DEFAULT_BLASTER_REV.to_string(),
             existential_mode: ExistentialMode::default(),
             target,
+            force_sampled_fallback: false,
         }
     }
 
@@ -1695,6 +1745,7 @@ error: Foo.lean:15:5: Tactic `blaster` failed";
                 module: "example".to_string(),
                 reason: "unsupported shape".to_string(),
             }],
+            fallbacks: Vec::new(),
         };
 
         let summary = no_proofs_summary(&manifest, true);
@@ -1722,6 +1773,7 @@ error: Foo.lean:15:5: Tactic `blaster` failed";
                 module: "example".to_string(),
                 reason: "unsupported shape".to_string(),
             }],
+            fallbacks: Vec::new(),
         };
 
         let summary = no_proofs_summary(&manifest, false);
@@ -1925,6 +1977,28 @@ error: Foo.lean:15:5: Tactic `blaster` failed";
             panic!("expected `run` subcommand")
         };
         assert_eq!(args.env.as_deref(), Some("staging"));
+    }
+
+    #[test]
+    fn run_args_parse_force_sampled_fallback_flag() {
+        #[derive(Parser)]
+        struct VerifyCli {
+            #[command(subcommand)]
+            cmd: Cmd,
+        }
+
+        let parsed = VerifyCli::try_parse_from([
+            "aiken-verify",
+            "run",
+            "--generate-only",
+            "--force-sampled-fallback",
+        ])
+        .expect("`verify run --force-sampled-fallback` should parse");
+
+        let Cmd::Run(args) = parsed.cmd else {
+            panic!("expected `run` subcommand")
+        };
+        assert!(args.force_sampled_fallback);
     }
 
     #[test]

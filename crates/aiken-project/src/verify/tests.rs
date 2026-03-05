@@ -191,7 +191,10 @@ fn generate_workspace_creates_files() {
     assert!(proof1.contains("theorem test_roundtrip_alwaysTerminating"));
     assert!(proof1.contains("by blaster"));
     assert!(proof1.contains(&format!("#import_uplc prog_{id0} single_cbor_hex")));
-    assert!(proof1.contains(&format!("#import_uplc fuzzer_prog_{id0} single_cbor_hex")));
+    assert!(
+        !proof1.contains(&format!("#import_uplc fuzzer_prog_{id0} single_cbor_hex")),
+        "Direct-domain theorem should not import fuzzer flat program, got:\n{proof1}"
+    );
     assert!(proof1.contains("(0 <= x && x <= 255)"));
     assert!(proof1.contains("namespace AikenVerify.Proofs.My_module.test_roundtrip"));
 
@@ -200,7 +203,10 @@ fn generate_workspace_creates_files() {
     assert!(proof2.contains("theorem test_map"));
     assert!(proof2.contains("theorem test_map_alwaysTerminating"));
     assert!(proof2.contains(&format!("#import_uplc prog_{id1} single_cbor_hex")));
-    assert!(proof2.contains(&format!("#import_uplc fuzzer_prog_{id1} single_cbor_hex")));
+    assert!(
+        !proof2.contains(&format!("#import_uplc fuzzer_prog_{id1} single_cbor_hex")),
+        "Direct-domain theorem should not import fuzzer flat program, got:\n{proof2}"
+    );
     assert!(proof2.contains(&format!("./flat/{id1}.flat")));
     assert!(proof2.contains("(0 <= x && x <= 255)"));
 }
@@ -244,11 +250,11 @@ fn generate_workspace_dotted_module_creates_matching_path() {
         "Proof should reference a sanitized `prog_...` Lean identifier"
     );
     assert!(
-        proof.contains(&format!(
+        !proof.contains(&format!(
             "#import_uplc fuzzer_prog_{} single_cbor_hex",
             entry.id
         )),
-        "Proof should reference a sanitized `fuzzer_prog_...` Lean identifier"
+        "Direct-domain proof should not import `fuzzer_prog_...`"
     );
     for line in proof
         .lines()
@@ -270,6 +276,93 @@ fn generate_workspace_dotted_module_creates_matching_path() {
             "Generated Lean import identifier must be syntactically valid: {identifier}"
         );
     }
+}
+
+#[test]
+fn generate_workspace_records_sampled_fallback_reasons() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out_dir = tmp.path().to_path_buf();
+    let tests = vec![make_test_with_type(
+        "my_module",
+        "test_bool_fallback_manifest",
+        FuzzerOutputType::Bool,
+        FuzzerConstraint::Any,
+    )];
+
+    let config = VerifyConfig {
+        out_dir,
+        cek_budget: 20000,
+        blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        existential_mode: ExistentialMode::default(),
+        target: VerificationTargetKind::default(),
+    };
+
+    let manifest = generate_lean_workspace(&tests, &config, false).unwrap();
+    assert_eq!(manifest.fallbacks.len(), 1);
+    assert_eq!(
+        manifest.fallbacks[0].name,
+        "my_module.test_bool_fallback_manifest"
+    );
+    assert!(
+        manifest.fallbacks[0]
+            .reason
+            .contains("no extractable scalar-domain predicates"),
+        "Expected explicit fallback reason, got: {:?}",
+        manifest.fallbacks[0]
+    );
+}
+
+#[test]
+fn generate_workspace_force_sampled_fallback_marks_all_tests() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out_dir = tmp.path().to_path_buf();
+    let tests = vec![
+        make_test_with_type(
+            "my_module",
+            "test_int_direct_domain",
+            FuzzerOutputType::Int,
+            FuzzerConstraint::IntRange {
+                min: "0".to_string(),
+                max: "10".to_string(),
+            },
+        ),
+        make_test_with_type(
+            "my_module",
+            "test_bytes_direct_domain",
+            FuzzerOutputType::ByteArray,
+            FuzzerConstraint::ByteStringLenRange {
+                min_len: 1,
+                max_len: 2,
+            },
+        ),
+    ];
+
+    let config = VerifyConfig {
+        out_dir,
+        cek_budget: 20000,
+        blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        existential_mode: ExistentialMode::default(),
+        target: VerificationTargetKind::default(),
+    };
+
+    let manifest = generate_lean_workspace_with_options(
+        &tests,
+        &config,
+        false,
+        ProofGenerationOptions {
+            force_sampled_fallback: true,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(manifest.tests.len(), 2);
+    assert_eq!(manifest.fallbacks.len(), 2);
+    assert!(
+        manifest
+            .fallbacks
+            .iter()
+            .all(|entry| entry.reason.contains("--force-sampled-fallback"))
+    );
 }
 
 #[test]
@@ -999,12 +1092,94 @@ fn bool_without_domain_predicate_uses_sampled_domain_fallback() {
         "Bool fallback theorem should sample the exported fuzzer domain, got:\n{proof}"
     );
     assert!(
+        proof.contains("-- sampled-domain fallback reason:"),
+        "Fallback proofs should include an explicit fallback reason comment, got:\n{proof}"
+    );
+    assert!(
         proof.contains("theorem test_bool_alwaysTerminating"),
         "Should have termination theorem, got:\n{proof}"
     );
     assert!(
         proof.contains(&format!("Option.isSome (proveTests prog_{id} (dataArg x))")),
         "Termination theorem should evaluate sampled value x via dataArg, got:\n{proof}"
+    );
+}
+
+#[test]
+fn sampled_domain_fallback_imports_fuzzer_program() {
+    let test = make_test_with_type(
+        "my_module",
+        "test_bool_fallback_import",
+        FuzzerOutputType::Bool,
+        FuzzerConstraint::Any,
+    );
+    let id = test_id("my_module", "test_bool_fallback_import");
+    let lean_name = sanitize_lean_name("test_bool_fallback_import");
+    let lean_module = "AikenVerify.Proofs.My_module.test_bool_fallback_import";
+
+    let proof = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::default(),
+    )
+    .unwrap();
+
+    assert!(
+        proof.contains(&format!("#import_uplc fuzzer_prog_{id} single_cbor_hex")),
+        "Sampled fallback must import fuzzer flat program, got:\n{proof}"
+    );
+    assert!(
+        proof.contains(&format!(
+            "match sampleFuzzerValue fuzzer_prog_{id} seed with"
+        )),
+        "Sampled fallback theorem should reference sampled fuzzer domain, got:\n{proof}"
+    );
+}
+
+#[test]
+fn force_sampled_fallback_overrides_direct_constraint_translation() {
+    let test = make_test_with_type(
+        "my_module",
+        "test_forced_fallback_overrides_direct",
+        FuzzerOutputType::Int,
+        FuzzerConstraint::IntRange {
+            min: "0".to_string(),
+            max: "10".to_string(),
+        },
+    );
+    let id = test_id("my_module", "test_forced_fallback_overrides_direct");
+    let lean_name = sanitize_lean_name("test_forced_fallback_overrides_direct");
+    let lean_module = "AikenVerify.Proofs.My_module.test_forced_fallback_overrides_direct";
+
+    let proof = generate_proof_file_with_options(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::default(),
+        ProofGenerationOptions {
+            force_sampled_fallback: true,
+        },
+    )
+    .unwrap();
+
+    assert!(
+        proof.contains(&format!("#import_uplc fuzzer_prog_{id} single_cbor_hex")),
+        "Forced sampled fallback must import fuzzer flat program, got:\n{proof}"
+    );
+    assert!(
+        proof.contains(&format!(
+            "match sampleFuzzerValue fuzzer_prog_{id} seed with"
+        )),
+        "Forced sampled fallback should sample fuzzer domain, got:\n{proof}"
+    );
+    assert!(
+        proof.contains("-- sampled-domain fallback reason: forced sampled-domain fallback mode enabled (--force-sampled-fallback)"),
+        "Forced sampled fallback should expose explicit reason, got:\n{proof}"
     );
 }
 
@@ -1227,6 +1402,41 @@ fn bytearray_without_domain_predicate_uses_sampled_domain_fallback() {
 }
 
 #[test]
+fn bytearray_length_range_generates_direct_scalar_domain() {
+    let test = make_test_with_type(
+        "my_module",
+        "test_bytes_len_range",
+        FuzzerOutputType::ByteArray,
+        FuzzerConstraint::ByteStringLenRange {
+            min_len: 1,
+            max_len: 3,
+        },
+    );
+    let id = test_id("my_module", "test_bytes_len_range");
+    let lean_name = sanitize_lean_name("test_bytes_len_range");
+    let lean_module = "AikenVerify.Proofs.My_module.test_bytes_len_range";
+
+    let proof = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::default(),
+    )
+    .unwrap();
+
+    assert!(
+        !proof.contains("match sampleFuzzerValue"),
+        "Bounded ByteArray should stay in direct scalar theorem path, got:\n{proof}"
+    );
+    assert!(
+        proof.contains("(1 <= x.length && x.length <= 3)"),
+        "Expected ByteArray length-domain precondition, got:\n{proof}"
+    );
+}
+
+#[test]
 fn bytearray_exact_non_empty_generates_direct_scalar_domain() {
     let test = make_test_with_type(
         "my_module",
@@ -1255,6 +1465,73 @@ fn bytearray_exact_non_empty_generates_direct_scalar_domain() {
     assert!(
         proof.contains("PlutusCore.ByteString.consByteStringV1 102"),
         "Expected emitted ByteString literal for non-empty bytes, got:\n{proof}"
+    );
+}
+
+#[test]
+fn string_length_range_generates_direct_scalar_domain() {
+    let test = make_test_with_type(
+        "my_module",
+        "test_string_len_range",
+        FuzzerOutputType::String,
+        FuzzerConstraint::ByteStringLenRange {
+            min_len: 2,
+            max_len: 5,
+        },
+    );
+    let id = test_id("my_module", "test_string_len_range");
+    let lean_name = sanitize_lean_name("test_string_len_range");
+    let lean_module = "AikenVerify.Proofs.My_module.test_string_len_range";
+
+    let proof = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::default(),
+    )
+    .unwrap();
+
+    assert!(
+        !proof.contains("match sampleFuzzerValue"),
+        "Bounded String should stay in direct scalar theorem path, got:\n{proof}"
+    );
+    assert!(
+        proof.contains("(2 <= x.length && x.length <= 5)"),
+        "Expected String length-domain precondition, got:\n{proof}"
+    );
+}
+
+#[test]
+fn bytearray_length_range_with_inconsistent_bounds_errors() {
+    let test = make_test_with_type(
+        "my_module",
+        "test_bytes_bad_len_range",
+        FuzzerOutputType::ByteArray,
+        FuzzerConstraint::ByteStringLenRange {
+            min_len: 9,
+            max_len: 2,
+        },
+    );
+    let id = test_id("my_module", "test_bytes_bad_len_range");
+    let lean_name = sanitize_lean_name("test_bytes_bad_len_range");
+    let lean_module = "AikenVerify.Proofs.My_module.test_bytes_bad_len_range";
+
+    let err = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::default(),
+    )
+    .unwrap_err()
+    .to_string();
+
+    assert!(
+        err.contains("inconsistent byte-string length bounds"),
+        "Expected inconsistent ByteString bounds error, got:\n{err}"
     );
 }
 
@@ -1384,6 +1661,84 @@ fn list_with_unsupported_constraint_uses_sampled_domain_fallback() {
             "match sampleFuzzerValue fuzzer_prog_{id} seed with"
         )),
         "Unsupported constraints should use sampled-domain fallback theorem, got:\n{proof}"
+    );
+}
+
+#[test]
+fn list_data_with_zero_lower_bound_generates_direct_theorem() {
+    let test = make_test_with_type(
+        "my_module",
+        "test_list_data_min_zero",
+        FuzzerOutputType::List(Box::new(FuzzerOutputType::Unsupported(
+            "Transaction".to_string(),
+        ))),
+        FuzzerConstraint::List {
+            elem: Box::new(FuzzerConstraint::Any),
+            min_len: Some(0),
+            max_len: None,
+        },
+    );
+    let id = test_id("my_module", "test_list_data_min_zero");
+    let lean_name = sanitize_lean_name("test_list_data_min_zero");
+    let lean_module = "AikenVerify.Proofs.My_module.test_list_data_min_zero";
+
+    let proof = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::default(),
+    )
+    .unwrap();
+
+    assert!(
+        proof.contains("∀ (xs : List Data),"),
+        "List<Data>-like scenario domains should be quantified directly, got:\n{proof}"
+    );
+    assert!(
+        proof.contains("(0 <= xs.length)"),
+        "List lower-bound predicate should be preserved, got:\n{proof}"
+    );
+    assert!(
+        !proof.contains("match sampleFuzzerValue"),
+        "Explicit list domains should avoid sampled fallback, got:\n{proof}"
+    );
+}
+
+#[test]
+fn unsupported_with_constructor_tags_generates_direct_data_theorem() {
+    let test = make_test_with_type(
+        "my_module",
+        "test_outcome_domain",
+        FuzzerOutputType::Unsupported("Outcome".to_string()),
+        FuzzerConstraint::DataConstructorTags { tags: vec![0, 1] },
+    );
+    let id = test_id("my_module", "test_outcome_domain");
+    let lean_name = sanitize_lean_name("test_outcome_domain");
+    let lean_module = "AikenVerify.Proofs.My_module.test_outcome_domain";
+
+    let proof = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::default(),
+    )
+    .unwrap();
+
+    assert!(
+        proof.contains("∀ (x : Data),"),
+        "Finite ADT domains should quantify directly over Data, got:\n{proof}"
+    );
+    assert!(
+        proof.contains("((x = Data.Constr 0 []) || (x = Data.Constr 1 []))"),
+        "Constructor tag disjunction should be emitted as domain precondition, got:\n{proof}"
+    );
+    assert!(
+        !proof.contains("match sampleFuzzerValue"),
+        "Finite ADT domains should avoid sampled-domain fallback, got:\n{proof}"
     );
 }
 
@@ -1782,6 +2137,68 @@ fn tuple_with_nested_list_element_uses_fallback() {
 }
 
 #[test]
+fn tuple_of_lists_with_explicit_domains_generates_direct_theorem() {
+    let test = make_test_with_type(
+        "my_module",
+        "test_tuple_list_domains",
+        FuzzerOutputType::Tuple(vec![
+            FuzzerOutputType::List(Box::new(FuzzerOutputType::Unsupported("Label".to_string()))),
+            FuzzerOutputType::List(Box::new(FuzzerOutputType::Unsupported(
+                "Transaction".to_string(),
+            ))),
+        ]),
+        FuzzerConstraint::Tuple(vec![
+            FuzzerConstraint::List {
+                elem: Box::new(FuzzerConstraint::Any),
+                min_len: Some(0),
+                max_len: None,
+            },
+            FuzzerConstraint::List {
+                elem: Box::new(FuzzerConstraint::Any),
+                min_len: Some(0),
+                max_len: None,
+            },
+        ]),
+    );
+    let id = test_id("my_module", "test_tuple_list_domains");
+    let lean_name = sanitize_lean_name("test_tuple_list_domains");
+    let lean_module = "AikenVerify.Proofs.My_module.test_tuple_list_domains";
+
+    let proof = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::default(),
+        &VerificationTargetKind::default(),
+    )
+    .unwrap();
+
+    assert!(
+        proof.contains("∀ (a : List Data) (b : List Data),"),
+        "Tuple(List<Data>, List<Data>) should be quantified directly, got:\n{proof}"
+    );
+    assert!(
+        proof.contains("(0 <= a.length)"),
+        "First list lower bound should be preserved, got:\n{proof}"
+    );
+    assert!(
+        proof.contains("(0 <= b.length)"),
+        "Second list lower bound should be preserved, got:\n{proof}"
+    );
+    assert!(
+        proof.contains(
+            "Data.List [Data.List (a.map (fun x_0 => x_0)), Data.List (b.map (fun x_0 => x_0))]"
+        ),
+        "Tuple list encoding should be inlined as Data.List payloads, got:\n{proof}"
+    );
+    assert!(
+        !proof.contains("match sampleFuzzerValue"),
+        "Explicit tuple/list domains should avoid sampled-domain fallback, got:\n{proof}"
+    );
+}
+
+#[test]
 fn utils_contains_arg_helpers() {
     let utils = generate_utils(10000);
     assert!(
@@ -1997,7 +2414,63 @@ fn make_manifest_with_termination(
             })
             .collect(),
         skipped: Vec::new(),
+        fallbacks: Vec::new(),
     }
+}
+
+#[test]
+fn equivalence_theorem_name_for_entry_detects_marker_in_proof_file() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out_dir = tmp.path();
+    let lean_file = "AikenVerify/Proofs/My_module/test_eq.lean".to_string();
+    let entry = ManifestEntry {
+        id: "my_module__test_eq_deadbeef".to_string(),
+        aiken_module: "my_module".to_string(),
+        aiken_name: "test_eq".to_string(),
+        lean_module: "AikenVerify.Proofs.My_module.test_eq".to_string(),
+        lean_theorem: "test_eq".to_string(),
+        lean_file: lean_file.clone(),
+        flat_file: "flat/my_module__test_eq_deadbeef.flat".to_string(),
+        has_termination_theorem: false,
+    };
+
+    fs::create_dir_all(out_dir.join("AikenVerify/Proofs/My_module")).unwrap();
+    fs::write(
+        out_dir.join(&lean_file),
+        "theorem test_eq_equivalence :\n  True :=\n  by trivial\n",
+    )
+    .unwrap();
+
+    assert_eq!(
+        equivalence_theorem_name_for_entry(out_dir, &entry),
+        Some("test_eq_equivalence".to_string())
+    );
+}
+
+#[test]
+fn equivalence_theorem_name_for_entry_returns_none_without_marker() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out_dir = tmp.path();
+    let lean_file = "AikenVerify/Proofs/My_module/test_eq.lean".to_string();
+    let entry = ManifestEntry {
+        id: "my_module__test_eq_deadbeef".to_string(),
+        aiken_module: "my_module".to_string(),
+        aiken_name: "test_eq".to_string(),
+        lean_module: "AikenVerify.Proofs.My_module.test_eq".to_string(),
+        lean_theorem: "test_eq".to_string(),
+        lean_file: lean_file.clone(),
+        flat_file: "flat/my_module__test_eq_deadbeef.flat".to_string(),
+        has_termination_theorem: false,
+    };
+
+    fs::create_dir_all(out_dir.join("AikenVerify/Proofs/My_module")).unwrap();
+    fs::write(
+        out_dir.join(&lean_file),
+        "theorem test_eq :\n  True :=\n  by trivial\n",
+    )
+    .unwrap();
+
+    assert_eq!(equivalence_theorem_name_for_entry(out_dir, &entry), None);
 }
 
 #[test]
@@ -2832,6 +3305,23 @@ fn lake_build_jobs_flag_unsupported_ignores_unrelated_errors() {
 }
 
 #[test]
+fn command_poll_interval_scales_for_long_timeout() {
+    assert_eq!(
+        command_poll_interval(1800),
+        std::time::Duration::from_secs(5)
+    );
+}
+
+#[test]
+fn command_poll_interval_has_reasonable_bounds() {
+    assert_eq!(command_poll_interval(0), std::time::Duration::from_secs(2));
+    assert_eq!(
+        command_poll_interval(1),
+        std::time::Duration::from_millis(200)
+    );
+}
+
+#[test]
 fn check_plutus_core_missing_dir() {
     let tmp = tempfile::tempdir().unwrap();
     let result = check_plutus_core_at(&tmp.path().join("PlutusCore"));
@@ -2857,6 +3347,52 @@ fn check_plutus_core_valid_dir() {
     fs::write(pc.join("lakefile.lean"), "-- placeholder").unwrap();
     let result = check_plutus_core_at(&pc);
     assert!(result.is_ok());
+}
+
+#[test]
+fn resolve_plutus_core_dir_prefers_fallback_when_preferred_has_known_bug() {
+    let tmp = tempfile::tempdir().unwrap();
+    let preferred = tmp.path().join("preferred");
+    let fallback = tmp.path().join("fallback");
+
+    fs::create_dir_all(preferred.join("PlutusCore/Data")).unwrap();
+    fs::create_dir_all(fallback.join("PlutusCore/Data")).unwrap();
+    fs::write(
+        preferred.join("PlutusCore/Data/Basic.lean"),
+        "def dataPairsType := mkApp2 (.const ``Prod.mk [.zero, .zero]) (.const ``Data []) (.const ``Data [])\n",
+    )
+    .unwrap();
+    fs::write(
+        fallback.join("PlutusCore/Data/Basic.lean"),
+        "def dataPairsType := mkApp2 (.const ``Prod [.zero, .zero]) (.const ``Data []) (.const ``Data [])\n",
+    )
+    .unwrap();
+
+    let resolved = resolve_plutus_core_dir(preferred.clone(), fallback.clone());
+    assert_eq!(resolved, fallback);
+}
+
+#[test]
+fn resolve_plutus_core_dir_keeps_preferred_when_no_bug() {
+    let tmp = tempfile::tempdir().unwrap();
+    let preferred = tmp.path().join("preferred");
+    let fallback = tmp.path().join("fallback");
+
+    fs::create_dir_all(preferred.join("PlutusCore/Data")).unwrap();
+    fs::create_dir_all(fallback.join("PlutusCore/Data")).unwrap();
+    fs::write(
+        preferred.join("PlutusCore/Data/Basic.lean"),
+        "def dataPairsType := mkApp2 (.const ``Prod [.zero, .zero]) (.const ``Data []) (.const ``Data [])\n",
+    )
+    .unwrap();
+    fs::write(
+        fallback.join("PlutusCore/Data/Basic.lean"),
+        "def dataPairsType := mkApp2 (.const ``Prod [.zero, .zero]) (.const ``Data []) (.const ``Data [])\n",
+    )
+    .unwrap();
+
+    let resolved = resolve_plutus_core_dir(preferred.clone(), fallback);
+    assert_eq!(resolved, preferred);
 }
 
 #[test]
@@ -5966,23 +6502,14 @@ fn intentional_limitations_register() {
     // 6. Supported envelope includes all three target modes.
     assert_eq!(caps.target_modes.len(), 3);
 
-    // 7. Bytearray length-domain translation is currently sampled-domain
-    //    fallback only.
+    // 7. Finite nullary ADT constructor domains are now explicitly supported.
     assert!(
-        caps.unsupported_fuzzer_types
+        caps.supported_fuzzer_types
             .iter()
-            .any(|t| t.contains("bytearray_between"))
+            .any(|t| t.contains("Finite nullary ADT constructor domains"))
     );
 
-    // 8. scenario.report_coverage extraction is currently sampled-domain
-    //    fallback only.
-    assert!(
-        caps.unsupported_fuzzer_types
-            .iter()
-            .any(|t| t.contains("report_coverage"))
-    );
-
-    // 9. Partial-application/higher-order resolver support is explicitly
+    // 8. Partial-application/higher-order resolver coverage is explicitly
     //    tracked as a known limitation.
     assert!(
         caps.unsupported_fuzzer_types

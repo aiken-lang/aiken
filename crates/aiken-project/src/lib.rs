@@ -79,6 +79,12 @@ fn convert_constraint(lang: &LangFuzzerConstraint) -> FuzzerConstraint {
             min: min.clone(),
             max: max.clone(),
         },
+        LangFuzzerConstraint::ByteStringLenRange { min_len, max_len } => {
+            FuzzerConstraint::ByteStringLenRange {
+                min_len: *min_len,
+                max_len: *max_len,
+            }
+        }
         LangFuzzerConstraint::Exact(value) => FuzzerConstraint::Exact(match value {
             aiken_lang::test_framework::FuzzerExactValue::Bool(v) => FuzzerExactValue::Bool(*v),
             aiken_lang::test_framework::FuzzerExactValue::ByteArray(bytes) => {
@@ -100,6 +106,9 @@ fn convert_constraint(lang: &LangFuzzerConstraint) -> FuzzerConstraint {
             min_len: *min_len,
             max_len: *max_len,
         },
+        LangFuzzerConstraint::DataConstructorTags { tags } => {
+            FuzzerConstraint::DataConstructorTags { tags: tags.clone() }
+        }
         LangFuzzerConstraint::Map(inner) => {
             FuzzerConstraint::Map(Box::new(convert_constraint(inner)))
         }
