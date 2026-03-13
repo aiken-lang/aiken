@@ -407,7 +407,7 @@ where
                 let blueprint = Blueprint::new(&self.config, &self.checked_modules, &mut generator)
                     .map_err(|err| Error::Blueprint(err.into()))?;
 
-                if blueprint.validators.is_empty() {
+                if blueprint.validators.is_empty() && !self.config.export_all_types {
                     self.warnings.push(Warning::NoValidators);
                 }
 

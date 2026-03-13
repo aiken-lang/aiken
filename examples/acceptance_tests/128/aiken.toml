@@ -1,0 +1,10 @@
+name = "aiken-lang/acceptance_test_128"
+version = "0.0.0"
+compiler = "v1.1.21"
+plutus = "v3"
+export_all_types = true
+
+[repository]
+user = "aiken-lang"
+project = "acceptance_test_128"
+platform = "github"
