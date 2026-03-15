@@ -68,18 +68,21 @@ impl Test {
         module_name: String,
         input_path: PathBuf,
     ) -> Test {
-        let program = generator.generate_raw(&test.body, &[], &module_name);
+        let program = generator
+            .generate_raw(&test.body, &[], &module_name)
+            .strip_context();
 
         let assertion = match test.body.try_into() {
             Err(..) => None,
             Ok(Assertion { bin_op, head, tail }) => {
                 let as_constant = |generator: &mut CodeGenerator<'_>, side| {
-                    Program::<NamedDeBruijn>::try_from(generator.generate_raw(
+                    Program::<NamedDeBruijn, _>::try_from(generator.generate_raw(
                         &side,
                         &[],
                         &module_name,
                     ))
                     .expect("failed to convert assertion operaand to NamedDeBruijn")
+                    .strip_context()
                     .eval(ExBudget::max())
                     .unwrap_constant()
                     .map(|cst| (cst, side.tipo()))
@@ -146,19 +149,25 @@ impl Test {
 
             let stripped_type_info = convert_opaque_type(&type_info, generator.data_types(), true);
 
-            let program = generator.clone().generate_raw(
-                &test.body,
-                &[TypedArg {
-                    tipo: stripped_type_info.clone(),
-                    ..parameter.clone().into()
-                }],
-                &module_name,
-            );
+            let program = generator
+                .clone()
+                .generate_raw(
+                    &test.body,
+                    &[TypedArg {
+                        tipo: stripped_type_info.clone(),
+                        ..parameter.clone().into()
+                    }],
+                    &module_name,
+                )
+                .strip_context();
 
             // NOTE: We need not to pass any parameter to the fuzzer/sampler here because the fuzzer
             // argument is a Data constructor which needs not any conversion. So we can just safely
             // apply onto it later.
-            let generator_program = generator.clone().generate_raw(&via, &[], &module_name);
+            let generator_program = generator
+                .clone()
+                .generate_raw(&via, &[], &module_name)
+                .strip_context();
 
             match kind {
                 RunnableKind::Bench => Test::Benchmark(Benchmark {
@@ -543,10 +552,10 @@ impl Benchmark {
         let mut size = 0;
 
         while error.is_none() && max_size >= size {
-            let fuzzer = self
-                .sampler
-                .program
-                .apply_term(&Term::Constant(Constant::Integer(size.into()).into()));
+            let fuzzer = self.sampler.program.apply_term(&Term::Constant {
+                value: Constant::Integer(size.into()).into(),
+                context: (),
+            });
 
             match prng.sample(&fuzzer) {
                 Ok(None) => {
@@ -744,9 +753,9 @@ impl Prng {
             unreachable!("malformed Prng: {cst:#?}")
         }
 
-        if let Term::Constant(rc) = &result {
+        if let Term::Constant { value: rc, .. } = &result {
             if let Constant::Data(PlutusData::Constr(Constr { tag, fields, .. })) = &rc.borrow() {
-                if *tag == 121 + Prng::SOME {
+                if tag == &(121 + Prng::SOME) {
                     if let [PlutusData::Array(elems)] = &fields[..] {
                         if let [new_seed, value] = &elems[..] {
                             return Some((as_prng(new_seed), value.clone()));
@@ -758,7 +767,7 @@ impl Prng {
                 // choices. If we run out of choices, or a choice end up being
                 // invalid as per the expectation, the fuzzer can't go further and
                 // fail.
-                if *tag == 121 + Prng::NONE {
+                if tag == &(121 + Prng::NONE) {
                     return None;
                 }
             }

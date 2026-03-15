@@ -4,7 +4,7 @@ use cmd::completion;
 use cmd::{
     Cmd, benchmark,
     blueprint::{self, address},
-    build, check, docs, export, fmt, lsp, new,
+    build, check, coverage, docs, export, fmt, lsp, new,
     packages::{self, add},
     tx, uplc,
 };
@@ -24,6 +24,7 @@ fn main() -> miette::Result<()> {
         Cmd::Build(args) => build::exec(args),
         Cmd::Address(args) => address::exec(args),
         Cmd::Check(args) => check::exec(args),
+        Cmd::Coverage(args) => coverage::exec(args),
         Cmd::Bench(args) => benchmark::exec(args),
         Cmd::Docs(args) => docs::exec(args),
         Cmd::Add(args) => add::exec(args),

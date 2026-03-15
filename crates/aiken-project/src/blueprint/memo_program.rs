@@ -1,9 +1,12 @@
-use aiken_lang::{ast::TypedValidator, gen_uplc::CodeGenerator};
-use uplc::ast::{DeBruijn, Program};
+use aiken_lang::{
+    ast::{SourceLocation, TypedValidator},
+    gen_uplc::CodeGenerator,
+};
+use uplc::ast::{Name, Program};
 
 #[derive(Default)]
 pub struct MemoProgram {
-    program: Option<Program<DeBruijn>>,
+    program: Option<Program<Name, SourceLocation>>,
 }
 
 impl MemoProgram {
@@ -12,13 +15,11 @@ impl MemoProgram {
         generator: &mut CodeGenerator,
         def: &TypedValidator,
         module_name: &str,
-    ) -> Program<DeBruijn> {
+    ) -> Program<Name, SourceLocation> {
         match self.program.take() {
             None => {
-                let new_program = generator.generate(def, module_name).to_debruijn().unwrap();
-
+                let new_program = generator.generate(def, module_name);
                 self.program.replace(new_program.clone());
-
                 new_program
             }
             Some(program) => program,

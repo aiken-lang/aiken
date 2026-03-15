@@ -1,4 +1,4 @@
-use super::{Error, Value};
+use super::{Error, value::Value};
 use crate::builtins::DefaultFunction;
 use num_traits::Signed;
 use pallas_primitives::conway::Language;
@@ -1974,7 +1974,11 @@ impl Default for BuiltinCosts {
 }
 
 impl BuiltinCosts {
-    pub fn to_ex_budget(&self, fun: DefaultFunction, args: &[Value]) -> Result<ExBudget, Error> {
+    pub fn to_ex_budget<C: Clone>(
+        &self,
+        fun: DefaultFunction,
+        args: &[Value<C>],
+    ) -> Result<ExBudget, Error> {
         Ok(match fun {
             DefaultFunction::AddInteger => ExBudget {
                 mem: self

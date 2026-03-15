@@ -3,7 +3,7 @@ use std::{fmt::Display, rc::Rc};
 use itertools::Itertools;
 use uplc::{builder::CONSTR_FIELDS_EXPOSER, builtins::DefaultFunction};
 
-use crate::expr::Type;
+use crate::{ast::SourceLocation, expr::Type};
 
 use super::{
     decision_tree::{CaseTest, Path, get_tipo_by_path},
@@ -39,24 +39,42 @@ impl Eq for Builtin {}
 impl Builtin {
     fn produce_air(self, arg: AirTree) -> AirTree {
         match self {
-            Builtin::HeadList(t) => AirTree::builtin(DefaultFunction::HeadList, t, vec![arg]),
-            Builtin::ExtractField(t) => AirTree::extract_field(t, arg),
+            Builtin::HeadList(t) => AirTree::builtin(
+                DefaultFunction::HeadList,
+                t,
+                vec![arg],
+                SourceLocation::empty(),
+            ),
+            Builtin::ExtractField(t) => AirTree::extract_field(t, arg, SourceLocation::empty()),
             Builtin::TailList => AirTree::builtin(
                 DefaultFunction::TailList,
                 Type::list(Type::data()),
                 vec![arg],
+                SourceLocation::empty(),
             ),
             Builtin::UnConstrFields => AirTree::call(
                 AirTree::local_var(
                     CONSTR_FIELDS_EXPOSER,
                     Type::function(vec![Type::data()], Type::list(Type::data())),
+                    SourceLocation::empty(),
                 ),
                 Type::list(Type::data()),
                 vec![arg],
+                SourceLocation::empty(),
             ),
 
-            Builtin::FstPair(t) => AirTree::builtin(DefaultFunction::FstPair, t, vec![arg]),
-            Builtin::SndPair(t) => AirTree::builtin(DefaultFunction::SndPair, t, vec![arg]),
+            Builtin::FstPair(t) => AirTree::builtin(
+                DefaultFunction::FstPair,
+                t,
+                vec![arg],
+                SourceLocation::empty(),
+            ),
+            Builtin::SndPair(t) => AirTree::builtin(
+                DefaultFunction::SndPair,
+                t,
+                vec![arg],
+                SourceLocation::empty(),
+            ),
         }
     }
 
@@ -226,8 +244,13 @@ impl Builtins {
             .rfold(then, |then, (prev_name, prev_tipo, next_name, builtin)| {
                 AirTree::let_assignment(
                     next_name,
-                    builtin.produce_air(AirTree::local_var(prev_name, prev_tipo)),
+                    builtin.produce_air(AirTree::local_var(
+                        prev_name,
+                        prev_tipo,
+                        SourceLocation::empty(),
+                    )),
                     then,
+                    SourceLocation::empty(),
                 )
             })
     }

@@ -3,7 +3,11 @@ use crate::ast::{Name, Program};
 pub mod interner;
 pub mod shrinker;
 
-pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
+/// Full optimization for Program<Name> (without span context).
+/// This includes DeBruijn interning and all optimizations.
+pub fn aiken_optimize_and_intern<C: Clone + Default + PartialEq>(
+    program: Program<Name, C>,
+) -> Program<Name, C> {
     let mut prog = program.run_once_pass();
 
     let mut prev_count = 0;
@@ -38,5 +42,14 @@ pub fn aiken_optimize_and_intern(program: Program<Name>) -> Program<Name> {
         }
     }
 
+    prog.clean_up_no_inlines().afterwards()
+}
+
+/// Minimal optimization for Program<Name> (without span context).
+/// Only performs passes necessary for correctness, skipping performance optimizations.
+pub fn aiken_optimize_minimal<C: Clone + Default + PartialEq>(
+    program: Program<Name, C>,
+) -> Program<Name, C> {
+    let prog = program.run_once_pass();
     prog.clean_up_no_inlines().afterwards()
 }

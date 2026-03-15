@@ -51,14 +51,14 @@ impl From<&Language> for BuiltinSemantics {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct BuiltinRuntime {
-    pub(super) args: Vec<Value>,
+pub struct BuiltinRuntime<C> {
+    pub(super) args: Vec<Value<C>>,
     pub fun: DefaultFunction,
     pub(super) forces: u32,
 }
 
-impl BuiltinRuntime {
-    pub fn new(fun: DefaultFunction) -> BuiltinRuntime {
+impl<C> BuiltinRuntime<C> {
+    pub fn new(fun: DefaultFunction) -> BuiltinRuntime<C> {
         Self {
             args: vec![],
             fun,
@@ -82,14 +82,16 @@ impl BuiltinRuntime {
         self.forces += 1;
     }
 
-    pub fn call(&self, language: &Language, traces: &mut Vec<Trace>) -> Result<Value, Error> {
-        self.fun.call(language.into(), &self.args, traces)
-    }
-
-    pub fn push(&mut self, arg: Value) -> Result<(), Error> {
+    pub fn push(&mut self, arg: Value<C>) -> Result<(), Error> {
         self.args.push(arg);
 
         Ok(())
+    }
+}
+
+impl<C: Clone> BuiltinRuntime<C> {
+    pub fn call(&self, language: &Language, traces: &mut Vec<Trace>) -> Result<Value<C>, Error> {
+        self.fun.call(language.into(), &self.args, traces)
     }
 
     pub fn to_ex_budget(&self, costs: &BuiltinCosts) -> Result<ExBudget, Error> {
@@ -97,7 +99,7 @@ impl BuiltinRuntime {
     }
 }
 
-impl From<DefaultFunction> for BuiltinRuntime {
+impl<C> From<DefaultFunction> for BuiltinRuntime<C> {
     fn from(fun: DefaultFunction) -> Self {
         BuiltinRuntime::new(fun)
     }
@@ -384,12 +386,12 @@ impl DefaultFunction {
         }
     }
 
-    pub fn call(
+    pub fn call<C: Clone>(
         &self,
         semantics: BuiltinSemantics,
-        args: &[Value],
+        args: &[Value<C>],
         traces: &mut Vec<Trace>,
-    ) -> Result<Value, Error> {
+    ) -> Result<Value<C>, Error> {
         match self {
             DefaultFunction::AddInteger => {
                 let arg1 = args[0].unwrap_integer()?;
@@ -828,7 +830,7 @@ impl DefaultFunction {
                 let (_, list) = args[0].unwrap_list()?;
 
                 if list.is_empty() {
-                    Err(Error::EmptyList(args[0].clone()))
+                    Err(Error::EmptyList(args[0].erase_context()))
                 } else {
                     let value = Value::Con(list[0].clone().into());
 
@@ -839,7 +841,7 @@ impl DefaultFunction {
                 let (r#type, list) = args[0].unwrap_list()?;
 
                 if list.is_empty() {
-                    Err(Error::EmptyList(args[0].clone()))
+                    Err(Error::EmptyList(args[0].erase_context()))
                 } else {
                     let value = Value::list(r#type.clone(), list[1..].to_vec());
 
@@ -951,7 +953,7 @@ impl DefaultFunction {
                     let Constant::Data(PlutusData::Constr(c)) = inner.as_ref() else {
                         return Err(Error::DeserialisationError(
                             "UnConstrData".to_string(),
-                            v.clone(),
+                            v.erase_context(),
                         ));
                     };
 
@@ -979,14 +981,14 @@ impl DefaultFunction {
 
                     Ok(value)
                 }
-                v => Err(Error::NotAConstant(v.clone())),
+                v => Err(Error::NotAConstant(v.erase_context())),
             },
             DefaultFunction::UnMapData => match &args[0] {
                 v @ Value::Con(inner) => {
                     let Constant::Data(PlutusData::Map(m)) = inner.as_ref() else {
                         return Err(Error::DeserialisationError(
                             "UnMapData".to_string(),
-                            v.clone(),
+                            v.erase_context(),
                         ));
                     };
 
@@ -1009,14 +1011,14 @@ impl DefaultFunction {
 
                     Ok(value)
                 }
-                v => Err(Error::NotAConstant(v.clone())),
+                v => Err(Error::NotAConstant(v.erase_context())),
             },
             DefaultFunction::UnListData => match &args[0] {
                 v @ Value::Con(inner) => {
                     let Constant::Data(PlutusData::Array(l)) = inner.as_ref() else {
                         return Err(Error::DeserialisationError(
                             "UnListData".to_string(),
-                            v.clone(),
+                            v.erase_context(),
                         ));
                     };
 
@@ -1030,14 +1032,14 @@ impl DefaultFunction {
 
                     Ok(value)
                 }
-                v => Err(Error::NotAConstant(v.clone())),
+                v => Err(Error::NotAConstant(v.erase_context())),
             },
             DefaultFunction::UnIData => match &args[0] {
                 v @ Value::Con(inner) => {
                     let Constant::Data(PlutusData::BigInt(b)) = inner.as_ref() else {
                         return Err(Error::DeserialisationError(
                             "UnIData".to_string(),
-                            v.clone(),
+                            v.erase_context(),
                         ));
                     };
 
@@ -1045,14 +1047,14 @@ impl DefaultFunction {
 
                     Ok(value)
                 }
-                v => Err(Error::NotAConstant(v.clone())),
+                v => Err(Error::NotAConstant(v.erase_context())),
             },
             DefaultFunction::UnBData => match &args[0] {
                 v @ Value::Con(inner) => {
                     let Constant::Data(PlutusData::BoundedBytes(b)) = inner.as_ref() else {
                         return Err(Error::DeserialisationError(
                             "UnBData".to_string(),
-                            v.clone(),
+                            v.erase_context(),
                         ));
                     };
 
@@ -1060,7 +1062,7 @@ impl DefaultFunction {
 
                     Ok(value)
                 }
-                v => Err(Error::NotAConstant(v.clone())),
+                v => Err(Error::NotAConstant(v.erase_context())),
             },
             DefaultFunction::EqualsData => {
                 let d1 = args[0].unwrap_data()?;
@@ -1881,7 +1883,7 @@ pub fn convert_constr_to_tag(constr: u64) -> Option<u64> {
 pub static ANY_TAG: u64 = 102;
 
 #[cfg(not(target_family = "wasm"))]
-fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Value, Error> {
+fn verify_ecdsa<C>(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Value<C>, Error> {
     use secp256k1::{Message, PublicKey, Secp256k1, ecdsa::Signature};
 
     let secp = Secp256k1::verification_only();
@@ -1900,7 +1902,11 @@ fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<V
 /// Unlike the Haskell implementation the schnorr verification function in Aiken doesn't allow for arbitrary message sizes (at the moment).
 /// The message needs to be 32 bytes (ideally prehashed, but not a requirement).
 #[cfg(not(target_family = "wasm"))]
-fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Value, Error> {
+fn verify_schnorr<C>(
+    public_key: &[u8],
+    message: &[u8],
+    signature: &[u8],
+) -> Result<Value<C>, Error> {
     use secp256k1::{Message, Secp256k1, XOnlyPublicKey, schnorr::Signature};
 
     let secp = Secp256k1::verification_only();
@@ -1917,7 +1923,7 @@ fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result
 }
 
 #[cfg(target_family = "wasm")]
-fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Value, Error> {
+fn verify_ecdsa<C>(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Value<C>, Error> {
     use k256::ecdsa::{self, signature::hazmat::PrehashVerifier};
 
     let verifying_key = ecdsa::VerifyingKey::try_from(public_key)?;
@@ -1930,7 +1936,11 @@ fn verify_ecdsa(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<V
 }
 
 #[cfg(target_family = "wasm")]
-fn verify_schnorr(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<Value, Error> {
+fn verify_schnorr<C>(
+    public_key: &[u8],
+    message: &[u8],
+    signature: &[u8],
+) -> Result<Value<C>, Error> {
     use k256::schnorr::{self, signature::hazmat::PrehashVerifier};
 
     let verifying_key = schnorr::VerifyingKey::from_bytes(public_key)?;

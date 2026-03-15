@@ -33,16 +33,25 @@ use std::{
 /// This represents a program in Untyped Plutus Core.
 /// A program contains a version tuple and a term.
 /// It is generic because Term requires a generic type.
+/// The `C` parameter is for context information (defaults to `()`).
 #[derive(Debug, Clone, PartialEq)]
-pub struct Program<T> {
+pub struct Program<T, C = ()> {
     pub version: (usize, usize, usize),
-    pub term: Term<T>,
+    pub term: Term<T, C>,
 }
 
-impl<T> Program<T>
+impl<T, C> Program<T, C>
 where
     T: Clone,
+    C: Clone + Default,
 {
+    pub fn strip_context(self) -> Program<T, ()> {
+        Program {
+            version: self.version,
+            term: self.term.strip_context(),
+        }
+    }
+
     /// We use this to apply the validator to Datum,
     /// then redeemer, then ScriptContext. If datum is
     /// even necessary (i.e. minting policy).
@@ -50,6 +59,7 @@ where
         let applied_term = Term::Apply {
             function: Rc::new(self.term.clone()),
             argument: Rc::new(program.term.clone()),
+            context: C::default(),
         };
 
         Program {
@@ -63,7 +73,11 @@ where
     pub fn apply_data(&self, plutus_data: PlutusData) -> Self {
         let applied_term = Term::Apply {
             function: Rc::new(self.term.clone()),
-            argument: Rc::new(Term::Constant(Constant::Data(plutus_data).into())),
+            argument: Rc::new(Term::Constant {
+                value: Constant::Data(plutus_data).into(),
+                context: C::default(),
+            }),
+            context: C::default(),
         };
 
         Program {
@@ -71,16 +85,26 @@ where
             term: applied_term,
         }
     }
+
+    /// Transform the context of all nodes in the program's term tree.
+    /// Use `program.map_context(|_| ())` to strip source locations.
+    pub fn map_context<D>(self, f: &impl Fn(C) -> D) -> Program<T, D> {
+        Program {
+            version: self.version,
+            term: self.term.map_context(f),
+        }
+    }
 }
 
-impl Program<Name> {
+impl<C: Clone + Default> Program<Name, C> {
     /// We use this to apply the validator to Datum,
     /// then redeemer, then ScriptContext. If datum is
     /// even necessary (i.e. minting policy).
-    pub fn apply_term(&self, term: &Term<Name>) -> Self {
+    pub fn apply_term(&self, term: &Term<Name, C>) -> Self {
         let applied_term = Term::Apply {
             function: Rc::new(self.term.clone()),
             argument: Rc::new(term.clone()),
+            context: C::default(),
         };
 
         let mut program = Program {
@@ -94,17 +118,17 @@ impl Program<Name> {
     }
 
     /// A convenient method to convery named programs to debruijn programs.
-    pub fn to_debruijn(self) -> Result<Program<DeBruijn>, debruijn::Error> {
+    pub fn to_debruijn(self) -> Result<Program<DeBruijn, C>, debruijn::Error> {
         self.try_into()
     }
 
     /// A convenient method to convery named programs to named debruijn programs.
-    pub fn to_named_debruijn(self) -> Result<Program<NamedDeBruijn>, debruijn::Error> {
+    pub fn to_named_debruijn(self) -> Result<Program<NamedDeBruijn, C>, debruijn::Error> {
         self.try_into()
     }
 }
 
-impl<'a, T> Display for Program<T>
+impl<'a, T, C> Display for Program<T, C>
 where
     T: Binder<'a>,
 {
@@ -293,58 +317,186 @@ impl Program<DeBruijn> {
 /// Specifically, `Var` and `parameter_name` in `Lambda` can be a `Name`,
 /// `NamedDebruijn`, or `DeBruijn`. When encoded to flat for on chain usage
 /// we must encode using the `DeBruijn` form.
+///
+/// The `C` parameter is used to attach context information (e.g., source spans)
+/// to terms. It defaults to `()` for cases where no context is needed.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Term<T> {
+pub enum Term<T, C = ()> {
     // tag: 0
-    Var(Rc<T>),
+    Var {
+        name: Rc<T>,
+        context: C,
+    },
     // tag: 1
-    Delay(Rc<Term<T>>),
+    Delay {
+        term: Rc<Term<T, C>>,
+        context: C,
+    },
     // tag: 2
     Lambda {
         parameter_name: Rc<T>,
-        body: Rc<Term<T>>,
+        body: Rc<Term<T, C>>,
+        context: C,
     },
     // tag: 3
     Apply {
-        function: Rc<Term<T>>,
-        argument: Rc<Term<T>>,
+        function: Rc<Term<T, C>>,
+        argument: Rc<Term<T, C>>,
+        context: C,
     },
     // tag: 4
-    Constant(Rc<Constant>),
+    Constant {
+        value: Rc<Constant>,
+        context: C,
+    },
     // tag: 5
-    Force(Rc<Term<T>>),
+    Force {
+        term: Rc<Term<T, C>>,
+        context: C,
+    },
     // tag: 6
-    Error,
+    Error {
+        context: C,
+    },
     // tag: 7
-    Builtin(DefaultFunction),
+    Builtin {
+        func: DefaultFunction,
+        context: C,
+    },
     // tag: 8
     Constr {
         tag: usize,
-        fields: Vec<Term<T>>,
+        fields: Vec<Term<T, C>>,
+        context: C,
     },
     // tag: 9
     Case {
-        constr: Rc<Term<T>>,
-        branches: Vec<Term<T>>,
+        constr: Rc<Term<T, C>>,
+        branches: Vec<Term<T, C>>,
+        context: C,
     },
 }
 
-impl<T> Term<T> {
+impl<T, C> Term<T, C> {
     pub fn is_unit(&self) -> bool {
-        matches!(self, Term::Constant(c) if c.as_ref() == &Constant::Unit)
+        matches!(self, Term::Constant { value, .. } if value.as_ref() == &Constant::Unit)
     }
 
     pub fn is_int(&self) -> bool {
-        matches!(self, Term::Constant(c) if matches!(c.as_ref(), &Constant::Integer(_)))
+        matches!(self, Term::Constant { value, .. } if matches!(value.as_ref(), &Constant::Integer(_)))
+    }
+
+    /// Get the context value for this term node.
+    /// This can be used to look up source locations when C is a source map index.
+    pub fn context(&self) -> C
+    where
+        C: Clone,
+    {
+        match self {
+            Term::Var { context, .. }
+            | Term::Delay { context, .. }
+            | Term::Lambda { context, .. }
+            | Term::Apply { context, .. }
+            | Term::Constant { context, .. }
+            | Term::Force { context, .. }
+            | Term::Error { context }
+            | Term::Builtin { context, .. }
+            | Term::Constr { context, .. }
+            | Term::Case { context, .. } => context.clone(),
+        }
+    }
+
+    pub fn strip_context(self) -> Term<T, ()>
+    where
+        C: Clone,
+        T: Clone,
+    {
+        self.map_context(&|_| ())
+    }
+
+    /// Transform the context of all nodes in the term tree.
+    /// Use `term.map_context(|_| ())` to strip source locations.
+    pub fn map_context<D>(self, f: &impl Fn(C) -> D) -> Term<T, D>
+    where
+        C: Clone,
+        T: Clone,
+    {
+        match self {
+            Term::Var { name, context } => Term::Var {
+                name,
+                context: f(context),
+            },
+            Term::Delay { term, context } => Term::Delay {
+                term: Rc::new(Rc::unwrap_or_clone(term).map_context(f)),
+                context: f(context),
+            },
+            Term::Lambda {
+                parameter_name,
+                body,
+                context,
+            } => Term::Lambda {
+                parameter_name,
+                body: Rc::new(Rc::unwrap_or_clone(body).map_context(f)),
+                context: f(context),
+            },
+            Term::Apply {
+                function,
+                argument,
+                context,
+            } => Term::Apply {
+                function: Rc::new(Rc::unwrap_or_clone(function).map_context(f)),
+                argument: Rc::new(Rc::unwrap_or_clone(argument).map_context(f)),
+                context: f(context),
+            },
+            Term::Constant { value, context } => Term::Constant {
+                value,
+                context: f(context),
+            },
+            Term::Force { term, context } => Term::Force {
+                term: Rc::new(Rc::unwrap_or_clone(term).map_context(f)),
+                context: f(context),
+            },
+            Term::Error { context } => Term::Error {
+                context: f(context),
+            },
+            Term::Builtin { func, context } => Term::Builtin {
+                func,
+                context: f(context),
+            },
+            Term::Constr {
+                tag,
+                fields,
+                context,
+            } => Term::Constr {
+                tag,
+                fields: fields
+                    .into_iter()
+                    .map(|field| field.map_context(f))
+                    .collect(),
+                context: f(context),
+            },
+            Term::Case {
+                constr,
+                branches,
+                context,
+            } => Term::Case {
+                constr: Rc::new(Rc::unwrap_or_clone(constr).map_context(f)),
+                branches: branches
+                    .into_iter()
+                    .map(|branch| branch.map_context(f))
+                    .collect(),
+                context: f(context),
+            },
+        }
     }
 }
 
-impl<T> TryInto<PlutusData> for Term<T> {
+impl<T, C> TryInto<PlutusData> for Term<T, C> {
     type Error = String;
 
     fn try_into(self) -> Result<PlutusData, String> {
         match self {
-            Term::Constant(rc) => match &*rc {
+            Term::Constant { value, .. } => match &*value {
                 Constant::Data(data) => Ok(data.to_owned()),
                 _ => Err("not a data".to_string()),
             },
@@ -353,7 +505,7 @@ impl<T> TryInto<PlutusData> for Term<T> {
     }
 }
 
-impl<'a, T> Display for Term<T>
+impl<'a, T, C> Display for Term<T, C>
 where
     T: Binder<'a>,
 {
@@ -646,23 +798,35 @@ impl From<DeBruijn> for NamedDeBruijn {
 
 /// Convert a Parsed `Program` to a `Program` in `NamedDebruijn` form.
 /// This checks for any Free Uniques in the `Program` and returns an error if found.
-impl TryFrom<Program<Name>> for Program<NamedDeBruijn> {
+impl<C: Clone> TryFrom<Program<Name, C>> for Program<NamedDeBruijn, C> {
     type Error = debruijn::Error;
 
-    fn try_from(value: Program<Name>) -> Result<Self, Self::Error> {
-        Ok(Program::<NamedDeBruijn> {
+    fn try_from(value: Program<Name, C>) -> Result<Self, Self::Error> {
+        Ok(Program::<NamedDeBruijn, C> {
             version: value.version,
             term: value.term.try_into()?,
         })
     }
 }
 
+impl<C: Clone> Program<Name, C> {
+    /// Convert a `Program<Name, C>` to `Program<NamedDeBruijn, C>`, preserving the context type.
+    /// This is useful for coverage tracking where we want to preserve source locations.
+    pub fn try_into_named_debruijn(self) -> Result<Program<NamedDeBruijn, C>, debruijn::Error> {
+        let mut converter = Converter::new();
+        Ok(Program {
+            version: self.version,
+            term: converter.name_to_named_debruijn(&self.term)?,
+        })
+    }
+}
+
 /// Convert a Parsed `Term` to a `Term` in `NamedDebruijn` form.
 /// This checks for any Free Uniques in the `Term` and returns an error if found.
-impl TryFrom<Term<Name>> for Term<NamedDeBruijn> {
+impl<C: Clone> TryFrom<Term<Name, C>> for Term<NamedDeBruijn, C> {
     type Error = debruijn::Error;
 
-    fn try_from(value: Term<Name>) -> Result<Self, debruijn::Error> {
+    fn try_from(value: Term<Name, C>) -> Result<Self, debruijn::Error> {
         let mut converter = Converter::new();
 
         let term = converter.name_to_named_debruijn(&value)?;
@@ -673,11 +837,11 @@ impl TryFrom<Term<Name>> for Term<NamedDeBruijn> {
 
 /// Convert a Parsed `Program` to a `Program` in `Debruijn` form.
 /// This checks for any Free Uniques in the `Program` and returns an error if found.
-impl TryFrom<Program<Name>> for Program<DeBruijn> {
+impl<C: Clone> TryFrom<Program<Name, C>> for Program<DeBruijn, C> {
     type Error = debruijn::Error;
 
-    fn try_from(value: Program<Name>) -> Result<Self, Self::Error> {
-        Ok(Program::<DeBruijn> {
+    fn try_from(value: Program<Name, C>) -> Result<Self, Self::Error> {
+        Ok(Program::<DeBruijn, C> {
             version: value.version,
             term: value.term.try_into()?,
         })
@@ -686,10 +850,10 @@ impl TryFrom<Program<Name>> for Program<DeBruijn> {
 
 /// Convert a Parsed `Term` to a `Term` in `Debruijn` form.
 /// This checks for any Free Uniques in the `Program` and returns an error if found.
-impl TryFrom<Term<Name>> for Term<DeBruijn> {
+impl<C: Clone> TryFrom<Term<Name, C>> for Term<DeBruijn, C> {
     type Error = debruijn::Error;
 
-    fn try_from(value: Term<Name>) -> Result<Self, debruijn::Error> {
+    fn try_from(value: Term<Name, C>) -> Result<Self, debruijn::Error> {
         let mut converter = Converter::new();
 
         let term = converter.name_to_debruijn(&value)?;
@@ -698,21 +862,21 @@ impl TryFrom<Term<Name>> for Term<DeBruijn> {
     }
 }
 
-impl TryFrom<&Program<DeBruijn>> for Program<Name> {
+impl<C: Clone> TryFrom<&Program<DeBruijn, C>> for Program<Name, C> {
     type Error = debruijn::Error;
 
-    fn try_from(value: &Program<DeBruijn>) -> Result<Self, Self::Error> {
-        Ok(Program::<Name> {
+    fn try_from(value: &Program<DeBruijn, C>) -> Result<Self, Self::Error> {
+        Ok(Program::<Name, C> {
             version: value.version,
             term: (&value.term).try_into()?,
         })
     }
 }
 
-impl TryFrom<&Term<DeBruijn>> for Term<Name> {
+impl<C: Clone> TryFrom<&Term<DeBruijn, C>> for Term<Name, C> {
     type Error = debruijn::Error;
 
-    fn try_from(value: &Term<DeBruijn>) -> Result<Self, debruijn::Error> {
+    fn try_from(value: &Term<DeBruijn, C>) -> Result<Self, debruijn::Error> {
         let mut converter = Converter::new();
 
         let term = converter.debruijn_to_name(value)?;
@@ -930,7 +1094,7 @@ impl Program<DeBruijn> {
 
 impl Term<NamedDeBruijn> {
     pub fn is_valid_script_result(&self) -> bool {
-        !matches!(self, Term::Error)
+        !matches!(self, Term::Error { .. })
     }
 }
 

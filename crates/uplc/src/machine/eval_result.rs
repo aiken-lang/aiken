@@ -54,13 +54,13 @@ impl EvalResult {
     pub fn failed(&self, can_error: bool) -> bool {
         if can_error {
             self.result.is_ok()
-                && !matches!(self.result, Ok(Term::Constant(ref con)) if matches!(con.as_ref(), Constant::Bool(false)))
+                && !matches!(self.result, Ok(Term::Constant { value: ref con, .. }) if matches!(con.as_ref(), Constant::Bool(false)))
         } else {
             self.result.is_err()
-                || matches!(self.result, Ok(Term::Error))
+                || matches!(self.result, Ok(Term::Error { .. }))
                 || !matches!(
                   self.result,
-                  Ok(Term::Constant(ref con))
+                  Ok(Term::Constant { value: ref con, .. })
                   if matches!(con.as_ref(), Constant::Bool(true)) || matches!(con.as_ref(), Constant::Unit)
                 )
         }
@@ -73,7 +73,7 @@ impl EvalResult {
     #[allow(clippy::result_unit_err)]
     pub fn unwrap_constant(self) -> Result<Constant, ()> {
         match self.result {
-            Ok(Term::Constant(cst)) => Ok(cst.as_ref().to_owned()),
+            Ok(Term::Constant { value: cst, .. }) => Ok(cst.as_ref().to_owned()),
             _ => Err(()),
         }
     }
