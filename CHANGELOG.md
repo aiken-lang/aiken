@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.22 - UNRELEASED
+
+### Fixed
+
+- **uplc**: Fixed conversion/discrepancy from large negative bigint when using `Data::integer`; mostly impacting value reification and tracing of large negative integers. Fixes [#1241](https://github.com/aiken-lang/aiken/issues/1241). @KtorZ
+
 ## v1.1.20 - 2025-12-11
 
 ### Added

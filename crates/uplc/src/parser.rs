@@ -403,6 +403,18 @@ mod tests {
     }
 
     #[test]
+    fn parse_big_negative_int() {
+        let uplc = "(program 1.1.0 (con integer -170141183460469231731687303715884105729))";
+        assert_eq!(
+            super::program(uplc).unwrap(),
+            Program::<Name> {
+                version: (1, 1, 0),
+                term: Term::Constant(Rc::new(Constant::Integer(BigInt::from(i128::MIN) - 1)))
+            }
+        )
+    }
+
+    #[test]
     fn parse_lambda() {
         let uplc = "(program 1.0.0 (lam x x))";
         let x = Name {
