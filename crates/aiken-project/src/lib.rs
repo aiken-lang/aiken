@@ -860,7 +860,8 @@ where
                                 }
                             })?;
 
-                            validator.source_map_file = Some(dir.join(&filename).to_string_lossy().into_owned());
+                            validator.source_map_file =
+                                Some(dir.join(&filename).to_string_lossy().into_owned());
                         }
                     }
                 }
