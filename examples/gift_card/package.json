@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@ada-anvil/weld": "^0.2.1",
-    "@lucid-evolution/lucid": "^0.4.6",
+    "@lucid-evolution/lucid": "^0.4.29",
     "@tailwindcss/container-queries": "^0.1.1",
     "@tailwindcss/forms": "^0.5.9",
     "@tailwindcss/typography": "^0.5.15",
