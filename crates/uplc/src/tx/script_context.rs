@@ -701,7 +701,6 @@ pub fn get_data_info(witness_set: &MintedWitnessSet) -> Vec<(DatumHash, PlutusDa
         .as_deref()
         .map(|s| {
             s.iter()
-                .cloned()
                 .map(|d| (d.original_hash(), d.clone().unwrap()))
                 .sorted()
                 .collect()
@@ -972,18 +971,16 @@ pub fn from_alonzo_value(value: &alonzo::Value) -> Value {
             NonEmptyKeyValuePairs::try_from(
                 assets
                     .iter()
-                    .cloned()
                     .map(|(policy_id, tokens)| {
                         (
-                            policy_id,
+                            *policy_id,
                             NonEmptyKeyValuePairs::try_from(
                                 tokens
                                     .iter()
-                                    .cloned()
                                     .map(|(asset_name, quantity)| {
                                         (
-                                            asset_name,
-                                            quantity.try_into().expect("0 Ada in output value?"),
+                                            asset_name.clone(),
+                                            (*quantity).try_into().expect("0 Ada in output value?"),
                                         )
                                     })
                                     .collect_vec(),

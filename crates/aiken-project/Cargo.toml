@@ -17,7 +17,7 @@ aiken-lang = { path = "../aiken-lang", version = "1.1.21" }
 askama = { version = "0.12.0", features = ["urlencode"] }
 camino = "1.1.9"
 ciborium = "0.2.2"
-dirs = "4.0.0"
+dirs = "6.0.0"
 fslock = "0.2.1"
 futures = "0.3.26"
 glob = "0.3.3"
@@ -40,13 +40,13 @@ petgraph = "0.6.3"
 pulldown-cmark = { version = "0.12.0", default-features = false, features = [
     "html",
 ] }
-rayon = "1.7.0"
+rayon = "1.11.0"
 regex = "1.12.2"
 reqwest = { version = "0.11.14", features = ["blocking", "json"] }
 rgb = "0.8.50"
 semver = { version = "1.0.23", features = ["serde"] }
 serde = { version = "1.0.152", features = ["derive"] }
-serde_json = { version = "1.0.94", features = ["preserve_order"] }
+serde_json = { version = "1.0.148", features = ["preserve_order"] }
 strip-ansi-escapes = "0.1.1"
 textplots = "0.8.7"
 thiserror = "1.0.39"
