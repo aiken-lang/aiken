@@ -1,10 +1,17 @@
+// NOTE: Required because clippy is unable to see through miette's Diagnostic macro expansion to
+// correctly assert that fields are used in the diagnostic precisely.
+#![allow(unused_assignments)]
+
 use super::{
     definitions::Reference,
     schema::{self, Schema},
 };
 use aiken_lang::ast::Span;
 use miette::{Diagnostic, NamedSource};
-use owo_colors::{OwoColorize, Stream::Stderr, Stream::Stdout};
+use owo_colors::{
+    OwoColorize,
+    Stream::{Stderr, Stdout},
+};
 use pallas_codec::minicbor as cbor;
 use std::{collections::BTreeSet, fmt::Debug};
 use uplc::ast::Constant;

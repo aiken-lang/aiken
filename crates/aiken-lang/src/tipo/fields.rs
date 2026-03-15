@@ -59,7 +59,6 @@ impl FieldMap {
 
         if self.arity != args.len() {
             return Err(Error::IncorrectFieldsArity {
-                labels: self.incorrect_arity_labels(args),
                 location,
                 expected: self.arity,
                 given: args.len(),

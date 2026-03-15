@@ -1,3 +1,7 @@
+// NOTE: Required because clippy is unable to see through miette's Diagnostic macro expansion to
+// correctly assert that fields are used in the diagnostic precisely.
+#![allow(unused_assignments)]
+
 pub mod well_known;
 
 use crate::{

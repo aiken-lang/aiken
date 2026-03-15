@@ -1321,7 +1321,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
         // Error constructor helper function
         let unknown_field = |fields| Error::UnknownRecordField {
-            situation: None,
             typ: record.tipo(),
             location,
             label: label.clone(),
@@ -2694,7 +2693,6 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         if self.not_yet_inferred.contains(&fun.name) {
                             return Err(Error::MustInferFirst {
                                 function: fun.clone(),
-                                location: *location,
                             });
                         }
                     }

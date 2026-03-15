@@ -1,3 +1,7 @@
+// NOTE: Required because clippy is unable to see through miette's Diagnostic macro expansion to
+// correctly assert that fields are used in the diagnostic precisely.
+#![allow(unused_assignments)]
+
 use super::Type;
 use crate::{
     ast::{
@@ -373,7 +377,6 @@ You can use '{discard}' and numbers to distinguish between similar names.
         location: Span,
         expected: usize,
         given: usize,
-        labels: Vec<String>,
     },
 
     #[error(
@@ -920,7 +923,6 @@ Perhaps, try the following:
         typ: Rc<Type>,
         label: String,
         fields: Vec<String>,
-        situation: Option<UnknownRecordFieldSituation>,
     },
 
     #[error("I found a reference to an unknown type.\n")]
@@ -1101,10 +1103,7 @@ The best thing to do from here is to remove it."#))]
     },
 
     #[error("Cannot infer caller without inferring callee first")]
-    MustInferFirst {
-        function: UntypedFunction,
-        location: Span,
-    },
+    MustInferFirst { function: UntypedFunction },
 
     #[error("I found a validator handler referring to an unknown purpose.\n")]
     #[diagnostic(code("unknown::purpose"))]
@@ -1253,13 +1252,7 @@ impl ExtraData for Error {
 }
 
 impl Error {
-    pub fn call_situation(mut self) -> Self {
-        if let Error::UnknownRecordField {
-            ref mut situation, ..
-        } = self
-        {
-            *situation = Some(UnknownRecordFieldSituation::FunctionCall);
-        }
+    pub fn call_situation(self) -> Self {
         self
     }
 

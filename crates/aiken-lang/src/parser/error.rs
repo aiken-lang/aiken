@@ -1,3 +1,7 @@
+// NOTE: Required because clippy is unable to see through miette's Diagnostic macro expansion to
+// correctly assert that fields are used in the diagnostic precisely.
+#![allow(unused_assignments)]
+
 use crate::{
     ast::{CurveType, Span},
     parser::token::Token,
@@ -38,9 +42,7 @@ use std::collections::HashSet;
 pub struct ParseError {
     pub kind: ErrorKind,
     #[label("{}", .label.unwrap_or_default())]
-    pub span: Span,
-    #[allow(dead_code)]
-    while_parsing: Option<(Span, &'static str)>,
+    span: Span,
     expected: HashSet<Pattern>,
     label: Option<&'static str>,
 }
@@ -59,7 +61,6 @@ impl ParseError {
             kind: ErrorKind::IllegalMultilineExpectComment,
             expected: HashSet::new(),
             span,
-            while_parsing: None,
             label: Some("too many lines"),
         }
     }
@@ -69,7 +70,6 @@ impl ParseError {
             kind: ErrorKind::Unexpected(got),
             expected: HashSet::from_iter([expected]),
             span,
-            while_parsing: None,
             label: None,
         }
     }
@@ -78,7 +78,6 @@ impl ParseError {
         Self {
             kind: ErrorKind::UnfinishedAssignmentRightHandSide,
             span,
-            while_parsing: None,
             expected: HashSet::new(),
             label: Some("invalid assignment right-hand side"),
         }
@@ -89,7 +88,6 @@ impl ParseError {
         Self {
             kind: ErrorKind::InvalidTupleIndex { hint },
             span,
-            while_parsing: None,
             expected: HashSet::new(),
             label: None,
         }
@@ -99,7 +97,6 @@ impl ParseError {
         Self {
             kind: ErrorKind::DeprecatedWhenClause,
             span,
-            while_parsing: None,
             expected: HashSet::new(),
             label: Some("deprecated"),
         }
@@ -109,7 +106,6 @@ impl ParseError {
         Self {
             kind: ErrorKind::PointNotOnCurve { curve },
             span,
-            while_parsing: None,
             expected: HashSet::new(),
             label: Some("out off curve"),
         }
@@ -125,7 +121,6 @@ impl ParseError {
         Self {
             kind: ErrorKind::UnknownCurvePoint { curve, point },
             span,
-            while_parsing: None,
             expected: HashSet::new(),
             label,
         }
@@ -135,7 +130,6 @@ impl ParseError {
         Self {
             kind: ErrorKind::MalformedBase16StringLiteral,
             span,
-            while_parsing: None,
             expected: HashSet::new(),
             label: None,
         }
@@ -145,7 +139,6 @@ impl ParseError {
         Self {
             kind: ErrorKind::MalformedBase16Digits,
             span,
-            while_parsing: None,
             expected: HashSet::new(),
             label: None,
         }
@@ -155,7 +148,6 @@ impl ParseError {
         Self {
             kind: ErrorKind::HybridNotationInByteArray,
             span,
-            while_parsing: None,
             expected: HashSet::new(),
             label: None,
         }
@@ -165,7 +157,6 @@ impl ParseError {
         Self {
             kind: ErrorKind::PatternMatchOnCurvePoint,
             span,
-            while_parsing: None,
             expected: HashSet::new(),
             label: Some("cannot pattern-match on curve point"),
         }
@@ -175,7 +166,6 @@ impl ParseError {
         Self {
             kind: ErrorKind::PatternMatchOnString,
             span,
-            while_parsing: None,
             expected: HashSet::new(),
             label: Some("cannot pattern-match on string"),
         }
@@ -204,7 +194,6 @@ impl<T: Into<Pattern>> chumsky::Error<T> for ParseError {
                 .map(ErrorKind::Unexpected)
                 .unwrap_or(ErrorKind::UnexpectedEnd),
             span,
-            while_parsing: None,
             expected: expected
                 .into_iter()
                 .map(|x| x.map(Into::into).unwrap_or(Pattern::End))
