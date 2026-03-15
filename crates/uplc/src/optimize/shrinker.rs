@@ -2223,7 +2223,7 @@ impl<C: Clone + Default> Term<Name, C> {
 
                     // The check above is to make sure the program is error safe
                     // Strip context for evaluation (evaluation doesn't preserve spans anyway)
-                    let stripped_term: Term<Name> = applied_term.map_context(|_| ());
+                    let stripped_term: Term<Name> = applied_term.map_context(&|_| ());
                     let eval_term: Term<Name> = Program {
                         version: (1, 0, 0),
                         term: stripped_term,
@@ -2237,7 +2237,7 @@ impl<C: Clone + Default> Term<Name, C> {
                     .unwrap();
 
                     // Add default context back to the evaluated term
-                    *self = eval_term.map_context(|_| C::default());
+                    *self = eval_term.map_context(&|_| C::default());
                 }
             }
             Term::Constr { .. } => todo!(),
@@ -2503,7 +2503,7 @@ impl<C: Clone + Default> Program<Name, C> {
         let contexts: RefCell<Vec<C>> = RefCell::new(Vec::new());
         let stripped: Program<Name> = Program {
             version: program.version,
-            term: program.term.map_context(|c| {
+            term: program.term.map_context(&|c| {
                 contexts.borrow_mut().push(c);
             }),
         };
@@ -2512,7 +2512,7 @@ impl<C: Clone + Default> Program<Name, C> {
         let iter = RefCell::new(contexts.into_inner().into_iter());
         Program {
             version: cleaned.version,
-            term: cleaned.term.map_context(|_| {
+            term: cleaned.term.map_context(&|_| {
                 iter.borrow_mut()
                     .next()
                     .expect("context count mismatch after DeBruijn round-trip")
@@ -2815,7 +2815,7 @@ impl<C: Clone + Default> Program<Name, C> {
         let contexts: RefCell<Vec<C>> = RefCell::new(Vec::new());
         let stripped: Program<Name> = Program {
             version: program.version,
-            term: program.term.map_context(|c| {
+            term: program.term.map_context(&|c| {
                 contexts.borrow_mut().push(c);
             }),
         };
@@ -2824,7 +2824,7 @@ impl<C: Clone + Default> Program<Name, C> {
         let iter = RefCell::new(contexts.into_inner().into_iter());
         Program {
             version: cleaned.version,
-            term: cleaned.term.map_context(|_| {
+            term: cleaned.term.map_context(&|_| {
                 iter.borrow_mut()
                     .next()
                     .expect("context count mismatch after DeBruijn round-trip")

@@ -68,18 +68,21 @@ impl Test {
         module_name: String,
         input_path: PathBuf,
     ) -> Test {
-        let program = generator.generate_raw(&test.body, &[], &module_name);
+        let program = generator
+            .generate_raw(&test.body, &[], &module_name)
+            .strip_context();
 
         let assertion = match test.body.try_into() {
             Err(..) => None,
             Ok(Assertion { bin_op, head, tail }) => {
                 let as_constant = |generator: &mut CodeGenerator<'_>, side| {
-                    Program::<NamedDeBruijn>::try_from(generator.generate_raw(
+                    Program::<NamedDeBruijn, _>::try_from(generator.generate_raw(
                         &side,
                         &[],
                         &module_name,
                     ))
                     .expect("failed to convert assertion operaand to NamedDeBruijn")
+                    .strip_context()
                     .eval(ExBudget::max())
                     .unwrap_constant()
                     .map(|cst| (cst, side.tipo()))
@@ -146,19 +149,25 @@ impl Test {
 
             let stripped_type_info = convert_opaque_type(&type_info, generator.data_types(), true);
 
-            let program = generator.clone().generate_raw(
-                &test.body,
-                &[TypedArg {
-                    tipo: stripped_type_info.clone(),
-                    ..parameter.clone().into()
-                }],
-                &module_name,
-            );
+            let program = generator
+                .clone()
+                .generate_raw(
+                    &test.body,
+                    &[TypedArg {
+                        tipo: stripped_type_info.clone(),
+                        ..parameter.clone().into()
+                    }],
+                    &module_name,
+                )
+                .strip_context();
 
             // NOTE: We need not to pass any parameter to the fuzzer/sampler here because the fuzzer
             // argument is a Data constructor which needs not any conversion. So we can just safely
             // apply onto it later.
-            let generator_program = generator.clone().generate_raw(&via, &[], &module_name);
+            let generator_program = generator
+                .clone()
+                .generate_raw(&via, &[], &module_name)
+                .strip_context();
 
             match kind {
                 RunnableKind::Bench => Test::Benchmark(Benchmark {

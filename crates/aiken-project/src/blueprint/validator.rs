@@ -250,9 +250,11 @@ impl Validator<()> {
         // Build source map if requested
         let source_map = match source_map_mode {
             SourceMapMode::None => None,
-            SourceMapMode::Inline | SourceMapMode::External(_) => program
-                .get_term_with_spans()
-                .map(|term| SourceMap::from_term(term, module_name, module_sources)),
+            SourceMapMode::Inline | SourceMapMode::External(_) => Some(SourceMap::from_term(
+                &compiled_program.term,
+                module_name,
+                module_sources,
+            )),
         };
 
         Validator {
@@ -265,7 +267,7 @@ impl Validator<()> {
                 PlutusVersion::V1 => SerializableProgram::PlutusV1Program,
                 PlutusVersion::V2 => SerializableProgram::PlutusV2Program,
                 PlutusVersion::V3 => SerializableProgram::PlutusV3Program,
-            }(compiled_program),
+            }(compiled_program.strip_context().to_debruijn().unwrap()),
             source_map,
             source_map_file: self.source_map_file,
             definitions: self.definitions,

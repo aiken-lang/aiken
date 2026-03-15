@@ -115,38 +115,24 @@ impl Export {
         })?;
 
         // Always generate with spans - both paths use the same code generation
-        let term_with_spans =
-            generator.generate_raw_with_spans(&func.body, &func.arguments, &module.name);
-
-        // Finalize and optimize (or use minimal optimization if no_optimize is set)
-        let optimized = if no_optimize {
-            generator.finalize_minimal_with_spans(term_with_spans)
-        } else {
-            generator.finalize_with_spans(term_with_spans)
-        };
+        let program = generator.generate_raw(&func.body, &func.arguments, &module.name);
 
         // Build source map if requested, otherwise discard spans
         let source_map = match source_map_mode {
             SourceMapMode::None => None,
             SourceMapMode::Inline | SourceMapMode::External(_) => Some(SourceMap::from_term(
-                &optimized.term,
+                &program.term,
                 &module.name,
                 module_sources,
             )),
         };
 
         // Convert to DeBruijn for final output (strips spans)
-        let program = uplc::ast::Program {
-            version: optimized.version,
-            term: optimized.term.map_context(|_| ()),
-        }
-        .to_debruijn()
-        .unwrap();
-
-        let program = match plutus_version {
-            PlutusVersion::V1 => SerializableProgram::PlutusV1Program(program),
-            PlutusVersion::V2 => SerializableProgram::PlutusV2Program(program),
-            PlutusVersion::V3 => SerializableProgram::PlutusV3Program(program),
+        let debruijn_program = program.strip_context().to_debruijn().unwrap();
+        let serialized_program = match plutus_version {
+            PlutusVersion::V1 => SerializableProgram::PlutusV1Program(debruijn_program),
+            PlutusVersion::V2 => SerializableProgram::PlutusV2Program(debruijn_program),
+            PlutusVersion::V3 => SerializableProgram::PlutusV3Program(debruijn_program),
         };
 
         Ok(Export {
@@ -154,7 +140,7 @@ impl Export {
             doc: func.doc.clone(),
             parameters,
             return_type,
-            program,
+            program: serialized_program,
             definitions,
             source_map,
         })
@@ -238,37 +224,25 @@ impl Export {
         })?;
 
         // Always generate with spans - both paths use the same code generation
-        let term_with_spans = generator.generate_raw_with_spans(&test.body, &args, &module.name);
-
-        // Finalize and optimize (or use minimal optimization if no_optimize is set)
-        let optimized = if no_optimize {
-            generator.finalize_minimal_with_spans(term_with_spans)
-        } else {
-            generator.finalize_with_spans(term_with_spans)
-        };
+        let program = generator.generate_raw(&test.body, &args, &module.name);
 
         // Build source map if requested, otherwise discard spans
         let source_map = match source_map_mode {
             SourceMapMode::None => None,
             SourceMapMode::Inline | SourceMapMode::External(_) => Some(SourceMap::from_term(
-                &optimized.term,
+                &program.term,
                 &module.name,
                 module_sources,
             )),
         };
 
         // Convert to DeBruijn for final output (strips spans)
-        let program = uplc::ast::Program {
-            version: optimized.version,
-            term: optimized.term.map_context(|_| ()),
-        }
-        .to_debruijn()
-        .unwrap();
+        let debruijn_program = program.strip_context().to_debruijn().unwrap();
 
-        let program = match plutus_version {
-            PlutusVersion::V1 => SerializableProgram::PlutusV1Program(program),
-            PlutusVersion::V2 => SerializableProgram::PlutusV2Program(program),
-            PlutusVersion::V3 => SerializableProgram::PlutusV3Program(program),
+        let serialized_program = match plutus_version {
+            PlutusVersion::V1 => SerializableProgram::PlutusV1Program(debruijn_program),
+            PlutusVersion::V2 => SerializableProgram::PlutusV2Program(debruijn_program),
+            PlutusVersion::V3 => SerializableProgram::PlutusV3Program(debruijn_program),
         };
 
         Ok(Export {
@@ -276,7 +250,7 @@ impl Export {
             doc: test.doc.clone(),
             parameters,
             return_type,
-            program,
+            program: serialized_program,
             definitions,
             source_map,
         })

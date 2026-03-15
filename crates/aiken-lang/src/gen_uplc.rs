@@ -56,10 +56,7 @@ use uplc::{
     builder::{CONSTR_FIELDS_EXPOSER, CONSTR_INDEX_EXPOSER, EXPECT_ON_LIST},
     builtins::DefaultFunction,
     machine::cost_model::ExBudget,
-    optimize::{
-        aiken_optimize_and_intern, aiken_optimize_minimal_with_context,
-        aiken_optimize_with_context, interner::CodeGenInterner, shrinker::NO_INLINE,
-    },
+    optimize::{aiken_optimize_and_intern, interner::CodeGenInterner, shrinker::NO_INLINE},
 };
 
 type Otherwise = Option<AirTree>;
@@ -138,18 +135,13 @@ impl<'a> CodeGenerator<'a> {
         }
     }
 
-    pub fn generate(&mut self, validator: &TypedValidator, module_name: &str) -> Program<Name> {
-        let (program, _term_with_spans) = self.generate_with_term(validator, module_name);
-        program
-    }
-
     /// Generate a validator program and return both the finalized program and the term with spans.
     /// The term with spans is useful for generating source maps.
-    pub fn generate_with_term(
+    pub fn generate(
         &mut self,
         validator: &TypedValidator,
         module_name: &str,
-    ) -> (Program<Name>, Term<Name, SourceLocation>) {
+    ) -> Program<Name, SourceLocation> {
         let context_name = "__context__".to_string();
         let context_name_interned = introduce_name(&mut self.interner, &context_name);
         validator.params.iter().for_each(|arg| {
@@ -190,12 +182,7 @@ impl<'a> CodeGenerator<'a> {
         });
 
         // Finalize with spans preserved for source map generation
-        let program_with_spans = self.finalize_with_spans(term);
-
-        // Strip spans for the program (compiled code doesn't need them)
-        let program = program_with_spans.clone().map_context(|_| ());
-
-        (program, program_with_spans.term)
+        self.finalize(term)
     }
 
     pub fn generate_raw(
@@ -203,7 +190,7 @@ impl<'a> CodeGenerator<'a> {
         body: &TypedExpr,
         args: &[TypedArg],
         module_name: &str,
-    ) -> Program<Name> {
+    ) -> Program<Name, SourceLocation> {
         args.iter().for_each(|arg| {
             arg.get_variable_name()
                 .iter()
@@ -233,50 +220,7 @@ impl<'a> CodeGenerator<'a> {
                 .for_each(|arg_name| self.interner.pop_text(arg_name.to_string()))
         });
 
-        self.finalize(term.map_context(|_| ()))
-    }
-
-    /// Returns the raw Term with Span context preserved.
-    /// This applies used functions (critical for recursive functions to work)
-    /// and is useful for source map generation.
-    pub fn generate_raw_with_spans(
-        &mut self,
-        body: &TypedExpr,
-        args: &[TypedArg],
-        module_name: &str,
-    ) -> Term<Name, SourceLocation> {
-        args.iter().for_each(|arg| {
-            arg.get_variable_name()
-                .iter()
-                .for_each(|arg_name| self.interner.intern(arg_name.to_string()))
-        });
-
-        let mut air_tree = self.build(body, module_name, &[]);
-
-        air_tree = AirTree::no_op(air_tree, SourceLocation::empty());
-
-        let full_tree = self.hoist_functions_to_validator(air_tree);
-
-        let full_vec = full_tree.to_vec();
-
-        let mut term = self.uplc_code_gen(full_vec);
-
-        term = if args.is_empty() {
-            term
-        } else {
-            cast_validator_args(term, args, &self.interner, &self.data_types)
-        };
-
-        args.iter().for_each(|arg| {
-            arg.get_variable_name()
-                .iter()
-                .for_each(|arg_name| self.interner.pop_text(arg_name.to_string()))
-        });
-
-        // Apply used functions (critical for recursive functions to work)
-        term = self.special_functions.apply_used_functions(term);
-
-        term
+        self.finalize(term)
     }
 
     fn new_program<T, C>(&self, term: Term<T, C>) -> Program<T, C> {
@@ -288,7 +232,12 @@ impl<'a> CodeGenerator<'a> {
         Program { version, term }
     }
 
-    fn finalize(&mut self, mut term: Term<Name>) -> Program<Name> {
+    /// Finalize and optimize a program while preserving source location context.
+    /// Uses the subset of optimizations that are generic over context type.
+    fn finalize<C: Default + Clone + PartialEq>(
+        &mut self,
+        mut term: Term<Name, C>,
+    ) -> Program<Name, C> {
         term = self.special_functions.apply_used_functions(term);
 
         let program = aiken_optimize_and_intern(self.new_program(term));
@@ -300,41 +249,6 @@ impl<'a> CodeGenerator<'a> {
         // switching to a shared code generator caused some
         // instability issues and we fixed it by placing this
         // method here.
-        self.reset(true);
-
-        program
-    }
-
-    /// Finalize and optimize a program while preserving source location context.
-    /// Uses the subset of optimizations that are generic over context type.
-    pub fn finalize_with_spans(
-        &mut self,
-        mut term: Term<Name, SourceLocation>,
-    ) -> Program<Name, SourceLocation> {
-        // Apply used functions (critical for recursive functions to work)
-        term = self.special_functions.apply_used_functions(term);
-
-        let program = aiken_optimize_with_context(self.new_program(term));
-
-        // Reset is important for reusing the generator instance
-        self.reset(true);
-
-        program
-    }
-
-    /// Finalize with minimal optimization, preserving source location context.
-    /// Skips performance optimizations like inlining and lambda reduction.
-    /// Produces larger but more readable code that maps directly to source.
-    pub fn finalize_minimal_with_spans(
-        &mut self,
-        mut term: Term<Name, SourceLocation>,
-    ) -> Program<Name, SourceLocation> {
-        // Apply used functions (critical for recursive functions to work)
-        term = self.special_functions.apply_used_functions(term);
-
-        let program = aiken_optimize_minimal_with_context(self.new_program(term));
-
-        // Reset is important for reusing the generator instance
         self.reset(true);
 
         program
@@ -4259,7 +4173,7 @@ impl<'a> CodeGenerator<'a> {
 
                     let mut program = self.new_program(
                         self.special_functions
-                            .apply_used_functions(term.map_context(|_| ())),
+                            .apply_used_functions(term.strip_context()),
                     );
 
                     let mut interner = CodeGenInterner::new();
@@ -4275,7 +4189,7 @@ impl<'a> CodeGenerator<'a> {
                         .unwrap_or_else(|e| panic!("Failed to evaluate constant: {e:#?}"))
                         .try_into()
                         .unwrap();
-                    Some(result.map_context(|_| location.clone()))
+                    Some(result.map_context(&|_| location.clone()))
                 }
                 ValueConstructorVariant::ModuleFn {
                     name: func_name,
@@ -4438,7 +4352,7 @@ impl<'a> CodeGenerator<'a> {
                                 term = term.lambda(format!("arg_{index}"))
                             }
                         }
-                        Some(term.map_context(|_| location.clone()))
+                        Some(term.map_context(&|_| location.clone()))
                     }
                 }
             },
@@ -5048,7 +4962,7 @@ impl<'a> CodeGenerator<'a> {
                 };
 
                 if extract_constant(term.pierce_no_inlines_ref()).is_some() {
-                    let mut program = self.new_program(term.clone().map_context(|_| ()));
+                    let mut program = self.new_program(term.clone().strip_context());
 
                     let mut interner = CodeGenInterner::new();
 
@@ -5063,7 +4977,7 @@ impl<'a> CodeGenerator<'a> {
                         .expect("Evaluated on unwrapping a data constant and got an error");
 
                     let result: Term<Name> = evaluated_term.try_into().unwrap();
-                    term = result.map_context(|_| location.clone());
+                    term = result.map_context(&|_| location.clone());
                 }
 
                 Some(term)
@@ -5074,7 +4988,7 @@ impl<'a> CodeGenerator<'a> {
                 if extract_constant(term.pierce_no_inlines_ref()).is_some() {
                     term = builder::convert_type_to_data(term, &tipo, &self.data_types);
 
-                    let mut program = self.new_program(term.clone().map_context(|_| ()));
+                    let mut program = self.new_program(term.clone().strip_context());
 
                     let mut interner = CodeGenInterner::new();
 
@@ -5089,7 +5003,7 @@ impl<'a> CodeGenerator<'a> {
                         .expect("Evaluated on wrapping a constant into data and got an error");
 
                     let result: Term<Name> = evaluated_term.try_into().unwrap();
-                    term = result.map_context(|_| location.clone());
+                    term = result.map_context(&|_| location.clone());
                 } else {
                     term = builder::convert_type_to_data(term, &tipo, &self.data_types);
                 }
@@ -5294,7 +5208,7 @@ impl<'a> CodeGenerator<'a> {
                     let maybe_const = extract_constant(item.pierce_no_inlines_ref());
                     maybe_const.is_some()
                 }) {
-                    let mut program = self.new_program(term.clone().map_context(|_| ()));
+                    let mut program = self.new_program(term.clone().strip_context());
 
                     let mut interner = CodeGenInterner::new();
 
@@ -5309,7 +5223,7 @@ impl<'a> CodeGenerator<'a> {
                         .expect("Evaluated a constant record with args and got an error");
 
                     let result: Term<Name> = evaluated_term.try_into().unwrap();
-                    term = result.map_context(|_| location.clone());
+                    term = result.map_context(&|_| location.clone());
                 }
 
                 Some(term)

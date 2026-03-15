@@ -150,7 +150,7 @@ impl CodeGenSpecialFuncs {
     ) -> Term<Name, C> {
         for func_name in self.used_funcs.iter() {
             // Convert the stored function (Term<Name>) to Term<Name, C>
-            let func = self.get_function(func_name).map_context(|_| C::default());
+            let func = self.get_function(func_name).map_context(&|_| C::default());
             term = term.lambda(func_name).apply(func);
         }
         term

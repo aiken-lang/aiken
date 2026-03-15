@@ -405,8 +405,8 @@ where
         {
             let mut generator = self.new_generator(tracing);
             for (module, def) in self.checked_modules.validators() {
-                let (_, term_with_spans) = generator.generate_with_term(def, &module.name);
-                let locations = coverage::collect_all_locations(&term_with_spans);
+                let program = generator.generate(def, &module.name);
+                let locations = coverage::collect_all_locations(&program.term);
                 all_coverable_locations.extend(locations);
             }
         }
@@ -676,23 +676,22 @@ where
                     convert_opaque_type(&type_info, generator.data_types(), true);
 
                 // Generate the fuzzer program (without source locations - we don't need coverage for the fuzzer)
-                let fuzzer_program =
-                    generator
-                        .clone()
-                        .generate_raw(&parameter.via, &[], &module_name);
+                let fuzzer_program = generator
+                    .clone()
+                    .generate_raw(&parameter.via, &[], &module_name)
+                    .strip_context();
 
                 // Generate test body with source locations (reused for each iteration)
                 let args = vec![TypedArg {
                     tipo: stripped_type_info,
                     ..parameter.clone().into()
                 }];
-                let term = generator.generate_raw_with_spans(&test.body, &args, &module_name);
-                let program_with_spans = generator.finalize_minimal_with_spans(term);
-                let base_program = program_with_spans.try_into_named_debruijn().map_err(|e| {
-                    Error::DeBruijnConversion {
+                let base_program = generator
+                    .generate_raw(&test.body, &args, &module_name)
+                    .try_into_named_debruijn()
+                    .map_err(|e| Error::DeBruijnConversion {
                         error: e.to_string(),
-                    }
-                })?;
+                    })?;
 
                 // Sample multiple values from the fuzzer, chaining the PRNG state
                 let mut prng = Prng::from_seed(seed);
@@ -721,13 +720,12 @@ where
                 }
             } else {
                 // Unit test - generate directly without fuzzer
-                let term = generator.generate_raw_with_spans(&test.body, &[], &module_name);
-                let program_with_spans = generator.finalize_minimal_with_spans(term);
-                let program = program_with_spans.try_into_named_debruijn().map_err(|e| {
-                    Error::DeBruijnConversion {
+                let program = generator
+                    .generate_raw(&test.body, &[], &module_name)
+                    .try_into_named_debruijn()
+                    .map_err(|e| Error::DeBruijnConversion {
                         error: e.to_string(),
-                    }
-                })?;
+                    })?;
 
                 tests.push((test_name, test.on_test_failure.clone(), program));
             }

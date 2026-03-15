@@ -80,7 +80,7 @@ impl<C> Value<C> {
         match self {
             Value::Con(c) => Value::Con(c.clone()),
             Value::Delay(term, env) => Value::Delay(
-                Rc::new(term.as_ref().clone().map_context(|_| ())),
+                Rc::new(term.as_ref().clone().map_context(&|_| ())),
                 Rc::new(
                     env.iter()
                         .map(|(name, v)| (name.clone(), v.erase_context()))
@@ -93,7 +93,7 @@ impl<C> Value<C> {
                 env,
             } => Value::Lambda {
                 parameter_name: parameter_name.clone(),
-                body: Rc::new(body.as_ref().clone().map_context(|_| ())),
+                body: Rc::new(body.as_ref().clone().map_context(&|_| ())),
                 env: Rc::new(
                     env.iter()
                         .map(|(name, v)| (name.clone(), v.erase_context()))
@@ -495,7 +495,7 @@ impl Value<()> {
         match self {
             Value::Con(c) => Value::Con(c),
             Value::Delay(term, env) => Value::Delay(
-                Rc::new(term.as_ref().clone().map_context(|_| C::default())),
+                Rc::new(term.as_ref().clone().map_context(&|_| C::default())),
                 Rc::new(
                     env.iter()
                         .map(|(name, v)| (name.clone(), v.clone().with_default_context()))
@@ -508,7 +508,7 @@ impl Value<()> {
                 env,
             } => Value::Lambda {
                 parameter_name,
-                body: Rc::new(body.as_ref().clone().map_context(|_| C::default())),
+                body: Rc::new(body.as_ref().clone().map_context(&|_| C::default())),
                 env: Rc::new(
                     env.iter()
                         .map(|(name, v)| (name.clone(), v.clone().with_default_context()))

@@ -414,7 +414,7 @@ impl Machine {
                     None => {
                         let term_branches: Vec<Term<NamedDeBruijn, ()>> = branches
                             .into_iter()
-                            .map(|t| t.map_context(|_| ()))
+                            .map(|t| t.map_context(&|_| ()))
                             .collect();
                         Err(Error::MissingCaseBranch(
                             term_branches,

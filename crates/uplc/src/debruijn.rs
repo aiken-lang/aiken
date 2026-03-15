@@ -136,19 +136,23 @@ impl Converter {
         Ok(converted_term)
     }
 
-    pub fn name_to_debruijn(&mut self, term: &Term<Name>) -> Result<Term<DeBruijn>, Error> {
+    pub fn name_to_debruijn<C: Clone>(
+        &mut self,
+        term: &Term<Name, C>,
+    ) -> Result<Term<DeBruijn, C>, Error> {
         let converted_term = match term {
-            Term::Var { name, .. } => Term::Var {
+            Term::Var { name, context, .. } => Term::Var {
                 name: self.get_index(name)?.into(),
-                context: (),
+                context: context.clone(),
             },
-            Term::Delay { term, .. } => Term::Delay {
+            Term::Delay { term, context, .. } => Term::Delay {
                 term: Rc::new(self.name_to_debruijn(term)?),
-                context: (),
+                context: context.clone(),
             },
             Term::Lambda {
                 parameter_name,
                 body,
+                context,
                 ..
             } => {
                 self.declare_unique(parameter_name.unique);
@@ -166,46 +170,59 @@ impl Converter {
                 Term::Lambda {
                     parameter_name: name.into(),
                     body: Rc::new(body),
-                    context: (),
+                    context: context.clone(),
                 }
             }
             Term::Apply {
-                function, argument, ..
+                function,
+                argument,
+                context,
+                ..
             } => Term::Apply {
                 function: Rc::new(self.name_to_debruijn(function)?),
                 argument: Rc::new(self.name_to_debruijn(argument)?),
-                context: (),
+                context: context.clone(),
             },
-            Term::Constant { value, .. } => Term::Constant {
+            Term::Constant { value, context, .. } => Term::Constant {
                 value: value.clone(),
-                context: (),
+                context: context.clone(),
             },
-            Term::Force { term, .. } => Term::Force {
+            Term::Force { term, context, .. } => Term::Force {
                 term: Rc::new(self.name_to_debruijn(term)?),
-                context: (),
+                context: context.clone(),
             },
-            Term::Error { .. } => Term::Error { context: () },
-            Term::Builtin { func, .. } => Term::Builtin {
+            Term::Error { context, .. } => Term::Error {
+                context: context.clone(),
+            },
+            Term::Builtin { func, context, .. } => Term::Builtin {
                 func: *func,
-                context: (),
+                context: context.clone(),
             },
-            Term::Constr { tag, fields, .. } => Term::Constr {
+            Term::Constr {
+                tag,
+                fields,
+                context,
+                ..
+            } => Term::Constr {
                 tag: *tag,
                 fields: fields
                     .iter()
                     .map(|field| self.name_to_debruijn(field))
                     .collect::<Result<_, _>>()?,
-                context: (),
+                context: context.clone(),
             },
             Term::Case {
-                constr, branches, ..
+                constr,
+                branches,
+                context,
+                ..
             } => Term::Case {
                 constr: Rc::new(self.name_to_debruijn(constr)?),
                 branches: branches
                     .iter()
                     .map(|branch| self.name_to_debruijn(branch))
                     .collect::<Result<_, _>>()?,
-                context: (),
+                context: context.clone(),
             },
         };
 
@@ -317,9 +334,16 @@ impl Converter {
         Ok(converted_term)
     }
 
-    pub fn debruijn_to_name(&mut self, term: &Term<DeBruijn>) -> Result<Term<Name>, Error> {
+    pub fn debruijn_to_name<C: Clone>(
+        &mut self,
+        term: &Term<DeBruijn, C>,
+    ) -> Result<Term<Name, C>, Error> {
         let converted_term = match term {
-            Term::Var { name: index, .. } => {
+            Term::Var {
+                name: index,
+                context,
+                ..
+            } => {
                 let unique = self.get_unique(index)?;
 
                 Term::Var {
@@ -328,16 +352,17 @@ impl Converter {
                         unique,
                     }
                     .into(),
-                    context: (),
+                    context: context.clone(),
                 }
             }
-            Term::Delay { term, .. } => Term::Delay {
+            Term::Delay { term, context, .. } => Term::Delay {
                 term: Rc::new(self.debruijn_to_name(term)?),
-                context: (),
+                context: context.clone(),
             },
             Term::Lambda {
                 parameter_name,
                 body,
+                context,
                 ..
             } => {
                 self.declare_binder();
@@ -358,46 +383,59 @@ impl Converter {
                 Term::Lambda {
                     parameter_name: name.into(),
                     body: Rc::new(body),
-                    context: (),
+                    context: context.clone(),
                 }
             }
             Term::Apply {
-                function, argument, ..
+                function,
+                argument,
+                context,
+                ..
             } => Term::Apply {
                 function: Rc::new(self.debruijn_to_name(function)?),
                 argument: Rc::new(self.debruijn_to_name(argument)?),
-                context: (),
+                context: context.clone(),
             },
-            Term::Constant { value, .. } => Term::Constant {
+            Term::Constant { value, context, .. } => Term::Constant {
                 value: value.clone(),
-                context: (),
+                context: context.clone(),
             },
-            Term::Force { term, .. } => Term::Force {
+            Term::Force { term, context, .. } => Term::Force {
                 term: Rc::new(self.debruijn_to_name(term)?),
-                context: (),
+                context: context.clone(),
             },
-            Term::Error { .. } => Term::Error { context: () },
-            Term::Builtin { func, .. } => Term::Builtin {
+            Term::Error { context } => Term::Error {
+                context: context.clone(),
+            },
+            Term::Builtin { func, context, .. } => Term::Builtin {
                 func: *func,
-                context: (),
+                context: context.clone(),
             },
-            Term::Constr { tag, fields, .. } => Term::Constr {
+            Term::Constr {
+                tag,
+                fields,
+                context,
+                ..
+            } => Term::Constr {
                 tag: *tag,
                 fields: fields
                     .iter()
                     .map(|field| self.debruijn_to_name(field))
                     .collect::<Result<_, _>>()?,
-                context: (),
+                context: context.clone(),
             },
             Term::Case {
-                constr, branches, ..
+                constr,
+                branches,
+                context,
+                ..
             } => Term::Case {
                 constr: Rc::new(self.debruijn_to_name(constr)?),
                 branches: branches
                     .iter()
                     .map(|branch| self.debruijn_to_name(branch))
                     .collect::<Result<_, _>>()?,
-                context: (),
+                context: context.clone(),
             },
         };
 

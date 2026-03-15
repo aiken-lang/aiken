@@ -2489,7 +2489,7 @@ impl chumsky::Span for Span {
 
 /// A source location that includes both the module name and the byte span.
 /// Used for tracking source locations across module boundaries during code generation.
-#[derive(Clone, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct SourceLocation {
     /// The module name (e.g., "aiken/collection/list" or "validators/my_validator")
     pub module: String,
@@ -2510,11 +2510,11 @@ impl SourceLocation {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.module.is_empty() && self.span.start == 0 && self.span.end == 0
+        self.module.is_empty() && self.span == Span::default()
     }
 }
 
-impl fmt::Debug for SourceLocation {
+impl fmt::Display for SourceLocation {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}:{:?}", self.module, self.span.range())
     }
