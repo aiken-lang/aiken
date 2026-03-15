@@ -158,6 +158,9 @@ pub enum Error {
     #[error("Test failed during coverage: {name}")]
     CoverageTestFailure { name: String },
 
+    #[error("Fuzzer sampling failed for property test '{test_name}': {error}")]
+    FuzzerSamplingFailed { test_name: String, error: String },
+
     #[error("I located conditional modules under 'env', but no default one!")]
     NoDefaultEnvironment,
 
@@ -373,7 +376,8 @@ impl ExtraData for Error {
             | Error::ScriptOverrideNotFound { .. }
             | Error::ScriptOverrideArgumentParseError { .. }
             | Error::DeBruijnConversion { .. }
-            | Error::CoverageTestFailure { .. } => None,
+            | Error::CoverageTestFailure { .. }
+            | Error::FuzzerSamplingFailed { .. } => None,
             Error::Type { error, .. } => error.extra_data(),
         }
     }
@@ -406,7 +410,8 @@ impl GetSource for Error {
             | Error::ScriptOverrideNotFound { .. }
             | Error::ScriptOverrideArgumentParseError { .. }
             | Error::DeBruijnConversion { .. }
-            | Error::CoverageTestFailure { .. } => None,
+            | Error::CoverageTestFailure { .. }
+            | Error::FuzzerSamplingFailed { .. } => None,
             Error::DuplicateModule { second: path, .. }
             | Error::MissingManifest { path }
             | Error::TomlLoading { path, .. }
@@ -440,7 +445,8 @@ impl GetSource for Error {
             | Error::ScriptOverrideNotFound { .. }
             | Error::ScriptOverrideArgumentParseError { .. }
             | Error::DeBruijnConversion { .. }
-            | Error::CoverageTestFailure { .. } => None,
+            | Error::CoverageTestFailure { .. }
+            | Error::FuzzerSamplingFailed { .. } => None,
             Error::TomlLoading { src, .. } | Error::Parse { src, .. } | Error::Type { src, .. } => {
                 Some(src.to_string())
             }
@@ -496,7 +502,8 @@ impl Diagnostic for Error {
             | Error::ScriptOverrideNotFound { .. }
             | Error::ScriptOverrideArgumentParseError { .. }
             | Error::DeBruijnConversion { .. }
-            | Error::CoverageTestFailure { .. } => None,
+            | Error::CoverageTestFailure { .. }
+            | Error::FuzzerSamplingFailed { .. } => None,
             Error::Module(e) => e.code().map(boxed),
         }
     }
@@ -564,7 +571,8 @@ impl Diagnostic for Error {
             | Error::JoinError(_)
             | Error::ExportNotFound { .. }
             | Error::DeBruijnConversion { .. }
-            | Error::CoverageTestFailure { .. } => None,
+            | Error::CoverageTestFailure { .. }
+            | Error::FuzzerSamplingFailed { .. } => None,
         }
     }
 
@@ -602,7 +610,8 @@ impl Diagnostic for Error {
             | Error::ScriptOverrideNotFound { .. }
             | Error::ScriptOverrideArgumentParseError { .. }
             | Error::DeBruijnConversion { .. }
-            | Error::CoverageTestFailure { .. } => None,
+            | Error::CoverageTestFailure { .. }
+            | Error::FuzzerSamplingFailed { .. } => None,
 
             Error::Module(e) => e.labels(),
         }
@@ -634,7 +643,8 @@ impl Diagnostic for Error {
             | Error::ScriptOverrideNotFound { .. }
             | Error::ScriptOverrideArgumentParseError { .. }
             | Error::DeBruijnConversion { .. }
-            | Error::CoverageTestFailure { .. } => None,
+            | Error::CoverageTestFailure { .. }
+            | Error::FuzzerSamplingFailed { .. } => None,
             Error::Module(e) => e.source_code(),
         }
     }
@@ -665,7 +675,8 @@ impl Diagnostic for Error {
             | Error::ScriptOverrideNotFound { .. }
             | Error::ScriptOverrideArgumentParseError { .. }
             | Error::DeBruijnConversion { .. }
-            | Error::CoverageTestFailure { .. } => None,
+            | Error::CoverageTestFailure { .. }
+            | Error::FuzzerSamplingFailed { .. } => None,
 
             Error::Module(e) => e.url(),
         }
@@ -697,7 +708,8 @@ impl Diagnostic for Error {
             | Error::ScriptOverrideNotFound { .. }
             | Error::ScriptOverrideArgumentParseError { .. }
             | Error::DeBruijnConversion { .. }
-            | Error::CoverageTestFailure { .. } => None,
+            | Error::CoverageTestFailure { .. }
+            | Error::FuzzerSamplingFailed { .. } => None,
             Error::Module(e) => e.related(),
         }
     }

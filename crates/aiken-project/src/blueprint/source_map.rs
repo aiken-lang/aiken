@@ -274,9 +274,10 @@ fn visit_post_order(
         Term::Apply {
             function, argument, ..
         } => {
-            // Visit argument first, then function (right-to-left for consistency)
-            visit_post_order(argument, counter, source_map, module_sources);
+            // Visit function first, then argument, so that wrapping a term in Apply
+            // does not shift indices for the original function subtree
             visit_post_order(function, counter, source_map, module_sources);
+            visit_post_order(argument, counter, source_map, module_sources);
         }
         Term::Lambda { body, .. } => {
             visit_post_order(body, counter, source_map, module_sources);
@@ -550,8 +551,8 @@ mod tests {
         //   Apply(function=Var("f"), argument=Var("x"))
         //
         // Post-order traversal visits:
-        //   1. argument first (Var "x") -> index 0
-        //   2. function next (Var "f") -> index 1
+        //   1. function first (Var "f") -> index 0
+        //   2. argument next (Var "x") -> index 1
         //   3. Apply last -> index 2
         let term = Term::Apply {
             context: AstSourceLocation::new(module_name, Span { start: 8, end: 14 }), // "result" on line 3
@@ -578,18 +579,18 @@ mod tests {
         assert_eq!(source_map.sources, vec!["test"]);
 
         // Verify post-order numbering:
-        // index 0: argument (Var "x") at line 2, col 1
-        // index 1: function (Var "f") at line 1, col 1
+        // index 0: function (Var "f") at line 1, col 1
+        // index 1: argument (Var "x") at line 2, col 1
         // index 2: Apply at line 3, col 1
         assert_eq!(source_map.locations.len(), 3);
 
         let loc0 = source_map.locations.get(&0).expect("should have index 0");
         assert_eq!(loc0.source_index, 0);
-        assert_eq!(loc0.line, 2); // "bar" is on line 2
+        assert_eq!(loc0.line, 1); // "foo" is on line 1
 
         let loc1 = source_map.locations.get(&1).expect("should have index 1");
         assert_eq!(loc1.source_index, 0);
-        assert_eq!(loc1.line, 1); // "foo" is on line 1
+        assert_eq!(loc1.line, 2); // "bar" is on line 2
 
         let loc2 = source_map.locations.get(&2).expect("should have index 2");
         assert_eq!(loc2.source_index, 0);
@@ -627,9 +628,10 @@ mod tests {
 
         let source_map = SourceMap::from_term(&term, module_name, &module_sources);
 
-        // Only index 1 (the function Var with valid span) should be present
+        // Only index 0 (the function Var with valid span) should be present
+        // (function is visited first, so it gets index 0)
         assert_eq!(source_map.locations.len(), 1);
-        assert!(source_map.locations.contains_key(&1));
+        assert!(source_map.locations.contains_key(&0));
     }
 
     #[test]
@@ -1067,9 +1069,9 @@ mod tests {
         module_sources.insert(module_name, &data);
 
         // Term with various naming patterns
-        // Post-order:
-        //   0: Var(__internal) -> "__internal" (now included)
-        //   1: Var(x_id_0) -> "x"
+        // Post-order (function-first):
+        //   0: Var(x_id_0) -> "x" (function visited first)
+        //   1: Var(__internal) -> "__internal" (argument visited second)
         //   2: Apply
         //   3: Lambda(user_var_id_5) -> "user_var"
         let term = Term::Lambda {
@@ -1099,14 +1101,14 @@ mod tests {
 
         let source_map = SourceMap::from_term(&term, module_name, &module_sources);
 
-        // Check that names are correctly processed:
-        // - __internal (index 0) is now included
-        // - x_id_0 (index 1) becomes "x"
+        // Check that names are correctly processed (function-first traversal):
+        // - x_id_0 (index 0) becomes "x" (function visited first)
+        // - __internal (index 1) is now included (argument visited second)
         // - Apply (index 2) has no name
         // - user_var_id_5 (index 3) becomes "user_var"
         assert_eq!(source_map.names.len(), 3);
-        assert_eq!(source_map.names.get(&0), Some(&"__internal".to_string()));
-        assert_eq!(source_map.names.get(&1), Some(&"x".to_string()));
+        assert_eq!(source_map.names.get(&0), Some(&"x".to_string()));
+        assert_eq!(source_map.names.get(&1), Some(&"__internal".to_string()));
         assert_eq!(source_map.names.get(&2), None); // Apply has no name
         assert_eq!(source_map.names.get(&3), Some(&"user_var".to_string()));
     }

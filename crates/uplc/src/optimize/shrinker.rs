@@ -9,7 +9,7 @@ use blst::{blst_p1, blst_p2};
 use indexmap::IndexMap;
 use itertools::{FoldWhile, Itertools};
 use pallas_primitives::conway::{BigInt, PlutusData};
-use std::{cmp::Ordering, iter, ops::Neg, rc::Rc};
+use std::{cell::RefCell, cmp::Ordering, iter, ops::Neg, rc::Rc};
 use strum::IntoEnumIterator;
 
 #[derive(Eq, Hash, PartialEq, Clone, Debug, PartialOrd)]
@@ -2499,16 +2499,24 @@ impl<C: Clone + Default> Program<Name, C> {
         interner.program(&mut program);
 
         // DeBruijn round-trip to normalize variable names
-        // Strip context, convert, then restore default context
+        // Collect contexts, strip them for conversion, then restore after round-trip
+        let contexts: RefCell<Vec<C>> = RefCell::new(Vec::new());
         let stripped: Program<Name> = Program {
             version: program.version,
-            term: program.term.map_context(|_| ()),
+            term: program.term.map_context(|c| {
+                contexts.borrow_mut().push(c);
+            }),
         };
         let debruijn = Program::<NamedDeBruijn>::try_from(stripped).unwrap();
         let cleaned: Program<Name> = Program::<Name>::try_from(debruijn).unwrap();
+        let iter = RefCell::new(contexts.into_inner().into_iter());
         Program {
             version: cleaned.version,
-            term: cleaned.term.map_context(|_| C::default()),
+            term: cleaned.term.map_context(|_| {
+                iter.borrow_mut()
+                    .next()
+                    .expect("context count mismatch after DeBruijn round-trip")
+            }),
         }
     }
 
@@ -2803,16 +2811,24 @@ impl<C: Clone + Default> Program<Name, C> {
         interner.program(&mut program);
 
         // DeBruijn round-trip to normalize variable names
-        // Strip context, convert, then restore default context
+        // Collect contexts, strip them for conversion, then restore after round-trip
+        let contexts: RefCell<Vec<C>> = RefCell::new(Vec::new());
         let stripped: Program<Name> = Program {
             version: program.version,
-            term: program.term.map_context(|_| ()),
+            term: program.term.map_context(|c| {
+                contexts.borrow_mut().push(c);
+            }),
         };
         let debruijn = Program::<NamedDeBruijn>::try_from(stripped).unwrap();
         let cleaned: Program<Name> = Program::<Name>::try_from(debruijn).unwrap();
+        let iter = RefCell::new(contexts.into_inner().into_iter());
         Program {
             version: cleaned.version,
-            term: cleaned.term.map_context(|_| C::default()),
+            term: cleaned.term.map_context(|_| {
+                iter.borrow_mut()
+                    .next()
+                    .expect("context count mismatch after DeBruijn round-trip")
+            }),
         }
     }
 }

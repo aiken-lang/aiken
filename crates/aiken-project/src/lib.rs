@@ -421,28 +421,82 @@ where
             })
             .collect();
 
-        // Aggregate coverage data
+        // Aggregate coverage data and collect per-iteration results
         let mut aggregated_coverage = CoverageData::new();
         let mut failed_tests = Vec::new();
+
+        // Group property test iterations by base name for correct fail-once semantics.
+        // Property tests are expanded into name[0], name[1], ..., and for `fail once`
+        // the property passes if ANY iteration fails, not each independently.
+        let mut property_results: HashMap<String, (OnTestFailure, bool)> = HashMap::new();
 
         for (name, on_test_failure, cov_result) in results {
             // Always merge coverage, even for failing tests
             aggregated_coverage.merge(&cov_result.coverage);
 
-            // Determine test success based on on_test_failure and result
-            // This mirrors the logic in EvalResult::failed()
-            let test_passed = match on_test_failure {
+            // Check if this is a property test iteration (name contains [N])
+            let base_name = if let Some(bracket_pos) = name.rfind('[') {
+                name[..bracket_pos].to_string()
+            } else {
+                // Unit test - evaluate directly
+                let test_passed = match on_test_failure {
+                    OnTestFailure::SucceedEventually | OnTestFailure::SucceedImmediately => {
+                        cov_result.errored || cov_result.returned_false
+                    }
+                    OnTestFailure::FailImmediately => cov_result.success,
+                };
+                if !test_passed {
+                    failed_tests.push(name);
+                }
+                continue;
+            };
+
+            let iteration_passed = match &on_test_failure {
                 OnTestFailure::SucceedEventually | OnTestFailure::SucceedImmediately => {
-                    // "fail" tests pass if they error (Term::Error, machine error) or return Bool(false)
                     cov_result.errored || cov_result.returned_false
                 }
+                OnTestFailure::FailImmediately => cov_result.success,
+            };
+
+            let entry = property_results
+                .entry(base_name)
+                .or_insert((on_test_failure, false));
+
+            match entry.0 {
+                OnTestFailure::SucceedEventually | OnTestFailure::SucceedImmediately => {
+                    // For fail-once: property passes if ANY iteration fails
+                    if iteration_passed {
+                        entry.1 = true;
+                    }
+                }
                 OnTestFailure::FailImmediately => {
-                    // Normal tests pass if they return Bool(true) or Unit
-                    cov_result.success
+                    // For normal tests: property passes if ALL iterations pass
+                    // Track failure: if any iteration fails, mark as having a failure
+                    if !iteration_passed && !entry.1 {
+                        // entry.1 stays false until we finish; we'll check below
+                    }
+                    // We need different logic: start true, set false on any failure
+                    if !iteration_passed {
+                        entry.1 = true; // has_failure = true
+                    }
+                }
+            }
+        }
+
+        // Evaluate aggregated property test results
+        for (base_name, (on_test_failure, flag)) in property_results {
+            let property_passed = match on_test_failure {
+                OnTestFailure::SucceedEventually | OnTestFailure::SucceedImmediately => {
+                    // flag = any_iteration_failed; property passes if any iteration failed
+                    flag
+                }
+                OnTestFailure::FailImmediately => {
+                    // flag = has_failure; property passes if no iteration failed
+                    !flag
                 }
             };
-            if !test_passed {
-                failed_tests.push(name);
+            if !property_passed {
+                failed_tests.push(base_name);
             }
         }
 
@@ -657,9 +711,11 @@ where
                             // Fuzzer exhausted
                             break;
                         }
-                        Err(_) => {
-                            // Fuzzer failed
-                            break;
+                        Err(e) => {
+                            return Err(Error::FuzzerSamplingFailed {
+                                test_name,
+                                error: e.to_string(),
+                            });
                         }
                     }
                 }
@@ -804,7 +860,7 @@ where
                                 }
                             })?;
 
-                            validator.source_map_file = Some(filename);
+                            validator.source_map_file = Some(dir.join(&filename).to_string_lossy().into_owned());
                         }
                     }
                 }
