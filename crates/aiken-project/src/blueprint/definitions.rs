@@ -401,8 +401,11 @@ impl Reference {
             Type::Var { tipo, .. } => match tipo.borrow().deref() {
                 TypeVar::Link { tipo } => Self::from_type(tipo.as_ref(), type_parameters),
                 TypeVar::Generic { id } | TypeVar::Unbound { id } => {
-                    let tipo = type_parameters.get(id).unwrap();
-                    Self::from_type(tipo, type_parameters)
+                    if let Some(tipo) = type_parameters.get(id) {
+                        Self::from_type(tipo, type_parameters)
+                    } else {
+                        Self::from_type(&Type::data(), type_parameters)
+                    }
                 }
             },
 

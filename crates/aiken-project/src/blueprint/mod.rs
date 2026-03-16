@@ -108,8 +108,12 @@ impl Blueprint {
                     }
 
                     Annotated::from_type(modules_map, &type_construtor.tipo, &mut definitions)
-                        .unwrap_or_else(|e| {
-                            unreachable!("failed to export type={type_construtor:?}: {e}")
+                        .map(|_| ())
+                        .unwrap_or_else(|e| match e.context() {
+                            schema::ErrorContext::UnsupportedType
+                            | schema::ErrorContext::UnexpectedFunction
+                            | schema::ErrorContext::IllegalOpaqueType => (),
+                            _ => unreachable!("failed to export type={type_construtor:?}: {e}"),
                         });
                 }
             }

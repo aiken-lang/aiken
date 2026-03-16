@@ -473,14 +473,24 @@ impl Annotated<Schema> {
                         .get(id)
                         .ok_or_else(|| Error::new(ErrorContext::FreeTypeVariable, type_info))?
                         .clone();
-                    Annotated::do_from_type(&tipo, modules, type_parameters, definitions)
+
+                    if tipo.get_generic_id() == Some(*id) {
+                        Annotated::do_from_type(
+                            &Type::data(),
+                            modules,
+                            type_parameters,
+                            definitions,
+                        )
+                    } else {
+                        Annotated::do_from_type(&tipo, modules, type_parameters, definitions)
+                    }
                 }
                 TypeVar::Unbound { .. } => {
                     Err(Error::new(ErrorContext::UnboundTypeVariable, type_info))
                 }
             },
 
-            Type::Fn { .. } => unreachable!(),
+            Type::Fn { .. } => Err(Error::new(ErrorContext::UnexpectedFunction, type_info)),
         }
     }
 }
@@ -1044,7 +1054,7 @@ pub struct Error {
     breadcrumbs: Vec<Type>,
 }
 
-#[derive(Debug, PartialEq, Clone, thiserror::Error)]
+#[derive(Debug, PartialEq, Clone, Copy, thiserror::Error)]
 pub enum ErrorContext {
     #[error(
         "I failed at my own job and couldn't figure out how to generate a specification for a type."
@@ -1070,6 +1080,10 @@ impl Error {
             context,
             breadcrumbs: vec![type_info.clone()],
         }
+    }
+
+    pub fn context(&self) -> ErrorContext {
+        self.context
     }
 
     pub fn backtrack(self, type_info: &Type) -> Self {
