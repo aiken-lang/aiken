@@ -990,13 +990,13 @@ impl<'a> CodeGenerator<'a> {
         // Cast value to or from data so we don't have to worry from this point onward
         let assign_casted_value = |name, value, then| {
             if props.value_type.is_data() && props.kind.is_expect() && !tipo.is_data() {
-                if props.otherwise.is_some() {
+                if let Some(otherwise) = props.otherwise.as_ref() {
                     AirTree::soft_cast_assignment(
                         name,
                         tipo.clone(),
                         value,
                         then,
-                        props.otherwise.as_ref().unwrap().clone(),
+                        otherwise.clone(),
                     )
                 } else {
                     AirTree::let_assignment(
