@@ -6,6 +6,8 @@
 
 - **uplc**: Fixed conversion/discrepancy from large negative bigint when using `Data::integer`; mostly impacting value reification and tracing of large negative integers. Fixes [#1241](https://github.com/aiken-lang/aiken/issues/1241). @KtorZ
 
+- **uplc**: Make evaluation failures language-dependent; thus allowing V1 & V2 evaluations to return non-unit results. @michaeljfazio, @KtorZ
+
 ## v1.1.20 - 2025-12-11
 
 ### Added

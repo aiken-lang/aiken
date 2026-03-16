@@ -227,10 +227,14 @@ impl UnitTest {
             .unwrap()
             .eval_version(ExBudget::max(), &plutus_version.into());
 
-        let success = !eval_result.failed(match self.on_test_failure {
-            OnTestFailure::SucceedEventually | OnTestFailure::SucceedImmediately => true,
-            OnTestFailure::FailImmediately => false,
-        });
+        let is_evaluation_failure = eval_result.failed(true, &plutus_version.into());
+
+        let success = match self.on_test_failure {
+            OnTestFailure::SucceedEventually | OnTestFailure::SucceedImmediately => {
+                is_evaluation_failure
+            }
+            OnTestFailure::FailImmediately => !is_evaluation_failure,
+        };
 
         let mut logs = Vec::new();
         if let Err(err) = eval_result.result() {
@@ -415,7 +419,7 @@ impl PropertyTest {
                 .or_insert(1);
         }
 
-        let is_failure = result.failed(false);
+        let is_failure = result.failed(true, &plutus_version.into());
 
         let is_success = !is_failure;
 
@@ -433,9 +437,9 @@ impl PropertyTest {
                         Err(..) => Status::Invalid,
                         Ok(None) => Status::Invalid,
                         Ok(Some((_, value))) => {
-                            let result = self.eval(&value, plutus_version);
-
-                            let is_failure = result.failed(false);
+                            let is_failure = self
+                                .eval(&value, plutus_version)
+                                .failed(true, &plutus_version.into());
 
                             match self.on_test_failure {
                                 FailImmediately | SucceedImmediately => {

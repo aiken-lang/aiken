@@ -1,3 +1,4 @@
+use pallas_primitives::conway::Language;
 use super::TestProject;
 use crate::module::CheckedModules;
 use aiken_lang::ast::{Definition, Function, TraceLevel, Tracing, TypedTest, TypedValidator};
@@ -79,16 +80,16 @@ fn assert_uplc(source_code: &str, expected: Term<Name>, should_fail: bool, verbo
             let eval = debruijn_program.eval(ExBudget::default());
 
             assert_eq!(
-                eval.failed(false),
+                eval.failed(true, &Language::PlutusV3),
                 should_fail,
                 "logs - {}\n",
                 format!("{:#?}", eval.logs())
             );
 
             assert!(if should_fail {
-                eval.failed(false)
+                eval.failed(true, &Language::PlutusV3)
             } else {
-                !eval.failed(false)
+                !eval.failed(true, &Language::PlutusV3)
             });
         }
         TestType::Validator(func) => {
