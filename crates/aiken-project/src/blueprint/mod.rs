@@ -9,7 +9,7 @@ use crate::{
     config::{self, PlutusVersion, ProjectConfig},
     module::CheckedModules,
 };
-use aiken_lang::{ast::Definition, gen_uplc::CodeGenerator, tipo::Type};
+use aiken_lang::gen_uplc::CodeGenerator;
 use definitions::Definitions;
 pub use error::Error;
 use pallas_addresses::ScriptHash;
@@ -17,7 +17,6 @@ use schema::{Annotated, Schema};
 use std::{
     collections::{BTreeSet, HashMap},
     fmt::Debug,
-    rc::Rc,
 };
 use uplc::{PlutusData, ast::SerializableProgram, tx::script_context::PlutusScript};
 use validator::Validator;
@@ -103,23 +102,15 @@ impl Blueprint {
                     continue;
                 }
 
-                for def in module.ast.definitions() {
-                    if let Definition::DataType(data_type) = def {
-                        if !data_type.public || data_type.opaque {
-                            continue;
-                        }
-
-                        let tipo = Rc::new(Type::App {
-                            public: data_type.public,
-                            contains_opaque: data_type.opaque,
-                            module: module.name.clone(),
-                            name: data_type.name.clone(),
-                            args: data_type.typed_parameters.clone(),
-                            alias: None,
-                        });
-
-                        let _ = Annotated::from_type(modules_map, &tipo, &mut definitions);
+                for type_construtor in module.ast.type_info.types.values() {
+                    if !type_construtor.public {
+                        continue;
                     }
+
+                    Annotated::from_type(modules_map, &type_construtor.tipo, &mut definitions)
+                        .unwrap_or_else(|e| {
+                            unreachable!("failed to export type={type_construtor:?}: {e}")
+                        });
                 }
             }
         }
