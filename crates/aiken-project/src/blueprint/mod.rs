@@ -66,6 +66,7 @@ impl Blueprint {
         config: &ProjectConfig,
         modules: &CheckedModules,
         generator: &mut CodeGenerator,
+        export_all_types: bool,
     ) -> Result<Self, Error> {
         let preamble = config.into();
 
@@ -93,7 +94,7 @@ impl Blueprint {
 
         let validators: Vec<_> = validators?.into_iter().flatten().collect();
 
-        if config.export_all_types {
+        if export_all_types {
             let project_package = config.name.to_string();
             let modules_map: &HashMap<String, _> = modules.into();
 

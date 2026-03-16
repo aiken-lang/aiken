@@ -7,6 +7,7 @@ pub struct Options {
     pub tracing: Tracing,
     pub env: Option<String>,
     pub blueprint_path: PathBuf,
+    pub blueprint_export: BlueprintExport,
 }
 
 impl Default for Options {
@@ -16,6 +17,23 @@ impl Default for Options {
             tracing: Tracing::silent(),
             env: None,
             blueprint_path: PathBuf::from("plutus.json"),
+            blueprint_export: BlueprintExport::OnlyBinaryInterface,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BlueprintExport {
+    OnlyBinaryInterface,
+    AllTypes,
+}
+
+impl From<bool> for BlueprintExport {
+    fn from(include_all_types: bool) -> Self {
+        if include_all_types {
+            Self::AllTypes
+        } else {
+            Self::OnlyBinaryInterface
         }
     }
 }

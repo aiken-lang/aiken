@@ -1,7 +1,10 @@
 #![allow(clippy::doc_overindented_list_items)]
 
 use aiken_lang::ast::{TraceLevel, Tracing};
-use aiken_project::watch::{self, watch_project, with_project};
+use aiken_project::{
+    options::BlueprintExport,
+    watch::{self, watch_project, with_project},
+};
 use clap::builder::{MapValueParser, PossibleValuesParser, TypedValueParser};
 use std::{path::PathBuf, process};
 
@@ -76,6 +79,11 @@ pub struct Args {
     /// [optional]
     #[clap(short, long, value_parser=trace_level_parser(), default_value_t=TraceLevel::Silent, verbatim_doc_comment)]
     trace_level: TraceLevel,
+
+    /// Include all serialisable types in the blueprint, not only those present in validators
+    /// signatures. Off by default.
+    #[clap(short = 'I', long)]
+    include_all_types: bool,
 }
 
 pub fn exec(
@@ -89,6 +97,7 @@ pub fn exec(
         trace_level,
         output,
         env,
+        include_all_types,
     }: Args,
 ) -> miette::Result<()> {
     let result = if watch {
@@ -100,6 +109,7 @@ pub fn exec(
                     None => Tracing::All(trace_level),
                 },
                 p.blueprint_path(output.as_deref()),
+                BlueprintExport::from(include_all_types),
                 env.clone(),
             )
         })
@@ -112,6 +122,7 @@ pub fn exec(
                     None => Tracing::All(trace_level),
                 },
                 p.blueprint_path(output.as_deref()),
+                BlueprintExport::from(include_all_types),
                 env.clone(),
             )
         })

@@ -47,9 +47,6 @@ pub struct ProjectConfig {
     #[serde(default)]
     pub dependencies: Vec<Dependency>,
 
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub export_all_types: bool,
-
     #[serde(default)]
     pub config: BTreeMap<String, BTreeMap<String, SimpleExpr>>,
 }
@@ -396,7 +393,6 @@ impl ProjectConfig {
                 },
                 source: Platform::Github,
             }],
-            export_all_types: false,
             config: BTreeMap::new(),
         }
     }

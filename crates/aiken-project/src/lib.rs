@@ -27,6 +27,7 @@ use crate::{
     config::ProjectConfig,
     error::{Error, Warning},
     module::{CheckedModule, CheckedModules, ParsedModule, ParsedModules},
+    options::BlueprintExport,
     telemetry::{CoverageMode, Event},
 };
 use aiken_lang::{
@@ -205,6 +206,7 @@ where
         uplc: bool,
         tracing: Tracing,
         blueprint_path: PathBuf,
+        blueprint_export: BlueprintExport,
         env: Option<String>,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
@@ -212,6 +214,7 @@ where
             tracing,
             env,
             blueprint_path,
+            blueprint_export,
         };
 
         self.compile(options)
@@ -297,6 +300,7 @@ where
                 }
             },
             blueprint_path: self.blueprint_path(None),
+            ..Options::default()
         };
 
         self.compile(options)
@@ -321,6 +325,7 @@ where
                 max_size,
             },
             blueprint_path: self.blueprint_path(None),
+            ..Options::default()
         };
 
         self.compile(options)
@@ -404,10 +409,20 @@ where
 
                 let mut generator = self.new_generator(options.tracing);
 
-                let blueprint = Blueprint::new(&self.config, &self.checked_modules, &mut generator)
-                    .map_err(|err| Error::Blueprint(err.into()))?;
+                let blueprint = Blueprint::new(
+                    &self.config,
+                    &self.checked_modules,
+                    &mut generator,
+                    options.blueprint_export == BlueprintExport::AllTypes,
+                )
+                .map_err(|err| Error::Blueprint(err.into()))?;
 
-                if blueprint.validators.is_empty() && !self.config.export_all_types {
+                if blueprint.validators.is_empty()
+                    && matches!(
+                        options.blueprint_export,
+                        BlueprintExport::OnlyBinaryInterface,
+                    )
+                {
                     self.warnings.push(Warning::NoValidators);
                 }
 
