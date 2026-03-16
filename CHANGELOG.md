@@ -2,6 +2,10 @@
 
 ## v1.1.22 - UNRELEASED
 
+### Added
+
+- **aiken**: New flag `-I / --include-all-types` to the `aiken build` command to include all serialisable types in the blueprint, regardless of whether they are part of the contract interface or not. @emiflake, @KtorZ
+
 ### Fixed
 
 - **uplc**: Fixed conversion/discrepancy from large negative bigint when using `Data::integer`; mostly impacting value reification and tracing of large negative integers. Fixes [#1241](https://github.com/aiken-lang/aiken/issues/1241). @KtorZ
