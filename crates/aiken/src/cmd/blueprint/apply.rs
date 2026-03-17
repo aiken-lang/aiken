@@ -136,7 +136,7 @@ pub fn exec(
             Some(ref path) => {
                 fs::write(path, json).map_err(|error| Error::FileIo {
                     error,
-                    path: path.clone(),
+                    path: Box::new(path.clone()),
                 })?;
             }
         };

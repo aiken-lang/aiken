@@ -146,7 +146,7 @@ pub fn exec(
                             })
                             .map_err(|error| Error::ScriptOverrideArgumentParseError {
                                 index,
-                                error,
+                                error: Box::new(error),
                             })?;
 
                     let to = get_override_part(&mut parts, ScriptOverrideArgumentError::MissingTo)
@@ -159,7 +159,7 @@ pub fn exec(
                         })
                         .map_err(|error| Error::ScriptOverrideArgumentParseError {
                             index,
-                            error,
+                            error: Box::new(error),
                         })?;
 
                     overrides.insert(
