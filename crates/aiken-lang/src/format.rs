@@ -898,30 +898,16 @@ impl<'comments> Formatter<'comments> {
                     },
                 );
 
-                let pattern_len = patterns.len();
-
-                let assignment = header
-                    .append(if pattern_len == 1 {
-                        " ".to_doc()
-                    } else {
-                        break_("", " ")
-                    })
-                    .append(join(patterns, break_(",", ", ")));
-
-                let assignment = if pattern_len == 1 {
-                    assignment
-                } else {
-                    assignment.nest(INDENT)
-                };
-
-                assignment
-                    .append(if pattern_len == 1 {
-                        " ".to_doc()
-                    } else {
-                        break_(",", " ")
-                    })
+                header
+                    .append(break_("  ", " "))
+                    .append(join(patterns, break_(",", ", ")))
+                    .group()
+                    .nest(INDENT)
+                    .append(break_("", " "))
                     .append(symbol)
-                    .append(self.case_clause_value(value))
+                    .group()
+                    .nest(INDENT)
+                    .append(self.assignment_value(value))
             }
         }
     }
@@ -2069,6 +2055,28 @@ impl<'comments> Formatter<'comments> {
                 .append(self.expr(expr, false))
                 .nest(INDENT)
                 .group(),
+        }
+    }
+
+    fn assignment_value<'a>(&mut self, expr: &'a UntypedExpr) -> Document<'a> {
+        match expr {
+            UntypedExpr::Trace {
+                kind: TraceKind::Trace,
+                ..
+            }
+            | UntypedExpr::Sequence { .. }
+            | UntypedExpr::Assignment { .. } => Document::Str(" {")
+                .append(break_("", " ").nest(INDENT))
+                .append(
+                    self.expr(expr, true)
+                        .nest(INDENT)
+                        .group()
+                        .append(line())
+                        .append("}")
+                        .force_break(),
+                ),
+
+            _ => Document::Str(" ").append(self.expr(expr, false)).group(),
         }
     }
 

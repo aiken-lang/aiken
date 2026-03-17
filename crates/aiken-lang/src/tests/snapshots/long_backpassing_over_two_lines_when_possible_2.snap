@@ -1,0 +1,12 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n  let\n    head_output_tokens,\n    tail_output_assets,\n  <- pairs.pop_until(output_assets, equals_bytearray(policy, _))\n\n  head_output_tokens + tail_output_assets\n}\n"
+---
+fn foo() {
+  let head_output_tokens, tail_output_assets <- pairs.pop_until(
+    output_assets,
+    equals_bytearray(policy, _),
+  )
+
+  head_output_tokens + tail_output_assets
+}

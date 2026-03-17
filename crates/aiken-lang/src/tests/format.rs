@@ -627,7 +627,7 @@ fn format_newline_module_comments() {
 }
 
 #[test]
-fn format_many_assignment_patterns() {
+fn backpassing_format_many_assignment_patterns() {
     assert_format!(
         r#"
         fn backpassing() -> Int {
@@ -649,6 +649,44 @@ fn format_many_assignment_patterns() {
           0)
 
           elem + accumulator
+        }
+        "#
+    );
+}
+
+#[test]
+fn long_backpassing_over_two_lines_when_possible() {
+    assert_format!(
+        r#"
+        fn foo() {
+          expect
+            head_output_tokens,
+            tail_output_assets,
+            tail_output_assets,
+            tail_output_assets,
+            tail_output_assets,
+            tail_output_assets,
+            tail_output_assets,
+            tail_output_assets,
+          <- pairs.pop_until(output_assets, equals_bytearray(policy, _), alfdljfdskfjdsfsf, lfjsdfjsfsdmf, kfdsfkjhsdfhskjfs)
+
+          head_output_tokens + tail_output_assets
+        }
+        "#
+    );
+}
+
+#[test]
+fn long_backpassing_over_two_lines_when_possible_2() {
+    assert_format!(
+        r#"
+        fn foo() {
+          let
+            head_output_tokens,
+            tail_output_assets,
+          <- pairs.pop_until(output_assets, equals_bytearray(policy, _))
+
+          head_output_tokens + tail_output_assets
         }
         "#
     );

@@ -1,0 +1,24 @@
+---
+source: crates/aiken-lang/src/tests/format.rs
+description: "Code:\n\nfn foo() {\n  expect\n    head_output_tokens,\n    tail_output_assets,\n    tail_output_assets,\n    tail_output_assets,\n    tail_output_assets,\n    tail_output_assets,\n    tail_output_assets,\n    tail_output_assets,\n  <- pairs.pop_until(output_assets, equals_bytearray(policy, _), alfdljfdskfjdsfsf, lfjsdfjsfsdmf, kfdsfkjhsdfhskjfs)\n\n  head_output_tokens + tail_output_assets\n}\n"
+---
+fn foo() {
+  expect  
+      head_output_tokens,
+      tail_output_assets,
+      tail_output_assets,
+      tail_output_assets,
+      tail_output_assets,
+      tail_output_assets,
+      tail_output_assets,
+      tail_output_assets
+    <- pairs.pop_until(
+    output_assets,
+    equals_bytearray(policy, _),
+    alfdljfdskfjdsfsf,
+    lfjsdfjsfsdmf,
+    kfdsfkjhsdfhskjfs,
+  )
+
+  head_output_tokens + tail_output_assets
+}
