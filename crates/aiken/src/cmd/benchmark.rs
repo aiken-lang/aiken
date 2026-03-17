@@ -67,6 +67,10 @@ pub struct Args {
     /// [optional]
     #[clap(short, long, value_parser=trace_level_parser(), default_value_t=TraceLevel::Silent, verbatim_doc_comment)]
     trace_level: TraceLevel,
+
+    /// When enabled, print execution units as plain numbers
+    #[clap(long)]
+    plain_numbers: bool,
 }
 
 pub fn exec(
@@ -79,6 +83,7 @@ pub fn exec(
         env,
         trace_filter,
         trace_level,
+        plain_numbers,
     }: Args,
 ) -> miette::Result<()> {
     let mut rng = rand::thread_rng();
@@ -95,6 +100,7 @@ pub fn exec(
                 Some(trace_filter) => trace_filter(trace_level),
                 None => Tracing::All(trace_level),
             },
+            plain_numbers,
             env.clone(),
         )
     });

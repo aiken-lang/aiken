@@ -54,6 +54,7 @@ pub enum CodeGenMode {
         exact_match: bool,
         seed: u32,
         max_size: usize,
+        plain_numbers: bool,
     },
     NoOp,
 }

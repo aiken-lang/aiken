@@ -280,8 +280,8 @@ where
         property_max_success: usize,
         coverage_mode: CoverageMode,
         tracing: Tracing,
-        env: Option<String>,
         plain_numbers: bool,
+        env: Option<String>,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
             tracing,
@@ -313,6 +313,7 @@ where
         seed: u32,
         max_size: usize,
         tracing: Tracing,
+        plain_numbers: bool,
         env: Option<String>,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
@@ -323,6 +324,7 @@ where
                 exact_match,
                 seed,
                 max_size,
+                plain_numbers,
             },
             blueprint_path: self.blueprint_path(None),
             ..Options::default()
@@ -498,6 +500,7 @@ where
                 exact_match,
                 seed,
                 max_size,
+                plain_numbers,
             } => {
                 let verbose = false;
 
@@ -525,8 +528,11 @@ where
                     })
                     .collect();
 
-                self.event_listener
-                    .handle_event(Event::FinishedBenchmarks { seed, benchmarks });
+                self.event_listener.handle_event(Event::FinishedBenchmarks {
+                    seed,
+                    benchmarks,
+                    plain_numbers,
+                });
 
                 if !errors.is_empty() {
                     Err(errors)

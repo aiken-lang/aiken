@@ -174,8 +174,8 @@ pub fn exec(
                     Some(trace_filter) => trace_filter(trace_level),
                     None => Tracing::All(trace_level),
                 },
-                env.clone(),
                 plain_numbers,
+                env.clone(),
             )
         })
     } else {
@@ -192,8 +192,8 @@ pub fn exec(
                     Some(trace_filter) => trace_filter(trace_level),
                     None => Tracing::All(trace_level),
                 },
-                env.clone(),
                 plain_numbers,
+                env.clone(),
             )
         })
     };

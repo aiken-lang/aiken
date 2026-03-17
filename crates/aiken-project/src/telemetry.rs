@@ -58,6 +58,7 @@ pub enum Event {
     FinishedBenchmarks {
         seed: u32,
         benchmarks: Vec<TestResult<UntypedExpr, UntypedExpr>>,
+        plain_numbers: bool,
     },
     WaitingForBuildDirLock,
     ResolvingPackages {

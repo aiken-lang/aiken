@@ -11,7 +11,7 @@ use aiken_lang::{
 use numfmt::{Precision, Scales};
 use owo_colors::{OwoColorize, Stream::Stderr};
 use rgb::RGB8;
-use std::sync::LazyLock;
+use std::{cell::RefCell, sync::LazyLock};
 use uplc::machine::cost_model::ExBudget;
 
 static BENCH_PLOT_COLOR: LazyLock<RGB8> = LazyLock::new(|| RGB8 {
@@ -182,7 +182,7 @@ impl EventListener for Terminal {
             } => {
                 let (max_mem, max_cpu, max_iter) = find_max_execution_units(&tests);
 
-                let (mut formatter, max_mem, max_cpu) =
+                let (formatter, max_mem, max_cpu) =
                     derive_execution_units_format(plain_numbers, max_mem, max_cpu);
 
                 for (module, results) in &group_by_module(&tests) {
@@ -201,7 +201,7 @@ impl EventListener for Terminal {
                                 max_iter,
                                 true,
                                 coverage_mode,
-                                &mut formatter,
+                                &formatter,
                             )
                         })
                         .collect::<Vec<String>>()
@@ -300,16 +300,21 @@ impl EventListener for Terminal {
                     "...".if_supports_color(Stderr, |s| s.bold())
                 );
             }
-            Event::FinishedBenchmarks { seed, benchmarks } => {
+            Event::FinishedBenchmarks {
+                seed,
+                benchmarks,
+                plain_numbers,
+            } => {
                 let (max_mem, max_cpu, max_iter) = find_max_execution_units(&benchmarks);
+
+                let (formatter, max_mem, max_cpu) =
+                    derive_execution_units_format(plain_numbers, max_mem, max_cpu);
 
                 for (module, results) in &group_by_module(&benchmarks) {
                     let title = module
                         .if_supports_color(Stderr, |s| s.bold())
                         .if_supports_color(Stderr, |s| s.blue())
                         .to_string();
-
-                    let mut formatter = numfmt::Formatter::new();
 
                     let benchmarks = results
                         .iter()
@@ -321,7 +326,7 @@ impl EventListener for Terminal {
                                 max_iter,
                                 true,
                                 CoverageMode::default(),
-                                &mut formatter,
+                                &formatter,
                             )
                         })
                         .collect::<Vec<String>>()
@@ -366,7 +371,7 @@ fn fmt_test(
     max_iter: usize,
     styled: bool,
     coverage_mode: CoverageMode,
-    formatter: &mut numfmt::Formatter,
+    formatter: &RefCell<numfmt::Formatter>,
 ) -> String {
     // Status
     let mut test = if matches!(result, TestResult::BenchmarkResult { .. }) {
@@ -404,8 +409,10 @@ fn fmt_test(
         TestResult::UnitTestResult(UnitTestResult { spent_budget, .. }) => {
             let ExBudget { mem, cpu } = spent_budget;
 
-            let mem_pad = pretty::pad_left(formatter.fmt2(*mem).to_owned(), max_mem, " ");
-            let cpu_pad = pretty::pad_left(formatter.fmt2(*cpu).to_owned(), max_cpu, " ");
+            let mem_pad =
+                pretty::pad_left(formatter.borrow_mut().fmt2(*mem).to_owned(), max_mem, " ");
+            let cpu_pad =
+                pretty::pad_left(formatter.borrow_mut().fmt2(*cpu).to_owned(), max_cpu, " ");
 
             test = format!(
                 "{test} [mem: {mem_unit}, cpu: {cpu_unit}]",
@@ -460,7 +467,8 @@ fn fmt_test(
                         .iter()
                         .map(|(size, budget)| (*size as f32, budget.mem as f32))
                         .collect::<Vec<_>>(),
-                    max_size
+                    max_size,
+                    formatter.clone(),
                 )
             );
 
@@ -475,7 +483,8 @@ fn fmt_test(
                         .iter()
                         .map(|(size, budget)| (*size as f32, budget.cpu as f32))
                         .collect::<Vec<_>>(),
-                    max_size
+                    max_size,
+                    formatter.clone(),
                 )
             );
 
@@ -681,22 +690,31 @@ fn fmt_test_summary<T>(tests: &[&TestResult<T, T>], styled: bool) -> String {
     )
 }
 
-fn plot(color: &RGB8, points: Vec<(f32, f32)>, max_size: usize) -> String {
-    use textplots::{Chart, ColorPlot, Shape};
+fn plot(
+    color: &RGB8,
+    points: Vec<(f32, f32)>,
+    max_size: usize,
+    formatter: RefCell<numfmt::Formatter>,
+) -> String {
+    use textplots::{Chart, ColorPlot, LabelBuilder, LabelFormat, Shape};
     let mut chart = Chart::new(80, 50, 1.0, max_size as f32);
     let plot = Shape::Lines(&points);
     let chart = chart.linecolorplot(&plot, *color);
     chart.borders();
     chart.axis();
     chart.figures();
-    chart.to_string()
+    chart
+        .y_label_format(LabelFormat::Custom(Box::new(move |y| {
+            formatter.borrow_mut().fmt2(y).to_owned()
+        })))
+        .to_string()
 }
 
 fn derive_execution_units_format(
     plain_numbers: bool,
     max_mem: usize,
     max_cpu: usize,
-) -> (numfmt::Formatter, usize, usize) {
+) -> (RefCell<numfmt::Formatter>, usize, usize) {
     // Update max size of the execution units to account for underscores
     // after three decimal place e.g. 1_000_000
     let update_max_size = |x: usize| {
@@ -709,7 +727,7 @@ fn derive_execution_units_format(
             .unwrap()
             .precision(Precision::Decimals(0));
         (
-            formatter,
+            RefCell::new(formatter),
             update_max_size(max_mem),
             update_max_size(max_cpu),
         )
@@ -719,6 +737,6 @@ fn derive_execution_units_format(
             .precision(Precision::Decimals(2));
         // For units denoted in scales, max unit value
         // does not give max unit size (e.g. 123.4 K vs 12.3 M )
-        (formatter, 8, 8)
+        (RefCell::new(formatter), 8, 8)
     }
 }

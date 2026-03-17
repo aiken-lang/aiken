@@ -39,7 +39,9 @@ impl EventListener for Json {
                 });
                 println!("{}", serde_json::to_string_pretty(&json_output).unwrap());
             }
-            Event::FinishedBenchmarks { benchmarks, seed } => {
+            Event::FinishedBenchmarks {
+                benchmarks, seed, ..
+            } => {
                 let benchmark_results: Vec<_> = benchmarks
                     .into_iter()
                     .filter_map(|test| {
