@@ -1,7 +1,7 @@
-use pallas_primitives::conway::Language;
 use super::TestProject;
 use crate::module::CheckedModules;
 use aiken_lang::ast::{Definition, Function, TraceLevel, Tracing, TypedTest, TypedValidator};
+use pallas_primitives::conway::Language;
 use pretty_assertions::assert_eq;
 use std::rc::Rc;
 use uplc::{
