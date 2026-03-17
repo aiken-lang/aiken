@@ -53,7 +53,7 @@ impl Parameter {
 
 fn mismatch(term: &Constant, schema: Schema) -> Error {
     Error::SchemaMismatch {
-        schema,
+        schema: Box::new(schema),
         term: term.clone(),
     }
 }

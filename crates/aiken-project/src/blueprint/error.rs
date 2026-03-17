@@ -22,7 +22,7 @@ pub enum Error {
     #[diagnostic(help("{}", error.help()))]
     #[diagnostic(code("aiken::blueprint::interface"))]
     Schema {
-        error: schema::Error,
+        error: Box<schema::Error>,
         #[label("invalid validator's boundary")]
         location: Span,
         #[source_code]
@@ -125,7 +125,7 @@ pub enum Error {
             }
         }.if_supports_color(Stdout, |s| s.red()),
     ))]
-    SchemaMismatch { schema: Schema, term: Constant },
+    SchemaMismatch { schema: Box<Schema>, term: Constant },
 
     #[error(
         "I discovered a discrepancy of elements between a given tuple and its declared schema."

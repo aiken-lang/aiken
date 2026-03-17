@@ -60,7 +60,7 @@ impl Export {
                     schema: Declaration::Referenced(schema),
                 })
                 .map_err(|error| blueprint::Error::Schema {
-                    error,
+                    error: Box::new(error),
                     location: param.location,
                     source_code: NamedSource::new(
                         module.input_path.display().to_string(),
@@ -94,7 +94,7 @@ impl Export {
             schema: Declaration::Referenced(schema),
         })
         .map_err(|error| blueprint::Error::Schema {
-            error,
+            error: Box::new(error),
             location: func.location,
             source_code: NamedSource::new(
                 module.input_path.display().to_string(),

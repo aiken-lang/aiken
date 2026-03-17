@@ -108,7 +108,7 @@ impl Validator<()> {
                     schema: Declaration::Referenced(schema),
                 })
                 .map_err(|error| Error::Schema {
-                    error,
+                    error: Box::new(error),
                     location: param.location,
                     source_code: NamedSource::new(
                         module.input_path.display().to_string(),
@@ -153,7 +153,7 @@ impl Validator<()> {
                                 &mut definitions,
                             )
                             .map_err(|error| Error::Schema {
-                                error,
+                                error: Box::new(error),
                                 location: datum.location,
                                 source_code: NamedSource::new(
                                     module.input_path.display().to_string(),
@@ -176,7 +176,7 @@ impl Validator<()> {
                 &mut definitions,
             )
             .map_err(|error| Error::Schema {
-                error,
+                error: Box::new(error),
                 location: redeemer.location,
                 source_code: NamedSource::new(
                     module.input_path.display().to_string(),
