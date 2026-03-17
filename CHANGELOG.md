@@ -7,11 +7,11 @@
 - **aiken**: New flag `-I / --include-all-types` to the `aiken build` command to include all serialisable types in the blueprint, regardless of whether they are part of the contract interface or not. @emiflake, @KtorZ
 - **aiken**: `aiken test` is now an alias for `aiken check`. @KtorZ
 - **aiken**: `aiken bench` now also display units using human-readable units by default and falls back to plain number when passed `--plain-numbers`. @KtorZ
+- **aiken**: `aiken bench` indicates a projected maximum size for benches by performing a linear regression on the results, using the minimum/bottleneck between cpu and mem. @KtorZ
 
 ### Fixed
 
 - **uplc**: Fixed conversion/discrepancy from large negative bigint when using `Data::integer`; mostly impacting value reification and tracing of large negative integers. Fixes [#1241](https://github.com/aiken-lang/aiken/issues/1241). @KtorZ
-
 - **uplc**: Make evaluation failures language-dependent; thus allowing V1 & V2 evaluations to return non-unit results. @michaeljfazio, @KtorZ
 
 ## v1.1.20 - 2025-12-11

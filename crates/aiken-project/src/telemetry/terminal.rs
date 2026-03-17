@@ -376,7 +376,7 @@ fn fmt_test(
     // Status
     let mut test = if matches!(result, TestResult::BenchmarkResult { .. }) {
         format!(
-            "\n{label}{title}\n",
+            "\n{label}{title}",
             label = if result.is_success() {
                 String::new()
             } else {
@@ -488,6 +488,23 @@ fn fmt_test(
                 )
             );
 
+            let max_mem_size = linear_regression(
+                measures
+                    .iter()
+                    .map(|(size, budget)| ((*size) as u64, budget.mem)),
+            )
+            .and_then(|regression| max_below_limit(regression, ExBudget::default().mem as f64));
+
+            let max_cpu_size = linear_regression(
+                measures
+                    .iter()
+                    .map(|(size, budget)| ((*size) as u64, budget.cpu)),
+            )
+            .and_then(|regression| max_below_limit(regression, ExBudget::default().cpu as f64));
+
+            let projected_max_size =
+                max_mem_size.and_then(|mem| max_cpu_size.map(|cpu| mem.min(cpu)));
+
             let charts = mem_chart
                 .lines()
                 .zip(cpu_chart.lines())
@@ -495,7 +512,14 @@ fn fmt_test(
                 .collect::<Vec<_>>()
                 .join("\n");
 
-            test = format!("{test}{charts}",);
+            test = format!(
+                "{test}{}{charts}",
+                if let Some(sz) = projected_max_size {
+                    format!(" (projected max size = {sz})\n")
+                } else {
+                    "\n".to_string()
+                }
+            );
         }
     }
 
@@ -738,5 +762,67 @@ fn derive_execution_units_format(
         // For units denoted in scales, max unit value
         // does not give max unit size (e.g. 123.4 K vs 12.3 M )
         (RefCell::new(formatter), 8, 8)
+    }
+}
+
+struct LinearModel {
+    slope: f64,
+    intercept: f64,
+}
+
+fn linear_regression(points: impl Iterator<Item = (u64, i64)>) -> Option<LinearModel> {
+    let mut sum_x = 0.0;
+    let mut sum_y = 0.0;
+    let mut sum_xx = 0.0;
+    let mut sum_xy = 0.0;
+    let mut n = 0;
+
+    for (x, y) in points {
+        n += 1;
+
+        let x: f64 = x as f64;
+        let y: f64 = y as f64;
+
+        if !(x.is_finite() && y.is_finite()) {
+            return None;
+        }
+
+        sum_x += x;
+        sum_y += y;
+        sum_xx += x * x;
+        sum_xy += x * y;
+    }
+
+    let denominator = (n as f64) * sum_xx - sum_x * sum_x;
+
+    if n < 2 || denominator == 0.0 {
+        return None;
+    }
+
+    let slope = ((n as f64) * sum_xy - sum_x * sum_y) / denominator;
+    let intercept = (sum_y - slope * sum_x) / (n as f64);
+
+    Some(LinearModel { slope, intercept })
+}
+
+fn max_below_limit(model: LinearModel, limit: f64) -> Option<u64> {
+    if model.slope == 0.0 {
+        return if model.intercept < limit {
+            Some(u64::MAX)
+        } else {
+            None
+        };
+    }
+
+    if model.slope < 0.0 {
+        return Some(u64::MAX);
+    }
+
+    let candidate = ((limit - model.intercept) / model.slope).ceil() - 1.0;
+
+    if candidate < 0.0 {
+        Some(0)
+    } else {
+        Some(candidate as u64)
     }
 }
