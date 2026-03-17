@@ -98,7 +98,7 @@ impl<'a> Downloader<'a> {
 
         if response.status().as_u16() >= 400 {
             return Err(Error::UnknownPackageVersion {
-                package: package.clone(),
+                package: Box::new(package.clone()),
             });
         }
 

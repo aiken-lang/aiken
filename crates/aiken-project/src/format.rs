@@ -103,7 +103,7 @@ fn unformatted_files(files: Vec<String>) -> Result<Vec<Unformatted>, Vec<Error>>
 fn format_file(problem_files: &mut Vec<Unformatted>, path: PathBuf) -> Result<(), Vec<Error>> {
     let src = fs::read_to_string(&path).map_err(|error| Error::FileIo {
         error,
-        path: path.clone(),
+        path: Box::new(path.clone()),
     })?;
 
     let mut output = String::new();

@@ -349,7 +349,10 @@ where
             let program = &validator.program;
             let program: Program<Name> = program.inner().try_into().unwrap();
 
-            fs::write(&path, program.to_pretty()).map_err(|error| Error::FileIo { error, path })?;
+            fs::write(&path, program.to_pretty()).map_err(|error| Error::FileIo {
+                error,
+                path: Box::new(path),
+            })?;
         }
 
         Ok(())
@@ -438,7 +441,7 @@ where
                 fs::write(options.blueprint_path.as_path(), json).map_err(|error| {
                     Error::FileIo {
                         error,
-                        path: options.blueprint_path,
+                        path: Box::new(options.blueprint_path),
                     }
                     .into()
                 })
@@ -559,10 +562,14 @@ where
             .map(|s| {
                 Address::from_hex(s)
                     .or_else(|_| Address::from_bech32(s))
-                    .map_err(|error| Error::MalformedStakeAddress { error: Some(error) })
+                    .map_err(|error| Error::MalformedStakeAddress {
+                        error: Box::new(Some(error)),
+                    })
                     .and_then(|addr| match addr {
                         Address::Stake(addr) => Ok(addr),
-                        _ => Err(Error::MalformedStakeAddress { error: None }),
+                        _ => Err(Error::MalformedStakeAddress {
+                            error: Box::new(None),
+                        }),
                     })
             })
             .transpose()?;
@@ -853,9 +860,9 @@ where
             duplicates
                 .into_iter()
                 .map(|(module, first, second)| Error::DuplicateModule {
-                    module,
-                    first,
-                    second,
+                    module: Box::new(module),
+                    first: Box::new(first),
+                    second: Box::new(second),
                 })
                 .collect::<Vec<_>>(),
         );
@@ -864,8 +871,8 @@ where
             parse_errors
                 .into_iter()
                 .map(|(path, src, named, error)| Error::Parse {
-                    path,
-                    src,
+                    path: Box::new(path),
+                    src: Box::new(src),
                     named: named.into(),
                     error,
                 })
@@ -878,9 +885,9 @@ where
                 .insert(parsed_module.name.clone(), parsed_module.path.clone())
             {
                 errors.push(Error::DuplicateModule {
-                    module: parsed_module.name.clone(),
-                    first,
-                    second: parsed_module.path.clone(),
+                    module: Box::new(parsed_module.name.clone()),
+                    first: Box::new(first),
+                    second: Box::new(parsed_module.path.clone()),
                 });
             }
         }
@@ -1198,7 +1205,7 @@ where
             AddModuleBy::Path(path) => {
                 let name = self.module_name(dir, &path);
                 let code = fs::read_to_string(&path).map_err(|error| Error::FileIo {
-                    path: path.clone(),
+                    path: Box::new(path.clone()),
                     error,
                 })?;
                 (name, code, path)

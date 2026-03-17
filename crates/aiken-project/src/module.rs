@@ -68,9 +68,12 @@ impl ParsedModule {
                 env,
             )
             .map_err(|error| Error::Type {
-                path: self.path.clone(),
-                src: self.code.clone(),
-                named: NamedSource::new(self.path.display().to_string(), self.code.clone()),
+                path: Box::new(self.path.clone()),
+                src: Box::new(self.code.clone()),
+                named: Box::new(NamedSource::new(
+                    self.path.display().to_string(),
+                    self.code.clone(),
+                )),
                 error: error.into(),
             })?;
 

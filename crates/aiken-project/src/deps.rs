@@ -46,15 +46,15 @@ impl LocalPackages {
 
         let result: Self = toml::from_str(&src).map_err(|e| Error::TomlLoading {
             ctx: TomlLoadingContext::Package,
-            path: path.clone(),
-            src: src.clone(),
+            path: Box::new(path.clone()),
+            src: Box::new(src.clone()),
             named: NamedSource::new(path.display().to_string(), src).into(),
             // this isn't actually a legit way to get the span
             location: e.span().map(|range| Span {
                 start: range.start,
                 end: range.end,
             }),
-            help: e.message().to_string(),
+            help: Box::new(e.message().to_string()),
         })?;
 
         Ok(result)

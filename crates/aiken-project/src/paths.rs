@@ -1,6 +1,5 @@
-use crate::deps::manifest::Package;
 use crate::{
-    deps::manifest::Manifest,
+    deps::manifest::{Manifest, Package},
     error::Error,
     package_name::PackageName,
     telemetry::{Event, EventListener},
@@ -117,7 +116,7 @@ async fn new_etag_from_network(http: &Client, package: &Package) -> Result<Strin
         .headers()
         .get("etag")
         .ok_or(Error::UnknownPackageVersion {
-            package: package.clone(),
+            package: Box::new(package.clone()),
         })?;
     Ok(etag.to_str().unwrap().replace('"', ""))
 }
@@ -151,7 +150,7 @@ fn new_cache_key_from_cache(target: &Package) -> Result<String, Error> {
 
     match most_recently_modified {
         None => Err(Error::UnableToResolvePackage {
-            package: target.clone(),
+            package: Box::new(target.clone()),
         }),
         Some(pkg) => Ok(format!(
             "{version}{etag}",

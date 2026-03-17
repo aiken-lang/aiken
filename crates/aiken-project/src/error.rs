@@ -49,13 +49,16 @@ impl fmt::Display for TomlLoadingContext {
 pub enum Error {
     #[error("I just found two modules with the same name: '{}'", module.if_supports_color(Stderr, |s| s.yellow()))]
     DuplicateModule {
-        module: String,
-        first: PathBuf,
-        second: PathBuf,
+        module: Box<String>,
+        first: Box<PathBuf>,
+        second: Box<PathBuf>,
     },
 
     #[error("Some operation on the file-system did fail.")]
-    FileIo { error: io::Error, path: PathBuf },
+    FileIo {
+        error: io::Error,
+        path: Box<PathBuf>,
+    },
 
     #[error("I found some files with incorrectly formatted source code.")]
     Format { problem_files: Vec<Unformatted> },
@@ -84,23 +87,23 @@ pub enum Error {
     #[error("I could not load the {ctx} config file.")]
     TomlLoading {
         ctx: TomlLoadingContext,
-        path: PathBuf,
-        src: String,
+        path: Box<PathBuf>,
+        src: Box<String>,
         named: Box<NamedSource<String>>,
         location: Option<Span>,
-        help: String,
+        help: Box<String>,
     },
 
     #[error("I couldn't find any 'aiken.toml' manifest in {path}.")]
-    MissingManifest { path: PathBuf },
+    MissingManifest { path: Box<PathBuf> },
 
     #[error("I just found a cycle in module hierarchy!")]
     ImportCycle { modules: Vec<String> },
 
     #[error("While parsing files...")]
     Parse {
-        path: PathBuf,
-        src: String,
+        path: Box<PathBuf>,
+        src: Box<String>,
         named: Box<NamedSource<String>>,
         #[source]
         error: Box<ParseError>,
@@ -108,19 +111,19 @@ pub enum Error {
 
     #[error("While trying to make sense of your code...")]
     Type {
-        path: PathBuf,
-        src: String,
-        named: NamedSource<String>,
+        path: Box<PathBuf>,
+        src: Box<String>,
+        named: Box<NamedSource<String>>,
         #[source]
         error: Box<tipo::error::Error>,
     },
 
     #[error("{name} failed{}", if *verbose { format!("\n{src}") } else { String::new() } )]
     TestFailure {
-        name: String,
-        path: PathBuf,
+        name: Box<String>,
+        path: Box<PathBuf>,
         verbose: bool,
-        src: String,
+        src: Box<String>,
     },
 
     #[error(
@@ -129,18 +132,18 @@ pub enum Error {
         package.name.owner,
         package.name.repo
     )]
-    UnknownPackageVersion { package: Package },
+    UnknownPackageVersion { package: Box<Package> },
 
     #[error(
         "I need to resolve a package {}/{}, but couldn't find it.",
         package.name.owner,
         package.name.repo,
     )]
-    UnableToResolvePackage { package: Package },
+    UnableToResolvePackage { package: Box<Package> },
 
     #[error("I couldn't parse the provided stake address.")]
     MalformedStakeAddress {
-        error: Option<pallas_addresses::Error>,
+        error: Box<Option<pallas_addresses::Error>>,
     },
 
     #[error("I couldn't find any exportable function named '{name}' in module '{module}'.")]
@@ -171,7 +174,7 @@ pub enum Error {
     ScriptOverrideArgumentParseError {
         index: usize,
         #[source]
-        error: ScriptOverrideArgumentError,
+        error: Box<ScriptOverrideArgumentError>,
     },
 }
 
@@ -286,8 +289,8 @@ impl Error {
 
         for error in errs {
             errors.push(Error::Parse {
-                path: path.into(),
-                src: src.to_string(),
+                path: Box::new(path.into()),
+                src: Box::new(src.to_string()),
                 named: NamedSource::new(path.display().to_string(), src.to_string()).into(),
                 error: error.into(),
             });
@@ -316,9 +319,9 @@ impl Error {
         };
 
         Error::TestFailure {
-            name,
-            path,
-            src,
+            name: Box::new(name),
+            path: Box::new(path),
+            src: Box::new(src),
             verbose,
         }
     }
@@ -527,7 +530,7 @@ impl Diagnostic for Error {
             Error::Json(error) => Some(Box::new(format!("{error}"))),
             Error::MalformedStakeAddress { error } => Some(Box::new(format!(
                 "A stake address must be provided either as a base16-encoded string, or as a bech32-encoded string with the 'stake' or 'stake_test' prefix.{hint}",
-                hint = match error {
+                hint = match error.as_ref() {
                     Some(error) => format!("\n\nHere's the error I encountered: {error}"),
                     None => String::new(),
                 }
@@ -594,7 +597,7 @@ impl Diagnostic for Error {
         match self {
             Error::Blueprint(e) => e.source_code(),
             Error::Parse { named, .. } => Some(named.as_ref()),
-            Error::Type { named, .. } => Some(named),
+            Error::Type { named, .. } => Some(named.as_ref()),
             Error::TomlLoading { named, .. } => Some(named.as_ref()),
             Error::DuplicateModule { .. }
             | Error::FileIo { .. }

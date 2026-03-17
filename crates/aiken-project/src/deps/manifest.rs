@@ -49,15 +49,15 @@ impl Manifest {
 
         let manifest: Self = toml::from_str(&toml).map_err(|e| Error::TomlLoading {
             ctx: TomlLoadingContext::Manifest,
-            path: manifest_path.clone(),
-            src: toml.clone(),
+            path: Box::new(manifest_path.clone()),
+            src: Box::new(toml.clone()),
             named: NamedSource::new(manifest_path.display().to_string(), toml).into(),
             // this isn't actually a legit way to get the span
             location: e.span().map(|range| Span {
                 start: range.start,
                 end: range.end,
             }),
-            help: e.message().to_string(),
+            help: Box::new(e.message().to_string()),
         })?;
 
         // If the config is unchanged since the manifest was written then it is up

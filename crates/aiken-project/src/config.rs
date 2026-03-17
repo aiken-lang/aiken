@@ -90,7 +90,7 @@ impl WorkspaceConfig {
     pub fn load(dir: &Path) -> Result<WorkspaceConfig, Error> {
         let config_path = dir.join(paths::project_config());
         let raw_config = fs::read_to_string(&config_path).map_err(|_| Error::MissingManifest {
-            path: dir.to_path_buf(),
+            path: Box::new(dir.to_path_buf()),
         })?;
 
         let raw: RawWorkspaceConfig = toml::from_str(&raw_config).map_err(|e| {
@@ -407,7 +407,7 @@ impl ProjectConfig {
     pub fn load(dir: &Path) -> Result<ProjectConfig, Error> {
         let config_path = dir.join(paths::project_config());
         let raw_config = fs::read_to_string(&config_path).map_err(|_| Error::MissingManifest {
-            path: dir.to_path_buf(),
+            path: Box::new(dir.to_path_buf()),
         })?;
 
         let result: Self = toml::from_str(&raw_config).map_err(|e| {
@@ -453,15 +453,15 @@ fn from_toml_de_error(
 ) -> Error {
     Error::TomlLoading {
         ctx,
-        path: config_path.clone(),
-        src: raw_config.clone(),
+        path: Box::new(config_path.clone()),
+        src: Box::new(raw_config.clone()),
         named: NamedSource::new(config_path.display().to_string(), raw_config).into(),
         // this isn't actually a legit way to get the span
         location: e.span().map(|range| Span {
             start: range.start,
             end: range.end,
         }),
-        help: e.message().to_string(),
+        help: Box::new(e.message().to_string()),
     }
 }
 
