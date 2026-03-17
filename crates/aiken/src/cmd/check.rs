@@ -15,6 +15,7 @@ use std::{path::PathBuf, process};
 #[derive(clap::Args)]
 #[clap(disable_version_flag(true))]
 #[command(
+    alias = "test",
     verbatim_doc_comment,
     about = color_print::cstr!(r#"
 Type-check an Aiken project and run any tests found.
