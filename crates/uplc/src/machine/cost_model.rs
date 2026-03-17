@@ -41,7 +41,7 @@ impl ExBudget {
 impl Default for ExBudget {
     fn default() -> Self {
         ExBudget {
-            mem: 14000000,
+            mem: 16500000,
             cpu: 10000000000,
         }
     }
