@@ -444,7 +444,7 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                                 label: Box::new(label),
                                 name: Box::new(name.clone()),
                                 args: pattern_args.clone(),
-                                module: module.clone(),
+                                module: Box::new(module.clone()),
                                 spread_location,
                             })
                         })
@@ -592,8 +592,8 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                                 location,
                                 given: pattern_args,
                                 expected: args.len(),
-                                name: name.clone(),
-                                module: module.clone(),
+                                name: Box::new(name.clone()),
+                                module: Box::new(module.clone()),
                                 is_record,
                             })
                         }
@@ -628,8 +628,8 @@ impl<'a, 'b> PatternTyper<'a, 'b> {
                                 location,
                                 given: pattern_args,
                                 expected: 0,
-                                name: name.clone(),
-                                module: module.clone(),
+                                name: Box::new(name.clone()),
+                                module: Box::new(module.clone()),
                                 is_record,
                             })
                         }

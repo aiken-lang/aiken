@@ -306,6 +306,7 @@ where
         self.compile(options)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn benchmark(
         &mut self,
         match_benchmarks: Option<Vec<String>>,

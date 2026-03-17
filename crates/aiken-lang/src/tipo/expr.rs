@@ -1484,7 +1484,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
 
                 Err(Error::CastDataNoAnn {
                     location,
-                    value: UntypedExpr::Assignment {
+                    value: Box::new(UntypedExpr::Assignment {
                         location,
                         value: untyped_value.clone().into(),
                         patterns: AssignmentPattern::new(
@@ -1495,7 +1495,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         .into(),
                         comment: comment.clone(),
                         kind,
-                    },
+                    }),
                 })
             };
 
@@ -1589,7 +1589,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                             },
                             pattern_location: untyped_pattern.location(),
                             value_location: untyped_value.location(),
-                            sample: match untyped_value {
+                            sample: Box::new(match untyped_value {
                                 UntypedExpr::Var { name, .. } if name == ast::BACKPASS_VARIABLE => {
                                     UntypedExpr::Assignment {
                                         location: Span::empty(),
@@ -1619,7 +1619,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                                     comment: None,
                                     kind: AssignmentKind::let_(),
                                 },
-                            },
+                            }),
                         });
                 }
             }
@@ -2123,7 +2123,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         if continuation.is_empty() {
             return Err(Error::LastExpressionIsAssignment {
                 location,
-                expr: *value,
+                expr: Box::new(*value),
                 patterns: patterns.clone(),
                 kind,
             });
@@ -2692,7 +2692,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                         // encountered it.
                         if self.not_yet_inferred.contains(&fun.name) {
                             return Err(Error::MustInferFirst {
-                                function: fun.clone(),
+                                function: Box::new(fun.clone()),
                             });
                         }
                     }
@@ -2769,7 +2769,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
         if clauses.len() == 1 && clauses[0].patterns.len() == 1 {
             sample = Some(Warning::SingleWhenClause {
                 location: clauses[0].patterns[0].location(),
-                sample: UntypedExpr::Assignment {
+                sample: Box::new(UntypedExpr::Assignment {
                     location: Span::empty(),
                     value: Box::new(subject.clone()),
                     patterns: AssignmentPattern::new(
@@ -2780,7 +2780,7 @@ impl<'a, 'b> ExprTyper<'a, 'b> {
                     .into(),
                     kind: AssignmentKind::let_(),
                     comment: None,
-                },
+                }),
             });
         }
 
@@ -2881,7 +2881,7 @@ fn assert_no_assignment(expr: &UntypedExpr) -> Result<(), Error> {
             ..
         } => Err(Error::LastExpressionIsAssignment {
             location: expr.location(),
-            expr: *value.clone(),
+            expr: Box::new(*value.clone()),
             patterns: patterns.clone(),
             kind: *kind,
         }),

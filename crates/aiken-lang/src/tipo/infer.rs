@@ -132,7 +132,7 @@ impl UntypedModule {
                         }
                         _ => None,
                     },
-                    leaked,
+                    leaked: Box::new(leaked),
                 });
             }
         }

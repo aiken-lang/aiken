@@ -79,7 +79,7 @@ pub enum Error {
     CastDataNoAnn {
         #[label("missing annotation")]
         location: Span,
-        value: UntypedExpr,
+        value: Box<UntypedExpr>,
     },
 
     #[error("I struggled to unify the types of two expressions.\n")]
@@ -432,8 +432,8 @@ From there, you can define 'increment', a function that takes a single argument 
         location: Span,
         expected: usize,
         given: Vec<CallArg<UntypedPattern>>,
-        name: String,
-        module: Option<Namespace>,
+        name: Box<String>,
+        module: Box<Option<Namespace>>,
         is_record: bool,
     },
 
@@ -517,7 +517,7 @@ If you really meant to return that last expression, try to replace it with the f
     LastExpressionIsAssignment {
         #[label("let-binding as last expression")]
         location: Span,
-        expr: expr::UntypedExpr,
+        expr: Box<expr::UntypedExpr>,
         patterns: Vec1<AssignmentPattern>,
         kind: UntypedAssignmentKind,
     },
@@ -635,7 +635,7 @@ Maybe you meant to turn it public using the '{keyword_pub}' keyword?"#
     PrivateTypeLeak {
         #[label("private type leak")]
         location: Span,
-        leaked: Type,
+        leaked: Box<Type>,
         #[label("defined here")]
         leaked_location: Option<Span>,
     },
@@ -766,7 +766,7 @@ Perhaps, try the following:
         label: Box<String>,
         name: Box<String>,
         args: Vec<CallArg<UntypedPattern>>,
-        module: Option<Namespace>,
+        module: Box<Option<Namespace>>,
         spread_location: Option<Span>,
     },
 
@@ -1103,7 +1103,7 @@ The best thing to do from here is to remove it."#))]
     },
 
     #[error("Cannot infer caller without inferring callee first")]
-    MustInferFirst { function: UntypedFunction },
+    MustInferFirst { function: Box<UntypedFunction> },
 
     #[error("I found a validator handler referring to an unknown purpose.\n")]
     #[diagnostic(code("unknown::purpose"))]
@@ -1290,10 +1290,10 @@ impl Error {
     pub fn with_unify_error_rigid_names(mut self, new_names: &HashMap<u64, String>) -> Self {
         match self {
             Error::CouldNotUnify {
-                rigid_type_names: ref mut annotated_names,
+                ref mut rigid_type_names,
                 ..
             } => {
-                annotated_names.clone_from(new_names);
+                rigid_type_names.clone_from(new_names);
                 self
             }
             _ => self,
@@ -1661,7 +1661,7 @@ pub enum Warning {
     SingleWhenClause {
         #[label("use let")]
         location: Span,
-        sample: UntypedExpr,
+        sample: Box<UntypedExpr>,
     },
 
     #[error(
@@ -1688,7 +1688,7 @@ pub enum Warning {
         pattern_location: Span,
         #[label("is not Data")]
         value_location: Span,
-        sample: UntypedExpr,
+        sample: Box<UntypedExpr>,
     },
 
     #[error("I found a todo left in the code.")]
