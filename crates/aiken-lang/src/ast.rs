@@ -2489,20 +2489,55 @@ impl chumsky::Span for Span {
 
 /// A source location that includes both the module name and the byte span.
 /// Used for tracking source locations across module boundaries during code generation.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+///
+/// Uses `Rc<str>` for the module name to make cloning O(1) — all terms within a module
+/// share the same allocation.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct SourceLocation {
     /// The module name (e.g., "aiken/collection/list" or "validators/my_validator")
-    pub module: String,
+    pub module: Rc<str>,
     /// The byte span within the module's source
     pub span: Span,
 }
 
+impl serde::Serialize for SourceLocation {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut s = serializer.serialize_struct("SourceLocation", 2)?;
+        s.serialize_field("module", &*self.module)?;
+        s.serialize_field("span", &self.span)?;
+        s.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for SourceLocation {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct Helper {
+            module: String,
+            span: Span,
+        }
+        let h = Helper::deserialize(deserializer)?;
+        Ok(Self {
+            module: h.module.into(),
+            span: h.span,
+        })
+    }
+}
+
 impl SourceLocation {
-    pub fn new(module: impl Into<String>, span: Span) -> Self {
+    pub fn new(module: &str, span: Span) -> Self {
         Self {
             module: module.into(),
             span,
         }
+    }
+
+    /// Create a SourceLocation with a pre-shared module name.
+    /// Use this when creating many locations for the same module to avoid
+    /// repeated Rc allocations.
+    pub fn with_rc(module: Rc<str>, span: Span) -> Self {
+        Self { module, span }
     }
 
     pub fn empty() -> Self {

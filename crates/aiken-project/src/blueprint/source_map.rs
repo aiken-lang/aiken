@@ -337,10 +337,10 @@ fn visit_post_order(
     }
 
     // Use the module name from the source location to look up the correct source
-    let module_name = &source_loc.module;
+    let module_name: &str = &source_loc.module;
     let span = &source_loc.span;
 
-    if let Some((src, line_numbers)) = module_sources.get(module_name.as_str()) {
+    if let Some((src, line_numbers)) = module_sources.get(module_name) {
         // Check if span is within bounds of this module's source
         if span.start < src.len() && span.end <= src.len() {
             if let Some(start_loc) = line_numbers.line_and_column_number(span.start) {

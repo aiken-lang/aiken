@@ -51,12 +51,12 @@ impl LcovReport {
     ) {
         for loc in all_locations {
             // Skip modules not from the main project (dependencies)
-            let info = match module_info.get(&loc.module) {
+            let info = match module_info.get(&*loc.module) {
                 Some(info) if info.is_project_module => info,
                 _ => continue,
             };
 
-            if let Some((_, line_numbers)) = module_sources.get(loc.module.as_str()) {
+            if let Some((_, line_numbers)) = module_sources.get(&*loc.module) {
                 if let Some(line_info) = line_numbers.line_and_column_number(loc.span.start) {
                     // Only insert if not already present (don't overwrite executed counts)
                     self.file_coverage
@@ -82,12 +82,12 @@ impl LcovReport {
     ) {
         for loc in executed_locations {
             // Skip modules not from the main project (dependencies)
-            let info = match module_info.get(&loc.module) {
+            let info = match module_info.get(&*loc.module) {
                 Some(info) if info.is_project_module => info,
                 _ => continue,
             };
 
-            if let Some((_, line_numbers)) = module_sources.get(loc.module.as_str()) {
+            if let Some((_, line_numbers)) = module_sources.get(&*loc.module) {
                 if let Some(line_info) = line_numbers.line_and_column_number(loc.span.start) {
                     *self
                         .file_coverage
