@@ -8,6 +8,7 @@ pub struct Options {
     pub env: Option<String>,
     pub blueprint_path: PathBuf,
     pub source_map_mode: SourceMapMode,
+    pub lcov_output: Option<PathBuf>,
 }
 
 impl Default for Options {
@@ -18,6 +19,7 @@ impl Default for Options {
             env: None,
             blueprint_path: PathBuf::from("plutus.json"),
             source_map_mode: SourceMapMode::None,
+            lcov_output: None,
         }
     }
 }

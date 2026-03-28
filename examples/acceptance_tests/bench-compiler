@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+
+# Benchmark compiler wall-clock performance using hyperfine.
+#
+# Compares two aiken binaries (or the same binary under different flags)
+# across acceptance tests and the hello_world example.
+#
+# Usage:
+#   bench-compiler <aiken-binary-a> [aiken-binary-b]
+#
+# Examples:
+#   # Benchmark a single binary
+#   bench-compiler ./target/release/aiken
+#
+#   # Compare two binaries (e.g. main vs feature branch)
+#   bench-compiler /tmp/aiken-main /tmp/aiken-branch
+#
+# Requires: hyperfine (https://github.com/sharkdp/hyperfine)
+
+set -e
+
+if [ -z "$1" ]; then
+  echo -e "\033[31mMissing argument: \033[1mAIKEN_BINARY\033[0m"
+  echo ""
+  echo -e "\033[1mUsage:\033[0m"
+  echo "  bench-compiler <aiken-binary-a> [aiken-binary-b]"
+  echo ""
+  echo -e "\033[1mExamples:\033[0m"
+  echo "  bench-compiler ./target/release/aiken"
+  echo "  bench-compiler /tmp/aiken-main /tmp/aiken-branch"
+  exit 1
+fi
+
+if ! command -v hyperfine &> /dev/null; then
+  echo -e "\033[31mhyperfine not found.\033[0m Install it from https://github.com/sharkdp/hyperfine"
+  exit 1
+fi
+
+AIKEN_A="$(realpath "$1")"
+AIKEN_B="${2:+$(realpath "$2")}"
+
+WORKDIR="$(dirname -- "${BASH_SOURCE[0]}")"
+PROJECTS=(
+  "$WORKDIR/../../examples/hello_world"
+  "$WORKDIR/071"
+  "$WORKDIR/089"
+  "$WORKDIR/104"
+)
+
+echo ""
+echo -e "\033[1m=== Compiler Performance Benchmarks ===\033[0m"
+echo ""
+
+for PROJECT in "${PROJECTS[@]}"; do
+  if [ ! -f "$PROJECT/aiken.toml" ]; then
+    continue
+  fi
+
+  NAME="$(basename "$PROJECT")"
+  echo -e "\033[1m--- $NAME ---\033[0m"
+
+  if [ -n "$AIKEN_B" ]; then
+    hyperfine \
+      --warmup 2 \
+      --min-runs 5 \
+      --command-name "A" "$AIKEN_A check -S $PROJECT" \
+      --command-name "B" "$AIKEN_B check -S $PROJECT"
+  else
+    hyperfine \
+      --warmup 2 \
+      --min-runs 5 \
+      "$AIKEN_A check -S $PROJECT"
+  fi
+
+  echo ""
+done

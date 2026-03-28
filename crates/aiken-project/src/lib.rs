@@ -219,6 +219,7 @@ where
             env,
             blueprint_path,
             source_map_mode,
+            lcov_output: None,
         };
 
         self.compile(options)
@@ -286,6 +287,7 @@ where
         tracing: Tracing,
         env: Option<String>,
         plain_numbers: bool,
+        lcov_output: Option<PathBuf>,
     ) -> Result<(), Vec<Error>> {
         let options = Options {
             tracing,
@@ -305,6 +307,7 @@ where
             },
             blueprint_path: self.blueprint_path(None),
             source_map_mode: SourceMapMode::None,
+            lcov_output,
         };
 
         self.compile(options)
@@ -330,39 +333,25 @@ where
             },
             blueprint_path: self.blueprint_path(None),
             source_map_mode: SourceMapMode::None,
+            lcov_output: None,
         };
 
         self.compile(options)
     }
 
     /// Run tests with code coverage tracking and generate an LCOV report.
+    /// Called from compile() when lcov_output is set.
     #[allow(clippy::too_many_arguments)]
-    pub fn coverage(
+    fn run_tests_with_coverage(
         &mut self,
         match_tests: Option<Vec<String>>,
         exact_match: bool,
         seed: u32,
         property_max_success: usize,
         tracing: Tracing,
-        env: Option<String>,
         output_path: PathBuf,
     ) -> Result<(), Vec<Error>> {
         use coverage::{CoverageData, LcovReport};
-
-        self.event_listener
-            .handle_event(Event::StartingCompilation {
-                root: self.root.clone(),
-                name: self.config.name.to_string(),
-                version: self.config.version.clone(),
-            });
-
-        let config = self.config_definitions(env.as_deref());
-
-        self.read_source_files(config)?;
-
-        let mut modules = self.parse_sources(self.config.name.clone())?;
-
-        self.type_check(&mut modules, tracing, env.as_deref(), true)?;
 
         // Collect tests to run
         let tests_to_run = self.collect_tests_for_coverage(
@@ -390,18 +379,14 @@ where
         let plutus_version = self.config.plutus;
         let language: pallas_primitives::conway::Language = (&plutus_version).into();
 
-        // First, collect all coverable locations from:
-        // 1. All test programs
-        // 2. All validators in the project
-        let mut all_coverable_locations = std::collections::HashSet::new();
+        // Collect all coverable locations from test programs and validators
+        let mut all_coverable_locations = HashSet::new();
 
-        // Collect from test programs
         for (_, _, program) in &tests_to_run {
             let locations = coverage::collect_all_program_locations(program);
             all_coverable_locations.extend(locations);
         }
 
-        // Compile all validators and collect their source locations
         {
             let mut generator = self.new_generator(tracing);
             for (module, def) in self.checked_modules.validators() {
@@ -411,7 +396,7 @@ where
             }
         }
 
-        // Run tests with coverage tracking (serial to avoid Rc Send issues)
+        // Run tests with coverage tracking
         let results: Vec<_> = tests_to_run
             .into_iter()
             .map(|(name, on_test_failure, program)| {
@@ -426,19 +411,14 @@ where
         let mut failed_tests = Vec::new();
 
         // Group property test iterations by base name for correct fail-once semantics.
-        // Property tests are expanded into name[0], name[1], ..., and for `fail once`
-        // the property passes if ANY iteration fails, not each independently.
         let mut property_results: HashMap<String, (OnTestFailure, bool)> = HashMap::new();
 
         for (name, on_test_failure, cov_result) in results {
-            // Always merge coverage, even for failing tests
             aggregated_coverage.merge(&cov_result.coverage);
 
-            // Check if this is a property test iteration (name contains [N])
             let base_name = if let Some(bracket_pos) = name.rfind('[') {
                 name[..bracket_pos].to_string()
             } else {
-                // Unit test - evaluate directly
                 let test_passed = match on_test_failure {
                     OnTestFailure::SucceedEventually | OnTestFailure::SucceedImmediately => {
                         cov_result.errored || cov_result.returned_false
@@ -464,36 +444,22 @@ where
 
             match entry.0 {
                 OnTestFailure::SucceedEventually | OnTestFailure::SucceedImmediately => {
-                    // For fail-once: property passes if ANY iteration fails
                     if iteration_passed {
                         entry.1 = true;
                     }
                 }
                 OnTestFailure::FailImmediately => {
-                    // For normal tests: property passes if ALL iterations pass
-                    // Track failure: if any iteration fails, mark as having a failure
-                    if !iteration_passed && !entry.1 {
-                        // entry.1 stays false until we finish; we'll check below
-                    }
-                    // We need different logic: start true, set false on any failure
                     if !iteration_passed {
-                        entry.1 = true; // has_failure = true
+                        entry.1 = true;
                     }
                 }
             }
         }
 
-        // Evaluate aggregated property test results
         for (base_name, (on_test_failure, flag)) in property_results {
             let property_passed = match on_test_failure {
-                OnTestFailure::SucceedEventually | OnTestFailure::SucceedImmediately => {
-                    // flag = any_iteration_failed; property passes if any iteration failed
-                    flag
-                }
-                OnTestFailure::FailImmediately => {
-                    // flag = has_failure; property passes if no iteration failed
-                    !flag
-                }
+                OnTestFailure::SucceedEventually | OnTestFailure::SucceedImmediately => flag,
+                OnTestFailure::FailImmediately => !flag,
             };
             if !property_passed {
                 failed_tests.push(base_name);
@@ -509,7 +475,6 @@ where
                 (
                     m.name.clone(),
                     coverage::ModuleInfo {
-                        // Canonicalize path to absolute for genhtml compatibility
                         file_path: m
                             .input_path
                             .canonicalize()
@@ -523,9 +488,7 @@ where
         // Generate LCOV report
         let module_sources = utils::indexmap::as_str_ref_values(&self.module_sources);
         let mut report = LcovReport::new();
-        // First initialize all coverable lines with count=0
         report.init_coverable_locations(&all_coverable_locations, &module_sources, &module_info);
-        // Then add the executed locations (incrementing their counts)
         report.add_coverage(
             &aggregated_coverage.executed_locations,
             &module_sources,
@@ -539,7 +502,6 @@ where
             }]
         })?;
 
-        // Report coverage stats
         let (hit, total) = report.overall_stats();
         self.event_listener.handle_event(Event::FinishedCoverage {
             output_path: output_path.clone(),
@@ -548,7 +510,6 @@ where
         });
 
         if !failed_tests.is_empty() {
-            // Coverage report is still written, but we report test failures
             Err(failed_tests
                 .into_iter()
                 .map(|name| Error::CoverageTestFailure { name })
@@ -575,86 +536,25 @@ where
         )>,
         Error,
     > {
-        let mut scripts = Vec::new();
+        let match_filters = parse_match_filters(match_tests);
 
-        let match_tests = match_tests.map(|mt| {
-            mt.into_iter()
-                .map(|match_test| {
-                    let mut match_split_dot = match_test.split('.');
-
-                    let match_module = if match_test.contains('.') || match_test.contains('/') {
-                        match_split_dot.next().unwrap_or("")
-                    } else {
-                        ""
-                    };
-
-                    let match_names = match_split_dot.next().and_then(|names| {
-                        let names = names.replace(&['{', '}'][..], "");
-                        let names_split_comma = names.split(',');
-
-                        let result = names_split_comma
-                            .filter_map(|s| {
-                                let s = s.trim();
-                                if s.is_empty() {
-                                    None
-                                } else {
-                                    Some(s.to_string())
-                                }
-                            })
-                            .collect::<Vec<_>>();
-
-                        if result.is_empty() {
-                            None
-                        } else {
-                            Some(result)
-                        }
-                    });
-
-                    (match_module.to_string(), match_names)
-                })
-                .collect::<Vec<(String, Option<Vec<String>>)>>()
-        });
-
-        for checked_module in self.checked_modules.values() {
-            if checked_module.package != self.config.name.to_string() {
-                continue;
-            }
-
-            for def in checked_module.ast.definitions() {
-                let func = match def {
-                    Definition::Test(func) => Some(func),
-                    _ => None,
-                };
-
-                if let Some(func) = func {
-                    if let Some(match_tests) = &match_tests {
-                        let is_match = match_tests.iter().any(|(module, names)| {
-                            let matched_module =
-                                module.is_empty() || checked_module.name.contains(module);
-
-                            let matched_name = match names {
-                                None => true,
-                                Some(names) => names.iter().any(|name| {
-                                    if exact_match {
-                                        name == &func.name
-                                    } else {
-                                        func.name.contains(name)
-                                    }
-                                }),
-                            };
-
-                            matched_module && matched_name
-                        });
-
-                        if is_match {
-                            scripts.push((checked_module.name.clone(), func));
-                        }
-                    } else {
-                        scripts.push((checked_module.name.clone(), func));
-                    }
-                }
-            }
-        }
+        let scripts: Vec<_> = self
+            .checked_modules
+            .values()
+            .filter(|m| m.package == self.config.name.to_string())
+            .flat_map(|m| {
+                m.ast
+                    .definitions()
+                    .filter_map(|def| match def {
+                        Definition::Test(func) => Some((m.name.clone(), func)),
+                        _ => None,
+                    })
+                    .filter(|(_, func)| {
+                        test_matches_filters(&func.name, &m.name, exact_match, &match_filters)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
 
         let mut generator = self.new_generator(tracing);
 
@@ -883,48 +783,59 @@ where
                 coverage_mode,
                 plain_numbers,
             } => {
-                let tests =
-                    self.collect_tests(verbose, match_tests, exact_match, options.tracing)?;
-
-                if !tests.is_empty() {
-                    self.event_listener.handle_event(Event::RunningTests);
-                }
-
-                let tests = self.run_runnables(tests, seed, property_max_success);
-
-                self.checks_count = if tests.is_empty() {
-                    None
+                if let Some(lcov_output) = options.lcov_output {
+                    self.run_tests_with_coverage(
+                        match_tests,
+                        exact_match,
+                        seed,
+                        property_max_success,
+                        options.tracing,
+                        lcov_output,
+                    )
                 } else {
-                    Some(tests.iter().fold(0, |acc, test| {
-                        acc + match test {
-                            TestResult::PropertyTestResult(r) => r.iterations,
-                            _ => 1,
-                        }
-                    }))
-                };
+                    let tests =
+                        self.collect_tests(verbose, match_tests, exact_match, options.tracing)?;
 
-                let errors: Vec<Error> = tests
-                    .iter()
-                    .filter_map(|e| {
-                        if e.is_success() {
-                            None
-                        } else {
-                            Some(Error::from_test_result(e, verbose))
-                        }
-                    })
-                    .collect();
+                    if !tests.is_empty() {
+                        self.event_listener.handle_event(Event::RunningTests);
+                    }
 
-                self.event_listener.handle_event(Event::FinishedTests {
-                    seed,
-                    coverage_mode,
-                    tests,
-                    plain_numbers,
-                });
+                    let tests = self.run_runnables(tests, seed, property_max_success);
 
-                if !errors.is_empty() {
-                    Err(errors)
-                } else {
-                    Ok(())
+                    self.checks_count = if tests.is_empty() {
+                        None
+                    } else {
+                        Some(tests.iter().fold(0, |acc, test| {
+                            acc + match test {
+                                TestResult::PropertyTestResult(r) => r.iterations,
+                                _ => 1,
+                            }
+                        }))
+                    };
+
+                    let errors: Vec<Error> = tests
+                        .iter()
+                        .filter_map(|e| {
+                            if e.is_success() {
+                                None
+                            } else {
+                                Some(Error::from_test_result(e, verbose))
+                            }
+                        })
+                        .collect();
+
+                    self.event_listener.handle_event(Event::FinishedTests {
+                        seed,
+                        coverage_mode,
+                        tests,
+                        plain_numbers,
+                    });
+
+                    if !errors.is_empty() {
+                        Err(errors)
+                    } else {
+                        Ok(())
+                    }
                 }
             }
             CodeGenMode::Benchmark {
@@ -1088,7 +999,6 @@ where
         name: &str,
         tracing: Tracing,
         source_map_mode: options::SourceMapMode,
-        no_optimize: bool,
     ) -> Result<Export, Error> {
         let checked_module =
             self.checked_modules
@@ -1117,7 +1027,6 @@ where
                 &self.config.plutus,
                 &source_map_mode,
                 &module_sources,
-                no_optimize,
             )
             .map_err(|err| Error::Blueprint(err.into()));
         }
@@ -1138,7 +1047,6 @@ where
                 &self.config.plutus,
                 &source_map_mode,
                 &module_sources,
-                no_optimize,
             )
             .map_err(|err| Error::Blueprint(err.into()));
         }
@@ -1423,111 +1331,49 @@ where
         exact_match: bool,
         tracing: Tracing,
     ) -> Result<Vec<Test>, Error> {
-        let mut scripts = Vec::new();
+        let match_filters = parse_match_filters(match_tests);
 
-        let match_tests = match_tests.map(|mt| {
-            mt.into_iter()
-                .map(|match_test| {
-                    let mut match_split_dot = match_test.split('.');
-
-                    let match_module = if match_test.contains('.') || match_test.contains('/') {
-                        match_split_dot.next().unwrap_or("")
-                    } else {
-                        ""
-                    };
-
-                    let match_names = match_split_dot.next().and_then(|names| {
-                        let names = names.replace(&['{', '}'][..], "");
-                        let names_split_comma = names.split(',');
-
-                        let result = names_split_comma
-                            .filter_map(|s| {
-                                let s = s.trim();
-                                if s.is_empty() {
-                                    None
-                                } else {
-                                    Some(s.to_string())
-                                }
-                            })
-                            .collect::<Vec<_>>();
-
-                        if result.is_empty() {
-                            None
-                        } else {
-                            Some(result)
-                        }
-                    });
-
+        // Emit telemetry for test collection
+        match &match_filters {
+            Some(filters) => {
+                for (module, names) in filters {
                     self.event_listener.handle_event(Event::CollectingTests {
-                        matching_module: if match_module.is_empty() {
+                        matching_module: if module.is_empty() {
                             None
                         } else {
-                            Some(match_module.to_string())
+                            Some(module.clone())
                         },
-                        matching_names: match_names.clone().unwrap_or_default(),
+                        matching_names: names.clone().unwrap_or_default(),
                     });
-
-                    (match_module.to_string(), match_names)
-                })
-                .collect::<Vec<(String, Option<Vec<String>>)>>()
-        });
-
-        if match_tests.is_none() {
-            self.event_listener.handle_event(Event::CollectingTests {
-                matching_module: None,
-                matching_names: vec![],
-            });
-        }
-
-        for checked_module in self.checked_modules.values() {
-            if checked_module.package != self.config.name.to_string() {
-                continue;
-            }
-
-            for def in checked_module.ast.definitions() {
-                let func = match (kind, def) {
-                    (RunnableKind::Test, Definition::Test(func)) => Some(func),
-                    (RunnableKind::Bench, Definition::Benchmark(func)) => Some(func),
-                    _ => None,
-                };
-
-                if let Some(func) = func {
-                    if let Some(match_tests) = &match_tests {
-                        let is_match = match_tests.iter().any(|(module, names)| {
-                            let matched_module =
-                                module.is_empty() || checked_module.name.contains(module);
-
-                            let matched_name = match names {
-                                None => true,
-                                Some(names) => names.iter().any(|name| {
-                                    if exact_match {
-                                        name == &func.name
-                                    } else {
-                                        func.name.contains(name)
-                                    }
-                                }),
-                            };
-
-                            matched_module && matched_name
-                        });
-
-                        if is_match {
-                            scripts.push((
-                                checked_module.input_path.clone(),
-                                checked_module.name.clone(),
-                                func,
-                            ))
-                        }
-                    } else {
-                        scripts.push((
-                            checked_module.input_path.clone(),
-                            checked_module.name.clone(),
-                            func,
-                        ))
-                    }
                 }
             }
+            None => {
+                self.event_listener.handle_event(Event::CollectingTests {
+                    matching_module: None,
+                    matching_names: vec![],
+                });
+            }
         }
+
+        let scripts: Vec<_> = self
+            .checked_modules
+            .values()
+            .filter(|m| m.package == self.config.name.to_string())
+            .flat_map(|m| {
+                m.ast
+                    .definitions()
+                    .filter_map(|def| match (kind, def) {
+                        (RunnableKind::Test, Definition::Test(func)) => Some(func),
+                        (RunnableKind::Bench, Definition::Benchmark(func)) => Some(func),
+                        _ => None,
+                    })
+                    .filter(|func| {
+                        test_matches_filters(&func.name, &m.name, exact_match, &match_filters)
+                    })
+                    .map(|func| (m.input_path.clone(), m.name.clone(), func))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
 
         let mut generator = self.new_generator(tracing);
 
@@ -1556,7 +1402,7 @@ where
         //
         // In this case, we raise an additional warning to suggest a different match syntax, which
         // may be quite helpful in teaching users how to deal with module filtering.
-        match match_tests.as_deref() {
+        match match_filters.as_deref() {
             Some(&[(ref s, Some(ref names))]) if tests.is_empty() => {
                 if let [test] = names.as_slice() {
                     self.warnings.push(Warning::SuspiciousTestMatch {
@@ -1718,6 +1564,72 @@ where
 
         // normalise windows paths
         name.replace('\\', "/").replace('-', "_")
+    }
+}
+
+type MatchFilters = Option<Vec<(String, Option<Vec<String>>)>>;
+
+/// Parse `-m` / `--match-tests` arguments into structured filters.
+fn parse_match_filters(match_tests: Option<Vec<String>>) -> MatchFilters {
+    match_tests.map(|mt| {
+        mt.into_iter()
+            .map(|match_test| {
+                let mut match_split_dot = match_test.split('.');
+
+                let match_module = if match_test.contains('.') || match_test.contains('/') {
+                    match_split_dot.next().unwrap_or("")
+                } else {
+                    ""
+                };
+
+                let match_names = match_split_dot.next().and_then(|names| {
+                    let names = names.replace(&['{', '}'][..], "");
+                    let names: Vec<_> = names
+                        .split(',')
+                        .filter_map(|s| {
+                            let s = s.trim();
+                            if s.is_empty() {
+                                None
+                            } else {
+                                Some(s.to_string())
+                            }
+                        })
+                        .collect();
+
+                    if names.is_empty() { None } else { Some(names) }
+                });
+
+                (match_module.to_string(), match_names)
+            })
+            .collect()
+    })
+}
+
+/// Check whether a test/benchmark matches the parsed filters.
+fn test_matches_filters(
+    test_name: &str,
+    module_name: &str,
+    exact_match: bool,
+    filters: &MatchFilters,
+) -> bool {
+    match filters {
+        None => true,
+        Some(filters) => filters.iter().any(|(filter_module, filter_names)| {
+            let matched_module = filter_module.is_empty() || module_name.contains(filter_module);
+
+            let matched_name = match filter_names {
+                None => true,
+                Some(names) => names.iter().any(|name| {
+                    if exact_match {
+                        name == test_name
+                    } else {
+                        test_name.contains(name)
+                    }
+                }),
+            };
+
+            matched_module && matched_name
+        }),
     }
 }
 

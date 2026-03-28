@@ -43,6 +43,7 @@ impl LspProject {
             Tracing::verbose(),
             None,
             false,
+            None,
         );
 
         self.project.restore(checkpoint);

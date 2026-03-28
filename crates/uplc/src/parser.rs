@@ -418,7 +418,10 @@ mod tests {
             super::program(uplc).unwrap(),
             Program::<Name> {
                 version: (1, 1, 0),
-                term: Term::Constant(Rc::new(Constant::Integer(BigInt::from(i128::MIN) - 1)))
+                term: Term::Constant {
+                    value: Rc::new(Constant::Integer(BigInt::from(i128::MIN) - 1)),
+                    context: ()
+                }
             }
         )
     }

@@ -54,7 +54,6 @@ impl Export {
         plutus_version: &PlutusVersion,
         source_map_mode: &SourceMapMode,
         module_sources: &IndexMap<&str, &(String, LineNumbers)>,
-        no_optimize: bool,
     ) -> Result<Export, blueprint::Error> {
         let mut definitions = Definitions::new();
 
@@ -155,7 +154,6 @@ impl Export {
         plutus_version: &PlutusVersion,
         source_map_mode: &SourceMapMode,
         module_sources: &IndexMap<&str, &(String, LineNumbers)>,
-        no_optimize: bool,
     ) -> Result<Export, blueprint::Error> {
         let mut definitions = Definitions::new();
 
@@ -293,7 +291,6 @@ mod tests {
                 &PlutusVersion::default(),
                 &SourceMapMode::None,
                 &module_sources,
-                false, // no_optimize
             );
 
             match export {

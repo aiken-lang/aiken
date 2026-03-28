@@ -8,7 +8,6 @@ pub mod check;
 // only windows
 #[cfg(not(target_os = "windows"))]
 pub mod completion;
-pub mod coverage;
 pub mod docs;
 pub mod export;
 pub mod fmt;
@@ -34,8 +33,6 @@ pub enum Cmd {
 
     #[clap(visible_alias("c"))]
     Check(check::Args),
-
-    Coverage(coverage::Args),
 
     Docs(docs::Args),
     Add(packages::add::Args),

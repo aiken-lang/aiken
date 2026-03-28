@@ -128,6 +128,13 @@ pub struct Args {
     /// When enabled, print execution units as plain numbers
     #[clap(long)]
     plain_numbers: bool,
+
+    /// Generate an LCOV code coverage report at the given path.
+    ///
+    /// Coverage data is output in LCOV format, which can be processed by tools like `genhtml`
+    /// to generate HTML reports, or uploaded to coverage services.
+    #[clap(long, value_name = "FILEPATH")]
+    lcov: Option<PathBuf>,
 }
 
 pub fn exec(
@@ -148,6 +155,7 @@ pub fn exec(
         max_success,
         env,
         plain_numbers,
+        lcov,
     }: Args,
 ) -> miette::Result<()> {
     if show_json_schema {
@@ -159,6 +167,11 @@ pub fn exec(
 
     let seed = seed.unwrap_or_else(|| rng.r#gen());
 
+    let tracing = match trace_filter {
+        Some(trace_filter) => trace_filter(trace_level),
+        None => Tracing::All(trace_level),
+    };
+
     let result = if watch {
         watch_project(directory.as_deref(), watch::default_filter, 500, |p| {
             p.check(
@@ -169,12 +182,10 @@ pub fn exec(
                 seed,
                 max_success,
                 property_coverage,
-                match trace_filter {
-                    Some(trace_filter) => trace_filter(trace_level),
-                    None => Tracing::All(trace_level),
-                },
+                tracing,
                 env.clone(),
                 plain_numbers,
+                lcov.clone(),
             )
         })
     } else {
@@ -187,12 +198,10 @@ pub fn exec(
                 seed,
                 max_success,
                 property_coverage,
-                match trace_filter {
-                    Some(trace_filter) => trace_filter(trace_level),
-                    None => Tracing::All(trace_level),
-                },
+                tracing,
                 env.clone(),
                 plain_numbers,
+                lcov.clone(),
             )
         })
     };

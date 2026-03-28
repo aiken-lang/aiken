@@ -68,7 +68,7 @@ where
     /// ```
     /// use uplc::ast::{Program, Name, Term};
     ///
-    /// let term = Term::var("x").lambda("x");
+    /// let term: Term<Name> = Term::var("x").lambda("x");
     /// let program = Program { version: (1, 0, 0), term };
     ///
     /// assert_eq!(
@@ -103,7 +103,7 @@ where
     /// ```
     /// use uplc::ast::{Program, Name, Term};
     ///
-    /// let term = Term::var("x").lambda("x");
+    /// let term: Term<Name> = Term::var("x").lambda("x");
     /// let program = Program { version: (1, 0, 0), term };
     ///
     /// assert_eq!(
@@ -129,7 +129,7 @@ where
     /// ```
     /// use uplc::ast::{Program, Name, Term};
     ///
-    /// let term = Term::var("x").lambda("x");
+    /// let term: Term<Name> = Term::var("x").lambda("x");
     /// let program = Program { version: (1, 0, 0), term };
     ///
     /// assert_eq!(
