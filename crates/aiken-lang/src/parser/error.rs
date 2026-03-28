@@ -10,7 +10,34 @@ use indoc::formatdoc;
 use itertools::Itertools;
 use miette::Diagnostic;
 use owo_colors::{OwoColorize, Stream::Stdout};
-use std::collections::HashSet;
+
+// NOTE: We intentionally avoid HashSet<Pattern> for the expected patterns.
+// Hashing Pattern (which contains Token with String fields) is very expensive
+// and was measured at ~49% of total compile time via perf profiling. A simple
+// Vec with lazy dedup at display time is much cheaper since merge() is called
+// far more often than error display.
+#[derive(Debug, Clone, Default)]
+struct ExpectedPatterns(Vec<Pattern>);
+
+impl ExpectedPatterns {
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn merge(&mut self, other: Self) {
+        self.0.extend(other.0);
+    }
+
+    fn iter_unique_sorted(&self) -> impl Iterator<Item = &Pattern> {
+        self.0.iter().sorted().dedup()
+    }
+}
+
+impl FromIterator<Pattern> for ExpectedPatterns {
+    fn from_iter<I: IntoIterator<Item = Pattern>>(iter: I) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
 
 #[derive(Debug, Clone, Diagnostic, thiserror::Error)]
 #[error("{kind}\n")]
@@ -22,8 +49,7 @@ use std::collections::HashSet;
                 format!(
                     "I am looking for one of the following patterns:\n{}",
                     expected
-                        .iter()
-                        .sorted()
+                        .iter_unique_sorted()
                         .map(|x| format!(
                             "→ {}",
                             x.to_aiken()
@@ -43,23 +69,20 @@ pub struct ParseError {
     pub kind: ErrorKind,
     #[label("{}", .label.unwrap_or_default())]
     span: Span,
-    expected: HashSet<Pattern>,
+    expected: ExpectedPatterns,
     label: Option<&'static str>,
 }
 
 impl ParseError {
     pub fn merge(mut self, other: Self) -> Self {
-        // TODO: Use HashSet
-        for expected in other.expected.into_iter() {
-            self.expected.insert(expected);
-        }
+        self.expected.merge(other.expected);
         self
     }
 
     pub fn illegal_multiline_expect_comment(span: Span) -> Self {
         Self {
             kind: ErrorKind::IllegalMultilineExpectComment,
-            expected: HashSet::new(),
+            expected: ExpectedPatterns::default(),
             span,
             label: Some("too many lines"),
         }
@@ -68,7 +91,7 @@ impl ParseError {
     pub fn expected_but_got(expected: Pattern, got: Pattern, span: Span) -> Self {
         Self {
             kind: ErrorKind::Unexpected(got),
-            expected: HashSet::from_iter([expected]),
+            expected: ExpectedPatterns(vec![expected]),
             span,
             label: None,
         }
@@ -78,7 +101,7 @@ impl ParseError {
         Self {
             kind: ErrorKind::UnfinishedAssignmentRightHandSide,
             span,
-            expected: HashSet::new(),
+            expected: ExpectedPatterns::default(),
             label: Some("invalid assignment right-hand side"),
         }
     }
@@ -88,7 +111,7 @@ impl ParseError {
         Self {
             kind: ErrorKind::InvalidTupleIndex { hint },
             span,
-            expected: HashSet::new(),
+            expected: ExpectedPatterns::default(),
             label: None,
         }
     }
@@ -97,7 +120,7 @@ impl ParseError {
         Self {
             kind: ErrorKind::DeprecatedWhenClause,
             span,
-            expected: HashSet::new(),
+            expected: ExpectedPatterns::default(),
             label: Some("deprecated"),
         }
     }
@@ -106,7 +129,7 @@ impl ParseError {
         Self {
             kind: ErrorKind::PointNotOnCurve { curve },
             span,
-            expected: HashSet::new(),
+            expected: ExpectedPatterns::default(),
             label: Some("out off curve"),
         }
     }
@@ -121,7 +144,7 @@ impl ParseError {
         Self {
             kind: ErrorKind::UnknownCurvePoint { curve, point },
             span,
-            expected: HashSet::new(),
+            expected: ExpectedPatterns::default(),
             label,
         }
     }
@@ -130,7 +153,7 @@ impl ParseError {
         Self {
             kind: ErrorKind::MalformedBase16StringLiteral,
             span,
-            expected: HashSet::new(),
+            expected: ExpectedPatterns::default(),
             label: None,
         }
     }
@@ -139,7 +162,7 @@ impl ParseError {
         Self {
             kind: ErrorKind::MalformedBase16Digits,
             span,
-            expected: HashSet::new(),
+            expected: ExpectedPatterns::default(),
             label: None,
         }
     }
@@ -148,7 +171,7 @@ impl ParseError {
         Self {
             kind: ErrorKind::HybridNotationInByteArray,
             span,
-            expected: HashSet::new(),
+            expected: ExpectedPatterns::default(),
             label: None,
         }
     }
@@ -157,7 +180,7 @@ impl ParseError {
         Self {
             kind: ErrorKind::PatternMatchOnCurvePoint,
             span,
-            expected: HashSet::new(),
+            expected: ExpectedPatterns::default(),
             label: Some("cannot pattern-match on curve point"),
         }
     }
@@ -166,7 +189,7 @@ impl ParseError {
         Self {
             kind: ErrorKind::PatternMatchOnString,
             span,
-            expected: HashSet::new(),
+            expected: ExpectedPatterns::default(),
             label: Some("cannot pattern-match on string"),
         }
     }
