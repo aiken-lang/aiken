@@ -15,7 +15,7 @@ exclude = ["test_data/*"]
 [dependencies]
 cryptoxide = "0.4.4"
 hex = "0.4.3"
-indexmap = "1.9.2"
+indexmap = "2.9.0"
 itertools = "0.10.5"
 miette = "5.5.0"
 num-bigint = "0.4.3"
