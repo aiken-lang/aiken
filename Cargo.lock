@@ -66,7 +66,7 @@ dependencies = [
  "miette 7.6.0",
  "num-bigint",
  "openssl",
- "openssl-probe",
+ "openssl-probe 0.2.1",
  "ordinal 0.3.2",
  "owo-colors 3.5.0",
  "pallas-addresses",
@@ -2116,7 +2116,7 @@ dependencies = [
  "libc",
  "log",
  "openssl",
- "openssl-probe",
+ "openssl-probe 0.1.6",
  "openssl-sys",
  "schannel",
  "security-framework",
@@ -2262,6 +2262,12 @@ name = "openssl-probe"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d05e27ee213611ffe7d6348b942e8f942b37114c00cc03cec254295a4a17852e"
+
+[[package]]
+name = "openssl-probe"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 
 [[package]]
 name = "openssl-src"
