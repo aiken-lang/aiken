@@ -70,7 +70,7 @@ dependencies = [
  "ordinal 0.3.2",
  "owo-colors 3.5.0",
  "pallas-addresses",
- "pallas-codec",
+ "pallas-codec 0.33.0",
  "pallas-primitives",
  "pallas-traverse",
  "rand 0.8.5",
@@ -161,8 +161,8 @@ dependencies = [
  "ordinal 0.4.0",
  "owo-colors 3.5.0",
  "pallas-addresses",
- "pallas-codec",
- "pallas-crypto",
+ "pallas-codec 0.33.0",
+ "pallas-crypto 0.35.0",
  "pallas-primitives",
  "pallas-traverse",
  "petgraph",
@@ -2332,8 +2332,8 @@ dependencies = [
  "crc",
  "cryptoxide",
  "hex",
- "pallas-codec",
- "pallas-crypto",
+ "pallas-codec 0.33.0",
+ "pallas-crypto 0.33.0",
  "thiserror 1.0.69",
 ]
 
@@ -2351,6 +2351,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallas-codec"
+version = "0.35.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7bb2a83ec9e56b222250ba1cb3115c54e621852f114bb46b44a8d8e189ea9a8e"
+dependencies = [
+ "hex",
+ "minicbor",
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "pallas-crypto"
 version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2358,7 +2370,22 @@ checksum = "0368945cd093e550febe36aef085431b1611c2e9196297cd70f4b21a4add054c"
 dependencies = [
  "cryptoxide",
  "hex",
- "pallas-codec",
+ "pallas-codec 0.33.0",
+ "rand_core 0.6.4",
+ "serde",
+ "thiserror 1.0.69",
+ "zeroize",
+]
+
+[[package]]
+name = "pallas-crypto"
+version = "0.35.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8d372b115df0faf85c281fe78766c462c876c224e56f8107046fcc90daff9d0"
+dependencies = [
+ "cryptoxide",
+ "hex",
+ "pallas-codec 0.35.0",
  "rand_core 0.6.4",
  "serde",
  "thiserror 1.0.69",
@@ -2375,8 +2402,8 @@ dependencies = [
  "bech32",
  "hex",
  "log",
- "pallas-codec",
- "pallas-crypto",
+ "pallas-codec 0.33.0",
+ "pallas-crypto 0.33.0",
  "serde",
  "serde_json",
 ]
@@ -2390,8 +2417,8 @@ dependencies = [
  "hex",
  "itertools 0.13.0",
  "pallas-addresses",
- "pallas-codec",
- "pallas-crypto",
+ "pallas-codec 0.33.0",
+ "pallas-crypto 0.33.0",
  "pallas-primitives",
  "paste",
  "serde",
@@ -3764,8 +3791,8 @@ dependencies = [
  "num-traits",
  "once_cell",
  "pallas-addresses",
- "pallas-codec",
- "pallas-crypto",
+ "pallas-codec 0.33.0",
+ "pallas-crypto 0.35.0",
  "pallas-primitives",
  "pallas-traverse",
  "peg",
