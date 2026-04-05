@@ -1073,7 +1073,7 @@ impl DefaultFunction {
             DefaultFunction::SerialiseData => {
                 let d = args[0].unwrap_data()?;
 
-                let serialized_data = plutus_data_to_bytes(d).unwrap();
+                let serialized_data = plutus_data_to_bytes(d);
 
                 let value = Value::byte_string(serialized_data);
 
