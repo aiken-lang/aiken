@@ -159,9 +159,33 @@ impl DefaultFunction {
                 | DefaultFunction::Bls12_381_G2_Add
         )
     }
+
+    pub fn try_curry_builtin(&self, arg_stack: Vec<Args>) -> Option<Vec<(usize, Term<Name>)>> {
+        if !self.can_curry_builtin() {
+            return None;
+        }
+
+        if self.arity() != arg_stack.len() {
+            return None;
+        }
+
+        Some(
+            arg_stack
+                .into_iter()
+                .map(|item| {
+                    let Args::Apply(arg_id, arg) = item else {
+                        unreachable!()
+                    };
+
+                    (arg_id, arg)
+                })
+                .collect_vec(),
+        )
+    }
+
     /// For now all of the curry builtins are not forceable
     /// Curryable builtins must take in 2 or more arguments
-    pub fn can_curry_builtin(self) -> bool {
+    pub fn can_curry_builtin(&self) -> bool {
         matches!(
             self,
             DefaultFunction::AddInteger
@@ -2472,16 +2496,7 @@ impl Program<Name> {
             false,
             &mut |_id, term, arg_stack, scope, _context| match term {
                 Term::Builtin(func) => {
-                    if func.can_curry_builtin() && arg_stack.len() == func.arity() {
-                        let arg_stack = arg_stack
-                            .into_iter()
-                            .map(|item| {
-                                let Args::Apply(arg_id, arg) = item else {
-                                    unreachable!()
-                                };
-                                (arg_id, arg)
-                            })
-                            .collect_vec();
+                    if let Some(arg_stack) = func.try_curry_builtin(arg_stack) {
                         // In the case of order agnostic builtins we want to sort the args by constant first
                         // This gives us the opportunity to curry constants that often pop up in the code
 
@@ -2523,6 +2538,10 @@ impl Program<Name> {
                         };
 
                         while let Some(node) = id_vec.pop() {
+                            if !matches!(node.term, Term::Constant { .. }) {
+                                continue;
+                            }
+
                             let mut id_only_vec =
                                 id_vec.iter().map(|item| item.curried_id).collect_vec();
 
@@ -2589,17 +2608,7 @@ impl Program<Name> {
             false,
             &mut |id, term, arg_stack, scope, _context| match term {
                 Term::Builtin(func) => {
-                    if func.can_curry_builtin() && arg_stack.len() == func.arity() {
-                        let mut arg_stack = arg_stack
-                            .into_iter()
-                            .map(|item| {
-                                let Args::Apply(arg_id, arg) = item else {
-                                    unreachable!()
-                                };
-                                (arg_id, arg)
-                            })
-                            .collect_vec();
-
+                    if let Some(mut arg_stack) = func.try_curry_builtin(arg_stack) {
                         let Some(curried_builtin) =
                             curried_terms.iter().find(|curry| curry.func == *func)
                         else {
