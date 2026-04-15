@@ -92,6 +92,14 @@ impl<'a> CodeGenerator<'a> {
         &self.data_types
     }
 
+    pub fn functions(&self) -> &IndexMap<&'a FunctionAccessKey, &'a TypedFunction> {
+        &self.functions
+    }
+
+    pub fn constants(&self) -> &IndexMap<&'a FunctionAccessKey, &'a TypedExpr> {
+        &self.constants
+    }
+
     pub fn new(
         plutus_version: PlutusVersion,
         functions: IndexMap<&'a FunctionAccessKey, &'a TypedFunction>,
@@ -165,6 +173,28 @@ impl<'a> CodeGenerator<'a> {
         });
 
         self.finalize(term)
+    }
+
+    pub fn generate_validator_handler(
+        &mut self,
+        validator: &TypedValidator,
+        handler_name: &str,
+        module_name: &str,
+    ) -> Option<Program<Name>> {
+        let handler = validator
+            .handlers
+            .iter()
+            .find(|handler| handler.name == handler_name)
+            .or_else(|| (validator.fallback.name == handler_name).then_some(&validator.fallback))?;
+
+        let handler_args = validator
+            .params
+            .iter()
+            .cloned()
+            .chain(handler.arguments.iter().cloned())
+            .collect::<Vec<_>>();
+
+        Some(self.generate_raw(&handler.body, &handler_args, module_name))
     }
 
     pub fn generate_raw(

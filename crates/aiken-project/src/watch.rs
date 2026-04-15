@@ -207,11 +207,11 @@ where
     }
 
     if !errs.is_empty() {
-        if is_terminal {
-            for err in &errs {
-                err.report()
-            }
+        for err in &errs {
+            err.report()
+        }
 
+        if is_terminal {
             eprintln!(
                 "{}",
                 Summary {
