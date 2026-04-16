@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **aiken**: New `aiken verify` command family for formal verification of property tests via Lean 4 / Z3. Subcommands: `run` (generate Lean theorems from Aiken property tests and discharge them with the Lean-blaster tactic), `doctor` (check toolchain versions and PlutusCore library availability), `clean` (remove generated verify artifacts), and `capabilities` (emit the supported fuzzer/constraint/semantics capability matrix as JSON). @Riley-Kilgore
+- **aiken**: New `aiken export-tests` command that serialises property tests — with normalised fuzzer constraints and semantics — to JSON for external tooling. @Riley-Kilgore
+- **aiken**: `--blaster-rev` and `--plutus-core-rev` flags on `aiken verify run` and `aiken verify doctor` to pin the git revisions of the external Lean-blaster and PlutusCoreBlaster dependencies. @Riley-Kilgore
+- **aiken-project**: New `verify` module housing the Lean 4 codegen pipeline, workspace management, subprocess orchestration with cross-platform process-tree termination, and proof-result parsing. @Riley-Kilgore
+- **aiken-lang**: New `FuzzerConstraint` and `FuzzerSemantics` types that normalise property-test fuzzer ASTs into a representation suitable for symbolic analysis. Covers primitive constraint extraction from stdlib `fuzz.*` helpers (`int_between`, `int_at_least`, `int_at_most`, `list_between`, etc.) and structural fuzzer call normalisation (`Bind`, `Map`, `Product`, `List`, `StateMachineTrace`). @Riley-Kilgore
+
+### Changed
+
+- **aiken-project**: `aiken check`, `build`, `export`, `blueprint`, `benchmark`, and `docs` now report per-error diagnostics in non-TTY contexts (CI, piped output); previously error reports were suppressed outside interactive terminals. The end-of-run summary block is still gated on `is_terminal`. @Riley-Kilgore
+
 ## v1.1.20 - 2025-12-11
 
 ### Added

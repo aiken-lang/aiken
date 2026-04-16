@@ -75,6 +75,7 @@ jobs:
 
   verify_unit_tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
@@ -125,6 +126,7 @@ jobs:
   verify_generate_only:
     runs-on: ubuntu-latest
     needs: [verify_unit_tests]
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2

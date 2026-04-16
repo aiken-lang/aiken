@@ -666,11 +666,7 @@ fn normalize_state_machine_trace_from_expr(
                     )
                 });
 
-            normalize_state_machine_trace_from_call(
-                &resolved_fun,
-                tipo.as_ref(),
-                &resolved_args,
-            )
+            normalize_state_machine_trace_from_call(&resolved_fun, tipo.as_ref(), &resolved_args)
         }
         TypedExpr::Var {
             name, constructor, ..
@@ -852,10 +848,8 @@ fn try_extract_stdlib_primitive_constraint(
             }
         }
         ("bytearray_between", 2) => {
-            let min_len =
-                try_extract_int_literal(&args[0].value, constant_index, local_values)?;
-            let max_len =
-                try_extract_int_literal(&args[1].value, constant_index, local_values)?;
+            let min_len = try_extract_int_literal(&args[0].value, constant_index, local_values)?;
+            let max_len = try_extract_int_literal(&args[1].value, constant_index, local_values)?;
             if min_len < 0 || max_len < 0 || min_len > max_len {
                 return None;
             }
@@ -911,8 +905,12 @@ fn try_extract_int_literal_inner(
             value,
             ..
         } => {
-            let inner =
-                try_extract_int_literal_inner(value.as_ref(), constant_index, local_values, depth + 1)?;
+            let inner = try_extract_int_literal_inner(
+                value.as_ref(),
+                constant_index,
+                local_values,
+                depth + 1,
+            )?;
             Some(-inner)
         }
         TypedExpr::Var {
@@ -956,6 +954,32 @@ fn try_extract_exact_scalar(expr: &TypedExpr) -> Option<FuzzerExactValue> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum IntBoundSide {
+    Min,
+    Max,
+}
+
+/// Detect the "unbounded" string sentinels that
+/// `try_extract_stdlib_primitive_constraint` plants when normalizing
+/// `fuzz.int_at_least(_)` / `fuzz.int_at_most(_)` into the closed-range
+/// `FuzzerConstraint::IntRange { min, max }` schema.
+///
+/// Returns `None` for the sentinel (unbounded side) and `Some(original)`
+/// otherwise, so callers can build a `FuzzerSemantics::IntRange` whose
+/// half-open structure faithfully describes the original fuzzer.
+fn unbounded_int_sentinel_to_none(bound: &str, side: IntBoundSide) -> Option<String> {
+    let sentinel = match side {
+        IntBoundSide::Min => i128::MIN.to_string(),
+        IntBoundSide::Max => i128::MAX.to_string(),
+    };
+    if bound == sentinel {
+        None
+    } else {
+        Some(bound.to_string())
+    }
+}
+
 /// Convert a known constraint into semantics when the types match.
 fn semantics_from_known_constraint(
     constraint: &FuzzerConstraint,
@@ -963,14 +987,19 @@ fn semantics_from_known_constraint(
 ) -> Option<FuzzerSemantics> {
     match constraint {
         FuzzerConstraint::IntRange { min, max } if output_type.is_int() => {
+            // SOUNDNESS: `int_at_least`/`int_at_most` stuff i128::MIN/MAX into
+            // the unbounded side as string sentinels (see
+            // `try_extract_stdlib_primitive_constraint`). Runtime integers are
+            // arbitrary-precision, so emitting those as literal Lean bounds
+            // would narrow the verification domain and miss counterexamples
+            // outside [i128::MIN, i128::MAX]. Strip the sentinels here so the
+            // downstream Lean emitter produces a half-open formula.
             Some(FuzzerSemantics::IntRange {
-                min: Some(min.clone()),
-                max: Some(max.clone()),
+                min: unbounded_int_sentinel_to_none(min, IntBoundSide::Min),
+                max: unbounded_int_sentinel_to_none(max, IntBoundSide::Max),
             })
         }
-        FuzzerConstraint::ByteStringLenRange { min_len, max_len }
-            if output_type.is_bytearray() =>
-        {
+        FuzzerConstraint::ByteStringLenRange { min_len, max_len } if output_type.is_bytearray() => {
             Some(FuzzerSemantics::ByteArrayRange {
                 min_len: Some(*min_len),
                 max_len: Some(*max_len),
@@ -1095,11 +1124,9 @@ fn normalize_structural_fuzzer_call(
                 // filter predicate (like `such_that`), not a domain-transforming map.
                 // Propagate the source's normalization unchanged — this is a sound
                 // over-approximation since the filter only narrows the domain.
-                let mapper_returns_bool = function_return_type(&mapper.value)
-                    .is_some_and(|(_, ret)| ret.is_bool());
-                if mapper_returns_bool
-                    && source_output_type.as_ref() == output_type.as_ref()
-                {
+                let mapper_returns_bool =
+                    function_return_type(&mapper.value).is_some_and(|(_, ret)| ret.is_bool());
+                if mapper_returns_bool && source_output_type.as_ref() == output_type.as_ref() {
                     return Some(source);
                 }
 
@@ -2442,7 +2469,12 @@ fn intersect_constraints(source: FuzzerConstraint, result: FuzzerConstraint) -> 
             let min = intersect_int_bound_max(Some(s_min), Some(r_min));
             let max = intersect_int_bound_min(Some(s_max), Some(r_max));
             if let (Some(lo), Some(hi)) = (&min, &max) {
-                if lo.parse::<i128>().ok().zip(hi.parse::<i128>().ok()).is_some_and(|(l, h)| l > h) {
+                if lo
+                    .parse::<i128>()
+                    .ok()
+                    .zip(hi.parse::<i128>().ok())
+                    .is_some_and(|(l, h)| l > h)
+                {
                     return result;
                 }
             }
@@ -2475,7 +2507,12 @@ fn intersect_semantics(source: FuzzerSemantics, result: FuzzerSemantics) -> Fuzz
             let min = intersect_optional_int_bound_max(s_min.as_deref(), r_min.as_deref());
             let max = intersect_optional_int_bound_min(s_max.as_deref(), r_max.as_deref());
             if let (Some(lo), Some(hi)) = (&min, &max) {
-                if lo.parse::<i128>().ok().zip(hi.parse::<i128>().ok()).is_some_and(|(l, h)| l > h) {
+                if lo
+                    .parse::<i128>()
+                    .ok()
+                    .zip(hi.parse::<i128>().ok())
+                    .is_some_and(|(l, h)| l > h)
+                {
                     return result;
                 }
             }
@@ -3162,7 +3199,13 @@ fn semantics_from_constraint(constraint: &FuzzerConstraint, output_type: &Type) 
                 .filter(|s| matches!(s, FuzzerSemantics::IntRange { .. }))
                 .collect();
 
-            if !int_ranges.is_empty() && int_ranges.len() == inner_semantics.iter().filter(|s| !matches!(s, FuzzerSemantics::Opaque { .. })).count() {
+            if !int_ranges.is_empty()
+                && int_ranges.len()
+                    == inner_semantics
+                        .iter()
+                        .filter(|s| !matches!(s, FuzzerSemantics::Opaque { .. }))
+                        .count()
+            {
                 // All non-opaque constraints are IntRange — intersect them.
                 let mut result_min: Option<String> = None;
                 let mut result_max: Option<String> = None;
@@ -3213,8 +3256,14 @@ fn semantics_from_constraint(constraint: &FuzzerConstraint, output_type: &Type) 
             for s in &inner_semantics {
                 match s {
                     FuzzerSemantics::Opaque { .. } => continue,
-                    FuzzerSemantics::IntRange { min: None, max: None } => continue,
-                    FuzzerSemantics::ByteArrayRange { min_len: None, max_len: None } => continue,
+                    FuzzerSemantics::IntRange {
+                        min: None,
+                        max: None,
+                    } => continue,
+                    FuzzerSemantics::ByteArrayRange {
+                        min_len: None,
+                        max_len: None,
+                    } => continue,
                     other => return other.clone(),
                 }
             }
@@ -6012,6 +6061,161 @@ mod test {
                 max: "3".to_string(),
             }
         );
+    }
+
+    fn make_typed_int_at_least_fuzzer(min: &str) -> TypedExpr {
+        let output_type = Type::int();
+        let fuzzer_type = Type::fuzzer(output_type.clone());
+        TypedExpr::Call {
+            location: Span::empty(),
+            tipo: fuzzer_type.clone(),
+            fun: Box::new(module_fn_var(
+                "int_at_least",
+                STDLIB_FUZZ_MODULE,
+                Type::function(vec![Type::int()], fuzzer_type),
+            )),
+            args: vec![call_arg(uint_lit(min))],
+        }
+    }
+
+    fn make_typed_int_at_most_fuzzer(max: &str) -> TypedExpr {
+        let output_type = Type::int();
+        let fuzzer_type = Type::fuzzer(output_type.clone());
+        TypedExpr::Call {
+            location: Span::empty(),
+            tipo: fuzzer_type.clone(),
+            fun: Box::new(module_fn_var(
+                "int_at_most",
+                STDLIB_FUZZ_MODULE,
+                Type::function(vec![Type::int()], fuzzer_type),
+            )),
+            args: vec![call_arg(uint_lit(max))],
+        }
+    }
+
+    /// Regression: `fuzz.int_at_least(5)` must produce a half-open
+    /// `FuzzerSemantics::IntRange { min: Some("5"), max: None }`. Prior to the
+    /// fix, `try_extract_stdlib_primitive_constraint` planted
+    /// `i128::MAX.to_string()` as the upper-bound sentinel and
+    /// `semantics_from_known_constraint` forwarded it verbatim, so downstream
+    /// Lean emission narrowed the verified domain to [5, i128::MAX] and any
+    /// counterexample with `x > i128::MAX` was missed.
+    #[test]
+    fn int_at_least_semantics_has_open_upper_bound() {
+        let via = make_typed_int_at_least_fuzzer("5");
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+
+        // Sanity-check the intermediate constraint still carries the sentinel
+        // (so this test also pins the invariant that the fix lives in
+        // `semantics_from_known_constraint`, not further upstream).
+        let constraint = extract_constraint_from_via(&via, "math", &empty_known_functions());
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::IntRange {
+                min: "5".to_string(),
+                max: i128::MAX.to_string(),
+            }
+        );
+
+        let semantics = extract_semantics_from_via(
+            &via,
+            "math",
+            &empty_known_functions(),
+            &data_types,
+            Type::int().as_ref(),
+        );
+
+        assert_eq!(
+            semantics,
+            FuzzerSemantics::IntRange {
+                min: Some("5".to_string()),
+                max: None,
+            }
+        );
+
+        // Defence-in-depth: assert the rendered semantics never leak the
+        // i128 sentinel string (or any 39-digit numeric string) so the Lean
+        // emitter can't receive it by accident if this code path is changed
+        // later.
+        let rendered = format!("{semantics:?}");
+        assert!(
+            !rendered.contains(&i128::MAX.to_string()),
+            "int_at_least semantics leaked i128::MAX sentinel: {rendered}"
+        );
+        assert!(
+            !rendered.contains(&i128::MIN.to_string()),
+            "int_at_least semantics leaked i128::MIN sentinel: {rendered}"
+        );
+        assert!(
+            !contains_39_plus_digit_run(&rendered),
+            "int_at_least semantics contains a 39+ digit numeric string: {rendered}"
+        );
+    }
+
+    /// Symmetric regression for `fuzz.int_at_most(10)`: lower bound must be
+    /// open (`min: None`).
+    #[test]
+    fn int_at_most_semantics_has_open_lower_bound() {
+        let via = make_typed_int_at_most_fuzzer("10");
+        let data_types: IndexMap<&DataTypeKey, &TypedDataType> = IndexMap::new();
+
+        let constraint = extract_constraint_from_via(&via, "math", &empty_known_functions());
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::IntRange {
+                min: i128::MIN.to_string(),
+                max: "10".to_string(),
+            }
+        );
+
+        let semantics = extract_semantics_from_via(
+            &via,
+            "math",
+            &empty_known_functions(),
+            &data_types,
+            Type::int().as_ref(),
+        );
+
+        assert_eq!(
+            semantics,
+            FuzzerSemantics::IntRange {
+                min: None,
+                max: Some("10".to_string()),
+            }
+        );
+
+        let rendered = format!("{semantics:?}");
+        assert!(
+            !rendered.contains(&i128::MAX.to_string()),
+            "int_at_most semantics leaked i128::MAX sentinel: {rendered}"
+        );
+        assert!(
+            !rendered.contains(&i128::MIN.to_string()),
+            "int_at_most semantics leaked i128::MIN sentinel: {rendered}"
+        );
+        assert!(
+            !contains_39_plus_digit_run(&rendered),
+            "int_at_most semantics contains a 39+ digit numeric string: {rendered}"
+        );
+    }
+
+    /// Scans a string for any run of 39 or more consecutive ASCII digits.
+    /// `i128::MAX` / `i128::MIN` serialize to 39-digit runs (ignoring the sign),
+    /// so this catches both sentinels and any accidental leak of similarly
+    /// sized literals.
+    fn contains_39_plus_digit_run(s: &str) -> bool {
+        let mut run = 0usize;
+        for c in s.chars() {
+            if c.is_ascii_digit() {
+                run += 1;
+                if run >= 39 {
+                    return true;
+                }
+            } else {
+                run = 0;
+            }
+        }
+        false
     }
 
     #[test]
@@ -9196,6 +9400,402 @@ mod test {
     #[test]
     fn extract_exact_scalar_int_returns_none() {
         assert_eq!(try_extract_exact_scalar(&uint_lit("42")), None);
+    }
+
+    // --- R6: INT_LITERAL_MAX_DEPTH cycle guard ---
+    //
+    // `try_extract_int_literal_inner` bounds its own recursion via
+    // `INT_LITERAL_MAX_DEPTH` to prevent stack overflows from adversarial or
+    // pathological expressions (deeply nested negations, circular local
+    // aliases, or mutually-referential module constants). These tests pin
+    // down the exact boundary: depth <= MAX succeeds, depth > MAX returns
+    // None, and the guard triggers without panicking.
+
+    /// Wrap `expr` in `depth` layers of `UnOp::Negate`.
+    fn nested_negate(expr: TypedExpr, depth: usize) -> TypedExpr {
+        let mut acc = expr;
+        for _ in 0..depth {
+            acc = negate_expr(acc);
+        }
+        acc
+    }
+
+    #[test]
+    fn int_literal_max_depth_constant_is_sixteen() {
+        // Pin the constant to its documented value. If it changes, the
+        // boundary tests below should be updated deliberately.
+        assert_eq!(INT_LITERAL_MAX_DEPTH, 16);
+    }
+
+    #[test]
+    fn try_extract_int_literal_at_max_depth_resolves_value() {
+        // 16 negations around a UInt is exactly at the depth limit
+        // (the UInt is read at depth == MAX, which is allowed since the
+        // guard uses strict `>` comparison). 16 is even, so the result
+        // equals the original value.
+        let constants = HashMap::new();
+        let locals = BTreeMap::new();
+        let expr = nested_negate(uint_lit("7"), 16);
+        assert_eq!(
+            try_extract_int_literal(&expr, &constants, &locals),
+            Some(7),
+            "16-level nesting must still resolve (depth == MAX is allowed)"
+        );
+    }
+
+    #[test]
+    fn try_extract_int_literal_below_max_depth_resolves_with_sign() {
+        // 15 negations: odd count flips the sign.
+        let constants = HashMap::new();
+        let locals = BTreeMap::new();
+        let expr = nested_negate(uint_lit("7"), 15);
+        assert_eq!(
+            try_extract_int_literal(&expr, &constants, &locals),
+            Some(-7),
+            "15-level nesting (odd) must resolve to the negated literal"
+        );
+    }
+
+    #[test]
+    fn try_extract_int_literal_above_max_depth_returns_none() {
+        // 17 negations: the guard must trip at the innermost recursive call
+        // (depth == 17 triggers the `depth > INT_LITERAL_MAX_DEPTH` check)
+        // and the function must return None rather than panic or overflow.
+        let constants = HashMap::new();
+        let locals = BTreeMap::new();
+        let expr = nested_negate(uint_lit("7"), 17);
+        assert_eq!(
+            try_extract_int_literal(&expr, &constants, &locals),
+            None,
+            "17-level nesting (depth > MAX) must be rejected by the cycle guard"
+        );
+    }
+
+    #[test]
+    fn try_extract_int_literal_far_above_max_depth_terminates() {
+        // A grossly deep nesting should terminate gracefully. The absolute
+        // depth here (64) would blow the stack without the guard, so this
+        // test doubles as a regression guard against removing the check.
+        let constants = HashMap::new();
+        let locals = BTreeMap::new();
+        let expr = nested_negate(uint_lit("7"), 64);
+        assert_eq!(
+            try_extract_int_literal(&expr, &constants, &locals),
+            None,
+            "extreme nesting must terminate with None (guard must short-circuit)"
+        );
+    }
+
+    #[test]
+    fn try_extract_int_literal_local_alias_chain_above_max_depth_returns_none() {
+        // Local-variable aliases also increment depth at each hop. A chain
+        // of 20 aliases must trip the guard even though no negation is
+        // involved — this covers the `LocalVariable` recursion path.
+        let constants = HashMap::new();
+        let mut locals: BTreeMap<String, TypedExpr> = BTreeMap::new();
+        let int_tipo = Type::int();
+
+        // x0 = 42; x1 = x0; x2 = x1; ... x20 = x19
+        locals.insert("x0".to_string(), uint_lit("42"));
+        for i in 1..=20 {
+            let prev = local_var(&format!("x{}", i - 1), int_tipo.clone());
+            locals.insert(format!("x{i}"), prev);
+        }
+
+        let expr = local_var("x20", int_tipo);
+        assert_eq!(
+            try_extract_int_literal(&expr, &constants, &locals),
+            None,
+            "20-deep local alias chain must be rejected by the cycle guard"
+        );
+    }
+
+    #[test]
+    fn try_extract_int_literal_short_local_alias_chain_resolves() {
+        // A chain of 3 aliases (well under the limit) must still resolve to
+        // confirm the alias-resolution path is exercised by these tests.
+        let constants = HashMap::new();
+        let mut locals: BTreeMap<String, TypedExpr> = BTreeMap::new();
+        let int_tipo = Type::int();
+        locals.insert("a".to_string(), uint_lit("99"));
+        locals.insert("b".to_string(), local_var("a", int_tipo.clone()));
+        locals.insert("c".to_string(), local_var("b", int_tipo.clone()));
+
+        let expr = local_var("c", int_tipo);
+        assert_eq!(
+            try_extract_int_literal(&expr, &constants, &locals),
+            Some(99),
+            "short alias chain must resolve through the alias path"
+        );
+    }
+
+    // --- R7: nested Bind and Map(Map) normalization ---
+    //
+    // The fuzzer normalizer must handle arbitrarily deep Bind/Map nestings
+    // without losing structural information. These tests pin the recursive
+    // descent behavior: nested Binds preserve a Bind-shaped result, nested
+    // Maps collapse to a Map tree over a Primitive leaf, and mixed chains
+    // preserve the outermost constructor.
+
+    #[test]
+    fn normalize_fuzzer_nested_bind_depth_four_preserves_bind_shape() {
+        // Build a Bind(Bind(Bind(Bind(Primitive)))) — depth 4.
+        // Each layer uses an inline lambda whose body is the next Bind call,
+        // which is itself a Fuzzer<Int>.
+        let int_ty = Type::int();
+
+        let innermost = make_typed_int_between_fuzzer("1", "2");
+
+        let level3 = make_typed_bind_call(
+            make_leaf_fuzzer_call("p3", int_ty.clone()),
+            make_inline_bind_continuation("x3", int_ty.clone(), innermost, int_ty.clone()),
+            int_ty.clone(),
+        );
+        let level2 = make_typed_bind_call(
+            make_leaf_fuzzer_call("p2", int_ty.clone()),
+            make_inline_bind_continuation("x2", int_ty.clone(), level3, int_ty.clone()),
+            int_ty.clone(),
+        );
+        let level1 = make_typed_bind_call(
+            make_leaf_fuzzer_call("p1", int_ty.clone()),
+            make_inline_bind_continuation("x1", int_ty.clone(), level2, int_ty.clone()),
+            int_ty.clone(),
+        );
+        let outer = make_typed_bind_call(
+            make_leaf_fuzzer_call("p0", int_ty.clone()),
+            make_inline_bind_continuation("x0", int_ty.clone(), level1, int_ty.clone()),
+            int_ty.clone(),
+        );
+
+        let normalized = normalize_fuzzer_from_via(&outer, "math", &empty_known_functions());
+
+        // Walk the resulting Bind chain: each layer must be a Bind whose
+        // source is a Primitive leaf (the `pN` fuzzer) and whose result is
+        // the next Bind layer.
+        fn expect_bind_chain(n: NormalizedFuzzer, remaining: usize) {
+            if remaining == 0 {
+                // Innermost: must be a Primitive with a concrete IntRange.
+                match n {
+                    NormalizedFuzzer::Primitive {
+                        known_constraint, ..
+                    } => {
+                        assert!(
+                            matches!(known_constraint, Some(FuzzerConstraint::IntRange { .. })),
+                            "innermost fuzzer must carry its IntRange constraint"
+                        );
+                    }
+                    other => {
+                        panic!("expected innermost Primitive, got {other:?}");
+                    }
+                }
+                return;
+            }
+            match n {
+                NormalizedFuzzer::Bind { source, result } => {
+                    assert!(
+                        matches!(*source, NormalizedFuzzer::Primitive { .. }),
+                        "each Bind source must remain a Primitive leaf"
+                    );
+                    expect_bind_chain(*result, remaining - 1);
+                }
+                other => panic!("expected Bind at remaining={remaining}, got {other:?}"),
+            }
+        }
+
+        // 4 bind layers => 4 nested Binds before the Primitive core.
+        expect_bind_chain(normalized, 4);
+    }
+
+    #[test]
+    fn normalize_fuzzer_map_of_map_depth_four_preserves_map_shape() {
+        // Build Map(Map(Map(Map(Primitive)))) using `anything_but_map` so the
+        // name-agnostic path is exercised. Each inner mapper is a
+        // distinguishable unary function, so no collapse to Identity occurs.
+        let int_ty = Type::int();
+
+        let level0 = make_typed_map_call(
+            make_leaf_fuzzer_call("seed", int_ty.clone()),
+            make_add_int_mapper("1"),
+            int_ty.clone(),
+        );
+        let level1 = make_typed_map_call(level0, make_add_int_mapper("2"), int_ty.clone());
+        let level2 = make_typed_map_call(level1, make_add_int_mapper("3"), int_ty.clone());
+        let level3 = make_typed_map_call(level2, make_add_int_mapper("4"), int_ty.clone());
+
+        let normalized = normalize_fuzzer_from_via(&level3, "math", &empty_known_functions());
+
+        // We expect exactly 4 nested Map layers over a Primitive leaf.
+        fn expect_map_chain(n: NormalizedFuzzer, remaining: usize) {
+            if remaining == 0 {
+                assert!(
+                    matches!(n, NormalizedFuzzer::Primitive { .. }),
+                    "innermost of Map chain must be a Primitive leaf, got {n:?}"
+                );
+                return;
+            }
+            match n {
+                NormalizedFuzzer::Map { source, .. } => {
+                    expect_map_chain(*source, remaining - 1);
+                }
+                other => panic!("expected Map at remaining={remaining}, got {other:?}"),
+            }
+        }
+        expect_map_chain(normalized, 4);
+    }
+
+    #[test]
+    fn normalize_fuzzer_map_of_map_depth_four_yields_intrange_constraint() {
+        // Same Map(Map(Map(Map(...)))) shape, but checked through the
+        // constraint extractor which is the actual proof-pipeline entry
+        // point. The affine mappers compose: ((seed + 1) + 2) + 3 + 4 = +10.
+        // With an unconstrained `seed` (Any), the composed range remains
+        // unconstrained, but the extracted constraint must still walk the
+        // full chain without opaquing.
+        let int_ty = Type::int();
+
+        let source = make_typed_map_call(
+            make_typed_int_between_fuzzer("0", "5"),
+            make_add_int_mapper("1"),
+            int_ty.clone(),
+        );
+        let lvl1 = make_typed_map_call(source, make_add_int_mapper("2"), int_ty.clone());
+        let lvl2 = make_typed_map_call(lvl1, make_add_int_mapper("3"), int_ty.clone());
+        let lvl3 = make_typed_map_call(lvl2, make_add_int_mapper("4"), int_ty);
+
+        let constraint = extract_constraint_from_via(&lvl3, "math", &empty_known_functions());
+
+        // [0,5] shifted by +1, +2, +3, +4 = [10, 15].
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::IntRange {
+                min: "10".to_string(),
+                max: "15".to_string(),
+            },
+            "Map(Map(Map(Map(...)))) must compose affine shifts through all four layers"
+        );
+    }
+
+    #[test]
+    fn normalize_fuzzer_nested_bind_continuation_returns_int_range() {
+        // Build Bind(seed, \x0. Bind(p1, \x1. Bind(p2, \x2. int_between(3,7)))).
+        // The outer Bind's constraint should be the innermost fuzzer's range
+        // (Bind propagates the continuation's constraint).
+        let int_ty = Type::int();
+
+        let innermost = make_typed_int_between_fuzzer("3", "7");
+        let mid = make_typed_bind_call(
+            make_leaf_fuzzer_call("p2", int_ty.clone()),
+            make_inline_bind_continuation("x2", int_ty.clone(), innermost, int_ty.clone()),
+            int_ty.clone(),
+        );
+        let outer_continuation_body = make_typed_bind_call(
+            make_leaf_fuzzer_call("p1", int_ty.clone()),
+            make_inline_bind_continuation("x1", int_ty.clone(), mid, int_ty.clone()),
+            int_ty.clone(),
+        );
+        let outer = make_typed_bind_call(
+            make_leaf_fuzzer_call("seed", int_ty.clone()),
+            make_inline_bind_continuation(
+                "x0",
+                int_ty.clone(),
+                outer_continuation_body,
+                int_ty.clone(),
+            ),
+            int_ty.clone(),
+        );
+
+        let constraint = extract_constraint_from_via(&outer, "math", &empty_known_functions());
+        assert_eq!(
+            constraint,
+            FuzzerConstraint::IntRange {
+                min: "3".to_string(),
+                max: "7".to_string(),
+            },
+            "nested Bind must propagate the innermost continuation's range"
+        );
+    }
+
+    #[test]
+    fn normalize_fuzzer_map_wrapping_bind_preserves_outer_shape() {
+        // Map(Bind(...)) — the outer normalization should expose a Map
+        // layer whose source is a Bind (not collapsed or opaqued).
+        let int_ty = Type::int();
+
+        let inner_bind = make_typed_bind_call(
+            make_leaf_fuzzer_call("seed", int_ty.clone()),
+            make_inline_bind_continuation(
+                "x",
+                int_ty.clone(),
+                make_typed_int_between_fuzzer("5", "8"),
+                int_ty.clone(),
+            ),
+            int_ty.clone(),
+        );
+
+        let outer_map = make_typed_map_call(inner_bind, make_add_int_mapper("1"), int_ty);
+
+        let normalized = normalize_fuzzer_from_via(&outer_map, "math", &empty_known_functions());
+
+        match normalized {
+            NormalizedFuzzer::Map { source, .. } => match *source {
+                NormalizedFuzzer::Bind {
+                    source: bind_source,
+                    result,
+                } => {
+                    assert!(
+                        matches!(*bind_source, NormalizedFuzzer::Primitive { .. }),
+                        "Bind source under Map must stay a Primitive leaf"
+                    );
+                    assert!(
+                        matches!(*result, NormalizedFuzzer::Primitive { .. }),
+                        "Bind continuation under Map must resolve to a Primitive (int_between)"
+                    );
+                }
+                other => panic!("expected Bind under Map, got {other:?}"),
+            },
+            other => panic!("expected Map at the outer level, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn normalize_fuzzer_bind_wrapping_map_exposes_bind_over_map() {
+        // Bind(Map(...), \x. fuzzer). The normalizer must see the Map as
+        // the Bind's source; otherwise the mapper's effect on the sampling
+        // domain would be lost.
+        let int_ty = Type::int();
+
+        let inner_map = make_typed_map_call(
+            make_leaf_fuzzer_call("seed", int_ty.clone()),
+            make_add_int_mapper("5"),
+            int_ty.clone(),
+        );
+
+        let outer_bind = make_typed_bind_call(
+            inner_map,
+            make_inline_bind_continuation(
+                "x",
+                int_ty.clone(),
+                make_typed_int_between_fuzzer("0", "3"),
+                int_ty.clone(),
+            ),
+            int_ty.clone(),
+        );
+
+        let normalized = normalize_fuzzer_from_via(&outer_bind, "math", &empty_known_functions());
+
+        match normalized {
+            NormalizedFuzzer::Bind { source, result } => {
+                assert!(
+                    matches!(*source, NormalizedFuzzer::Map { .. }),
+                    "Bind source must be the inner Map, not a collapsed primitive"
+                );
+                assert!(
+                    matches!(*result, NormalizedFuzzer::Primitive { .. }),
+                    "Bind continuation must normalize to the inner int_between primitive"
+                );
+            }
+            other => panic!("expected Bind at the outer level, got {other:?}"),
+        }
     }
 
     #[test]

@@ -1,3 +1,53 @@
+//! Formal verification pipeline that discharges Aiken property tests as Lean 4
+//! theorems proved via the Blaster SMT tactic and Z3.
+//!
+//! # Pipeline
+//!
+//! 1. **Fuzzer normalization.** Incoming [`ExportedPropertyTest`]s carry a
+//!    [`FuzzerSemantics`](crate::export::FuzzerSemantics) tree describing the
+//!    input domain of each test. Helpers in this module flatten those semantics
+//!    into scalar, list, tuple, and state-machine preconditions that are safe to
+//!    emit as Lean `Prop`s.
+//! 2. **Lean workspace scaffolding.** [`generate_lean_workspace`] materializes
+//!    a self-contained Lake project under `out_dir`: a `lakefile.lean` pinning
+//!    Blaster and PlutusCore revisions, a `lean-toolchain`, `AikenVerify/Utils.lean`
+//!    with the `proveTests` / CEK budget helpers, and CBOR payloads for every
+//!    compiled UPLC program.
+//! 3. **Proof generation.** Each test produces a Lean proof file under
+//!    `AikenVerify/Proofs/`. `format_theorems` combines a normalized
+//!    `TheoremForm` with the precondition set to produce theorems closed by
+//!    `by blaster`, `by decide`, or an explicit witness; `admit`-backed
+//!    fallbacks are used only when the spec permits it.
+//! 4. **Lean execution orchestration.** [`run_proofs`] invokes
+//!    `lake build` (and `lake exe`) per theorem with a timeout, process-tree
+//!    termination, and pipe drainage. Per-test exit codes and `blaster` output
+//!    are parsed into [`TheoremResult`]s with a classified [`FailureCategory`].
+//! 5. **Result aggregation.** Individual [`TheoremResult`]s are folded into a
+//!    [`VerifySummary`] that drives human-readable reporting and the JSON
+//!    payload emitted by `aiken verify --json`.
+//!
+//! # Key types
+//!
+//! - [`VerifyConfig`]: caller-controlled inputs — output directory, Blaster /
+//!   PlutusCore revisions, CEK budget, timeout, existential mode, artifact
+//!   retention policy.
+//! - [`VerifySummary`]: end-to-end structured outcome of a verification run.
+//! - `GenerationError`: internal error emitted when a test cannot be lowered
+//!   to a Lean theorem (carries a category used to decide whether to skip).
+//! - [`DoctorReport`]: toolchain readiness report surfaced via
+//!   `aiken verify doctor --json`.
+//!
+//! # External dependencies
+//!
+//! - **Lean 4** (`lean`, `lake`) — proof kernel and build system (minimum
+//!   version [`MIN_LEAN_VERSION`]).
+//! - **Blaster** ([`blaster`](https://github.com/galois-advanced-algorithms/lean-blaster))
+//!   — Lean tactic that reifies a goal into SMT and discharges it with Z3.
+//! - **PlutusCore** (Lean formalization) — dependency providing UPLC / CEK
+//!   semantics that the generated theorems quantify over.
+//! - **Z3** — SMT solver invoked by Blaster (minimum version
+//!   [`MIN_Z3_VERSION`]).
+
 use crate::blueprint::{
     definitions::Reference,
     schema::{Data as SchemaData, Declaration as SchemaDeclaration, Items as SchemaItems, Schema},
@@ -16,6 +66,32 @@ use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
+
+/// Lean Unicode symbols used verbatim in generated proof output.
+///
+/// Using named constants keeps format strings consistent, makes it obvious
+/// which characters are Lean syntax (as opposed to incidental Unicode in a
+/// comment), and avoids mixing literal characters with `\u{...}` escapes.
+mod lean_sym {
+    /// Logical conjunction (U+2227).
+    pub(super) const AND: &str = "\u{2227}";
+    /// Universal quantifier (U+2200).
+    pub(super) const FORALL: &str = "\u{2200}";
+    /// Existential quantifier (U+2203).
+    pub(super) const EXISTS: &str = "\u{2203}";
+    /// Set membership (U+2208).
+    pub(super) const ELEMENT_OF: &str = "\u{2208}";
+    /// Right arrow / implication (U+2192).
+    pub(super) const IMPLIES: &str = "\u{2192}";
+    /// If and only if (U+2194).
+    pub(super) const IFF: &str = "\u{2194}";
+    /// Anonymous constructor opening bracket (U+27E8).
+    pub(super) const ANGLE_OPEN: &str = "\u{27e8}";
+    /// Anonymous constructor closing bracket (U+27E9).
+    pub(super) const ANGLE_CLOSE: &str = "\u{27e9}";
+    /// Cartesian product (U+00D7).
+    pub(super) const CROSS: &str = "\u{00d7}";
+}
 
 #[cfg(unix)]
 unsafe extern "C" {
@@ -219,25 +295,28 @@ pub struct VerifySummary {
 /// Default pinned Blaster revision. Update this when upgrading to a new tested Blaster version.
 pub const DEFAULT_BLASTER_REV: &str = "95368fb83f0e359be762a64d2e75facb754d3ee2";
 
+/// Default pinned PlutusCore revision. Update this when upgrading to a new tested PlutusCore version.
+pub const DEFAULT_PLUTUS_CORE_REV: &str = "main";
+
 /// Minimum supported Lean version (major, minor, patch).
 pub const MIN_LEAN_VERSION: (u32, u32, u32) = (4, 24, 0);
 
 /// Minimum supported Z3 version (major, minor, patch).
 pub const MIN_Z3_VERSION: (u32, u32, u32) = (4, 8, 0);
 
-/// Validate that a blaster_rev string contains only safe characters for
+/// Validate that a git revision string contains only safe characters for
 /// interpolation into lakefile.lean. Allows alphanumeric, dots, hyphens,
 /// slashes, and underscores (covering commit SHAs, tags, and branch names).
-fn validate_blaster_rev(rev: &str) -> miette::Result<()> {
+fn validate_git_rev(rev: &str, name: &str) -> miette::Result<()> {
     if rev.is_empty() {
-        return Err(miette::miette!("blaster-rev must not be empty"));
+        return Err(miette::miette!("{name} must not be empty"));
     }
     if !rev
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '/' | '_'))
     {
         return Err(miette::miette!(
-            "blaster-rev contains invalid characters: \"{rev}\". \
+            "{name} contains invalid characters: \"{rev}\". \
              Only alphanumeric characters, dots, hyphens, slashes, and underscores are allowed."
         ));
     }
@@ -510,12 +589,14 @@ pub struct VerifyConfig {
     pub cek_budget: u64,
     /// Git revision (commit, tag, or branch) for the Blaster dependency.
     pub blaster_rev: String,
+    /// Git revision (commit, tag, or branch) for the PlutusCore dependency.
+    pub plutus_core_rev: String,
     /// Strategy for `fail once` tests (default: Witness).
     pub existential_mode: ExistentialMode,
     /// Verification target mode (default: PropertyWrapper).
     pub target: VerificationTargetKind,
-    /// Explicit path to the PlutusCore Lean library. When `None`, falls back
-    /// to the `PLUTUS_CORE_DIR` environment variable.
+    /// Explicit path to the PlutusCore Lean library. When `None` and no
+    /// `PLUTUS_CORE_DIR` env var is set, PlutusCore is pulled from git.
     pub plutus_core_dir: Option<PathBuf>,
 }
 
@@ -712,6 +793,7 @@ pub struct DoctorReport {
     pub tools: Vec<ToolCheck>,
     pub plutus_core: PlutusCoreCheck,
     pub blaster_rev: String,
+    pub plutus_core_rev: String,
     pub all_ok: bool,
     /// Documented verification capabilities (what is/isn't supported).
     pub capabilities: VerificationCapabilities,
@@ -907,17 +989,10 @@ fn version_meets_minimum(version: &str, min: (u32, u32, u32)) -> bool {
 /// Resolve the PlutusCore Lean library path.
 ///
 /// Priority: `explicit` argument > `PLUTUS_CORE_DIR` env var.
-/// If neither is set, returns a placeholder path that will not exist;
-/// downstream callers (e.g. `check_plutus_core_at`) will produce a clear
-/// error instructing the user to set the env var or CLI flag.
+/// If neither is set, returns a placeholder path (for display purposes only);
+/// callers should prefer `resolve_local_plutus_core_dir` to distinguish git mode.
 pub fn resolve_plutus_core_dir(explicit: Option<&Path>) -> PathBuf {
-    if let Some(p) = explicit {
-        return p.to_path_buf();
-    }
-    if let Ok(env_val) = std::env::var("PLUTUS_CORE_DIR") {
-        return PathBuf::from(env_val);
-    }
-    PathBuf::from("PlutusCore")
+    resolve_local_plutus_core_dir(explicit).unwrap_or_else(|| PathBuf::from("PlutusCore"))
 }
 
 fn check_plutus_core_at(pc_dir: &Path) -> miette::Result<()> {
@@ -947,10 +1022,14 @@ fn check_plutus_core_at(pc_dir: &Path) -> miette::Result<()> {
 
 /// Check whether the configured PlutusCore Lean library exists and contains
 /// the expected structure (at minimum, a `lakefile.lean`).
-/// Returns `Ok(())` when the directory and structure are valid, or an
-/// informational error with instructions when they are not.
+/// Returns `Ok(())` when in git mode (no local path configured) or when the
+/// local directory and structure are valid. Returns an informational error
+/// with instructions when a local path is configured but invalid.
 pub fn check_plutus_core(explicit: Option<&Path>) -> miette::Result<()> {
-    check_plutus_core_at(&resolve_plutus_core_dir(explicit))
+    match resolve_local_plutus_core_dir(explicit) {
+        Some(local_path) => check_plutus_core_at(&local_path),
+        None => Ok(()), // git mode — Lake will fetch PlutusCore
+    }
 }
 
 fn check_plutus_core_detailed_at(pc_dir: &Path) -> PlutusCoreCheck {
@@ -980,18 +1059,30 @@ fn check_plutus_core_detailed_at(pc_dir: &Path) -> PlutusCoreCheck {
 }
 
 /// Check the PlutusCore library and return a structured report (for doctor).
-pub fn check_plutus_core_detailed(explicit: Option<&Path>) -> PlutusCoreCheck {
-    check_plutus_core_detailed_at(&resolve_plutus_core_dir(explicit))
+/// When in git mode, reports success with the git source as path.
+pub fn check_plutus_core_detailed(
+    explicit: Option<&Path>,
+    plutus_core_rev: &str,
+) -> PlutusCoreCheck {
+    match resolve_local_plutus_core_dir(explicit) {
+        Some(local_path) => check_plutus_core_detailed_at(&local_path),
+        None => PlutusCoreCheck {
+            found: true,
+            path: format!("git: input-output-hk/PlutusCoreBlaster @ {plutus_core_rev}"),
+            has_lakefile: true,
+            error: None,
+        },
+    }
 }
 
 /// Run a full diagnostic check of the verify toolchain and dependencies.
 /// Returns a structured report suitable for JSON serialization and human display.
-pub fn run_doctor(out_dir: &Path, blaster_rev: &str) -> DoctorReport {
+pub fn run_doctor(out_dir: &Path, blaster_rev: &str, plutus_core_rev: &str) -> DoctorReport {
     let _ = out_dir;
     let lean_check = check_tool_version("lean", MIN_LEAN_VERSION);
     let lake_check = check_tool_version("lake", (0, 0, 0));
     let z3_check = check_tool_version("z3", MIN_Z3_VERSION);
-    let plutus_core = check_plutus_core_detailed(None);
+    let plutus_core = check_plutus_core_detailed(None, plutus_core_rev);
 
     let all_ok = doctor_all_ok(&lean_check, &lake_check, &z3_check, &plutus_core);
 
@@ -999,6 +1090,7 @@ pub fn run_doctor(out_dir: &Path, blaster_rev: &str) -> DoctorReport {
         tools: vec![lean_check, lake_check, z3_check],
         plutus_core,
         blaster_rev: blaster_rev.to_string(),
+        plutus_core_rev: plutus_core_rev.to_string(),
         all_ok,
         capabilities: capabilities(),
     }
@@ -1525,10 +1617,7 @@ fn generation_error(
 fn is_skippable_generation_error(error: &miette::Report) -> bool {
     matches!(
         error.downcast_ref::<GenerationError>().map(|e| e.category),
-        Some(
-            GenerationErrorCategory::UnsupportedShape
-                | GenerationErrorCategory::FallbackRequired
-        )
+        Some(GenerationErrorCategory::UnsupportedShape | GenerationErrorCategory::FallbackRequired)
     )
 }
 
@@ -1540,7 +1629,8 @@ pub fn generate_lean_workspace(
     config: &VerifyConfig,
     skip_unsupported: bool,
 ) -> miette::Result<GeneratedManifest> {
-    validate_blaster_rev(&config.blaster_rev)?;
+    validate_git_rev(&config.blaster_rev, "blaster-rev")?;
+    validate_git_rev(&config.plutus_core_rev, "plutus-core-rev")?;
 
     struct PreparedManifestEntry {
         id: String,
@@ -1568,7 +1658,11 @@ pub fn generate_lean_workspace(
     // Write lakefile.lean
     write_file(
         &out.join("lakefile.lean"),
-        &generate_lakefile(&config.blaster_rev, config.plutus_core_dir.as_deref()),
+        &generate_lakefile(
+            &config.blaster_rev,
+            &config.plutus_core_rev,
+            config.plutus_core_dir.as_deref(),
+        ),
     )?;
 
     // Write lean-toolchain
@@ -1757,13 +1851,24 @@ fn escape_path_for_lean(path: &Path) -> String {
     let s = path.display().to_string();
     // Replace backslashes with forward slashes, then escape any remaining
     // backslashes and double-quotes for Lean string literals.
-    s.replace('\\', "/")
-        .replace('"', "\\\"")
+    s.replace('\\', "/").replace('"', "\\\"")
 }
 
-fn generate_lakefile(blaster_rev: &str, pc_dir_override: Option<&Path>) -> String {
-    let plutus_core_dir = resolve_plutus_core_dir(pc_dir_override);
-    let escaped = escape_path_for_lean(&plutus_core_dir);
+fn generate_lakefile(
+    blaster_rev: &str,
+    plutus_core_rev: &str,
+    pc_dir_override: Option<&Path>,
+) -> String {
+    let plutus_core_require = if let Some(local_path) =
+        resolve_local_plutus_core_dir(pc_dir_override)
+    {
+        let escaped = escape_path_for_lean(&local_path);
+        format!("require PlutusCore from\n  \"{escaped}\"")
+    } else {
+        format!(
+            "require PlutusCore from git\n  \"https://github.com/input-output-hk/PlutusCoreBlaster\" @ \"{plutus_core_rev}\""
+        )
+    };
     format!(
         r#"import Lake
 open Lake DSL
@@ -1776,10 +1881,21 @@ lean_lib AikenVerify where
 require Blaster from git
   "https://github.com/input-output-hk/Lean-blaster" @ "{blaster_rev}"
 
-require PlutusCore from
-  "{escaped}"
+{plutus_core_require}
 "#,
     )
+}
+
+/// Resolve a local PlutusCore path from explicit arg or env var.
+/// Returns `None` when neither is set (git mode).
+fn resolve_local_plutus_core_dir(explicit: Option<&Path>) -> Option<PathBuf> {
+    if let Some(p) = explicit {
+        return Some(p.to_path_buf());
+    }
+    if let Ok(env_val) = std::env::var("PLUTUS_CORE_DIR") {
+        return Some(PathBuf::from(env_val));
+    }
+    None
 }
 
 fn generate_utils(cek_budget: u64) -> String {
@@ -1985,7 +2101,7 @@ fn lean_type_for(t: &FuzzerOutputType) -> Option<String> {
         FuzzerOutputType::Pair(a, b) => {
             let a_ty = lean_type_for(a)?;
             let b_ty = lean_type_for(b)?;
-            Some(format!("({a_ty} × {b_ty})"))
+            Some(format!("({a_ty} {CROSS} {b_ty})", CROSS = lean_sym::CROSS))
         }
         // Tuples map to right-associated Lean products: (A × B × C) = (A × (B × C))
         FuzzerOutputType::Tuple(types) => {
@@ -1999,7 +2115,10 @@ fn lean_type_for(t: &FuzzerOutputType) -> Option<String> {
                 .iter()
                 .map(lean_type_for)
                 .collect::<Option<Vec<_>>>()?;
-            Some(format!("({})", parts.join(" × ")))
+            Some(format!(
+                "({})",
+                parts.join(&format!(" {} ", lean_sym::CROSS))
+            ))
         }
     }
 }
@@ -2048,9 +2167,7 @@ fn lean_data_encoder(t: &FuzzerOutputType, var: &str) -> Option<String> {
                 }
                 let pattern = bindings.join(", ");
                 let items = encoded.join(", ");
-                Some(format!(
-                    "(let ({pattern}) := {var}; Data.List [{items}])"
-                ))
+                Some(format!("(let ({pattern}) := {var}; Data.List [{items}])"))
             }
         }
     }
@@ -2132,10 +2249,12 @@ fn lean_bytestring_literal_from_bytes(bytes: &[u8]) -> String {
     if bytes.is_empty() {
         return "ByteString.empty".to_string();
     }
-    bytes.iter().rev().fold(
-        "ByteString.empty".to_string(),
-        |acc, b| format!("PlutusCore.ByteString.consByteStringV1 {} ({acc})", b),
-    )
+    bytes
+        .iter()
+        .rev()
+        .fold("ByteString.empty".to_string(), |acc, b| {
+            format!("PlutusCore.ByteString.consByteStringV1 {} ({acc})", b)
+        })
 }
 
 fn lean_zero_bytestring_literal_of_len(len: usize) -> String {
@@ -2211,7 +2330,7 @@ fn lean_prop_conjunction(parts: &[String]) -> String {
     match parts {
         [] => "True".to_string(),
         [single] => single.clone(),
-        _ => format!("({})", parts.join(" ∧ ")),
+        _ => format!("({})", parts.join(&format!(" {} ", lean_sym::AND))),
     }
 }
 
@@ -2338,7 +2457,8 @@ fn emit_exported_schema_data_predicate(
             )?;
             let items_name = format!("{name}_items");
             builder.definitions.push(format!(
-                "def {items_name} : List Data -> Prop\n  | [] => True\n  | x :: xs => {item_predicate} x ∧ {items_name} xs\n"
+                "def {items_name} : List Data -> Prop\n  | [] => True\n  | x :: xs => {item_predicate} x {AND} {items_name} xs\n",
+                AND = lean_sym::AND,
             ));
             builder.definitions.push(format!(
                 "def {name} : Data -> Prop\n  | Data.List xs => {items_name} xs\n  | _ => False\n"
@@ -2383,7 +2503,8 @@ fn emit_exported_schema_data_predicate(
             )?;
             let entries_name = format!("{name}_entries");
             builder.definitions.push(format!(
-                "def {entries_name} : List (Prod Data Data) -> Prop\n  | [] => True\n  | entry :: rest => {key_predicate} entry.1 ∧ {value_predicate} entry.2 ∧ {entries_name} rest\n"
+                "def {entries_name} : List (Prod Data Data) -> Prop\n  | [] => True\n  | entry :: rest => {key_predicate} entry.1 {AND} {value_predicate} entry.2 {AND} {entries_name} rest\n",
+                AND = lean_sym::AND,
             ));
             builder.definitions.push(format!(
                 "def {name} : Data -> Prop\n  | Data.Map entries => {entries_name} entries\n  | _ => False\n"
@@ -2576,7 +2697,9 @@ fn emit_partial_data_semantics_predicate(
         }
         FuzzerSemantics::IntRange { min, max } => {
             let body = match (min, max) {
-                (Some(min), Some(max)) => format!("({min} <= x ∧ x <= {max})"),
+                (Some(min), Some(max)) => {
+                    format!("({min} <= x {AND} x <= {max})", AND = lean_sym::AND)
+                }
                 (Some(min), None) => format!("({min} <= x)"),
                 (None, Some(max)) => format!("(x <= {max})"),
                 (None, None) => "True".to_string(),
@@ -2588,7 +2711,10 @@ fn emit_partial_data_semantics_predicate(
         FuzzerSemantics::ByteArrayRange { min_len, max_len } => {
             let body = match (min_len, max_len) {
                 (Some(min_len), Some(max_len)) => {
-                    format!("({min_len} <= x.length ∧ x.length <= {max_len})")
+                    format!(
+                        "({min_len} <= x.length {AND} x.length <= {max_len})",
+                        AND = lean_sym::AND
+                    )
                 }
                 (Some(min_len), None) => format!("({min_len} <= x.length)"),
                 (None, Some(max_len)) => format!("(x.length <= {max_len})"),
@@ -2661,13 +2787,17 @@ fn emit_partial_data_semantics_predicate(
                 emit_partial_data_semantics_predicate(builder, prefix, element)?;
             let items_name = format!("{name}_items");
             builder.definitions.push(format!(
-                "def {items_name} : List Data -> Prop\n  | [] => True\n  | x :: xs => {element_predicate} x ∧ {items_name} xs\n"
+                "def {items_name} : List Data -> Prop\n  | [] => True\n  | x :: xs => {element_predicate} x {AND} {items_name} xs\n",
+                AND = lean_sym::AND,
             ));
 
             let mut parts = Vec::new();
             match (min_len, max_len) {
                 (Some(min_len), Some(max_len)) => {
-                    parts.push(format!("({min_len} <= xs.length ∧ xs.length <= {max_len})"));
+                    parts.push(format!(
+                        "({min_len} <= xs.length {AND} xs.length <= {max_len})",
+                        AND = lean_sym::AND,
+                    ));
                 }
                 (Some(min_len), None) => parts.push(format!("({min_len} <= xs.length)")),
                 (None, Some(max_len)) => parts.push(format!("(xs.length <= {max_len})")),
@@ -2784,7 +2914,12 @@ fn build_state_machine_trace_reachability_helpers(
     let step_input_parts: Vec<String> = step_input_predicates
         .iter()
         .enumerate()
-        .map(|(index, predicate)| format!("(∃ step_input_{index}, {predicate} step_input_{index})"))
+        .map(|(index, predicate)| {
+            format!(
+                "({EXISTS} step_input_{index}, {predicate} step_input_{index})",
+                EXISTS = lean_sym::EXISTS,
+            )
+        })
         .collect();
     helper_blocks.push(format!(
         "def {step_inputs_satisfiable} : Prop := {}\n",
@@ -2801,8 +2936,9 @@ fn build_state_machine_trace_reachability_helpers(
     let reachable_output = format!("{helper_prefix}_reachable_output");
 
     helper_blocks.push(format!(
-        "def {terminal_predicate} : Data -> Prop\n  | Data.Constr tag fields => tag = {} ∧ fields = []\n  | _ => False\n",
-        transition_semantics.terminal_tag
+        "def {terminal_predicate} : Data -> Prop\n  | Data.Constr tag fields => tag = {tag} {AND} fields = []\n  | _ => False\n",
+        tag = transition_semantics.terminal_tag,
+        AND = lean_sym::AND,
     ));
     helper_blocks.push(format!(
         "def {label_field} : Data -> Option Data\n  | Data.Constr tag fields =>\n      if tag = {} then fields.get? {} else none\n  | _ => none\n",
@@ -2817,30 +2953,39 @@ fn build_state_machine_trace_reachability_helpers(
         transition_semantics.step_tag, event_index
     ));
     helper_blocks.push(format!(
-        "def {step_relation} (state transition nextState label event : Data) : Prop :=\n  {state_predicate} state ∧\n  {state_predicate} nextState ∧\n  {label_predicate} label ∧\n  {event_predicate} event ∧\n  {step_inputs_satisfiable} ∧\n  {label_field} transition = some label ∧\n  {next_state_field} transition = some nextState ∧\n  {event_field} transition = some event\n"
+        "def {step_relation} (state transition nextState label event : Data) : Prop :=\n  {state_predicate} state {AND}\n  {state_predicate} nextState {AND}\n  {label_predicate} label {AND}\n  {event_predicate} event {AND}\n  {step_inputs_satisfiable} {AND}\n  {label_field} transition = some label {AND}\n  {next_state_field} transition = some nextState {AND}\n  {event_field} transition = some event\n",
+        AND = lean_sym::AND,
     ));
 
     match acceptance {
         StateMachineAcceptance::AcceptsSuccess => {
             helper_blocks.push(format!(
-                "def {reachable_from} : Data -> List Data -> List Data -> Prop\n  | _state, [], _events => False\n  | _state, [terminal], events => {terminal_predicate} terminal ∧ events = []\n  | state, transition :: rest, events =>\n      ∃ nextState label event tailEvents,\n        {step_relation} state transition nextState label event ∧\n        {reachable_from} nextState rest tailEvents ∧\n        events = event :: tailEvents\n"
+                "def {reachable_from} : Data -> List Data -> List Data -> Prop\n  | _state, [], _events => False\n  | _state, [terminal], events => {terminal_predicate} terminal {AND} events = []\n  | state, transition :: rest, events =>\n      {EXISTS} nextState label event tailEvents,\n        {step_relation} state transition nextState label event {AND}\n        {reachable_from} nextState rest tailEvents {AND}\n        events = event :: tailEvents\n",
+                AND = lean_sym::AND,
+                EXISTS = lean_sym::EXISTS,
             ));
             helper_blocks.push(format!(
                 "def {output_projection} (events : List Data) : Data := Data.List events\n"
             ));
             helper_blocks.push(format!(
-                "def {reachable_output} (x : Data) : Prop :=\n  ∃ initState trace events,\n    {state_predicate} initState ∧\n    {reachable_from} initState trace events ∧\n    x = {output_projection} events\n"
+                "def {reachable_output} (x : Data) : Prop :=\n  {EXISTS} initState trace events,\n    {state_predicate} initState {AND}\n    {reachable_from} initState trace events {AND}\n    x = {output_projection} events\n",
+                AND = lean_sym::AND,
+                EXISTS = lean_sym::EXISTS,
             ));
         }
         StateMachineAcceptance::AcceptsFailure => {
             helper_blocks.push(format!(
-                "def {reachable_from} : Data -> List Data -> List Data -> List Data -> Prop\n  | _state, [], _labels, _events => False\n  | _state, [terminal], _labels, _events => False\n  | state, [transition, terminal], labels, events =>\n      ∃ nextState label event,\n        {step_relation} state transition nextState label event ∧\n        {terminal_predicate} terminal ∧\n        labels = [label] ∧\n        events = [event]\n  | state, transition :: rest, labels, events =>\n      ∃ nextState label event tailLabels tailEvents,\n        {step_relation} state transition nextState label event ∧\n        {reachable_from} nextState rest tailLabels tailEvents ∧\n        labels = label :: tailLabels ∧\n        events = event :: tailEvents\n"
+                "def {reachable_from} : Data -> List Data -> List Data -> List Data -> Prop\n  | _state, [], _labels, _events => False\n  | _state, [terminal], _labels, _events => False\n  | state, [transition, terminal], labels, events =>\n      {EXISTS} nextState label event,\n        {step_relation} state transition nextState label event {AND}\n        {terminal_predicate} terminal {AND}\n        labels = [label] {AND}\n        events = [event]\n  | state, transition :: rest, labels, events =>\n      {EXISTS} nextState label event tailLabels tailEvents,\n        {step_relation} state transition nextState label event {AND}\n        {reachable_from} nextState rest tailLabels tailEvents {AND}\n        labels = label :: tailLabels {AND}\n        events = event :: tailEvents\n",
+                AND = lean_sym::AND,
+                EXISTS = lean_sym::EXISTS,
             ));
             helper_blocks.push(format!(
                 "def {output_projection} (labels events : List Data) : Data :=\n  Data.List [Data.List labels, Data.List events]\n"
             ));
             helper_blocks.push(format!(
-                "def {reachable_output} (x : Data) : Prop :=\n  ∃ initState trace labels events,\n    {state_predicate} initState ∧\n    {reachable_from} initState trace labels events ∧\n    x = {output_projection} labels events\n"
+                "def {reachable_output} (x : Data) : Prop :=\n  {EXISTS} initState trace labels events,\n    {state_predicate} initState {AND}\n    {reachable_from} initState trace labels events {AND}\n    x = {output_projection} labels events\n",
+                AND = lean_sym::AND,
+                EXISTS = lean_sym::EXISTS,
             ));
         }
     }
@@ -2879,6 +3024,27 @@ fn try_generate_state_machine_trace_proof_from_semantics(
     let Some(schema) = test.fuzzer_data_schema.as_ref() else {
         return Ok(None);
     };
+
+    // TODO(4.6) soundness gate: the `step_inputs_satisfiable` predicate built by
+    // `build_state_machine_trace_reachability_helpers` is a global over-approximation
+    // of reachability. For universal (`test`) theorems this only widens what must be
+    // proved (sound-but-incomplete). For existential (`fail once`) theorems --
+    // `∃ x, reachability(x) ∧ ¬P(x)` -- the over-approximation admits spurious traces
+    // that no compiled program can produce, so Z3 could witness a "failing" input that
+    // does not actually exist at runtime. Route existential state-machine trace proofs
+    // through the skip path until step-input witnesses are tied to specific transitions.
+    if form.existential {
+        return Err(generation_error(
+            GenerationErrorCategory::FallbackRequired,
+            format!(
+                "Test '{}' is an existential (fail once) state-machine trace theorem. \
+                 The current `step_inputs_satisfiable` encoding globally over-approximates \
+                 reachability, which would make an existential proof unsound (see TODO 4.6). \
+                 Routing through fallback until per-transition step-input witnesses land.",
+                test.name
+            ),
+        ));
+    }
 
     let helper_prefix = format!("{lean_test_name}_shape");
     let (root_predicate, helper_defs) =
@@ -2991,7 +3157,10 @@ fn collect_scalar_precondition_parts_from_semantics(
             match (min, max) {
                 (Some(min), Some(max)) => {
                     validate_int_bounds_literals(test_name, min, max)?;
-                    out.push(format!("({min} <= {var} \u{2227} {var} <= {max})"));
+                    out.push(format!(
+                        "({min} <= {var} {AND} {var} <= {max})",
+                        AND = lean_sym::AND
+                    ));
                     if witness.is_none() {
                         *witness = Some(format!("({min} : Integer)"));
                     }
@@ -3053,7 +3222,8 @@ fn collect_scalar_precondition_parts_from_semantics(
                 (Some(min_len), Some(max_len)) => {
                     validate_bytestring_len_bounds(test_name, *min_len, *max_len)?;
                     out.push(format!(
-                        "({min_len} <= {var}.length \u{2227} {var}.length <= {max_len})"
+                        "({min_len} <= {var}.length {AND} {var}.length <= {max_len})",
+                        AND = lean_sym::AND
                     ));
                     if witness.is_none() {
                         *witness = Some(lean_zero_bytestring_literal_of_len(*min_len));
@@ -3358,7 +3528,11 @@ fn collect_list_element_precondition_parts_from_semantics(
                 (Some(min), Some(max)) => {
                     validate_int_bounds_literals(test_name, min, max)?;
                     out.push(format!(
-                        "(\u{2200} x_i, x_i \u{2208} {list_var} \u{2192} {min} <= x_i \u{2227} x_i <= {max})"
+                        "({FORALL} x_i, x_i {IN} {list_var} {IMPLIES} {min} <= x_i {AND} x_i <= {max})",
+                        FORALL = lean_sym::FORALL,
+                        IN = lean_sym::ELEMENT_OF,
+                        IMPLIES = lean_sym::IMPLIES,
+                        AND = lean_sym::AND,
                     ));
                     *witness_elem = Some(format!("({min} : Integer)"));
                 }
@@ -3373,7 +3547,10 @@ fn collect_list_element_precondition_parts_from_semantics(
                         )
                     })?;
                     out.push(format!(
-                        "(\u{2200} x_i, x_i \u{2208} {list_var} \u{2192} {min} <= x_i)"
+                        "({FORALL} x_i, x_i {IN} {list_var} {IMPLIES} {min} <= x_i)",
+                        FORALL = lean_sym::FORALL,
+                        IN = lean_sym::ELEMENT_OF,
+                        IMPLIES = lean_sym::IMPLIES,
                     ));
                     *witness_elem = Some(format!("({min} : Integer)"));
                 }
@@ -3388,7 +3565,10 @@ fn collect_list_element_precondition_parts_from_semantics(
                         )
                     })?;
                     out.push(format!(
-                        "(\u{2200} x_i, x_i \u{2208} {list_var} \u{2192} x_i <= {max})"
+                        "({FORALL} x_i, x_i {IN} {list_var} {IMPLIES} x_i <= {max})",
+                        FORALL = lean_sym::FORALL,
+                        IN = lean_sym::ELEMENT_OF,
+                        IMPLIES = lean_sym::IMPLIES,
                     ));
                     if witness_elem.is_none() {
                         *witness_elem = Some(format!("({max} : Integer)"));
@@ -3421,19 +3601,29 @@ fn collect_list_element_precondition_parts_from_semantics(
                 (Some(min_len), Some(max_len)) => {
                     validate_bytestring_len_bounds(test_name, *min_len, *max_len)?;
                     out.push(format!(
-                        "(\u{2200} x_i, x_i \u{2208} {list_var} \u{2192} {min_len} <= x_i.length \u{2227} x_i.length <= {max_len})"
+                        "({FORALL} x_i, x_i {IN} {list_var} {IMPLIES} {min_len} <= x_i.length {AND} x_i.length <= {max_len})",
+                        FORALL = lean_sym::FORALL,
+                        IN = lean_sym::ELEMENT_OF,
+                        IMPLIES = lean_sym::IMPLIES,
+                        AND = lean_sym::AND,
                     ));
                     *witness_elem = Some(lean_zero_bytestring_literal_of_len(*min_len));
                 }
                 (Some(min_len), None) => {
                     out.push(format!(
-                        "(\u{2200} x_i, x_i \u{2208} {list_var} \u{2192} {min_len} <= x_i.length)"
+                        "({FORALL} x_i, x_i {IN} {list_var} {IMPLIES} {min_len} <= x_i.length)",
+                        FORALL = lean_sym::FORALL,
+                        IN = lean_sym::ELEMENT_OF,
+                        IMPLIES = lean_sym::IMPLIES,
                     ));
                     *witness_elem = Some(lean_zero_bytestring_literal_of_len(*min_len));
                 }
                 (None, Some(max_len)) => {
                     out.push(format!(
-                        "(\u{2200} x_i, x_i \u{2208} {list_var} \u{2192} x_i.length <= {max_len})"
+                        "({FORALL} x_i, x_i {IN} {list_var} {IMPLIES} x_i.length <= {max_len})",
+                        FORALL = lean_sym::FORALL,
+                        IN = lean_sym::ELEMENT_OF,
+                        IMPLIES = lean_sym::IMPLIES,
                     ));
                     if witness_elem.is_none() {
                         *witness_elem = Some("ByteString.empty".to_string());
@@ -3492,7 +3682,10 @@ fn collect_list_element_precondition_parts_from_semantics(
                 )
             })?;
             out.push(format!(
-                "(\u{2200} x_i, x_i \u{2208} {list_var} \u{2192} x_i = {lit})"
+                "({FORALL} x_i, x_i {IN} {list_var} {IMPLIES} x_i = {lit})",
+                FORALL = lean_sym::FORALL,
+                IN = lean_sym::ELEMENT_OF,
+                IMPLIES = lean_sym::IMPLIES,
             ));
             *witness_elem = Some(lit);
             Ok(())
@@ -3520,7 +3713,10 @@ fn collect_list_element_precondition_parts_from_semantics(
                 )
             })?;
             out.push(format!(
-                "(\u{2200} x_i, x_i \u{2208} {list_var} \u{2192} {predicate})"
+                "({FORALL} x_i, x_i {IN} {list_var} {IMPLIES} {predicate})",
+                FORALL = lean_sym::FORALL,
+                IN = lean_sym::ELEMENT_OF,
+                IMPLIES = lean_sym::IMPLIES,
             ));
             if witness_elem.is_none() {
                 let first_tag = tags
@@ -3543,7 +3739,10 @@ fn collect_list_element_precondition_parts_from_semantics(
         // generate constraints on key length and value range). For now, we rely on
         // the Lean type-level encoding of Pair elements.
         FuzzerSemantics::Product(_) => {
-            if matches!(elem_type, FuzzerOutputType::Pair(_, _) | FuzzerOutputType::Tuple(_)) {
+            if matches!(
+                elem_type,
+                FuzzerOutputType::Pair(_, _) | FuzzerOutputType::Tuple(_)
+            ) {
                 // Product semantics for Pair/Tuple elements: accept without per-element predicate
                 Ok(())
             } else {
@@ -3590,7 +3789,8 @@ fn build_list_domain_preconditions_from_semantics(
 
             match (min_len, max_len) {
                 (Some(min), Some(max)) => precondition_parts.push(format!(
-                    "({min} <= {list_var}.length \u{2227} {list_var}.length <= {max})"
+                    "({min} <= {list_var}.length {AND} {list_var}.length <= {max})",
+                    AND = lean_sym::AND,
                 )),
                 (Some(min), None) => {
                     precondition_parts.push(format!("({min} <= {list_var}.length)"))
@@ -3841,16 +4041,17 @@ fn format_theorems(
     let correctness_tactic = form.correctness.tactic();
 
     let mut out = if form.existential {
-        let quantifiers = format!("\u{2203} {quantifier_vars},");
+        let quantifiers = format!("{} {quantifier_vars},", lean_sym::EXISTS);
+        let and_sep = format!("\n  {}\n  ", lean_sym::AND);
         let preconditions = if precondition_parts.is_empty() {
             String::new()
         } else {
-            format!("\n  {}", precondition_parts.join("\n  \u{2227}\n  "))
+            format!("\n  {}", precondition_parts.join(&and_sep))
         };
         let connector = if preconditions.is_empty() {
-            ""
+            String::new()
         } else {
-            "\n  \u{2227}\n  "
+            and_sep
         };
         let mode_comment = match form.existential_mode {
             Some(ExistentialMode::Witness) => "-- Mode: witness (deterministic witness search)\n",
@@ -3859,7 +4060,11 @@ fn format_theorems(
         };
 
         let proof_term = if let Some(witness) = witness_value {
-            format!("\u{27e8}{witness}, by {correctness_tactic}\u{27e9}")
+            format!(
+                "{open}{witness}, by {correctness_tactic}{close}",
+                open = lean_sym::ANGLE_OPEN,
+                close = lean_sym::ANGLE_CLOSE,
+            )
         } else {
             format!("by {correctness_tactic}")
         };
@@ -3868,19 +4073,17 @@ fn format_theorems(
             "{mode_comment}theorem {lean_test_name} :\n  {quantifiers}{preconditions}{connector}{correctness_body} :=\n  {proof_term}\n"
         )
     } else {
-        let quantifiers = format!("\u{2200} {quantifier_vars},");
+        let quantifiers = format!("{} {quantifier_vars},", lean_sym::FORALL);
+        let implies_sep = format!("\n  {}\n  ", lean_sym::IMPLIES);
         let preconditions = if precondition_parts.is_empty() {
             String::new()
         } else {
-            format!(
-                "\n  {}",
-                precondition_parts.join("\n  \u{2192}\n  ")
-            )
+            format!("\n  {}", precondition_parts.join(&implies_sep))
         };
         let arrow = if preconditions.is_empty() {
-            ""
+            String::new()
         } else {
-            "\n  \u{2192}\n  "
+            implies_sep
         };
         format!(
             "theorem {lean_test_name} :\n  {quantifiers}{preconditions}{arrow}{correctness_body} :=\n  by {correctness_tactic}\n"
@@ -3891,19 +4094,17 @@ fn format_theorems(
         let termination_body = term_body.format(prog, arg_expr);
         let termination_tactic = term_body.tactic();
         // Termination theorems are always universal
-        let quantifiers = format!("\u{2200} {quantifier_vars},");
+        let quantifiers = format!("{} {quantifier_vars},", lean_sym::FORALL);
+        let implies_sep = format!("\n  {}\n  ", lean_sym::IMPLIES);
         let preconditions = if precondition_parts.is_empty() {
             String::new()
         } else {
-            format!(
-                "\n  {}",
-                precondition_parts.join("\n  \u{2192}\n  ")
-            )
+            format!("\n  {}", precondition_parts.join(&implies_sep))
         };
         let arrow = if preconditions.is_empty() {
-            ""
+            String::new()
         } else {
-            "\n  \u{2192}\n  "
+            implies_sep
         };
         out.push_str(&format!(
             "\ntheorem {lean_test_name}_alwaysTerminating :\n  {quantifiers}{preconditions}{arrow}{termination_body} :=\n  by {termination_tactic}\n"
@@ -3929,11 +4130,13 @@ fn equivalence_goal(
             format!("proveTests {prop_prog} ({arg_expr}) = proveTests {handler_prog} ({arg_expr})")
         }
         (TestReturnMode::Void, OnTestFailure::FailImmediately) => format!(
-            "proveTestsHalt {prop_prog} ({arg_expr}) ↔ proveTestsHalt {handler_prog} ({arg_expr})"
+            "proveTestsHalt {prop_prog} ({arg_expr}) {IFF} proveTestsHalt {handler_prog} ({arg_expr})",
+            IFF = lean_sym::IFF,
         ),
         (TestReturnMode::Void, OnTestFailure::SucceedEventually)
         | (TestReturnMode::Void, OnTestFailure::SucceedImmediately) => format!(
-            "proveTestsError {prop_prog} ({arg_expr}) ↔ proveTestsError {handler_prog} ({arg_expr})"
+            "proveTestsError {prop_prog} ({arg_expr}) {IFF} proveTestsError {handler_prog} ({arg_expr})",
+            IFF = lean_sym::IFF,
         ),
     }
 }
@@ -3948,19 +4151,17 @@ fn format_equivalence_theorem(
     precondition_parts: &[String],
 ) -> String {
     // Equivalence theorems are always universal
-    let quantifiers = format!("\u{2200} {quantifier_vars},");
+    let quantifiers = format!("{} {quantifier_vars},", lean_sym::FORALL);
+    let implies_sep = format!("\n  {}\n  ", lean_sym::IMPLIES);
     let preconditions = if precondition_parts.is_empty() {
         String::new()
     } else {
-        format!(
-            "\n  {}",
-            precondition_parts.join("\n  \u{2192}\n  ")
-        )
+        format!("\n  {}", precondition_parts.join(&implies_sep))
     };
     let arrow = if preconditions.is_empty() {
-        ""
+        String::new()
     } else {
-        "\n  \u{2192}\n  "
+        implies_sep
     };
     let equivalence_goal = equivalence_goal(test, prop_prog, handler_prog, arg_expr);
     format!(
@@ -4369,13 +4570,12 @@ fn try_generate_direct_proof_from_semantics(
 
     match (&test.fuzzer_output_type, &test.semantics) {
         (FuzzerOutputType::Int, semantics) => {
-            let (precondition_parts, witness) =
-                build_scalar_domain_preconditions_from_semantics(
-                    &test.name,
-                    &test.fuzzer_output_type,
-                    semantics,
-                    "x",
-                )?;
+            let (precondition_parts, witness) = build_scalar_domain_preconditions_from_semantics(
+                &test.name,
+                &test.fuzzer_output_type,
+                semantics,
+                "x",
+            )?;
             Ok(Some(build_scalar_theorem(
                 "intArg x",
                 "(x : Integer)",
@@ -4385,13 +4585,12 @@ fn try_generate_direct_proof_from_semantics(
             )))
         }
         (FuzzerOutputType::Bool, semantics) => {
-            let (precondition_parts, witness) =
-                build_scalar_domain_preconditions_from_semantics(
-                    &test.name,
-                    &test.fuzzer_output_type,
-                    semantics,
-                    "x",
-                )?;
+            let (precondition_parts, witness) = build_scalar_domain_preconditions_from_semantics(
+                &test.name,
+                &test.fuzzer_output_type,
+                semantics,
+                "x",
+            )?;
             Ok(Some(build_scalar_theorem(
                 "boolArg x",
                 "(x : Bool)",
@@ -4401,13 +4600,12 @@ fn try_generate_direct_proof_from_semantics(
             )))
         }
         (FuzzerOutputType::ByteArray, semantics) => {
-            let (precondition_parts, witness) =
-                build_scalar_domain_preconditions_from_semantics(
-                    &test.name,
-                    &test.fuzzer_output_type,
-                    semantics,
-                    "x",
-                )?;
+            let (precondition_parts, witness) = build_scalar_domain_preconditions_from_semantics(
+                &test.name,
+                &test.fuzzer_output_type,
+                semantics,
+                "x",
+            )?;
             Ok(Some(build_scalar_theorem(
                 "bytearrayArg x",
                 "(x : ByteString)",
@@ -4417,13 +4615,12 @@ fn try_generate_direct_proof_from_semantics(
             )))
         }
         (FuzzerOutputType::String, semantics) => {
-            let (precondition_parts, witness) =
-                build_scalar_domain_preconditions_from_semantics(
-                    &test.name,
-                    &test.fuzzer_output_type,
-                    semantics,
-                    "x",
-                )?;
+            let (precondition_parts, witness) = build_scalar_domain_preconditions_from_semantics(
+                &test.name,
+                &test.fuzzer_output_type,
+                semantics,
+                "x",
+            )?;
             Ok(Some(build_scalar_theorem(
                 "stringArg x",
                 "(x : ByteString)",

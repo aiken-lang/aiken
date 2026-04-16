@@ -5,8 +5,8 @@ use aiken_project::{
     options::Options,
     telemetry::EventTarget,
     verify::{
-        self, ArtifactRetention, DEFAULT_BLASTER_REV, ExistentialMode, FailureCategory,
-        ProofStatus, VerifyConfig,
+        self, ArtifactRetention, DEFAULT_BLASTER_REV, DEFAULT_PLUTUS_CORE_REV, ExistentialMode,
+        FailureCategory, ProofStatus, VerifyConfig,
     },
     watch::with_project,
 };
@@ -152,6 +152,11 @@ pub struct RunArgs {
     #[clap(long, default_value = "property")]
     target: VerificationTargetKind,
 
+    /// Git revision (commit, tag, or branch) for the PlutusCore dependency.
+    /// Defaults to the version pinned in this release. Use --plutus-core-dir for a local checkout instead.
+    #[clap(long, default_value = DEFAULT_PLUTUS_CORE_REV)]
+    plutus_core_rev: String,
+
     /// Path to the PlutusCore Lean library checkout. Overrides the PLUTUS_CORE_DIR environment variable.
     #[clap(long)]
     plutus_core_dir: Option<PathBuf>,
@@ -174,6 +179,10 @@ pub struct DoctorArgs {
     /// Git revision (commit, tag, or branch) for the Blaster dependency to report
     #[clap(long, default_value = DEFAULT_BLASTER_REV)]
     blaster_rev: String,
+
+    /// Git revision (commit, tag, or branch) for the PlutusCore dependency to report
+    #[clap(long, default_value = DEFAULT_PLUTUS_CORE_REV)]
+    plutus_core_rev: String,
 }
 
 #[derive(clap::Args)]
@@ -210,6 +219,7 @@ struct RunCommandOptions {
     skip_unsupported: bool,
     allow_skips: bool,
     blaster_rev: String,
+    plutus_core_rev: String,
     existential_mode: ExistentialMode,
     target: VerificationTargetKind,
     plutus_core_dir: Option<PathBuf>,
@@ -300,8 +310,7 @@ fn format_doctor_output(report: &verify::DoctorReport, json: bool) -> miette::Re
         } else if !tool.meets_minimum {
             format!(
                 "{} (minimum: {})",
-                "VERSION TOO LOW"
-                    .if_supports_color(Stderr, |s| s.red()),
+                "VERSION TOO LOW".if_supports_color(Stderr, |s| s.red()),
                 tool.minimum_version,
             )
         } else {
@@ -345,6 +354,7 @@ fn format_doctor_output(report: &verify::DoctorReport, json: bool) -> miette::Re
 
     lines.push(String::new());
     lines.push(format!("  Blaster revision: {}", report.blaster_rev));
+    lines.push(format!("  PlutusCore revision: {}", report.plutus_core_rev));
     lines.push(String::new());
 
     if report.all_ok {
@@ -375,13 +385,14 @@ fn run_doctor_command_with<F>(
     out_dir: PathBuf,
     json: bool,
     blaster_rev: String,
+    plutus_core_rev: String,
     run_doctor: F,
 ) -> miette::Result<CommandBranchResult>
 where
-    F: FnOnce(&Path, &str) -> verify::DoctorReport,
+    F: FnOnce(&Path, &str, &str) -> verify::DoctorReport,
 {
     let out_dir = resolve_verify_out_dir(&out_dir, project_root)?;
-    let report = run_doctor(&out_dir, &blaster_rev);
+    let report = run_doctor(&out_dir, &blaster_rev, &plutus_core_rev);
     let output = format_doctor_output(&report, json)?;
     let exit_code = doctor_exit_code(&report);
 
@@ -394,6 +405,7 @@ fn exec_doctor(
         out_dir,
         json,
         blaster_rev,
+        plutus_core_rev,
     }: DoctorArgs,
 ) -> miette::Result<()> {
     let mut exit_code = 0;
@@ -404,6 +416,7 @@ fn exec_doctor(
             out_dir.clone(),
             json,
             blaster_rev.clone(),
+            plutus_core_rev.clone(),
             verify::run_doctor,
         )
         .map_err(|e| {
@@ -696,6 +709,7 @@ fn exec_run(
         blaster_rev,
         existential_mode,
         target,
+        plutus_core_rev,
         plutus_core_dir,
     }: RunArgs,
 ) -> miette::Result<()> {
@@ -731,6 +745,7 @@ fn exec_run(
         skip_unsupported,
         allow_skips,
         blaster_rev,
+        plutus_core_rev,
         existential_mode,
         target,
         plutus_core_dir,
@@ -799,21 +814,19 @@ fn exec_run_with_project(
         out_dir: resolved_out_dir.clone(),
         cek_budget: run_options.cek_budget,
         blaster_rev: run_options.blaster_rev.clone(),
+        plutus_core_rev: run_options.plutus_core_rev.clone(),
         existential_mode: run_options.existential_mode,
         target: run_options.target.clone(),
         plutus_core_dir: run_options.plutus_core_dir.clone(),
     };
 
-    let manifest = verify::generate_lean_workspace(
-        property_tests,
-        &config,
-        run_options.skip_unsupported,
-    )
-    .map_err(|e| {
-        vec![aiken_project::error::Error::StandardIo(
-            std::io::Error::other(e.to_string()),
-        )]
-    })?;
+    let manifest =
+        verify::generate_lean_workspace(property_tests, &config, run_options.skip_unsupported)
+            .map_err(|e| {
+                vec![aiken_project::error::Error::StandardIo(
+                    std::io::Error::other(e.to_string()),
+                )]
+            })?;
 
     let skipped_without_allow =
         skips_require_failure(manifest.skipped.len(), run_options.allow_skips);
@@ -858,13 +871,20 @@ fn exec_run_with_project(
                 println!("  - {} -> {}", entry.aiken_module, entry.lean_module);
             }
             println!();
-            println!(
-                "Note: The PlutusCore Lean library is configured at {}.",
-                verify::resolve_plutus_core_dir(run_options.plutus_core_dir.as_deref()).display(),
-            );
-            println!(
-                "      Set PLUTUS_CORE_DIR or pass --plutus-core-dir to change."
-            );
+            if run_options.plutus_core_dir.is_some() || std::env::var("PLUTUS_CORE_DIR").is_ok() {
+                println!(
+                    "Note: The PlutusCore Lean library is configured at {}.",
+                    verify::resolve_plutus_core_dir(run_options.plutus_core_dir.as_deref())
+                        .display(),
+                );
+                println!("      Set PLUTUS_CORE_DIR or pass --plutus-core-dir to change.");
+            } else {
+                println!(
+                    "Note: PlutusCore will be fetched from git (rev: {}).",
+                    run_options.plutus_core_rev,
+                );
+                println!("      Pass --plutus-core-dir for a local checkout instead.");
+            }
         }
     } else {
         if manifest.tests.is_empty() {
@@ -1369,13 +1389,18 @@ test unsupported_for_validator_target(x via int_fuzzer()) {
             skip_unsupported: false,
             allow_skips: false,
             blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+            plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
             existential_mode: ExistentialMode::default(),
             target,
             plutus_core_dir: None,
         }
     }
 
-    fn sample_doctor_report(all_ok: bool, blaster_rev: &str) -> verify::DoctorReport {
+    fn sample_doctor_report(
+        all_ok: bool,
+        blaster_rev: &str,
+        plutus_core_rev: &str,
+    ) -> verify::DoctorReport {
         verify::DoctorReport {
             tools: vec![
                 verify::ToolCheck {
@@ -1410,6 +1435,7 @@ test unsupported_for_validator_target(x via int_fuzzer()) {
                 error: None,
             },
             blaster_rev: blaster_rev.to_string(),
+            plutus_core_rev: plutus_core_rev.to_string(),
             all_ok,
             capabilities: verify::capabilities(),
         }
@@ -1422,7 +1448,10 @@ test unsupported_for_validator_target(x via int_fuzzer()) {
             PathBuf::from("build/verify"),
             false,
             "abc123".to_string(),
-            |_out_dir, blaster_rev| sample_doctor_report(true, blaster_rev),
+            "pc-rev-1".to_string(),
+            |_out_dir, blaster_rev, plutus_core_rev| {
+                sample_doctor_report(true, blaster_rev, plutus_core_rev)
+            },
         )
         .expect("doctor branch should render output");
 
@@ -1444,7 +1473,10 @@ test unsupported_for_validator_target(x via int_fuzzer()) {
             PathBuf::from("build/verify"),
             true,
             "deadbeef".to_string(),
-            |_out_dir, blaster_rev| sample_doctor_report(false, blaster_rev),
+            "pc-rev-2".to_string(),
+            |_out_dir, blaster_rev, plutus_core_rev| {
+                sample_doctor_report(false, blaster_rev, plutus_core_rev)
+            },
         )
         .expect("doctor branch should render JSON output");
 
@@ -1453,6 +1485,7 @@ test unsupported_for_validator_target(x via int_fuzzer()) {
             serde_json::from_str(&result.output).expect("doctor JSON output should parse");
         assert_eq!(value["all_ok"], false);
         assert_eq!(value["blaster_rev"], "deadbeef");
+        assert_eq!(value["plutus_core_rev"], "pc-rev-2");
     }
 
     #[test]
@@ -1489,9 +1522,10 @@ test unsupported_for_validator_target(x via int_fuzzer()) {
             PathBuf::from("build/verify"),
             false,
             "abc123".to_string(),
-            |out_dir, blaster_rev| {
+            "pc-rev-3".to_string(),
+            |out_dir, blaster_rev, plutus_core_rev| {
                 resolved_out_dir = Some(out_dir.to_path_buf());
-                sample_doctor_report(true, blaster_rev)
+                sample_doctor_report(true, blaster_rev, plutus_core_rev)
             },
         )
         .expect("doctor branch should resolve out_dir against project root");
@@ -1913,7 +1947,12 @@ error: Foo.lean:15:5: Tactic `blaster` failed";
                 .map(|s| s.len())
                 .unwrap_or(0);
             assert!(
-                skipped > 0 || manifest_value["tests"].as_array().map(|t| t.len()).unwrap_or(0) > 0,
+                skipped > 0
+                    || manifest_value["tests"]
+                        .as_array()
+                        .map(|t| t.len())
+                        .unwrap_or(0)
+                        > 0,
                 "--target {target} should generate a valid manifest"
             );
         }
@@ -2187,6 +2226,7 @@ error: Foo.lean:15:5: Tactic `blaster` failed";
             skip_unsupported: false,
             allow_skips: false,
             blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+            plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
             existential_mode: ExistentialMode::default(),
             target: VerificationTargetKind::PropertyWrapper,
             plutus_core_dir: None,

@@ -271,9 +271,7 @@ fn collect_proof_benchmark_metrics(proof: &str) -> ProofBenchmarkMetrics {
     }
 }
 
-fn generate_proof_for_phase12_case(
-    test: &ExportedPropertyTest,
-) -> miette::Result<String> {
+fn generate_proof_for_phase12_case(test: &ExportedPropertyTest) -> miette::Result<String> {
     let aiken_name = test
         .name
         .rsplit('.')
@@ -542,6 +540,79 @@ fn make_phase12_state_machine_test(
     }
 }
 
+/// Helper: returns the `GenerationErrorCategory` of a downcastable `GenerationError`,
+/// or `None` for anything else. Used by tests that need to distinguish between
+/// `FallbackRequired` and `UnsupportedShape` rather than relying on the coarse
+/// `is_skippable_generation_error` predicate (which accepts either).
+fn error_category(error: &miette::Report) -> Option<GenerationErrorCategory> {
+    error.downcast_ref::<GenerationError>().map(|e| e.category)
+}
+
+/// Asserts that `error` is a `GenerationError` whose category equals `expected`.
+/// Prints the actual category and message on mismatch so regressions (e.g. a
+/// test that should produce `FallbackRequired` silently becoming
+/// `UnsupportedShape`) are caught.
+#[track_caller]
+fn assert_generation_error_category(
+    error: &miette::Report,
+    expected: GenerationErrorCategory,
+    context: &str,
+) {
+    let actual = error_category(error);
+    assert_eq!(
+        actual,
+        Some(expected),
+        "{context}: expected {expected:?}, got {actual:?} (message: {error})"
+    );
+}
+
+/// Shared sanity check used by the `export_path_populates_validator_metadata_*`
+/// family. Those tests exist primarily to verify validator metadata extraction;
+/// the secondary `preflight_validate_test` call guards against regressions
+/// where metadata extraction silently succeeds but direct proof generation
+/// breaks. Assert that the preflight error is a `FallbackRequired` with a
+/// message naming the fixture test, so a silent reclassification to
+/// `UnsupportedShape` (which would still make the bare `is_err()` happy) is
+/// caught.
+#[track_caller]
+fn assert_preflight_fallback_required(
+    result: miette::Result<()>,
+    context: &str,
+    test_name_needle: &str,
+) {
+    let err = result
+        .err()
+        .unwrap_or_else(|| panic!("{context}: preflight unexpectedly succeeded"));
+    assert_generation_error_category(&err, GenerationErrorCategory::FallbackRequired, context);
+    let message = err.to_string();
+    assert!(
+        message.contains(test_name_needle),
+        "{context}: error should name fixture test `{test_name_needle}`, got: {message}"
+    );
+    assert!(
+        message.contains("cannot be formally verified") || message.contains("opaque"),
+        "{context}: error should surface opaque-semantics reason, got: {message}"
+    );
+}
+
+/// Sibling of `assert_preflight_fallback_required` for tests whose validator
+/// target is intentionally unpopulated (control-flow-dependent calls stay in
+/// property-wrapper mode). Preflight should reject a validator/equivalence
+/// target with `UnsupportedShape` and an explicit "no validator target
+/// metadata" message, not a generic `FallbackRequired`.
+#[track_caller]
+fn assert_preflight_missing_validator_metadata(result: miette::Result<()>, context: &str) {
+    let err = result
+        .err()
+        .unwrap_or_else(|| panic!("{context}: preflight unexpectedly succeeded"));
+    assert_generation_error_category(&err, GenerationErrorCategory::UnsupportedShape, context);
+    let message = err.to_string();
+    assert!(
+        message.contains("no validator target metadata"),
+        "{context}: error should flag missing validator metadata, got: {message}"
+    );
+}
+
 #[test]
 fn sanitize_lean_name_basic() {
     assert_eq!(sanitize_lean_name("test_map"), "test_map");
@@ -624,6 +695,7 @@ fn generate_workspace_creates_files() {
         out_dir: out_dir.clone(),
         cek_budget: 20000,
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
         plutus_core_dir: None,
@@ -713,6 +785,7 @@ fn generate_workspace_dotted_module_creates_matching_path() {
         out_dir: out_dir.clone(),
         cek_budget: 20000,
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
         plutus_core_dir: None,
@@ -725,9 +798,7 @@ fn generate_workspace_dotted_module_creates_matching_path() {
         "AikenVerify.Proofs.PermissionsTest.prop_permissions_core_development_standard_ok"
     );
     let entry = &manifest.tests[0];
-    assert!(
-        out_dir.join(&entry.lean_file).exists(),
-    );
+    assert!(out_dir.join(&entry.lean_file).exists(),);
     assert!(
         !entry.id.contains('.'),
         "Manifest IDs are embedded into Lean identifiers and must not contain dots"
@@ -776,14 +847,14 @@ fn opaque_semantics_errors_on_workspace_generation() {
         out_dir,
         cek_budget: 20000,
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
         plutus_core_dir: None,
     };
 
-    let err = generate_lean_workspace(&tests, &config, false).expect_err(
-        "workspace generation should fail for opaque semantics",
-    );
+    let err = generate_lean_workspace(&tests, &config, false)
+        .expect_err("workspace generation should fail for opaque semantics");
     let message = err.to_string();
     assert!(
         message.contains("cannot be formally verified") || message.contains("opaque"),
@@ -806,6 +877,12 @@ fn opaque_semantics_errors_on_preflight() {
         &VerificationTargetKind::default(),
     )
     .expect_err("preflight should fail for opaque semantics");
+
+    let message = err.to_string();
+    assert!(
+        message.contains("opaque") || message.contains("cannot be formally verified"),
+        "Preflight error should mention opaque semantics, got: {message}"
+    );
 }
 
 #[test]
@@ -829,6 +906,17 @@ fn opaque_semantics_errors_on_proof_generation() {
         &VerificationTargetKind::default(),
     )
     .expect_err("proof generation should fail for opaque semantics");
+
+    let message = err.to_string();
+    assert!(
+        message.contains("opaque") || message.contains("cannot be formally verified"),
+        "Error should mention opaque semantics, got: {message}"
+    );
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Opaque Bool semantics at proof-gen layer",
+    );
 }
 
 #[test]
@@ -870,6 +958,7 @@ fn scenario_like_void_property_with_opaque_semantics_produces_error() {
         out_dir: out_dir.clone(),
         cek_budget: 20000,
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
         plutus_core_dir: None,
@@ -877,6 +966,15 @@ fn scenario_like_void_property_with_opaque_semantics_produces_error() {
 
     let err = generate_lean_workspace(&[test], &config, false)
         .expect_err("opaque state-machine semantics should error");
+
+    let message = err.to_string();
+    assert!(
+        message.contains("opaque")
+            || message.contains("cannot be formally verified")
+            || message.contains("schema")
+            || message.contains("Transaction"),
+        "Error should explain why opaque state-machine semantics fail, got: {message}"
+    );
 }
 
 #[test]
@@ -919,6 +1017,7 @@ fn generate_workspace_scenario_like_void_property_uses_schema_backed_direct_theo
         out_dir: out_dir.clone(),
         cek_budget: 20000,
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
         plutus_core_dir: None,
@@ -928,6 +1027,15 @@ fn generate_workspace_scenario_like_void_property_uses_schema_backed_direct_theo
     // produce errors instead of silently mapping to True.
     let err = generate_lean_workspace(&[test], &config, false)
         .expect_err("opaque state-machine semantics should error");
+
+    let message = err.to_string();
+    assert!(
+        message.contains("opaque")
+            || message.contains("schema")
+            || message.contains("cannot be formally verified")
+            || message.contains("Transaction"),
+        "Error should explain why state-machine with opaque output semantics fails, got: {message}"
+    );
 }
 
 #[test]
@@ -988,6 +1096,7 @@ fn generate_workspace_scenario_like_fail_property_uses_schema_backed_direct_theo
         out_dir: out_dir.clone(),
         cek_budget: 20000,
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
         plutus_core_dir: None,
@@ -997,6 +1106,15 @@ fn generate_workspace_scenario_like_fail_property_uses_schema_backed_direct_theo
     // produce errors instead of silently mapping to True.
     let err = generate_lean_workspace(&[test], &config, false)
         .expect_err("opaque state-machine semantics should error");
+
+    let message = err.to_string();
+    assert!(
+        message.contains("opaque")
+            || message.contains("schema")
+            || message.contains("cannot be formally verified")
+            || message.contains("Transaction"),
+        "Error should explain why fail-mode state-machine with opaque output semantics fails, got: {message}"
+    );
 }
 
 #[test]
@@ -1044,6 +1162,7 @@ fn generate_workspace_clears_stale_generated_files_but_keeps_static_cache() {
         out_dir: out_dir.clone(),
         cek_budget: 20000,
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
         plutus_core_dir: None,
@@ -1086,6 +1205,7 @@ fn generate_workspace_empty_tests() {
         out_dir: tmp.path().to_path_buf(),
         cek_budget: 20000,
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
         plutus_core_dir: None,
@@ -1138,7 +1258,10 @@ fn succeed_eventually_generates_false_assertion() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
     assert!(
         !proof.contains("= some true"),
         "SucceedEventually should not contain = true"
@@ -1162,10 +1285,22 @@ fn fail_once_witness_mode_generates_existential_theorem() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("\u{2203}"), "Witness mode should generate existential (\u{2203}) quantifier");
-    assert!(proof.contains("witnessTests"), "Witness mode should use witnessTests helper");
-    assert!(proof.contains("by decide"), "Witness mode should use decide tactic");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("\u{2203}"),
+        "Witness mode should generate existential (\u{2203}) quantifier"
+    );
+    assert!(
+        proof.contains("witnessTests"),
+        "Witness mode should use witnessTests helper"
+    );
+    assert!(
+        proof.contains("by decide"),
+        "Witness mode should use decide tactic"
+    );
 }
 
 #[test]
@@ -1185,11 +1320,26 @@ fn fail_once_proof_mode_generates_existential_theorem() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("\u{2203}"), "Proof mode should generate existential (\u{2203}) quantifier");
-    assert!(proof.contains("proveTests"), "Proof mode should use proveTests helper");
-    assert!(proof.contains("= false"), "Existential proof for SucceedImmediately should assert = false");
-    assert!(proof.contains("by blaster"), "Proof mode should use blaster tactic");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("\u{2203}"),
+        "Proof mode should generate existential (\u{2203}) quantifier"
+    );
+    assert!(
+        proof.contains("proveTests"),
+        "Proof mode should use proveTests helper"
+    );
+    assert!(
+        proof.contains("= false"),
+        "Existential proof for SucceedImmediately should assert = false"
+    );
+    assert!(
+        proof.contains("by blaster"),
+        "Proof mode should use blaster tactic"
+    );
 }
 
 #[test]
@@ -1214,10 +1364,22 @@ fn fail_once_void_witness_mode_generates_existential_error_theorem() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("\u{2203}"), "Witness mode should generate existential (\u{2203}) quantifier");
-    assert!(proof.contains("proveTestsError"), "Void witness mode should use proveTestsError helper");
-    assert!(proof.contains("by decide"), "Witness mode should use decide tactic");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("\u{2203}"),
+        "Witness mode should generate existential (\u{2203}) quantifier"
+    );
+    assert!(
+        proof.contains("proveTestsError"),
+        "Void witness mode should use proveTestsError helper"
+    );
+    assert!(
+        proof.contains("by decide"),
+        "Witness mode should use decide tactic"
+    );
 }
 
 #[test]
@@ -1252,17 +1414,46 @@ fn fail_once_tuple_witness_mode_uses_conjunction_between_bounds() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("\u{2203}"), "Existential tuple witness should use \u{2203} quantifier");
-    assert!(proof.contains("(a : Integer)"), "Should bind first variable as Integer");
-    assert!(proof.contains("(b : Integer)"), "Should bind second variable as Integer");
-    assert!(proof.contains("\u{2227}"), "Tuple existential should use conjunction (\u{2227}) between bounds");
-    assert!(!proof.contains("\u{2192}"), "Existential mode should not contain implication (\u{2192})");
-    assert!(proof.contains("witnessTests"), "Witness mode should use witnessTests helper");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("\u{2203}"),
+        "Existential tuple witness should use \u{2203} quantifier"
+    );
+    assert!(
+        proof.contains("(a : Integer)"),
+        "Should bind first variable as Integer"
+    );
+    assert!(
+        proof.contains("(b : Integer)"),
+        "Should bind second variable as Integer"
+    );
+    assert!(
+        proof.contains("\u{2227}"),
+        "Tuple existential should use conjunction (\u{2227}) between bounds"
+    );
+    assert!(
+        !proof.contains("\u{2192}"),
+        "Existential mode should not contain implication (\u{2192})"
+    );
+    assert!(
+        proof.contains("witnessTests"),
+        "Witness mode should use witnessTests helper"
+    );
 }
 
 #[test]
-fn fail_once_data_witness_mode_uses_valid_data_constructor() {
+fn fail_once_data_witness_mode_errors_without_constructor_domain() {
+    // Historically this test asserted that witness-mode Data with
+    // `SucceedImmediately` generated a proof using a valid Data constructor
+    // (via sampled-domain fallback). The semantics cutover disabled implicit
+    // sampled-domain proof generation, so this test now pins the error-path
+    // behavior: without a constructor domain (Any constraint, opaque semantics)
+    // the Data fail-once witness path must surface a FallbackRequired error
+    // referencing the test's opaque semantics, not silently produce an invalid
+    // witness or misclassify as UnsupportedShape.
     let mut test = make_test_with_type(
         "my_module",
         "test_data_exist",
@@ -1282,11 +1473,26 @@ fn fail_once_data_witness_mode_uses_valid_data_constructor() {
         ExistentialMode::Witness,
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
+    let err = result.expect_err("Any/Opaque Data semantics should not produce a direct proof");
+    let message = err.to_string();
+    assert!(
+        message.contains("test_data_exist") && message.contains("opaque"),
+        "Error should name the opaque Data fail-once test, got: {message}"
+    );
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Opaque Data witness mode (fail-once) without constructor domain",
+    );
 }
 
 #[test]
-fn fail_once_unsupported_witness_mode_uses_valid_data_constructor() {
+fn fail_once_unsupported_witness_mode_errors_without_shape_domain() {
+    // Paired with `fail_once_data_witness_mode_errors_without_constructor_domain`.
+    // Previously verified that unsupported ADT + witness mode emitted a proof
+    // with a valid Data constructor via sampled-domain fallback; the semantics
+    // cutover disabled that implicit path, so we pin the error category here
+    // to guard against silent reclassification to UnsupportedShape.
     let mut test = make_test_with_type(
         "my_module",
         "test_adt_exist",
@@ -1306,7 +1512,18 @@ fn fail_once_unsupported_witness_mode_uses_valid_data_constructor() {
         ExistentialMode::Witness,
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
+    let err = result
+        .expect_err("Unsupported type with opaque semantics should not produce a direct proof");
+    let message = err.to_string();
+    assert!(
+        message.contains("test_adt_exist") && message.contains("opaque"),
+        "Error should name the unsupported-ADT fail-once test and flag opaque semantics, got: {message}"
+    );
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Unsupported ADT witness mode (fail-once) without constructor domain",
+    );
 }
 
 #[test]
@@ -1338,10 +1555,22 @@ fn fail_once_tuple_with_data_witness_uses_valid_data_constructor() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("\u{2203}"), "Existential tuple+data witness should use \u{2203} quantifier");
-    assert!(proof.contains("(a : Integer)"), "Should bind Int component as Integer");
-    assert!(proof.contains("Data"), "Should reference Data type for the Data component");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("\u{2203}"),
+        "Existential tuple+data witness should use \u{2203} quantifier"
+    );
+    assert!(
+        proof.contains("(a : Integer)"),
+        "Should bind Int component as Integer"
+    );
+    assert!(
+        proof.contains("Data"),
+        "Should reference Data type for the Data component"
+    );
 }
 
 #[test]
@@ -1371,8 +1600,14 @@ fn fail_once_list_of_data_witness_uses_valid_data_constructor() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("\u{2203}"), "List existential witness should use \u{2203} quantifier");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("\u{2203}"),
+        "List existential witness should use \u{2203} quantifier"
+    );
     assert!(proof.contains("List"), "Should quantify over a List type");
     assert!(proof.contains("Data"), "List element type should be Data");
 }
@@ -1404,8 +1639,14 @@ fn fail_once_list_bool_exact_witness_uses_exact_element() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("\u{2203}"), "List Bool exact existential should use \u{2203} quantifier");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("\u{2203}"),
+        "List Bool exact existential should use \u{2203} quantifier"
+    );
     assert!(proof.contains("List"), "Should quantify over a List type");
     assert!(proof.contains("Bool"), "List element type should be Bool");
 }
@@ -1428,11 +1669,19 @@ fn void_return_mode_generates_halt_theorem() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("proveTestsHalt"), "Void return mode should use proveTestsHalt helper");
-    assert!(proof.contains("\u{2200}"), "Universal proof should contain \u{2200} quantifier");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("proveTestsHalt"),
+        "Void return mode should use proveTestsHalt helper"
+    );
+    assert!(
+        proof.contains("\u{2200}"),
+        "Universal proof should contain \u{2200} quantifier"
+    );
 }
-
 
 #[test]
 fn void_fail_mode_generates_error_theorem() {
@@ -1456,9 +1705,18 @@ fn void_fail_mode_generates_error_theorem() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("proveTestsError"), "Void fail mode should use proveTestsError helper");
-    assert!(proof.contains("\u{2200}"), "Universal proof should contain \u{2200} quantifier");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("proveTestsError"),
+        "Void fail mode should use proveTestsError helper"
+    );
+    assert!(
+        proof.contains("\u{2200}"),
+        "Universal proof should contain \u{2200} quantifier"
+    );
 }
 
 #[test]
@@ -1480,11 +1738,23 @@ fn bool_return_mode_generates_prove_tests() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("proveTests"), "Bool mode should use proveTests helper");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("proveTests"),
+        "Bool mode should use proveTests helper"
+    );
     assert!(proof.contains("= true"), "Bool mode should assert = true");
-    assert!(proof.contains("alwaysTerminating"), "Bool mode should include termination theorem");
-    assert!(proof.contains("\u{2200}"), "Universal proof should contain \u{2200} quantifier");
+    assert!(
+        proof.contains("alwaysTerminating"),
+        "Bool mode should include termination theorem"
+    );
+    assert!(
+        proof.contains("\u{2200}"),
+        "Universal proof should contain \u{2200} quantifier"
+    );
 }
 
 fn make_test_with_type(
@@ -1522,7 +1792,7 @@ fn make_test_with_type(
 }
 
 #[test]
-fn bool_without_domain_predicate_uses_sampled_domain_fallback() {
+fn bool_without_domain_predicate_reports_fallback_required() {
     let test = make_test_with_type(
         "my_module",
         "test_bool",
@@ -1541,11 +1811,16 @@ fn bool_without_domain_predicate_uses_sampled_domain_fallback() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
+    let err = result.expect_err("Bool with opaque semantics should not produce a direct proof");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Bool without domain predicate",
+    );
 }
 
 #[test]
-fn sampled_domain_fallback_imports_fuzzer_program() {
+fn bool_any_constraint_pins_fallback_required_category() {
     let test = make_test_with_type(
         "my_module",
         "test_bool_fallback_import",
@@ -1564,12 +1839,27 @@ fn sampled_domain_fallback_imports_fuzzer_program() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
+    // Opaque fuzzers are no longer silently generated at the proof-gen layer;
+    // callers now have to opt into skip_unsupported. Pin the FallbackRequired
+    // category so a regression re-routing this through UnsupportedShape (which
+    // would still pass the coarse `is_skippable_generation_error` predicate)
+    // is caught.
+    let err = result.expect_err("Bool with opaque semantics should not produce a direct proof");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Bool Any constraint (pinned category)",
+    );
 }
 
 #[test]
-fn bool_succeed_eventually_generates_false() {
-    // SucceedEventually = `fail` keyword, body should return false
+fn bool_succeed_eventually_errors_without_domain_predicate() {
+    // Historically `bool_succeed_eventually_generates_false` asserted that a
+    // SucceedEventually (`fail` keyword) Bool test lowered to a `= false`
+    // theorem via sampled-domain fallback. The semantics cutover removed that
+    // silent fallback, so the test now pins the error-path behavior: opaque
+    // Bool semantics in SucceedEventually mode must surface as a
+    // FallbackRequired error, not be misclassified as UnsupportedShape.
     let mut test = make_test_with_type(
         "my_module",
         "test_bool_fail",
@@ -1590,7 +1880,17 @@ fn bool_succeed_eventually_generates_false() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
+    let err = result.expect_err("Bool with opaque semantics should not produce a direct proof");
+    let message = err.to_string();
+    assert!(
+        message.contains("test_bool_fail") && message.contains("opaque"),
+        "Error should name the SucceedEventually Bool test and flag opaque semantics, got: {message}"
+    );
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Bool SucceedEventually without domain predicate",
+    );
 }
 
 #[test]
@@ -1618,11 +1918,26 @@ fn tuple_int_int_generates_two_variable_theorem() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("(a : Integer)"), "Should bind first variable a as Integer");
-    assert!(proof.contains("(b : Integer)"), "Should bind second variable b as Integer");
-    assert!(proof.contains("\u{2200}"), "Universal proof should contain \u{2200} quantifier");
-    assert!(proof.contains("Data.List"), "Tuple proof should construct Data.List argument");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("(a : Integer)"),
+        "Should bind first variable a as Integer"
+    );
+    assert!(
+        proof.contains("(b : Integer)"),
+        "Should bind second variable b as Integer"
+    );
+    assert!(
+        proof.contains("\u{2200}"),
+        "Universal proof should contain \u{2200} quantifier"
+    );
+    assert!(
+        proof.contains("Data.List"),
+        "Tuple proof should construct Data.List argument"
+    );
 }
 
 #[test]
@@ -1656,13 +1971,34 @@ fn tuple_int_int_component_bounds_generate_two_ranges() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("(a : Integer)"), "Should bind first component as Integer");
-    assert!(proof.contains("(b : Integer)"), "Should bind second component as Integer");
-    assert!(proof.contains("0 <= a"), "Should contain lower bound for first component");
-    assert!(proof.contains("a <= 10"), "Should contain upper bound for first component");
-    assert!(proof.contains("20 <= b"), "Should contain lower bound for second component");
-    assert!(proof.contains("b <= 30"), "Should contain upper bound for second component");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("(a : Integer)"),
+        "Should bind first component as Integer"
+    );
+    assert!(
+        proof.contains("(b : Integer)"),
+        "Should bind second component as Integer"
+    );
+    assert!(
+        proof.contains("0 <= a"),
+        "Should contain lower bound for first component"
+    );
+    assert!(
+        proof.contains("a <= 10"),
+        "Should contain upper bound for first component"
+    );
+    assert!(
+        proof.contains("20 <= b"),
+        "Should contain lower bound for second component"
+    );
+    assert!(
+        proof.contains("b <= 30"),
+        "Should contain upper bound for second component"
+    );
 }
 
 #[test]
@@ -1688,7 +2024,12 @@ fn tuple_int_int_component_bounds_wrong_arity_uses_fallback() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "mismatched tuple arity should not produce a direct proof");
+    let err = result.expect_err("mismatched tuple arity should not produce a direct proof");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Tuple(Int,Int) with mismatched-arity tuple constraint",
+    );
 }
 
 #[test]
@@ -1711,7 +2052,12 @@ fn tuple_int_int_unknown_bounds_use_fallback() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
+    let err = result.expect_err("Any/Opaque semantics should not produce a direct proof");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Tuple(Int,Int) with unknown per-component bounds",
+    );
 }
 
 #[test]
@@ -1736,9 +2082,18 @@ fn bool_semantics_can_generate_direct_theorem_without_constraint_predicates() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("Bool"), "Bool semantics should quantify over Bool type");
-    assert!(proof.contains("boolArg"), "Bool semantics should use boolArg helper");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("Bool"),
+        "Bool semantics should quantify over Bool type"
+    );
+    assert!(
+        proof.contains("boolArg"),
+        "Bool semantics should use boolArg helper"
+    );
     assert!(proof.contains("= true"), "Bool mode should assert = true");
 }
 
@@ -1768,9 +2123,18 @@ fn int_semantics_range_takes_precedence_over_legacy_constraint_bounds() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("Integer"), "Int semantics should quantify over Integer type");
-    assert!(proof.contains("100"), "Semantics range (100..100) should take precedence over legacy constraint (0..10)");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("Integer"),
+        "Int semantics should quantify over Integer type"
+    );
+    assert!(
+        proof.contains("100"),
+        "Semantics range (100..100) should take precedence over legacy constraint (0..10)"
+    );
 }
 
 #[test]
@@ -1801,10 +2165,23 @@ fn non_state_machine_direct_generation_requires_semantics_not_legacy_constraints
         &VerificationTargetKind::default(),
     )
     .expect_err("opaque semantics must not silently reuse legacy constraint lowering");
+
+    // The cutover regression guard: error should surface the opaque semantic domain,
+    // not accept the legacy IntRange constraint as an implicit fallback.
+    let message = err.to_string();
+    assert!(
+        message.contains("opaque") || message.contains("fixture forces semantic fallback"),
+        "Error should surface the opaque semantic reason, got: {message}"
+    );
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Opaque semantics cutover (Int with legacy IntRange constraint)",
+    );
 }
 
 #[test]
-fn bytearray_without_domain_predicate_uses_sampled_domain_fallback() {
+fn bytearray_without_domain_predicate_reports_fallback_required() {
     let test = make_test_with_type(
         "my_module",
         "test_bytes",
@@ -1823,9 +2200,11 @@ fn bytearray_without_domain_predicate_uses_sampled_domain_fallback() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(
-        result.is_err(),
-        "ByteArray with opaque semantics should error without fallback"
+    let err = result.expect_err("ByteArray with opaque semantics should error without fallback");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "ByteArray without domain predicate",
     );
 }
 
@@ -1854,10 +2233,22 @@ fn bytearray_length_range_generates_direct_scalar_domain() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("ByteString"), "ByteArray type should map to ByteString in Lean");
-    assert!(proof.contains("x.length"), "Should contain length-based bounds");
-    assert!(proof.contains("bytearrayArg"), "Should use bytearrayArg helper");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("ByteString"),
+        "ByteArray type should map to ByteString in Lean"
+    );
+    assert!(
+        proof.contains("x.length"),
+        "Should contain length-based bounds"
+    );
+    assert!(
+        proof.contains("bytearrayArg"),
+        "Should use bytearrayArg helper"
+    );
 }
 
 #[test]
@@ -1882,9 +2273,18 @@ fn bytearray_exact_non_empty_generates_direct_scalar_domain() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("ByteString"), "ByteArray type should map to ByteString in Lean");
-    assert!(proof.contains("bytearrayArg"), "Should use bytearrayArg helper");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("ByteString"),
+        "ByteArray type should map to ByteString in Lean"
+    );
+    assert!(
+        proof.contains("bytearrayArg"),
+        "Should use bytearrayArg helper"
+    );
 }
 
 #[test]
@@ -1912,10 +2312,22 @@ fn string_length_range_generates_direct_scalar_domain() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("ByteString"), "String type should map to ByteString in Lean");
-    assert!(proof.contains("stringArg"), "String type should use stringArg helper");
-    assert!(proof.contains("x.length"), "Should contain length-based bounds");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("ByteString"),
+        "String type should map to ByteString in Lean"
+    );
+    assert!(
+        proof.contains("stringArg"),
+        "String type should use stringArg helper"
+    );
+    assert!(
+        proof.contains("x.length"),
+        "Should contain length-based bounds"
+    );
 }
 
 #[test]
@@ -1972,14 +2384,26 @@ fn string_exact_non_empty_generates_direct_scalar_domain() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("ByteString"), "String type should map to ByteString in Lean");
-    assert!(proof.contains("stringArg"), "String type should use stringArg helper");
-    assert!(proof.contains("consByteStringV1"), "Exact string should encode bytes via consByteStringV1");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("ByteString"),
+        "String type should map to ByteString in Lean"
+    );
+    assert!(
+        proof.contains("stringArg"),
+        "String type should use stringArg helper"
+    );
+    assert!(
+        proof.contains("consByteStringV1"),
+        "Exact string should encode bytes via consByteStringV1"
+    );
 }
 
 #[test]
-fn list_without_bounds_uses_sampled_domain_fallback() {
+fn list_without_bounds_reports_fallback_required() {
     let test = make_test_with_type(
         "my_module",
         "test_list",
@@ -1994,19 +2418,36 @@ fn list_without_bounds_uses_sampled_domain_fallback() {
     let lean_name = sanitize_lean_name("test_list");
     let lean_module = "AikenVerify.Proofs.My_module.test_list";
 
-    let result = generate_proof_file(
+    let proof = generate_proof_file(
         &test,
         &id,
         &lean_name,
         lean_module,
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
+    )
+    .expect("List<Int> with Any element should produce a direct proof via list semantics");
+
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
     );
-    assert!(result.is_ok(), "List constraint with Any element should produce a direct proof via list semantics");
+    assert!(
+        proof.contains("List Integer"),
+        "Unbounded list over Int should still quantify over List Integer"
+    );
+    assert!(
+        proof.contains("\u{2200}"),
+        "Universal theorem should contain \u{2200} quantifier"
+    );
+    assert!(
+        !proof.contains(".length <="),
+        "No max-len constraint should emit an upper-bound predicate on xs.length"
+    );
 }
 
 #[test]
-fn list_with_any_constraint_uses_sampled_domain_fallback() {
+fn list_with_any_constraint_reports_fallback_required() {
     let test = make_test_with_type(
         "my_module",
         "test_list_any",
@@ -2025,11 +2466,16 @@ fn list_with_any_constraint_uses_sampled_domain_fallback() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "should error without sampled-domain fallback");
+    let err = result.expect_err("should error without sampled-domain fallback");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "List with top-level Any constraint (opaque element-domain)",
+    );
 }
 
 #[test]
-fn list_with_unsupported_constraint_uses_sampled_domain_fallback() {
+fn list_with_unsupported_constraint_reports_fallback_required() {
     let test = make_test_with_type(
         "my_module",
         "test_list_unsupported",
@@ -2050,7 +2496,12 @@ fn list_with_unsupported_constraint_uses_sampled_domain_fallback() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "should error without sampled-domain fallback");
+    let err = result.expect_err("should error without sampled-domain fallback");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "List with top-level Unsupported constraint",
+    );
 }
 
 #[test]
@@ -2071,15 +2522,33 @@ fn list_unsupported_element_with_only_zero_lower_bound_uses_fallback() {
     let lean_name = sanitize_lean_name("test_list_data_min_zero");
     let lean_module = "AikenVerify.Proofs.My_module.test_list_data_min_zero";
 
-    let result = generate_proof_file(
+    let proof = generate_proof_file(
         &test,
         &id,
         &lean_name,
         lean_module,
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
+    )
+    .expect("List constraint with Any element should produce a direct proof via list semantics");
+
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
     );
-    assert!(result.is_ok(), "List constraint with Any element should produce a direct proof via list semantics");
+    assert!(
+        proof.contains("List Data"),
+        "Unsupported element type should be lowered to List Data, got:\n{proof}"
+    );
+    assert!(
+        proof.contains("\u{2200}"),
+        "Universal theorem should contain \u{2200} quantifier"
+    );
+    // min_len = 0 should emit no effective length precondition (0 <= len is trivial).
+    assert!(
+        !proof.contains("xs.length <="),
+        "min_len=0 without max_len should not emit a length upper-bound"
+    );
 }
 
 #[test]
@@ -2104,14 +2573,23 @@ fn unsupported_with_constructor_tags_generates_direct_data_theorem() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("Data"), "Unsupported type should be quantified as Data");
-    assert!(proof.contains("Data.Constr"), "Constructor tag domain should use Data.Constr match");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("Data"),
+        "Unsupported type should be quantified as Data"
+    );
+    assert!(
+        proof.contains("Data.Constr"),
+        "Constructor tag domain should use Data.Constr match"
+    );
     assert!(proof.contains("dataArg"), "Should use dataArg helper");
 }
 
 #[test]
-fn int_with_unsupported_constraint_uses_sampled_domain_fallback() {
+fn int_with_unsupported_constraint_reports_fallback_required() {
     let test = make_test_with_type(
         "my_module",
         "test_int_unsupported",
@@ -2132,7 +2610,12 @@ fn int_with_unsupported_constraint_uses_sampled_domain_fallback() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "Unsupported constraint should not produce a direct proof");
+    let err = result.expect_err("Unsupported constraint should not produce a direct proof");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Int with top-level Unsupported constraint",
+    );
 }
 
 #[test]
@@ -2165,10 +2648,22 @@ fn universal_int_and_with_unsupported_salvages_supported_bounds() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("Integer"), "Should quantify over Integer type");
-    assert!(proof.contains("1 <= x"), "Salvaged bounds should include min bound");
-    assert!(proof.contains("x <= 9"), "Salvaged bounds should include max bound");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("Integer"),
+        "Should quantify over Integer type"
+    );
+    assert!(
+        proof.contains("1 <= x"),
+        "Salvaged bounds should include min bound"
+    );
+    assert!(
+        proof.contains("x <= 9"),
+        "Salvaged bounds should include max bound"
+    );
 }
 
 #[test]
@@ -2192,15 +2687,36 @@ fn existential_int_and_with_unsupported_uses_sampled_fallback() {
     let lean_name = sanitize_lean_name("test_int_partial_salvage_existential");
     let lean_module = "AikenVerify.Proofs.My_module.test_int_partial_salvage_existential";
 
-    let result = generate_proof_file(
+    let proof = generate_proof_file(
         &test,
         &id,
         &lean_name,
         lean_module,
         ExistentialMode::Witness,
         &VerificationTargetKind::default(),
+    )
+    .expect("salvageable IntRange in existential mode should produce a direct proof");
+
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
     );
-    assert!(result.is_ok(), "salvageable IntRange in existential mode should produce a direct proof");
+    assert!(
+        proof.contains("\u{2203}"),
+        "Existential (witness) mode should use \u{2203} quantifier"
+    );
+    assert!(
+        proof.contains("Integer"),
+        "Should quantify over Integer type"
+    );
+    assert!(
+        proof.contains("1 <= x"),
+        "Salvaged min bound from AND should appear in existential proof"
+    );
+    assert!(
+        proof.contains("x <= 9"),
+        "Salvaged max bound from AND should appear in existential proof"
+    );
 }
 
 #[test]
@@ -2219,15 +2735,28 @@ fn list_data_without_domain_predicate_uses_fuzzer_domain_fallback() {
     let lean_name = sanitize_lean_name("test_list_data_unconstrained");
     let lean_module = "AikenVerify.Proofs.My_module.test_list_data_unconstrained";
 
-    let result = generate_proof_file(
+    let proof = generate_proof_file(
         &test,
         &id,
         &lean_name,
         lean_module,
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
+    )
+    .expect("List<Data> with Any element should produce a direct proof via list semantics");
+
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
     );
-    assert!(result.is_ok(), "List constraint with Any element should produce a direct proof via list semantics");
+    assert!(
+        proof.contains("List Data"),
+        "List<Data> without bounds should be lowered to List Data, got:\n{proof}"
+    );
+    assert!(
+        proof.contains("\u{2200}"),
+        "Universal theorem should contain \u{2200} quantifier"
+    );
 }
 
 #[test]
@@ -2248,15 +2777,30 @@ fn list_unsupported_element_without_domain_predicate_uses_fuzzer_domain_fallback
     let lean_name = sanitize_lean_name("test_list_transaction_like");
     let lean_module = "AikenVerify.Proofs.My_module.test_list_transaction_like";
 
-    let result = generate_proof_file(
+    let proof = generate_proof_file(
         &test,
         &id,
         &lean_name,
         lean_module,
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
+    )
+    .expect(
+        "List with unsupported element type should still produce a direct proof via list semantics",
     );
-    assert!(result.is_ok(), "List constraint with Any element should produce a direct proof via list semantics");
+
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("List Data"),
+        "Unsupported element type (Transaction) should be erased to List Data, got:\n{proof}"
+    );
+    assert!(
+        proof.contains("\u{2200}"),
+        "Universal theorem should contain \u{2200} quantifier"
+    );
 }
 
 #[test]
@@ -2277,20 +2821,33 @@ fn list_data_fallback_supports_existential_mode() {
     let lean_name = sanitize_lean_name("test_list_data_existential");
     let lean_module = "AikenVerify.Proofs.My_module.test_list_data_existential";
 
-    let result = generate_proof_file(
+    let proof = generate_proof_file(
         &test,
         &id,
         &lean_name,
         lean_module,
         ExistentialMode::Witness,
         &VerificationTargetKind::default(),
-    );
+    )
     // List<Data> with list semantics now generates a direct proof
-    assert!(result.is_ok(), "List<Data> with existential mode should generate direct proof");
+    .expect("List<Data> with existential mode should generate direct proof");
+
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("\u{2203}"),
+        "Witness mode should emit \u{2203} quantifier for List<Data>"
+    );
+    assert!(
+        proof.contains("List Data"),
+        "Should quantify over List Data"
+    );
 }
 
 #[test]
-fn data_without_domain_predicate_uses_sampled_domain_fallback() {
+fn data_without_domain_predicate_reports_fallback_required() {
     let test = make_test_with_type(
         "my_module",
         "test_data",
@@ -2309,7 +2866,12 @@ fn data_without_domain_predicate_uses_sampled_domain_fallback() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
+    let err = result.expect_err("Any/Opaque Data semantics should not produce a direct proof");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Plain Data without domain predicate",
+    );
 }
 
 #[test]
@@ -2332,7 +2894,12 @@ fn tuple_data_data_without_predicates_uses_fallback() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
+    let err = result.expect_err("Any/Opaque semantics should not produce a direct proof");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Tuple(Data,Data) without predicates",
+    );
 }
 
 #[test]
@@ -2359,7 +2926,12 @@ fn tuple_data_data_data_without_predicates_uses_fallback() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
+    let err = result.expect_err("Any/Opaque semantics should not produce a direct proof");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Tuple(Data,Data,Data) without predicates",
+    );
 }
 
 #[test]
@@ -2390,9 +2962,18 @@ fn tuple_mixed_int_bool_generates_theorem_with_bounds() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("Integer"), "Should contain Integer type for Int component");
-    assert!(proof.contains("Bool"), "Should contain Bool type for Bool component");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("Integer"),
+        "Should contain Integer type for Int component"
+    );
+    assert!(
+        proof.contains("Bool"),
+        "Should contain Bool type for Bool component"
+    );
     assert!(proof.contains("0 <= a"), "Should contain Int bounds");
 }
 
@@ -2422,8 +3003,14 @@ fn list_semantics_can_generate_direct_theorem_without_constraint_extraction() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("List"), "List semantics should quantify over List type");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("List"),
+        "List semantics should quantify over List type"
+    );
     assert!(proof.contains("Bool"), "List element type should be Bool");
 }
 
@@ -2450,7 +3037,12 @@ fn tuple_with_nested_list_element_uses_fallback() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
+    let err = result.expect_err("Any/Opaque semantics should not produce a direct proof");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Tuple(Int, List<Int>) without per-component constraints",
+    );
 }
 
 #[test]
@@ -2481,15 +3073,30 @@ fn tuple_of_lists_with_unsupported_elements_uses_fallback() {
     let lean_name = sanitize_lean_name("test_tuple_list_domains");
     let lean_module = "AikenVerify.Proofs.My_module.test_tuple_list_domains";
 
-    let result = generate_proof_file(
+    let proof = generate_proof_file(
         &test,
         &id,
         &lean_name,
         lean_module,
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
+    )
+    .expect("Tuple of List constraints with Any element should produce a direct proof via list semantics");
+
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
     );
-    assert!(result.is_ok(), "Tuple of List constraints with Any element should produce a direct proof via list semantics");
+    // Both list components must be lowered to List Data
+    let list_data_count = proof.matches("List Data").count();
+    assert!(
+        list_data_count >= 2,
+        "Tuple of two lists with unsupported elements should contain two `List Data` bindings, got {list_data_count} in:\n{proof}"
+    );
+    assert!(
+        proof.contains("\u{2200}"),
+        "Universal theorem should contain \u{2200} quantifier"
+    );
 }
 
 #[test]
@@ -2590,14 +3197,32 @@ fn map2_tuple_decomposition_is_cartesian_product() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("(a : Integer)"), "Should bind first element as Integer");
-    assert!(proof.contains("(b : Integer)"), "Should bind second element as Integer");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("(a : Integer)"),
+        "Should bind first element as Integer"
+    );
+    assert!(
+        proof.contains("(b : Integer)"),
+        "Should bind second element as Integer"
+    );
     // Each element is independently bounded (Cartesian product, no cross-element constraints)
-    assert!(proof.contains("0 <= a"), "Should bound first element independently");
-    assert!(proof.contains("20 <= b"), "Should bound second element independently");
+    assert!(
+        proof.contains("0 <= a"),
+        "Should bound first element independently"
+    );
+    assert!(
+        proof.contains("20 <= b"),
+        "Should bound second element independently"
+    );
     // Preconditions use implication (→) between independent components
-    assert!(proof.contains("\u{2192}"), "Independent Cartesian bounds should be joined by implication");
+    assert!(
+        proof.contains("\u{2192}"),
+        "Independent Cartesian bounds should be joined by implication"
+    );
 }
 
 #[test]
@@ -3511,7 +4136,7 @@ fn check_tool_version_with_floor_rejects_unparseable_output() {
 
 #[test]
 fn generate_lakefile_uses_blaster_rev() {
-    let lakefile = generate_lakefile("abc123def", None);
+    let lakefile = generate_lakefile("abc123def", DEFAULT_PLUTUS_CORE_REV, None);
     assert!(
         lakefile.contains(r#"@ "abc123def""#),
         "Lakefile should pin Blaster to the given rev, got:\n{lakefile}"
@@ -3524,7 +4149,7 @@ fn generate_lakefile_uses_blaster_rev() {
 
 #[test]
 fn generate_lakefile_default_rev() {
-    let lakefile = generate_lakefile(DEFAULT_BLASTER_REV, None);
+    let lakefile = generate_lakefile(DEFAULT_BLASTER_REV, DEFAULT_PLUTUS_CORE_REV, None);
     assert!(
         lakefile.contains(&format!(r#"@ "{DEFAULT_BLASTER_REV}""#)),
         "Lakefile should use default rev"
@@ -3532,29 +4157,48 @@ fn generate_lakefile_default_rev() {
 }
 
 #[test]
-fn generate_lakefile_uses_resolved_plutus_core_path() {
+fn generate_lakefile_uses_local_path_when_plutus_core_dir_set() {
     let tmp = tempfile::tempdir().unwrap();
     let pc = tmp.path().join("PlutusCore");
     fs::create_dir_all(&pc).unwrap();
-    let lakefile = generate_lakefile(DEFAULT_BLASTER_REV, Some(&pc));
-    let expected = format!(
-        "require PlutusCore from\n  \"{}\"",
-        pc.display()
-    );
+    let lakefile = generate_lakefile(DEFAULT_BLASTER_REV, DEFAULT_PLUTUS_CORE_REV, Some(&pc));
+    let expected = format!("require PlutusCore from\n  \"{}\"", pc.display());
     assert!(
         lakefile.contains(&expected),
         "Lakefile should reference the explicit PlutusCore path, got:\n{lakefile}"
     );
+    assert!(
+        !lakefile.contains("require PlutusCore from git"),
+        "Lakefile should not use git for PlutusCore when local path is set, got:\n{lakefile}"
+    );
 }
 
 #[test]
-fn generate_lakefile_uses_placeholder_when_no_path_configured() {
-    // When no explicit path and no env var, the lakefile gets the placeholder.
+fn generate_lakefile_uses_git_for_plutus_core_by_default() {
+    // When no explicit path and no env var, PlutusCore comes from git.
     unsafe { std::env::remove_var("PLUTUS_CORE_DIR") };
-    let lakefile = generate_lakefile(DEFAULT_BLASTER_REV, None);
+    let lakefile = generate_lakefile(DEFAULT_BLASTER_REV, DEFAULT_PLUTUS_CORE_REV, None);
     assert!(
-        lakefile.contains("require PlutusCore from\n  \"PlutusCore\""),
-        "Lakefile should use placeholder path when nothing is configured, got:\n{lakefile}"
+        lakefile.contains("require PlutusCore from git"),
+        "Lakefile should use git for PlutusCore by default, got:\n{lakefile}"
+    );
+    assert!(
+        lakefile.contains("PlutusCoreBlaster"),
+        "Lakefile should reference the PlutusCoreBlaster repo, got:\n{lakefile}"
+    );
+    assert!(
+        lakefile.contains(&format!(r#"@ "{DEFAULT_PLUTUS_CORE_REV}""#)),
+        "Lakefile should pin PlutusCore to the default rev, got:\n{lakefile}"
+    );
+}
+
+#[test]
+fn generate_lakefile_uses_custom_plutus_core_rev() {
+    unsafe { std::env::remove_var("PLUTUS_CORE_DIR") };
+    let lakefile = generate_lakefile(DEFAULT_BLASTER_REV, "abc123", None);
+    assert!(
+        lakefile.contains(r#"@ "abc123""#),
+        "Lakefile should pin PlutusCore to the custom rev, got:\n{lakefile}"
     );
 }
 
@@ -3713,12 +4357,16 @@ fn doctor_report_serializes_to_json() {
             error: None,
         },
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         all_ok: true,
         capabilities: capabilities(),
     };
     let json = serde_json::to_string(&report).unwrap();
     assert!(json.contains("\"all_ok\":true"));
     assert!(json.contains(&format!("\"blaster_rev\":\"{DEFAULT_BLASTER_REV}\"")));
+    assert!(json.contains(&format!(
+        "\"plutus_core_rev\":\"{DEFAULT_PLUTUS_CORE_REV}\""
+    )));
     assert!(json.contains("\"supported_test_kinds\""));
     assert!(json.contains("\"target_modes\""));
 }
@@ -4419,7 +5067,7 @@ fn export_path_preserves_nested_fuzzer_data_schema() {
 }
 
 #[test]
-fn export_path_preserves_state_machine_transition_semantics() {
+fn export_path_keeps_state_machine_transition_semantics_opaque() {
     let tmp = tempfile::tempdir().unwrap();
     write_verify_state_machine_semantics_fixture(tmp.path());
 
@@ -4591,18 +5239,24 @@ fn export_path_populates_validator_metadata_for_cross_module_module_select_calls
         "cross-module validator metadata should include compiled handler program"
     );
 
-    let result = preflight_validate_test(
+    assert_preflight_fallback_required(
+        preflight_validate_test(
             test,
             ExistentialMode::default(),
             &VerificationTargetKind::ValidatorHandler,
+        ),
+        "cross-module handler preflight (ValidatorHandler target)",
+        "foo_mint_cross_module",
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
-    let result = preflight_validate_test(
+    assert_preflight_fallback_required(
+        preflight_validate_test(
             test,
             ExistentialMode::default(),
             &VerificationTargetKind::Equivalence,
+        ),
+        "cross-module handler preflight (Equivalence target)",
+        "foo_mint_cross_module",
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
 }
 
 #[test]
@@ -4638,18 +5292,24 @@ fn export_path_populates_validator_metadata_via_helper_functions() {
         validator_target.handler_program.is_some(),
         "helper-routed validator tests should keep compiled handler program"
     );
-    let result = preflight_validate_test(
+    assert_preflight_fallback_required(
+        preflight_validate_test(
             test,
             ExistentialMode::default(),
             &VerificationTargetKind::ValidatorHandler,
+        ),
+        "helper-routed preflight (ValidatorHandler target)",
+        "foo_mint_via_helper",
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
-    let result = preflight_validate_test(
+    assert_preflight_fallback_required(
+        preflight_validate_test(
             test,
             ExistentialMode::default(),
             &VerificationTargetKind::Equivalence,
+        ),
+        "helper-routed preflight (Equivalence target)",
+        "foo_mint_via_helper",
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
 }
 
 #[test]
@@ -4685,18 +5345,24 @@ fn export_path_populates_validator_metadata_via_local_alias_arguments() {
         validator_target.handler_program.is_some(),
         "local-alias-routed validator tests should keep compiled handler program"
     );
-    let result = preflight_validate_test(
+    assert_preflight_fallback_required(
+        preflight_validate_test(
             test,
             ExistentialMode::default(),
             &VerificationTargetKind::ValidatorHandler,
+        ),
+        "local-alias preflight (ValidatorHandler target)",
+        "foo_mint_via_local_alias",
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
-    let result = preflight_validate_test(
+    assert_preflight_fallback_required(
+        preflight_validate_test(
             test,
             ExistentialMode::default(),
             &VerificationTargetKind::Equivalence,
+        ),
+        "local-alias preflight (Equivalence target)",
+        "foo_mint_via_local_alias",
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
 }
 
 #[test]
@@ -4732,18 +5398,24 @@ fn export_path_populates_validator_metadata_via_local_callee_aliases() {
         validator_target.handler_program.is_some(),
         "local-callee-alias-routed validator tests should keep compiled handler program"
     );
-    let result = preflight_validate_test(
+    assert_preflight_fallback_required(
+        preflight_validate_test(
             test,
             ExistentialMode::default(),
             &VerificationTargetKind::ValidatorHandler,
+        ),
+        "local-callee-alias preflight (ValidatorHandler target)",
+        "foo_mint_via_local_callee_alias",
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
-    let result = preflight_validate_test(
+    assert_preflight_fallback_required(
+        preflight_validate_test(
             test,
             ExistentialMode::default(),
             &VerificationTargetKind::Equivalence,
+        ),
+        "local-callee-alias preflight (Equivalence target)",
+        "foo_mint_via_local_callee_alias",
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
 }
 
 #[test]
@@ -4779,18 +5451,24 @@ fn export_path_populates_validator_metadata_via_tuple_destructured_assignments()
         validator_target.handler_program.is_some(),
         "tuple-destructuring-routed validator tests should keep compiled handler program"
     );
-    let result = preflight_validate_test(
+    assert_preflight_fallback_required(
+        preflight_validate_test(
             test,
             ExistentialMode::default(),
             &VerificationTargetKind::ValidatorHandler,
+        ),
+        "tuple-destructure preflight (ValidatorHandler target)",
+        "foo_mint_via_tuple_destructure",
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
-    let result = preflight_validate_test(
+    assert_preflight_fallback_required(
+        preflight_validate_test(
             test,
             ExistentialMode::default(),
             &VerificationTargetKind::Equivalence,
+        ),
+        "tuple-destructure preflight (Equivalence target)",
+        "foo_mint_via_tuple_destructure",
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
 }
 
 #[test]
@@ -4829,23 +5507,21 @@ fn export_path_does_not_infer_validator_metadata_for_control_flow_branch_calls()
             test.validator_target.is_none(),
             "{context} should not export validator metadata from control-flow-dependent calls"
         );
-        assert!(
+        assert_preflight_missing_validator_metadata(
             preflight_validate_test(
                 test,
                 ExistentialMode::default(),
                 &VerificationTargetKind::ValidatorHandler,
-            )
-            .is_err(),
-            "{context} should fail validator-target preflight without validator metadata"
+            ),
+            &format!("{context} validator-target preflight"),
         );
-        assert!(
+        assert_preflight_missing_validator_metadata(
             preflight_validate_test(
                 test,
                 ExistentialMode::default(),
                 &VerificationTargetKind::Equivalence,
-            )
-            .is_err(),
-            "{context} should fail equivalence preflight without validator metadata"
+            ),
+            &format!("{context} equivalence preflight"),
         );
     }
 }
@@ -4918,30 +5594,42 @@ fn export_path_populates_validator_metadata_for_when_and_if_is_shadowed_argument
         "if-is argument substitution should ignore outer aliases for names rebound by the branch pattern"
     );
 
-    let result = preflight_validate_test(
+    assert_preflight_fallback_required(
+        preflight_validate_test(
             when_shadowed,
             ExistentialMode::default(),
             &VerificationTargetKind::ValidatorHandler,
+        ),
+        "when-shadowed-argument preflight (ValidatorHandler target)",
+        "foo_mint_via_when_shadowed_argument",
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
-    let result = preflight_validate_test(
+    assert_preflight_fallback_required(
+        preflight_validate_test(
             when_shadowed,
             ExistentialMode::default(),
             &VerificationTargetKind::Equivalence,
+        ),
+        "when-shadowed-argument preflight (Equivalence target)",
+        "foo_mint_via_when_shadowed_argument",
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
-    let result = preflight_validate_test(
+    assert_preflight_fallback_required(
+        preflight_validate_test(
             if_is_shadowed,
             ExistentialMode::default(),
             &VerificationTargetKind::ValidatorHandler,
+        ),
+        "if-is-shadowed-argument preflight (ValidatorHandler target)",
+        "foo_mint_via_if_is_shadowed_argument",
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
-    let result = preflight_validate_test(
+    assert_preflight_fallback_required(
+        preflight_validate_test(
             if_is_shadowed,
             ExistentialMode::default(),
             &VerificationTargetKind::Equivalence,
+        ),
+        "if-is-shadowed-argument preflight (Equivalence target)",
+        "foo_mint_via_if_is_shadowed_argument",
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
 }
 
 #[test]
@@ -5073,19 +5761,18 @@ fn export_tests_output_generates_validator_and_equivalence_workspaces() {
             out_dir: out.path().to_path_buf(),
             cek_budget: 20_000,
             blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+            plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
             existential_mode: ExistentialMode::default(),
             target: target.clone(),
             plutus_core_dir: None,
         };
 
-        let manifest = generate_lean_workspace(
-            &validator_target_tests,
-            &config,
-            true,
-        )
-        .unwrap_or_else(|e| {
-            panic!("workspace generation should succeed for --target {target} (with skips): {e}")
-        });
+        let manifest = generate_lean_workspace(&validator_target_tests, &config, true)
+            .unwrap_or_else(|e| {
+                panic!(
+                    "workspace generation should succeed for --target {target} (with skips): {e}"
+                )
+            });
 
         // Opaque fuzzers may be skipped; check that at least one entry exists
         if manifest.tests.is_empty() {
@@ -5134,11 +5821,16 @@ fn validator_target_mode_errors_without_metadata() {
         ExistentialMode::default(),
         &VerificationTargetKind::ValidatorHandler,
     );
-    assert!(result.is_err());
-    let err = result.unwrap_err().to_string();
+    let err = result.expect_err("validator target without metadata should fail");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::UnsupportedShape,
+        "ValidatorHandler target without validator_target metadata",
+    );
+    let err_text = err.to_string();
     assert!(
-        err.contains("no validator target metadata"),
-        "Should error about missing validator_target, got: {err}"
+        err_text.contains("no validator target metadata"),
+        "Should error about missing validator_target, got: {err_text}"
     );
 }
 
@@ -5159,17 +5851,28 @@ fn validator_mode_accepts_property_target_kind_when_metadata_exists() {
     let lean_name = sanitize_lean_name("test_target_metadata");
     let lean_module = "AikenVerify.Proofs.My_module.test_target_metadata";
 
-    let result = generate_proof_file(
+    let proof = generate_proof_file(
         &test,
         &id,
         &lean_name,
         lean_module,
         ExistentialMode::default(),
         &VerificationTargetKind::ValidatorHandler,
+    )
+    .expect("Validator mode should use validator metadata instead of strict target_kind matching");
+
+    assert!(
+        proof.contains("theorem "),
+        "Validator-mode proof should still produce a theorem"
+    );
+    // Validator mode must reference the handler program (not just the property-wrapper program).
+    assert!(
+        proof.contains("handler_prog_"),
+        "Validator-mode proof should import a handler_prog_* program binding, got:\n{proof}"
     );
     assert!(
-        result.is_ok(),
-        "Validator mode should use validator metadata instead of strict target_kind matching"
+        proof.contains("_handler.cbor"),
+        "Validator-mode proof should point to a _handler.cbor artifact, got:\n{proof}"
     );
 }
 
@@ -5200,10 +5903,22 @@ fn validator_target_mode_uses_handler_prog() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("handler_prog"), "Validator handler mode should use handler program");
-    assert!(proof.contains("#import_uplc handler_prog"), "Should import the handler UPLC program");
-    assert!(proof.contains("_handler.cbor"), "Handler CBOR file should be imported");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("handler_prog"),
+        "Validator handler mode should use handler program"
+    );
+    assert!(
+        proof.contains("#import_uplc handler_prog"),
+        "Should import the handler UPLC program"
+    );
+    assert!(
+        proof.contains("_handler.cbor"),
+        "Handler CBOR file should be imported"
+    );
 }
 
 #[test]
@@ -5233,10 +5948,22 @@ fn equivalence_target_mode_generates_equivalence_theorem() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("_equivalence"), "Equivalence mode should generate an equivalence theorem");
-    assert!(proof.contains("#import_uplc handler_prog"), "Should import both the original and handler programs");
-    assert!(proof.contains("= proveTests handler_prog"), "Equivalence theorem should assert equal results between programs");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("_equivalence"),
+        "Equivalence mode should generate an equivalence theorem"
+    );
+    assert!(
+        proof.contains("#import_uplc handler_prog"),
+        "Should import both the original and handler programs"
+    );
+    assert!(
+        proof.contains("= proveTests handler_prog"),
+        "Equivalence theorem should assert equal results between programs"
+    );
 }
 
 #[test]
@@ -5307,7 +6034,12 @@ fn equivalence_target_fallback_uses_non_vacuous_void_error_goal() {
         ExistentialMode::default(),
         &VerificationTargetKind::Equivalence,
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
+    let err = result.expect_err("Any/Opaque semantics should not produce a direct proof");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Equivalence fallback on opaque Data (Void SucceedEventually)",
+    );
 }
 
 #[test]
@@ -5342,7 +6074,12 @@ fn equivalence_target_fallback_stays_universal_in_fail_once_mode() {
         ExistentialMode::default(),
         &VerificationTargetKind::Equivalence,
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
+    let err = result.expect_err("Any/Opaque semantics should not produce a direct proof");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Equivalence fallback in fail-once mode (opaque Data)",
+    );
 }
 
 #[test]
@@ -5379,24 +6116,25 @@ fn verification_target_kind_display() {
 }
 
 #[test]
-fn validate_blaster_rev_accepts_valid_inputs() {
-    assert!(validate_blaster_rev("main").is_ok());
-    assert!(validate_blaster_rev("abc123def").is_ok());
-    assert!(validate_blaster_rev("v1.2.3").is_ok());
-    assert!(validate_blaster_rev("feature/my-branch").is_ok());
-    assert!(validate_blaster_rev("my_tag_1.0").is_ok());
+fn validate_git_rev_accepts_valid_inputs() {
+    assert!(validate_git_rev("main", "blaster-rev").is_ok());
+    assert!(validate_git_rev("abc123def", "blaster-rev").is_ok());
+    assert!(validate_git_rev("v1.2.3", "plutus-core-rev").is_ok());
+    assert!(validate_git_rev("feature/my-branch", "plutus-core-rev").is_ok());
+    assert!(validate_git_rev("my_tag_1.0", "blaster-rev").is_ok());
 }
 
 #[test]
-fn validate_blaster_rev_rejects_empty() {
-    assert!(validate_blaster_rev("").is_err());
+fn validate_git_rev_rejects_empty() {
+    assert!(validate_git_rev("", "blaster-rev").is_err());
+    assert!(validate_git_rev("", "plutus-core-rev").is_err());
 }
 
 #[test]
-fn validate_blaster_rev_rejects_injection() {
-    assert!(validate_blaster_rev("main\" ; rm -rf /").is_err());
-    assert!(validate_blaster_rev("rev\nmalicious").is_err());
-    assert!(validate_blaster_rev("rev`cmd`").is_err());
+fn validate_git_rev_rejects_injection() {
+    assert!(validate_git_rev("main\" ; rm -rf /", "blaster-rev").is_err());
+    assert!(validate_git_rev("rev\nmalicious", "plutus-core-rev").is_err());
+    assert!(validate_git_rev("rev`cmd`", "blaster-rev").is_err());
 }
 
 #[test]
@@ -5678,6 +6416,7 @@ fn skip_unsupported_collects_skipped_tests() {
         out_dir: tmp.path().to_path_buf(),
         cek_budget: 20000,
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
         plutus_core_dir: None,
@@ -5691,9 +6430,12 @@ fn skip_unsupported_collects_skipped_tests() {
     ]);
     unsupported.constraint = FuzzerConstraint::Any;
 
-    let manifest =
-        generate_lean_workspace(&[unsupported], &config, true).unwrap();
-    assert_eq!(manifest.skipped.len(), 1, "mismatched type/semantics should be skipped");
+    let manifest = generate_lean_workspace(&[unsupported], &config, true).unwrap();
+    assert_eq!(
+        manifest.skipped.len(),
+        1,
+        "mismatched type/semantics should be skipped"
+    );
     assert!(manifest.tests.is_empty());
 }
 
@@ -5704,6 +6446,7 @@ fn skip_unsupported_ignores_collisions_from_skipped_tests() {
         out_dir: tmp.path().to_path_buf(),
         cek_budget: 20000,
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::ValidatorHandler,
         plutus_core_dir: None,
@@ -5749,6 +6492,7 @@ fn skip_unsupported_skips_missing_validator_metadata_for_target_modes() {
             out_dir: tmp.path().to_path_buf(),
             cek_budget: 20000,
             blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+            plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
             existential_mode: ExistentialMode::default(),
             target: target.clone(),
             plutus_core_dir: None,
@@ -5758,9 +6502,7 @@ fn skip_unsupported_skips_missing_validator_metadata_for_target_modes() {
         let manifest = generate_lean_workspace(&[missing_metadata], &config, true)
             .unwrap_or_else(|e| panic!("skip mode should not fail for target {target}: {e}"));
 
-        assert!(
-            manifest.tests.is_empty(),
-        );
+        assert!(manifest.tests.is_empty(),);
         assert_eq!(
             manifest.skipped.len(),
             1,
@@ -5782,6 +6524,7 @@ fn skip_unsupported_false_errors_on_unsupported() {
         out_dir: tmp.path().to_path_buf(),
         cek_budget: 20000,
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
         plutus_core_dir: None,
@@ -5794,11 +6537,18 @@ fn skip_unsupported_false_errors_on_unsupported() {
     ]);
     unsupported.constraint = FuzzerConstraint::Any;
 
-    let result =
-        generate_lean_workspace(&[unsupported], &config, false);
+    let err = generate_lean_workspace(&[unsupported], &config, false)
+        .expect_err("Nested composites with opaque semantics should error without skip mode");
+
+    // Without `skip_unsupported`, a skippable (FallbackRequired) error must surface
+    // as a hard failure - workspace gen must not silently swallow it.
+    let message = err.to_string();
     assert!(
-        result.is_err(),
-        "Nested composites with opaque semantics should error without skip mode"
+        message.contains("test_list")
+            || message.contains("cannot")
+            || message.contains("opaque")
+            || message.contains("unsupported"),
+        "Error should mention the failing test or the reason, got: {message}"
     );
 }
 
@@ -5809,6 +6559,7 @@ fn skip_unsupported_does_not_swallow_non_skippable_generation_error() {
         out_dir: tmp.path().to_path_buf(),
         cek_budget: 20000,
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
         plutus_core_dir: None,
@@ -5844,6 +6595,7 @@ fn skip_unsupported_mixed_generates_supported_and_skips_rest() {
         out_dir: tmp.path().to_path_buf(),
         cek_budget: 20000,
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::default(),
         target: VerificationTargetKind::default(),
         plutus_core_dir: None,
@@ -5857,8 +6609,7 @@ fn skip_unsupported_mixed_generates_supported_and_skips_rest() {
     ]);
     bad.constraint = FuzzerConstraint::Any;
 
-    let manifest =
-        generate_lean_workspace(&[good, bad], &config, true).unwrap();
+    let manifest = generate_lean_workspace(&[good, bad], &config, true).unwrap();
     assert_eq!(manifest.tests.len(), 1, "Good test should generate");
     assert_eq!(manifest.skipped.len(), 1, "Bad test should be skipped");
 }
@@ -5866,7 +6617,7 @@ fn skip_unsupported_mixed_generates_supported_and_skips_rest() {
 // --- Step 3.1 tests: String and Pair ---
 
 #[test]
-fn string_without_domain_predicate_uses_sampled_domain_fallback() {
+fn string_without_domain_predicate_reports_fallback_required() {
     let test = make_test_with_type(
         "my_module",
         "test_string",
@@ -5885,7 +6636,12 @@ fn string_without_domain_predicate_uses_sampled_domain_fallback() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
+    let err = result.expect_err("String with opaque semantics should not produce a direct proof");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "String without domain predicate",
+    );
 }
 
 #[test]
@@ -5911,7 +6667,12 @@ fn pair_data_data_without_predicates_uses_fallback() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
+    let err = result.expect_err("Any/Opaque semantics should not produce a direct proof");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Pair<Data,Data> without predicates",
+    );
 }
 
 #[test]
@@ -5945,11 +6706,23 @@ fn pair_int_data_generates_theorem_with_bounds() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("(a : Integer)"), "Pair fst should bind as Integer");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("(a : Integer)"),
+        "Pair fst should bind as Integer"
+    );
     assert!(proof.contains("(b : Data)"), "Pair snd should bind as Data");
-    assert!(proof.contains("-10 <= a"), "Should contain lower bound for Int component");
-    assert!(proof.contains("a <= 10"), "Should contain upper bound for Int component");
+    assert!(
+        proof.contains("-10 <= a"),
+        "Should contain lower bound for Int component"
+    );
+    assert!(
+        proof.contains("a <= 10"),
+        "Should contain upper bound for Int component"
+    );
 }
 
 // --- Step 3.2 tests: Generic tuple arities ---
@@ -5989,11 +6762,26 @@ fn tuple_arity_4_generates_theorem() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("Data"), "Should contain Data type for first component");
-    assert!(proof.contains("Integer"), "Should contain Integer type for second component");
-    assert!(proof.contains("Bool"), "Should contain Bool type for third component");
-    assert!(proof.contains("ByteString"), "Should contain ByteString type for fourth component");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("Data"),
+        "Should contain Data type for first component"
+    );
+    assert!(
+        proof.contains("Integer"),
+        "Should contain Integer type for second component"
+    );
+    assert!(
+        proof.contains("Bool"),
+        "Should contain Bool type for third component"
+    );
+    assert!(
+        proof.contains("ByteString"),
+        "Should contain ByteString type for fourth component"
+    );
 }
 
 #[test]
@@ -6022,7 +6810,12 @@ fn tuple_arity_5_all_data_without_predicates_uses_fallback() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
+    let err = result.expect_err("Any/Opaque semantics should not produce a direct proof");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Tuple(Data x5) without predicates",
+    );
 }
 
 #[test]
@@ -6045,7 +6838,12 @@ fn tuple_high_arity_without_predicates_uses_fallback() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
+    let err = result.expect_err("Any/Opaque semantics should not produce a direct proof");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Tuple arity-20 without predicates",
+    );
 }
 
 // --- Step 3.3 tests: List with bounds ---
@@ -6079,11 +6877,26 @@ fn list_with_bounds_generates_theorem() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("List Integer"), "Should quantify over List Integer");
-    assert!(proof.contains("xs.length"), "Should contain list length bounds");
-    assert!(proof.contains("\u{2208}"), "Should use element membership (\u{2208}) for per-element bounds");
-    assert!(proof.contains("\u{2200}"), "Should contain \u{2200} quantifier");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("List Integer"),
+        "Should quantify over List Integer"
+    );
+    assert!(
+        proof.contains("xs.length"),
+        "Should contain list length bounds"
+    );
+    assert!(
+        proof.contains("\u{2208}"),
+        "Should use element membership (\u{2208}) for per-element bounds"
+    );
+    assert!(
+        proof.contains("\u{2200}"),
+        "Should contain \u{2200} quantifier"
+    );
 }
 
 #[test]
@@ -6112,9 +6925,18 @@ fn list_data_with_bounds_generates_theorem() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("List Data"), "Should quantify over List Data");
-    assert!(proof.contains("xs.length"), "Should contain list length bounds");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("List Data"),
+        "Should quantify over List Data"
+    );
+    assert!(
+        proof.contains("xs.length"),
+        "Should contain list length bounds"
+    );
 }
 
 #[test]
@@ -6182,9 +7004,18 @@ fn list_bounds_can_be_extracted_through_and_constraint() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("List Data"), "Should quantify over List Data");
-    assert!(proof.contains("xs.length"), "And-extracted bounds should contain length constraints");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("List Data"),
+        "Should quantify over List Data"
+    );
+    assert!(
+        proof.contains("xs.length"),
+        "And-extracted bounds should contain length constraints"
+    );
 }
 
 #[test]
@@ -6216,15 +7047,24 @@ fn list_missing_max_len_generates_one_sided_length_precondition() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("List"), "One-sided length precondition test should generate a List proof");
-    assert!(proof.contains("xs.length"), "One-sided length precondition should include length bounds");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("List"),
+        "One-sided length precondition test should generate a List proof"
+    );
+    assert!(
+        proof.contains("xs.length"),
+        "One-sided length precondition should include length bounds"
+    );
 }
 
 // --- Step 3.4 tests: ADT fallback via Data encoding ---
 
 #[test]
-fn unsupported_type_uses_sampled_domain_fallback() {
+fn unsupported_type_reports_fallback_required() {
     let test = make_test_with_type(
         "my_module",
         "test_adt",
@@ -6243,7 +7083,12 @@ fn unsupported_type_uses_sampled_domain_fallback() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "Any/Opaque semantics should not produce a direct proof");
+    let err = result.expect_err("Any/Opaque semantics should not produce a direct proof");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Unsupported top-level ADT with opaque semantics",
+    );
 }
 
 #[test]
@@ -6277,9 +7122,18 @@ fn unsupported_type_in_tuple_falls_back_to_data() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("Integer"), "Should contain Integer type for Int component");
-    assert!(proof.contains("Data"), "Unsupported type should fall back to Data");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("Integer"),
+        "Should contain Integer type for Int component"
+    );
+    assert!(
+        proof.contains("Data"),
+        "Unsupported type should fall back to Data"
+    );
 }
 
 #[test]
@@ -6307,10 +7161,22 @@ fn tuple_int_data_with_shared_int_range_constrains_only_int_positions() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("Integer"), "Should contain Integer for Int position");
-    assert!(proof.contains("Data"), "Should contain Data for Data position");
-    assert!(proof.contains("0 <= a"), "Shared IntRange should apply to Int position");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("Integer"),
+        "Should contain Integer for Int position"
+    );
+    assert!(
+        proof.contains("Data"),
+        "Should contain Data for Data position"
+    );
+    assert!(
+        proof.contains("0 <= a"),
+        "Shared IntRange should apply to Int position"
+    );
 }
 
 // --- requires_explicit_bounds extended tests ---
@@ -6691,16 +7557,28 @@ fn compat_all_supported_scalar_types_generate_workspace() {
             out_dir: dir.path().to_path_buf(),
             cek_budget: 20000,
             blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+            plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
             existential_mode: ExistentialMode::Witness,
             target: VerificationTargetKind::PropertyWrapper,
             plutus_core_dir: None,
         };
 
-        let manifest = generate_lean_workspace(&[test], &config, true);
-        assert!(
-            manifest.is_ok(),
-            "Scalar type {:?} should generate workspace (possibly with skips)",
-            output_type
+        let manifest = generate_lean_workspace(&[test], &config, true).unwrap_or_else(|e| {
+            panic!(
+                "Scalar type {:?} should generate workspace (possibly with skips), got: {e}",
+                output_type
+            )
+        });
+
+        // Either the test generates a theorem or is gracefully skipped.
+        let generated = manifest.tests.len() + manifest.skipped.len();
+        assert_eq!(
+            generated,
+            1,
+            "Scalar type {:?} must produce either one test entry or one skip entry, got tests={} skipped={}",
+            output_type,
+            manifest.tests.len(),
+            manifest.skipped.len()
         );
     }
 }
@@ -6745,6 +7623,7 @@ fn compat_tuple_and_list_types_generate_workspace() {
             out_dir: dir.path().to_path_buf(),
             cek_budget: 20000,
             blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+            plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
             existential_mode: ExistentialMode::Witness,
             target: VerificationTargetKind::PropertyWrapper,
             plutus_core_dir: None,
@@ -6775,15 +7654,24 @@ fn compat_unsupported_type_fails_without_skip() {
         out_dir: dir.path().to_path_buf(),
         cek_budget: 20000,
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::Witness,
         target: VerificationTargetKind::PropertyWrapper,
         plutus_core_dir: None,
     };
 
-    let result = generate_lean_workspace(&[test], &config, false);
+    let err = generate_lean_workspace(&[test], &config, false).expect_err(
+        "Nested composites with opaque semantics should error without sampled-domain fallback",
+    );
+
+    let message = err.to_string();
     assert!(
-        result.is_err(),
-        "Nested composites with opaque semantics should error without sampled-domain fallback"
+        message.contains("nested")
+            || message.contains("compat")
+            || message.contains("unsupported")
+            || message.contains("opaque")
+            || message.contains("cannot"),
+        "Error should identify the failing test or reason, got: {message}"
     );
 }
 
@@ -6803,13 +7691,13 @@ fn compat_unsupported_type_skipped_with_flag() {
         out_dir: dir.path().to_path_buf(),
         cek_budget: 20000,
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::Witness,
         target: VerificationTargetKind::PropertyWrapper,
         plutus_core_dir: None,
     };
 
-    let manifest =
-        generate_lean_workspace(&[test], &config, true).unwrap();
+    let manifest = generate_lean_workspace(&[test], &config, true).unwrap();
     // With fallback removed, opaque semantics are skipped
     assert_eq!(manifest.skipped.len(), 1);
     assert!(manifest.tests.is_empty());
@@ -6832,13 +7720,13 @@ fn compat_fail_once_witness_mode_generates_existential() {
         out_dir: dir.path().to_path_buf(),
         cek_budget: 20000,
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::Witness,
         target: VerificationTargetKind::PropertyWrapper,
         plutus_core_dir: None,
     };
 
-    let manifest =
-        generate_lean_workspace(&[test], &config, false).unwrap();
+    let manifest = generate_lean_workspace(&[test], &config, false).unwrap();
     assert_eq!(manifest.tests.len(), 1);
 
     // Read the generated proof file to verify existential theorem
@@ -6864,13 +7752,13 @@ fn compat_void_return_mode_generates_halt_theorem() {
         out_dir: dir.path().to_path_buf(),
         cek_budget: 20000,
         blaster_rev: DEFAULT_BLASTER_REV.to_string(),
+        plutus_core_rev: DEFAULT_PLUTUS_CORE_REV.to_string(),
         existential_mode: ExistentialMode::Witness,
         target: VerificationTargetKind::PropertyWrapper,
         plutus_core_dir: None,
     };
 
-    let manifest =
-        generate_lean_workspace(&[test], &config, false).unwrap();
+    let manifest = generate_lean_workspace(&[test], &config, false).unwrap();
     assert_eq!(manifest.tests.len(), 1);
 
     let proof_path = dir.path().join(&manifest.tests[0].lean_file);
@@ -6988,9 +7876,7 @@ fn phase12_benchmark_matrix_collects_fidelity_and_tractability_evidence() {
         let direct = generate_proof_for_phase12_case(test)
             .unwrap_or_else(|e| panic!("direct proof should generate for {label}: {e}"));
         let direct_metrics = collect_proof_benchmark_metrics(&direct);
-        assert!(
-            direct_metrics.theorem_size_bytes > 0 && direct_metrics.theorem_count >= 1,
-        );
+        assert!(direct_metrics.theorem_size_bytes > 0 && direct_metrics.theorem_count >= 1,);
         assert!(
             direct_metrics.theorem_size_bytes < 120_000,
             "theorem size budget exceeded for {label}: {:?}",
@@ -7182,13 +8068,22 @@ fn tuple_int_proof_opens_data_namespace() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("open PlutusCore.Data (Data)"), "Tuple proof should open Data namespace even for all-Int elements");
-    assert!(proof.contains("Data.List"), "Tuple proof should construct Data.List argument");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("open PlutusCore.Data (Data)"),
+        "Tuple proof should open Data namespace even for all-Int elements"
+    );
+    assert!(
+        proof.contains("Data.List"),
+        "Tuple proof should construct Data.List argument"
+    );
 }
 
 #[test]
-fn list_bool_with_mapped_int_range_uses_sampled_domain_fallback() {
+fn list_bool_with_mapped_int_range_reports_fallback_required() {
     // Mapped IntRange over Bool output cannot be translated to direct output
     // predicates; we should fall back to sampled-domain theorems.
     let test = make_test_with_type(
@@ -7218,7 +8113,12 @@ fn list_bool_with_mapped_int_range_uses_sampled_domain_fallback() {
         ExistentialMode::default(),
         &VerificationTargetKind::default(),
     );
-    assert!(result.is_err(), "mapped IntRange over Bool cannot produce a direct proof");
+    let err = result.expect_err("mapped IntRange over Bool cannot produce a direct proof");
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "Mapped IntRange over List<Bool>",
+    );
 }
 
 // --- Item 2.1: lean_type_for nested tuple/pair support ---
@@ -7229,7 +8129,10 @@ fn lean_type_for_pair_int_bytearray() {
         Box::new(FuzzerOutputType::Int),
         Box::new(FuzzerOutputType::ByteArray),
     );
-    assert_eq!(lean_type_for(&t), Some("(Integer \u{00d7} ByteString)".to_string()));
+    assert_eq!(
+        lean_type_for(&t),
+        Some("(Integer \u{00d7} ByteString)".to_string())
+    );
 }
 
 #[test]
@@ -7382,6 +8285,126 @@ fn lean_default_witness_tuple() {
     assert_eq!(w, "((0 : Integer), true, ByteString.empty)");
 }
 
+// --- R5: scalar-output helpers with String, Data, Unsupported ---
+//
+// These tests exercise the three output types that share the ByteArray,
+// Data, and Data-fallback branches in `lean_type_for`, `lean_data_encoder`,
+// and `lean_default_witness`. They catch regressions in the `Unsupported`
+// fallback ("degrade to Data") and the `String`/`ByteArray` collapsing logic.
+
+#[test]
+fn lean_type_for_string_returns_bytestring() {
+    // String is treated the same as ByteArray at the Lean level.
+    assert_eq!(
+        lean_type_for(&FuzzerOutputType::String),
+        Some("ByteString".to_string())
+    );
+}
+
+#[test]
+fn lean_type_for_data_returns_data() {
+    assert_eq!(
+        lean_type_for(&FuzzerOutputType::Data),
+        Some("Data".to_string())
+    );
+}
+
+#[test]
+fn lean_type_for_unsupported_falls_back_to_data() {
+    // Unsupported should always normalize to the Data universe so proofs can
+    // still be emitted even when the element type cannot be modeled precisely.
+    let t = FuzzerOutputType::Unsupported("MyOpaqueType".to_string());
+    assert_eq!(lean_type_for(&t), Some("Data".to_string()));
+}
+
+#[test]
+fn lean_type_for_unsupported_is_name_independent() {
+    // The Lean type should not depend on the specific Aiken type name;
+    // two distinct unsupported types map to the same Data type.
+    let t1 = FuzzerOutputType::Unsupported("Option<Int>".to_string());
+    let t2 = FuzzerOutputType::Unsupported("Result<ByteArray,Int>".to_string());
+    assert_eq!(lean_type_for(&t1), lean_type_for(&t2));
+}
+
+#[test]
+fn lean_data_encoder_string_uses_bytestring_constructor() {
+    // String shares the ByteArray encoder because the Plutus runtime
+    // represents UTF-8 strings as byte strings.
+    let enc = lean_data_encoder(&FuzzerOutputType::String, "v").unwrap();
+    assert_eq!(enc, "Data.B v");
+}
+
+#[test]
+fn lean_data_encoder_data_uses_identity() {
+    // Data inputs are already in the Data universe; the encoder must be
+    // the identity on the variable (no Data.I / Data.B / Data.Constr wrap).
+    let enc = lean_data_encoder(&FuzzerOutputType::Data, "v").unwrap();
+    assert_eq!(enc, "v");
+}
+
+#[test]
+fn lean_data_encoder_unsupported_uses_identity() {
+    // Unsupported types fall back to Data and therefore must also use the
+    // identity encoder; otherwise we would double-encode a Data value.
+    let t = FuzzerOutputType::Unsupported("SomeCustomRecord".to_string());
+    let enc = lean_data_encoder(&t, "x").unwrap();
+    assert_eq!(enc, "x");
+}
+
+#[test]
+fn lean_data_encoder_unsupported_varies_with_var_name() {
+    // The encoder should thread the variable name through; otherwise a
+    // shared Unsupported encoder would alias two different inputs.
+    let t = FuzzerOutputType::Unsupported("SomeType".to_string());
+    let e1 = lean_data_encoder(&t, "a").unwrap();
+    let e2 = lean_data_encoder(&t, "b").unwrap();
+    assert_eq!(e1, "a");
+    assert_eq!(e2, "b");
+    assert_ne!(e1, e2);
+}
+
+#[test]
+fn lean_default_witness_string_is_empty_bytestring() {
+    // String witnesses are empty byte strings (like ByteArray), not
+    // Lean string literals.
+    assert_eq!(
+        lean_default_witness(&FuzzerOutputType::String),
+        "ByteString.empty"
+    );
+}
+
+#[test]
+fn lean_default_witness_data_is_zero_integer_data() {
+    // The Data default must be a well-formed Data term; `Data.I 0` is the
+    // canonical "smallest" Data value used across the proof generator.
+    assert_eq!(lean_default_witness(&FuzzerOutputType::Data), "Data.I 0");
+}
+
+#[test]
+fn lean_default_witness_unsupported_matches_data_witness() {
+    // Unsupported falls back to the Data witness so existential proofs can
+    // still produce a concrete value without knowing the original shape.
+    let t = FuzzerOutputType::Unsupported("SomeAlias".to_string());
+    assert_eq!(
+        lean_default_witness(&t),
+        lean_default_witness(&FuzzerOutputType::Data)
+    );
+    assert_eq!(lean_default_witness(&t), "Data.I 0");
+}
+
+#[test]
+fn lean_default_witness_unsupported_does_not_leak_type_name() {
+    // The witness is a Lean value expression, not a type name: the original
+    // Aiken type string must not appear in the output (it would be invalid
+    // Lean syntax).
+    let t = FuzzerOutputType::Unsupported("MySecretType".to_string());
+    let w = lean_default_witness(&t);
+    assert!(
+        !w.contains("MySecretType"),
+        "witness should not embed the Aiken type name, got: {w}"
+    );
+}
+
 // --- Item 2.5: AcceptsFailure event accumulation ---
 
 fn make_non_opaque_transition_semantics() -> StateMachineTransitionSemantics {
@@ -7507,8 +8530,14 @@ fn adt_with_fields_and_data_semantics_uses_schema_predicate() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("Data"), "ADT with schema should quantify over Data");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("Data"),
+        "ADT with schema should quantify over Data"
+    );
 }
 
 #[test]
@@ -7535,9 +8564,18 @@ fn adt_with_fields_and_constructor_tags_uses_schema_predicate() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("Data"), "ADT with tags and schema should quantify over Data");
-    assert!(proof.contains("Data.Constr"), "Should contain constructor tag matching via Data.Constr");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("Data"),
+        "ADT with tags and schema should quantify over Data"
+    );
+    assert!(
+        proof.contains("Data.Constr"),
+        "Should contain constructor tag matching via Data.Constr"
+    );
 }
 
 #[test]
@@ -7566,8 +8604,14 @@ fn data_type_without_schema_uses_plain_data_quantification() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("(x : Data)"), "Plain Data quantification should bind x as Data");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("(x : Data)"),
+        "Plain Data quantification should bind x as Data"
+    );
     assert!(proof.contains("dataArg"), "Should use dataArg helper");
 }
 
@@ -7604,9 +8648,18 @@ fn dict_type_flows_through_as_list_of_pairs() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("List"), "Dict should flow through as List type");
-    assert!(proof.contains("xs.length"), "Dict list should have length bounds");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("List"),
+        "Dict should flow through as List type"
+    );
+    assert!(
+        proof.contains("xs.length"),
+        "Dict list should have length bounds"
+    );
 }
 
 #[test]
@@ -7640,9 +8693,18 @@ fn dict_type_with_data_semantics_does_not_error() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("List"), "Dict<Data,Data> should generate List-based proof");
-    assert!(proof.contains("Data"), "Dict elements should reference Data type");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("List"),
+        "Dict<Data,Data> should generate List-based proof"
+    );
+    assert!(
+        proof.contains("Data"),
+        "Dict elements should reference Data type"
+    );
 }
 
 // --- Phase 2 Batch B: Item 2.4 - Typed list quantification for ADT elements ---
@@ -7676,9 +8738,18 @@ fn list_of_nullary_enum_applies_constructor_tags_to_elements() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("List"), "List of enum should quantify over List type");
-    assert!(proof.contains("Data"), "List of Unsupported should map elements to Data");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("List"),
+        "List of enum should quantify over List type"
+    );
+    assert!(
+        proof.contains("Data"),
+        "List of Unsupported should map elements to Data"
+    );
 }
 
 #[test]
@@ -7689,9 +8760,7 @@ fn list_of_data_with_constructor_element_semantics_generates_predicate() {
         "test_list_data_ctors",
         FuzzerOutputType::List(Box::new(FuzzerOutputType::Data)),
         FuzzerConstraint::List {
-            elem: Box::new(FuzzerConstraint::DataConstructorTags {
-                tags: vec![0, 1],
-            }),
+            elem: Box::new(FuzzerConstraint::DataConstructorTags { tags: vec![0, 1] }),
             min_len: Some(0),
             max_len: Some(3),
         },
@@ -7710,7 +8779,66 @@ fn list_of_data_with_constructor_element_semantics_generates_predicate() {
     )
     .unwrap();
 
-    assert!(proof.contains("theorem "), "Generated proof should contain a theorem");
-    assert!(proof.contains("List Data"), "Should quantify over List Data");
-    assert!(proof.contains("Data.Constr"), "Constructor-tag element semantics should generate Data.Constr predicate");
+    assert!(
+        proof.contains("theorem "),
+        "Generated proof should contain a theorem"
+    );
+    assert!(
+        proof.contains("List Data"),
+        "Should quantify over List Data"
+    );
+    assert!(
+        proof.contains("Data.Constr"),
+        "Constructor-tag element semantics should generate Data.Constr predicate"
+    );
+}
+
+#[test]
+fn state_machine_existential_theorem_reports_fallback_required_pending_todo_4_6() {
+    // Soundness gate: `try_generate_state_machine_trace_proof_from_semantics` must
+    // refuse to emit a direct proof for existential (`fail once`) state-machine trace
+    // theorems while the reachability encoding relies on the globally over-approximating
+    // `step_inputs_satisfiable` predicate. See the TODO(4.6) comment in verify.rs:
+    // widening reachability is sound for `∀`-theorems but lets Z3 witness spurious
+    // failing traces for `∃`-theorems, which would be unsound.
+    //
+    // Until per-transition step-input witnesses are implemented, such tests must fall
+    // back to the skip path (GenerationErrorCategory::FallbackRequired) rather than
+    // falsely claiming success.
+    let mut test = make_phase12_state_machine_test(
+        "prop_state_machine_trace_fail_once",
+        StateMachineAcceptance::AcceptsSuccess,
+    );
+    // Force the existential theorem form: `fail once` => OnTestFailure::SucceedImmediately
+    // => TheoremForm { existential: true, .. } in determine_theorem_form.
+    test.on_test_failure = OnTestFailure::SucceedImmediately;
+
+    let id = test_id("permissions.test", "prop_state_machine_trace_fail_once");
+    let lean_name = sanitize_lean_name("prop_state_machine_trace_fail_once");
+    let lean_module = "AikenVerify.Proofs.Permissions.prop_state_machine_trace_fail_once";
+
+    let err = generate_proof_file(
+        &test,
+        &id,
+        &lean_name,
+        lean_module,
+        ExistentialMode::Proof,
+        &VerificationTargetKind::default(),
+    )
+    .expect_err(
+        "existential state-machine trace proofs must refuse generation while TODO(4.6) \
+         leaves reachability globally over-approximated",
+    );
+
+    assert_generation_error_category(
+        &err,
+        GenerationErrorCategory::FallbackRequired,
+        "existential state-machine trace should route through the skip path",
+    );
+
+    let message = err.to_string();
+    assert!(
+        message.contains("TODO 4.6") || message.contains("step_inputs_satisfiable"),
+        "error message should reference the TODO(4.6) soundness gate, got: {message}"
+    );
 }
