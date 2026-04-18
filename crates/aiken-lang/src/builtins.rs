@@ -426,6 +426,23 @@ pub fn prelude(id_gen: &IdGenerator) -> TypeInfo {
         ),
     );
 
+    // tautology
+    let tautology_var = Type::generic_var(id_gen.next());
+    prelude.values.insert(
+        "tautology".to_string(),
+        ValueConstructor::public(
+            Type::function(vec![tautology_var], Type::void()),
+            ValueConstructorVariant::ModuleFn {
+                name: "tautology".to_string(),
+                field_map: None,
+                module: "".to_string(),
+                arity: 1,
+                location: Span::empty(),
+                builtin: None,
+            },
+        ),
+    );
+
     // flip
     let flip_a_var = Type::generic_var(id_gen.next());
     let flip_b_var = Type::generic_var(id_gen.next());
@@ -1447,6 +1464,48 @@ pub fn prelude_functions(
             return_type: a_var,
             end_position: 0,
         },
+    );
+
+    // /// A function that absorbs any expression and returns true. Useful to write failing test
+    // /// scenarios regardless of the output of a function.
+    // pub fn tautology(a: a) -> Bool {
+    //   a == a
+    // }
+    functions.insert(
+        FunctionAccessKey {
+            module_name: "".to_string(),
+            function_name: "tautology".to_string(),
+        },
+        aiken_fn!(
+            &module_types,
+            &id_gen,
+            r#"
+                pub fn tautology(a: a) -> Bool {
+                  a == a
+                }
+            "#
+        ),
+    );
+
+    // /// A function that absorbs any expression and returns true. Useful to write failing test
+    // // scenarios regardless of the output of a function.
+    // pub fn tautology(a: a) -> Bool {
+    //   a == a
+    // }
+    functions.insert(
+        FunctionAccessKey {
+            module_name: "".to_string(),
+            function_name: "tautology".to_string(),
+        },
+        aiken_fn!(
+            &module_types,
+            &id_gen,
+            r#"
+                pub fn tautology(a: a) -> Bool {
+                  a == a
+                }
+            "#
+        ),
     );
 
     // /// A function that flips the arguments of a function.
