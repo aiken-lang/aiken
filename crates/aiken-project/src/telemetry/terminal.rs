@@ -671,14 +671,21 @@ fn fmt_test(
                 .iter()
                 .map(|line| {
                     match line
-                        .strip_prefix("expect")
-                        .or_else(|| line.strip_prefix("<expected>"))
+                        .strip_prefix("expect ")
+                        .or_else(|| line.strip_prefix("<expected> "))
                     {
                         None => format!("| {line}"),
                         Some(rest) => format!(
-                            "{}{rest}",
-                            "x <expected>"
-                                .if_supports_color(Stderr, |s| s.red().bold().to_string())
+                            "{} {rest}",
+                            if result.is_success() {
+                                "✓ <expected>"
+                                    .if_supports_color(Stderr, |s| s.green().bold().to_string())
+                                    .to_string()
+                            } else {
+                                "× <expected>"
+                                    .if_supports_color(Stderr, |s| s.red().bold().to_string())
+                                    .to_string()
+                            },
                         ),
                     }
                 })
