@@ -196,23 +196,35 @@ impl DefaultFunction {
                 | DefaultFunction::QuotientInteger
                 | DefaultFunction::RemainderInteger
                 | DefaultFunction::EqualsInteger
-                | DefaultFunction::EqualsByteString
-                | DefaultFunction::EqualsString
-                | DefaultFunction::EqualsData
-                | DefaultFunction::Bls12_381_G1_Equal
-                | DefaultFunction::Bls12_381_G2_Equal
                 | DefaultFunction::LessThanInteger
                 | DefaultFunction::LessThanEqualsInteger
                 | DefaultFunction::AppendByteString
                 | DefaultFunction::ConsByteString
                 | DefaultFunction::SliceByteString
                 | DefaultFunction::IndexByteString
-                | DefaultFunction::LessThanEqualsByteString
+                | DefaultFunction::EqualsByteString
                 | DefaultFunction::LessThanByteString
+                | DefaultFunction::LessThanEqualsByteString
+                | DefaultFunction::EqualsString
                 | DefaultFunction::AppendString
-                | DefaultFunction::Bls12_381_G1_Add
-                | DefaultFunction::Bls12_381_G2_Add
                 | DefaultFunction::ConstrData
+                | DefaultFunction::EqualsData
+                | DefaultFunction::Bls12_381_G1_Add
+                | DefaultFunction::Bls12_381_G1_ScalarMul
+                | DefaultFunction::Bls12_381_G1_Equal
+                | DefaultFunction::Bls12_381_G1_HashToGroup
+                | DefaultFunction::Bls12_381_G2_Add
+                | DefaultFunction::Bls12_381_G2_ScalarMul
+                | DefaultFunction::Bls12_381_G2_Equal
+                | DefaultFunction::Bls12_381_G2_HashToGroup
+                | DefaultFunction::IntegerToByteString
+                | DefaultFunction::ByteStringToInteger
+                | DefaultFunction::AndByteString
+                | DefaultFunction::OrByteString
+                | DefaultFunction::XorByteString
+                | DefaultFunction::ReplicateByte
+                | DefaultFunction::RotateByteString
+                | DefaultFunction::ShiftByteString
         )
     }
 
@@ -352,6 +364,77 @@ impl DefaultFunction {
                     } else {
                         false
                     }
+                } else {
+                    false
+                }
+            }
+
+            DefaultFunction::Bls12_381_G1_HashToGroup
+            | DefaultFunction::Bls12_381_G2_HashToGroup => arg_stack.iter().all(|arg| {
+                if let Term::Constant(c) = arg {
+                    matches!(c.as_ref(), Constant::ByteString(..))
+                } else {
+                    false
+                }
+            }),
+
+            DefaultFunction::Bls12_381_G1_ScalarMul | DefaultFunction::Bls12_381_G2_ScalarMul => {
+                if let (Term::Constant(c1), Term::Constant(c2)) = (&arg_stack[0], &arg_stack[1]) {
+                    matches!(c1.as_ref(), Constant::Integer(..))
+                        && matches!(c2.as_ref(), Constant::Bls12_381G1Element(..))
+                } else {
+                    false
+                }
+            }
+
+            DefaultFunction::IntegerToByteString => {
+                if let (Term::Constant(c1), Term::Constant(c2), Term::Constant(c3)) =
+                    (&arg_stack[0], &arg_stack[1], &arg_stack[2])
+                {
+                    matches!(c1.as_ref(), Constant::Bool(..))
+                        && matches!(c2.as_ref(), Constant::Integer(i) if i == &0.into())
+                        && matches!(c3.as_ref(), Constant::Integer(i) if i >= &0.into())
+                } else {
+                    false
+                }
+            }
+
+            DefaultFunction::ByteStringToInteger => {
+                if let (Term::Constant(c1), Term::Constant(c2)) = (&arg_stack[0], &arg_stack[1]) {
+                    matches!(c1.as_ref(), Constant::Bool(..))
+                        && matches!(c2.as_ref(), Constant::ByteString(..))
+                } else {
+                    false
+                }
+            }
+
+            DefaultFunction::AndByteString
+            | DefaultFunction::OrByteString
+            | DefaultFunction::XorByteString => {
+                if let (Term::Constant(c1), Term::Constant(c2), Term::Constant(c3)) =
+                    (&arg_stack[0], &arg_stack[1], &arg_stack[2])
+                {
+                    matches!(c1.as_ref(), Constant::Bool(..))
+                        && matches!(c2.as_ref(), Constant::ByteString(..))
+                        && matches!(c3.as_ref(), Constant::ByteString(..))
+                } else {
+                    false
+                }
+            }
+
+            DefaultFunction::RotateByteString | DefaultFunction::ShiftByteString => {
+                if let (Term::Constant(c1), Term::Constant(c2)) = (&arg_stack[0], &arg_stack[1]) {
+                    matches!(c1.as_ref(), Constant::ByteString(..))
+                        && matches!(c2.as_ref(), Constant::Integer(..))
+                } else {
+                    false
+                }
+            }
+
+            DefaultFunction::ReplicateByte => {
+                if let (Term::Constant(c1), Term::Constant(c2)) = (&arg_stack[0], &arg_stack[1]) {
+                    matches!(c1.as_ref(), Constant::Integer(i) if i >= &0.into())
+                        && matches!(c2.as_ref(), Constant::Integer(i) if i >= &0.into() && i <= &255.into() )
                 } else {
                     false
                 }

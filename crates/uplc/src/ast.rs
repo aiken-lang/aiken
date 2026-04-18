@@ -330,6 +330,18 @@ pub enum Term<T> {
 }
 
 impl<T> Term<T> {
+    pub fn is_constant(&self) -> bool {
+        matches!(self, Term::Constant(..))
+    }
+
+    pub fn is_true(&self) -> bool {
+        matches!(self, Term::Constant(c) if c.as_ref() == &Constant::Bool(true))
+    }
+
+    pub fn is_false(&self) -> bool {
+        matches!(self, Term::Constant(c) if c.as_ref() == &Constant::Bool(false))
+    }
+
     pub fn is_unit(&self) -> bool {
         matches!(self, Term::Constant(c) if c.as_ref() == &Constant::Unit)
     }

@@ -1553,6 +1553,20 @@ impl BinOp {
             Self::MultInt | Self::DivInt | Self::ModInt => 7,
         }
     }
+
+    pub fn is_symmetric(&self) -> bool {
+        match self {
+            Self::Or
+            | Self::LtInt
+            | Self::LtEqInt
+            | Self::GtEqInt
+            | Self::GtInt
+            | Self::SubInt
+            | Self::ModInt
+            | Self::DivInt => false,
+            Self::And | Self::Eq | Self::NotEq | Self::AddInt | Self::MultInt => true,
+        }
+    }
 }
 
 pub type UntypedPattern = Pattern<(), (), Namespace, (u8, Span)>;
