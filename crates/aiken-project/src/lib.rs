@@ -462,7 +462,7 @@ where
                     self.event_listener.handle_event(Event::RunningTests);
                 }
 
-                let tests = self.run_runnables(tests, seed, property_max_success);
+                let tests = self.run_runnables(tests, seed, property_max_success, options.tracing);
 
                 self.checks_count = if tests.is_empty() {
                     None
@@ -519,7 +519,7 @@ where
                     self.event_listener.handle_event(Event::RunningBenchmarks);
                 }
 
-                let benchmarks = self.run_runnables(benchmarks, seed, max_size);
+                let benchmarks = self.run_runnables(benchmarks, seed, max_size, options.tracing);
 
                 let errors: Vec<Error> = benchmarks
                     .iter()
@@ -1142,6 +1142,7 @@ where
         tests: Vec<Test>,
         seed: u32,
         max_success: usize,
+        tracing: Tracing,
     ) -> Vec<TestResult<UntypedExpr, UntypedExpr>> {
         use rayon::prelude::*;
 
@@ -1151,7 +1152,7 @@ where
 
         tests
             .into_par_iter()
-            .map(|test| test.run(seed, max_success, plutus_version))
+            .map(|test| test.run(seed, max_success, plutus_version, tracing))
             .collect::<Vec<TestResult<(Constant, Rc<Type>), PlutusData>>>()
             .into_iter()
             .map(|test| test.reify(&data_types))

@@ -235,7 +235,9 @@ mod test {
 
                 let data_types_refs = utils::indexmap::as_ref_values(&data_types);
 
-                let result = test.run(&PlutusVersion::V3).reify(&data_types_refs);
+                let result = test
+                    .run(&PlutusVersion::V3, Tracing::verbose())
+                    .reify(&data_types_refs);
 
                 result
                     .assertion

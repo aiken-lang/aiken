@@ -1,5 +1,8 @@
 use crate::{
-    ast::{BinOp, DataTypeKey, IfBranch, OnTestFailure, Span, TypedArg, TypedDataType, TypedTest},
+    ast::{
+        BinOp, DataTypeKey, IfBranch, OnTestFailure, Span, TraceLevel, Tracing, TypedArg,
+        TypedDataType, TypedTest,
+    },
     expr::{TypedExpr, UntypedExpr},
     format::Formatter,
     gen_uplc::CodeGenerator,
@@ -194,9 +197,12 @@ impl Test {
         seed: u32,
         max_success: usize,
         plutus_version: &PlutusVersion,
+        tracing: Tracing,
     ) -> TestResult<(Constant, Rc<Type>), PlutusData> {
         match self {
-            Test::UnitTest(unit_test) => TestResult::UnitTestResult(unit_test.run(plutus_version)),
+            Test::UnitTest(unit_test) => {
+                TestResult::UnitTestResult(unit_test.run(plutus_version, tracing))
+            }
             Test::PropertyTest(property_test) => {
                 TestResult::PropertyTestResult(property_test.run(seed, max_success, plutus_version))
             }
@@ -222,7 +228,11 @@ pub struct UnitTest {
 unsafe impl Send for UnitTest {}
 
 impl UnitTest {
-    pub fn run(self, plutus_version: &PlutusVersion) -> UnitTestResult<(Constant, Rc<Type>)> {
+    pub fn run(
+        self,
+        plutus_version: &PlutusVersion,
+        tracing: Tracing,
+    ) -> UnitTestResult<(Constant, Rc<Type>)> {
         let eval_result = Program::<NamedDeBruijn>::try_from(self.program.clone())
             .unwrap()
             .eval_version(ExBudget::max(), &plutus_version.into());
@@ -237,7 +247,9 @@ impl UnitTest {
         };
 
         let mut logs = Vec::new();
-        if let Err(err) = eval_result.result() {
+        if let Err(err) = eval_result.result()
+            && tracing.trace_level(false) == TraceLevel::Verbose
+        {
             logs.push(format!("{err}"))
         }
         logs.extend(eval_result.logs());
