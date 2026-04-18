@@ -726,10 +726,14 @@ where
             parsed_modules
                 .par_iter_mut()
                 .for_each(|(_module, parsed_module)| {
-                    parsed_module
-                        .ast
-                        .definitions
-                        .retain(|def| !matches!(def, Definition::Test { .. }))
+                    parsed_module.ast.definitions.retain(|def| {
+                        !matches!(
+                            def,
+                            Definition::Test(..)
+                                | Definition::Benchmark(..)
+                                | Definition::Validator(..)
+                        )
+                    })
                 });
 
             parsed_packages.extend(Into::<HashMap<_, _>>::into(parsed_modules));
