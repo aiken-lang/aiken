@@ -4,6 +4,7 @@
 
 ### Added
 
+- **aiken-lang**: Allow test assertions to _"see through"_ backpassing, to provide better insights on failing tests using a continuation passing style. @KtorZ
 - **aiken**: New flag `-I / --include-all-types` to the `aiken build` command to include all serialisable types in the blueprint, regardless of whether they are part of the contract interface or not. @emiflake, @KtorZ
 - **aiken**: `aiken test` is now an alias for `aiken check`. @KtorZ
 - **aiken**: `aiken bench` now also display units using human-readable units by default and falls back to plain number when passed `--plain-numbers`. @KtorZ

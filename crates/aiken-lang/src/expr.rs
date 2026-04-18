@@ -325,6 +325,40 @@ impl TypedExpr {
         }
     }
 
+    pub fn replace_type(&mut self, new_type: Rc<Type>) {
+        match self {
+            Self::Var { constructor, .. } => {
+                constructor.tipo = new_type;
+            }
+            Self::Trace { then, .. } => then.replace_type(new_type),
+            Self::Fn { tipo, .. }
+            | Self::UInt { tipo, .. }
+            | Self::ErrorTerm { tipo, .. }
+            | Self::When { tipo, .. }
+            | Self::List { tipo, .. }
+            | Self::Call { tipo, .. }
+            | Self::If { tipo, .. }
+            | Self::UnOp { tipo, .. }
+            | Self::BinOp { tipo, .. }
+            | Self::Tuple { tipo, .. }
+            | Self::Pair { tipo, .. }
+            | Self::String { tipo, .. }
+            | Self::ByteArray { tipo, .. }
+            | Self::TupleIndex { tipo, .. }
+            | Self::Assignment { tipo, .. }
+            | Self::ModuleSelect { tipo, .. }
+            | Self::RecordAccess { tipo, .. }
+            | Self::RecordUpdate { tipo, .. }
+            | Self::CurvePoint { tipo, .. } => *tipo = new_type,
+            Self::Pipeline { expressions, .. } | Self::Sequence { expressions, .. } => {
+                expressions
+                    .last_mut()
+                    .expect("trying to replace type of an empty sequence or pipeline")
+                    .replace_type(new_type);
+            }
+        }
+    }
+
     pub fn is_literal(&self) -> bool {
         matches!(
             self,

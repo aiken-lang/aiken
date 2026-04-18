@@ -3,7 +3,7 @@ use crate::{
         BinOp, DataTypeKey, IfBranch, OnTestFailure, Span, TraceLevel, Tracing, TypedArg,
         TypedDataType, TypedTest,
     },
-    expr::{TypedExpr, UntypedExpr},
+    expr::{CallArg, TypedExpr, UntypedExpr},
     format::Formatter,
     gen_uplc::CodeGenerator,
     plutus_version::PlutusVersion,
@@ -82,7 +82,7 @@ impl Test {
                         &[],
                         &module_name,
                     ))
-                    .expect("failed to convert assertion operaand to NamedDeBruijn")
+                    .expect("failed to convert assertion operand to NamedDeBruijn")
                     .eval(ExBudget::max())
                     .unwrap_constant()
                     .map(|cst| (cst, side.tipo()))
@@ -1382,6 +1382,128 @@ impl TryFrom<TypedExpr> for Assertion<TypedExpr> {
                     Err(())
                 }
             }
+
+            TypedExpr::Call {
+                args,
+                location,
+                fun,
+                ..
+            } => {
+                // Unwind backpassing if any, or calls to function that contain binary ops.
+                if let Some((last_arg, first_args)) = args.split_last()
+                    && let TypedExpr::Fn {
+                        body: last_arg_body,
+                        location: last_arg_location,
+                        tipo: last_arg_tipo,
+                        is_capture: last_arg_is_capture,
+                        return_annotation: last_arg_return_annotation,
+                        args: last_arg_args,
+                    } = &last_arg.value
+                {
+                    let Assertion { bin_op, head, tail } = Self::try_from(*last_arg_body.clone())?;
+
+                    let new_callback_tipo = |body: &TypedExpr| -> Rc<Type> {
+                        match last_arg_tipo.as_ref() {
+                            Type::Fn {
+                                args,
+                                ret: _ret,
+                                alias,
+                            } => Rc::new(Type::Fn {
+                                args: args.clone(),
+                                ret: body.tipo(), // Replace the return type to match head.
+                                alias: alias.clone(),
+                            }),
+                            Type::App { .. }
+                            | Type::Var { .. }
+                            | Type::Pair { .. }
+                            | Type::Tuple { .. } => {
+                                unreachable!(
+                                    "guard above on 'last_arg.value' guarantees that type is necessarily a function (Fn)"
+                                )
+                            }
+                        }
+                    };
+
+                    let new_fun = |body: &TypedExpr, callback_tipo: Rc<Type>| -> Box<TypedExpr> {
+                        let fun_tipo = match fun.as_ref().tipo().as_ref() {
+                            Type::Fn {
+                                args,
+                                alias,
+                                ret: _,
+                            } => {
+                                let mut args = args
+                                    .split_last()
+                                    .expect("function has at least one arg")
+                                    .1
+                                    .to_vec();
+                                args.push(callback_tipo); // Replace last callback argument
+                                Rc::new(Type::Fn {
+                                    args,
+                                    ret: body.tipo(), // Replace overall return type
+                                    alias: alias.clone(),
+                                })
+                            }
+                            Type::App { .. }
+                            | Type::Var { .. }
+                            | Type::Pair { .. }
+                            | Type::Tuple { .. } => {
+                                unreachable!(
+                                    "guard above on 'last_arg.value' guarantees that type is necessarily a function (Fn)"
+                                )
+                            }
+                        };
+
+                        let mut fun = fun.clone();
+                        fun.replace_type(fun_tipo);
+
+                        fun
+                    };
+
+                    let new_args =
+                        |body: TypedExpr, callback_tipo: Rc<Type>| -> Vec<CallArg<TypedExpr>> {
+                            let mut args = first_args.to_vec();
+                            args.push(CallArg {
+                                label: last_arg.label.clone(),
+                                location: last_arg.location,
+                                value: TypedExpr::Fn {
+                                    location: *last_arg_location,
+                                    tipo: callback_tipo.clone(),
+                                    is_capture: *last_arg_is_capture,
+                                    return_annotation: last_arg_return_annotation.clone(),
+                                    args: last_arg_args.clone(),
+                                    body: Box::new(body),
+                                },
+                            });
+                            args
+                        };
+
+                    return Ok(Assertion {
+                        bin_op,
+                        head: head.map(|body| {
+                            let callback_tipo = new_callback_tipo(&body);
+                            TypedExpr::Call {
+                                location,
+                                tipo: body.tipo(),
+                                fun: new_fun(&body, callback_tipo.clone()),
+                                args: new_args(body, callback_tipo.clone()),
+                            }
+                        }),
+                        tail: tail.map(|tail| {
+                            tail.mapped(|body| {
+                                let callback_tipo = new_callback_tipo(&body);
+                                TypedExpr::Call {
+                                    location,
+                                    tipo: body.tipo(),
+                                    fun: new_fun(&body, callback_tipo.clone()),
+                                    args: new_args(body, callback_tipo.clone()),
+                                }
+                            })
+                        }),
+                    });
+                }
+                Err(())
+            }
+
             _ => Err(()),
         }
     }
