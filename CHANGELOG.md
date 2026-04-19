@@ -9,6 +9,8 @@
 - **aiken**: `aiken test` is now an alias for `aiken check`. @KtorZ
 - **aiken**: `aiken bench` now also display units using human-readable units by default and falls back to plain number when passed `--plain-numbers`. @KtorZ
 - **aiken**: `aiken bench` indicates a projected maximum size for benches by performing a linear regression on the results, using the minimum/bottleneck between cpu and mem. @KtorZ
+- **aiken-project**: Swap constants with variable arguments in symmetric operators to allow currying and hoisting optimisations to kick-in more often. @KtorZ
+- **aiken-project**: Better code-generation for boolean comparisons with constant terms. @KtorZ
 
 ### Fixed
 
@@ -16,6 +18,8 @@
 - **uplc**: Make evaluation failures language-dependent; thus allowing V1 & V2 evaluations to return non-unit results. @michaeljfazio, @KtorZ
 - **aiken-lang**: Improve/fix formatter on assignments, in particular multiline ones. @KtorZ
 - **aiken-lang**: Do not display UPLC machine logs in test reports when `-t silent` is given. @KtorZ
+- **aiken-lang**: Allow test assertions to "see through" backpassing and provide feedback on test failure even when using continuation passing style. @KtorZ
+- **aiken-lang**: Fix code generation interner to avoid FreeUnique caused by optimisations. @KtorZ
 
 ## v1.1.20 - 2025-12-11
 
