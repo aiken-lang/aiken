@@ -52,4 +52,4 @@ xdg = "2.5.2"
 
 [target.'cfg(target_env = "musl")'.dependencies]
 openssl = { version = "0.10.72", features = ["vendored"] }
-openssl-probe = "0.1.5"
+openssl-probe = "0.2.1"
