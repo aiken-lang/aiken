@@ -5,6 +5,11 @@ on:
     branches: ["main"]
   pull_request:
     branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      cache-version:
+        type: number
+        default: 2
 
 env:
   CARGO_TERM_COLOR: always
